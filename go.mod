@@ -10,7 +10,6 @@ require (
 	github.com/echa/log v1.3.3
 	github.com/gofrs/flock v0.12.1
 	github.com/google/btree v1.1.3
-	github.com/google/go-cmp v0.6.0
 	github.com/jedib0t/go-pretty/v6 v6.6.4
 	github.com/klauspost/compress v1.17.11
 	github.com/klauspost/cpuid/v2 v2.2.9

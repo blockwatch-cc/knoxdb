@@ -133,7 +133,7 @@ func BenchmarkCmpEqualLoop(b *testing.B) {
 
 func CmpEqualFusedBenchmark[T types.Unsigned](b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
-		for _, p := range tests.BenchmarkPatterns {
+		for _, p := range tests.BenchmarkPercents {
 			data, val := tests.GenEqual[T](c.N, p.Pct)
 			buf := make([]byte, 8*c.N)
 			bits := bitset.NewBitset(c.N)
@@ -159,7 +159,7 @@ func CmpEqualFusedBenchmark[T types.Unsigned](b *testing.B) {
 // 5-7x slower (unpack: 90-150 µs, match: 25 µs, total: 115-180 µs = 8.2 cycles/value)
 func CmpEqualUnpackedBenchmark[T types.Unsigned](b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
-		for _, p := range tests.BenchmarkPatterns {
+		for _, p := range tests.BenchmarkPercents {
 			data, val := tests.GenEqual[T](c.N, p.Pct)
 			buf := make([]byte, 8*c.N)
 			bits := bitset.NewBitset(c.N)
@@ -195,7 +195,7 @@ func CmpEqualUnpackedBenchmark[T types.Unsigned](b *testing.B) {
 
 func CmpEqualLoopBenchmark[T types.Unsigned](b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
-		for _, p := range tests.BenchmarkPatterns {
+		for _, p := range tests.BenchmarkPercents {
 			data, val := tests.GenEqual[T](c.N, p.Pct)
 			bits := bitset.NewBitset(c.N)
 			buf := make([]byte, 8*c.N)

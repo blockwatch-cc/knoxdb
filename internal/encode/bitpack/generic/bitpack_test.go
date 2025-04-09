@@ -31,11 +31,11 @@ func makeBitpackBufPoison(n int) []byte {
 }
 
 func TestBitPack(t *testing.T) {
-	for i := 4; i < 25; i++ {
+	for i := 1; i < 63; i++ {
 		buf := makeBitpackBuf(bitpackBufSize)
 		vals := make([]uint64, bitpackBufSize*8/i)
 		for k := 0; k < bitpackBufSize*8/i; k++ {
-			val := uint64(util.RandInt32n((1 << i) - 1))
+			val := uint64(util.RandInt64n((1 << i) - 1))
 			Pack(buf, k, i, val)
 			vals[k] = val
 		}
@@ -47,7 +47,7 @@ func TestBitPack(t *testing.T) {
 }
 
 func TestBitPackMsb(t *testing.T) {
-	for i := 4; i < 25; i++ {
+	for i := 1; i < 63; i++ {
 		buf := makeBitpackBuf(bitpackBufSize)
 		val := uint64(1 << (i - 1))
 		for k := 0; k < bitpackBufSize*8/i; k++ {

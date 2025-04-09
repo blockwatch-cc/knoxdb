@@ -103,7 +103,7 @@ func encode[T types.Integer](buf []byte, vals []T, minv, maxv T) ([]byte, int, e
 	return buf, log2, nil
 }
 
-func decode[T types.Unsigned](dst []T, src []byte, log2 int, minv T) (int, error) {
+func decode[T types.Integer](dst []T, src []byte, log2 int, minv T) (int, error) {
 	for i := range dst {
 		dst[i] = T(unpack(src, i, log2)) + minv
 	}

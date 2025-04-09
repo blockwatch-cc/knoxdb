@@ -73,11 +73,6 @@ vector_loop:
     VPCMPGTQ Y5, Y1, Y3    // Y3 = (max_vec > curr_vec) for signed max
     VPBLENDVB Y3, Y1, Y5, Y5 // If max_vec > curr_vec, keep curr_vec; else max_vec
 
-    // Create shifted vector
-    //VPERMQ $0x93, Y1, Y2
-    //VPINSRQ $0, R13, X2, X6
-    //VINSERTI128 $0, X6, Y2, Y2
-
     // count num_runs
     VPCMPEQQ Y1, Y2, Y6
     VMOVMSKPD Y6, AX
@@ -97,7 +92,6 @@ vector_loop:
 
 next_iter:
     ADDQ $4, BX
-    //MOVQ -8(R8)(BX*8), R13 // no need to load last_prev without shift
     CMPQ BX, R12
     JB vector_loop
 

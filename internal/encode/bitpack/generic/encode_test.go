@@ -18,6 +18,10 @@ func TestEncode(t *testing.T) {
 	tests.EncodeTest(t, Encode[uint32], nil)
 	tests.EncodeTest(t, Encode[uint16], nil)
 	tests.EncodeTest(t, Encode[uint8], nil)
+	tests.EncodeTest(t, Encode[int64], nil)
+	tests.EncodeTest(t, Encode[int32], nil)
+	tests.EncodeTest(t, Encode[int16], nil)
+	tests.EncodeTest(t, Encode[int8], nil)
 }
 
 func TestDecode(t *testing.T) {
@@ -25,6 +29,10 @@ func TestDecode(t *testing.T) {
 	tests.EncodeTest(t, nil, Decode[uint32])
 	tests.EncodeTest(t, nil, Decode[uint16])
 	tests.EncodeTest(t, nil, Decode[uint8])
+	tests.EncodeTest(t, nil, Decode[int64])
+	tests.EncodeTest(t, nil, Decode[int32])
+	tests.EncodeTest(t, nil, Decode[int16])
+	tests.EncodeTest(t, nil, Decode[int8])
 }
 
 // -------------------------------

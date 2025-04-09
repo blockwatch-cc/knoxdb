@@ -24,9 +24,9 @@ func Encode[T types.Integer](buf []byte, vals []T, minv, maxv T) ([]byte, int, e
 		return buf[:0], log2, nil
 	}
 	if log2 < 59 {
-		n = encode1(buf, vals, minv, max(log2, 1))
+		n = encode1(buf, vals, minv, log2)
 	} else {
-		n = encode2(buf, vals, minv, max(log2, 1))
+		n = encode2(buf, vals, minv, log2)
 	}
 	return buf[:n], log2, nil
 }

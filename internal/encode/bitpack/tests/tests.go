@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"testing"
+	"unsafe"
 
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/tests"
@@ -19,7 +20,7 @@ type DecodeFunc[T types.Integer] func([]T, []byte, int, T) (int, error)
 type CompareFunc func([]byte, int, uint64, int, *bitset.Bitset) *bitset.Bitset
 type CompareFunc2 func([]byte, int, uint64, uint64, int, *bitset.Bitset) *bitset.Bitset
 
-type TestCase[T types.Unsigned] struct {
+type TestCase[T types.Integer] struct {
 	Name string
 	Vals []T
 	Gen  func() []T
@@ -33,11 +34,11 @@ func (c TestCase[T]) Data() []T {
 	return c.Vals
 }
 
-func MakeTests[T types.Unsigned]() []TestCase[T] {
+func MakeTests[T types.Integer]() []TestCase[T] {
 	return []TestCase[T]{
 		{Name: "nil", Vals: nil},
 		{Name: "empty", Vals: []T{}},
-		{Name: "mixed", Vals: []T{7, 6, 255, 4, 3, 2, 1}},
+		{Name: "mixed", Vals: []T{7, 6, 127, 4, 3, 2, 1}},
 		{Name: "outlier", Vals: []T{7, 6, types.MaxVal[T]() - 1, 4, 3, 2, 1}},
 	}
 }
@@ -54,7 +55,7 @@ func (c CharType) Get(i int) string {
 	return string(c[i%8])
 }
 
-func EncodeTest[T types.Unsigned](t *testing.T, enc EncodeFunc[T], dec DecodeFunc[T]) {
+func EncodeTest[T types.Integer](t *testing.T, enc EncodeFunc[T], dec DecodeFunc[T]) {
 	if enc == nil {
 		enc = encode[T]
 	}
@@ -62,9 +63,9 @@ func EncodeTest[T types.Unsigned](t *testing.T, enc EncodeFunc[T], dec DecodeFun
 		dec = decode[T]
 	}
 	for _, n := range TestSizes {
-		for w := range 64 { // bit depths
+		for w := range int(unsafe.Sizeof(T(0))*8) - 1 { // bit depths [0..62] + 1
 			w++
-			t.Run(fmt.Sprintf("%d_bits/n_%d", w, n), func(t *testing.T) {
+			t.Run(fmt.Sprintf("%T/%d_bits/n_%d", T(0), w, n), func(t *testing.T) {
 				src := tests.GenRndBits[T](n, w)
 				minv, maxv := slices.Min(src), slices.Max(src)
 				buf := make([]byte, len(src)*8)
@@ -91,7 +92,7 @@ func EncodeTest[T types.Unsigned](t *testing.T, enc EncodeFunc[T], dec DecodeFun
 
 	// test patterns
 	for _, test := range MakeTests[T]() {
-		t.Run(test.Name, func(t *testing.T) {
+		t.Run(fmt.Sprintf("%T/%s", T(0), test.Name), func(t *testing.T) {
 			src := test.Data()
 			var maxv T
 			if len(src) > 0 {
