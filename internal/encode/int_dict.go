@@ -4,11 +4,14 @@
 package encode
 
 import (
-	"slices"
+	"fmt"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/arena"
+	"blockwatch.cc/knoxdb/internal/encode/hashprobe"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
 )
@@ -90,8 +93,7 @@ func (c *DictionaryContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl in
 	if len(ctx.UniqueArray) > 0 {
 		dict, codes = dictEncodeArray(ctx, vals)
 	} else {
-		// dict, codes = dictEncodeMap(ctx, vals)
-		dict, codes = dictEncodeHash(ctx, vals)
+		dict, codes = hashprobe.BuildDict(vals, ctx.NumUnique)
 	}
 
 	// encode child containers
@@ -106,8 +108,13 @@ func (c *DictionaryContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl in
 	c.Codes = EncodeInt(cctx, codes, lvl-1)
 	cctx.Close()
 	if c.Codes.Type() != TIntegerRaw {
-		arena.Free(arena.AllocUint16, codes)
+		arena.FreeT(codes)
 	}
+
+	// fmt.Printf("Dict keys(%s)=%d/%d codes(%s)=%d/%d\n",
+	// 	c.Dict.Type(), len(dict), c.Dict.Len(),
+	// 	c.Codes.Type(), len(codes), c.Codes.Len(),
+	// )
 
 	return c
 }
@@ -129,95 +136,6 @@ func dictEncodeArray[T types.Integer](ctx *IntegerContext[T], vals []T) ([]T, []
 		// apply min-FOR to value for compatibility with buildUniqueArray()
 		codes[i] = uint16(ctx.UniqueArray[int64(v)-int64(ctx.Min)] - 1)
 	}
-
-	return dict, codes
-}
-
-func dictEncodeMap[T types.Integer](ctx *IntegerContext[T], vals []T) ([]T, []uint16) {
-	// construct unique values map
-	if ctx.UniqueMap == nil {
-		ctx.UniqueMap = make(map[T]uint16, ctx.NumUnique)
-	}
-
-	for _, v := range vals {
-		ctx.UniqueMap[v] = 0
-	}
-
-	// construct dict from unique values (apply FOR)
-	dict := arena.AllocT[T](len(ctx.UniqueMap))
-	for v := range ctx.UniqueMap {
-		dict = append(dict, v)
-	}
-
-	// sort dict
-	slices.Sort(dict)
-
-	// remap dict codes to original values
-	for i, v := range dict {
-		ctx.UniqueMap[v] = uint16(i)
-	}
-
-	// translate values to codes
-	codes := arena.AllocT[uint16](len(vals))
-	for _, v := range vals {
-		codes = append(codes, ctx.UniqueMap[v])
-	}
-
-	return dict, codes
-}
-
-func dictEncodeHash[T types.Integer](ctx *IntegerContext[T], vals []T) ([]T, []uint16) {
-	table := allocHashTable[T]()
-	initHashTable(table)
-
-	// Fast hash function (multiply-shift)
-	hash := func(key uint64, mask uint64) uint64 {
-		return (key * 0x9e3779b97f4a7c15) & mask // Prime constant, mask = size-1
-	}
-	mask := uint64(1<<16 - 1)
-
-	// Step 1: Deduplicate into hash table
-	for _, key := range vals {
-		h := hash(uint64(key), mask)
-		for table[h].value != 0xFFFF && table[h].key != key {
-			h = (h + 1) & mask // Linear probe
-		}
-		if table[h].value == 0xFFFF { // New entry
-			table[h] = entry[T]{key, 0} // Value unused yet
-		}
-	}
-
-	// Step 2: Extract unique keys
-	dict := arena.AllocT[T](ctx.NumUnique)
-	for _, e := range table {
-		if e.value != 0xFFFF {
-			dict = append(dict, e.key)
-		}
-	}
-
-	// Step 3: Sort keys
-	slices.Sort(dict)
-
-	// Step 4: Assign codes in sorted order
-	for i, key := range dict {
-		h := hash(uint64(key), mask)
-		for table[h].key != key {
-			h = (h + 1) & mask
-		}
-		table[h].value = uint16(i)
-	}
-
-	// encode values
-	codes := arena.AllocT[uint16](len(vals))[:len(vals)]
-	for i, v := range vals {
-		h := hash(uint64(v), mask)
-		for table[h].key != v {
-			h = (h + 1) & mask
-		}
-		codes[i] = table[h].value
-	}
-
-	freeHashTable(table)
 
 	return dict, codes
 }
@@ -397,18 +315,24 @@ func (c *DictionaryContainer[T]) MatchBetween(a, b T, bits, mask *Bitset) *Bitse
 	return c.Codes.MatchBetween(uint16(ai), uint16(bi), bits, mask)
 }
 
-// func (c *DictionaryContainer[T]) String() string {
-// 	var b strings.Builder
-// 	b.WriteString("Dict [")
-// 	for i := range c.Dict.Len() {
-// 		b.WriteString(strconv.FormatInt(int64(c.Dict.Get(i)), 10))
-// 		if i < c.Dict.Len()-1 {
-// 			b.WriteRune(',')
-// 		}
-// 	}
-// 	b.WriteRune(']')
-// 	return b.String()
-// }
+func (c *DictionaryContainer[T]) String() string {
+	var b strings.Builder
+	b.WriteString("Dict (")
+	b.WriteString(c.Dict.Type().String())
+	b.WriteString("/")
+	b.WriteString(c.Codes.Type().String())
+	b.WriteString(fmt.Sprintf(") [%d, %d] [", c.Dict.Len(), c.Codes.Len()))
+	for i := range c.Dict.Len() {
+		b.WriteString(strconv.FormatInt(int64(c.Dict.Get(i)), 16))
+		if i < c.Dict.Len()-1 {
+			b.WriteRune(',')
+		}
+	}
+	b.WriteString("] Codes: ")
+	b.WriteString(fmt.Sprintf("%#v", c.Codes))
+
+	return b.String()
+}
 
 func (c *DictionaryContainer[T]) MatchSet(s any, bits, mask *Bitset) *Bitset {
 	// Translate set members to codes, ignore when not in dict. If none

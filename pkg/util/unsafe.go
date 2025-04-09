@@ -9,8 +9,16 @@ import (
 	"unsafe"
 )
 
+type Integer interface {
+	int8 | int16 | int32 | int64 | uint8 | uint16 | uint32 | uint64
+}
+
 type Number interface {
-	int8 | int16 | int32 | int64 | uint8 | uint16 | uint32 | uint64 | float32 | float64
+	Integer | float32 | float64
+}
+
+func SizeOf[T Number]() int {
+	return int(unsafe.Sizeof(T(0)))
 }
 
 // go 1.20 versions

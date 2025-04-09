@@ -4,11 +4,11 @@
 package encode
 
 import (
-	"slices"
 	"sort"
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/arena"
+	"blockwatch.cc/knoxdb/internal/encode/hashprobe"
 	"blockwatch.cc/knoxdb/internal/types"
 )
 
@@ -82,7 +82,7 @@ func (c *FloatDictionaryContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 
 func (c *FloatDictionaryContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int) FloatContainer[T] {
 	// construct dictionary and encode vals
-	dict, codes := dictEncodeFloatMap(ctx, vals)
+	dict, codes := hashprobe.BuildFloatDict(vals, ctx.NumUnique)
 
 	// encode child containers
 	vctx := AnalyzeFloat(dict, false)
@@ -100,39 +100,6 @@ func (c *FloatDictionaryContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl
 	}
 
 	return c
-}
-
-func dictEncodeFloatMap[T types.Float](ctx *FloatContext[T], vals []T) ([]T, []uint16) {
-	// construct unique values map
-	if ctx.UniqueMap == nil {
-		ctx.UniqueMap = make(map[T]uint16, ctx.NumUnique)
-	}
-
-	for _, v := range vals {
-		ctx.UniqueMap[v] = 0
-	}
-
-	// construct dict from unique values
-	dict := arena.AllocT[T](len(ctx.UniqueMap))
-	for v := range ctx.UniqueMap {
-		dict = append(dict, v)
-	}
-
-	// sort dict
-	slices.Sort(dict)
-
-	// remap dict codes to original values
-	for i, v := range dict {
-		ctx.UniqueMap[v] = uint16(i)
-	}
-
-	// translate values to codes
-	codes := arena.AllocT[uint16](len(vals))
-	for _, v := range vals {
-		codes = append(codes, ctx.UniqueMap[v])
-	}
-
-	return dict, codes
 }
 
 func (c *FloatDictionaryContainer[T]) MatchEqual(val T, bits, mask *Bitset) *Bitset {

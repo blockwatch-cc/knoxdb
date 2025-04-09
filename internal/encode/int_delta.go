@@ -32,7 +32,7 @@ func (c *DeltaContainer[T]) Len() int {
 }
 
 func (c *DeltaContainer[T]) MaxSize() int {
-	return 1 + 2*num.MaxVarintLen64 + num.MaxVarintLen32
+	return 1 + num.UvarintLen(c.For) + num.UvarintLen(c.Delta) + num.UvarintLen(c.N)
 }
 
 func (c *DeltaContainer[T]) Store(dst []byte) []byte {

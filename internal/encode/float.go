@@ -129,13 +129,9 @@ func EncodeFloat[T types.Float](ctx *FloatContext[T], v []T, lvl int) FloatConta
 // in some cases. In others, particularly nested cases, we need a full encode but
 // on a small sample only.
 func EstimateFloat[T types.Float](scheme FloatContainerType, ctx *FloatContext[T], v []T, lvl int) float64 {
-	// start with raw size
-	raw := NewFloat[T](TFloatRaw).Encode(ctx, v, lvl)
-	rawSize := raw.MaxSize()
-	raw.Close()
-
 	// estimate cheap encodings
 	var (
+		rawSize int = 1 + num.MaxVarintLen32 + SizeOf[T]()*len(v)
 		estSize int
 		ok      bool
 	)
@@ -159,11 +155,8 @@ func EstimateFloat[T types.Float](scheme FloatContainerType, ctx *FloatContext[T
 		ctx.SampleCtx = AnalyzeFloat(ctx.Sample, true)
 	}
 
-	// trail encode the sample as raw and target scheme
-	raw = NewFloat[T](TFloatRaw).Encode(ctx.SampleCtx, ctx.Sample, lvl)
-	rawSize = raw.MaxSize()
-	raw.Close()
-
+	// trail encode the sample as target scheme
+	rawSize = 1 + num.MaxVarintLen32 + SizeOf[T]()*len(ctx.Sample)
 	enc := NewFloat[T](scheme).Encode(ctx.SampleCtx, ctx.Sample, lvl)
 	estSize = enc.MaxSize()
 	enc.Close()
@@ -171,7 +164,7 @@ func EstimateFloat[T types.Float](scheme FloatContainerType, ctx *FloatContext[T
 	return float64(estSize) / float64(rawSize)
 }
 
-// LoadFloat loads an float container from buffer
+// LoadFloat loads a float container from buffer
 func LoadFloat[T types.Float](buf []byte) (FloatContainer[T], error) {
 	c := NewFloat[T](FloatContainerType(buf[0]))
 	if _, err := c.Load(buf); err != nil {

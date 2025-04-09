@@ -144,46 +144,42 @@ func EncodeInt[T types.Integer](ctx *IntegerContext[T], v []T, lvl int) IntegerC
 // in some cases. In others, particularly nested cases, we need a full encode but
 // on a small sample only.
 func EstimateInt[T types.Integer](scheme IntegerContainerType, ctx *IntegerContext[T], v []T, lvl int) float64 {
-	// start with raw size
-	raw := NewInt[T](TIntegerRaw).Encode(ctx, v, lvl)
-	rawSize := raw.MaxSize()
-	raw.Close()
-
 	// estimate cheap encodings
 	var (
+		rawSize int = 1 + num.MaxVarintLen32 + len(v)*SizeOf[T]()
 		estSize int
 		ok      bool
 	)
 	switch scheme {
-	case TIntegerConstant, TIntegerDelta:
-		enc := NewInt[T](scheme).Encode(ctx, v, lvl)
-		estSize, ok = enc.MaxSize(), true
-		enc.Close()
+	case TIntegerConstant:
+		estSize, ok = 1+2*num.MaxVarintLen32, true
+	case TIntegerDelta:
+		estSize, ok = 1+3*num.MaxVarintLen64, true
 	case TIntegerBitpacked:
-		// don't run bit packing, just calculate using max depth
-		estSize, ok = 2+2*num.MaxVarintLen64+(ctx.UseBits*ctx.NumValues+7)/8, true
+		estSize, ok = ctx.bitPackCosts(), true
 	case TIntegerRaw:
 		estSize, ok = rawSize, true
+	case TIntegerDictionary:
+		// upper bound for dict encoding using bit-packing as child base
+		estSize, ok = ctx.dictCosts(), true
+	case TIntegerRunEnd:
+		// upper bound for run end encoding using bit-packing as child base
+		estSize, ok = ctx.runEndCosts(), true
 	}
 	if ok {
 		return float64(estSize) / float64(rawSize)
 	}
 
-	// the remaining schemes TIntegerSimple8, TIntegerRunEnd, TIntegerDictionary
-	// use child containers which we cannot easily estimate without running
-	// the encoder itself, to save time we use a sample
-
-	// sample
+	// use sampling for TIntegerSimple8
 	if ctx.Sample == nil {
 		ctx.Sample, ctx.FreeSample = SampleInt(v)
-		ctx.SampleCtx = AnalyzeInt(ctx.Sample, true)
+		ctx.SampleCtx = AnalyzeInt(ctx.Sample, false)
 	}
 
-	// trail encode the sample as raw and target scheme
-	raw = NewInt[T](TIntegerRaw).Encode(ctx.SampleCtx, ctx.Sample, lvl)
-	rawSize = raw.MaxSize()
-	raw.Close()
+	// adjust raw size to sample len
+	rawSize = 1 + num.MaxVarintLen32 + len(ctx.Sample)*SizeOf[T]()
 
+	// trail encode the sample as simple8
 	enc := NewInt[T](scheme).Encode(ctx.SampleCtx, ctx.Sample, lvl)
 	estSize = enc.MaxSize()
 	enc.Close()

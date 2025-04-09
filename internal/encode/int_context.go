@@ -10,8 +10,10 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/encode/analyze"
+	"blockwatch.cc/knoxdb/internal/encode/hashprobe"
 	"blockwatch.cc/knoxdb/internal/filter/loglogbeta"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
@@ -28,7 +30,6 @@ type IntegerContext[T types.Integer] struct {
 	SampleCtx   *IntegerContext[T] // sample analysis
 	FreeSample  bool               // hint whether sample may be reused
 	UniqueArray []T                // unique values as array (optional)
-	UniqueMap   map[T]uint16       // unique values (optional)
 }
 
 // AnalyzeInt produces statistics about slice vals which are used to
@@ -180,23 +181,55 @@ func (c *IntegerContext[T]) EligibleSchemes() []IntegerContainerType {
 	schemes := []IntegerContainerType{
 		TIntegerRaw,
 	}
-	// bit packed must decrease bit width by at least 8
-	if c.UseBits+8 < c.PhyBits {
+	// bit-packed width must decrease
+	if c.UseBits < c.PhyBits {
 		schemes = append(schemes, TIntegerBitpacked)
 	}
 	// simple 8 requires max 60bit values but is inefficient if many values are > 20bit
-	if c.UseBits <= 60 {
+	if c.UseBits < c.PhyBits && c.UseBits <= 60 {
 		schemes = append(schemes, TIntegerSimple8)
 	}
 	// run-end requires avg run lengths >= 2
-	if c.NumRuns*2 <= c.NumValues {
+	if c.preferRunEnd() {
 		schemes = append(schemes, TIntegerRunEnd)
 	}
-	// dict makes only sense if <64k entries, value range is reduced and card < 3/4
-	if c.NumUnique <= 1<<16 && c.Max-c.Min > T(c.NumUnique) && c.NumUnique*4/3 < c.NumValues {
+	// dict makes only sense when more efficient than bit-packing
+	if c.preferDict() {
 		schemes = append(schemes, TIntegerDictionary)
 	}
 	return schemes
+}
+
+func (c *IntegerContext[T]) preferDict() bool {
+	return c.NumUnique <= hashprobe.MAX_DICT_LIMIT && c.dictCosts() < c.bitPackCosts()
+}
+
+func (c *IntegerContext[T]) preferRunEnd() bool {
+	return c.NumRuns*2 <= c.NumValues && c.runEndCosts() < c.bitPackCosts()
+}
+
+func (c *IntegerContext[T]) dictCosts() int {
+	return dictCosts(c.NumValues, c.UseBits, c.NumUnique)
+}
+
+func (c *IntegerContext[T]) bitPackCosts() int {
+	return bitPackCosts(c.NumValues, c.UseBits)
+}
+
+func (c *IntegerContext[T]) runEndCosts() int {
+	return runEndCosts(c.NumValues, c.NumRuns, c.UseBits)
+}
+
+func dictCosts(n, w, c int) int {
+	return 1 + bitPackCosts(n, bits.Len(uint(c-1))) + bitPackCosts(c, w)
+}
+
+func bitPackCosts(n, w int) int {
+	return 2 + 2*num.MaxVarintLen32 + (n*w+7)/8
+}
+
+func runEndCosts(n, r, w int) int {
+	return 1 + bitPackCosts(r, w) + bitPackCosts(r, bits.Len(uint(n-1)))
 }
 
 func (c *IntegerContext[T]) Close() {
@@ -204,7 +237,6 @@ func (c *IntegerContext[T]) Close() {
 	if c.UniqueArray != nil {
 		c.UniqueArray = c.UniqueArray[:0]
 	}
-	clear(c.UniqueMap)
 	if c.SampleCtx != nil {
 		c.SampleCtx.Close()
 		c.SampleCtx = nil

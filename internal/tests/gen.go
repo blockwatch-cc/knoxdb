@@ -6,6 +6,7 @@ package tests
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"math"
 	"reflect"
 
@@ -311,18 +312,30 @@ func GenRndBits[T types.Number](n, w int) []T {
 	return res
 }
 
-// creates n values with cardinality c (i.e. u % unique values)
-func GenDups[T types.Number](n, u int) []T {
-	c := max(n/u, 1)
+// creates n values with cardinality c and max bit width w. W is only used
+// for 64 and 32 bit types.
+func GenDups[T types.Number](n, c, w int) []T {
+	if w > BENCH_WIDTH {
+		panic(fmt.Errorf("w=%d must be smaller than %d", w, BENCH_WIDTH))
+	}
+	if c > n {
+		panic(fmt.Errorf("c=%d must be smaller than n=%d", c, n))
+	}
+	if w <= 0 {
+		w = BENCH_WIDTH
+	}
+	if c <= 0 {
+		c = 1
+	}
 	res := make([]T, n)
 	switch any(T(0)).(type) {
 	case int64:
-		unique := util.RandIntsn[int64](c, 1<<BENCH_WIDTH-1)
+		unique := util.RandIntsn[int64](c, 1<<w-1)
 		for i := range res {
 			res[i] = T(unique[util.RandIntn(c)])
 		}
 	case int32:
-		unique := util.RandIntsn[int32](c, 1<<(BENCH_WIDTH/2-1))
+		unique := util.RandIntsn[int32](c, 1<<min(w, 31)-1)
 		for i := range res {
 			res[i] = T(unique[util.RandIntn(c)])
 		}
@@ -337,12 +350,12 @@ func GenDups[T types.Number](n, u int) []T {
 			res[i] = T(unique[util.RandIntn(c)])
 		}
 	case uint64:
-		unique := util.RandUintsn[uint64](c, 1<<BENCH_WIDTH-1)
+		unique := util.RandUintsn[uint64](c, 1<<w-1)
 		for i := range res {
 			res[i] = T(unique[util.RandIntn(c)])
 		}
 	case uint32:
-		unique := util.RandUintsn[uint32](c, 1<<(BENCH_WIDTH/2-1))
+		unique := util.RandUintsn[uint32](c, 1<<min(w, 32)-1)
 		for i := range res {
 			res[i] = T(unique[util.RandIntn(c)])
 		}
@@ -357,12 +370,12 @@ func GenDups[T types.Number](n, u int) []T {
 			res[i] = T(unique[util.RandIntn(c)])
 		}
 	case float64:
-		unique := util.RandFloatsn[float64](c, 1<<BENCH_WIDTH-1)
+		unique := util.RandFloatsn[float64](c, float64(uint(1)<<w-1))
 		for i := range res {
 			res[i] = T(unique[util.RandIntn(c)])
 		}
 	case float32:
-		unique := util.RandFloatsn[float32](c, 1<<(BENCH_WIDTH/2)-1)
+		unique := util.RandFloatsn[float32](c, float32((uint(1)<<min(w, 32))-1))
 		for i := range res {
 			res[i] = T(unique[util.RandIntn(c)])
 		}
@@ -370,13 +383,22 @@ func GenDups[T types.Number](n, u int) []T {
 	return res
 }
 
-// creates n values with run length r
-func GenRuns[T types.Number](n, r int) []T {
+// creates n values with run length r at max bit width w
+func GenRuns[T types.Number](n, r, w int) []T {
+	if w > BENCH_WIDTH {
+		panic(fmt.Errorf("w=%d must be smaller than %d", w, BENCH_WIDTH))
+	}
+	if r > n {
+		panic(fmt.Errorf("r=%d must be smaller than n=%d", r, n))
+	}
+	if w <= 0 {
+		w = BENCH_WIDTH
+	}
 	res := make([]T, 0, n)
 	sz := (n + r - 1) / r
 	switch any(T(0)).(type) {
 	case int64:
-		for _, v := range util.RandIntsn[int64](sz, 1<<BENCH_WIDTH-1) {
+		for _, v := range util.RandIntsn[int64](sz, 1<<w-1) {
 			for range r {
 				if len(res) == n {
 					break
@@ -385,7 +407,7 @@ func GenRuns[T types.Number](n, r int) []T {
 			}
 		}
 	case int32:
-		for _, v := range util.RandIntsn[int32](sz, 1<<(BENCH_WIDTH/2-1)) {
+		for _, v := range util.RandIntsn[int32](sz, 1<<(w/2-1)) {
 			for range r {
 				if len(res) == n {
 					break
@@ -412,7 +434,7 @@ func GenRuns[T types.Number](n, r int) []T {
 			}
 		}
 	case uint64:
-		for _, v := range util.RandUintsn[uint64](sz, 1<<BENCH_WIDTH-1) {
+		for _, v := range util.RandUintsn[uint64](sz, 1<<w-1) {
 			for range r {
 				if len(res) == n {
 					break
@@ -421,7 +443,7 @@ func GenRuns[T types.Number](n, r int) []T {
 			}
 		}
 	case uint32:
-		for _, v := range util.RandUintsn[uint32](sz, 1<<(BENCH_WIDTH/2-1)) {
+		for _, v := range util.RandUintsn[uint32](sz, 1<<(w/2-1)) {
 			for range r {
 				if len(res) == n {
 					break
@@ -448,7 +470,7 @@ func GenRuns[T types.Number](n, r int) []T {
 			}
 		}
 	case float64:
-		for _, v := range util.RandFloatsn[float64](sz, 1<<BENCH_WIDTH-1) {
+		for _, v := range util.RandFloatsn[float64](sz, float64(uint(1)<<w-1)) {
 			for range r {
 				if len(res) == n {
 					break
@@ -457,7 +479,7 @@ func GenRuns[T types.Number](n, r int) []T {
 			}
 		}
 	case float32:
-		for _, v := range util.RandFloatsn[float32](sz, 1<<(BENCH_WIDTH/2)-1) {
+		for _, v := range util.RandFloatsn[float32](sz, float32(uint(1)<<(w/2)-1)) {
 			for range r {
 				if len(res) == n {
 					break

@@ -8,8 +8,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/types"
 )
 
-const BENCH_WIDTH = 60
-
 func GenForIntScheme[T types.Integer](scheme, n int) []T {
 	switch scheme {
 	case 0: // TIntegerConstant,
@@ -17,11 +15,11 @@ func GenForIntScheme[T types.Integer](scheme, n int) []T {
 	case 1: // TIntegerDelta,
 		return tests.GenSeq[T](n)
 	case 2: // TIntegerRunEnd,
-		return tests.GenRuns[T](n, 5)
+		return tests.GenRuns[T](n, min(n, 5), -1)
 	case 3: // TIntegerBitpacked,
 		return tests.GenRnd[T](n)
 	case 4: // TIntegerDictionary,
-		return tests.GenDups[T](n, 10)
+		return tests.GenDups[T](n, n/10, -1)
 	case 5: // TIntegerSimple8,
 		return tests.GenRnd[T](n)
 	case 6: // TIntegerRaw,
@@ -36,9 +34,9 @@ func GenForFloatScheme[T types.Float](scheme, n int) []T {
 	case 0: // TFloatConstant,
 		return tests.GenConst[T](n, 4.225)
 	case 1: // TFloatRunEnd,
-		return tests.GenRuns[T](n, 5)
+		return tests.GenRuns[T](n, min(n, 5), -1)
 	case 2: // TFloatDictionary,
-		return tests.GenDups[T](n, 10)
+		return tests.GenDups[T](n, n/10, -1)
 	case 3: // TFloatAlp,
 		return tests.GenRnd[T](n)
 	case 4: // TFloatAlpRd,

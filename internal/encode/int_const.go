@@ -30,7 +30,7 @@ func (c *ConstContainer[T]) Len() int {
 }
 
 func (c *ConstContainer[T]) MaxSize() int {
-	return 1 + num.MaxVarintLen64 + num.MaxVarintLen32
+	return 1 + num.UvarintLen(c.Val) + num.UvarintLen(c.N)
 }
 
 func (c *ConstContainer[T]) Store(dst []byte) []byte {

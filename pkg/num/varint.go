@@ -32,6 +32,15 @@ const (
 	MaxVarintLen64 = 9
 )
 
+type Int interface {
+	int | uint | uint64 | uint32 | uint16 | uint8 | int64 | int32 | int16 | int8
+}
+
+func UvarintLen[T Int](x T) int {
+	var v [MaxVarintLen64]byte
+	return PutUvarint(v[:], uint64(x))
+}
+
 func EncodeUvarint(x uint64) []byte {
 	var v [MaxVarintLen64]byte
 	n := PutUvarint(v[:], x)

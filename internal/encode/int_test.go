@@ -48,27 +48,28 @@ func TestAnalyzeInt(t *testing.T) {
 	assert.Equal(t, 3, x.NumUnique, "num_unique")
 	assert.Equal(t, 3, x.NumRuns, "num_runs")
 	assert.Equal(t, 6, x.NumValues, "num_values")
-	assert.Contains(t, x.EligibleSchemes(), TIntegerRunEnd, "eligible")
-	assert.Contains(t, x.EligibleSchemes(), TIntegerBitpacked, "eligible")
-	assert.Contains(t, x.EligibleSchemes(), TIntegerRaw, "eligible")
-	assert.Contains(t, x.EligibleSchemes(), TIntegerDictionary, "eligible")
-	assert.Contains(t, x.EligibleSchemes(), TIntegerSimple8, "eligible")
+	// assert.Contains(t, x.EligibleSchemes(), TIntegerRunEnd, "missing eligible scheme")
+	assert.Contains(t, x.EligibleSchemes(), TIntegerBitpacked, "missing eligible scheme")
+	assert.Contains(t, x.EligibleSchemes(), TIntegerRaw, "missing eligible scheme")
+	assert.Contains(t, x.EligibleSchemes(), TIntegerSimple8, "missing eligible scheme")
 
 	// dict-friendly
-	x = AnalyzeInt([]int64{-1, 1, 5, 1, -1, 1}, true)
-	assert.Equal(t, int64(-1), x.Min, "min")
-	assert.Equal(t, int64(5), x.Max, "max")
+	x = AnalyzeInt([]int64{
+		0, 42, 100, 42, 100, 42, 100, 42, 100, 42, 100, 42, 100, 42, 100, 42, 100,
+		42, 100, 42, 100, 42, 100, 42, 100, 42, 100, 42, 100, 42, 100, 42, 100}, true)
+	assert.Equal(t, int64(0), x.Min, "min")
+	assert.Equal(t, int64(100), x.Max, "max")
 	assert.Equal(t, int64(0), x.Delta, "delta")
 	assert.Equal(t, 64, x.PhyBits, "phybits")
-	assert.Equal(t, 3, x.UseBits, "usebits")
+	assert.Equal(t, 7, x.UseBits, "usebits")
 	assert.InDelta(t, 3, x.NumUnique, 1.0, "num_unique")
-	assert.Equal(t, 6, x.NumRuns, "num_runs")
-	assert.Equal(t, 6, x.NumValues, "num_values")
+	assert.Equal(t, 33, x.NumRuns, "num_runs")
+	assert.Equal(t, 33, x.NumValues, "num_values")
 	assert.NotContains(t, x.EligibleSchemes(), TIntegerRunEnd, "not eligible")
-	assert.Contains(t, x.EligibleSchemes(), TIntegerBitpacked, "eligible")
-	assert.Contains(t, x.EligibleSchemes(), TIntegerRaw, "eligible")
-	assert.Contains(t, x.EligibleSchemes(), TIntegerDictionary, "eligible")
-	assert.Contains(t, x.EligibleSchemes(), TIntegerSimple8, "eligible")
+	assert.Contains(t, x.EligibleSchemes(), TIntegerBitpacked, "missing eligible scheme")
+	assert.Contains(t, x.EligibleSchemes(), TIntegerRaw, "missing eligible scheme")
+	assert.Contains(t, x.EligibleSchemes(), TIntegerDictionary, "missing eligible scheme")
+	assert.Contains(t, x.EligibleSchemes(), TIntegerSimple8, "missing eligible scheme")
 }
 
 func testIntContainerType[T types.Integer](t *testing.T, scheme IntegerContainerType) {
@@ -404,9 +405,9 @@ func testEncodeIntT[T types.Integer](t *testing.T) {
 		t.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(t *testing.T) {
 			x := AnalyzeInt(c.Data, true)
 			e := EncodeInt(x, c.Data, MAX_CASCADE)
-			require.Equal(t, len(c.Data), e.Len(), "x=%#v", x)
+			require.Equal(t, len(c.Data), e.Len(), "T=%v x=%#v", e, x)
 			for i, v := range c.Data {
-				require.Equal(t, v, e.Get(i), "i=%d d=%x", i, c.Data)
+				require.Equal(t, v, e.Get(i), "T=%v i=%d d=%x", e, i, c.Data)
 			}
 		})
 	}
@@ -525,7 +526,7 @@ func BenchmarkEncodeAndStoreInt(b *testing.B) {
 					enc := NewInt[int16](scheme).Encode(ctx, data, MAX_CASCADE)
 					sz := enc.MaxSize()
 					buf := enc.Store(make([]byte, 0, enc.MaxSize()))
-					require.Less(b, len(buf), sz)
+					require.LessOrEqual(b, len(buf), sz)
 					enc.Close()
 					ctx.Close()
 				}
@@ -700,51 +701,15 @@ func BenchmarkUniqueLLB(b *testing.B) {
 	}
 }
 
-func BenchmarkDictMap(b *testing.B) {
-	DictMapBenchmark[uint64](b)
-	DictMapBenchmark[uint32](b)
-	DictMapBenchmark[uint16](b)
-	DictMapBenchmark[uint8](b)
-}
-
 func BenchmarkDictArray(b *testing.B) {
 	DictArrayBenchmark[uint16](b)
 	DictArrayBenchmark[uint8](b)
 }
 
-func BenchmarkDictHash(b *testing.B) {
-	DictHashBenchmark[uint64](b)
-	DictHashBenchmark[uint32](b)
-	DictHashBenchmark[uint16](b)
-	DictHashBenchmark[uint8](b)
-}
-
-func DictMapBenchmark[T types.Integer](b *testing.B) {
-	for _, p := range tests.BenchmarkPatterns {
-		for _, c := range tests.BenchmarkSizes {
-			data := tests.GenDups[T](c.N, p.Pct)
-			ctx := AnalyzeInt(data, true)
-			var card int
-			b.Run(fmt.Sprintf("%T/%s/%s", T(0), c.Name, p.Name), func(b *testing.B) {
-				b.ReportAllocs()
-				b.SetBytes(int64(c.N * int(unsafe.Sizeof(T(0)))))
-				for range b.N {
-					dict, codes := dictEncodeMap(ctx, data)
-					card = len(dict)
-					clear(ctx.UniqueMap)
-					arena.FreeT(dict)
-					arena.FreeT(codes)
-				}
-				_ = card
-			})
-		}
-	}
-}
-
 func DictArrayBenchmark[T types.Integer](b *testing.B) {
 	for _, p := range tests.BenchmarkPatterns {
 		for _, c := range tests.BenchmarkSizes {
-			data := tests.GenDups[T](c.N, 50)
+			data := tests.GenDups[T](c.N, min(c.N, p.Size), 30)
 			ctx := AnalyzeInt(data, true)
 			var card int
 			b.Run(fmt.Sprintf("%T/%s/%s", T(0), c.Name, p.Name), func(b *testing.B) {
@@ -753,29 +718,6 @@ func DictArrayBenchmark[T types.Integer](b *testing.B) {
 				for range b.N {
 					dict, codes := dictEncodeArray(ctx, data)
 					card = len(dict)
-					clear(ctx.UniqueMap)
-					arena.FreeT(dict)
-					arena.FreeT(codes)
-				}
-				_ = card
-			})
-		}
-	}
-}
-
-func DictHashBenchmark[T types.Integer](b *testing.B) {
-	for _, p := range tests.BenchmarkPatterns {
-		for _, c := range tests.BenchmarkSizes {
-			data := tests.GenDups[T](c.N, 50)
-			ctx := AnalyzeInt(data, true)
-			var card int
-			b.Run(fmt.Sprintf("%T/%s/%s", T(0), c.Name, p.Name), func(b *testing.B) {
-				b.ReportAllocs()
-				b.SetBytes(int64(c.N * int(unsafe.Sizeof(T(0)))))
-				for range b.N {
-					dict, codes := dictEncodeHash(ctx, data)
-					card = len(dict)
-					clear(ctx.UniqueMap)
 					arena.FreeT(dict)
 					arena.FreeT(codes)
 				}

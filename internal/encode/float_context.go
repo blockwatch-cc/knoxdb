@@ -8,6 +8,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/encode/alp"
+	"blockwatch.cc/knoxdb/internal/encode/hashprobe"
 	"blockwatch.cc/knoxdb/internal/filter/loglogbeta"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/util"
@@ -16,6 +17,7 @@ import (
 type FloatContext[T types.Float] struct {
 	Min        T                // vector minimum
 	Max        T                // vector maximum
+	PhyBits    int              // float bit width
 	NumUnique  int              // vector cardinality (hint, may not be precise)
 	NumRuns    int              // vector runs
 	NumValues  int              // vector length
@@ -23,7 +25,6 @@ type FloatContext[T types.Float] struct {
 	Sample     []T              // data sample (optional)
 	SampleCtx  *FloatContext[T] // sample analysis
 	FreeSample bool             // hint whether sample may be reused
-	UniqueMap  map[T]uint16     // unique values (optional)
 }
 
 // AnalyzeFloat produces statistics about slice vals which are used to
@@ -34,6 +35,7 @@ func AnalyzeFloat[T types.Float](vals []T, checkUnique bool) *FloatContext[T] {
 	c.Max = vals[0]
 	c.NumRuns = 1
 	c.NumValues = len(vals)
+	c.PhyBits = SizeOf[T]() * 8
 	for i, v := range vals[1:] {
 		if v < c.Min {
 			c.Min = v
@@ -45,7 +47,9 @@ func AnalyzeFloat[T types.Float](vals []T, checkUnique bool) *FloatContext[T] {
 
 	// TODO: avoid on ALP nested float containers
 	// let ALP estimate the best scheme
-	c.AlpScheme = alp.Scheme(vals)
+	if c.Min != c.Max {
+		c.AlpScheme = alp.Scheme(vals)
+	}
 
 	// count unique only if necessary
 	c.NumUnique = c.NumRuns
@@ -89,19 +93,30 @@ func (c *FloatContext[T]) EligibleSchemes(lvl int) []FloatContainerType {
 	}
 
 	// run-end requires avg run lengths >= 2
-	if c.NumRuns*2 <= c.NumValues {
+	if c.preferRunEnd() {
 		schemes = append(schemes, TFloatRunEnd)
 	}
-	// dict makes only sense if <64k entries, value range is reduced and card < 3/4
-	if c.NumUnique <= 1<<16 && c.NumUnique*4/3 < c.NumValues {
+	// dict makes only sense when more efficient than raw
+	if c.preferDict() {
 		schemes = append(schemes, TFloatDictionary)
 	}
 
 	return schemes
 }
 
+func (c *FloatContext[T]) preferDict() bool {
+	dcost := dictCosts(c.NumValues, c.PhyBits, c.NumUnique)
+	rcost := 5 + c.NumValues*c.PhyBits/8
+	return c.NumUnique <= hashprobe.MAX_DICT_LIMIT && dcost < rcost
+}
+
+func (c *FloatContext[T]) preferRunEnd() bool {
+	rcost := runEndCosts(c.NumValues, c.NumRuns, c.PhyBits)
+	bcost := bitPackCosts(c.NumValues, c.PhyBits)
+	return c.NumRuns*2 <= c.NumValues && rcost < bcost
+}
+
 func (c *FloatContext[T]) Close() {
-	clear(c.UniqueMap)
 	if c.SampleCtx != nil {
 		c.SampleCtx.Close()
 		c.SampleCtx = nil

@@ -59,7 +59,7 @@ func MakeShortIntTests[T types.Integer](scheme int) []TestCase[T] {
 
 func MakeIntTest[T types.Integer](s string, n int, data ...int) TestCase[T] {
 	c := TestCase[T]{
-		Name: s + "_" + reflect.TypeOf(T(0)).String() + "_" + strconv.Itoa(n),
+		Name: s + "_" + strconv.Itoa(n),
 		Data: make([]T, n),
 	}
 	if len(data) > 0 {
@@ -73,12 +73,12 @@ func MakeIntTest[T types.Integer](s string, n int, data ...int) TestCase[T] {
 }
 
 func MakeIntTests[T types.Integer](n int) []TestCase[T] {
-	name := reflect.TypeOf(T(0)).String() + "_" + strconv.Itoa(n)
+	name := strconv.Itoa(n)
 	return []TestCase[T]{
 		{"const_" + name, tests.GenConst[T](n, 42)},
 		{"delta_" + name, tests.GenSeq[T](n)},
-		{"dups_" + name, tests.GenDups[T](n, n/10)},
-		{"runs_" + name, tests.GenRuns[T](n, 5)},
+		{"dups_" + name, tests.GenDups[T](n, n/10, -1)},
+		{"runs_" + name, tests.GenRuns[T](n, 5, -1)},
 		{"rand_" + name, tests.GenRnd[T](n)},
 	}
 }
@@ -116,8 +116,8 @@ func MakeFloatTests[T types.Float](n int) []TestCase[T] {
 	name := reflect.TypeOf(T(0)).String() + "_" + strconv.Itoa(n)
 	return []TestCase[T]{
 		{"const_" + name, tests.GenConst[T](n, 4.225)},
-		{"dups_" + name, tests.GenDups[T](n, n/10)},
-		{"runs_" + name, tests.GenRuns[T](n, 5)},
+		{"dups_" + name, tests.GenDups[T](n, n/10, -1)},
+		{"runs_" + name, tests.GenRuns[T](n, 5, -1)},
 		{"rand_" + name, tests.GenRnd[T](n)},
 	}
 }

@@ -44,7 +44,7 @@ func (c *BitpackContainer[T]) Len() int {
 
 func (c *BitpackContainer[T]) MaxSize() int {
 	// Typ (1) + FOR (varint) + log2 (1) + n (varint) + bits (variable)
-	return 2 + 2*num.MaxVarintLen64 + len(c.Packed)
+	return 2 + num.UvarintLen(c.For) + num.UvarintLen(c.N) + len(c.Packed)
 }
 
 func (c *BitpackContainer[T]) Store(dst []byte) []byte {
@@ -99,6 +99,7 @@ func (c *BitpackContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 func (c *BitpackContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) IntegerContainer[T] {
 	sz := bitpack.EstimateMaxSize(ctx.UseBits, len(vals))
 	c.Packed = arena.Alloc(arena.AllocBytes, sz).([]byte)[:sz]
+	clear(c.Packed) // arena does not allocate zeroed memory
 	c.free = true
 	c.Log2 = ctx.UseBits
 	c.N = len(vals)
