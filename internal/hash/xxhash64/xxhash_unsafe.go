@@ -4,7 +4,7 @@
 // This file encapsulates usage of unsafe.
 // xxhash_safe.go contains the safe implementations.
 
-package xxhash
+package xxhash64
 
 import (
 	"blockwatch.cc/knoxdb/pkg/util"

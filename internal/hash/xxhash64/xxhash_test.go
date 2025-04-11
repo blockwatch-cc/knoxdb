@@ -1,4 +1,4 @@
-package xxhash
+package xxhash64
 
 import (
 	"bytes"

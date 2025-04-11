@@ -8,8 +8,9 @@ import (
 	"math"
 	"math/bits"
 
-	"blockwatch.cc/knoxdb/internal/hash/xxHash32"
-	"blockwatch.cc/knoxdb/internal/hash/xxhashVec"
+	"blockwatch.cc/knoxdb/internal/hash/xxhash"
+	"blockwatch.cc/knoxdb/internal/hash/xxhash32"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 const (
@@ -106,31 +107,23 @@ func (llb *LogLogBeta) AddHash(x uint32) {
 }
 
 func (llb *LogLogBeta) Add(value []byte) {
-	llb.AddHash(xxHash32.Checksum(value, 0))
+	llb.AddHash(xxhash32.Checksum(value, 0))
 }
 
 func (llb *LogLogBeta) AddUint32(val uint32) {
-	llb.AddHash(xxhashVec.XXHash32Uint32(val, 0))
+	llb.AddHash(xxhash.Hash32u32(val, 0))
 }
 
 func (llb *LogLogBeta) AddInt32(val int32) {
-	llb.AddHash(xxhashVec.XXHash32Int32(val, 0))
+	llb.AddHash(xxhash.Hash32u32(uint32(val), 0))
 }
 
 func (llb *LogLogBeta) AddUint64(val uint64) {
-	llb.AddHash(xxhashVec.XXHash32Uint64(val, 0))
+	llb.AddHash(xxhash.Hash32u64(val, 0))
 }
 
 func (llb *LogLogBeta) AddInt64(val int64) {
-	llb.AddHash(xxhashVec.XXHash32Int64(val, 0))
-}
-
-func (llb *LogLogBeta) AddManyUint16(data []uint16) {
-	filterAddManyUint16(llb, data, 0)
-}
-
-func (llb *LogLogBeta) AddManyInt16(data []int16) {
-	filterAddManyInt16(llb, data, 0)
+	llb.AddHash(xxhash.Hash32u64(uint64(val), 0))
 }
 
 func (llb *LogLogBeta) AddManyUint32(data []uint32) {
@@ -138,7 +131,7 @@ func (llb *LogLogBeta) AddManyUint32(data []uint32) {
 }
 
 func (llb *LogLogBeta) AddManyInt32(data []int32) {
-	filterAddManyInt32(llb, data, 0)
+	filterAddManyUint32(llb, util.ReinterpretSlice[int32, uint32](data), 0)
 }
 
 func (llb *LogLogBeta) AddManyUint64(data []uint64) {
@@ -146,7 +139,7 @@ func (llb *LogLogBeta) AddManyUint64(data []uint64) {
 }
 
 func (llb *LogLogBeta) AddManyInt64(data []int64) {
-	filterAddManyInt64(llb, data, 0)
+	filterAddManyUint64(llb, util.ReinterpretSlice[int64, uint64](data), 0)
 }
 
 // Cardinality returns the number of unique elements added to the sketch

@@ -2,7 +2,7 @@
 // +build !appengine,gc,!purego
 
 // nolint
-package xxhash
+package xxhash64
 
 // Sum64 computes the 64-bit xxHash digest of b.
 //

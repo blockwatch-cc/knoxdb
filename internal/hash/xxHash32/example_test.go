@@ -1,15 +1,15 @@
-package xxHash32_test
+package xxhash32_test
 
 import (
 	"bytes"
 	"fmt"
 
-	"blockwatch.cc/knoxdb/internal/hash/xxHash32"
+	"blockwatch.cc/knoxdb/internal/hash/xxhash32"
 )
 
 func ExampleNew() {
 	buf := bytes.NewBufferString("this is a test")
-	x := xxHash32.New(0xCAFE)
+	x := xxhash32.New(0xCAFE)
 	x.Write(buf.Bytes())
 	fmt.Printf("%x\n", x.Sum32())
 	// Output: bb4f02bc
@@ -17,6 +17,6 @@ func ExampleNew() {
 
 func ExampleChecksum() {
 	buf := bytes.NewBufferString("this is a test")
-	fmt.Printf("%x\n", xxHash32.Checksum(buf.Bytes(), 0xCAFE))
+	fmt.Printf("%x\n", xxhash32.Checksum(buf.Bytes(), 0xCAFE))
 	// Output: bb4f02bc
 }

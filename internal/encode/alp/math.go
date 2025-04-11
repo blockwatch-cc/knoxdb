@@ -30,6 +30,9 @@ func isImpossibleToEncode(f float64) bool {
 		(x > lo && x >= sign) // f < ENCODING_LOWER_LIMIT
 }
 
+// see
+// https://github.com/cwida/ALP/blob/main/include/alp/encoder.hpp#L322
+
 func isImpossibleToEncodeSlow(f float64) bool {
 	return math.IsInf(f, 0) || math.IsNaN(f) ||
 		f > ENCODING_UPPER_LIMIT ||

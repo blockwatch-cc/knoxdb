@@ -13,7 +13,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/filter"
 	"blockwatch.cc/knoxdb/internal/filter/bloom"
 	"blockwatch.cc/knoxdb/internal/hash"
-	"blockwatch.cc/knoxdb/internal/hash/xxHash32"
+	"blockwatch.cc/knoxdb/internal/hash/xxhash32"
 	"blockwatch.cc/knoxdb/pkg/slicex"
 	"github.com/echa/log"
 )
@@ -342,7 +342,7 @@ func (m *bytesSetMatcher) WithSlice(slice any) {
 	m.slice = slicex.NewOrderedBytes(slice.([][]byte)).SetUnique()
 	m.hashes = hash.HashAnySlice(m.slice.Values)
 	if len(m.slice.Values) > filterThreshold {
-		// re-use bloom hash value [1] (xxHash32) as unique hash value
+		// re-use bloom hash value [1] (xxhash32) as unique hash value
 		m.hmap = make(map[uint32]int)
 		for i, h := range m.hashes {
 			val := m.slice.Values[i]
@@ -371,7 +371,7 @@ func (m *bytesSetMatcher) WithSlice(slice any) {
 }
 
 func (m bytesSetMatcher) matchHashMap(val []byte) bool {
-	sum := xxHash32.Checksum(val, 0)
+	sum := xxhash32.Checksum(val, 0)
 	if pos, ok := m.hmap[sum]; ok {
 		if pos != 0xFFFFFFFF {
 			// compare slice value at pos to ensure we're collision free

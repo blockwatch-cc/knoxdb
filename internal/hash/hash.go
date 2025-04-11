@@ -7,8 +7,8 @@ import (
 	"encoding/binary"
 	"math"
 
-	"blockwatch.cc/knoxdb/internal/hash/xxHash32"
-	"blockwatch.cc/knoxdb/internal/hash/xxhashVec"
+	"blockwatch.cc/knoxdb/internal/hash/xxhash"
+	"blockwatch.cc/knoxdb/internal/hash/xxhash32"
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
@@ -18,15 +18,15 @@ type HashValue [2]uint32
 const XxHash32Seed = 1312
 
 func Hash(data []byte) HashValue {
-	return HashValue{xxHash32.Checksum(data, XxHash32Seed), xxHash32.Checksum(data, 0)}
+	return HashValue{xxhash32.Checksum(data, XxHash32Seed), xxhash32.Checksum(data, 0)}
 }
 
 func HashUint16(v uint16) HashValue {
 	var buf [2]byte
 	binary.LittleEndian.PutUint16(buf[:], v)
 	return HashValue{
-		xxHash32.Checksum(buf[:], XxHash32Seed),
-		xxHash32.Checksum(buf[:], 0),
+		xxhash32.Checksum(buf[:], XxHash32Seed),
+		xxhash32.Checksum(buf[:], 0),
 	}
 }
 
@@ -34,52 +34,52 @@ func HashInt16(v int16) HashValue {
 	var buf [2]byte
 	binary.LittleEndian.PutUint16(buf[:], uint16(v))
 	return HashValue{
-		xxHash32.Checksum(buf[:], XxHash32Seed),
-		xxHash32.Checksum(buf[:], 0),
+		xxhash32.Checksum(buf[:], XxHash32Seed),
+		xxhash32.Checksum(buf[:], 0),
 	}
 }
 
 func HashUint32(v uint32) HashValue {
 	return HashValue{
-		xxhashVec.XXHash32Uint32(v, XxHash32Seed),
-		xxhashVec.XXHash32Uint32(v, 0),
+		xxhash.Hash32u32(v, XxHash32Seed),
+		xxhash.Hash32u32(v, 0),
 	}
 }
 
 func HashInt32(v int32) HashValue {
 	return HashValue{
-		xxhashVec.XXHash32Int32(v, XxHash32Seed),
-		xxhashVec.XXHash32Int32(v, 0),
+		xxhash.Hash32u32(uint32(v), XxHash32Seed),
+		xxhash.Hash32u32(uint32(v), 0),
 	}
 }
 
 func HashUint64(v uint64) HashValue {
 	return HashValue{
-		xxhashVec.XXHash32Uint64(v, XxHash32Seed),
-		xxhashVec.XXHash32Uint64(v, 0),
+		xxhash.Hash32u64(v, XxHash32Seed),
+		xxhash.Hash32u64(v, 0),
 	}
 }
 
 func HashInt64(v int64) HashValue {
 	return HashValue{
-		xxhashVec.XXHash32Int64(v, XxHash32Seed),
-		xxhashVec.XXHash32Int64(v, 0),
+		xxhash.Hash32u64(uint64(v), XxHash32Seed),
+		xxhash.Hash32u64(uint64(v), 0),
 	}
 }
 
 func HashFloat64(v float64) HashValue {
 	u := math.Float64bits(v)
 	return HashValue{
-		xxhashVec.XXHash32Uint64(u, XxHash32Seed),
-		xxhashVec.XXHash32Uint64(u, 0),
+		xxhash.Hash32u64(u, XxHash32Seed),
+		xxhash.Hash32u64(u, 0),
 	}
 }
 
 func HashFloat32(v float32) HashValue {
 	u := math.Float32bits(v)
 	return HashValue{
-		xxhashVec.XXHash32Uint32(u, XxHash32Seed),
-		xxhashVec.XXHash32Uint32(u, 0),
+		xxhash.Hash32u32(u, XxHash32Seed),
+		xxhash.Hash32u32(u, 0),
 	}
 }
 

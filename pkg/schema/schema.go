@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"strings"
 
-	"blockwatch.cc/knoxdb/internal/hash/xxhash"
+	"blockwatch.cc/knoxdb/internal/hash/xxhash64"
 	"blockwatch.cc/knoxdb/internal/types"
 )
 
@@ -730,7 +730,7 @@ func (s *Schema) Finalize() *Schema {
 	var b [4]byte
 
 	// generate schema hash from visible fields
-	h := xxhash.New()
+	h := xxhash64.New()
 	LE.PutUint32(b[:], s.version)
 	h.Write(b[:])
 

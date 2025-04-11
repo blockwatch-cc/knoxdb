@@ -4,42 +4,18 @@
 package loglogbeta
 
 import (
-	"blockwatch.cc/knoxdb/internal/hash/xxhashVec"
+	"blockwatch.cc/knoxdb/internal/hash/xxhash"
 )
-
-func filterAddManyUint16Generic(llb *LogLogBeta, val []uint16, seed uint32) {
-	for _, v := range val {
-		llb.AddHash(xxhashVec.XXHash32Uint32(uint32(v), seed))
-	}
-}
 
 func filterAddManyUint32Generic(llb *LogLogBeta, val []uint32, seed uint32) {
 	for _, v := range val {
-		llb.AddHash(xxhashVec.XXHash32Uint32(v, seed))
+		llb.AddHash(xxhash.Hash32u32(v, seed))
 	}
 }
 
 func filterAddManyUint64Generic(llb *LogLogBeta, val []uint64, seed uint32) {
 	for _, v := range val {
-		llb.AddHash(xxhashVec.XXHash32Uint64(v, seed))
-	}
-}
-
-func filterAddManyInt16Generic(llb *LogLogBeta, val []int16, seed uint32) {
-	for _, v := range val {
-		llb.AddHash(xxhashVec.XXHash32Int32(int32(v), seed))
-	}
-}
-
-func filterAddManyInt32Generic(llb *LogLogBeta, val []int32, seed uint32) {
-	for _, v := range val {
-		llb.AddHash(xxhashVec.XXHash32Int32(v, seed))
-	}
-}
-
-func filterAddManyInt64Generic(llb *LogLogBeta, val []int64, seed uint32) {
-	for _, v := range val {
-		llb.AddHash(xxhashVec.XXHash32Int64(v, seed))
+		llb.AddHash(xxhash.Hash32u64(v, seed))
 	}
 }
 

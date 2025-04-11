@@ -1,6 +1,6 @@
 // Package xxHash32 implements the very fast xxHash hashing algorithm (32 bits version).
 // (https://github.com/Cyan4973/xxHash/)
-package xxHash32
+package xxhash32
 
 import "hash"
 

@@ -1,7 +1,7 @@
 //go:build !amd64 || appengine || !gc || purego
 // +build !amd64 appengine !gc purego
 
-package xxhash
+package xxhash64
 
 // Sum64 computes the 64-bit xxHash digest of b.
 func Sum64(b []byte) uint64 {

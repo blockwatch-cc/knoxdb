@@ -3,9 +3,7 @@
 
 package dedup
 
-import (
-	"blockwatch.cc/knoxdb/internal/hash/xxhash"
-)
+import "blockwatch.cc/knoxdb/internal/hash/xxhash64"
 
 // Base sizes
 //
@@ -37,7 +35,7 @@ import (
 // dyn len + card < n/2   -> dict
 // dyn len + card >= n/2  -> compact (e.g. block/op hashes)
 
-var emptyHash = xxhash.Sum64([]byte{})
+var emptyHash = xxhash64.Sum64([]byte{})
 
 type analysis struct {
 	nEmpty    int
@@ -72,7 +70,7 @@ func dedup(slice [][]byte) (dupmap []int, card int, sz int) {
 	for i, v := range slice {
 		h := emptyHash
 		if len(v) > 0 {
-			h = xxhash.Sum64(v)
+			h = xxhash64.Sum64(v)
 		}
 		if j, ok := m[h]; ok {
 			dupmap[i] = j

@@ -231,14 +231,14 @@ func (c *FloatAlpContainer[T]) MatchBetween(a, b T, bits, mask *Bitset) *Bitset 
 	return nil
 }
 
-func (c *FloatAlpContainer[T]) MatchSet(s any, bits, mask *Bitset) *Bitset {
-	// set := s.(*xroar.Bitmap)
-	return nil
+func (c *FloatAlpContainer[T]) MatchSet(_ any, bits, _ *Bitset) *Bitset {
+	// N.A.
+	return bits
 }
 
-func (c *FloatAlpContainer[T]) MatchNotSet(s any, bits, mask *Bitset) *Bitset {
-	// set := s.(*xroar.Bitmap)
-	return nil
+func (c *FloatAlpContainer[T]) MatchNotSet(_ any, bits, _ *Bitset) *Bitset {
+	// N.A.
+	return bits
 }
 
 type FloatAlpFactory struct {

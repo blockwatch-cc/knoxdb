@@ -1,7 +1,7 @@
 //go:build !appengine
 // +build !appengine
 
-package xxhash
+package xxhash64
 
 import (
 	"os/exec"

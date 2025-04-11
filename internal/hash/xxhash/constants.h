@@ -1,6 +1,45 @@
 // Copyright (c) 2021 Blockwatch Data Inc.
 // Author: stefan@blockwatch.cc
 
+#define rol32_17(Y_reg) \
+    VPSLLD  $17, Y_reg, Y15 \
+    VPSRLD  $15, Y_reg, Y_reg \
+    VPOR    Y15, Y_reg, Y_reg
+
+#define rol64_23(Y_reg) \
+    VPSLLQ  $23, Y_reg, Y15 \
+    VPSRLQ  $41, Y_reg, Y_reg \
+    VPOR    Y15, Y_reg, Y_reg
+
+#define rol64_24(Y_reg) \
+    VPSLLQ  $24, Y_reg, Y15 \
+    VPSRLQ  $40, Y_reg, Y_reg \
+    VPOR    Y15, Y_reg, Y_reg
+
+#define rol64_27(Y_reg) \
+    VPSLLQ  $27, Y_reg, Y15 \
+    VPSRLQ  $37, Y_reg, Y_reg \
+    VPOR    Y15, Y_reg, Y_reg
+
+#define rol64_31(Y_reg) \
+    VPSLLQ  $31, Y_reg, Y15 \
+    VPSRLQ  $33, Y_reg, Y_reg \
+    VPOR    Y15, Y_reg, Y_reg
+
+#define rol64_49(Y_reg) \
+    VPSLLQ  $49, Y_reg, Y15 \
+    VPSRLQ  $15, Y_reg, Y_reg \
+    VPOR    Y15, Y_reg, Y_reg
+
+#define mul64(Ya, Yb, Yab) \
+    VPSHUFD     $0xb1, Yb, Yab \
+    VPMULLD     Ya, Yab, Yab \
+    VPSLLQ      $32, Yab, Y15 \
+    VPADDD      Yab, Y15, Y15 \
+    VPAND       Y15, Y9, Y15 \
+    VPMULUDQ    Ya, Yb, Yab \
+    VPADDQ      Yab, Y15, Yab \
+
 DATA PRIME32_1<>+0x00(SB)/4, $(2654435761)
 GLOBL PRIME32_1<>(SB), (RODATA+NOPTR), $4
 

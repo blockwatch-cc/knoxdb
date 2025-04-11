@@ -69,64 +69,6 @@ func TestCardinalityManyUint32AVX512(t *testing.T) {
 	}
 }
 
-func TestCardinalityManyInt32AVX2(t *testing.T) {
-	if !util.UseAVX2 {
-		t.SkipNow()
-	}
-	llb := NewFilter()
-	step := 10000
-	unique := map[int32]bool{}
-	slice := make([]int32, step)
-	var j int
-	for i := 0; i < 100000; i++ {
-		val := int32(util.RandIntn(i + step))
-		unique[val] = true
-		slice[j] = val
-		j++
-
-		if j%step == 0 {
-			exact := uint64(len(unique))
-			filterAddManyInt32AVX2(llb, slice, 0)
-			j = 0
-			res := filterCardinalityAVX2(llb)
-
-			ratio := 100 * estimateError(res, exact)
-			if ratio > 2 {
-				t.Errorf("Exact %d, got %d which is %.2f%% error", exact, res, ratio)
-			}
-		}
-	}
-}
-
-func TestCardinalityManyInt32AVX512(t *testing.T) {
-	if !util.UseAVX512_CD {
-		t.SkipNow()
-	}
-	llb := NewFilter()
-	step := 10000
-	unique := map[int32]bool{}
-	slice := make([]int32, step)
-	var j int
-	for i := 0; i < 100000; i++ {
-		val := int32(util.RandIntn(i + step))
-		unique[val] = true
-		slice[j] = val
-		j++
-
-		if j%step == 0 {
-			exact := uint64(len(unique))
-			filterAddManyInt32AVX512(llb, slice, 0)
-			j = 0
-			res := filterCardinalityAVX512(llb)
-
-			ratio := 100 * estimateError(res, exact)
-			if ratio > 2 {
-				t.Errorf("Exact %d, got %d which is %.2f%% error", exact, res, ratio)
-			}
-		}
-	}
-}
-
 func TestCardinalityManyUint64AVX2(t *testing.T) {
 	if !util.UseAVX2 {
 		t.SkipNow()
@@ -174,64 +116,6 @@ func TestCardinalityManyUint64AVX512(t *testing.T) {
 		if j%step == 0 {
 			exact := uint64(len(unique))
 			filterAddManyUint64AVX512(llb, slice, 0)
-			j = 0
-			res := filterCardinalityAVX512(llb)
-
-			ratio := 100 * estimateError(res, exact)
-			if ratio > 2 {
-				t.Errorf("Exact %d, got %d which is %.2f%% error", exact, res, ratio)
-			}
-		}
-	}
-}
-
-func TestCardinalityManyInt64AVX2(t *testing.T) {
-	if !util.UseAVX2 {
-		t.SkipNow()
-	}
-	llb := NewFilter()
-	step := 10000
-	unique := map[int64]bool{}
-	slice := make([]int64, step)
-	var j int
-	for i := 0; i < 100000; i++ {
-		val := int64(util.RandIntn(i + step))
-		unique[val] = true
-		slice[j] = val
-		j++
-
-		if j%step == 0 {
-			exact := uint64(len(unique))
-			filterAddManyInt64AVX2(llb, slice, 0)
-			j = 0
-			res := filterCardinalityAVX2(llb)
-
-			ratio := 100 * estimateError(res, exact)
-			if ratio > 2 {
-				t.Errorf("Exact %d, got %d which is %.2f%% error", exact, res, ratio)
-			}
-		}
-	}
-}
-
-func TestCardinalityManyInt64AVX512(t *testing.T) {
-	if !util.UseAVX512_CD {
-		t.SkipNow()
-	}
-	llb := NewFilter()
-	step := 10000
-	unique := map[int64]bool{}
-	slice := make([]int64, step)
-	var j int
-	for i := 0; i < 100000; i++ {
-		val := int64(util.RandIntn(i + step))
-		unique[val] = true
-		slice[j] = val
-		j++
-
-		if j%step == 0 {
-			exact := uint64(len(unique))
-			filterAddManyInt64AVX512(llb, slice, 0)
 			j = 0
 			res := filterCardinalityAVX512(llb)
 

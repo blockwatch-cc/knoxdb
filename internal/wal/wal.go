@@ -19,7 +19,7 @@ import (
 
 	"github.com/echa/log"
 
-	"blockwatch.cc/knoxdb/internal/hash/xxhash"
+	"blockwatch.cc/knoxdb/internal/hash/xxhash64"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
@@ -133,7 +133,7 @@ func Create(opts WalOptions) (*Wal, error) {
 	wal := &Wal{
 		opts:  opts,
 		wr:    NewBufioWriterSize(nil, WAL_BUFFER_SIZE),
-		hash:  xxhash.New(),
+		hash:  xxhash64.New(),
 		csum:  opts.Seed,
 		req:   make(chan *util.Future, WAL_MAX_SYNC_REQUESTS),
 		close: make(chan struct{}),
@@ -199,7 +199,7 @@ func Open(lsn LSN, opts WalOptions) (*Wal, error) {
 	wal := &Wal{
 		opts:  opts,
 		wr:    NewBufioWriterSize(nil, WAL_BUFFER_SIZE),
-		hash:  xxhash.New(),
+		hash:  xxhash64.New(),
 		req:   make(chan *util.Future, WAL_MAX_SYNC_REQUESTS),
 		close: make(chan struct{}),
 		csum:  opts.Seed,

@@ -1,4 +1,4 @@
-package xxHash32_test
+package xxhash32_test
 
 import (
 	"encoding/binary"
@@ -6,7 +6,7 @@ import (
 	"hash/fnv"
 	"testing"
 
-	"blockwatch.cc/knoxdb/internal/hash/xxHash32"
+	"blockwatch.cc/knoxdb/internal/hash/xxhash32"
 )
 
 type test struct {
@@ -43,14 +43,14 @@ func init() {
 }
 
 func TestBlockSize(t *testing.T) {
-	xxh := xxHash32.New(0)
+	xxh := xxhash32.New(0)
 	if s := xxh.BlockSize(); s <= 0 {
 		t.Errorf("invalid BlockSize: %d", s)
 	}
 }
 
 func TestSize(t *testing.T) {
-	xxh := xxHash32.New(0)
+	xxh := xxhash32.New(0)
 	if s := xxh.Size(); s != 4 {
 		t.Errorf("invalid Size: got %d expected 4", s)
 	}
@@ -58,14 +58,14 @@ func TestSize(t *testing.T) {
 
 func TestData(t *testing.T) {
 	for i, td := range testdata {
-		xxh := xxHash32.New(0)
+		xxh := xxhash32.New(0)
 		data := []byte(td.data)
 		xxh.Write(data)
 		if h := xxh.Sum32(); h != td.sum {
 			t.Errorf("test %d: xxh32(%s)=0x%x expected 0x%x", i, td.printable, h, td.sum)
 			t.FailNow()
 		}
-		if h := xxHash32.Checksum(data, 0); h != td.sum {
+		if h := xxhash32.Checksum(data, 0); h != td.sum {
 			t.Errorf("test %d: xxh32(%s)=0x%x expected 0x%x", i, td.printable, h, td.sum)
 			t.FailNow()
 		}
@@ -74,7 +74,7 @@ func TestData(t *testing.T) {
 
 func TestSplitData(t *testing.T) {
 	for i, td := range testdata {
-		xxh := xxHash32.New(0)
+		xxh := xxhash32.New(0)
 		data := []byte(td.data)
 		l := len(data) / 2
 		xxh.Write(data[0:l])
@@ -89,7 +89,7 @@ func TestSplitData(t *testing.T) {
 
 func TestSum(t *testing.T) {
 	for i, td := range testdata {
-		xxh := xxHash32.New(0)
+		xxh := xxhash32.New(0)
 		data := []byte(td.data)
 		xxh.Write(data)
 		b := xxh.Sum(data)
@@ -101,7 +101,7 @@ func TestSum(t *testing.T) {
 }
 
 func TestReset(t *testing.T) {
-	xxh := xxHash32.New(0)
+	xxh := xxhash32.New(0)
 	for i, td := range testdata {
 		xxh.Write([]byte(td.data))
 		h := xxh.Sum32()
@@ -118,7 +118,7 @@ func TestReset(t *testing.T) {
 var testdata1 = []byte(testdata[len(testdata)-1].data)
 
 func Benchmark_XXH32(b *testing.B) {
-	h := xxHash32.New(0)
+	h := xxhash32.New(0)
 	for n := 0; n < b.N; n++ {
 		h.Write(testdata1)
 		h.Sum32()
@@ -128,7 +128,7 @@ func Benchmark_XXH32(b *testing.B) {
 
 func Benchmark_XXH32_Checksum(b *testing.B) {
 	for n := 0; n < b.N; n++ {
-		xxHash32.Checksum(testdata1, 0)
+		xxhash32.Checksum(testdata1, 0)
 	}
 }
 

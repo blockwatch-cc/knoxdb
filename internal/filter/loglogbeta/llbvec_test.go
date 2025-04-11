@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"blockwatch.cc/knoxdb/internal/hash/xxhashVec"
+	"blockwatch.cc/knoxdb/internal/hash/xxhash"
 	"blockwatch.cc/knoxdb/pkg/slicex"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
@@ -122,32 +122,6 @@ func TestCardinalityManyUint32Generic(t *testing.T) {
 	}
 }
 
-func TestCardinalityManyInt32Generic(t *testing.T) {
-	llb := NewFilter()
-	step := 10000
-	unique := map[int32]bool{}
-	slice := make([]int32, step)
-	var j int
-	for i := 0; i < 100000; i++ {
-		val := int32(util.RandIntn(i + step))
-		unique[val] = true
-		slice[j] = val
-		j++
-
-		if j%step == 0 {
-			exact := uint64(len(unique))
-			filterAddManyInt32Generic(llb, slice, 0)
-			j = 0
-			res := filterCardinalityGeneric(llb)
-
-			ratio := 100 * estimateError(res, exact)
-			if ratio > MaxAllowedLlbError {
-				t.Errorf("Exact %d, got %d which is %.2f%% error", exact, res, ratio)
-			}
-		}
-	}
-}
-
 func TestCardinalityManyUint64Generic(t *testing.T) {
 	llb := NewFilter()
 	step := 10000
@@ -163,32 +137,6 @@ func TestCardinalityManyUint64Generic(t *testing.T) {
 		if j%step == 0 {
 			exact := uint64(len(unique))
 			filterAddManyUint64Generic(llb, slice, 0)
-			j = 0
-			res := filterCardinalityGeneric(llb)
-
-			ratio := 100 * estimateError(res, exact)
-			if ratio > MaxAllowedLlbError {
-				t.Errorf("Exact %d, got %d which is %.2f%% error", exact, res, ratio)
-			}
-		}
-	}
-}
-
-func TestCardinalityManyInt64Generic(t *testing.T) {
-	llb := NewFilter()
-	step := 10000
-	unique := map[int64]bool{}
-	slice := make([]int64, step)
-	var j int
-	for i := 0; i < 100000; i++ {
-		val := int64(util.RandIntn(i + step))
-		unique[val] = true
-		slice[j] = val
-		j++
-
-		if j%step == 0 {
-			exact := uint64(len(unique))
-			filterAddManyInt64Generic(llb, slice, 0)
 			j = 0
 			res := filterCardinalityGeneric(llb)
 
@@ -394,7 +342,7 @@ func BenchmarkFilterAddExactHashed(b *testing.B) {
 			continue
 		}
 		lastn = c.n
-		u64 := xxhashVec.XXHash64Uint64Slice(RandUint64(c.n), nil)
+		u64 := xxhash.Vec64u64(RandUint64(c.n), nil)
 		b.Run(fmt.Sprintf("n=%d", c.n), func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
@@ -412,7 +360,7 @@ func BenchmarkFilterCardinalityExactHashed(b *testing.B) {
 			continue
 		}
 		lastn = c.n
-		u64 := xxhashVec.XXHash64Uint64Slice(RandUint64(c.n), nil)
+		u64 := xxhash.Vec64u64(RandUint64(c.n), nil)
 		b.Run(fmt.Sprintf("n=%d", c.n), func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {

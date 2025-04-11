@@ -6,28 +6,12 @@
 
 package loglogbeta
 
-func filterAddManyUint16(f *LogLogBeta, data []uint16, seed uint32) {
-	filterAddManyUint16Generic(f, data, seed)
-}
-
-func filterAddManyInt16(f *LogLogBeta, data []int16, seed uint32) {
-	filterAddManyInt16Generic(f, data, seed)
-}
-
 func filterAddManyUint32(f *LogLogBeta, data []uint32, seed uint32) {
 	filterAddManyUint32Generic(f, data, seed)
 }
 
-func filterAddManyInt32(f *LogLogBeta, data []int32, seed uint32) {
-	filterAddManyInt32Generic(f, data, seed)
-}
-
 func filterAddManyUint64(f *LogLogBeta, data []uint64, seed uint32) {
 	filterAddManyUint64Generic(f, data, seed)
-}
-
-func filterAddManyInt64(f *LogLogBeta, data []int64, seed uint32) {
-	filterAddManyInt64Generic(f, data, seed)
 }
 
 func filterCardinality(f *LogLogBeta) uint64 {

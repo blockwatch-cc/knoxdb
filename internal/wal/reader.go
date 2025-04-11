@@ -8,7 +8,7 @@ import (
 	"hash"
 	"io"
 
-	"blockwatch.cc/knoxdb/internal/hash/xxhash"
+	"blockwatch.cc/knoxdb/internal/hash/xxhash64"
 	"blockwatch.cc/knoxdb/internal/types"
 )
 
@@ -84,7 +84,7 @@ func (w *Wal) NewReader() WalReader {
 	return &Reader{
 		wal:    w,
 		rd:     NewBufioReaderSize(nil, WAL_BUFFER_SIZE),
-		hash:   xxhash.New(),
+		hash:   xxhash64.New(),
 		csum:   w.opts.Seed,
 		maxSz:  w.opts.MaxSegmentSize,
 		maxLsn: w.lsn,
