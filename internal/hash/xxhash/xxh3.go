@@ -49,7 +49,7 @@ func xxh3_u32_purego(src []uint32, dst []uint64) []uint64 {
 	sp := unsafe.Pointer(&src[0])
 	rp := unsafe.Pointer(&dst[0])
 	for range len(src) / 128 {
-		s := (*[128]uint32)(unsafe.Add(sp, i*8))
+		s := (*[128]uint32)(unsafe.Add(sp, i*4))
 		r := (*[128]uint64)(unsafe.Add(rp, i*8))
 		xxh3_u32_core(s, r)
 		i += 128

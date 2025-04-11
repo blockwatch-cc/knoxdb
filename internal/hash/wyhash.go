@@ -21,15 +21,11 @@ const (
 
 var hashkey = [4]uintptr{m1, m2, m3, m4}
 
+// init random secrets if non-determinism is ok
 // func init() {
 // 	for i := range hashkey {
 // 		hashkey[i] = uintptr(rand.Uint64())
 // 	}
-// }
-
-// func mix64(a, b uint64) uint64 {
-// 	hi, lo := bits.Mul64(a, b)
-// 	return hi ^ lo
 // }
 
 func mix(a, b uintptr) uintptr {
@@ -37,16 +33,58 @@ func mix(a, b uintptr) uintptr {
 	return uintptr(hi ^ lo)
 }
 
-func WyHash32(value uint32, seed uint64) uintptr {
-	return mix(m5^4, mix(uintptr(value)^m2, uintptr(value)^uintptr(seed)^m1))
+func WyHash32(value uint32, seed uint64) uint64 {
+	return uint64(mix(m5^4, mix(uintptr(value)^m2, uintptr(value)^uintptr(seed)^m1)))
 }
 
-func WyHash64(value uint64, seed uint64) uintptr {
-	return mix(m5^8, mix(uintptr(value)^m2, uintptr(value)^uintptr(seed)^m1))
+func WyHash64(value uint64, seed uint64) uint64 {
+	return uint64(mix(m5^8, mix(uintptr(value)^m2, uintptr(value)^uintptr(seed)^m1)))
 }
 
 func WyHash(buf []byte, seed uint64) uint64 {
 	return uint64(wyHash(unsafe.Pointer(&buf[0]), uintptr(seed), uintptr(len(buf))))
+}
+
+func WyVec64u64(src, dst []uint64) []uint64 {
+	if len(src) == 0 {
+		return dst[:0]
+	}
+	var i int
+	sp := unsafe.Pointer(&src[0])
+	rp := unsafe.Pointer(&dst[0])
+	for range len(src) / 128 {
+		s := (*[128]uint64)(unsafe.Add(sp, i*8))
+		r := (*[128]uint64)(unsafe.Add(rp, i*8))
+		wyVec64u64core(s, r)
+		i += 128
+	}
+	for i < len(src) {
+		dst[i] = WyHash64(src[i], 0)
+		i++
+	}
+	return dst
+}
+
+func wyVec64u64core(src, dst *[128]uint64) {
+	for i := 0; i < len(src); i += 16 {
+		dst[0] = WyHash64(src[i], 0)
+		dst[i+1] = WyHash64(src[i+1], 0)
+		dst[i+2] = WyHash64(src[i+2], 0)
+		dst[i+3] = WyHash64(src[i+3], 0)
+		dst[i+4] = WyHash64(src[i+4], 0)
+		dst[i+5] = WyHash64(src[i+5], 0)
+		dst[i+6] = WyHash64(src[i+6], 0)
+		dst[i+7] = WyHash64(src[i+7], 0)
+
+		dst[i+8] = WyHash64(src[i+8], 0)
+		dst[i+9] = WyHash64(src[i+9], 0)
+		dst[i+10] = WyHash64(src[i+10], 0)
+		dst[i+11] = WyHash64(src[i+11], 0)
+		dst[i+12] = WyHash64(src[i+12], 0)
+		dst[i+13] = WyHash64(src[i+13], 0)
+		dst[i+14] = WyHash64(src[i+14], 0)
+		dst[i+15] = WyHash64(src[i+15], 0)
+	}
 }
 
 func wyHash(p unsafe.Pointer, seed, s uintptr) uintptr {

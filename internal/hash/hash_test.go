@@ -90,6 +90,7 @@ func BenchmarkMultiHash(b *testing.B) {
 	HashBenchMulti64(b, "xxhash64", xxhash.Vec64u64)
 	HashBenchMulti32(b, "xxhash32", xxhash.Vec32u64)
 	HashBenchMulti64(b, "xxh3", xxhash.VecXXH3u64)
+	HashBenchMulti64(b, "wyhash", WyVec64u64)
 }
 
 func HashBenchMulti64(b *testing.B, name string, fn func([]uint64, []uint64) []uint64) {
@@ -110,7 +111,7 @@ func HashBenchMulti32(b *testing.B, name string, fn func([]uint64, []uint32, uin
 		data := tests.GenRnd[uint64](sz.N)
 		res := make([]uint32, sz.N)
 		b.Run(fmt.Sprintf("%s/%s", name, sz.Name), func(b *testing.B) {
-			b.SetBytes(int64(sz.N) * 4)
+			b.SetBytes(int64(sz.N) * 8)
 			for range b.N {
 				fn(data, res, 0)
 			}

@@ -73,7 +73,7 @@ func x64_u8_purego(src []uint8, dst []uint64) []uint64 {
 	sp := unsafe.Pointer(&src[0])
 	rp := unsafe.Pointer(&dst[0])
 	for range len(src) / 128 {
-		s := (*[128]uint8)(unsafe.Add(sp, i*8))
+		s := (*[128]uint8)(unsafe.Add(sp, i))
 		r := (*[128]uint64)(unsafe.Add(rp, i*8))
 		x64_u8_core(s, r)
 		i += 128
@@ -115,7 +115,7 @@ func x64_u16_purego(src []uint16, dst []uint64) []uint64 {
 	sp := unsafe.Pointer(&src[0])
 	rp := unsafe.Pointer(&dst[0])
 	for range len(src) / 128 {
-		s := (*[128]uint16)(unsafe.Add(sp, i*8))
+		s := (*[128]uint16)(unsafe.Add(sp, i*2))
 		r := (*[128]uint64)(unsafe.Add(rp, i*8))
 		x64_u16_core(s, r)
 		i += 128
@@ -157,7 +157,7 @@ func x64_u32_purego(src []uint32, dst []uint64) []uint64 {
 	sp := unsafe.Pointer(&src[0])
 	rp := unsafe.Pointer(&dst[0])
 	for range len(src) / 128 {
-		s := (*[128]uint32)(unsafe.Add(sp, i*8))
+		s := (*[128]uint32)(unsafe.Add(sp, i*4))
 		r := (*[128]uint64)(unsafe.Add(rp, i*8))
 		x64_u32_core(s, r)
 		i += 128
