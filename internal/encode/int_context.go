@@ -233,8 +233,8 @@ func runEndCosts(n, r, w int) int {
 }
 
 func (c *IntegerContext[T]) Close() {
-	clear(c.UniqueArray)
 	if c.UniqueArray != nil {
+		clear(c.UniqueArray)
 		c.UniqueArray = c.UniqueArray[:0]
 	}
 	if c.SampleCtx != nil {

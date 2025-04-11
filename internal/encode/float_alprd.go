@@ -2,10 +2,12 @@ package encode
 
 import (
 	"math"
+	"math/bits"
 	"sync"
 	"unsafe"
 
 	"blockwatch.cc/knoxdb/internal/arena"
+	"blockwatch.cc/knoxdb/internal/encode/hashprobe"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/util"
@@ -99,15 +101,16 @@ func (c *FloatAlpRdContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 
 func (c *FloatAlpRdContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int) FloatContainer[T] {
 	cnt := len(vals)
-	left := arena.AllocT[uint16](cnt)[:cnt]
+	left := arena.AllocT[uint16](1 << 16)[:1<<16]
 	right := arena.AllocT[uint64](cnt)[:cnt]
 	c.typ = BlockType[T]()
 
 	sample, ok := SampleFloat(vals)
-	bestShift := estimateShift(sample, left, right)
+	bestShift := estimateShift(sample, left)
 	if ok {
 		arena.FreeT(sample)
 	}
+	left = left[:cnt]
 
 	// TODO: SIMD
 	mask := uint64(1<<bestShift) - 1
@@ -144,58 +147,95 @@ func (c *FloatAlpRdContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int)
 	return c
 }
 
-func estimateShift[T types.Float](sample []T, leftInts []uint16, rightInts []uint64) int {
+func estimateShift[T types.Float](sample []T, unique []uint16) int {
 	var (
 		bestShift int
 		bestSize  int = math.MaxInt32
 		sz            = len(sample)
 		w         int = SizeOf[T]()
 	)
-
 	for i := 1; i <= 16; i++ {
-		rightBitWidth := 64 - i
-		mask := uint64(1<<rightBitWidth) - 1
+		shift := 64 - i
+		mask := uint64(1<<shift - 1)
 
-		// TODO: SIMD
-		// split vals into left and right
+		var (
+			lmin, lmax uint16 = 0, math.MaxUint16
+			rmin, rmax uint64 = 0, math.MaxUint64
+		)
+
 		switch w {
 		case 8:
-			for k, v := range util.ReinterpretSlice[T, uint64](sample) {
-				rightInts[k] = v & mask
-				leftInts[k] = uint16(v >> rightBitWidth)
+			// min/max
+			for _, v := range util.ReinterpretSlice[T, uint64](sample) {
+				l, r := uint16(v>>shift), v&mask
+				if l < lmin {
+					lmin = l
+				} else if l > lmax {
+					lmax = l
+				}
+				if r < rmin {
+					rmin = r
+				} else if r > rmax {
+					rmax = r
+				}
 			}
+			// mark uniques
+			for _, v := range util.ReinterpretSlice[T, uint64](sample) {
+				unique[uint16(v>>shift)-lmin] = 1
+			}
+
 		case 4:
-			for k, v := range util.ReinterpretSlice[T, uint32](sample) {
-				rightInts[k] = uint64(v) & mask
-				leftInts[k] = uint16(v >> rightBitWidth)
+			// min/max
+			for _, v := range util.ReinterpretSlice[T, uint32](sample) {
+				l, r := uint16(v>>shift), uint64(v)&mask
+				if l < lmin {
+					lmin = l
+				} else if l > lmax {
+					lmax = l
+				}
+				if r < rmin {
+					rmin = r
+				} else if r > rmax {
+					rmax = r
+				}
+				unique[l] = 1
+			}
+			// mark uniques
+			for _, v := range util.ReinterpretSlice[T, uint32](sample) {
+				unique[uint16(v>>shift)-lmin] = 1
 			}
 		}
 
-		// estimate integer container sizes
-		lctx := AnalyzeInt(leftInts[:sz], true)
-		rctx := AnalyzeInt(rightInts[:sz], false)
+		// count uniques
+		var lunique int
+		for _, v := range unique[:lmax-lmin+1] {
+			lunique = util.Bool2int(v > 0)
+		}
+		lbits, rbits := bits.Len16(lmax-lmin), bits.Len64(rmax-rmin)
 
-		// estimate based on the following
+		// estimate encoded size
 		// - left side may be dict compressed
 		// - right side will be bitpacked
-		var maxSz int
-		if lctx.preferDict() {
-			maxSz += lctx.dictCosts()
-		} else {
-			maxSz += lctx.bitPackCosts()
-		}
-		maxSz += rctx.bitPackCosts() // bitpack only
+		ldcost := dictCosts(sz, lbits, lunique)
+		lbcost := bitPackCosts(sz, lbits)
 
-		lctx.Close()
-		rctx.Close()
+		var maxSz int
+		if lunique <= hashprobe.MAX_DICT_LIMIT && ldcost < lbcost {
+			maxSz += ldcost
+		} else {
+			maxSz += lbcost
+		}
+		maxSz += bitPackCosts(sz, rbits) // bitpack only
 
 		// compare against previous know best ratio and keep best containers
 		if maxSz <= bestSize {
 			bestSize = maxSz
-			bestShift = rightBitWidth
+			bestShift = shift
 		}
-	}
 
+		// cleanup
+		clear(unique[:lmax-lmin+1])
+	}
 	return bestShift
 }
 
