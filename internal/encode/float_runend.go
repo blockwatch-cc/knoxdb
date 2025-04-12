@@ -137,7 +137,7 @@ func (c *FloatRunEndContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int
 	ends[p] = n
 
 	// encode child containers
-	vctx := AnalyzeFloat(values, true)
+	vctx := AnalyzeFloat(values, true, lvl == MAX_CASCADE)
 	c.Values = EncodeFloat(vctx, values, lvl-1)
 	vctx.Close()
 	if c.Values.Type() != TFloatRaw {

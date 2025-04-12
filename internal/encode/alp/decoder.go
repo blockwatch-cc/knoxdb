@@ -30,9 +30,28 @@ func (d *Decoder[T]) WithExceptions(values []T, pos []uint32) *Decoder[T] {
 
 // Scalar decoding of an ALP vector
 func (d *Decoder[T]) Decompress(dst []T, src []int64) {
-	_ = dst[len(src)-1]
-	for i, v := range src {
-		dst[i] = T(v) * d.factor * d.exponent
+	l := len(src)
+	if l == 0 {
+		return
+	}
+
+	_ = dst[l-1]
+	var i int
+	for range l / 8 {
+		dst[i] = T(src[i]) * d.factor * d.exponent
+		dst[i+1] = T(src[i+1]) * d.factor * d.exponent
+		dst[i+2] = T(src[i+2]) * d.factor * d.exponent
+		dst[i+3] = T(src[i+3]) * d.factor * d.exponent
+		dst[i+4] = T(src[i+4]) * d.factor * d.exponent
+		dst[i+5] = T(src[i+5]) * d.factor * d.exponent
+		dst[i+6] = T(src[i+6]) * d.factor * d.exponent
+		dst[i+7] = T(src[i+7]) * d.factor * d.exponent
+		i += 8
+	}
+
+	for i < l {
+		dst[i] = T(src[i]) * d.factor * d.exponent
+		i++
 	}
 
 	// patching exceptions

@@ -98,7 +98,7 @@ func SampleFloat[T types.Float](v []T) ([]T, bool) {
 func EncodeFloat[T types.Float](ctx *FloatContext[T], v []T, lvl int) FloatContainer[T] {
 	// analyze full data if missing
 	if ctx == nil {
-		ctx = AnalyzeFloat(v, true)
+		ctx = AnalyzeFloat(v, true, lvl == MAX_CASCADE)
 		defer ctx.Close()
 	}
 
@@ -152,7 +152,7 @@ func EstimateFloat[T types.Float](scheme FloatContainerType, ctx *FloatContext[T
 	// sample
 	if ctx.Sample == nil {
 		ctx.Sample, ctx.FreeSample = SampleFloat(v)
-		ctx.SampleCtx = AnalyzeFloat(ctx.Sample, true)
+		ctx.SampleCtx = AnalyzeFloat(ctx.Sample, true, lvl == MAX_CASCADE)
 	}
 
 	// trail encode the sample as target scheme

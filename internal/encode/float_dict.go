@@ -85,7 +85,7 @@ func (c *FloatDictionaryContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl
 	dict, codes := hashprobe.BuildFloatDict(vals, ctx.NumUnique)
 
 	// encode child containers
-	vctx := AnalyzeFloat(dict, false)
+	vctx := AnalyzeFloat(dict, false, lvl == MAX_CASCADE)
 	c.Dict = EncodeFloat(vctx, dict, lvl-1)
 	vctx.Close()
 	if c.Dict.Type() != TFloatRaw {

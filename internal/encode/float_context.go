@@ -21,15 +21,15 @@ type FloatContext[T types.Float] struct {
 	NumUnique  int              // vector cardinality (hint, may not be precise)
 	NumRuns    int              // vector runs
 	NumValues  int              // vector length
-	AlpScheme  int              // suggested ALP encoder scheme
 	Sample     []T              // data sample (optional)
 	SampleCtx  *FloatContext[T] // sample analysis
 	FreeSample bool             // hint whether sample may be reused
+	AlpEncoder *alp.Encoder[T]  // ALP encoder state
 }
 
 // AnalyzeFloat produces statistics about slice vals which are used to
 // find the most efficient encoding scheme.
-func AnalyzeFloat[T types.Float](vals []T, checkUnique bool) *FloatContext[T] {
+func AnalyzeFloat[T types.Float](vals []T, checkUnique, noALP bool) *FloatContext[T] {
 	c := newFloatContext[T]()
 	c.Min = vals[0]
 	c.Max = vals[0]
@@ -45,10 +45,9 @@ func AnalyzeFloat[T types.Float](vals []T, checkUnique bool) *FloatContext[T] {
 		c.NumRuns += util.Bool2int(vals[i] != v)
 	}
 
-	// TODO: avoid on ALP nested float containers
-	// let ALP estimate the best scheme
-	if c.Min != c.Max {
-		c.AlpScheme = alp.Scheme(vals)
+	// let ALP estimate the best scheme, avoid on ALP nested float containers
+	if c.Min != c.Max && !noALP {
+		c.AlpEncoder = alp.NewEncoder[T]().Analyze(vals)
 	}
 
 	// count unique only if necessary
@@ -83,8 +82,8 @@ func (c *FloatContext[T]) EligibleSchemes(lvl int) []FloatContainerType {
 	}
 
 	// use ALP as top-level scheme only
-	if lvl == MAX_CASCADE {
-		switch c.AlpScheme {
+	if lvl == MAX_CASCADE && c.AlpEncoder != nil {
+		switch c.AlpEncoder.State().Scheme {
 		case alp.AlpScheme:
 			schemes = append(schemes, TFloatAlp)
 		case alp.AlpRdScheme:
@@ -120,6 +119,10 @@ func (c *FloatContext[T]) Close() {
 	if c.SampleCtx != nil {
 		c.SampleCtx.Close()
 		c.SampleCtx = nil
+	}
+	if c.AlpEncoder != nil {
+		c.AlpEncoder.Close()
+		c.AlpEncoder = nil
 	}
 	if c.Sample != nil {
 		if c.FreeSample {

@@ -159,21 +159,25 @@ func (c *FloatAlpContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 }
 
 func (c *FloatAlpContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int) FloatContainer[T] {
-	enc := alp.NewEncoder[T]().Compress(vals)
+	enc := ctx.AlpEncoder
+	if enc == nil {
+		enc = alp.NewEncoder[T]()
+	}
+	enc.Compress(vals)
 	s := enc.State()
 
-	c.Exponent = s.EncodingIndice.Exponent
-	c.Factor = s.EncodingIndice.Factor
+	c.Exponent = s.Encoding.E
+	c.Factor = s.Encoding.F
 	c.dec = alp.NewDecoder[T](c.Factor, c.Exponent)
 
 	// encode child containers
-	c.Values = EncodeInt(nil, s.EncodedIntegers, lvl-1)
+	c.Values = EncodeInt(nil, s.Integers, lvl-1)
 	// fmt.Printf("ALP: int encoded as %s in %d bytes\n", c.Values.Type(), c.Values.MaxSize())
 	if len(s.Exceptions) > 0 {
 		c.hasException = true
 		c.Exception = EncodeFloat(nil, s.Exceptions, lvl-1)
 		// fmt.Printf("ALP: ex encoded as %s in %d bytes raw=%v\n", c.Exception.Type(), c.Exception.MaxSize(), s.Exceptions)
-		c.Positions = EncodeInt(nil, s.ExceptionPositions, lvl-1)
+		c.Positions = EncodeInt(nil, s.Positions, lvl-1)
 		// fmt.Printf("ALP: pos encoded as %s in %d bytes raw=%d\n", c.Positions.Type(), c.Positions.MaxSize(), s.ExceptionPositions)
 	}
 	enc.Close()

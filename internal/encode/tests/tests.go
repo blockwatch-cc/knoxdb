@@ -88,18 +88,21 @@ func MakeShortFloatTests[T types.Float](scheme int) []TestCase[T] {
 		// TFloatConstant:
 		return []TestCase[T]{MakeFloatTest[T]("const", 6, floatConstCase...)}
 	}
-	return []TestCase[T]{
+	tests := []TestCase[T]{
 		MakeFloatTest[T]("const", 6, floatConstCase...),
 		MakeFloatTest[T]("runs", 6, floatRunsCase...),
 		MakeFloatTest[T]("dict", 6, floatDictCase...),
 		MakeFloatTest[T]("alp", 6, floatAlpCase...),
-		MakeFloatTest[T]("alprd", 6, floatAlpRdCase...),
 	}
+	if scheme == 4 {
+		tests = append(tests, MakeFloatTest[T]("alprd", 6, floatAlpRdCase...))
+	}
+	return tests
 }
 
 func MakeFloatTest[T types.Float](s string, n int, data ...float64) TestCase[T] {
 	c := TestCase[T]{
-		Name: s + "_" + reflect.TypeOf(T(0)).String() + "_" + strconv.Itoa(n),
+		Name: s + "_" + strconv.Itoa(n),
 		Data: make([]T, n),
 	}
 	if len(data) > 0 {

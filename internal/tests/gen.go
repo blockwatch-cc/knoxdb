@@ -305,9 +305,9 @@ func GenRndBits[T types.Number](n, w int) []T {
 	case uint8:
 		res = util.ReinterpretSlice[uint8, T](util.RandUintsn[uint8](n, 1<<w-1))
 	case float64:
-		res = util.ReinterpretSlice[float64, T](util.RandFloatsn[float64](n, f64(1<<w-1)))
+		res = util.ReinterpretSlice[float64, T](util.RandFloatsn[float64](n, float64(uint64(1<<w-1))))
 	case float32:
-		res = util.ReinterpretSlice[float32, T](util.RandFloatsn[float32](n, f32(1<<w-1)))
+		res = util.ReinterpretSlice[float32, T](util.RandFloatsn[float32](n, float32(uint32(1<<w-1))))
 	}
 	return res
 }

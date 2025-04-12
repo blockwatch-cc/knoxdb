@@ -38,9 +38,9 @@ func GenForFloatScheme[T types.Float](scheme, n int) []T {
 	case 2: // TFloatDictionary,
 		return tests.GenDups[T](n, n/10, -1)
 	case 3: // TFloatAlp,
-		return tests.GenRnd[T](n)
+		return tests.GenRndBits[T](n, 28)
 	case 4: // TFloatAlpRd,
-		return tests.GenRnd[T](n)
+		return tests.GenRndBits[T](n, 49)
 	case 5: // TFloatRaw,
 		return tests.GenRnd[T](n)
 	default:
