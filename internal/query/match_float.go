@@ -9,18 +9,17 @@ import (
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/filter"
-	"blockwatch.cc/knoxdb/internal/filter/bloom"
-	"blockwatch.cc/knoxdb/internal/hash"
+	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/slicex"
 )
 
 // IN ---
 
 // In, Contains
-type floatInSetMatcher[T Number] struct {
+type floatInSetMatcher[T types.Float] struct {
 	noopMatcher
-	slice  slicex.OrderedNumbers[T]
-	hashes []hash.HashValue
+	slice  slicex.OrderedFloats[T]
+	hashes []filter.HashValue
 }
 
 func (m *floatInSetMatcher[T]) Weight() int { return m.slice.Len() }
@@ -39,7 +38,7 @@ func (m *floatInSetMatcher[T]) WithSlice(slice any) {
 	data := slice.([]T)
 	slices.Sort(data)
 	m.slice.Values = data
-	m.hashes = hash.HashAnySlice(data)
+	m.hashes = filter.HashMulti(data)
 }
 
 func (m floatInSetMatcher[T]) MatchValue(v any) bool {
@@ -51,15 +50,7 @@ func (m floatInSetMatcher[T]) MatchRange(from, to any) bool {
 }
 
 func (m floatInSetMatcher[T]) MatchFilter(flt filter.Filter) bool {
-	if x, ok := flt.(*bloom.Filter); ok {
-		return x.ContainsAnyHash(m.hashes)
-	}
-	for _, h := range m.hashes {
-		if flt.Contains(h.Uint64()) {
-			return true
-		}
-	}
-	return false
+	return flt.ContainsAny(m.hashes)
 }
 
 func (m floatInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
@@ -96,9 +87,9 @@ func (m floatInSetMatcher[T]) MatchRangeVectors(mins, maxs *block.Block, bits, m
 
 // NOT IN ---
 
-type floatNotInSetMatcher[T Number] struct {
+type floatNotInSetMatcher[T types.Float] struct {
 	noopMatcher
-	slice slicex.OrderedNumbers[T]
+	slice slicex.OrderedFloats[T]
 }
 
 func (m *floatNotInSetMatcher[T]) Weight() int { return m.slice.Len() }

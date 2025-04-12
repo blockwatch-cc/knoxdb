@@ -11,7 +11,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/encode/analyze"
 	"blockwatch.cc/knoxdb/internal/encode/hashprobe"
-	"blockwatch.cc/knoxdb/internal/filter/loglogbeta"
+	"blockwatch.cc/knoxdb/internal/filter/llb"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/util"
@@ -131,11 +131,11 @@ func (c *IntegerContext[T]) estimateCardinality(vals []T) int {
 		c.UniqueArray = make([]T, sz)
 	}
 	c.UniqueArray = c.UniqueArray[:sz]
-	unique, _ := loglogbeta.NewFilterBuffer(util.ToByteSlice(c.UniqueArray), 8)
+	unique, _ := llb.NewFilterBuffer(util.ToByteSlice(c.UniqueArray), 8)
 	if c.PhyBits == 64 {
-		unique.AddManyUint64(util.ReinterpretSlice[T, uint64](vals))
+		unique.AddMultiUint64(util.ReinterpretSlice[T, uint64](vals))
 	} else {
-		unique.AddManyUint32(util.ReinterpretSlice[T, uint32](vals))
+		unique.AddMultiUint32(util.ReinterpretSlice[T, uint32](vals))
 	}
 	card := int(unique.Cardinality())
 	clear(c.UniqueArray)

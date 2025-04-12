@@ -2,7 +2,7 @@
 // Author: stefanx@blockwatch.cc
 
 #include "textflag.h"
-#include "constants_AVX.h"
+#include "constants.h"
 
 #define rol32_17(Y_reg) \
     VPSLLD  $17, Y_reg, Y15 \
@@ -11,8 +11,8 @@
 
 /***************************** filterAddManyUint32 ****************************************************/
 
-// func filterAddManyUint32AVX2Core(f LogLogBeta, data []uint32, seed uint32)
-TEXT ·filterAddManyUint32AVX2Core(SB), NOSPLIT, $0-76
+// func llb_add_u32_core_avx2(f LogLogBeta, data []uint32, seed uint32)
+TEXT ·llb_add_u32_core_avx2(SB), NOSPLIT, $0-76
         MOVQ    data_base+48(FP), SI
         MOVQ    data_len+56(FP), BX
         MOVQ    f_buf_base+24(FP), DI
@@ -192,8 +192,8 @@ loop:
 exit:
         RET
 
-// func filterAddManyUint32AVX512Core(f LogLogBeta, data []uint32, seed uint32)
-TEXT ·filterAddManyUint32AVX512Core(SB), NOSPLIT, $0-76
+// func llb_add_u32_core_avx512(f LogLogBeta, data []uint32, seed uint32)
+TEXT ·llb_add_u32_core_avx512(SB), NOSPLIT, $0-76
         MOVQ    data_base+48(FP), SI
         MOVQ    data_len+56(FP), BX
         MOVQ    f_buf_base+24(FP), DI
@@ -437,8 +437,8 @@ exit:
 
 /***************************** filterAddManyUint64 ****************************************************/
 
-// func filterAddManyUint64AVX2Core(f LogLogBeta, data []uint64, seed uint32)
-TEXT ·filterAddManyUint64AVX2Core(SB), NOSPLIT, $0-76
+// func llb_add_u64_core_avx2(f LogLogBeta, data []uint64, seed uint32)
+TEXT ·llb_add_u64_core_avx2(SB), NOSPLIT, $0-76
         MOVQ    data_base+48(FP), SI
         MOVQ    data_len+56(FP), BX
         MOVQ    f_buf_base+24(FP), DI
@@ -639,8 +639,8 @@ loop:
 exit:
         RET
 
-// func XYZfilterAddManyUint64AVX512Core(f LogLogBeta, data []uint64, seed uint32)
-TEXT ·filterAddManyUint64AVX512Core(SB), NOSPLIT, $0-76
+// func llb_add_u64_core_avx512(f LogLogBeta, data []uint64, seed uint32)
+TEXT ·llb_add_u64_core_avx512(SB), NOSPLIT, $0-76
         MOVQ    data_base+48(FP), SI
         MOVQ    data_len+56(FP), BX
         MOVQ    f_buf_base+24(FP), DI
@@ -912,8 +912,8 @@ exit:
 
 /***************************** filterMerge ****************************************************/
 
-// func filterMergeAVX2(dst, src []byte)
-TEXT ·filterMergeAVX2(SB), NOSPLIT, $0-48
+// func llb_merge_core_avx2(dst, src []byte)
+TEXT ·llb_merge_core_avx2(SB), NOSPLIT, $0-48
 	MOVQ	dst_base+0(FP), SI
 	MOVQ	dst_len+8(FP), BX
 	MOVQ	src_base+24(FP), DI
@@ -973,8 +973,8 @@ done:
 
 /***************************** regSumAndZeros ****************************************************/
 
-// func regSumAndZerosAVX2(registers []uint8) (float64, float64)
-TEXT ·regSumAndZerosAVX2(SB), NOSPLIT, $0-40
+// func llb_sum_core_avx2(registers []uint8) (float64, float64)
+TEXT ·llb_sum_core_avx2(SB), NOSPLIT, $0-40
 	MOVQ	        registers_base+0(FP), SI
 	MOVQ	        registers_len+8(FP), BX
 
@@ -1084,8 +1084,8 @@ done:
         VZEROUPPER
 	RET
 
-// func regSumAndZerosAVX512(registers []uint8) (float64, float64)
-TEXT ·regSumAndZerosAVX512(SB), NOSPLIT, $0-40
+// func llb_sum_core_avx512(registers []uint8) (float64, float64)
+TEXT ·llb_sum_core_avx512(SB), NOSPLIT, $0-40
 	MOVQ	        registers_base+0(FP), SI
 	MOVQ	        registers_len+8(FP), BX
 
@@ -1207,8 +1207,8 @@ done:
  * first it generates 8 hashes with vectorized code
  * then it puts the 8 hashes in the filter with an small loop. This cannot be vectorized
  
-// func filterAddManyUint32AVX2Core(f LogLogBeta, data []uint32, seed uint32)
-TEXT ·filterAddManyUint32AVX2Core(SB), NOSPLIT, $0-76
+// func ·llb_add_u32_core_avx2(f LogLogBeta, data []uint32, seed uint32)
+TEXT ··llb_add_u32_core_avx2(SB), NOSPLIT, $0-76
         MOVQ    data_base+48(FP), SI
         MOVQ    data_len+56(FP), BX
         MOVQ    f_buf_base+24(FP), DI
@@ -1297,8 +1297,8 @@ exit:
  * next evolution step would be to interleave the code for processing the old hashes and calculating
  * the new ones to achieve instruction level parallism. This leads to the functions above
 
-// func filterAddManyUint32AVX2Core(f LogLogBeta, data []uint32, seed uint32)
-TEXT ·filterAddManyUint32AVX2Core(SB), NOSPLIT, $0-76
+// func ·llb_add_u32_core_avx2(f LogLogBeta, data []uint32, seed uint32)
+TEXT ··llb_add_u32_core_avx2(SB), NOSPLIT, $0-76
         MOVQ    data_base+48(FP), SI
         MOVQ    data_len+56(FP), BX
         MOVQ    f_buf_base+24(FP), DI

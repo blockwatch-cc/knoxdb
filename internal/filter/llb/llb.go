@@ -1,7 +1,7 @@
 // Copyright (c) 2021 Blockwatch Data Inc.
 // Author: stefan@blockwatch.cc
 
-package loglogbeta
+package llb
 
 import (
 	"fmt"
@@ -106,6 +106,12 @@ func (llb *LogLogBeta) AddHash(x uint32) {
 	}
 }
 
+func (llb *LogLogBeta) AddHashes(h []uint64) {
+	for _, v := range h {
+		llb.AddHash(uint32(v))
+	}
+}
+
 func (llb *LogLogBeta) Add(value []byte) {
 	llb.AddHash(xxhash32.Checksum(value, 0))
 }
@@ -126,25 +132,25 @@ func (llb *LogLogBeta) AddInt64(val int64) {
 	llb.AddHash(xxhash.Hash32u64(uint64(val), 0))
 }
 
-func (llb *LogLogBeta) AddManyUint32(data []uint32) {
-	filterAddManyUint32(llb, data, 0)
+func (llb *LogLogBeta) AddMultiUint32(data []uint32) {
+	llb_add_u32(llb, data, 0)
 }
 
-func (llb *LogLogBeta) AddManyInt32(data []int32) {
-	filterAddManyUint32(llb, util.ReinterpretSlice[int32, uint32](data), 0)
+func (llb *LogLogBeta) AddMultiInt32(data []int32) {
+	llb_add_u32(llb, util.ReinterpretSlice[int32, uint32](data), 0)
 }
 
-func (llb *LogLogBeta) AddManyUint64(data []uint64) {
-	filterAddManyUint64(llb, data, 0)
+func (llb *LogLogBeta) AddMultiUint64(data []uint64) {
+	llb_add_u64(llb, data, 0)
 }
 
-func (llb *LogLogBeta) AddManyInt64(data []int64) {
-	filterAddManyUint64(llb, util.ReinterpretSlice[int64, uint64](data), 0)
+func (llb *LogLogBeta) AddMultiInt64(data []int64) {
+	llb_add_u64(llb, util.ReinterpretSlice[int64, uint64](data), 0)
 }
 
 // Cardinality returns the number of unique elements added to the sketch
 func (llb *LogLogBeta) Cardinality() uint64 {
-	return filterCardinality(llb)
+	return llb_cardinality(llb)
 }
 
 // Merge takes another LogLogBeta and combines it with llb one, making llb the union of both.
@@ -155,7 +161,7 @@ func (llb *LogLogBeta) Merge(other *LogLogBeta) {
 	if len(llb.buf) != len(other.buf) {
 		return
 	}
-	filterMerge(llb.buf, other.buf)
+	llb_merge(llb.buf, other.buf)
 }
 
 func (llb *LogLogBeta) Bytes() []byte {

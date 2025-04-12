@@ -197,7 +197,7 @@ func Unique(typ types.BlockType, a any) any {
 	case types.BlockUint64:
 		return slicex.Unique(a.([]uint64))
 	case types.BlockFloat64:
-		return slicex.Unique(a.([]float64))
+		return slicex.UniqueFloats(a.([]float64))
 	case types.BlockBytes:
 		return slicex.UniqueBytes(a.([][]byte))
 	case types.BlockInt32:
@@ -213,7 +213,7 @@ func Unique(typ types.BlockType, a any) any {
 	case types.BlockUint8:
 		return slicex.Unique(a.([]uint8))
 	case types.BlockFloat32:
-		return slicex.Unique(a.([]float32))
+		return slicex.UniqueFloats(a.([]float32))
 	case types.BlockBool:
 		return slicex.UniqueBools(a.([]bool))
 	case types.BlockInt128:
@@ -228,48 +228,48 @@ func Unique(typ types.BlockType, a any) any {
 func Intersect(typ types.BlockType, a, b any) any {
 	switch typ {
 	case types.BlockInt64, types.BlockTime:
-		x := slicex.NewOrderedNumbers[int64](a.([]int64)).SetUnique()
-		y := slicex.NewOrderedNumbers[int64](b.([]int64)).SetUnique()
+		x := slicex.NewOrderedIntegers(a.([]int64)).SetUnique()
+		y := slicex.NewOrderedIntegers(b.([]int64)).SetUnique()
 		return x.Intersect(y).Values
 	case types.BlockUint64:
-		x := slicex.NewOrderedNumbers[uint64](a.([]uint64)).SetUnique()
-		y := slicex.NewOrderedNumbers[uint64](b.([]uint64)).SetUnique()
+		x := slicex.NewOrderedIntegers(a.([]uint64)).SetUnique()
+		y := slicex.NewOrderedIntegers(b.([]uint64)).SetUnique()
 		return x.Intersect(y).Values
 	case types.BlockFloat64:
-		x := slicex.NewOrderedNumbers[float64](a.([]float64)).SetUnique()
-		y := slicex.NewOrderedNumbers[float64](b.([]float64)).SetUnique()
+		x := slicex.NewOrderedFloats(a.([]float64)).SetUnique()
+		y := slicex.NewOrderedFloats(b.([]float64)).SetUnique()
 		return x.Intersect(y).Values
 	case types.BlockBytes:
 		x := slicex.NewOrderedBytes(a.([][]byte)).SetUnique()
 		y := slicex.NewOrderedBytes(b.([][]byte)).SetUnique()
 		return x.Intersect(y).Values
 	case types.BlockInt32:
-		x := slicex.NewOrderedNumbers[int32](a.([]int32)).SetUnique()
-		y := slicex.NewOrderedNumbers[int32](b.([]int32)).SetUnique()
+		x := slicex.NewOrderedIntegers(a.([]int32)).SetUnique()
+		y := slicex.NewOrderedIntegers(b.([]int32)).SetUnique()
 		return x.Intersect(y).Values
 	case types.BlockInt16:
-		x := slicex.NewOrderedNumbers[int16](a.([]int16)).SetUnique()
-		y := slicex.NewOrderedNumbers[int16](b.([]int16)).SetUnique()
+		x := slicex.NewOrderedIntegers(a.([]int16)).SetUnique()
+		y := slicex.NewOrderedIntegers(b.([]int16)).SetUnique()
 		return x.Intersect(y).Values
 	case types.BlockInt8:
-		x := slicex.NewOrderedNumbers[int8](a.([]int8)).SetUnique()
-		y := slicex.NewOrderedNumbers[int8](b.([]int8)).SetUnique()
+		x := slicex.NewOrderedIntegers(a.([]int8)).SetUnique()
+		y := slicex.NewOrderedIntegers(b.([]int8)).SetUnique()
 		return x.Intersect(y).Values
 	case types.BlockUint32:
-		x := slicex.NewOrderedNumbers[uint32](a.([]uint32)).SetUnique()
-		y := slicex.NewOrderedNumbers[uint32](b.([]uint32)).SetUnique()
+		x := slicex.NewOrderedIntegers(a.([]uint32)).SetUnique()
+		y := slicex.NewOrderedIntegers(b.([]uint32)).SetUnique()
 		return x.Intersect(y).Values
 	case types.BlockUint16:
-		x := slicex.NewOrderedNumbers[uint16](a.([]uint16)).SetUnique()
-		y := slicex.NewOrderedNumbers[uint16](b.([]uint16)).SetUnique()
+		x := slicex.NewOrderedIntegers(a.([]uint16)).SetUnique()
+		y := slicex.NewOrderedIntegers(b.([]uint16)).SetUnique()
 		return x.Intersect(y).Values
 	case types.BlockUint8:
-		x := slicex.NewOrderedNumbers[uint8](a.([]uint8)).SetUnique()
-		y := slicex.NewOrderedNumbers[uint8](b.([]uint8)).SetUnique()
+		x := slicex.NewOrderedIntegers(a.([]uint8)).SetUnique()
+		y := slicex.NewOrderedIntegers(b.([]uint8)).SetUnique()
 		return x.Intersect(y).Values
 	case types.BlockFloat32:
-		x := slicex.NewOrderedNumbers[float32](a.([]float32)).SetUnique()
-		y := slicex.NewOrderedNumbers[float32](b.([]float32)).SetUnique()
+		x := slicex.NewOrderedFloats(a.([]float32)).SetUnique()
+		y := slicex.NewOrderedFloats(b.([]float32)).SetUnique()
 		return x.Intersect(y).Values
 	case types.BlockBool:
 		x, y := slicex.ToBoolBits(a.([]bool)...), slicex.ToBoolBits(b.([]bool)...)
@@ -286,48 +286,48 @@ func Intersect(typ types.BlockType, a, b any) any {
 func Union(typ types.BlockType, a, b any) any {
 	switch typ {
 	case types.BlockInt64, types.BlockTime:
-		x := slicex.NewOrderedNumbers[int64](a.([]int64)).SetUnique()
-		y := slicex.NewOrderedNumbers[int64](b.([]int64)).SetUnique()
+		x := slicex.NewOrderedIntegers(a.([]int64)).SetUnique()
+		y := slicex.NewOrderedIntegers(b.([]int64)).SetUnique()
 		return x.Union(y).Values
 	case types.BlockUint64:
-		x := slicex.NewOrderedNumbers[uint64](a.([]uint64)).SetUnique()
-		y := slicex.NewOrderedNumbers[uint64](b.([]uint64)).SetUnique()
+		x := slicex.NewOrderedIntegers(a.([]uint64)).SetUnique()
+		y := slicex.NewOrderedIntegers(b.([]uint64)).SetUnique()
 		return x.Union(y).Values
 	case types.BlockFloat64:
-		x := slicex.NewOrderedNumbers[float64](a.([]float64)).SetUnique()
-		y := slicex.NewOrderedNumbers[float64](b.([]float64)).SetUnique()
+		x := slicex.NewOrderedFloats(a.([]float64)).SetUnique()
+		y := slicex.NewOrderedFloats(b.([]float64)).SetUnique()
 		return x.Union(y).Values
 	case types.BlockBytes:
 		x := slicex.NewOrderedBytes(a.([][]byte)).SetUnique()
 		y := slicex.NewOrderedBytes(b.([][]byte)).SetUnique()
 		return x.Union(y).Values
 	case types.BlockInt32:
-		x := slicex.NewOrderedNumbers[int32](a.([]int32)).SetUnique()
-		y := slicex.NewOrderedNumbers[int32](b.([]int32)).SetUnique()
+		x := slicex.NewOrderedIntegers(a.([]int32)).SetUnique()
+		y := slicex.NewOrderedIntegers(b.([]int32)).SetUnique()
 		return x.Union(y).Values
 	case types.BlockInt16:
-		x := slicex.NewOrderedNumbers[int16](a.([]int16)).SetUnique()
-		y := slicex.NewOrderedNumbers[int16](b.([]int16)).SetUnique()
+		x := slicex.NewOrderedIntegers(a.([]int16)).SetUnique()
+		y := slicex.NewOrderedIntegers(b.([]int16)).SetUnique()
 		return x.Union(y).Values
 	case types.BlockInt8:
-		x := slicex.NewOrderedNumbers[int8](a.([]int8)).SetUnique()
-		y := slicex.NewOrderedNumbers[int8](b.([]int8)).SetUnique()
+		x := slicex.NewOrderedIntegers(a.([]int8)).SetUnique()
+		y := slicex.NewOrderedIntegers(b.([]int8)).SetUnique()
 		return x.Union(y).Values
 	case types.BlockUint32:
-		x := slicex.NewOrderedNumbers[uint32](a.([]uint32)).SetUnique()
-		y := slicex.NewOrderedNumbers[uint32](b.([]uint32)).SetUnique()
+		x := slicex.NewOrderedIntegers(a.([]uint32)).SetUnique()
+		y := slicex.NewOrderedIntegers(b.([]uint32)).SetUnique()
 		return x.Union(y).Values
 	case types.BlockUint16:
-		x := slicex.NewOrderedNumbers[uint16](a.([]uint16)).SetUnique()
-		y := slicex.NewOrderedNumbers[uint16](b.([]uint16)).SetUnique()
+		x := slicex.NewOrderedIntegers(a.([]uint16)).SetUnique()
+		y := slicex.NewOrderedIntegers(b.([]uint16)).SetUnique()
 		return x.Union(y).Values
 	case types.BlockUint8:
-		x := slicex.NewOrderedNumbers[uint8](a.([]uint8)).SetUnique()
-		y := slicex.NewOrderedNumbers[uint8](b.([]uint8)).SetUnique()
+		x := slicex.NewOrderedIntegers(a.([]uint8)).SetUnique()
+		y := slicex.NewOrderedIntegers(b.([]uint8)).SetUnique()
 		return x.Union(y).Values
 	case types.BlockFloat32:
-		x := slicex.NewOrderedNumbers[float32](a.([]float32)).SetUnique()
-		y := slicex.NewOrderedNumbers[float32](b.([]float32)).SetUnique()
+		x := slicex.NewOrderedFloats(a.([]float32)).SetUnique()
+		y := slicex.NewOrderedFloats(b.([]float32)).SetUnique()
 		return x.Union(y).Values
 	case types.BlockBool:
 		x, y := slicex.ToBoolBits(a.([]bool)...), slicex.ToBoolBits(b.([]bool)...)
@@ -344,48 +344,48 @@ func Union(typ types.BlockType, a, b any) any {
 func Difference(typ types.BlockType, a, b any) any {
 	switch typ {
 	case types.BlockInt64, types.BlockTime:
-		x := slicex.NewOrderedNumbers[int64](a.([]int64)).SetUnique()
-		y := slicex.NewOrderedNumbers[int64](b.([]int64)).SetUnique()
+		x := slicex.NewOrderedIntegers(a.([]int64)).SetUnique()
+		y := slicex.NewOrderedIntegers(b.([]int64)).SetUnique()
 		return x.Difference(y).Values
 	case types.BlockUint64:
-		x := slicex.NewOrderedNumbers[uint64](a.([]uint64)).SetUnique()
-		y := slicex.NewOrderedNumbers[uint64](b.([]uint64)).SetUnique()
+		x := slicex.NewOrderedIntegers(a.([]uint64)).SetUnique()
+		y := slicex.NewOrderedIntegers(b.([]uint64)).SetUnique()
 		return x.Difference(y).Values
 	case types.BlockFloat64:
-		x := slicex.NewOrderedNumbers[float64](a.([]float64)).SetUnique()
-		y := slicex.NewOrderedNumbers[float64](b.([]float64)).SetUnique()
+		x := slicex.NewOrderedFloats(a.([]float64)).SetUnique()
+		y := slicex.NewOrderedFloats(b.([]float64)).SetUnique()
 		return x.Difference(y).Values
 	case types.BlockBytes:
 		x := slicex.NewOrderedBytes(a.([][]byte)).SetUnique()
 		y := slicex.NewOrderedBytes(b.([][]byte)).SetUnique()
 		return x.Difference(y).Values
 	case types.BlockInt32:
-		x := slicex.NewOrderedNumbers[int32](a.([]int32)).SetUnique()
-		y := slicex.NewOrderedNumbers[int32](b.([]int32)).SetUnique()
+		x := slicex.NewOrderedIntegers(a.([]int32)).SetUnique()
+		y := slicex.NewOrderedIntegers(b.([]int32)).SetUnique()
 		return x.Difference(y).Values
 	case types.BlockInt16:
-		x := slicex.NewOrderedNumbers[int16](a.([]int16)).SetUnique()
-		y := slicex.NewOrderedNumbers[int16](b.([]int16)).SetUnique()
+		x := slicex.NewOrderedIntegers(a.([]int16)).SetUnique()
+		y := slicex.NewOrderedIntegers(b.([]int16)).SetUnique()
 		return x.Difference(y).Values
 	case types.BlockInt8:
-		x := slicex.NewOrderedNumbers[int8](a.([]int8)).SetUnique()
-		y := slicex.NewOrderedNumbers[int8](b.([]int8)).SetUnique()
+		x := slicex.NewOrderedIntegers(a.([]int8)).SetUnique()
+		y := slicex.NewOrderedIntegers(b.([]int8)).SetUnique()
 		return x.Difference(y).Values
 	case types.BlockUint32:
-		x := slicex.NewOrderedNumbers[uint32](a.([]uint32)).SetUnique()
-		y := slicex.NewOrderedNumbers[uint32](b.([]uint32)).SetUnique()
+		x := slicex.NewOrderedIntegers(a.([]uint32)).SetUnique()
+		y := slicex.NewOrderedIntegers(b.([]uint32)).SetUnique()
 		return x.Difference(y).Values
 	case types.BlockUint16:
-		x := slicex.NewOrderedNumbers[uint16](a.([]uint16)).SetUnique()
-		y := slicex.NewOrderedNumbers[uint16](b.([]uint16)).SetUnique()
+		x := slicex.NewOrderedIntegers(a.([]uint16)).SetUnique()
+		y := slicex.NewOrderedIntegers(b.([]uint16)).SetUnique()
 		return x.Difference(y).Values
 	case types.BlockUint8:
-		x := slicex.NewOrderedNumbers[uint8](a.([]uint8)).SetUnique()
-		y := slicex.NewOrderedNumbers[uint8](b.([]uint8)).SetUnique()
+		x := slicex.NewOrderedIntegers(a.([]uint8)).SetUnique()
+		y := slicex.NewOrderedIntegers(b.([]uint8)).SetUnique()
 		return x.Difference(y).Values
 	case types.BlockFloat32:
-		x := slicex.NewOrderedNumbers[float32](a.([]float32)).SetUnique()
-		y := slicex.NewOrderedNumbers[float32](b.([]float32)).SetUnique()
+		x := slicex.NewOrderedFloats(a.([]float32)).SetUnique()
+		y := slicex.NewOrderedFloats(b.([]float32)).SetUnique()
 		return x.Difference(y).Values
 	case types.BlockBool:
 		x, y := slicex.ToBoolBits(a.([]bool)...), slicex.ToBoolBits(b.([]bool)...)
@@ -401,81 +401,81 @@ func Difference(typ types.BlockType, a, b any) any {
 
 // Range returns min, max of a set and whether all values between min and
 // max are present, i.e. the set is complete.
-func Range(typ types.BlockType, set any) (minv any, maxv any, isComplete bool) {
+func Range(typ types.BlockType, set any) (minv any, maxv any, isContinuous bool) {
 	if bs, ok := set.(*xroar.Bitmap); ok {
 		minU64 := bs.Minimum()
 		maxU64 := bs.Maximum()
-		isComplete = maxU64-minU64+1 == uint64(bs.GetCardinality())
+		isContinuous = maxU64-minU64+1 == uint64(bs.GetCardinality())
 		minv, _ = Cast(typ, minU64)
 		maxv, _ = Cast(typ, maxU64)
 		return
 	}
 	switch typ {
 	case types.BlockInt64, types.BlockTime:
-		x := slicex.NewOrderedNumbers[int64](set.([]int64))
+		x := slicex.NewOrderedIntegers(set.([]int64))
 		minv, maxv = x.MinMax()
-		isComplete = x.IsFull()
+		isContinuous = x.IsContinuous()
 	case types.BlockInt32:
-		x := slicex.NewOrderedNumbers[int32](set.([]int32))
+		x := slicex.NewOrderedIntegers(set.([]int32))
 		minv, maxv = x.MinMax()
-		isComplete = x.IsFull()
+		isContinuous = x.IsContinuous()
 	case types.BlockInt16:
-		x := slicex.NewOrderedNumbers[int16](set.([]int16))
+		x := slicex.NewOrderedIntegers(set.([]int16))
 		minv, maxv = x.MinMax()
-		isComplete = x.IsFull()
+		isContinuous = x.IsContinuous()
 	case types.BlockInt8:
-		x := slicex.NewOrderedNumbers[int8](set.([]int8))
+		x := slicex.NewOrderedIntegers(set.([]int8))
 		minv, maxv = x.MinMax()
-		isComplete = x.IsFull()
+		isContinuous = x.IsContinuous()
 	case types.BlockUint64:
-		x := slicex.NewOrderedNumbers[uint64](set.([]uint64))
+		x := slicex.NewOrderedIntegers(set.([]uint64))
 		minv, maxv = x.MinMax()
-		isComplete = x.IsFull()
+		isContinuous = x.IsContinuous()
 	case types.BlockUint32:
-		x := slicex.NewOrderedNumbers[uint32](set.([]uint32))
+		x := slicex.NewOrderedIntegers(set.([]uint32))
 		minv, maxv = x.MinMax()
-		isComplete = x.IsFull()
+		isContinuous = x.IsContinuous()
 	case types.BlockUint16:
-		x := slicex.NewOrderedNumbers[uint16](set.([]uint16))
+		x := slicex.NewOrderedIntegers(set.([]uint16))
 		minv, maxv = x.MinMax()
-		isComplete = x.IsFull()
+		isContinuous = x.IsContinuous()
 	case types.BlockUint8:
-		x := slicex.NewOrderedNumbers[uint8](set.([]uint8))
+		x := slicex.NewOrderedIntegers(set.([]uint8))
 		minv, maxv = x.MinMax()
-		isComplete = x.IsFull()
+		isContinuous = x.IsContinuous()
 	case types.BlockInt128:
 		i128s := set.([]num.Int128)
 		mini, maxi := num.Int128MinMax(num.Int128Sort(i128s))
 		minv, maxv = mini, maxi
-		isComplete = int(maxi.Sub(mini).Int64()+1) == len(i128s)
+		isContinuous = int(maxi.Sub(mini).Int64()+1) == len(i128s)
 	case types.BlockInt256:
 		i256s := set.([]num.Int256)
 		mini, maxi := num.Int256MinMax(num.Int256Sort(i256s))
 		minv, maxv = mini, maxi
-		isComplete = int(maxi.Sub(mini).Int64()+1) == len(i256s)
+		isContinuous = int(maxi.Sub(mini).Int64()+1) == len(i256s)
 	case types.BlockFloat64:
-		x := slicex.NewOrderedNumbers(set.([]float64))
+		x := slicex.NewOrderedFloats(set.([]float64))
 		minv, maxv = x.MinMax()
-		isComplete = false
+		isContinuous = false
 	case types.BlockFloat32:
-		x := slicex.NewOrderedNumbers(set.([]float32))
+		x := slicex.NewOrderedFloats(set.([]float32))
 		minv, maxv = x.MinMax()
-		isComplete = false
+		isContinuous = false
 	case types.BlockBool:
 		switch slicex.ToBoolBits(set.([]bool)...) {
 		case 0:
-			minv, maxv, isComplete = false, false, false
+			minv, maxv, isContinuous = false, false, false
 		case 1:
-			minv, maxv, isComplete = false, false, false
+			minv, maxv, isContinuous = false, false, false
 		case 2:
-			minv, maxv, isComplete = true, true, false
+			minv, maxv, isContinuous = true, true, false
 		case 3:
-			minv, maxv, isComplete = false, true, true
+			minv, maxv, isContinuous = false, true, true
 		}
 	case types.BlockBytes:
 		x := slicex.NewOrderedBytes(set.([][]byte))
 		minv, maxv = x.MinMax()
-		isComplete = false
+		isContinuous = false
 	default:
 		panic(fmt.Errorf("range: unsupported block type %s", typ))
 	}
@@ -705,37 +705,37 @@ func Zero(typ types.BlockType) any {
 func RemoveRange(typ types.BlockType, s, from, to any) any {
 	switch typ {
 	case types.BlockInt64, types.BlockTime:
-		return slicex.NewOrderedNumbers[int64](s.([]int64)).
+		return slicex.NewOrderedIntegers(s.([]int64)).
 			RemoveRange(from.(int64), to.(int64)).Values
 	case types.BlockUint64:
-		return slicex.NewOrderedNumbers[uint64](s.([]uint64)).
+		return slicex.NewOrderedIntegers(s.([]uint64)).
 			RemoveRange(from.(uint64), to.(uint64)).Values
 	case types.BlockFloat64:
-		return slicex.NewOrderedNumbers[float64](s.([]float64)).
+		return slicex.NewOrderedFloats(s.([]float64)).
 			RemoveRange(from.(float64), to.(float64)).Values
 	case types.BlockBytes:
 		return slicex.NewOrderedBytes(s.([][]byte)).
 			RemoveRange(from.([]byte), to.([]byte)).Values
 	case types.BlockInt32:
-		return slicex.NewOrderedNumbers[int32](s.([]int32)).
+		return slicex.NewOrderedIntegers(s.([]int32)).
 			RemoveRange(from.(int32), to.(int32)).Values
 	case types.BlockInt16:
-		return slicex.NewOrderedNumbers[int16](s.([]int16)).
+		return slicex.NewOrderedIntegers(s.([]int16)).
 			RemoveRange(from.(int16), to.(int16)).Values
 	case types.BlockInt8:
-		return slicex.NewOrderedNumbers[int8](s.([]int8)).
+		return slicex.NewOrderedIntegers(s.([]int8)).
 			RemoveRange(from.(int8), to.(int8)).Values
 	case types.BlockUint32:
-		return slicex.NewOrderedNumbers[uint32](s.([]uint32)).
+		return slicex.NewOrderedIntegers(s.([]uint32)).
 			RemoveRange(from.(uint32), to.(uint32)).Values
 	case types.BlockUint16:
-		return slicex.NewOrderedNumbers[uint16](s.([]uint16)).
+		return slicex.NewOrderedIntegers(s.([]uint16)).
 			RemoveRange(from.(uint16), to.(uint16)).Values
 	case types.BlockUint8:
-		return slicex.NewOrderedNumbers[uint8](s.([]uint8)).
+		return slicex.NewOrderedIntegers(s.([]uint8)).
 			RemoveRange(from.(uint8), to.(uint8)).Values
 	case types.BlockFloat32:
-		return slicex.NewOrderedNumbers[float32](s.([]float32)).
+		return slicex.NewOrderedFloats(s.([]float32)).
 			RemoveRange(from.(float32), to.(float32)).Values
 	case types.BlockBool:
 		x := slicex.ToBoolBits(s.([]bool)...)
@@ -754,37 +754,37 @@ func RemoveRange(typ types.BlockType, s, from, to any) any {
 func IntersectRange(typ types.BlockType, s, from, to any) any {
 	switch typ {
 	case types.BlockInt64, types.BlockTime:
-		return slicex.NewOrderedNumbers[int64](s.([]int64)).
+		return slicex.NewOrderedIntegers(s.([]int64)).
 			IntersectRange(from.(int64), to.(int64)).Values
 	case types.BlockUint64:
-		return slicex.NewOrderedNumbers[uint64](s.([]uint64)).
+		return slicex.NewOrderedIntegers(s.([]uint64)).
 			IntersectRange(from.(uint64), to.(uint64)).Values
 	case types.BlockFloat64:
-		return slicex.NewOrderedNumbers[float64](s.([]float64)).
+		return slicex.NewOrderedFloats(s.([]float64)).
 			IntersectRange(from.(float64), to.(float64)).Values
 	case types.BlockBytes:
 		return slicex.NewOrderedBytes(s.([][]byte)).
 			IntersectRange(from.([]byte), to.([]byte)).Values
 	case types.BlockInt32:
-		return slicex.NewOrderedNumbers[int32](s.([]int32)).
+		return slicex.NewOrderedIntegers(s.([]int32)).
 			IntersectRange(from.(int32), to.(int32)).Values
 	case types.BlockInt16:
-		return slicex.NewOrderedNumbers[int16](s.([]int16)).
+		return slicex.NewOrderedIntegers(s.([]int16)).
 			IntersectRange(from.(int16), to.(int16)).Values
 	case types.BlockInt8:
-		return slicex.NewOrderedNumbers[int8](s.([]int8)).
+		return slicex.NewOrderedIntegers(s.([]int8)).
 			IntersectRange(from.(int8), to.(int8)).Values
 	case types.BlockUint32:
-		return slicex.NewOrderedNumbers[uint32](s.([]uint32)).
+		return slicex.NewOrderedIntegers(s.([]uint32)).
 			IntersectRange(from.(uint32), to.(uint32)).Values
 	case types.BlockUint16:
-		return slicex.NewOrderedNumbers[uint16](s.([]uint16)).
+		return slicex.NewOrderedIntegers(s.([]uint16)).
 			IntersectRange(from.(uint16), to.(uint16)).Values
 	case types.BlockUint8:
-		return slicex.NewOrderedNumbers[uint8](s.([]uint8)).
+		return slicex.NewOrderedIntegers(s.([]uint8)).
 			IntersectRange(from.(uint8), to.(uint8)).Values
 	case types.BlockFloat32:
-		return slicex.NewOrderedNumbers[float32](s.([]float32)).
+		return slicex.NewOrderedFloats(s.([]float32)).
 			IntersectRange(from.(float32), to.(float32)).Values
 	case types.BlockBool:
 		x := slicex.ToBoolBits(s.([]bool)...)

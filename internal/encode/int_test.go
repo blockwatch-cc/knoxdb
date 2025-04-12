@@ -13,7 +13,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/bitset"
 	etests "blockwatch.cc/knoxdb/internal/encode/tests"
-	"blockwatch.cc/knoxdb/internal/filter/loglogbeta"
+	"blockwatch.cc/knoxdb/internal/filter/llb"
 	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
@@ -602,7 +602,7 @@ func BenchmarkAppendTo(b *testing.B) {
 
 func BenchmarkUniqueMap(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
-		data := util.RandInts[int16](c.N)
+		data := tests.GenRnd[int16](c.N)
 		var card int
 		b.Run(c.Name, func(b *testing.B) {
 			b.ReportAllocs()
@@ -621,7 +621,7 @@ func BenchmarkUniqueMap(b *testing.B) {
 
 func BenchmarkUniqueArray(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
-		data := util.RandInts[int16](c.N)
+		data := tests.GenRnd[int16](c.N)
 		minx := slices.Min(data)
 		maxx := slices.Max(data)
 		var card int
@@ -645,7 +645,7 @@ func BenchmarkUniqueArray(b *testing.B) {
 
 func BenchmarkUniqueBitset(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
-		data := util.RandInts[int16](c.N)
+		data := tests.GenRnd[int16](c.N)
 		minx := slices.Min(data)
 		maxx := slices.Max(data)
 		var card int
@@ -666,7 +666,7 @@ func BenchmarkUniqueBitset(b *testing.B) {
 
 func BenchmarkUniqueRoaring(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
-		data := util.RandInts[int16](c.N)
+		data := tests.GenRnd[int16](c.N)
 		minx := slices.Min(data)
 		var card int
 		b.Run(c.Name, func(b *testing.B) {
@@ -686,14 +686,14 @@ func BenchmarkUniqueRoaring(b *testing.B) {
 
 func BenchmarkUniqueLLB(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
-		data := util.RandInts[int16](c.N)
+		data := tests.GenRnd[uint32](c.N)
 		var card int
 		b.Run(c.Name, func(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(c.N * 2))
 			for range b.N {
-				flt := loglogbeta.NewFilterWithPrecision(8)
-				flt.AddManyInt16(data)
+				flt := llb.NewFilterWithPrecision(8)
+				flt.AddMultiUint32(data)
 				card = int(flt.Cardinality())
 			}
 		})

@@ -8,10 +8,10 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/cmp"
+	"blockwatch.cc/knoxdb/internal/filter"
 	"blockwatch.cc/knoxdb/internal/filter/bloom"
 	"blockwatch.cc/knoxdb/internal/filter/fuse"
-	"blockwatch.cc/knoxdb/internal/filter/loglogbeta"
-	"blockwatch.cc/knoxdb/internal/hash"
+	"blockwatch.cc/knoxdb/internal/filter/llb"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
@@ -52,7 +52,7 @@ func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
 		case types.IndexTypeBloom:
 			if idx.use.Is(FeatBloomFilter) {
 				// TODO: use cardinality and unique values from pack analyis step
-				card := EstimateCardinality(b, 14)
+				card := EstimateCardinality(b, 8)
 				if flt := BuildBloomFilter(b, card, int(f.Scale)); flt != nil {
 					blooms[uint16(i)] = flt.Bytes()
 				}
@@ -69,7 +69,7 @@ func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
 		case types.IndexTypeBits:
 			if idx.use.Is(FeatBitsFilter) {
 				// TODO: use cardinality and unique values from pack analyis step
-				card := EstimateCardinality(b, 14)
+				card := EstimateCardinality(b, 8)
 				if flt := BuildBitsFilter(b, card); flt != nil {
 					bits[uint16(i)] = flt.ToBuffer()
 				}
@@ -213,17 +213,17 @@ func EstimateCardinality(b *block.Block, precision int) int {
 	}
 
 	// type-based estimation
-	// - use loglogbeta for 256/128/64/32 bit numbers and bytes/strings
+	// - use llb for 256/128/64/32 bit numbers and bytes/strings
 	// - use xroar bitmaps for 16/8 bit
 	switch b.Type() {
 	case block.BlockInt64, block.BlockTime, block.BlockUint64, block.BlockFloat64:
-		flt := loglogbeta.NewFilterWithPrecision(uint32(precision))
-		flt.AddManyUint64(b.Uint64().Slice())
+		flt := llb.NewFilterWithPrecision(uint32(precision))
+		flt.AddMultiUint64(b.Uint64().Slice())
 		return min(l, int(flt.Cardinality()))
 
 	case block.BlockInt32, block.BlockUint32, block.BlockFloat32:
-		flt := loglogbeta.NewFilterWithPrecision(uint32(precision))
-		flt.AddManyUint32(b.Uint32().Slice())
+		flt := llb.NewFilterWithPrecision(uint32(precision))
+		flt.AddMultiUint32(b.Uint32().Slice())
 		return min(l, int(flt.Cardinality()))
 
 	case block.BlockInt16, block.BlockUint16:
@@ -241,7 +241,7 @@ func EstimateCardinality(b *block.Block, precision int) int {
 		return bits.GetCardinality()
 
 	case block.BlockInt256:
-		flt := loglogbeta.NewFilterWithPrecision(uint32(precision))
+		flt := llb.NewFilterWithPrecision(uint32(precision))
 		b.Int256().ForEach(func(v num.Int256) {
 			buf := v.Bytes32()
 			flt.Add(buf[:])
@@ -249,7 +249,7 @@ func EstimateCardinality(b *block.Block, precision int) int {
 		return min(l, int(flt.Cardinality()))
 
 	case block.BlockInt128:
-		flt := loglogbeta.NewFilterWithPrecision(uint32(precision))
+		flt := llb.NewFilterWithPrecision(uint32(precision))
 		b.Int128().ForEach(func(v num.Int128) {
 			buf := v.Bytes16()
 			flt.Add(buf[:])
@@ -257,7 +257,7 @@ func EstimateCardinality(b *block.Block, precision int) int {
 		return min(l, int(flt.Cardinality()))
 
 	case block.BlockBytes:
-		flt := loglogbeta.NewFilterWithPrecision(uint32(precision))
+		flt := llb.NewFilterWithPrecision(uint32(precision))
 		b.Bytes().ForEachUnique(func(_ int, buf []byte) {
 			flt.Add(buf)
 		})
@@ -310,15 +310,13 @@ func BuildBloomFilter(b *block.Block, cardinality, factor int) *bloom.Filter {
 	case block.BlockInt256:
 		// write individual elements (no optimization exists)
 		b.Int256().ForEach(func(v num.Int256) {
-			buf := v.Bytes32()
-			flt.Add(buf[:])
+			flt.Add(v.Bytes())
 		})
 
 	case block.BlockInt128:
 		// write individual elements (no optimization exists)
 		b.Int128().ForEach(func(v num.Int128) {
-			buf := v.Bytes16()
-			flt.Add(buf[:])
+			flt.Add(v.Bytes())
 		})
 
 	case block.BlockBytes:
@@ -397,8 +395,7 @@ func BuildFuseFilter(b *block.Block) (*fuse.BinaryFuse[uint8], error) {
 		u64 = make([]uint64, b.Len())
 		var i int
 		b.Int256().ForEach(func(v num.Int256) {
-			buf := v.Bytes32()
-			u64[i] = hash.Hash(buf[:]).Uint64()
+			u64[i] = filter.Hash(v.Bytes()).Uint64()
 			i++
 		})
 		u64 = slicex.Unique(u64)
@@ -408,8 +405,7 @@ func BuildFuseFilter(b *block.Block) (*fuse.BinaryFuse[uint8], error) {
 		u64 = make([]uint64, b.Len())
 		var i int
 		b.Int128().ForEach(func(v num.Int128) {
-			buf := v.Bytes16()
-			u64[i] = hash.Hash(buf[:]).Uint64()
+			u64[i] = filter.Hash(v.Bytes()).Uint64()
 			i++
 		})
 		u64 = slicex.Unique(u64)
@@ -420,7 +416,7 @@ func BuildFuseFilter(b *block.Block) (*fuse.BinaryFuse[uint8], error) {
 		u64 = make([]uint64, b.Len())
 		var i int
 		b.Bytes().ForEachUnique(func(_ int, buf []byte) {
-			u64[i] = hash.Hash(buf).Uint64()
+			u64[i] = filter.Hash(buf).Uint64()
 			i++
 		})
 

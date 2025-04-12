@@ -146,12 +146,12 @@ func (n *FilterTreeNode) Fields() []string {
 // Indexes returns a unique ordered list of field indexes referenced by
 // filters in this tree.
 func (n *FilterTreeNode) Indexes() []uint16 {
-	ord := slicex.NewOrderedNumbers[uint16](make([]uint16, 0)).SetUnique()
+	ord := slicex.NewOrderedIntegers(make([]uint16, 0)).SetUnique()
 	n.collectIndexes(ord)
 	return ord.Values
 }
 
-func (n *FilterTreeNode) collectIndexes(s *slicex.OrderedNumbers[uint16]) {
+func (n *FilterTreeNode) collectIndexes(s *slicex.OrderedIntegers[uint16]) {
 	if n.IsLeaf() {
 		s.Insert(n.Filter.Index)
 		return

@@ -8,7 +8,7 @@ import (
 	"os"
 	"testing"
 
-	"blockwatch.cc/knoxdb/internal/hash/xxhash"
+	"blockwatch.cc/knoxdb/internal/hash/xxhash64"
 	"github.com/echa/log"
 	"github.com/stretchr/testify/require"
 )
@@ -19,7 +19,7 @@ func makeWal(t *testing.T) *Wal {
 			MaxSegmentSize: SEG_FILE_MINSIZE,
 			Path:           t.TempDir(),
 		},
-		hash: xxhash.New(),
+		hash: xxhash64.New(),
 		csum: 0,
 		log:  log.Disabled,
 	}

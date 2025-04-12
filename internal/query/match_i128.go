@@ -8,8 +8,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/filter"
-	"blockwatch.cc/knoxdb/internal/filter/bloom"
-	"blockwatch.cc/knoxdb/internal/hash"
 	"blockwatch.cc/knoxdb/pkg/num"
 )
 
@@ -259,7 +257,7 @@ func (m i128RangeMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask 
 type i128InSetMatcher struct {
 	noopMatcher
 	slice  []num.Int128
-	hashes []hash.HashValue
+	hashes []filter.HashValue
 }
 
 func (m *i128InSetMatcher) Weight() int { return len(m.slice) }
@@ -276,7 +274,7 @@ func (m *i128InSetMatcher) WithValue(val any) {
 
 func (m *i128InSetMatcher) WithSlice(slice any) {
 	m.slice = num.Int128Sort(slice.([]num.Int128))
-	m.hashes = hash.HashAnySlice(m.slice)
+	m.hashes = filter.HashMulti(m.slice)
 }
 
 func (m i128InSetMatcher) MatchValue(v any) bool {
@@ -288,15 +286,7 @@ func (m i128InSetMatcher) MatchRange(from, to any) bool {
 }
 
 func (m i128InSetMatcher) MatchFilter(flt filter.Filter) bool {
-	if x, ok := flt.(*bloom.Filter); ok {
-		return x.ContainsAnyHash(m.hashes)
-	}
-	for _, h := range m.hashes {
-		if flt.Contains(h.Uint64()) {
-			return true
-		}
-	}
-	return false
+	return flt.ContainsAny(m.hashes)
 }
 
 func (m i128InSetMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {

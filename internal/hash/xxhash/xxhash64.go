@@ -6,6 +6,8 @@ package xxhash
 import (
 	"math/bits"
 	"unsafe"
+
+	"blockwatch.cc/knoxdb/internal/hash/xxhash64"
 )
 
 var (
@@ -22,6 +24,10 @@ const (
 	prime64_4 = 9650029242287828579
 	prime64_5 = 2870177450012600261
 )
+
+func Sum64(buf []byte) uint64 {
+	return xxhash64.Sum64(buf)
+}
 
 func Hash64u32(val uint32) uint64 {
 	var h uint64

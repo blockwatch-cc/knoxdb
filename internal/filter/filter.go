@@ -5,4 +5,6 @@ package filter
 
 type Filter interface {
 	Contains(uint64) bool
+	ContainsAny([]HashValue) bool
+	ContainsHash(HashValue) bool
 }

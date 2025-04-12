@@ -7,10 +7,9 @@ import (
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/filter"
-	"blockwatch.cc/knoxdb/internal/filter/bloom"
-	"blockwatch.cc/knoxdb/internal/hash"
 	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/slicex"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 type BitMatcherFactory struct{}
@@ -44,12 +43,12 @@ func (f BitMatcherFactory) New(m FilterMode) Matcher {
 type bitMatcher struct {
 	noopMatcher
 	val  bool
-	hash hash.HashValue
+	hash filter.HashValue
 }
 
 func (m *bitMatcher) WithValue(v any) {
 	m.val = v.(bool)
-	m.hash = hash.HashAny(m.val)
+	m.hash = filter.HashUint8(util.Bool2byte(m.val))
 }
 
 func (m *bitMatcher) Value() any {
@@ -348,7 +347,7 @@ func (m bitRangeMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask *
 // In, Contains
 type bitInSetMatcher struct {
 	bitRangeMatcher
-	hashes []hash.HashValue
+	hashes []filter.HashValue
 }
 
 func (m *bitInSetMatcher) Weight() int { return 1 }
@@ -382,7 +381,7 @@ func (m *bitInSetMatcher) WithSlice(slice any) {
 	case 2:
 		m.from, m.to = vals[0], vals[1]
 	}
-	m.hashes = hash.HashAnySlice(vals)
+	m.hashes = filter.HashMulti(vals)
 }
 
 func (m *bitInSetMatcher) WithSet(set *xroar.Bitmap) {
@@ -397,28 +396,20 @@ func (m *bitInSetMatcher) WithSet(set *xroar.Bitmap) {
 	case 2:
 		// all true
 		m.from, m.to = true, true
-		m.hashes = []hash.HashValue{hash.HashAny(true)}
+		m.hashes = []filter.HashValue{filter.HashUint8(1)}
 	case 3:
 		// full range
 		m.from, m.to = false, true
-		m.hashes = []hash.HashValue{hash.HashAny(false), hash.HashAny(true)}
+		m.hashes = []filter.HashValue{filter.HashUint8(0), filter.HashUint8(1)}
 	default:
 		// empty or all false
 		m.from, m.to = false, false
-		m.hashes = []hash.HashValue{hash.HashAny(false)}
+		m.hashes = []filter.HashValue{filter.HashUint8(0)}
 	}
 }
 
 func (m bitInSetMatcher) MatchFilter(flt filter.Filter) bool {
-	if x, ok := flt.(*bloom.Filter); ok {
-		return x.ContainsAnyHash(m.hashes)
-	}
-	for _, h := range m.hashes {
-		if flt.Contains(h.Uint64()) {
-			return true
-		}
-	}
-	return false
+	return flt.ContainsAny(m.hashes)
 }
 
 // NOT IN ---

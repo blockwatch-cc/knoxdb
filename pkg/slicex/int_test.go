@@ -12,106 +12,106 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestOrderedNumbersContains(t *testing.T) {
+func TestOrderedIntegersContains(t *testing.T) {
 	// nil slice
-	if NewOrderedNumbers[int](nil).Contains(1) {
+	if NewOrderedIntegers[int](nil).Contains(1) {
 		t.Errorf("nil slice cannot contain value")
 	}
 
 	// empty slice
-	if NewOrderedNumbers([]int{}).Contains(1) {
+	if NewOrderedIntegers([]int{}).Contains(1) {
 		t.Errorf("empty slice cannot contain value")
 	}
 
 	// 1-element slice positive
-	if !NewOrderedNumbers([]int{1}).Contains(1) {
+	if !NewOrderedIntegers([]int{1}).Contains(1) {
 		t.Errorf("1-element slice value not found")
 	}
 
 	// 1-element slice negative
-	if NewOrderedNumbers([]int{1}).Contains(2) {
+	if NewOrderedIntegers([]int{1}).Contains(2) {
 		t.Errorf("1-element slice found wrong match")
 	}
 
 	// n-element slice positive first element
-	if !NewOrderedNumbers([]int{1, 3, 5, 7, 11, 13}).Contains(1) {
+	if !NewOrderedIntegers([]int{1, 3, 5, 7, 11, 13}).Contains(1) {
 		t.Errorf("N-element first slice value not found")
 	}
 
 	// n-element slice positive middle element
-	if !NewOrderedNumbers([]int{1, 3, 5, 7, 11, 13}).Contains(5) {
+	if !NewOrderedIntegers([]int{1, 3, 5, 7, 11, 13}).Contains(5) {
 		t.Errorf("N-element middle slice value not found")
 	}
 
 	// n-element slice positive last element
-	if !NewOrderedNumbers([]int{1, 3, 5, 7, 11, 13}).Contains(13) {
+	if !NewOrderedIntegers([]int{1, 3, 5, 7, 11, 13}).Contains(13) {
 		t.Errorf("N-element last slice value not found")
 	}
 
 	// n-element slice negative before
-	if NewOrderedNumbers([]int{1, 3, 5, 7, 11, 13}).Contains(0) {
+	if NewOrderedIntegers([]int{1, 3, 5, 7, 11, 13}).Contains(0) {
 		t.Errorf("N-element before slice value wrong match")
 	}
 
 	// n-element slice negative middle
-	if NewOrderedNumbers([]int{1, 3, 5, 7, 11, 13}).Contains(2) {
+	if NewOrderedIntegers([]int{1, 3, 5, 7, 11, 13}).Contains(2) {
 		t.Errorf("N-element middle slice value wrong match")
 	}
 
 	// n-element slice negative after
-	if NewOrderedNumbers([]int{1, 3, 5, 7, 11, 13}).Contains(14) {
+	if NewOrderedIntegers([]int{1, 3, 5, 7, 11, 13}).Contains(14) {
 		t.Errorf("N-element after slice value wrong match")
 	}
 }
 
-func TestOrderedNumbersUnique(t *testing.T) {
+func TestOrderedIntegersUnique(t *testing.T) {
 	var tests = []struct {
 		n string
-		a *OrderedNumbers[int]
-		b *OrderedNumbers[int]
-		r *OrderedNumbers[int]
+		a *OrderedIntegers[int]
+		b *OrderedIntegers[int]
+		r *OrderedIntegers[int]
 	}{
 		{
 			n: "empty",
-			a: NewOrderedNumbers[int](nil).SetUnique(),
-			b: NewOrderedNumbers[int](nil).SetUnique(),
-			r: NewOrderedNumbers[int](nil).SetUnique(),
+			a: NewOrderedIntegers[int](nil).SetUnique(),
+			b: NewOrderedIntegers[int](nil).SetUnique(),
+			r: NewOrderedIntegers[int](nil).SetUnique(),
 		},
 		{
 			n: "empty a",
-			a: NewOrderedNumbers[int](nil).SetUnique(),
-			b: NewOrderedNumbers([]int{1, 2}).SetUnique(),
-			r: NewOrderedNumbers([]int{1, 2}).SetUnique(),
+			a: NewOrderedIntegers[int](nil).SetUnique(),
+			b: NewOrderedIntegers([]int{1, 2}).SetUnique(),
+			r: NewOrderedIntegers([]int{1, 2}).SetUnique(),
 		},
 		{
 			n: "empty b",
-			a: NewOrderedNumbers([]int{1, 2}).SetUnique(),
-			b: NewOrderedNumbers[int](nil).SetUnique(),
-			r: NewOrderedNumbers([]int{1, 2}).SetUnique(),
+			a: NewOrderedIntegers([]int{1, 2}).SetUnique(),
+			b: NewOrderedIntegers[int](nil).SetUnique(),
+			r: NewOrderedIntegers([]int{1, 2}).SetUnique(),
 		},
 		{
 			n: "distinct unique",
-			a: NewOrderedNumbers([]int{1, 2}).SetUnique(),
-			b: NewOrderedNumbers([]int{3, 4}).SetUnique(),
-			r: NewOrderedNumbers([]int{1, 2, 3, 4}).SetUnique(),
+			a: NewOrderedIntegers([]int{1, 2}).SetUnique(),
+			b: NewOrderedIntegers([]int{3, 4}).SetUnique(),
+			r: NewOrderedIntegers([]int{1, 2, 3, 4}).SetUnique(),
 		},
 		{
 			n: "distinct unique gap",
-			a: NewOrderedNumbers([]int{1, 2}).SetUnique(),
-			b: NewOrderedNumbers([]int{4, 5}).SetUnique(),
-			r: NewOrderedNumbers([]int{1, 2, 4, 5}).SetUnique(),
+			a: NewOrderedIntegers([]int{1, 2}).SetUnique(),
+			b: NewOrderedIntegers([]int{4, 5}).SetUnique(),
+			r: NewOrderedIntegers([]int{1, 2, 4, 5}).SetUnique(),
 		},
 		{
 			n: "overlap duplicates",
-			a: NewOrderedNumbers([]int{1, 2}).SetUnique(),
-			b: NewOrderedNumbers([]int{2, 3}).SetUnique(),
-			r: NewOrderedNumbers([]int{1, 2, 3}).SetUnique(),
+			a: NewOrderedIntegers([]int{1, 2}).SetUnique(),
+			b: NewOrderedIntegers([]int{2, 3}).SetUnique(),
+			r: NewOrderedIntegers([]int{1, 2, 3}).SetUnique(),
 		},
 		{
 			n: "overlap duplicates not unique",
-			a: NewOrderedNumbers([]int{1, 2}),
-			b: NewOrderedNumbers([]int{2, 3}),
-			r: NewOrderedNumbers([]int{1, 2, 2, 3}),
+			a: NewOrderedIntegers([]int{1, 2}),
+			b: NewOrderedIntegers([]int{2, 3}),
+			r: NewOrderedIntegers([]int{1, 2, 2, 3}),
 		},
 	}
 
@@ -121,54 +121,54 @@ func TestOrderedNumbersUnique(t *testing.T) {
 	}
 }
 
-func TestOrderedNumbersIntersect(t *testing.T) {
+func TestOrderedIntegersIntersect(t *testing.T) {
 	var tests = []struct {
 		n string
-		a *OrderedNumbers[int]
-		b *OrderedNumbers[int]
-		r *OrderedNumbers[int]
+		a *OrderedIntegers[int]
+		b *OrderedIntegers[int]
+		r *OrderedIntegers[int]
 	}{
 		{
 			n: "empty",
-			a: NewOrderedNumbers[int](nil).SetUnique(),
-			b: NewOrderedNumbers[int](nil).SetUnique(),
-			r: NewOrderedNumbers[int](nil).SetUnique(),
+			a: NewOrderedIntegers[int](nil).SetUnique(),
+			b: NewOrderedIntegers[int](nil).SetUnique(),
+			r: NewOrderedIntegers[int](nil).SetUnique(),
 		},
 		{
 			n: "empty a",
-			a: NewOrderedNumbers[int](nil).SetUnique(),
-			b: NewOrderedNumbers([]int{1, 2}).SetUnique(),
-			r: NewOrderedNumbers([]int{}).SetUnique(),
+			a: NewOrderedIntegers[int](nil).SetUnique(),
+			b: NewOrderedIntegers([]int{1, 2}).SetUnique(),
+			r: NewOrderedIntegers([]int{}).SetUnique(),
 		},
 		{
 			n: "empty b",
-			a: NewOrderedNumbers([]int{1, 2}).SetUnique(),
-			b: NewOrderedNumbers[int](nil).SetUnique(),
-			r: NewOrderedNumbers([]int{}).SetUnique(),
+			a: NewOrderedIntegers([]int{1, 2}).SetUnique(),
+			b: NewOrderedIntegers[int](nil).SetUnique(),
+			r: NewOrderedIntegers([]int{}).SetUnique(),
 		},
 		{
 			n: "distinct unique",
-			a: NewOrderedNumbers([]int{1, 2}).SetUnique(),
-			b: NewOrderedNumbers([]int{3, 4}).SetUnique(),
-			r: NewOrderedNumbers([]int{}).SetUnique(),
+			a: NewOrderedIntegers([]int{1, 2}).SetUnique(),
+			b: NewOrderedIntegers([]int{3, 4}).SetUnique(),
+			r: NewOrderedIntegers([]int{}).SetUnique(),
 		},
 		{
 			n: "distinct unique gap",
-			a: NewOrderedNumbers([]int{1, 2}).SetUnique(),
-			b: NewOrderedNumbers([]int{4, 5}).SetUnique(),
-			r: NewOrderedNumbers([]int{}).SetUnique(),
+			a: NewOrderedIntegers([]int{1, 2}).SetUnique(),
+			b: NewOrderedIntegers([]int{4, 5}).SetUnique(),
+			r: NewOrderedIntegers([]int{}).SetUnique(),
 		},
 		{
 			n: "overlap duplicates",
-			a: NewOrderedNumbers([]int{1, 2}).SetUnique(),
-			b: NewOrderedNumbers([]int{2, 3}).SetUnique(),
-			r: NewOrderedNumbers([]int{2}).SetUnique(),
+			a: NewOrderedIntegers([]int{1, 2}).SetUnique(),
+			b: NewOrderedIntegers([]int{2, 3}).SetUnique(),
+			r: NewOrderedIntegers([]int{2}).SetUnique(),
 		},
 		{
 			n: "overlap duplicates not unique",
-			a: NewOrderedNumbers([]int{1, 2}),
-			b: NewOrderedNumbers([]int{2, 3}),
-			r: NewOrderedNumbers([]int{2}),
+			a: NewOrderedIntegers([]int{1, 2}),
+			b: NewOrderedIntegers([]int{2, 3}),
+			r: NewOrderedIntegers([]int{2}),
 		},
 	}
 
@@ -178,54 +178,54 @@ func TestOrderedNumbersIntersect(t *testing.T) {
 	}
 }
 
-func TestOrderedNumbersDifference(t *testing.T) {
+func TestOrderedIntegersDifference(t *testing.T) {
 	var tests = []struct {
 		n string
-		a *OrderedNumbers[int]
-		b *OrderedNumbers[int]
-		r *OrderedNumbers[int]
+		a *OrderedIntegers[int]
+		b *OrderedIntegers[int]
+		r *OrderedIntegers[int]
 	}{
 		{
 			n: "empty",
-			a: NewOrderedNumbers[int](nil).SetUnique(),
-			b: NewOrderedNumbers[int](nil).SetUnique(),
-			r: NewOrderedNumbers[int](nil).SetUnique(),
+			a: NewOrderedIntegers[int](nil).SetUnique(),
+			b: NewOrderedIntegers[int](nil).SetUnique(),
+			r: NewOrderedIntegers[int](nil).SetUnique(),
 		},
 		{
 			n: "empty a",
-			a: NewOrderedNumbers[int](nil).SetUnique(),
-			b: NewOrderedNumbers([]int{1, 2}).SetUnique(),
-			r: NewOrderedNumbers([]int{}).SetUnique(),
+			a: NewOrderedIntegers[int](nil).SetUnique(),
+			b: NewOrderedIntegers([]int{1, 2}).SetUnique(),
+			r: NewOrderedIntegers([]int{}).SetUnique(),
 		},
 		{
 			n: "empty b",
-			a: NewOrderedNumbers([]int{1, 2}).SetUnique(),
-			b: NewOrderedNumbers[int](nil).SetUnique(),
-			r: NewOrderedNumbers([]int{1, 2}).SetUnique(),
+			a: NewOrderedIntegers([]int{1, 2}).SetUnique(),
+			b: NewOrderedIntegers[int](nil).SetUnique(),
+			r: NewOrderedIntegers([]int{1, 2}).SetUnique(),
 		},
 		{
 			n: "distinct unique",
-			a: NewOrderedNumbers([]int{1, 2}).SetUnique(),
-			b: NewOrderedNumbers([]int{3, 4}).SetUnique(),
-			r: NewOrderedNumbers([]int{1, 2}).SetUnique(),
+			a: NewOrderedIntegers([]int{1, 2}).SetUnique(),
+			b: NewOrderedIntegers([]int{3, 4}).SetUnique(),
+			r: NewOrderedIntegers([]int{1, 2}).SetUnique(),
 		},
 		{
 			n: "distinct unique gap",
-			a: NewOrderedNumbers([]int{1, 2}).SetUnique(),
-			b: NewOrderedNumbers([]int{4, 5}).SetUnique(),
-			r: NewOrderedNumbers([]int{1, 2}).SetUnique(),
+			a: NewOrderedIntegers([]int{1, 2}).SetUnique(),
+			b: NewOrderedIntegers([]int{4, 5}).SetUnique(),
+			r: NewOrderedIntegers([]int{1, 2}).SetUnique(),
 		},
 		{
 			n: "overlap duplicates",
-			a: NewOrderedNumbers([]int{1, 2}).SetUnique(),
-			b: NewOrderedNumbers([]int{2, 3}).SetUnique(),
-			r: NewOrderedNumbers([]int{1}).SetUnique(),
+			a: NewOrderedIntegers([]int{1, 2}).SetUnique(),
+			b: NewOrderedIntegers([]int{2, 3}).SetUnique(),
+			r: NewOrderedIntegers([]int{1}).SetUnique(),
 		},
 		{
 			n: "overlap duplicates not unique",
-			a: NewOrderedNumbers([]int{1, 2}),
-			b: NewOrderedNumbers([]int{2, 3}),
-			r: NewOrderedNumbers([]int{1}),
+			a: NewOrderedIntegers([]int{1, 2}),
+			b: NewOrderedIntegers([]int{2, 3}),
+			r: NewOrderedIntegers([]int{1}),
 		},
 	}
 
@@ -235,11 +235,11 @@ func TestOrderedNumbersDifference(t *testing.T) {
 	}
 }
 
-func BenchmarkOrderedNumbersContains(b *testing.B) {
+func BenchmarkOrderedIntegersContains(b *testing.B) {
 	cases := []int{10, 1000, 1000000}
 	for _, n := range cases {
 		b.Run(fmt.Sprintf("%d-neg", n), func(b *testing.B) {
-			a := NewOrderedNumbers(util.RandInts[int](n))
+			a := NewOrderedIntegers(util.RandInts[int](n))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				a.Contains(rand.Int())
@@ -248,7 +248,7 @@ func BenchmarkOrderedNumbersContains(b *testing.B) {
 	}
 	for _, n := range cases {
 		b.Run(fmt.Sprintf("%d-pos", n), func(b *testing.B) {
-			a := NewOrderedNumbers(util.RandInts[int](n))
+			a := NewOrderedIntegers(util.RandInts[int](n))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				a.Contains(a.Values[rand.Intn(len(a.Values))])
@@ -257,7 +257,7 @@ func BenchmarkOrderedNumbersContains(b *testing.B) {
 	}
 }
 
-func TestOrderedNumbersContainsRange(t *testing.T) {
+func TestOrderedIntegersContainsRange(t *testing.T) {
 	type TestRange struct {
 		Name  string
 		From  int
@@ -352,17 +352,17 @@ func TestOrderedNumbersContainsRange(t *testing.T) {
 
 	for i, v := range tests {
 		for _, r := range v.Ranges {
-			if want, got := r.Match, NewOrderedNumbers(v.Slice).ContainsRange(r.From, r.To); want != got {
+			if want, got := r.Match, NewOrderedIntegers(v.Slice).ContainsRange(r.From, r.To); want != got {
 				t.Errorf("case %d/%s want=%t got=%t", i, r.Name, want, got)
 			}
 		}
 	}
 }
 
-func BenchmarkOrderedNumbersContainsRange(b *testing.B) {
+func BenchmarkOrderedIntegersContainsRange(b *testing.B) {
 	for _, n := range []int{10, 1000, 1000000} {
 		b.Run(fmt.Sprintf("%d", n), func(b *testing.B) {
-			a := NewOrderedNumbers(util.RandUints[uint64](n))
+			a := NewOrderedIntegers(util.RandUints[uint64](n))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				min, max := util.RandUint64(), util.RandUint64()
@@ -375,7 +375,7 @@ func BenchmarkOrderedNumbersContainsRange(b *testing.B) {
 	}
 }
 
-func TestOrderedNumbersRemoveRange(t *testing.T) {
+func TestOrderedIntegersRemoveRange(t *testing.T) {
 	type TestRange struct {
 		Name     string
 		From     int
@@ -453,12 +453,12 @@ func TestOrderedNumbersRemoveRange(t *testing.T) {
 
 	for _, v := range tests {
 		for _, r := range v.Ranges {
-			assert.Equal(t, r.Expected, NewOrderedNumbers(v.Slice).RemoveRange(r.From, r.To).Values, r.Name)
+			assert.Equal(t, r.Expected, NewOrderedIntegers(v.Slice).RemoveRange(r.From, r.To).Values, r.Name)
 		}
 	}
 }
 
-func TestOrderedNumbersIntersectRange(t *testing.T) {
+func TestOrderedIntegersIntersectRange(t *testing.T) {
 	type TestRange struct {
 		Name     string
 		From     int
@@ -536,7 +536,7 @@ func TestOrderedNumbersIntersectRange(t *testing.T) {
 
 	for _, v := range tests {
 		for _, r := range v.Ranges {
-			assert.Equal(t, r.Expected, NewOrderedNumbers(v.Slice).IntersectRange(r.From, r.To).Values, r.Name)
+			assert.Equal(t, r.Expected, NewOrderedIntegers(v.Slice).IntersectRange(r.From, r.To).Values, r.Name)
 		}
 	}
 }

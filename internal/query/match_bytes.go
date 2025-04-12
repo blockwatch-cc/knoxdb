@@ -11,9 +11,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/filter"
-	"blockwatch.cc/knoxdb/internal/filter/bloom"
-	"blockwatch.cc/knoxdb/internal/hash"
-	"blockwatch.cc/knoxdb/internal/hash/xxhash32"
+	"blockwatch.cc/knoxdb/internal/hash/xxhash"
 	"blockwatch.cc/knoxdb/pkg/slicex"
 	"github.com/echa/log"
 )
@@ -50,14 +48,14 @@ func (f BytesMatcherFactory) New(m FilterMode) Matcher {
 type bytesMatcher struct {
 	noopMatcher
 	val  []byte
-	hash hash.HashValue
+	hash filter.HashValue
 }
 
 func (m *bytesMatcher) Weight() int { return len(m.val) }
 
 func (m *bytesMatcher) WithValue(v any) {
 	m.val = v.([]byte)
-	m.hash = hash.Hash(m.val)
+	m.hash = filter.Hash(m.val)
 }
 
 func (m *bytesMatcher) Value() any {
@@ -65,9 +63,6 @@ func (m *bytesMatcher) Value() any {
 }
 
 func (m bytesMatcher) MatchFilter(flt filter.Filter) bool {
-	if x, ok := flt.(*bloom.Filter); ok {
-		return x.ContainsHash(m.hash)
-	}
 	return flt.Contains(m.hash.Uint64())
 }
 
@@ -321,7 +316,7 @@ type hashvalue struct {
 type bytesSetMatcher struct {
 	noopMatcher
 	slice    *slicex.OrderedBytes // original query data, sorted, unique
-	hashes   []hash.HashValue     // bloom hashes
+	hashes   []filter.HashValue   // bloom hashes
 	hmap     map[uint32]int       // compiled hashmap for quick byte/string set query lookup
 	overflow []hashvalue          // hash collision overflow list
 }
@@ -340,7 +335,7 @@ func (m *bytesSetMatcher) WithValue(val any) {
 
 func (m *bytesSetMatcher) WithSlice(slice any) {
 	m.slice = slicex.NewOrderedBytes(slice.([][]byte)).SetUnique()
-	m.hashes = hash.HashAnySlice(m.slice.Values)
+	m.hashes = filter.HashMulti(m.slice.Values)
 	if len(m.slice.Values) > filterThreshold {
 		// re-use bloom hash value [1] (xxhash32) as unique hash value
 		m.hmap = make(map[uint32]int)
@@ -371,7 +366,7 @@ func (m *bytesSetMatcher) WithSlice(slice any) {
 }
 
 func (m bytesSetMatcher) matchHashMap(val []byte) bool {
-	sum := xxhash32.Checksum(val, 0)
+	sum := xxhash.Sum32(val, 0)
 	if pos, ok := m.hmap[sum]; ok {
 		if pos != 0xFFFFFFFF {
 			// compare slice value at pos to ensure we're collision free
@@ -408,15 +403,7 @@ func (m bytesInSetMatcher) MatchRange(from, to any) bool {
 }
 
 func (m bytesInSetMatcher) MatchFilter(flt filter.Filter) bool {
-	if x, ok := flt.(*bloom.Filter); ok {
-		return x.ContainsAnyHash(m.hashes)
-	}
-	for _, h := range m.hashes {
-		if flt.Contains(h.Uint64()) {
-			return true
-		}
-	}
-	return false
+	return flt.ContainsAny(m.hashes)
 }
 
 func (m bytesInSetMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
@@ -453,7 +440,7 @@ func (m bytesInSetMatcher) matchBlockHashMap(b *block.Block, bits *bitset.Bitset
 
 func (m bytesInSetMatcher) matchBlockHashMapWithMask(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
 	arr := b.Bytes()
-	for i, l := 0, arr.Len(); i < l; i++ {
+	for i := range arr.Len() {
 		// skip masked values
 		if !mask.IsSet(i) {
 			continue
@@ -476,7 +463,7 @@ func (m bytesInSetMatcher) matchBlockSlice(b *block.Block, bits *bitset.Bitset) 
 
 func (m bytesInSetMatcher) matchBlockSliceWithMask(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
 	arr := b.Bytes()
-	for i, l := 0, arr.Len(); i < l; i++ {
+	for i := range arr.Len() {
 		// skip masked values
 		if !mask.IsSet(i) {
 			continue
@@ -544,7 +531,7 @@ func (m bytesNotInSetMatcher) matchBlockHashMap(b *block.Block, bits *bitset.Bit
 
 func (m bytesNotInSetMatcher) matchBlockHashMapWithMask(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
 	arr := b.Bytes()
-	for i, l := 0, arr.Len(); i < l; i++ {
+	for i := range arr.Len() {
 		// skip masked values
 		if !mask.IsSet(i) {
 			continue
@@ -567,7 +554,7 @@ func (m bytesNotInSetMatcher) matchBlockSlice(b *block.Block, bits *bitset.Bitse
 
 func (m bytesNotInSetMatcher) matchBlockSliceWithMask(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
 	arr := b.Bytes()
-	for i, l := 0, arr.Len(); i < l; i++ {
+	for i := range arr.Len() {
 		// skip masked values
 		if !mask.IsSet(i) {
 			continue
@@ -632,7 +619,7 @@ func (m bytesRegexpMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitse
 	}
 	if mask != nil {
 		arr := b.Bytes()
-		for i, l := 0, arr.Len(); i < l; i++ {
+		for i := range arr.Len() {
 			// skip masked values
 			if !mask.IsSet(i) {
 				continue

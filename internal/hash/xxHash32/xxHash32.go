@@ -2,7 +2,12 @@
 // (https://github.com/Cyan4973/xxHash/)
 package xxhash32
 
-import "hash"
+import (
+	"hash"
+	"unsafe"
+
+	"golang.org/x/sys/cpu"
+)
 
 const (
 	prime32_1 = 2654435761
@@ -135,6 +140,7 @@ func (xxh *xxHash) Sum32() uint32 {
 
 // Checksum returns the 32bits Hash value.
 func Checksum(input []byte, seed uint32) uint32 {
+	p := unsafe.Pointer(&input[0])
 	n := len(input)
 	h32 := uint32(n)
 
@@ -145,28 +151,27 @@ func Checksum(input []byte, seed uint32) uint32 {
 		v2 := seed + prime32_2
 		v3 := seed
 		v4 := seed - prime32_1
-		p := 0
-		for n := n - 16; p <= n; p += 16 {
-			sub := input[p:][:16] // BCE hint for compiler
-			v1 = rol13(v1+u32(sub)*prime32_2) * prime32_1
-			v2 = rol13(v2+u32(sub[4:])*prime32_2) * prime32_1
-			v3 = rol13(v3+u32(sub[8:])*prime32_2) * prime32_1
-			v4 = rol13(v4+u32(sub[12:])*prime32_2) * prime32_1
+		for n >= 16 {
+			v1 = rol13(v1+r4(p)*prime32_2) * prime32_1
+			v2 = rol13(v2+r4(unsafe.Add(p, 4))*prime32_2) * prime32_1
+			v3 = rol13(v3+r4(unsafe.Add(p, 8))*prime32_2) * prime32_1
+			v4 = rol13(v4+r4(unsafe.Add(p, 12))*prime32_2) * prime32_1
+			n -= 16
+			p = unsafe.Add(p, 16)
 		}
-		input = input[p:]
-		n -= p
 		h32 += rol1(v1) + rol7(v2) + rol12(v3) + rol18(v4)
 	}
 
-	p := 0
-	for n := n - 4; p <= n; p += 4 {
-		h32 += u32(input[p:p+4]) * prime32_3
+	for n >= 4 {
+		h32 += r4(p) * prime32_3
 		h32 = rol17(h32) * prime32_4
+		n -= 4
+		p = unsafe.Add(p, 4)
 	}
-	for p < n {
-		h32 += uint32(input[p]) * prime32_5
+	for n > 0 {
+		h32 += uint32(input[len(input)-n]) * prime32_5
 		h32 = rol11(h32) * prime32_1
-		p++
+		n--
 	}
 
 	h32 ^= h32 >> 15
@@ -176,6 +181,85 @@ func Checksum(input []byte, seed uint32) uint32 {
 	h32 ^= h32 >> 16
 
 	return h32
+}
+
+// Checksum2 returns 2x 32bits Hash values from multiple seeds.
+func Checksum2(input []byte, seed0, seed1 uint32) (uint32, uint32) {
+	p := unsafe.Pointer(&input[0])
+	n := len(input)
+	h0, h1 := uint32(n), uint32(n)
+
+	if n < 16 {
+		h0 += seed0 + prime32_5
+		h1 += seed1 + prime32_5
+	} else {
+		v1_0 := seed0 + prime32_1 + prime32_2
+		v2_0 := seed0 + prime32_2
+		v3_0 := seed0
+		v4_0 := seed0 - prime32_1
+		v1_1 := seed1 + prime32_1 + prime32_2
+		v2_1 := seed1 + prime32_2
+		v3_1 := seed1
+		v4_1 := seed1 - prime32_1
+		for n >= 16 {
+			u1 := r4(p)
+			v1_0 = rol13(v1_0+u1*prime32_2) * prime32_1
+			v1_1 = rol13(v1_1+u1*prime32_2) * prime32_1
+			u2 := r4(unsafe.Add(p, 4))
+			v2_0 = rol13(v2_0+u2*prime32_2) * prime32_1
+			v2_1 = rol13(v2_1+u2*prime32_2) * prime32_1
+			u3 := r4(unsafe.Add(p, 8))
+			v3_0 = rol13(v3_0+u3*prime32_2) * prime32_1
+			v3_1 = rol13(v3_1+u3*prime32_2) * prime32_1
+			u4 := r4(unsafe.Add(p, 12))
+			v4_0 = rol13(v4_0+u4*prime32_2) * prime32_1
+			v4_1 = rol13(v4_1+u4*prime32_2) * prime32_1
+			n -= 16
+			p = unsafe.Add(p, 16)
+		}
+		h0 += rol1(v1_0) + rol7(v2_0) + rol12(v3_0) + rol18(v4_0)
+		h1 += rol1(v1_1) + rol7(v2_1) + rol12(v3_1) + rol18(v4_1)
+	}
+
+	for n >= 4 {
+		v := r4(p)
+		h0 += v * prime32_3
+		h1 += v * prime32_3
+		h0 = rol17(h0) * prime32_4
+		h1 = rol17(h1) * prime32_4
+		n -= 4
+		p = unsafe.Add(p, 4)
+	}
+	for n > 0 {
+		v := uint32(input[len(input)-n])
+		h0 += v * prime32_5
+		h1 += v * prime32_5
+		h0 = rol11(h0) * prime32_1
+		h1 = rol11(h1) * prime32_1
+		n--
+	}
+
+	h0 ^= h0 >> 15
+	h1 ^= h1 >> 15
+	h0 *= prime32_2
+	h1 *= prime32_2
+	h0 ^= h0 >> 13
+	h1 ^= h1 >> 13
+	h0 *= prime32_3
+	h1 *= prime32_3
+	h0 ^= h0 >> 16
+	h1 ^= h1 >> 16
+
+	return h0, h1
+}
+
+func r4(p unsafe.Pointer) uint32 {
+	q := (*[4]byte)(p)
+	if cpu.IsBigEndian {
+		return uint32(uint32(q[3]) | uint32(q[2])<<8 | uint32(q[1])<<16 | uint32(q[0])<<24)
+	} else {
+		return uint32(uint32(q[0]) | uint32(q[1])<<8 | uint32(q[2])<<16 | uint32(q[3])<<24)
+	}
 }
 
 func u32(buf []byte) uint32 {

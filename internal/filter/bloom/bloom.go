@@ -20,11 +20,12 @@ import (
 	"io"
 	"math"
 
-	"blockwatch.cc/knoxdb/internal/hash"
+	"blockwatch.cc/knoxdb/internal/filter"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
-type containsFunc func(*Filter, hash.HashValue) bool
-type addFunc func(*Filter, hash.HashValue)
+type containsFunc func(*Filter, uint32, uint32) bool
+type addFunc func(*Filter, uint32, uint32)
 
 // Filter represents a bloom filter.
 type Filter struct {
@@ -121,31 +122,30 @@ func (f *Filter) Clone() *Filter {
 }
 
 // location returns the ith hashed location using two hash values.
-func (f *Filter) location(h hash.HashValue, i uint32) uint32 {
-	return (h[0] + h[1]*i) & f.mask
+func (f *Filter) location(h0, h1 uint32, i uint32) uint32 {
+	return h0 + h1*i&f.mask
 }
 
 // contains4 is a loop unrolled version for k=4
-func containsUnroll4(f *Filter, h hash.HashValue) bool {
-	a, b := h[0], h[1]
-	if f.bits[(a&f.mask)>>3]&(1<<(a&7)) == 0 {
+func containsUnroll4(f *Filter, h0, h1 uint32) bool {
+	if f.bits[(h0&f.mask)>>3]&(1<<(h0&7)) == 0 {
 		return false
 	}
-	a += b
-	if f.bits[(a&f.mask)>>3]&(1<<(a&7)) == 0 {
+	h0 += h1
+	if f.bits[(h0&f.mask)>>3]&(1<<(h0&7)) == 0 {
 		return false
 	}
-	a += b
-	if f.bits[(a&f.mask)>>3]&(1<<(a&7)) == 0 {
+	h0 += h1
+	if f.bits[(h0&f.mask)>>3]&(1<<(h0&7)) == 0 {
 		return false
 	}
-	a += b
-	return f.bits[(a&f.mask)>>3]&(1<<(a&7)) != 0
+	h0 += h1
+	return f.bits[(h0&f.mask)>>3]&(1<<(h0&7)) != 0
 }
 
-func containsGeneric(f *Filter, h hash.HashValue) bool {
+func containsGeneric(f *Filter, h0, h1 uint32) bool {
 	for i := uint32(0); i < f.k; i++ {
-		loc := f.location(h, i)
+		loc := f.location(h0, h1, i)
 		if f.bits[loc>>3]&(1<<(loc&7)) == 0 {
 			return false
 		}
@@ -153,171 +153,89 @@ func containsGeneric(f *Filter, h hash.HashValue) bool {
 	return true
 }
 
-func addUnroll4(f *Filter, h hash.HashValue) {
-	a, b := h[0], h[1]
-	f.bits[(a&f.mask)>>3] |= 1 << (a & 7)
-	a += b
-	f.bits[(a&f.mask)>>3] |= 1 << (a & 7)
-	a += b
-	f.bits[(a&f.mask)>>3] |= 1 << (a & 7)
-	a += b
-	f.bits[(a&f.mask)>>3] |= 1 << (a & 7)
+func addUnroll4(f *Filter, h0, h1 uint32) {
+	f.bits[(h0&f.mask)>>3] |= 1 << (h0 & 7)
+	h0 += h1
+	f.bits[(h0&f.mask)>>3] |= 1 << (h0 & 7)
+	h0 += h1
+	f.bits[(h0&f.mask)>>3] |= 1 << (h0 & 7)
+	h0 += h1
+	f.bits[(h0&f.mask)>>3] |= 1 << (h0 & 7)
 }
 
-func addGeneric(f *Filter, h hash.HashValue) {
+func addGeneric(f *Filter, h0, h1 uint32) {
 	for i := uint32(0); i < f.k; i++ {
-		loc := f.location(h, i)
+		loc := f.location(h0, h1, i)
 		f.bits[loc>>3] |= 1 << (loc & 7)
 	}
 }
 
-func (f *Filter) AddHash(h hash.HashValue) {
-	f.add(f, h)
-}
-
-// ContainsHash returns true if the filter contains hash value h.
-// Returns false if the filter definitely does not contain h.
-func (f *Filter) ContainsHash(h hash.HashValue) bool {
-	return f.contains(f, h)
-}
-
-// Add inserts data to the filter.
-func (f *Filter) Add(v []byte) {
-	f.add(f, hash.Hash(v))
-}
-
-// AddMany inserts multiple data points to the filter.
-func (f *Filter) AddMany(l [][]byte) {
-	for _, v := range l {
-		f.add(f, hash.Hash(v))
-	}
-}
-
-// AddManyUint8 inserts multiple data points to the filter.
-func (f *Filter) AddManyUint8(data []byte) {
-	for _, v := range data {
-		f.add(f, hash.Hash([]byte{v}))
-	}
-}
-
-// AddManyUint16 inserts multiple data points to the filter.
-func (f *Filter) AddManyUint16(data []uint16) {
-	for _, v := range data {
-		f.add(f, hash.HashUint16(v))
-	}
-}
-
-// AddManyInt16 inserts multiple data points to the filter.
-func (f *Filter) AddManyInt16(data []int16) {
-	for _, v := range data {
-		f.add(f, hash.HashInt16(v))
-	}
-}
-
-// AddManyUint32 inserts multiple data points to the filter.
-func (f *Filter) AddManyUint32(data []uint32) {
-	filterAddManyUint32(f, data)
-}
-
-// AddManyInt32 inserts multiple data points to the filter.
-func (f *Filter) AddManyInt32(data []int32) {
-	filterAddManyInt32(f, data)
-}
-
-// AddManyUint64 inserts multiple data points to the filter.
-func (f *Filter) AddManyUint64(data []uint64) {
-	filterAddManyUint64(f, data)
-}
-
-// AddManyInt64 inserts multiple data points to the filter.
-func (f *Filter) AddManyInt64(data []int64) {
-	filterAddManyInt64(f, data)
-}
-
-// AddManyFloat64 inserts multiple data points to the filter.
-func (f *Filter) AddManyFloat64(data []float64) {
-	for _, v := range data {
-		f.add(f, hash.HashFloat64(v))
-	}
-}
-
-// AddManyFloat32 inserts multiple data points to the filter.
-func (f *Filter) AddManyFloat32(data []float32) {
-	for _, v := range data {
-		f.add(f, hash.HashFloat32(v))
-	}
+func (f *Filter) AddHash(h filter.HashValue) {
+	f.add(f, h[0], h[1])
 }
 
 // Contains returns true if the filter possible contains the
 // encoded (pre-hashed) value. This implements the common
 // interface filter.Filter used by query matchers.
-func (f *Filter) Contains(v uint64) bool {
-	return f.contains(f, hash.HashValue{uint32(v >> 32), uint32(v)})
+func (f *Filter) Contains(h uint64) bool {
+	return f.contains(f, uint32(h>>32), uint32(h))
 }
 
-// ContainsBytes returns true if the filter possibly contains v.
-// Returns false if the filter definitely does not contain v.
-func (f *Filter) ContainsBytes(v []byte) bool {
-	return f.contains(f, hash.Hash(v))
+// ContainsHash returns true if the filter possible contains the
+// hash value.
+func (f *Filter) ContainsHash(h filter.HashValue) bool {
+	return f.contains(f, h[0], h[1])
 }
 
-// ContainsUint16 returns true if the filter possibly contains v.
-// Returns false if the filter definitely does not contain v.
-func (f *Filter) ContainsUint16(v uint16) bool {
-	return f.contains(f, hash.HashUint16(v))
-}
-
-// ContainsInt16 returns true if the filter possibly contains v.
-// Returns false if the filter definitely does not contain v.
-func (f *Filter) ContainsInt16(v int16) bool {
-	return f.contains(f, hash.HashInt16(v))
-}
-
-// ContainsInt32 returns true if the filter possibly contains v.
-// Returns false if the filter definitely does not contain v.
-func (f *Filter) ContainsInt32(v int32) bool {
-	return f.contains(f, hash.HashInt32(v))
-}
-
-// ContainsUint32 returns true if the filter possibly contains v.
-// Returns false if the filter definitely does not contain v.
-func (f *Filter) ContainsUint32(v uint32) bool {
-	return f.contains(f, hash.HashUint32(v))
-}
-
-// ContainsUint64 returns true if the filter possibly contains v.
-// Returns false if the filter definitely does not contain v.
-func (f *Filter) ContainsUint64(v uint64) bool {
-	return f.contains(f, hash.HashUint64(v))
-}
-
-// ContainsInt64 returns true if the filter possibly contains v.
-// Returns false if the filter definitely does not contain v.
-func (f *Filter) ContainsInt64(v int64) bool {
-	return f.contains(f, hash.HashInt64(v))
-}
-
-// ContainsFloat64 returns true if the filter possibly contains v.
-// Returns false if the filter definitely does not contain v.
-func (f *Filter) ContainsFloat64(v float64) bool {
-	return f.contains(f, hash.HashFloat64(v))
-}
-
-// ContainsFloat32 returns true if the filter possibly contains v.
-// Returns false if the filter definitely does not contain v.
-func (f *Filter) ContainsFloat32(v float32) bool {
-	return f.contains(f, hash.HashFloat32(v))
-}
-
-// ContainsAnyHash returns true if the filter contains any hash value in l.
+// ContainsAny returns true if the filter contains any hash value in l.
 // Returns false if the filter definitely does not contain any hash in l.
-func (f *Filter) ContainsAnyHash(l []hash.HashValue) bool {
+func (f *Filter) ContainsAny(l []filter.HashValue) bool {
 	for _, h := range l {
-		if f.contains(f, h) {
+		if f.contains(f, h[0], h[1]) {
 			return true
 		}
 	}
 	return false
+}
+
+// Add inserts data to the filter.
+func (f *Filter) Add(v []byte) {
+	add_string(f, v)
+}
+
+// AddMany inserts multiple data points to the filter.
+func (f *Filter) AddMany(src [][]byte) {
+	add_strings(f, src)
+}
+
+// AddManyUint8 inserts multiple data points to the filter.
+func (f *Filter) AddManyUint8(src []byte) {
+	add_u8(f, src)
+}
+
+// AddManyUint16 inserts multiple data points to the filter.
+func (f *Filter) AddManyUint16(src []uint16) {
+	add_u16(f, src)
+}
+
+// AddManyUint32 inserts multiple data points to the filter.
+func (f *Filter) AddManyUint32(src []uint32) {
+	add_u32(f, src)
+}
+
+// AddManyUint64 inserts multiple data points to the filter.
+func (f *Filter) AddManyUint64(src []uint64) {
+	add_u64(f, src)
+}
+
+// AddManyFloat64 inserts multiple data points to the filter.
+func (f *Filter) AddManyFloat64(src []float64) {
+	add_u64(f, util.ReinterpretSlice[float64, uint64](src))
+}
+
+// AddManyFloat32 inserts multiple data points to the filter.
+func (f *Filter) AddManyFloat32(src []float32) {
+	add_u32(f, util.ReinterpretSlice[float32, uint32](src))
 }
 
 // Merge performs an in-place union of other into f.
@@ -333,7 +251,7 @@ func (f *Filter) Merge(other *Filter) error {
 	} else if f.k != other.k {
 		return fmt.Errorf("bloom.Merge(): k mismatch: %d <> %d", f.k, other.k)
 	}
-	filterMerge(f.bits, other.bits)
+	merge(f.bits, other.bits)
 	return nil
 }
 

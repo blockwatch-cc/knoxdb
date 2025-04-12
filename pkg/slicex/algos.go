@@ -10,6 +10,10 @@ import (
 	"golang.org/x/exp/slices"
 )
 
+type Number interface {
+	Integer | Float
+}
+
 func removeZeros[T constraints.Ordered](s []T) ([]T, int) {
 	var (
 		n    int

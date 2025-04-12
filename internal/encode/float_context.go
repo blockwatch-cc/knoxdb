@@ -9,7 +9,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/encode/alp"
 	"blockwatch.cc/knoxdb/internal/encode/hashprobe"
-	"blockwatch.cc/knoxdb/internal/filter/loglogbeta"
+	"blockwatch.cc/knoxdb/internal/filter/llb"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
@@ -61,11 +61,11 @@ func AnalyzeFloat[T types.Float](vals []T, checkUnique bool) *FloatContext[T] {
 
 func (c *FloatContext[T]) estimateCardinality(vals []T) int {
 	var scratch [256]byte // need 256 byte scratch space
-	unique, _ := loglogbeta.NewFilterBuffer(scratch[:], 8)
+	unique, _ := llb.NewFilterBuffer(scratch[:], 8)
 	if SizeOf[T]() == 8 {
-		unique.AddManyUint64(util.ReinterpretSlice[T, uint64](vals))
+		unique.AddMultiUint64(util.ReinterpretSlice[T, uint64](vals))
 	} else {
-		unique.AddManyUint32(util.ReinterpretSlice[T, uint32](vals))
+		unique.AddMultiUint32(util.ReinterpretSlice[T, uint32](vals))
 	}
 	card := int(unique.Cardinality())
 	return card

@@ -1,5 +1,5 @@
-// Copyright (c) 2021 Blockwatch Data Inc.
-// Author: stefan@blockwatch.cc
+// Copyright (c) 2020-2025 Blockwatch Data Inc.
+// Author: stefan@blockwatch.cc, alex@blockwatch.cc
 
 DATA PRIME32_1<>+0x00(SB)/4, $(2654435761)
 GLOBL PRIME32_1<>(SB), (RODATA+NOPTR), $4

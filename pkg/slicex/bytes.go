@@ -6,6 +6,8 @@ package slicex
 import (
 	"bytes"
 	"sort"
+
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 // Optimized algorithms for ordered byte slices
@@ -28,6 +30,13 @@ func NewOrderedBytes(s [][]byte) *OrderedBytes {
 func UniqueBytes(s [][]byte) [][]byte {
 	bytesSorter(s).Sort()
 	return removeDuplicateBytes(s)
+}
+
+func ShuffleBytes(s [][]byte) [][]byte {
+	util.RandShuffle(len(s), func(i, j int) {
+		s[i], s[j] = s[j], s[i]
+	})
+	return s
 }
 
 func (o *OrderedBytes) SetNonZero() *OrderedBytes {

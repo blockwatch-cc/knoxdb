@@ -4,43 +4,59 @@
 package slicex
 
 import (
+	"math"
 	"slices"
 
+	"blockwatch.cc/knoxdb/pkg/util"
 	"golang.org/x/exp/constraints"
 )
 
-type Number interface {
-	constraints.Integer | constraints.Float
+type Float interface {
+	constraints.Float
 }
 
 // Optimized algorithms for ordered numeric slices
-type OrderedNumbers[T Number] struct {
+type OrderedFloats[T Float] struct {
 	NonZero bool
 	Unique  bool
 	Values  []T
 }
 
-func NewOrderedNumbers[T Number](s []T) *OrderedNumbers[T] {
+func NewOrderedFloats[T Float](s []T) *OrderedFloats[T] {
 	if s == nil {
 		s = make([]T, 0)
 	}
 	slices.Sort(s)
-	return &OrderedNumbers[T]{
+	return &OrderedFloats[T]{
 		Values: s,
 	}
 }
 
-func Unique[T Number](s []T) []T {
+func UniqueFloats[T Float](s []T) []T {
 	slices.Sort(s)
 	return removeDuplicates(s)
 }
 
-func RemoveZeros[T Number](s []T) []T {
+func ShuffleFloats[T Float](s []T) []T {
+	util.RandShuffle(len(s), func(i, j int) {
+		s[i], s[j] = s[j], s[i]
+	})
+	return s
+}
+
+func RemoveZeroFloats[T Float](s []T) []T {
 	var zero T
 	return slices.DeleteFunc(s, func(v T) bool { return v == zero })
 }
 
-func (o *OrderedNumbers[T]) SetNonZero() *OrderedNumbers[T] {
+func RemoveSpecialFloats[T Float](s []T) []T {
+	return slices.DeleteFunc(s, func(v T) bool {
+		return math.IsInf(float64(v), 0) || math.IsNaN(float64(v)) ||
+			(math.Signbit(float64(v)) && v == 0.0)
+	})
+}
+
+func (o *OrderedFloats[T]) SetNonZero() *OrderedFloats[T] {
 	// remove zero values
 	var zero T
 	o.Values = slices.DeleteFunc(o.Values, func(v T) bool { return v == zero })
@@ -48,18 +64,18 @@ func (o *OrderedNumbers[T]) SetNonZero() *OrderedNumbers[T] {
 	return o
 }
 
-func (o *OrderedNumbers[T]) SetUnique() *OrderedNumbers[T] {
+func (o *OrderedFloats[T]) SetUnique() *OrderedFloats[T] {
 	// remove duplicates
 	o.Values = removeDuplicates(o.Values)
 	o.Unique = true
 	return o
 }
 
-func (o OrderedNumbers[T]) Len() int {
+func (o OrderedFloats[T]) Len() int {
 	return len(o.Values)
 }
 
-func (o OrderedNumbers[T]) MinMax() (T, T) {
+func (o OrderedFloats[T]) MinMax() (T, T) {
 	switch l := len(o.Values); l {
 	case 0:
 		var zero T
@@ -71,26 +87,21 @@ func (o OrderedNumbers[T]) MinMax() (T, T) {
 	}
 }
 
-func (o OrderedNumbers[T]) Min() T {
+func (o OrderedFloats[T]) Min() T {
 	if len(o.Values) == 0 {
 		return 0
 	}
 	return o.Values[0]
 }
 
-func (o OrderedNumbers[T]) Max() T {
+func (o OrderedFloats[T]) Max() T {
 	if l := len(o.Values); l > 0 {
 		return o.Values[l-1]
 	}
 	return 0
 }
 
-func (o OrderedNumbers[T]) IsFull() bool {
-	a, b := o.MinMax()
-	return int(b-a)+1 == len(o.Values)
-}
-
-func (o *OrderedNumbers[T]) Insert(val ...T) *OrderedNumbers[T] {
+func (o *OrderedFloats[T]) Insert(val ...T) *OrderedFloats[T] {
 	// remove incoming zeros
 	if o.NonZero {
 		val, _ = removeZeros(val)
@@ -112,7 +123,7 @@ func (o *OrderedNumbers[T]) Insert(val ...T) *OrderedNumbers[T] {
 	return o
 }
 
-func (o *OrderedNumbers[T]) Remove(val ...T) *OrderedNumbers[T] {
+func (o *OrderedFloats[T]) Remove(val ...T) *OrderedFloats[T] {
 	if len(val) == 0 {
 		return o
 	}
@@ -130,19 +141,19 @@ func (o *OrderedNumbers[T]) Remove(val ...T) *OrderedNumbers[T] {
 	return o
 }
 
-func (o *OrderedNumbers[T]) Index(val T) (int, bool) {
+func (o *OrderedFloats[T]) Index(val T) (int, bool) {
 	return index(o.Values, val, 0, o.NonZero && o.Unique)
 }
 
-func (o *OrderedNumbers[T]) IndexStart(val T, start int) (int, bool) {
+func (o *OrderedFloats[T]) IndexStart(val T, start int) (int, bool) {
 	return index(o.Values, val, start, o.NonZero && o.Unique)
 }
 
-func (o OrderedNumbers[T]) Contains(val T) bool {
+func (o OrderedFloats[T]) Contains(val T) bool {
 	return contains(o.Values, val, o.NonZero && o.Unique)
 }
 
-func (o OrderedNumbers[T]) ContainsAny(val ...T) bool {
+func (o OrderedFloats[T]) ContainsAny(val ...T) bool {
 	slices.Sort(val)
 	var (
 		last int
@@ -157,7 +168,7 @@ func (o OrderedNumbers[T]) ContainsAny(val ...T) bool {
 	return false
 }
 
-func (o OrderedNumbers[T]) ContainsAll(val ...T) bool {
+func (o OrderedFloats[T]) ContainsAll(val ...T) bool {
 	slices.Sort(val)
 	var (
 		last int
@@ -172,7 +183,7 @@ func (o OrderedNumbers[T]) ContainsAll(val ...T) bool {
 	return true
 }
 
-func (o OrderedNumbers[T]) Equal(o2 *OrderedNumbers[T]) bool {
+func (o OrderedFloats[T]) Equal(o2 *OrderedFloats[T]) bool {
 	if o.Len() != o2.Len() {
 		return false
 	}
@@ -184,42 +195,42 @@ func (o OrderedNumbers[T]) Equal(o2 *OrderedNumbers[T]) bool {
 	return true
 }
 
-func (o OrderedNumbers[T]) ContainsRange(from, to T) bool {
+func (o OrderedFloats[T]) ContainsRange(from, to T) bool {
 	return containsRange(o.Values, from, to)
 }
 
-func (o OrderedNumbers[T]) RemoveRange(from, to T) *OrderedNumbers[T] {
-	return &OrderedNumbers[T]{
+func (o OrderedFloats[T]) RemoveRange(from, to T) *OrderedFloats[T] {
+	return &OrderedFloats[T]{
 		NonZero: o.NonZero,
 		Unique:  o.Unique,
 		Values:  removeRange(o.Values, from, to, make([]T, 0)),
 	}
 }
 
-func (o OrderedNumbers[T]) IntersectRange(from, to T) *OrderedNumbers[T] {
-	return &OrderedNumbers[T]{
+func (o OrderedFloats[T]) IntersectRange(from, to T) *OrderedFloats[T] {
+	return &OrderedFloats[T]{
 		NonZero: o.NonZero,
 		Unique:  o.Unique,
 		Values:  intersectRange(o.Values, from, to, make([]T, 0)),
 	}
 }
 
-func (o OrderedNumbers[T]) Intersect(v *OrderedNumbers[T]) *OrderedNumbers[T] {
+func (o OrderedFloats[T]) Intersect(v *OrderedFloats[T]) *OrderedFloats[T] {
 	if v == nil {
 		return nil
 	}
-	return &OrderedNumbers[T]{
+	return &OrderedFloats[T]{
 		NonZero: o.NonZero || v.NonZero,
 		Unique:  o.Unique || v.Unique,
 		Values:  intersect(o.Values, v.Values, make([]T, 0)),
 	}
 }
 
-func (o *OrderedNumbers[T]) Union(v *OrderedNumbers[T]) *OrderedNumbers[T] {
+func (o *OrderedFloats[T]) Union(v *OrderedFloats[T]) *OrderedFloats[T] {
 	if v == nil {
 		return o
 	}
-	res := &OrderedNumbers[T]{
+	res := &OrderedFloats[T]{
 		NonZero: o.NonZero && v.NonZero,
 		Unique:  o.Unique && v.Unique,
 		Values:  make([]T, len(o.Values), len(o.Values)+len(v.Values)),
@@ -229,11 +240,11 @@ func (o *OrderedNumbers[T]) Union(v *OrderedNumbers[T]) *OrderedNumbers[T] {
 	return res
 }
 
-func (o *OrderedNumbers[T]) Difference(v *OrderedNumbers[T]) *OrderedNumbers[T] {
+func (o *OrderedFloats[T]) Difference(v *OrderedFloats[T]) *OrderedFloats[T] {
 	if v == nil {
 		return o
 	}
-	res := &OrderedNumbers[T]{
+	res := &OrderedFloats[T]{
 		NonZero: o.NonZero && v.NonZero,
 		Unique:  o.Unique && v.Unique,
 		Values:  make([]T, len(o.Values)),

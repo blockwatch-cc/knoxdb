@@ -1,5 +1,5 @@
-// Copyright (c) 2021 Blockwatch Data Inc.
-// Author: stefan@blockwatch.cc
+// Copyright (c) 2020-2025 Blockwatch Data Inc.
+// Author: stefan@blockwatch.cc, alex@blockwatch.cc
 
 package bloom
 
@@ -7,10 +7,14 @@ import (
 	"encoding/binary"
 	"fmt"
 	"testing"
+
+	"blockwatch.cc/knoxdb/internal/filter"
+	"blockwatch.cc/knoxdb/internal/tests"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 // Ensure filter can insert values and verify they exist.
-func TestFilterAddContains(t *testing.T) {
+func TestBytesGo(t *testing.T) {
 	var num, fsize int
 	if testing.Short() {
 		num = 100000
@@ -23,18 +27,18 @@ func TestFilterAddContains(t *testing.T) {
 	// These parameters will result, for 10M entries, with a bloom filter
 	// with 0.001 false positive rate (1 in 1000 values will be incorrectly
 	// identified as being present in the set).
-	filter := NewFilter(fsize)
+	f := NewFilter(fsize)
 	v := make([]byte, 4)
 	for i := 0; i < num; i++ {
 		binary.BigEndian.PutUint32(v, uint32(i))
-		filter.Add(v)
+		f.Add(v)
 	}
 
 	// None of the values inserted should ever be considered "not possibly in
 	// the filter".
 	for i := 0; i < num; i++ {
 		binary.BigEndian.PutUint32(v, uint32(i))
-		if !filter.ContainsBytes(v) {
+		if !f.ContainsHash(filter.Hash(v)) {
 			t.Fatalf("got false for value %q, expected true", v)
 		}
 	}
@@ -44,7 +48,7 @@ func TestFilterAddContains(t *testing.T) {
 	var fp int
 	for i := num; i < 11*num; i++ {
 		binary.BigEndian.PutUint32(v, uint32(i))
-		if filter.ContainsBytes(v) {
+		if f.ContainsHash(filter.Hash(v)) {
 			fp++
 		}
 	}
@@ -59,7 +63,7 @@ func TestFilterAddContains(t *testing.T) {
 }
 
 // Ensure filter can insert values and verify they exist.
-func TestFilterAddContainsUint32Generic(t *testing.T) {
+func TestUint32Go(t *testing.T) {
 	var num, fsize int
 	if testing.Short() {
 		num = 100000
@@ -72,17 +76,17 @@ func TestFilterAddContainsUint32Generic(t *testing.T) {
 	// These parameters will result, for 10M entries, with a bloom filter
 	// with 0.001 false positive rate (1 in 1000 values will be incorrectly
 	// identified as being present in the set).
-	filter := NewFilter(fsize)
+	f := NewFilter(fsize)
 	slice := make([]uint32, num)
 	for i := 0; i < num; i++ {
 		slice[i] = uint32(i)
 	}
-	filterAddManyUint32Generic(filter, slice)
+	add_u32_purego(f, slice)
 
 	// None of the values inserted should ever be considered "not possibly in
 	// the filter".
 	for i := 0; i < num; i++ {
-		if !filter.ContainsUint32(uint32(i)) {
+		if !f.ContainsHash(filter.HashUint32(uint32(i))) {
 			t.Fatalf("got false for value %v, expected true", i)
 		}
 	}
@@ -91,7 +95,7 @@ func TestFilterAddContainsUint32Generic(t *testing.T) {
 	// filter then we might expect around 100,000 of them to be false positives.
 	var fp int
 	for i := num; i < 11*num; i++ {
-		if filter.ContainsUint32(uint32(i)) {
+		if f.ContainsHash(filter.HashUint32(uint32(i))) {
 			fp++
 		}
 	}
@@ -105,7 +109,7 @@ func TestFilterAddContainsUint32Generic(t *testing.T) {
 }
 
 // Ensure filter can insert values and verify they exist.
-func TestFilterAddContainsInt32Generic(t *testing.T) {
+func TestUint64Go(t *testing.T) {
 	var num, fsize int
 	if testing.Short() {
 		num = 100000
@@ -118,63 +122,17 @@ func TestFilterAddContainsInt32Generic(t *testing.T) {
 	// These parameters will result, for 10M entries, with a bloom filter
 	// with 0.001 false positive rate (1 in 1000 values will be incorrectly
 	// identified as being present in the set).
-	filter := NewFilter(fsize)
-	slice := make([]int32, num)
-	for i := 0; i < num; i++ {
-		slice[i] = int32(i)
-	}
-	filterAddManyInt32Generic(filter, slice)
-
-	// None of the values inserted should ever be considered "not possibly in
-	// the filter".
-	for i := 0; i < num; i++ {
-		if !filter.ContainsInt32(int32(i)) {
-			t.Fatalf("got false for value %v, expected true", i)
-		}
-	}
-
-	// If we check for 100,000,000 values that we know are not present in the
-	// filter then we might expect around 100,000 of them to be false positives.
-	var fp int
-	for i := num; i < 11*num; i++ {
-		if filter.ContainsInt32(int32(i)) {
-			fp++
-		}
-	}
-
-	if fp > num/10 {
-		// If we're an order of magnitude off, then it's arguable that there
-		// is a bug in the bloom filter.
-		t.Fatalf("got %d false positives which is an error rate of %f, expected error rate <=0.001", fp, float64(fp)/100000000)
-	}
-	t.Logf("Bloom false positive error rate was %f", float64(fp)/float64(num)/10)
-}
-
-// Ensure filter can insert values and verify they exist.
-func TestFilterAddContainsUint64Generic(t *testing.T) {
-	var num, fsize int
-	if testing.Short() {
-		num = 100000
-		fsize = 1437758
-	} else {
-		num = 10000000
-		fsize = 143775876
-	}
-
-	// These parameters will result, for 10M entries, with a bloom filter
-	// with 0.001 false positive rate (1 in 1000 values will be incorrectly
-	// identified as being present in the set).
-	filter := NewFilter(fsize)
+	f := NewFilter(fsize)
 	slice := make([]uint64, num)
 	for i := 0; i < num; i++ {
 		slice[i] = uint64(i)
 	}
-	filterAddManyUint64Generic(filter, slice)
+	add_u64_purego(f, slice)
 
 	// None of the values inserted should ever be considered "not possibly in
 	// the filter".
 	for i := 0; i < num; i++ {
-		if !filter.ContainsUint64(uint64(i)) {
+		if !f.ContainsHash(filter.HashUint64(uint64(i))) {
 			t.Fatalf("got false for value %v, expected true", i)
 		}
 	}
@@ -183,7 +141,7 @@ func TestFilterAddContainsUint64Generic(t *testing.T) {
 	// filter then we might expect around 100,000 of them to be false positives.
 	var fp int
 	for i := num; i < 11*num; i++ {
-		if filter.ContainsUint64(uint64(i)) {
+		if f.ContainsHash(filter.HashUint64(uint64(i))) {
 			fp++
 		}
 	}
@@ -196,8 +154,7 @@ func TestFilterAddContainsUint64Generic(t *testing.T) {
 	t.Logf("Bloom false positive error rate was %f", float64(fp)/float64(num)/10)
 }
 
-// Ensure filter can insert values and verify they exist.
-func TestFilterAddContainsInt64Generic(t *testing.T) {
+func TestMergeGo(t *testing.T) {
 	var num, fsize int
 	if testing.Short() {
 		num = 100000
@@ -210,70 +167,25 @@ func TestFilterAddContainsInt64Generic(t *testing.T) {
 	// These parameters will result, for 10M entries, with a bloom filter
 	// with 0.001 false positive rate (1 in 1000 values will be incorrectly
 	// identified as being present in the set).
-	filter := NewFilter(fsize)
-	slice := make([]int64, num)
-	for i := 0; i < num; i++ {
-		slice[i] = int64(i)
-	}
-	filterAddManyInt64Generic(filter, slice)
-
-	// None of the values inserted should ever be considered "not possibly in
-	// the filter".
-	for i := 0; i < num; i++ {
-		if !filter.ContainsInt64(int64(i)) {
-			t.Fatalf("got false for value %v, expected true", i)
-		}
-	}
-
-	// If we check for 100,000,000 values that we know are not present in the
-	// filter then we might expect around 100,000 of them to be false positives.
-	var fp int
-	for i := num; i < 11*num; i++ {
-		if filter.ContainsInt64(int64(i)) {
-			fp++
-		}
-	}
-
-	if fp > num/10 {
-		// If we're an order of magnitude off, then it's arguable that there
-		// is a bug in the bloom filter.
-		t.Fatalf("got %d false positives which is an error rate of %f, expected error rate <=0.001", fp, float64(fp)/100000000)
-	}
-	t.Logf("Bloom false positive error rate was %f", float64(fp)/float64(num)/10)
-}
-
-func TestFilterMergeGeneric(t *testing.T) {
-	var num, fsize int
-	if testing.Short() {
-		num = 100000
-		fsize = 1437758
-	} else {
-		num = 10000000
-		fsize = 143775876
-	}
-
-	// These parameters will result, for 10M entries, with a bloom filter
-	// with 0.001 false positive rate (1 in 1000 values will be incorrectly
-	// identified as being present in the set).
-	filter := NewFilter(fsize)
+	f := NewFilter(fsize)
 	slice := make([]uint32, num/2)
 	for i := 0; i < num/2; i++ {
 		slice[i] = uint32(i)
 	}
-	filterAddManyUint32Generic(filter, slice)
+	add_u32_purego(f, slice)
 
 	filter2 := NewFilter(fsize)
 	for i := num / 2; i < num; i++ {
 		slice[i-num/2] = uint32(i)
 	}
-	filterAddManyUint32Generic(filter2, slice)
+	add_u32_purego(filter2, slice)
 
-	filterMergeGeneric(filter.bits, filter2.bits)
+	merge_purego(f.bits, filter2.bits)
 
 	// None of the values inserted should ever be considered "not possibly in
 	// the filter".
 	for i := 0; i < num; i++ {
-		if !filter.ContainsUint32(uint32(i)) {
+		if !f.ContainsHash(filter.HashUint32(uint32(i))) {
 			t.Fatalf("got false for value %v, expected true", i)
 		}
 	}
@@ -282,7 +194,7 @@ func TestFilterMergeGeneric(t *testing.T) {
 	// filter then we might expect around 100,000 of them to be false positives.
 	var fp int
 	for i := num; i < 11*num; i++ {
-		if filter.ContainsUint32(uint32(i)) {
+		if f.ContainsHash(filter.HashUint32(uint32(i))) {
 			fp++
 		}
 	}
@@ -295,139 +207,106 @@ func TestFilterMergeGeneric(t *testing.T) {
 	t.Logf("Bloom false positive error rate was %f", float64(fp)/float64(num)/10)
 }
 
-var benchCases = []struct {
-	m int
-	n int
-	v int
+var bloomSizes = []struct {
+	Name string
+	M    int
+	V    int
 }{
-	// 32k packs
-	{m: 32768, n: 32768, v: 1},
-	{m: 65536, n: 32768, v: 1},
-	{m: 131072, n: 32768, v: 1},
-	{m: 262144, n: 32768, v: 1},
-	{m: 524288, n: 32768, v: 1},
-	{m: 1048576, n: 32768, v: 1},
-
-	// 64k packs
-	{m: 32768, n: 65536, v: 1},
-	{m: 65536, n: 65536, v: 1},
-	{m: 131072, n: 65536, v: 1},
-	{m: 262144, n: 65536, v: 1},
-	{m: 524288, n: 65536, v: 1},
-	{m: 1048576, n: 65536, v: 1},
+	{"32kB", 32768, 1},
+	{"128kB", 131072, 1},
+	{"512kB", 524288, 1},
 }
 
-func BenchmarkFilterAdd(b *testing.B) {
-	for _, c := range benchCases {
-		data := make([][]byte, 0, c.n)
-		buf := make([]byte, 4)
-		for i := 0; i < c.n; i++ {
-			binary.LittleEndian.PutUint32(buf, uint32(i))
-			data = append(data, buf)
-		}
+func BenchmarkAddManyBytesGo(b *testing.B) {
+	for _, c := range tests.BenchmarkSizes {
+		for _, s := range bloomSizes {
+			data := make([][]byte, 0, c.N)
+			buf := make([]byte, 4)
+			for i := 0; i < c.N; i++ {
+				binary.LittleEndian.PutUint32(buf, uint32(i))
+				data = append(data, buf)
+			}
 
-		filter := NewFilter(c.m)
-		b.Run(fmt.Sprintf("m=%d_n=%d", c.m, c.n), func(b *testing.B) {
-			b.SetBytes(4 * int64(c.n))
-			for i := 0; i < b.N; i++ {
-				for _, v := range data {
-					filter.Add(v)
+			f := NewFilter(s.M)
+			b.Run(fmt.Sprintf("%s/%s", c.Name, s.Name), func(b *testing.B) {
+				b.SetBytes(4 * int64(c.N))
+				for range b.N {
+					f.AddMany(data)
 				}
-			}
-		})
-
+			})
+		}
 	}
 }
 
-func BenchmarkFilterAddManyUint32Generic(b *testing.B) {
-	for _, c := range benchCases {
-		data := make([]uint32, c.n)
-		for i := 0; i < c.n; i++ {
-			data[i] = uint32(i)
-		}
-
-		filter := NewFilter(c.m)
-		b.Run(fmt.Sprintf("m=%d_n=%d", c.m, c.n), func(b *testing.B) {
-			b.SetBytes(4 * int64(c.n))
-			for i := 0; i < b.N; i++ {
-				filterAddManyUint32Generic(filter, data)
-			}
-		})
-
-	}
-}
-
-func BenchmarkFilterAddManyUint64Generic(b *testing.B) {
-	for _, c := range benchCases {
-		data := make([]uint64, c.n)
-		for i := 0; i < c.n; i++ {
-			data[i] = uint64(i)
-		}
-
-		filter := NewFilter(c.m)
-		b.Run(fmt.Sprintf("m=%d_n=%d", c.m, c.n), func(b *testing.B) {
-			b.SetBytes(8 * int64(c.n))
-			for i := 0; i < b.N; i++ {
-				filterAddManyUint64Generic(filter, data)
-			}
-		})
-
-	}
-}
-
-func BenchmarkFilter_Contains(b *testing.B) {
-	for _, c := range benchCases {
-		data := make([][]byte, 0, c.n)
-		notData := make([][]byte, 0, c.n)
-		for i := 0; i < c.n; i++ {
-			data = append(data, []byte(fmt.Sprintf("%d", i)))
-			notData = append(notData, []byte(fmt.Sprintf("%d", c.n+i)))
-		}
-
-		filter := NewFilter(c.m)
-		for _, v := range data {
-			filter.Add(v)
-		}
-
-		b.Run(fmt.Sprintf("IN m=%d_n=%d", c.m, c.n), func(b *testing.B) {
-			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
-				for _, v := range data[:c.v] {
-					_ = filter.ContainsBytes(v)
+func BenchmarkAddManyUint32Go(b *testing.B) {
+	for _, c := range tests.BenchmarkSizes {
+		for _, s := range bloomSizes {
+			data := tests.GenSeq[uint32](c.N)
+			f := NewFilter(s.M)
+			b.Run(fmt.Sprintf("%s/%s", c.Name, s.Name), func(b *testing.B) {
+				b.SetBytes(4 * int64(c.N))
+				for range b.N {
+					add_u32_purego(f, data)
 				}
-			}
-		})
-
-		// not in
-		b.Run(fmt.Sprintf("NI m=%d_n=%d", c.m, c.n), func(b *testing.B) {
-			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
-				for _, v := range notData[:c.v] {
-					_ = filter.ContainsBytes(v)
-				}
-			}
-		})
+			})
+		}
 	}
 }
 
-func BenchmarkFilterMergeGeneric(b *testing.B) {
-	for _, c := range benchCases {
-		data1 := make([]uint32, c.n)
-		data2 := make([]uint32, c.n)
-		for i := 0; i < c.n; i++ {
-			data1[i] = uint32(i)
-			data2[i] = uint32(c.n + i)
+func BenchmarkAddManyUint64Go(b *testing.B) {
+	for _, c := range tests.BenchmarkSizes {
+		for _, s := range bloomSizes {
+			data := tests.GenSeq[uint64](c.N)
+			f := NewFilter(s.M)
+			b.Run(fmt.Sprintf("%s/%s", c.Name, s.Name), func(b *testing.B) {
+				b.SetBytes(8 * int64(c.N))
+				for range b.N {
+					add_u64_purego(f, data)
+				}
+			})
 		}
+	}
+}
 
-		filter1 := NewFilter(c.m)
-		filter2 := NewFilter(c.m)
-		filter1.AddManyUint32(data1)
-		filter2.AddManyUint32(data2)
+func BenchmarkContainsGo(b *testing.B) {
+	for _, c := range tests.BenchmarkSizes {
+		for _, s := range bloomSizes {
+			data := make([][]byte, 0, c.N)
+			notData := make([][]byte, 0, c.N)
+			for i := range c.N {
+				data = append(data, []byte(fmt.Sprintf("%d", i)))
+				notData = append(notData, []byte(fmt.Sprintf("%d", c.N+i)))
+			}
 
-		b.Run(fmt.Sprintf("m=%d_n=%d", c.m, c.n), func(b *testing.B) {
-			b.SetBytes(int64(c.m >> 3))
-			for i := 0; i < b.N; i++ {
-				filterMergeGeneric(filter1.bits, filter2.bits)
+			f := NewFilter(s.M)
+			add_strings_purego(f, data)
+
+			b.Run(fmt.Sprintf("%s/%s/IN", c.Name, s.Name), func(b *testing.B) {
+				b.ReportAllocs()
+				for range b.N {
+					_ = f.ContainsHash(filter.Hash(data[util.RandIntn(c.N)]))
+				}
+			})
+
+			// not in
+			b.Run(fmt.Sprintf("%s/%s/NI", c.Name, s.Name), func(b *testing.B) {
+				b.ReportAllocs()
+				for range b.N {
+					_ = f.ContainsHash(filter.Hash(notData[util.RandIntn(c.N)]))
+				}
+			})
+		}
+	}
+}
+
+func BenchmarkMergeGo(b *testing.B) {
+	for _, s := range bloomSizes {
+		filter1 := NewFilter(s.M)
+		filter2 := NewFilter(s.M)
+		b.Run(s.Name, func(b *testing.B) {
+			b.SetBytes(int64(s.M >> 3))
+			for range b.N {
+				merge_purego(filter1.bits, filter2.bits)
 			}
 		})
 	}

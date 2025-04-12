@@ -9,6 +9,8 @@ import (
 	"math/bits"
 	"slices"
 	"unsafe"
+
+	"blockwatch.cc/knoxdb/internal/filter"
 )
 
 // The maximum  number of iterations allowed before the populate function returns an error
@@ -274,6 +276,19 @@ func (filter *BinaryFuse[T]) Contains(key uint64) bool {
 	h0, h1, h2 := filter.getHashFromHash(hash)
 	f ^= filter.Fingerprints[h0] ^ filter.Fingerprints[h1] ^ filter.Fingerprints[h2]
 	return f == 0
+}
+
+func (filter *BinaryFuse[T]) ContainsAny(keys []filter.HashValue) bool {
+	for _, v := range keys {
+		if filter.Contains(v.Uint64()) {
+			return true
+		}
+	}
+	return false
+}
+
+func (filter *BinaryFuse[T]) ContainsHash(key filter.HashValue) bool {
+	return filter.Contains(key.Uint64())
 }
 
 func (filter *BinaryFuse[T]) initializeParameters(size uint32) {

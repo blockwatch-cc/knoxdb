@@ -3,7 +3,11 @@
 
 package xxhash
 
-import "unsafe"
+import (
+	"unsafe"
+
+	"blockwatch.cc/knoxdb/internal/hash/xxhash32"
+)
 
 var (
 	Vec32u32 = x32_u32_purego
@@ -17,6 +21,14 @@ const (
 	prime32_4 = 668265263
 	prime32_5 = 374761393
 )
+
+func Sum32(buf []byte, seed uint32) uint32 {
+	return xxhash32.Checksum(buf, seed)
+}
+
+func Sum32x2(buf []byte, seed0, seed1 uint32) (uint32, uint32) {
+	return xxhash32.Checksum2(buf, seed0, seed1)
+}
 
 func Hash32u32(val uint32, seed uint32) uint32 {
 	h := seed + prime32_5 + 4

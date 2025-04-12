@@ -9,7 +9,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/filter"
 	"blockwatch.cc/knoxdb/internal/filter/bloom"
-	"blockwatch.cc/knoxdb/internal/hash"
 	"blockwatch.cc/knoxdb/internal/xroar"
 
 	"unsafe"
@@ -278,16 +277,20 @@ func (f NumMatcherFactory[T]) New(m FilterMode) Matcher {
 		return &numRangeMatcher[T]{match: fn}
 	case FilterModeIn:
 		switch f.typ {
-		case BlockFloat32, BlockFloat64:
-			return &floatInSetMatcher[T]{}
+		case BlockFloat32:
+			return &floatInSetMatcher[float32]{}
+		case BlockFloat64:
+			return &floatInSetMatcher[float64]{}
 		default:
 			return &numInSetMatcher[T]{}
 		}
 
 	case FilterModeNotIn:
 		switch f.typ {
-		case BlockFloat32, BlockFloat64:
-			return &floatNotInSetMatcher[T]{}
+		case BlockFloat32:
+			return &floatNotInSetMatcher[float32]{}
+		case BlockFloat64:
+			return &floatNotInSetMatcher[float64]{}
 		default:
 			return &numNotInSetMatcher[T]{}
 		}
@@ -305,12 +308,12 @@ type numMatcher[T Number] struct {
 	noopMatcher
 	match numMatchFunc[T]
 	val   T
-	hash  hash.HashValue
+	hash  filter.HashValue
 }
 
 func (m *numMatcher[T]) WithValue(v any) {
 	m.val = v.(T)
-	m.hash = hash.HashAny(v)
+	m.hash = filter.HashT(m.val)
 }
 
 func (m *numMatcher[T]) Value() any {
@@ -581,7 +584,7 @@ func (m numRangeMatcher[T]) MatchRangeVectors(mins, maxs *block.Block, bits, mas
 // In, Contains
 type numInSetMatcher[T Number] struct {
 	set    *xroar.Bitmap
-	hashes []hash.HashValue
+	hashes []filter.HashValue
 }
 
 func (m *numInSetMatcher[T]) Weight() int { return 1 }
@@ -612,20 +615,20 @@ func (m *numInSetMatcher[T]) WithSlice(slice any) {
 	for _, v := range slice.([]T) {
 		m.set.Set(uint64(v))
 	}
-	m.hashes = hash.HashAnySlice(slice.([]T))
+	m.hashes = filter.HashMulti(slice.([]T))
 }
 
 func (m *numInSetMatcher[T]) WithSet(set *xroar.Bitmap) {
 	m.set = set
 	card := set.GetCardinality()
 	it := m.set.NewIterator()
-	m.hashes = make([]hash.HashValue, card)
-	for i := 0; i < card; i++ {
+	m.hashes = make([]filter.HashValue, card)
+	for i := range card {
 		v, ok := it.Next()
 		if !ok {
 			break
 		}
-		m.hashes[i] = hash.HashUint64(v)
+		m.hashes[i] = filter.HashT(v)
 	}
 }
 

@@ -6,6 +6,7 @@ package slicex
 import (
 	"strings"
 
+	"blockwatch.cc/knoxdb/pkg/util"
 	"golang.org/x/exp/slices"
 )
 
@@ -29,6 +30,13 @@ func NewOrderedStrings(s []string) *OrderedStrings {
 func UniqueStrings(s []string) []string {
 	slices.Sort(s)
 	return removeDuplicates(s)
+}
+
+func ShuffleStrings(s []string) []string {
+	util.RandShuffle(len(s), func(i, j int) {
+		s[i], s[j] = s[j], s[i]
+	})
+	return s
 }
 
 func UniqueStringsStable(s []string) []string {

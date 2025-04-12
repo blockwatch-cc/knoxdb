@@ -23,6 +23,7 @@ import (
 	"strings"
 	"sync"
 
+	"blockwatch.cc/knoxdb/internal/filter"
 	"github.com/pkg/errors"
 )
 
@@ -530,6 +531,19 @@ func (ra *Bitmap) Contains(x uint64) bool {
 	case typeBitmap:
 		b := bitmap(c)
 		return b.has(y)
+	}
+	return false
+}
+
+func (ra *Bitmap) ContainsHash(key filter.HashValue) bool {
+	return ra.Contains(key.Uint64())
+}
+
+func (ra *Bitmap) ContainsAny(keys []filter.HashValue) bool {
+	for _, v := range keys {
+		if ra.Contains(v.Uint64()) {
+			return true
+		}
 	}
 	return false
 }
