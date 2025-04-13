@@ -9,6 +9,12 @@ import (
 	"blockwatch.cc/knoxdb/internal/types"
 )
 
+func MaxSampleLen(n int) int {
+	sampleRange := min(ROWGROUP_SIZE, n)
+	nProbes := (sampleRange + VECTOR_SIZE - 1) / VECTOR_SIZE
+	return nProbes * SAMPLES_PER_VECTOR
+}
+
 func FirstLevelSample[T types.Float](dst, src []T) []T {
 	portionToSample := min(ROWGROUP_SIZE, len(src))
 	availableAlpVectors := int(math.Ceil(float64(portionToSample) / VECTOR_SIZE))

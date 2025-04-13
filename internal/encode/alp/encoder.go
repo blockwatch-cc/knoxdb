@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Blockwatch Data Inc.
-// Author: abdul@blockwatch.cc
+// Author: abdul@blockwatch.cc,alex@blockwatch.cc
 
 package alp
 
@@ -26,10 +26,6 @@ type Encoding struct {
 	F uint8
 }
 
-func (e Encoding) Hash() uint8 {
-	return e.E ^ e.F
-}
-
 type Combination struct {
 	enc   Encoding
 	count int
@@ -49,10 +45,6 @@ func (l Combinations) Less(i, j int) bool {
 	return c1.count > c2.count ||
 		(c1.count == c2.count && c1.enc.E > c2.enc.E) ||
 		(c1.count == c2.count && c1.enc.E == c2.enc.E && c1.enc.F > c2.enc.F)
-	// return (c1.count > c2.count) ||
-	// 	(c1.count == c2.count && (c1.size < c2.size)) ||
-	// 	((c1.count == c2.count && c1.size == c2.size) && (c2.index.E < c1.index.E)) ||
-	// 	((c1.count == c2.count && c1.size == c2.size && c2.index.E == c1.index.E) && (c2.index.F < c1.index.F))
 }
 
 type State[T types.Float] struct {
@@ -132,15 +124,6 @@ func (s *State[T]) Reset() {
 	s.Exceptions = s.Exceptions[:0]
 }
 
-// TODO: reuse the work we did here instead of closing the encoder
-func Scheme[T types.Float](values []T) int {
-	enc := NewEncoder[T]()
-	enc.Analyze(values)
-	s := enc.state.Scheme
-	enc.Close()
-	return s
-}
-
 type Encoder[T types.Float] struct {
 	bits     int
 	state    *State[T]
@@ -177,19 +160,8 @@ func (e *Encoder[T]) Analyze(values []T) *Encoder[T] {
 	return e
 }
 
-// ! Scalar encoding a single value with ALP
-func (e *Encoder[T]) encodeValue(value, exp, fact T) int64 {
-	n := value * exp * fact
-	if isImpossibleToEncode(float64(n)) {
-		return ENCODING_UPPER_LIMIT
-	}
-	return int64(n + T(e.constant.MAGIC_NUMER) - T(e.constant.MAGIC_NUMER))
-}
-
-/*
- * Find the best combinations of Factor-Exponent from a sampled vector
- * This operates over ALP first level samples
- */
+// Find the best combinations of Factor-Exponent from a sampled vector
+// This operates over ALP first level samples
 func (e *Encoder[T]) findTopK(sample []T) {
 	// a sample may contain data from up to 100 probes, each 32 items long
 	nSamples := min(len(sample), SAMPLES_PER_VECTOR)
@@ -302,50 +274,11 @@ func (e *Encoder[T]) findTopK(sample []T) {
 	}
 }
 
-// func (e Encoder[T]) compressToEstimateSize(sample []T, index Encoding) uint64 {
-// 	nValues := len(sample)
-// 	exceptionsCount := 0
-// 	nonExceptionsCount := 0
-// 	estimatedBitsPerValue := uint32(0)
-// 	size := uint64(0)
-// 	var maxEncodedValue int64 = math.MaxInt64
-// 	var minEncodedValue int64 = math.MinInt64
-
-// 	fac := FACT_ARR[index.F]
-// 	exp := T(e.constant.FRAC_ARR[index.E])
-
-// 	frac := T(e.constant.FRAC_ARR[index.F])
-// 	expr := T(e.constant.EXP_ARR[index.E])
-
-// 	for _, value := range sample {
-// 		encodedValue := e.encodeValue(value, frac, expr)
-// 		decodedValue := decodeValue(encodedValue, fac, exp)
-// 		if decodedValue == value {
-// 			nonExceptionsCount++
-// 			maxEncodedValue = max(encodedValue, maxEncodedValue)
-// 			minEncodedValue = min(encodedValue, minEncodedValue)
-// 			continue
-// 		}
-// 		exceptionsCount++
-// 	}
-
-// 	// We penalize combinations which yields to almost all exceptions
-// 	if nonExceptionsCount < 2 {
-// 		return math.MaxUint64
-// 	}
-
-// 	// Evaluate F/E compression size (we optimize for FOR)
-// 	delta := uint64(maxEncodedValue) - uint64(minEncodedValue)
-// 	estimatedBitsPerValue = uint32(math.Ceil(math.Log2(float64(delta + 1))))
-// 	size += uint64(nValues) * uint64(estimatedBitsPerValue)
-// 	size += uint64(exceptionsCount) * (uint64(e.bits) + (EXCEPTION_POSITION_SIZE * 8))
-// 	return size
-// }
-
 // Select the best combination of Factor-Exponent for a vector from
 // within the best k combinations. This is ALP second level sampling.
 func (e *Encoder[T]) selectBestEncoding(src []T) Encoding {
-	//! We sample equidistant values within a vector; to do this we skip a fixed number of values
+	// We sample equidistant values within the src vector;
+	// to do this we skip a fixed number of values
 	nValues := len(src)
 	step := max(1, ((nValues + SAMPLES_PER_VECTOR - 1) / SAMPLES_PER_VECTOR))
 
@@ -355,7 +288,8 @@ func (e *Encoder[T]) selectBestEncoding(src []T) Encoding {
 		worseCount int
 	)
 
-	//! We try each K combination in search for the one which minimize the compression size in the vector
+	// We try each K combination on a small sample in search for
+	// the one which minimizes the compression size across the vector.
 	for k, c := range e.state.topk {
 		var (
 			nEx        int
@@ -385,7 +319,7 @@ func (e *Encoder[T]) selectBestEncoding(src []T) Encoding {
 		nBits := bits.Len64(uint64(maxv - minv))
 		size := SAMPLES_PER_VECTOR*nBits + nEx*(e.constant.EXCEPTION_SIZE+EXCEPTION_POSITION_SIZE)
 
-		// first encoding of K
+		// init from first encoding of K
 		if k == 0 {
 			best.F = c.enc.F
 			best.E = c.enc.E
@@ -421,7 +355,7 @@ func (e *Encoder[T]) Compress(src []T) *Encoder[T] {
 		panic(fmt.Errorf("must encode source with ALP/RD"))
 	}
 
-	// select best encoding process vector
+	// select best encoding process vector (second pass)
 	if len(e.state.topk) > 1 {
 		e.state.Encoding = e.selectBestEncoding(src)
 	} else {
@@ -429,27 +363,28 @@ func (e *Encoder[T]) Compress(src []T) *Encoder[T] {
 	}
 
 	// Encoding Floating-Point to Int64
-	//! We encode all the values regardless of their correctness to recover the original floating-point
+	// We encode all the values regardless of their correctness to
+	// recover the original floating-point
 	encFactor := T(e.constant.FRAC_ARR[e.state.Encoding.F])
 	encExponent := T(e.constant.EXP_ARR[e.state.Encoding.E])
 	decFactor := FACT_ARR[e.state.Encoding.F]
 	decExponent := T(e.constant.FRAC_ARR[e.state.Encoding.E])
 
 	exceptionsIdx := 0
-	exceptionPositions := e.state.Positions[:cap(e.state.Positions)]
+	positions := e.state.Positions[:cap(e.state.Positions)]
 	e.state.Integers = e.state.Integers[:len(src)]
 	for i, val := range src {
 		enc := e.encodeValue(val, encExponent, encFactor)
 		dec := decodeValue(enc, decFactor, decExponent)
 		e.state.Integers[i] = enc
-		exceptionPositions[exceptionsIdx] = uint32(i)
+		positions[exceptionsIdx] = uint32(i)
 		exceptionsIdx += util.Bool2int(dec != val)
 	}
 
 	// Find first non exception value
 	nonExceptionValue := int64(0)
 	for i := range src {
-		if i != int(exceptionPositions[i]) {
+		if i != int(positions[i]) {
 			nonExceptionValue = e.state.Integers[i]
 			break
 		}
@@ -457,12 +392,21 @@ func (e *Encoder[T]) Compress(src []T) *Encoder[T] {
 
 	// Replace that first non exception value on the vector exceptions
 	for i := range exceptionsIdx {
-		exceptionPos := exceptionPositions[i]
+		exceptionPos := positions[i]
 		actualValue := src[exceptionPos]
 		e.state.Integers[exceptionPos] = nonExceptionValue
 		e.state.Exceptions = append(e.state.Exceptions, actualValue)
 	}
-	e.state.Positions = exceptionPositions[:exceptionsIdx]
+	e.state.Positions = positions[:exceptionsIdx]
 
 	return e
+}
+
+// Scalar encoding a single value with ALP
+func (e *Encoder[T]) encodeValue(value, exp, fact T) int64 {
+	n := value * exp * fact
+	if isImpossibleToEncode(float64(n)) {
+		return int64(ENCODING_UPPER_LIMIT)
+	}
+	return int64(n + T(e.constant.MAGIC_NUMER) - T(e.constant.MAGIC_NUMER))
 }

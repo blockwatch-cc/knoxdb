@@ -22,6 +22,10 @@ type DictionaryContainer[T types.Integer] struct {
 	Codes IntegerContainer[uint16]
 }
 
+func (c *DictionaryContainer[T]) Info() string {
+	return fmt.Sprintf("Dict(%s)_[%s]_[%s]", TypeName[T](), c.Dict.Info(), c.Codes.Info())
+}
+
 func (c *DictionaryContainer[T]) Close() {
 	c.Dict.Close()
 	c.Codes.Close()

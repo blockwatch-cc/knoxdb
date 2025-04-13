@@ -4,6 +4,7 @@
 package encode
 
 import (
+	"fmt"
 	"slices"
 	"sort"
 	"sync"
@@ -17,6 +18,10 @@ import (
 type FloatRunEndContainer[T types.Float] struct {
 	Values FloatContainer[T]        // []T
 	Ends   IntegerContainer[uint32] // []uint32
+}
+
+func (c *FloatRunEndContainer[T]) Info() string {
+	return fmt.Sprintf("REE(%s)_[%s]_[%s]", TypeName[T](), c.Values.Info(), c.Ends.Info())
 }
 
 func (c *FloatRunEndContainer[T]) Close() {

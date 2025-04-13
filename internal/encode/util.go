@@ -4,6 +4,7 @@
 package encode
 
 import (
+	"fmt"
 	"math/bits"
 	"unsafe"
 
@@ -42,5 +43,32 @@ func BlockType[T types.Number]() types.BlockType {
 		return types.BlockFloat32
 	default:
 		return types.BlockUint64
+	}
+}
+
+func TypeName[T types.Number]() string {
+	switch any(T(0)).(type) {
+	case uint64:
+		return "u64"
+	case uint32:
+		return "u32"
+	case uint16:
+		return "u16"
+	case uint8:
+		return "u8"
+	case int64:
+		return "i64"
+	case int32:
+		return "i32"
+	case int16:
+		return "i16"
+	case int8:
+		return "i8"
+	case float64:
+		return "f64"
+	case float32:
+		return "f32"
+	default:
+		return fmt.Sprintf("%T", T(0))
 	}
 }

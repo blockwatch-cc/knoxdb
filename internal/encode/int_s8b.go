@@ -25,6 +25,10 @@ type Simple8Container[T types.Integer] struct {
 	typ      types.BlockType
 }
 
+func (c *Simple8Container[T]) Info() string {
+	return fmt.Sprintf("S8(%s)_[n=%d]", TypeName[T](), c.Len())
+}
+
 func (c *Simple8Container[T]) Close() {
 	if c.free {
 		arena.Free(arena.AllocBytes, c.Packed)

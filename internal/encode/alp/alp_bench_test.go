@@ -9,7 +9,11 @@ import (
 	"blockwatch.cc/knoxdb/internal/tests"
 )
 
-func BenchmarkCompressAlpFloat64(b *testing.B) {
+// -------------------------------------
+// ALP
+//
+
+func BenchmarkAlp_CompressFloat64(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		var exn, n, r int
 		src := tests.GenRndBits[float64](c.N, 32)
@@ -30,7 +34,7 @@ func BenchmarkCompressAlpFloat64(b *testing.B) {
 	}
 }
 
-func BenchmarkCompressAlpFloat32(b *testing.B) {
+func BenchmarkAlp_CompressFloat32(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		var exn, n, r int
 		src := tests.GenRndBits[float32](c.N, 28)
@@ -51,35 +55,7 @@ func BenchmarkCompressAlpFloat32(b *testing.B) {
 	}
 }
 
-func BenchmarkCompressAlpRdFloat64(b *testing.B) {
-	for _, c := range tests.BenchmarkSizes {
-		src := tests.GenRndBits[float64](c.N, 49)
-		b.Run(c.Name, func(b *testing.B) {
-			b.ResetTimer()
-			b.ReportAllocs()
-			b.SetBytes(int64(c.N * 8))
-			for range b.N {
-				RDCompress[float64, uint64](src)
-			}
-		})
-	}
-}
-
-func BenchmarkCompressAlpRdFloat32(b *testing.B) {
-	for _, c := range tests.BenchmarkSizes {
-		src := tests.GenRndBits[float32](c.N, 49)
-		b.Run(c.Name, func(b *testing.B) {
-			b.ResetTimer()
-			b.ReportAllocs()
-			b.SetBytes(int64(c.N * 4))
-			for range b.N {
-				RDCompress[float32, uint32](src)
-			}
-		})
-	}
-}
-
-func BenchmarkDecompressAlpFloat64(b *testing.B) {
+func BenchmarkAlp_DecompressFloat64(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		enc := NewEncoder[float64]().Compress(tests.GenRndBits[float64](c.N, 32))
 		e := enc.State()
@@ -97,7 +73,7 @@ func BenchmarkDecompressAlpFloat64(b *testing.B) {
 	}
 }
 
-func BenchmarkDecompressAlpFloat32(b *testing.B) {
+func BenchmarkAlp_DecompressFloat32(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		enc := NewEncoder[float32]().Compress(tests.GenRndBits[float32](c.N, 28))
 		e := enc.State()
@@ -115,29 +91,102 @@ func BenchmarkDecompressAlpFloat32(b *testing.B) {
 	}
 }
 
-func BenchmarkDecompressAlpRdFloat64(b *testing.B) {
+// -------------------------------------
+// ALP-RD
+//
+
+func BenchmarkAlpRD_EstimateFloat64(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
-		s := RDCompress[float64, uint64](tests.GenRndBits[float64](c.N, 32))
+		src := tests.GenRndBits[float64](c.N, 49)
+		unique := make([]uint16, 1<<16)
+		sample := make([]float64, MaxSampleLen(c.N))
+		FirstLevelSample(sample, src)
 		b.Run(c.Name, func(b *testing.B) {
-			b.ResetTimer()
-			b.ReportAllocs()
 			b.SetBytes(int64(c.N * 8))
 			for range b.N {
-				RDDecompress[float64, uint64](s)
+				_ = EstimateShift(sample, unique)
 			}
 		})
 	}
 }
 
-func BenchmarkDecompressAlpRdFloat32(b *testing.B) {
+func BenchmarkAlpRD_EstimateFloat32(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
-		s := RDCompress[float32, uint32](tests.GenRndBits[float32](c.N, 49))
+		src := tests.GenRndBits[float32](c.N, 32)
+		unique := make([]uint16, 1<<16)
+		sample := make([]float32, MaxSampleLen(c.N))
+		FirstLevelSample(sample, src)
 		b.Run(c.Name, func(b *testing.B) {
-			b.ResetTimer()
-			b.ReportAllocs()
 			b.SetBytes(int64(c.N * 4))
 			for range b.N {
-				RDDecompress[float32, uint32](s)
+				_ = EstimateShift(sample, unique)
+			}
+		})
+	}
+}
+
+func BenchmarkAlpRD_SplitFloat64(b *testing.B) {
+	for _, c := range tests.BenchmarkSizes {
+		src := tests.GenRndBits[float64](c.N, 49)
+		unique := make([]uint16, max(c.N, 1<<16))
+		shift := EstimateShift(FirstLevelSample(src, nil), unique)
+		left := make([]uint16, c.N)
+		right := make([]uint64, c.N)
+		b.Run(c.Name, func(b *testing.B) {
+			b.SetBytes(int64(c.N * 8))
+			for range b.N {
+				Split(src, left, right, shift)
+			}
+		})
+	}
+}
+
+func BenchmarkAlpRD_SplitFloat32(b *testing.B) {
+	for _, c := range tests.BenchmarkSizes {
+		src := tests.GenRndBits[float32](c.N, 32)
+		unique := make([]uint16, max(c.N, 1<<16))
+		shift := EstimateShift(FirstLevelSample(src, nil), unique)
+		left := make([]uint16, c.N)
+		right := make([]uint64, c.N)
+		b.Run(c.Name, func(b *testing.B) {
+			b.SetBytes(int64(c.N * 4))
+			for range b.N {
+				Split(src, left, right, shift)
+			}
+		})
+	}
+}
+
+func BenchmarkAlpRD_MergeFloat64(b *testing.B) {
+	for _, c := range tests.BenchmarkSizes {
+		src := tests.GenRndBits[float64](c.N, 49)
+		unique := make([]uint16, max(c.N, 1<<16))
+		shift := EstimateShift(FirstLevelSample(src, nil), unique)
+		left := make([]uint16, c.N)
+		right := make([]uint64, c.N)
+		dst := make([]float64, c.N)
+		Split(src, left, right, shift)
+		b.Run(c.Name, func(b *testing.B) {
+			b.SetBytes(int64(c.N * 8))
+			for range b.N {
+				Merge(dst, left, right, shift)
+			}
+		})
+	}
+}
+
+func BenchmarkAlpRD_MergeFloat32(b *testing.B) {
+	for _, c := range tests.BenchmarkSizes {
+		src := tests.GenRndBits[float32](c.N, 32)
+		unique := make([]uint16, max(c.N, 1<<16))
+		shift := EstimateShift(FirstLevelSample(src, nil), unique)
+		left := make([]uint16, c.N)
+		right := make([]uint64, c.N)
+		dst := make([]float32, c.N)
+		b.Run(c.Name, func(b *testing.B) {
+			b.SetBytes(int64(c.N * 4))
+			for range b.N {
+				Merge(dst, left, right, shift)
 			}
 		})
 	}

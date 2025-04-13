@@ -4,6 +4,7 @@
 package encode
 
 import (
+	"fmt"
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/arena"
@@ -19,6 +20,10 @@ type RawContainer[T types.Integer] struct {
 	Values []T
 	sz     int
 	typ    types.BlockType
+}
+
+func (c *RawContainer[T]) Info() string {
+	return fmt.Sprintf("Raw(%s)_[n=%d]", TypeName[T](), len(c.Values))
 }
 
 func (c *RawContainer[T]) Close() {

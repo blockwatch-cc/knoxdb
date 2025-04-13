@@ -184,7 +184,15 @@ func BenchmarkEncodeFloat(b *testing.B) {
 		} {
 			data := etests.GenForFloatScheme[float64](int(scheme), c.N)
 			ctx := AnalyzeFloat(data, scheme == TFloatDictionary, scheme == TFloatAlp)
+			once := true
 			b.Run(c.Name+"_"+scheme.String(), func(b *testing.B) {
+				if once && testing.Verbose() {
+					enc := NewFloat[float64](scheme).Encode(ctx, data, MAX_CASCADE)
+					b.Log(enc.Info())
+					enc.Close()
+					once = false
+				}
+				b.ResetTimer()
 				b.ReportAllocs()
 				b.SetBytes(int64(c.N * 8))
 				for range b.N {

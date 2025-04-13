@@ -4,6 +4,7 @@
 package encode
 
 import (
+	"fmt"
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/types"
@@ -14,6 +15,10 @@ import (
 type FloatConstContainer[T types.Float] struct {
 	Val T
 	N   int
+}
+
+func (c *FloatConstContainer[T]) Info() string {
+	return fmt.Sprintf("Const(%s)_[n=%d]", TypeName[T](), c.N)
 }
 
 func (c *FloatConstContainer[T]) Close() {

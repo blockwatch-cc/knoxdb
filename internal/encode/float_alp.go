@@ -1,6 +1,7 @@
 package encode
 
 import (
+	"fmt"
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/arena"
@@ -28,6 +29,16 @@ type FloatAlpContainer[T types.Float] struct {
 	hasException bool
 	exceptions   map[uint32]T
 	dec          *alp.Decoder[T]
+}
+
+func (c *FloatAlpContainer[T]) Info() string {
+	if c.hasException {
+		return fmt.Sprintf("ALP(%s)_[%d,%d]_[v=%s]_[ex=%s]_[pos=%s]",
+			TypeName[T](), c.Exponent, c.Factor,
+			c.Values.Info(), c.Exception.Info(), c.Positions.Info())
+	}
+	return fmt.Sprintf("ALP(%s)_[%d,%d]_[v=%s]_[noex]", TypeName[T](),
+		c.Exponent, c.Factor, c.Values.Info())
 }
 
 func (c *FloatAlpContainer[T]) Close() {
@@ -172,15 +183,15 @@ func (c *FloatAlpContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int) F
 
 	// encode child containers
 	c.Values = EncodeInt(nil, s.Integers, lvl-1)
-	// fmt.Printf("ALP: int encoded as %s in %d bytes\n", c.Values.Type(), c.Values.MaxSize())
 	if len(s.Exceptions) > 0 {
 		c.hasException = true
 		c.Exception = EncodeFloat(nil, s.Exceptions, lvl-1)
-		// fmt.Printf("ALP: ex encoded as %s in %d bytes raw=%v\n", c.Exception.Type(), c.Exception.MaxSize(), s.Exceptions)
-		c.Positions = EncodeInt(nil, s.Positions, lvl-1)
-		// fmt.Printf("ALP: pos encoded as %s in %d bytes raw=%d\n", c.Positions.Type(), c.Positions.MaxSize(), s.ExceptionPositions)
+		ectx := AnalyzeInt(s.Positions, false)
+		c.Positions = EncodeInt(ectx, s.Positions, lvl-1)
+		ectx.Close()
 	}
 	enc.Close()
+	ctx.AlpEncoder = nil
 
 	return c
 }

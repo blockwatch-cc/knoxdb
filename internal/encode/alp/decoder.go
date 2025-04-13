@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Blockwatch Data Inc.
-// Author: abdul@blockwatch.cc
+// Author: abdul@blockwatch.cc,alex@blockwatch.cc
 
 package alp
 
@@ -60,7 +60,7 @@ func (d *Decoder[T]) Decompress(dst []T, src []int64) {
 	}
 }
 
-// DecompressValue decompresses value by unFOR+decode. Doesnt take account of exceptions
+// DecompressValue decompresses a single value without unFOR or exceptions.
 func (d *Decoder[T]) DecompressValue(v int64) T {
 	return T(v) * d.factor * d.exponent
 }

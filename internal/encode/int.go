@@ -45,6 +45,7 @@ type IntegerContainer[T types.Integer] interface {
 	// introspect
 	Type() IntegerContainerType
 	Len() int
+	Info() string
 
 	// data access
 	Get(int) T

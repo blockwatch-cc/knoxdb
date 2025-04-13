@@ -4,6 +4,7 @@
 package encode
 
 import (
+	"fmt"
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/arena"
@@ -17,6 +18,10 @@ type DeltaContainer[T types.Integer] struct {
 	Delta T
 	For   T
 	N     int
+}
+
+func (c *DeltaContainer[T]) Info() string {
+	return fmt.Sprintf("Delta(%s)_[n=%d]", TypeName[T](), c.N)
 }
 
 func (c *DeltaContainer[T]) Close() {

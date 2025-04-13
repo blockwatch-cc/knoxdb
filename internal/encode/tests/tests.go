@@ -95,6 +95,7 @@ func MakeShortFloatTests[T types.Float](scheme int) []TestCase[T] {
 		MakeFloatTest[T]("alp", 6, floatAlpCase...),
 	}
 	if scheme == 4 {
+		// TFloatAlpRd
 		tests = append(tests, MakeFloatTest[T]("alprd", 6, floatAlpRdCase...))
 	}
 	return tests

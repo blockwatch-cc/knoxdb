@@ -493,7 +493,15 @@ func BenchmarkEncodeInt(b *testing.B) {
 		} {
 			data := etests.GenForIntScheme[int64](int(scheme), c.N)
 			ctx := AnalyzeInt(data, scheme == TIntegerDictionary)
+			once := true
 			b.Run(c.Name+"_"+scheme.String(), func(b *testing.B) {
+				if once && testing.Verbose() {
+					enc := NewInt[int64](scheme).Encode(ctx, data, MAX_CASCADE)
+					b.Log(enc.Info())
+					enc.Close()
+					once = false
+				}
+				b.ResetTimer()
 				b.ReportAllocs()
 				b.SetBytes(int64(c.N * 8))
 				for range b.N {

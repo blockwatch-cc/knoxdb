@@ -1,16 +1,14 @@
 package encode
 
 import (
-	"math"
-	"math/bits"
+	"fmt"
 	"sync"
 	"unsafe"
 
 	"blockwatch.cc/knoxdb/internal/arena"
-	"blockwatch.cc/knoxdb/internal/encode/hashprobe"
+	"blockwatch.cc/knoxdb/internal/encode/alp"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 // TFloatAlpRd
@@ -19,6 +17,11 @@ type FloatAlpRdContainer[T types.Float] struct {
 	Right IntegerContainer[uint64]
 	Shift int
 	typ   types.BlockType
+}
+
+func (c *FloatAlpRdContainer[T]) Info() string {
+	return fmt.Sprintf("ALP-RD(%s)_[>>%d]_[%s]_[%s]",
+		TypeName[T](), c.Shift, c.Left.Info(), c.Right.Info())
 }
 
 func (c *FloatAlpRdContainer[T]) Close() {
@@ -101,142 +104,47 @@ func (c *FloatAlpRdContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 
 func (c *FloatAlpRdContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int) FloatContainer[T] {
 	cnt := len(vals)
-	left := arena.AllocT[uint16](1 << 16)[:1<<16]
+	left := arena.AllocT[uint16](max(cnt, 1<<16))[:1<<16] // alloc more to use as scratch array
 	right := arena.AllocT[uint64](cnt)[:cnt]
 	c.typ = BlockType[T]()
 
-	sample, ok := SampleFloat(vals)
-	bestShift := estimateShift(sample, left)
-	if ok {
-		arena.FreeT(sample)
-	}
+	// produce a small sample
+	sample := arena.AllocT[T](alp.MaxSampleLen(cnt))
+	alp.FirstLevelSample(sample, vals)
+
+	// estimate best shift based on sample (use left array as scratch space for unique count)
+	c.Shift = alp.EstimateShift(sample, left)
+
+	// free sample and reset left to input vector length
+	arena.FreeT(sample)
 	left = left[:cnt]
 
-	// TODO: SIMD
-	mask := uint64(1<<bestShift) - 1
-	switch c.typ {
-	case types.BlockFloat64:
-		for k, v := range util.ReinterpretSlice[T, uint64](vals) {
-			right[k] = v & mask
-			left[k] = uint16(v >> bestShift)
-		}
-	case types.BlockFloat32:
-		for k, v := range util.ReinterpretSlice[T, uint32](vals) {
-			right[k] = uint64(v) & mask
-			left[k] = uint16(v >> bestShift)
-		}
-	}
+	// split input float vector into left and right integer parts
+	alp.Split(vals, left, right, c.Shift)
 
+	// analyze parts
 	lctx := AnalyzeInt(left, true)
 	rctx := AnalyzeInt(right, false)
-	c.Shift = bestShift
 
-	// left side dict compression only makes sense when more efficient than bit-packing
+	// prefer left side dict compression when more efficient than bit-packing
 	leftScheme := TIntegerBitpacked
 	if lctx.preferDict() {
 		leftScheme = TIntegerDictionary
 	}
 
+	// encode parts
 	c.Left = NewInt[uint16](leftScheme).Encode(lctx, left, lvl-1)
+	// fmt.Printf("ALP-RD: left encoded as %s in %d bytes\n", c.Left.Type(), c.Left.MaxSize())
 	c.Right = NewInt[uint64](TIntegerBitpacked).Encode(rctx, right, lvl-1)
+	// fmt.Printf("ALP-RD: right encoded as %s in %d bytes\n", c.Right.Type(), c.Right.MaxSize())
+
+	// free temp allocations
 	lctx.Close()
 	rctx.Close()
 	arena.FreeT(left)
 	arena.FreeT(right)
 
 	return c
-}
-
-func estimateShift[T types.Float](sample []T, unique []uint16) int {
-	var (
-		bestShift int
-		bestSize  int = math.MaxInt32
-		sz            = len(sample)
-		w         int = SizeOf[T]()
-	)
-	for i := 1; i <= 16; i++ {
-		shift := 64 - i
-		mask := uint64(1<<shift - 1)
-
-		var (
-			lmin, lmax uint16 = 0, math.MaxUint16
-			rmin, rmax uint64 = 0, math.MaxUint64
-		)
-
-		switch w {
-		case 8:
-			// min/max
-			for _, v := range util.ReinterpretSlice[T, uint64](sample) {
-				l, r := uint16(v>>shift), v&mask
-				if l < lmin {
-					lmin = l
-				} else if l > lmax {
-					lmax = l
-				}
-				if r < rmin {
-					rmin = r
-				} else if r > rmax {
-					rmax = r
-				}
-			}
-			// mark uniques
-			for _, v := range util.ReinterpretSlice[T, uint64](sample) {
-				unique[uint16(v>>shift)-lmin] = 1
-			}
-
-		case 4:
-			// min/max
-			for _, v := range util.ReinterpretSlice[T, uint32](sample) {
-				l, r := uint16(v>>shift), uint64(v)&mask
-				if l < lmin {
-					lmin = l
-				} else if l > lmax {
-					lmax = l
-				}
-				if r < rmin {
-					rmin = r
-				} else if r > rmax {
-					rmax = r
-				}
-				unique[l] = 1
-			}
-			// mark uniques
-			for _, v := range util.ReinterpretSlice[T, uint32](sample) {
-				unique[uint16(v>>shift)-lmin] = 1
-			}
-		}
-
-		// count uniques
-		var lunique int
-		for _, v := range unique[:lmax-lmin+1] {
-			lunique = util.Bool2int(v > 0)
-		}
-		lbits, rbits := bits.Len16(lmax-lmin), bits.Len64(rmax-rmin)
-
-		// estimate encoded size
-		// - left side may be dict compressed
-		// - right side will be bitpacked
-		ldcost := dictCosts(sz, lbits, lunique)
-		lbcost := bitPackCosts(sz, lbits)
-
-		var maxSz int
-		if lunique <= hashprobe.MAX_DICT_LIMIT && ldcost < lbcost {
-			maxSz += ldcost
-		} else {
-			maxSz += lbcost
-		}
-		maxSz += bitPackCosts(sz, rbits) // bitpack only
-
-		// compare against previous know best ratio and keep best containers
-		if maxSz <= bestSize {
-			bestSize = maxSz
-			bestShift = shift
-		}
-
-		// cleanup
-		clear(unique[:lmax-lmin+1])
-	}
-	return bestShift
 }
 
 func (c *FloatAlpRdContainer[T]) MatchEqual(val T, bits, mask *Bitset) *Bitset {

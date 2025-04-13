@@ -4,6 +4,7 @@
 package encode
 
 import (
+	"fmt"
 	"sort"
 	"sync"
 
@@ -16,6 +17,10 @@ import (
 type FloatDictionaryContainer[T types.Float] struct {
 	Dict  FloatContainer[T]
 	Codes IntegerContainer[uint16]
+}
+
+func (c *FloatDictionaryContainer[T]) Info() string {
+	return fmt.Sprintf("Dict(%s)_[%s]_[%s]", TypeName[T](), c.Dict.Info(), c.Codes.Info())
 }
 
 func (c *FloatDictionaryContainer[T]) Close() {

@@ -38,6 +38,7 @@ type FloatContainer[T types.Float] interface {
 	// introspect
 	Type() FloatContainerType
 	Len() int
+	Info() string
 
 	// data access
 	Get(int) T

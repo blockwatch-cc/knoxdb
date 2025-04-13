@@ -4,6 +4,7 @@
 package encode
 
 import (
+	"fmt"
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/arena"
@@ -22,6 +23,10 @@ type BitpackContainer[T types.Integer] struct {
 	For    T
 	free   bool
 	unpack bitpack.UnpackFunc
+}
+
+func (c *BitpackContainer[T]) Info() string {
+	return fmt.Sprintf("BP(%s)_[w=%d,n=%d]", TypeName[T](), c.Log2, c.N)
 }
 
 func (c *BitpackContainer[T]) Close() {
