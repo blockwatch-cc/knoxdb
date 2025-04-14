@@ -38,14 +38,14 @@ func (t *hashTable[T]) Init() *hashTable[T] {
 	return t
 }
 
-// Prevent underallocation due to cardinality estimation errors (<4%).
+// Prevent underallocation due to cardinality estimation errors (<25%).
 // Arena allocation already rounds to next pow2.
 func safeDictLen(n int) int {
-	// increase size by error boundary (1/32th)
-	n += n >> 5
+	// increase size by error boundary (1/16th)
+	n += n >> 4
 
-	// round to multiples of 32
-	return (n + 31) &^ 31
+	// round to multiples of 256
+	return (n + 255) &^ 255
 }
 
 // Fast hash function (multiply prime) that extracts

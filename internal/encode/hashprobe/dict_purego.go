@@ -15,6 +15,9 @@ func BuildDict[T Integer](vals []T, numUnique int) ([]T, []uint16) {
 	return buildDictGeneric(vals, numUnique)
 }
 
+// Note: requires we change the hash function to make it mix upper
+// bits before masking the lower 16 bits. Not doing this results in
+// excessive hash table collisions.
 func BuildFloatDict[T float32 | float64](vals []T, numUnique int) ([]T, []uint16) {
 	var (
 		dict  []T
