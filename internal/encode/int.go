@@ -7,11 +7,9 @@ import (
 	"errors"
 	"fmt"
 
-	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 var (
@@ -86,29 +84,6 @@ func NewInt[T types.Integer](scheme IntegerContainerType) IntegerContainer[T] {
 	}
 }
 
-const (
-	MAX_CASCADE  = 3
-	SAMPLE_SIZE  = 64
-	SAMPLE_COUNT = 10
-)
-
-// SampleInt extracts a random sample from integer slice v. It is used
-// when estimating the effectiveness of different encoders.
-func SampleInt[T types.Integer](v []T) ([]T, bool) {
-	if len(v) <= SAMPLE_COUNT*SAMPLE_SIZE {
-		return v, false
-	}
-	sz := SAMPLE_COUNT * SAMPLE_SIZE
-	s := arena.AllocT[T](sz)[:sz]
-	chunk := len(v) / SAMPLE_COUNT
-	for i := 0; i < SAMPLE_COUNT; i++ {
-		start := chunk*i + util.RandIntn(chunk-SAMPLE_SIZE)
-		end := start + SAMPLE_SIZE
-		copy(s[SAMPLE_SIZE*i:], v[start:end])
-	}
-	return s, true
-}
-
 // EncodeInt encodes an integer type slice into an integer container
 // selecting the most efficient encoding scheme.
 func EncodeInt[T types.Integer](ctx *IntegerContext[T], v []T, lvl int) IntegerContainer[T] {
@@ -173,7 +148,7 @@ func EstimateInt[T types.Integer](scheme IntegerContainerType, ctx *IntegerConte
 
 	// use sampling for TIntegerSimple8
 	if ctx.Sample == nil {
-		ctx.Sample, ctx.FreeSample = SampleInt(v)
+		ctx.Sample, ctx.FreeSample = Sample(v)
 		ctx.SampleCtx = AnalyzeInt(ctx.Sample, false)
 	}
 

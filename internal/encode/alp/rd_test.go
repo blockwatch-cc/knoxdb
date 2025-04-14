@@ -23,18 +23,18 @@ func AlpRDTest[T types.Float, U types.Unsigned](t *testing.T) {
 
 			// estimate shift
 			unique := make([]uint16, 1<<16)
-			shift := EstimateShift(sample, unique)
-			require.GreaterOrEqual(t, shift, 48)
-			require.LessOrEqual(t, shift, 64)
+			e := EstimateRD(sample, unique)
+			require.GreaterOrEqual(t, e.Shift, 48)
+			require.LessOrEqual(t, e.Shift, 64)
 
 			// split floats
 			left := make([]uint16, len(c.Data))
 			right := make([]uint64, len(c.Data))
-			Split(c.Data, left, right, shift)
+			SplitRD(c.Data, left, right, e.Shift)
 
 			// merge floats
 			dst := make([]T, len(c.Data))
-			Merge(dst, left, right, shift)
+			MergeRD(dst, left, right, e.Shift)
 
 			require.Equal(t, c.Data[0], dst[0], "%x != %x",
 				math.Float64bits(float64(c.Data[0])), math.Float64bits(float64(dst[0])))

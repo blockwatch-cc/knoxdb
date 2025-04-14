@@ -493,9 +493,9 @@ func BenchmarkEncodeInt(b *testing.B) {
 		} {
 			data := etests.GenForIntScheme[int64](int(scheme), c.N)
 			ctx := AnalyzeInt(data, scheme == TIntegerDictionary)
-			once := true
+			once := etests.ShowInfo
 			b.Run(c.Name+"_"+scheme.String(), func(b *testing.B) {
-				if once && testing.Verbose() {
+				if once  {
 					enc := NewInt[int64](scheme).Encode(ctx, data, MAX_CASCADE)
 					b.Log(enc.Info())
 					enc.Close()
@@ -545,13 +545,22 @@ func BenchmarkEncodeAndStoreInt(b *testing.B) {
 
 func BenchmarkEncodeBestInt(b *testing.B) {
 	for _, c := range tests.MakeBenchmarks[uint64]() {
+		once := etests.ShowInfo
 		b.Run(c.Name, func(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(len(c.Data) * 8))
+			var sz int
 			for range b.N {
 				enc := EncodeInt(nil, c.Data, MAX_CASCADE)
+				sz += enc.MaxSize()
+				if once {
+					b.Log(enc.Info())
+					once = false
+				}
 				enc.Close()
 			}
+			b.ReportMetric(float64(sz/b.N), "c(B)")
+			b.ReportMetric(100*float64(sz)/float64(b.N*c.N*8), "c(%)")
 		})
 	}
 }
@@ -562,15 +571,19 @@ func BenchmarkEncodeLegacyInt(b *testing.B) {
 		b.Run(c.Name, func(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(len(c.Data) * 8))
+			var sz int
 			for range b.N {
-				_, _ = zip.EncodeUint64(c.Data, buf)
+				n, _ := zip.EncodeUint64(c.Data, buf)
+				sz += n
 				buf.Reset()
 			}
+			b.ReportMetric(float64(sz/b.N), "c(B)")
+			b.ReportMetric(100*float64(sz)/float64(b.N*c.N*8), "c(%)")
 		})
 	}
 }
 
-func BenchmarkAppendTo(b *testing.B) {
+func BenchmarkAppendToInt(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		for _, scheme := range []IntegerContainerType{
 			TIntegerConstant,

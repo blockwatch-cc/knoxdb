@@ -77,7 +77,6 @@ func (c *FloatAlpContainer[T]) MaxSize() int {
 
 func (c *FloatAlpContainer[T]) Store(dst []byte) []byte {
 	dst = append(dst, byte(TFloatAlp))
-	// dst = num.AppendUvarint(dst, uint64(c.For))
 	dst = num.AppendUvarint(dst, uint64(c.Exponent))
 	dst = num.AppendUvarint(dst, uint64(c.Factor))
 	dst = c.Values.Store(dst)

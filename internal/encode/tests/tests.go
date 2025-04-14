@@ -4,6 +4,7 @@
 package tests
 
 import (
+	"flag"
 	"reflect"
 	"slices"
 	"strconv"
@@ -13,6 +14,8 @@ import (
 )
 
 var (
+	ShowInfo bool
+
 	constCase  = []int{1, 1, 1, 1, 1, 1}
 	deltaCase  = []int{1, 2, 3, 4, 5, 6} // delta = 1
 	runsCase   = []int{1, 1, 2, 2, 3, 3}
@@ -28,6 +31,10 @@ var (
 	floatAlpCase   = []float64{2.50, 540.4532, 1.5210, 50.4125, 1.5330, 50.4335}
 	floatAlpRdCase = []float64{18446744073709551615.50, 18446744073709551615.4532, 18446744073709551615.5210, 18446744073709551615.4125, 18446744073709551615.5330, 18446744073709551615.4335}
 )
+
+func init() {
+	flag.BoolVar(&ShowInfo, "info", false, "be more verbose")
+}
 
 var CompareSizes = []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 23}
 
@@ -89,7 +96,6 @@ func MakeShortFloatTests[T types.Float](scheme int) []TestCase[T] {
 		return []TestCase[T]{MakeFloatTest[T]("const", 6, floatConstCase...)}
 	}
 	tests := []TestCase[T]{
-		MakeFloatTest[T]("const", 6, floatConstCase...),
 		MakeFloatTest[T]("runs", 6, floatRunsCase...),
 		MakeFloatTest[T]("dict", 6, floatDictCase...),
 		MakeFloatTest[T]("alp", 6, floatAlpCase...),

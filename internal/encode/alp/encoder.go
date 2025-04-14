@@ -29,10 +29,15 @@ type Encoding struct {
 type Combination struct {
 	enc   Encoding
 	count int
+	rate  float64
 }
 
 func (c Combination) Key() uint16 {
 	return uint16(c.enc.E)<<8 | uint16(c.enc.F)
+}
+
+func (c Combination) Rate() float64 {
+	return c.rate
 }
 
 type Combinations []Combination
@@ -48,14 +53,16 @@ func (l Combinations) Less(i, j int) bool {
 }
 
 type State[T types.Float] struct {
+	Scheme     int
 	Integers   []int64
 	Exceptions []T
 	Positions  []uint32
-	Scheme     int
 	Encoding   Encoding
+	RD         EncodingRD
 	topk       Combinations
 	allk       map[uint16]int
 	sample     []T
+	unique     []uint16
 }
 
 type StateFy struct {
@@ -84,7 +91,7 @@ func putState[T types.Float](s *State[T]) {
 	}
 }
 
-const StateFyBufferSize = 1 << 16
+const StateBufferSize = 1 << 16
 
 var stateFy = StateFy{
 	f64Pool: sync.Pool{
@@ -97,31 +104,39 @@ var stateFy = StateFy{
 
 func newState[T types.Float](sz int) *State[T] {
 	return &State[T]{
+		Scheme:     InvalidScheme,
 		Integers:   make([]int64, 0, sz),
 		Exceptions: make([]T, 0, sz),
 		Positions:  make([]uint32, 0, sz),
 		sample:     make([]T, 0, VECTOR_SIZE),
 		topk:       make(Combinations, 0, MAX_K_COMBINATIONS),
 		allk:       make(map[uint16]int, MAX_K_COMBINATIONS),
-		Scheme:     AlpScheme,
+		unique:     make([]uint16, 1<<16),
 	}
 }
 
 func NewState[T types.Float](sz int) *State[T] {
-	if sz <= StateFyBufferSize {
+	if sz <= StateBufferSize {
 		return allocState[T]()
 	}
 	return newState[T](sz)
 }
 
 func (s *State[T]) Reset() {
-	s.Scheme = AlpScheme
+	s.Scheme = InvalidScheme
 	s.Positions = s.Positions[:0]
 	s.sample = s.sample[:0]
 	s.topk = s.topk[:0]
 	clear(s.allk)
 	s.Integers = s.Integers[:0]
 	s.Exceptions = s.Exceptions[:0]
+}
+
+func (s *State[T]) Top() Combination {
+	if len(s.topk) > 0 {
+		return s.topk[0]
+	}
+	return Combination{rate: 1.0}
 }
 
 type Encoder[T types.Float] struct {
@@ -149,32 +164,39 @@ func NewEncoder[T types.Float]() *Encoder[T] {
 	}
 }
 
+func (e *Encoder[T]) IsInit() bool {
+	return e != nil && e.state != nil && e.state.Scheme != InvalidScheme
+}
+
 func (e *Encoder[T]) Analyze(values []T) *Encoder[T] {
 	if e.state == nil {
 		e.state = NewState[T](len(values))
 	}
-	if len(e.state.topk) == 0 {
+	if e.state.Scheme == InvalidScheme {
+		// fmt.Printf("Analyze: %d values\n", len(values))
 		e.state.sample = FirstLevelSample(e.state.sample, values)
-		e.findTopK(e.state.sample)
+		e.analyzeSample(e.state.sample)
 	}
 	return e
 }
 
 // Find the best combinations of Factor-Exponent from a sampled vector
 // This operates over ALP first level samples
-func (e *Encoder[T]) findTopK(sample []T) {
+func (e *Encoder[T]) analyzeSample(sample []T) {
+	var voffs, szSample int
+
 	// a sample may contain data from up to 100 probes, each 32 items long
 	nSamples := min(len(sample), SAMPLES_PER_VECTOR)
 
-	// fmt.Printf("TopK: %d samples\n", nSamples)
-
 	// probes are called vectors here and we visit each of them individually
-	nVectors := (nSamples + SAMPLES_PER_VECTOR - 1) / SAMPLES_PER_VECTOR
-	var voffs int
-	// fmt.Printf("TopK: %d vectors\n", nVectors)
+	nVectors := (len(sample) + SAMPLES_PER_VECTOR - 1) / SAMPLES_PER_VECTOR
 
-	// init best size found so far to a wors-case max
+	// fmt.Printf("ALP: %d samples\n", nSamples)
+	// fmt.Printf("ALP: %d vectors\n", nVectors)
+
+	// init best size found so far to a worst-case max
 	bestSize := math.MaxInt
+	rawSize := len(sample) * int(unsafe.Sizeof(T(0)))
 
 	// For each vector in the rg sample
 	for range nVectors {
@@ -219,16 +241,16 @@ func (e *Encoder[T]) findTopK(sample []T) {
 
 				// evaluate performance
 				nBits := bits.Len64(uint64(maxv - minv))
-				size := (nSamples*nBits+7)/8 + nEx*(e.constant.EXCEPTION_SIZE+EXCEPTION_POSITION_SIZE)
+				szBits := (nSamples*nBits + 7) + nEx*(e.constant.EXCEPTION_SIZE+EXCEPTION_POSITION_SIZE)
 
 				// keep better compressing versions
-				if size < bestProbeSize || // We prefer better size
-					(size == bestProbeSize && useExp < ei) || // or bigger exponents
-					(size == bestProbeSize && useExp == ei && useFac < fi) { // or bigger factors
+				if szBits < bestProbeSize || // We prefer better size
+					(szBits == bestProbeSize && useExp < ei) || // or bigger exponents
+					(szBits == bestProbeSize && useExp == ei && useFac < fi) { // or bigger factors
 
-					// fmt.Printf("> E=%d F=%d => size=%d ex=%d\n", ei, fi, size, nEx)
+					// fmt.Printf("> E=%d F=%d => ex=%d size=%d\n", ei, fi, nEx, szBits/8)
 
-					bestProbeSize = size
+					bestProbeSize = szBits
 					useExp = ei
 					useFac = fi
 					if bestProbeSize < bestSize {
@@ -238,19 +260,22 @@ func (e *Encoder[T]) findTopK(sample []T) {
 			}
 		}
 
-		// fmt.Printf("TopK: keep E=%d F=%d\n", useExp, useFac)
+		// fmt.Printf("ALP: keep E=%d F=%d sz=%d\n", useExp, useFac, bestSize/8)
 
 		// remember encoding and count how often it appeared
 		key := uint16(useExp)<<8 | uint16(useFac)
 		e.state.allk[key]++
+		szSample += bestProbeSize
 
 		voffs += nSamples
 	}
 
-	// We adapt scheme if we were not able to achieve compression in the current rg
+	// We switch scheme if we were not able to achieve compression in any of the probes
 	if bestSize >= e.constant.RD_SIZE_THRESHOLD_LIMIT {
-		fmt.Printf("TopK: should use ALP-RD on %v\n", sample)
+		// fmt.Printf("ALP: should use ALP-RD (sz: %d > %d) on %v ...\n",
+		// 	bestSize/8, e.constant.RD_SIZE_THRESHOLD_LIMIT/8, sample[:min(5, len(sample))])
 		e.state.Scheme = AlpRdScheme
+		e.state.RD = EstimateRD(sample, e.state.unique)
 		return
 	}
 
@@ -260,6 +285,7 @@ func (e *Encoder[T]) findTopK(sample []T) {
 		e.state.topk = append(e.state.topk, Combination{
 			enc:   Encoding{E: uint8(k >> 8), F: uint8(k)},
 			count: c,
+			rate:  float64(szSample/8) / float64(rawSize),
 		})
 	}
 
@@ -269,9 +295,10 @@ func (e *Encoder[T]) findTopK(sample []T) {
 	// limit
 	e.state.topk = e.state.topk[:min(len(e.state.topk), MAX_K_COMBINATIONS)]
 
-	if len(e.state.topk) > 1 {
-		fmt.Printf("TopK: %v\n", e.state.topk)
-	}
+	// if len(e.state.topk) > 1 {
+	// 	fmt.Printf("ALP: %#v\n", e.state.topk)
+	// }
+	e.state.Scheme = AlpScheme
 }
 
 // Select the best combination of Factor-Exponent for a vector from
@@ -280,7 +307,7 @@ func (e *Encoder[T]) selectBestEncoding(src []T) Encoding {
 	// We sample equidistant values within the src vector;
 	// to do this we skip a fixed number of values
 	nValues := len(src)
-	step := max(1, ((nValues + SAMPLES_PER_VECTOR - 1) / SAMPLES_PER_VECTOR))
+	step := max(1, (nValues+SAMPLES_PER_VECTOR-1)/SAMPLES_PER_VECTOR)
 
 	var (
 		best       Encoding
@@ -348,7 +375,9 @@ func (e *Encoder[T]) selectBestEncoding(src []T) Encoding {
 
 func (e *Encoder[T]) Compress(src []T) *Encoder[T] {
 	// alloc state and analyze vector (first pass)
-	e.Analyze(src)
+	if !e.IsInit() {
+		e.Analyze(src)
+	}
 
 	// must have ALP detected and set up
 	if e.state.Scheme != AlpScheme {

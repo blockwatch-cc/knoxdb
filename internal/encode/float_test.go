@@ -22,7 +22,6 @@ func TestAnalyzeFloat(t *testing.T) {
 	assert.Equal(t, float64(-1.044), x.Min, "min")
 	assert.Equal(t, float64(5.245), x.Max, "max")
 	assert.InDelta(t, 3, x.NumUnique, 1.0, "num_unique")
-	// assert.Equal(t, 3, x.NumUnique, "num_unique")
 	assert.Equal(t, 3, x.NumRuns, "num_runs")
 	assert.Equal(t, 6, x.NumValues, "num_values")
 	assert.Contains(t, x.EligibleSchemes(MAX_CASCADE), TFloatRunEnd, "eligible")
@@ -30,10 +29,9 @@ func TestAnalyzeFloat(t *testing.T) {
 	assert.Contains(t, x.EligibleSchemes(MAX_CASCADE), TFloatDictionary, "eligible")
 
 	// dict-friendly
-	x = AnalyzeFloat([]float64{-1.05, 1.05, 5.05, 1.05, -1.05, 1.05}, true, true)
+	x = AnalyzeFloat([]float64{-1.05, 1.05, 5.05, 1.05, -1.05, 1.05}, true, false)
 	assert.Equal(t, float64(-1.05), x.Min, "min")
 	assert.Equal(t, float64(5.05), x.Max, "max")
-	// assert.Equal(t, 3, x.NumUnique, "num_unique")
 	assert.InDelta(t, 3, x.NumUnique, 1.0, "num_unique")
 	assert.Equal(t, 6, x.NumRuns, "num_runs")
 	assert.Equal(t, 6, x.NumValues, "num_values")
@@ -50,6 +48,7 @@ func testFloatContainerType[T types.Float](t *testing.T, scheme FloatContainerTy
 
 			// analyze and encode data into container
 			ctx := AnalyzeFloat(c.Data, true, true)
+			require.Greater(t, ctx.NumUnique, 0, "%#v", ctx)
 			enc.Encode(ctx, c.Data, 1)
 
 			// validate contents
@@ -184,9 +183,9 @@ func BenchmarkEncodeFloat(b *testing.B) {
 		} {
 			data := etests.GenForFloatScheme[float64](int(scheme), c.N)
 			ctx := AnalyzeFloat(data, scheme == TFloatDictionary, scheme == TFloatAlp)
-			once := true
+			once := etests.ShowInfo
 			b.Run(c.Name+"_"+scheme.String(), func(b *testing.B) {
-				if once && testing.Verbose() {
+				if once && etests.ShowInfo {
 					enc := NewFloat[float64](scheme).Encode(ctx, data, MAX_CASCADE)
 					b.Log(enc.Info())
 					enc.Close()
@@ -222,9 +221,7 @@ func BenchmarkEncodeAndStoreFloat(b *testing.B) {
 				for range b.N {
 					ctx := AnalyzeFloat(data, scheme == TFloatDictionary, scheme == TFloatAlp)
 					enc := NewFloat[float64](scheme).Encode(ctx, data, MAX_CASCADE)
-					sz := enc.MaxSize()
-					buf := enc.Store(make([]byte, 0, enc.MaxSize()))
-					require.Less(b, len(buf), sz)
+					_ = enc.Store(make([]byte, 0, enc.MaxSize()))
 					enc.Close()
 					ctx.Close()
 				}
@@ -235,13 +232,22 @@ func BenchmarkEncodeAndStoreFloat(b *testing.B) {
 
 func BenchmarkEncodeBestFloat(b *testing.B) {
 	for _, c := range tests.MakeBenchmarks[float64]() {
+		once := etests.ShowInfo
 		b.Run(c.Name, func(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(len(c.Data) * 8))
+			var sz int
 			for range b.N {
 				enc := EncodeFloat(nil, c.Data, MAX_CASCADE)
+				sz += enc.MaxSize()
+				if once {
+					b.Log(enc.Info())
+					once = false
+				}
 				enc.Close()
 			}
+			b.ReportMetric(float64(sz/b.N), "c(B)")
+			b.ReportMetric(100*float64(sz)/float64(b.N*c.N*8), "c(%)")
 		})
 	}
 }
@@ -252,10 +258,14 @@ func BenchmarkEncodeLegacyFloat(b *testing.B) {
 		b.Run(c.Name, func(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(len(c.Data) * 8))
+			var sz int
 			for range b.N {
-				_, _ = zip.EncodeFloat64(c.Data, buf)
+				n, _ := zip.EncodeFloat64(c.Data, buf)
+				sz += n
 				buf.Reset()
 			}
+			b.ReportMetric(float64(sz/b.N), "c(B)")
+			b.ReportMetric(100*float64(sz)/float64(b.N*c.N*8), "c(%)")
 		})
 	}
 }

@@ -29,13 +29,16 @@ type FloatContext[T types.Float] struct {
 
 // AnalyzeFloat produces statistics about slice vals which are used to
 // find the most efficient encoding scheme.
-func AnalyzeFloat[T types.Float](vals []T, checkUnique, noALP bool) *FloatContext[T] {
+func AnalyzeFloat[T types.Float](vals []T, checkUnique, checkALP bool) *FloatContext[T] {
 	c := newFloatContext[T]()
+	c.PhyBits = SizeOf[T]() * 8
+	if len(vals) == 0 {
+		return c
+	}
 	c.Min = vals[0]
 	c.Max = vals[0]
 	c.NumRuns = 1
 	c.NumValues = len(vals)
-	c.PhyBits = SizeOf[T]() * 8
 	for i, v := range vals[1:] {
 		if v < c.Min {
 			c.Min = v
@@ -44,17 +47,25 @@ func AnalyzeFloat[T types.Float](vals []T, checkUnique, noALP bool) *FloatContex
 		}
 		c.NumRuns += util.Bool2int(vals[i] != v)
 	}
-
-	// let ALP estimate the best scheme, avoid on ALP nested float containers
-	if c.Min != c.Max && !noALP {
-		c.AlpEncoder = alp.NewEncoder[T]().Analyze(vals)
-	}
-
-	// count unique only if necessary
 	c.NumUnique = c.NumRuns
-	if checkUnique {
-		c.NumUnique = c.estimateCardinality(vals)
+
+	// run more analysis steps when const encoding is excluded
+	if c.Min != c.Max {
+		// let ALP estimate the best scheme, avoid ALP-in-ALP nesting
+		if checkALP {
+			// analyze full vector for compatibility, ALP will do its own sampling
+			c.AlpEncoder = alp.NewEncoder[T]().Analyze(vals)
+		}
+
+		// count unique only if requested, prefer ALP over float dict
+		// Note: float dict construction via hashprobe requires the
+		// upper bits of the multiplicative hash to avoid excessive
+		// collisions, however, we just mask out the lower 16 bits.
+		if !checkALP && checkUnique {
+			c.NumUnique = max(1, c.estimateCardinality(vals))
+		}
 	}
+
 	return c
 }
 
@@ -81,8 +92,8 @@ func (c *FloatContext[T]) EligibleSchemes(lvl int) []FloatContainerType {
 		TFloatRaw,
 	}
 
-	// use ALP as top-level scheme only
-	if lvl == MAX_CASCADE && c.AlpEncoder != nil {
+	// use ALP only when requested in analysis step (otherwise encoder is nil)
+	if c.AlpEncoder != nil {
 		switch c.AlpEncoder.State().Scheme {
 		case alp.AlpScheme:
 			schemes = append(schemes, TFloatAlp)
@@ -95,6 +106,7 @@ func (c *FloatContext[T]) EligibleSchemes(lvl int) []FloatContainerType {
 	if c.preferRunEnd() {
 		schemes = append(schemes, TFloatRunEnd)
 	}
+
 	// dict makes only sense when more efficient than raw
 	if c.preferDict() {
 		schemes = append(schemes, TFloatDictionary)
@@ -104,15 +116,31 @@ func (c *FloatContext[T]) EligibleSchemes(lvl int) []FloatContainerType {
 }
 
 func (c *FloatContext[T]) preferDict() bool {
-	dcost := dictCosts(c.NumValues, c.PhyBits, c.NumUnique)
-	rcost := 5 + c.NumValues*c.PhyBits/8
+	dcost := c.dictCosts()
+	rcost := c.rawCosts()
 	return c.NumUnique <= hashprobe.MAX_DICT_LIMIT && dcost < rcost
 }
 
 func (c *FloatContext[T]) preferRunEnd() bool {
-	rcost := runEndCosts(c.NumValues, c.NumRuns, c.PhyBits)
-	bcost := bitPackCosts(c.NumValues, c.PhyBits)
+	rcost := c.runEndCosts()
+	bcost := c.bitPackCosts()
 	return c.NumRuns*2 <= c.NumValues && rcost < bcost
+}
+
+func (c *FloatContext[T]) rawCosts() int {
+	return 5 + c.NumValues*c.PhyBits/8
+}
+
+func (c *FloatContext[T]) dictCosts() int {
+	return dictCosts(c.NumValues, c.PhyBits, c.NumUnique)
+}
+
+func (c *FloatContext[T]) bitPackCosts() int {
+	return bitPackCosts(c.NumValues, c.PhyBits)
+}
+
+func (c *FloatContext[T]) runEndCosts() int {
+	return runEndCosts(c.NumValues, c.NumRuns, c.PhyBits)
 }
 
 func (c *FloatContext[T]) Close() {
@@ -120,17 +148,24 @@ func (c *FloatContext[T]) Close() {
 		c.SampleCtx.Close()
 		c.SampleCtx = nil
 	}
-	if c.AlpEncoder != nil {
-		c.AlpEncoder.Close()
-		c.AlpEncoder = nil
-	}
 	if c.Sample != nil {
 		if c.FreeSample {
+			// clear(c.Sample)
 			arena.FreeT(c.Sample)
 		}
 		c.FreeSample = false
 		c.Sample = nil
 	}
+	if c.AlpEncoder != nil {
+		c.AlpEncoder.Close()
+		c.AlpEncoder = nil
+	}
+	c.Min = 0
+	c.Max = 0
+	c.PhyBits = 0
+	c.NumUnique = 0
+	c.NumRuns = 0
+	c.NumValues = 0
 	putFloatContext(c)
 }
 

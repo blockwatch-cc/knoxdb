@@ -104,23 +104,27 @@ func (c *FloatAlpRdContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 
 func (c *FloatAlpRdContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int) FloatContainer[T] {
 	cnt := len(vals)
-	left := arena.AllocT[uint16](max(cnt, 1<<16))[:1<<16] // alloc more to use as scratch array
+	left := arena.AllocT[uint16](cnt)[:cnt]
 	right := arena.AllocT[uint64](cnt)[:cnt]
 	c.typ = BlockType[T]()
 
-	// produce a small sample
-	sample := arena.AllocT[T](alp.MaxSampleLen(cnt))
-	alp.FirstLevelSample(sample, vals)
+	// ensure we have an ALP analysis result (mostly relevant for testcases)
+	if !ctx.AlpEncoder.IsInit() || ctx.AlpEncoder.State().Scheme != alp.AlpRdScheme {
+		// produce a small sample
+		sample := arena.AllocT[T](alp.MaxSampleLen(cnt))
+		alp.FirstLevelSample(sample, vals)
 
-	// estimate best shift based on sample (use left array as scratch space for unique count)
-	c.Shift = alp.EstimateShift(sample, left)
-
-	// free sample and reset left to input vector length
-	arena.FreeT(sample)
-	left = left[:cnt]
+		// estimate best shift based on sample
+		unique := arena.AllocT[uint16](1 << 16)[:1<<16]
+		c.Shift = alp.EstimateRD(sample, unique).Shift
+		arena.FreeT(unique)
+		arena.FreeT(sample)
+	} else {
+		c.Shift = ctx.AlpEncoder.State().RD.Shift
+	}
 
 	// split input float vector into left and right integer parts
-	alp.Split(vals, left, right, c.Shift)
+	alp.SplitRD(vals, left, right, c.Shift)
 
 	// analyze parts
 	lctx := AnalyzeInt(left, true)
@@ -134,9 +138,7 @@ func (c *FloatAlpRdContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int)
 
 	// encode parts
 	c.Left = NewInt[uint16](leftScheme).Encode(lctx, left, lvl-1)
-	// fmt.Printf("ALP-RD: left encoded as %s in %d bytes\n", c.Left.Type(), c.Left.MaxSize())
 	c.Right = NewInt[uint64](TIntegerBitpacked).Encode(rctx, right, lvl-1)
-	// fmt.Printf("ALP-RD: right encoded as %s in %d bytes\n", c.Right.Type(), c.Right.MaxSize())
 
 	// free temp allocations
 	lctx.Close()

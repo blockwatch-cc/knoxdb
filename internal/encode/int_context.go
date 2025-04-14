@@ -70,7 +70,7 @@ func AnalyzeInt[T types.Integer](vals []T, checkUnique bool) *IntegerContext[T] 
 	// count unique only if necessary
 	doCountUnique := checkUnique && c.Min != c.Max && c.Delta == 0
 	isSigned := types.IsSigned[T]()
-	c.NumUnique = min(c.NumRuns, int(c.Max)-int(c.Min))
+	c.NumUnique = min(c.NumRuns, int(c.Max)-int(c.Min)+1)
 
 	switch c.PhyBits {
 	case 64:
@@ -85,7 +85,7 @@ func AnalyzeInt[T types.Integer](vals []T, checkUnique bool) *IntegerContext[T] 
 			if sz <= 1<<16 {
 				c.NumUnique = c.buildUniqueArray(vals)
 			} else {
-				c.NumUnique = c.estimateCardinality(vals)
+				c.NumUnique = max(1, c.estimateCardinality(vals))
 			}
 		}
 	case 32:
@@ -100,7 +100,7 @@ func AnalyzeInt[T types.Integer](vals []T, checkUnique bool) *IntegerContext[T] 
 			if sz <= 1<<16 {
 				c.NumUnique = c.buildUniqueArray(vals)
 			} else {
-				c.NumUnique = c.estimateCardinality(vals)
+				c.NumUnique = max(1, c.estimateCardinality(vals))
 			}
 		}
 	case 16:
@@ -243,11 +243,22 @@ func (c *IntegerContext[T]) Close() {
 	}
 	if c.Sample != nil {
 		if c.FreeSample {
+			// clear(c.Sample)
 			arena.FreeT(c.Sample)
 		}
 		c.FreeSample = false
 		c.Sample = nil
 	}
+
+	c.Min = 0
+	c.Max = 0
+	c.Delta = 0
+	c.NumRuns = 0
+	c.NumUnique = 0
+	c.NumValues = 0
+	c.PhyBits = 0
+	c.UseBits = 0
+
 	putIntegerContext(c)
 }
 

@@ -16,7 +16,7 @@ import (
 func BenchmarkAlp_CompressFloat64(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		var exn, n, r int
-		src := tests.GenRndBits[float64](c.N, 32)
+		src := tests.GenRndBits[float64](c.N, 24)
 		b.Run(c.Name, func(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
@@ -28,8 +28,8 @@ func BenchmarkAlp_CompressFloat64(b *testing.B) {
 				r++
 				enc.Close()
 			}
-			b.ReportMetric(float64(exn)/float64(r), "except(mean)")
-			b.ReportMetric(float64(exn*100)/float64(n), "except(pct)")
+			b.ReportMetric(float64(exn)/float64(r), "ex/op")
+			b.ReportMetric(float64(exn*100)/float64(n), "%ex")
 		})
 	}
 }
@@ -37,7 +37,7 @@ func BenchmarkAlp_CompressFloat64(b *testing.B) {
 func BenchmarkAlp_CompressFloat32(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		var exn, n, r int
-		src := tests.GenRndBits[float32](c.N, 28)
+		src := tests.GenRndBits[float32](c.N, 12)
 		b.Run(c.Name, func(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
@@ -48,8 +48,8 @@ func BenchmarkAlp_CompressFloat32(b *testing.B) {
 				n += c.N
 				r++
 				enc.Close()
-				b.ReportMetric(float64(exn)/float64(r), "except(mean)")
-				b.ReportMetric(float64(exn*100)/float64(n), "except(pct)")
+				b.ReportMetric(float64(exn)/float64(r), "ex/op")
+				b.ReportMetric(float64(exn*100)/float64(n), "%ex")
 			}
 		})
 	}
@@ -57,14 +57,13 @@ func BenchmarkAlp_CompressFloat32(b *testing.B) {
 
 func BenchmarkAlp_DecompressFloat64(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
-		enc := NewEncoder[float64]().Compress(tests.GenRndBits[float64](c.N, 32))
+		src := tests.GenRndBits[float64](c.N, 24)
+		enc := NewEncoder[float64]().Compress(src)
 		e := enc.State()
 		out := make([]float64, c.N)
 		dec := NewDecoder[float64](e.Encoding.F, e.Encoding.E).
 			WithExceptions(e.Exceptions, e.Positions)
 		b.Run(c.Name, func(b *testing.B) {
-			b.ResetTimer()
-			b.ReportAllocs()
 			b.SetBytes(int64(c.N * 8))
 			for range b.N {
 				dec.Decompress(out, e.Integers)
@@ -75,14 +74,13 @@ func BenchmarkAlp_DecompressFloat64(b *testing.B) {
 
 func BenchmarkAlp_DecompressFloat32(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
-		enc := NewEncoder[float32]().Compress(tests.GenRndBits[float32](c.N, 28))
+		src := tests.GenRndBits[float32](c.N, 12)
+		enc := NewEncoder[float32]().Compress(src)
 		e := enc.State()
 		out := make([]float32, c.N)
 		dec := NewDecoder[float32](e.Encoding.F, e.Encoding.E).
 			WithExceptions(e.Exceptions, e.Positions)
 		b.Run(c.Name, func(b *testing.B) {
-			b.ResetTimer()
-			b.ReportAllocs()
 			b.SetBytes(int64(c.N * 4))
 			for range b.N {
 				dec.Decompress(out, e.Integers)
@@ -104,7 +102,7 @@ func BenchmarkAlpRD_EstimateFloat64(b *testing.B) {
 		b.Run(c.Name, func(b *testing.B) {
 			b.SetBytes(int64(c.N * 8))
 			for range b.N {
-				_ = EstimateShift(sample, unique)
+				_ = EstimateRD(sample, unique)
 			}
 		})
 	}
@@ -119,7 +117,7 @@ func BenchmarkAlpRD_EstimateFloat32(b *testing.B) {
 		b.Run(c.Name, func(b *testing.B) {
 			b.SetBytes(int64(c.N * 4))
 			for range b.N {
-				_ = EstimateShift(sample, unique)
+				_ = EstimateRD(sample, unique)
 			}
 		})
 	}
@@ -129,13 +127,13 @@ func BenchmarkAlpRD_SplitFloat64(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		src := tests.GenRndBits[float64](c.N, 49)
 		unique := make([]uint16, max(c.N, 1<<16))
-		shift := EstimateShift(FirstLevelSample(src, nil), unique)
+		e := EstimateRD(FirstLevelSample(src, nil), unique)
 		left := make([]uint16, c.N)
 		right := make([]uint64, c.N)
 		b.Run(c.Name, func(b *testing.B) {
 			b.SetBytes(int64(c.N * 8))
 			for range b.N {
-				Split(src, left, right, shift)
+				SplitRD(src, left, right, e.Shift)
 			}
 		})
 	}
@@ -145,13 +143,13 @@ func BenchmarkAlpRD_SplitFloat32(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		src := tests.GenRndBits[float32](c.N, 32)
 		unique := make([]uint16, max(c.N, 1<<16))
-		shift := EstimateShift(FirstLevelSample(src, nil), unique)
+		e := EstimateRD(FirstLevelSample(src, nil), unique)
 		left := make([]uint16, c.N)
 		right := make([]uint64, c.N)
 		b.Run(c.Name, func(b *testing.B) {
 			b.SetBytes(int64(c.N * 4))
 			for range b.N {
-				Split(src, left, right, shift)
+				SplitRD(src, left, right, e.Shift)
 			}
 		})
 	}
@@ -161,15 +159,15 @@ func BenchmarkAlpRD_MergeFloat64(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		src := tests.GenRndBits[float64](c.N, 49)
 		unique := make([]uint16, max(c.N, 1<<16))
-		shift := EstimateShift(FirstLevelSample(src, nil), unique)
+		e := EstimateRD(FirstLevelSample(src, nil), unique)
 		left := make([]uint16, c.N)
 		right := make([]uint64, c.N)
 		dst := make([]float64, c.N)
-		Split(src, left, right, shift)
+		SplitRD(src, left, right, e.Shift)
 		b.Run(c.Name, func(b *testing.B) {
 			b.SetBytes(int64(c.N * 8))
 			for range b.N {
-				Merge(dst, left, right, shift)
+				MergeRD(dst, left, right, e.Shift)
 			}
 		})
 	}
@@ -179,14 +177,15 @@ func BenchmarkAlpRD_MergeFloat32(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		src := tests.GenRndBits[float32](c.N, 32)
 		unique := make([]uint16, max(c.N, 1<<16))
-		shift := EstimateShift(FirstLevelSample(src, nil), unique)
+		e := EstimateRD(FirstLevelSample(src, nil), unique)
 		left := make([]uint16, c.N)
 		right := make([]uint64, c.N)
 		dst := make([]float32, c.N)
+		SplitRD(src, left, right, e.Shift)
 		b.Run(c.Name, func(b *testing.B) {
 			b.SetBytes(int64(c.N * 4))
 			for range b.N {
-				Merge(dst, left, right, shift)
+				MergeRD(dst, left, right, e.Shift)
 			}
 		})
 	}

@@ -277,9 +277,15 @@ func GenRnd[T types.Number](n int) []T {
 	case uint8:
 		res = util.ReinterpretSlice[uint8, T](util.RandUints[uint8](n))
 	case float64:
-		res = util.ReinterpretSlice[float64, T](util.RandFloatsn[float64](n, 1<<BENCH_WIDTH-1))
+		res = make([]T, n)
+		for i, v := range util.RandUintsn[uint64](n, 1<<BENCH_WIDTH-1) {
+			res[i] = T(v) / 100.0
+		}
 	case float32:
-		res = util.ReinterpretSlice[float32, T](util.RandFloatsn[float32](n, 1<<(BENCH_WIDTH/2)-1))
+		res = make([]T, n)
+		for i, v := range util.RandUintsn[uint32](n, 1<<(BENCH_WIDTH/2)-1) {
+			res[i] = T(v) / 100.0
+		}
 	}
 	return res
 }
@@ -305,9 +311,15 @@ func GenRndBits[T types.Number](n, w int) []T {
 	case uint8:
 		res = util.ReinterpretSlice[uint8, T](util.RandUintsn[uint8](n, 1<<w-1))
 	case float64:
-		res = util.ReinterpretSlice[float64, T](util.RandFloatsn[float64](n, float64(uint64(1<<w-1))))
+		res = make([]T, n)
+		for i, v := range util.RandUintsn[uint64](n, 1<<min(w, 49)-1) {
+			res[i] = T(v) / 100.0
+		}
 	case float32:
-		res = util.ReinterpretSlice[float32, T](util.RandFloatsn[float32](n, float32(uint32(1<<w-1))))
+		res = make([]T, n)
+		for i, v := range util.RandUintsn[uint32](n, 1<<min(w, 29)-1) {
+			res[i] = T(v) / 100.0
+		}
 	}
 	return res
 }
@@ -370,14 +382,16 @@ func GenDups[T types.Number](n, c, w int) []T {
 			res[i] = T(unique[util.RandIntn(c)])
 		}
 	case float64:
-		unique := util.RandFloatsn[float64](c, float64(uint(1)<<w-1))
+		// produces not full random, but more realistic floats for tests
+		unique := util.RandUintsn[uint64](c, 1<<min(w, 49)-1)
 		for i := range res {
-			res[i] = T(unique[util.RandIntn(c)])
+			res[i] = T(unique[util.RandIntn(c)]) / 100.0
 		}
 	case float32:
-		unique := util.RandFloatsn[float32](c, float32((uint(1)<<min(w, 32))-1))
+		// produces not full random, but more realistic floats for tests
+		unique := util.RandUintsn[uint32](c, 1<<min(w/2, 29)-1)
 		for i := range res {
-			res[i] = T(unique[util.RandIntn(c)])
+			res[i] = T(unique[util.RandIntn(c)]) / 100.0
 		}
 	}
 	return res
@@ -470,21 +484,22 @@ func GenRuns[T types.Number](n, r, w int) []T {
 			}
 		}
 	case float64:
-		for _, v := range util.RandFloatsn[float64](sz, float64(uint(1)<<w-1)) {
+		// produces not full random, but more realistic floats for tests
+		for _, v := range util.RandUintsn[uint64](sz, 1<<min(w, 49)-1) {
 			for range r {
 				if len(res) == n {
 					break
 				}
-				res = append(res, T(v))
+				res = append(res, T(v)/100.0)
 			}
 		}
 	case float32:
-		for _, v := range util.RandFloatsn[float32](sz, float32(uint(1)<<(w/2)-1)) {
+		for _, v := range util.RandUintsn[uint32](sz, 1<<min(w/2, 29)-1) {
 			for range r {
 				if len(res) == n {
 					break
 				}
-				res = append(res, T(v))
+				res = append(res, T(v)/100.0)
 			}
 		}
 	}
@@ -568,24 +583,24 @@ func GenEqual[T types.Number](n, u int) ([]T, T) {
 				res[i] = T(util.RandUint64n(1<<8 - 1))
 			}
 		}
-	case float64:
-		x = T(util.RandFloat64() * float64(1<<BENCH_WIDTH-1))
-		for i := range res {
-			if util.RandIntn(100) <= u {
-				res[i] = x
-			} else {
-				res[i] = T(util.RandFloat64() * float64(1<<BENCH_WIDTH-1))
-			}
-		}
-	case float32:
-		x = T(util.RandFloat32() * float32(1<<(BENCH_WIDTH/2)-1))
-		for i := range res {
-			if util.RandIntn(100) <= u {
-				res[i] = x
-			} else {
-				res[i] = T(util.RandFloat32() * float32(1<<(BENCH_WIDTH/2)-1))
-			}
-		}
+		// case float64:
+		// 	x = T(util.RandFloat64() * float64(1<<BENCH_WIDTH-1))
+		// 	for i := range res {
+		// 		if util.RandIntn(100) <= u {
+		// 			res[i] = x
+		// 		} else {
+		// 			res[i] = T(util.RandFloat64() * float64(1<<BENCH_WIDTH-1))
+		// 		}
+		// 	}
+		// case float32:
+		// 	x = T(util.RandFloat32() * float32(1<<(BENCH_WIDTH/2)-1))
+		// 	for i := range res {
+		// 		if util.RandIntn(100) <= u {
+		// 			res[i] = x
+		// 		} else {
+		// 			res[i] = T(util.RandFloat32() * float32(1<<(BENCH_WIDTH/2)-1))
+		// 		}
+		// 	}
 	}
 	return res, x
 }

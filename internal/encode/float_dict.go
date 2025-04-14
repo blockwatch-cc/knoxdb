@@ -269,7 +269,7 @@ func (c *FloatDictionaryContainer[T]) MatchBetween(a, b T, bits, mask *Bitset) *
 	})
 
 	// range is within a dict value gap
-	if ai == bi && c.Dict.Get(ai) != a {
+	if v := c.Dict.Get(ai); ai == bi && v != a && v != b {
 		return bits
 	}
 

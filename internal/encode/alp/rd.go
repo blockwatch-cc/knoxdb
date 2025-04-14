@@ -14,6 +14,11 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
+type EncodingRD struct {
+	Shift int
+	Rate  float64
+}
+
 // Note: keep these calculations in sync with integer container costs
 func dictCosts(n, w, c int) int {
 	return 1 + bitPackCosts(n, bits.Len(uint(c-1))) + bitPackCosts(c, w)
@@ -23,7 +28,7 @@ func bitPackCosts(n, w int) int {
 	return 2 + 2*num.MaxVarintLen32 + (n*w+7)/8
 }
 
-func EstimateShift[T types.Float](sample []T, unique []uint16) int {
+func EstimateRD[T types.Float](sample []T, unique []uint16) EncodingRD {
 	var (
 		bestShift int
 		bestSize  int = math.MaxInt32
@@ -112,10 +117,10 @@ func EstimateShift[T types.Float](sample []T, unique []uint16) int {
 		// cleanup
 		clear(unique[:lmax-lmin+1])
 	}
-	return bestShift
+	return EncodingRD{Shift: bestShift, Rate: float64(bestSize) / float64(len(sample)*w)}
 }
 
-func Split[T types.Float](src []T, left []uint16, right []uint64, shift int) {
+func SplitRD[T types.Float](src []T, left []uint16, right []uint64, shift int) {
 	switch unsafe.Sizeof(T(0)) {
 	case 4:
 		u32 := util.ReinterpretSlice[T, uint32](src)
@@ -252,7 +257,7 @@ func splitCore32(src *[128]uint32, left *[128]uint16, right *[128]uint64, shift 
 	}
 }
 
-func Merge[T types.Float](dst []T, left []uint16, right []uint64, shift int) {
+func MergeRD[T types.Float](dst []T, left []uint16, right []uint64, shift int) {
 	switch unsafe.Sizeof(T(0)) {
 	case 4:
 		u32 := util.ReinterpretSlice[T, uint32](dst)
