@@ -68,7 +68,7 @@ func (c *FloatAlpContainer[T]) Len() int {
 }
 
 func (c *FloatAlpContainer[T]) MaxSize() int {
-	v := 1 + 2 + num.MaxVarintLen64 + c.Values.MaxSize()
+	v := 1 + 2 + c.Values.MaxSize()
 	if c.hasException {
 		v += c.Exception.MaxSize() + c.Positions.MaxSize()
 	}

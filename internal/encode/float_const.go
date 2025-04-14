@@ -34,7 +34,7 @@ func (c *FloatConstContainer[T]) Len() int {
 }
 
 func (c *FloatConstContainer[T]) MaxSize() int {
-	return 1 + SizeOf[T]() + num.MaxVarintLen32
+	return 1 + SizeOf[T]() + num.UvarintLen(uint64(c.N))
 }
 
 func (c *FloatConstContainer[T]) Store(dst []byte) []byte {

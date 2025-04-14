@@ -40,7 +40,7 @@ func (c *RawContainer[T]) Len() int {
 }
 
 func (c *RawContainer[T]) MaxSize() int {
-	return 1 + num.MaxVarintLen32 + c.sz*len(c.Values)
+	return 1 + num.UvarintLen(uint64(c.sz*len(c.Values))) + c.sz*len(c.Values)
 }
 
 func (c *RawContainer[T]) Store(dst []byte) []byte {

@@ -55,7 +55,8 @@ func (c *Simple8Container[T]) Len() int {
 }
 
 func (c *Simple8Container[T]) MaxSize() int {
-	return 1 + 2*num.MaxVarintLen64 + len(c.Packed)
+	return 1 + num.UvarintLen(uint64(c.For)) + num.UvarintLen(uint64(len(c.Packed))) +
+		len(c.Packed)
 }
 
 func (c *Simple8Container[T]) Store(dst []byte) []byte {

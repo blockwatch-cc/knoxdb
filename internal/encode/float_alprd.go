@@ -41,7 +41,7 @@ func (c *FloatAlpRdContainer[T]) Len() int {
 }
 
 func (c *FloatAlpRdContainer[T]) MaxSize() int {
-	v := 1 + num.MaxVarintLen64 + c.Left.MaxSize() + c.Right.MaxSize()
+	v := 2 + c.Left.MaxSize() + c.Right.MaxSize()
 	return v
 }
 
