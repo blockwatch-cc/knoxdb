@@ -59,7 +59,7 @@ type BenchmarkPattern struct {
 var BenchmarkPatterns = []BenchmarkPattern{
 	{"D1", 128},
 	{"D2", 2 * 1024},
-	{"D8", 8 * 1024}, // dict better for W > 15, N = 64k
+	{"D8", 8 * 1024},
 	{"D16", 16 * 1024},
 	{"D32", 32 * 1024},
 	{"D48", 48 * 1024},

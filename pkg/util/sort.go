@@ -31,12 +31,12 @@ func Sort2[S, T constraints.Ordered](s []S, t []T) {
 	sort.Sort(PairSorter[S, T]{s, t})
 }
 
+const bits = 8
+
 // custom radix sort, faster than slices.Sort
 func Sort[T Integer](vs []T, shift int) {
-	const (
-		bits = 8
-	)
 	w := SizeOf[T]() * 8
+	s := w - bits - shift
 
 	if len(vs) < 1<<6 {
 		// Insertion sort for small inputs
@@ -51,7 +51,7 @@ func Sort[T Integer](vs []T, shift int) {
 	// First pass: count each bin size
 	var bins [1 << bits]int
 	for _, v := range vs {
-		b := uint(v>>(w-bits-shift)) & 0xFF
+		b := uint(v>>s) & 0xFF
 		bins[b]++
 	}
 
@@ -68,7 +68,7 @@ func Sort[T Integer](vs []T, shift int) {
 	// Second pass: move elements into allotted bins
 	for b := 0; b < len(bins); b++ {
 		for i := bins[b]; i < ends[b]; {
-			bin := int((vs[i] >> (w - bits - shift))) & 0xFF
+			bin := int(vs[i]>>s) & 0xFF
 			if bin == b {
 				i++
 			} else {

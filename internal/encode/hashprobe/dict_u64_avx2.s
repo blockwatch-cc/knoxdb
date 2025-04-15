@@ -40,9 +40,15 @@ init_done:
     LEAQ -3(R8), R14              // R14 = len - 3
 
 main_loop:
-    // Load 4x uint64_t
+    // // Load 4x uint64_t
     VMOVDQU (DI)(BX*8), Y1        // kvec = vals[i:i+4]
-    VPMULLD Y1, Y11, Y2           // hvec = kvec * HASH_CONST (32-bit mul)
+
+    // Double XOR shift: key ^ (key >> 32) ^ (key >> 16)
+    VPSRLQ $32, Y1, Y3            // key >> 32
+    VPSRLQ $16, Y1, Y4            // key >> 16
+    VPXOR Y1, Y3, Y3              // key ^ (key >> 32)
+    VPXOR Y3, Y4, Y2              // key ^ (key >> 32) ^ (key >> 16)
+    VPMULLD Y2, Y11, Y2           // hvec = mixed * HASH_CONST
 
     // Extract and probe hashes, find the next free slot
     VMOVDQU Y2, -32(SP)           // h_vals[4] on stack (32 bytes)
@@ -143,9 +149,17 @@ tail_start:
     JGE extract_start
     MOVQ (DI)(BX*8), AX           // val = vals[i]
     MOVQ AX, R10                  // Save val for comparison
-    IMULQ R15, AX                 // val * HASH_CONST (R15 = HASH_CONST, result in RAX)
-    ANDQ R11, AX                  // h = val & HASH_MASK
-    XORQ BP, BP                   // p = 0
+
+    // Double XOR shift: val ^ (val >> 32) ^ (val >> 16)
+    MOVQ AX, R13
+    MOVQ AX, R14
+    SHRQ $32, R13
+    XORQ R13, AX
+    SHRQ $16, R14
+    XORQ R14, AX
+    IMULQ R15, AX                 // * HASH_CONST
+    ANDQ R11, AX                  // h = & HASH_MASK
+
 tail_probe:
     CMPW (CX)(AX*2), R11          // ht_values[h] == HASH_MASK?
     JE tail_empty
@@ -229,10 +243,14 @@ TEXT ·ht_encode64(SB), NOSPLIT, $0-40
 main_loop:
     // Load and hash 4x uint64_t
     VMOVDQU (DI)(BX*8), Y1        // kvec = vals[i:i+4]
-    VPMULLD Y1, Y11, Y2           // hvec = kvec * HASH_CONST
-    VMOVDQU Y2, -32(SP)           // h_vals[4] on stack
 
-    // Extract and probe hashes
+    // Double XOR shift: key ^ (key >> 32) ^ (key >> 16) * HASH_CONST
+    VPSRLQ $32, Y1, Y3            // key >> 32
+    VPSRLQ $16, Y1, Y4            // key >> 16
+    VPXOR Y1, Y3, Y3              // key ^ (key >> 32)
+    VPXOR Y3, Y4, Y2              // key ^ (key >> 32) ^ (key >> 16)
+    VPMULLD Y2, Y11, Y2           // hvec = mixed * HASH_CONST
+    VMOVDQU Y2, -32(SP)           // h_vals[4] on stack (32 bytes)
 
     // Probe h0
     MOVQ -32(SP), AX              // h_vals[0]
@@ -314,9 +332,15 @@ tail_start:
     CMPQ BX, R8
     JGE done
     MOVQ (DI)(BX*8), AX           // val = vals[i]
-    MOVQ AX, R10                  // Save val for comparison
+    MOVQ AX, R13                  // Double XOR shift: val ^ (val >> 32) ^ (val >> 16)
+    MOVQ AX, R14
+    SHRQ $32, R13
+    XORQ R13, AX
+    SHRQ $16, R14
+    XORQ R14, AX
     IMULQ R15, AX                 // val * HASH_CONST (R15 = HASH_CONST)
     ANDQ R11, AX                  // h = val & HASH_MASK
+
     XORQ BP, BP                   // p = 0
 tail_probe:
     MOVQ (SI)(AX*8), R12          // Load ht_keys[h]

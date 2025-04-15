@@ -2,9 +2,12 @@ package hashprobe
 
 import (
 	"fmt"
+	"math"
 	"testing"
+	"unsafe"
 
 	"blockwatch.cc/knoxdb/internal/arena"
+	etests "blockwatch.cc/knoxdb/internal/encode/tests"
 	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/require"
@@ -30,6 +33,7 @@ func TestDictAVX2(t *testing.T) {
 }
 
 type buildFunc[T Integer] func([]T, int) ([]T, []uint16)
+type buildFuncFloat[T Float] func([]T, int) ([]T, []uint16)
 
 type DictTestCase[T Integer] struct {
 	Name string
@@ -81,11 +85,15 @@ func DictTest[T Integer](t *testing.T, fn buildFunc[T]) {
 func BenchmarkDictMap(b *testing.B) {
 	DictBenchmark[uint64](b, buildDictMap)
 	DictBenchmark[uint32](b, buildDictMap)
+	DictBenchmarkFloat[float64, uint64](b, buildDictMap)
+	DictBenchmarkFloat[float32, uint32](b, buildDictMap)
 }
 
 func BenchmarkDictGeneric(b *testing.B) {
 	DictBenchmark[uint64](b, buildDictGeneric)
 	DictBenchmark[uint32](b, buildDictGeneric)
+	DictBenchmarkFloat[float64, uint64](b, buildDictGeneric)
+	DictBenchmarkFloat[float32, uint32](b, buildDictGeneric)
 }
 
 func BenchmarkDictAVX2(b *testing.B) {
@@ -94,6 +102,8 @@ func BenchmarkDictAVX2(b *testing.B) {
 	}
 	DictBenchmark[uint64](b, buildDictAVX2)
 	DictBenchmark[uint32](b, buildDictAVX2)
+	DictBenchmarkFloat[float64, uint64](b, buildDictAVX2)
+	DictBenchmarkFloat[float32, uint32](b, buildDictAVX2)
 }
 
 func DictBenchmark[T Integer](b *testing.B, fn buildFunc[T]) {
@@ -103,7 +113,7 @@ func DictBenchmark[T Integer](b *testing.B, fn buildFunc[T]) {
 			card := estimateCardinality(data)
 			b.Run(fmt.Sprintf("%T/%s/%s", T(0), c.Name, p.Name), func(b *testing.B) {
 				b.ReportAllocs()
-				b.SetBytes(int64(c.N * 8))
+				b.SetBytes(int64(c.N * int(unsafe.Sizeof(T(0)))))
 				for range b.N {
 					dict, codes := fn(data, card)
 					card = len(dict)
@@ -116,7 +126,33 @@ func DictBenchmark[T Integer](b *testing.B, fn buildFunc[T]) {
 	}
 }
 
-func estimateCardinality[T Integer](vals []T) int {
+func DictBenchmarkFloat[T Float, U Integer](b *testing.B, fn buildFunc[U]) {
+	for _, p := range tests.BenchmarkPatterns {
+		for _, c := range tests.BenchmarkSizes {
+			data := tests.GenDups[T](c.N, min(c.N, p.Size), 25)
+			src := util.ReinterpretSlice[T, U](data)
+			card := estimateCardinality(data)
+			once := true
+			b.Run(fmt.Sprintf("%T/%s/%s", T(0), c.Name, p.Name), func(b *testing.B) {
+				if once && etests.ShowInfo {
+					b.Logf("Hash source bits: %#v", f2hash(data))
+					once = false
+				}
+				b.ReportAllocs()
+				b.SetBytes(int64(c.N * int(unsafe.Sizeof(T(0)))))
+				for range b.N {
+					dict, codes := fn(src, card)
+					card = len(dict)
+					arena.FreeT(dict)
+					arena.FreeT(codes)
+				}
+				_ = card
+			})
+		}
+	}
+}
+
+func estimateCardinality[T Integer | Float](vals []T) int {
 	m := make(map[T]struct{})
 	for _, v := range vals {
 		m[v] = struct{}{}
@@ -153,4 +189,19 @@ func buildDictMap[T Integer](vals []T, numUnique int) ([]T, []uint16) {
 	}
 
 	return dict, codes
+}
+
+func f2hash[T Float](s []T) map[uint16]int {
+	u := make(map[uint16]int, len(s))
+	switch any(T(0)).(type) {
+	case float64:
+		for _, v := range s {
+			u[uint16(math.Float64bits(float64(v)))]++
+		}
+	case float32:
+		for _, v := range s {
+			u[uint16(math.Float32bits(float32(v)))]++
+		}
+	}
+	return u
 }

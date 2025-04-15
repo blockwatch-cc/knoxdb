@@ -6,7 +6,9 @@
 
 package hashprobe
 
-import "blockwatch.cc/knoxdb/internal/types"
+import (
+	"blockwatch.cc/knoxdb/internal/types"
+)
 
 func buildDictAVX2[T types.Integer](vals []T, numUnique int) ([]T, []uint16) {
 	return buildDictGeneric(vals, numUnique)

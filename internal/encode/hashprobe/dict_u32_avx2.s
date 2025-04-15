@@ -42,7 +42,11 @@ init_done:
 main_loop:
     // Load 8x uint32_t
     VMOVDQU (DI)(BX*4), Y1        // kvec = vals[i:i+8]
-    VPMULLD Y1, Y11, Y2           // hvec = kvec * HASH_CONST (32-bit mul)
+
+    // Double XOR shift: key ^ (key >> 16) for uint32
+    VPSRLD $16, Y1, Y2            // key >> 16
+    VPXOR Y1, Y2, Y2              // key ^ (key >> 16)
+    VPMULLD Y2, Y11, Y2           // hvec = mixed * HASH_CONST
 
     // Extract and probe hashes, find the next free slot
     VMOVDQU Y2, -32(SP)           // h_vals[8] on stack (32 bytes)
@@ -231,6 +235,9 @@ tail_start:
     JGE extract_start
     MOVL (DI)(BX*4), AX           // val = vals[i]
     MOVL AX, R10                  // Save val for comparison
+    MOVL AX, R13                  // Double XOR shift: val ^ (val >> 32) ^ (val >> 16) * HASH_CONST
+    SHRL $16, R13                 // u32 needs only the second xor& shift because the upper
+    XORQ R13, AX                  // 32bits are zero/undefined
     IMULL R15, AX                 // val * HASH_CONST (R15 = HASH_CONST, result in RAX)
     ANDQ R11, AX                  // h = val & HASH_MASK
     XORQ BP, BP                   // p = 0
@@ -317,7 +324,11 @@ TEXT ·ht_encode32(SB), NOSPLIT, $0-40
 main_loop:
     // Load and hash 8x uint32_t
     VMOVDQU (DI)(BX*4), Y1        // kvec = vals[i:i+8]
-    VPMULLD Y1, Y11, Y2           // hvec = kvec * HASH_CONST
+
+    // Double XOR shift: key ^ (key >> 16) ^ (key >> 8) for uint32
+    VPSRLD $16, Y1, Y2            // key >> 16
+    VPXOR Y1, Y2, Y2              // key ^ (key >> 16)
+    VPMULLD Y2, Y11, Y2           // hvec = mixed * HASH_CONST
     VMOVDQU Y2, -32(SP)           // h_vals[4] on stack
 
     // Extract and probe hashes
@@ -474,7 +485,9 @@ tail_start:
     CMPQ BX, R8
     JGE done
     MOVL (DI)(BX*4), AX           // val = vals[i]
-    MOVL AX, R10                  // Save val for comparison
+    MOVL AX, R13                  // Double XOR shift: val ^ (val >> 32) ^ (val >> 16) * HASH_CONST
+    SHRL $16, R13                 // u32 needs only the second xor& shift because the upper
+    XORQ R13, AX                  // 32bits are zero/undefined
     IMULL R15, AX                 // val * HASH_CONST (R15 = HASH_CONST)
     ANDQ R11, AX                  // h = val & HASH_MASK
     XORQ BP, BP                   // p = 0

@@ -11,6 +11,10 @@ type Integer interface {
 	int8 | int16 | int32 | int64 | uint8 | uint16 | uint32 | uint64
 }
 
+type Float interface {
+	float64 | float32
+}
+
 const (
 	MAX_DICT_SIZE  = 1 << 16 // 64k, 16-bit hashes
 	MAX_DICT_LIMIT = 1 << 15 // 32k, max unique keys to build dict efficiently
@@ -50,8 +54,12 @@ func safeDictLen(n int) int {
 
 // Fast hash function (multiply prime) that extracts
 // only the last 16 bits for use as hash table address.
+// Note: floating point data may lack sufficient distribution
+// in lower bits so that multiplicative hashing alone fails
+// to produce sufficiently good slot addresses. We therefore
+// use double XOR mixing to use upper bits as well.
 func (t *hashTable[T]) hash16(key uint64) uint16 {
-	return uint16((key * HASH_CONST) & HASH_MASK) // Prime constant, mask = size-1
+	return uint16(((key ^ (key >> 32) ^ (key >> 16)) * HASH_CONST) & HASH_MASK)
 }
 
 type HTFactory struct {
