@@ -1,6 +1,10 @@
+// Copyright (c) 2025 Blockwatch Data Inc.
+// Author: oliver@blockwatch.cc
+//
 // Package fcbench provides a benchmarking suite for KnoxDB, inspired by FCBench.
 // It generates synthetic datasets and tests encoding performance across various
 // vector lengths and encoder types, exporting results to CSV for analysis.
+
 package fcbench
 
 import (

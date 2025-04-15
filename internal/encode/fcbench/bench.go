@@ -1,10 +1,15 @@
+// Copyright (c) 2025 Blockwatch Data Inc.
+// Author: oliver@blockwatch.cc
+//
 // Package fcbench provides a benchmarking suite for KnoxDB, inspired by FCBench.
 // It generates synthetic datasets and tests encoding performance across various
 // vector lengths and encoder types, exporting results to CSV for analysis.
+
 package fcbench
 
 import (
 	"fmt"
+	"log"
 	"math/rand"
 	"path/filepath"
 	"reflect"
@@ -12,32 +17,94 @@ import (
 	"time"
 
 	"blockwatch.cc/knoxdb/internal/encode"
+	"blockwatch.cc/knoxdb/internal/encode/alp"
 )
 
-type Encoder struct {
+// Encoder defines the interface for KnoxDB encoders.
+type Encoder interface {
+	EncodeInt(v []int64) (int, error)
+	EncodeFloat(v []float64) (int, error)
+	Info() string
+}
+
+// encoderStruct wraps KnoxDB encoders, implementing the Encoder interface.
+type encoderStruct struct {
 	ienc encode.IntegerContainer[int64]
 	fenc encode.FloatContainer[float64]
 }
 
-func (e *Encoder) Info() string {
-	if e.ienc != nil {
-		return e.ienc.Info()
+func (w *encoderStruct) EncodeInt(v []int64) (int, error) {
+	if w.ienc == nil {
+		return 0, fmt.Errorf("encoder: EncodeInt: integer encoder not supported")
 	}
-	return e.fenc.Info()
-}
-
-func (e *Encoder) EncodeInt(v []int64) (int, error) {
 	ctx := encode.AnalyzeInt(v, true)
-	e.ienc.Encode(ctx, v, encode.MAX_CASCADE)
+	w.ienc.Encode(ctx, v, encode.MAX_CASCADE)
 	ctx.Close()
-	return e.ienc.MaxSize(), nil
+	return w.ienc.MaxSize(), nil
 }
 
-func (e *Encoder) EncodeFloat(v []float64) (int, error) {
+func (w *encoderStruct) EncodeFloat(v []float64) (int, error) {
+	if w.fenc == nil {
+		return 0, fmt.Errorf("encoder: EncodeFloat: float encoder not supported")
+	}
 	ctx := encode.AnalyzeFloat(v, true, true)
-	e.fenc.Encode(ctx, v, encode.MAX_CASCADE)
+	fenc := w.fenc
+	if ctx.AlpEncoder != nil {
+		switch ctx.AlpEncoder.State().Scheme {
+		case alp.AlpScheme:
+			fenc = encode.NewFloat[float64](encode.TFloatAlp)
+		case alp.AlpRdScheme:
+			fenc = encode.NewFloat[float64](encode.TFloatAlpRd)
+		}
+	}
+	fenc.Encode(ctx, v, encode.MAX_CASCADE)
+	maxSize := fenc.MaxSize()
 	ctx.Close()
-	return e.fenc.MaxSize(), nil
+	fenc.Close()
+	return maxSize, nil
+}
+
+func (w *encoderStruct) Info() string {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("Warning: Recovered from panic in Info(): %v\n", r)
+		}
+	}()
+	if w.ienc != nil {
+		if info := w.ienc.Info; info != nil {
+			var result string
+			var err interface{}
+			func() {
+				defer func() {
+					err = recover()
+				}()
+				result = info()
+			}()
+			if err == nil {
+				return result
+			}
+			return fmt.Sprintf("Integer encoder (%T) - Info() call failed", w.ienc)
+		}
+		return fmt.Sprintf("Integer encoder (%T)", w.ienc)
+	}
+	if w.fenc != nil {
+		if info := w.fenc.Info; info != nil {
+			var result string
+			var err interface{}
+			func() {
+				defer func() {
+					err = recover()
+				}()
+				result = info()
+			}()
+			if err == nil {
+				return result
+			}
+			return fmt.Sprintf("Float encoder (%T) - Info() call failed", w.fenc)
+		}
+		return fmt.Sprintf("Float encoder (%T)", w.fenc)
+	}
+	return "Unknown encoder configuration"
 }
 
 // getEncoder retrieves an encoder instance by name.
@@ -51,22 +118,22 @@ func (e *Encoder) EncodeFloat(v []float64) (int, error) {
 //   - "alprd": ALP-RD floating point
 //
 // Returns an error if the requested encoder is not supported.
-func getEncoder(name string) (*Encoder, error) {
+func getEncoder(name string) (*encoderStruct, error) {
 	switch name {
 	case "delta":
-		return &Encoder{ienc: encode.NewInt[int64](encode.TIntegerDelta)}, nil
+		return &encoderStruct{ienc: encode.NewInt[int64](encode.TIntegerDelta)}, nil
 	case "run":
-		return &Encoder{ienc: encode.NewInt[int64](encode.TIntegerRunEnd)}, nil
+		return &encoderStruct{ienc: encode.NewInt[int64](encode.TIntegerRunEnd)}, nil
 	case "bp":
-		return &Encoder{ienc: encode.NewInt[int64](encode.TIntegerBitpacked)}, nil
+		return &encoderStruct{ienc: encode.NewInt[int64](encode.TIntegerBitpacked)}, nil
 	case "dict":
-		return &Encoder{ienc: encode.NewInt[int64](encode.TIntegerDictionary)}, nil
+		return &encoderStruct{ienc: encode.NewInt[int64](encode.TIntegerDictionary)}, nil
 	case "s8":
-		return &Encoder{ienc: encode.NewInt[int64](encode.TIntegerSimple8)}, nil
+		return &encoderStruct{ienc: encode.NewInt[int64](encode.TIntegerSimple8)}, nil
 	case "alp":
-		return &Encoder{fenc: encode.NewFloat[float64](encode.TFloatAlp)}, nil
+		return &encoderStruct{fenc: encode.NewFloat[float64](encode.TFloatAlp)}, nil
 	case "alprd":
-		return &Encoder{fenc: encode.NewFloat[float64](encode.TFloatAlpRd)}, nil
+		return &encoderStruct{fenc: encode.NewFloat[float64](encode.TFloatAlpRd)}, nil
 	default:
 		return nil, fmt.Errorf("getEncoder: unknown encoder: %s", name)
 	}
@@ -315,7 +382,7 @@ func sliceTPCData(data []TransactionRow, vecLen, maxSize int) ([]int64, error) {
 
 // benchmarkIntEncoder runs a benchmark on an int64 vector using the specified encoder.
 // It measures encoding time, compression ratio, and throughput in values per second.
-func benchmarkIntEncoder(enc *Encoder, encName, encInfo string, data []int64, vecLen int, datasetType string) (BenchmarkResult, error) {
+func benchmarkIntEncoder(enc Encoder, encName, encInfo string, data []int64, vecLen int, datasetType string) (BenchmarkResult, error) {
 	result := BenchmarkResult{
 		DatasetType:   datasetType,
 		EncoderName:   encName,
@@ -346,7 +413,7 @@ func benchmarkIntEncoder(enc *Encoder, encName, encInfo string, data []int64, ve
 
 // benchmarkFloatEncoder runs a benchmark on a float64 vector using the specified encoder.
 // It measures encoding time, compression ratio, and throughput in values per second.
-func benchmarkFloatEncoder(enc *Encoder, encName, encInfo string, data []float64, vecLen int, datasetType string) (BenchmarkResult, error) {
+func benchmarkFloatEncoder(enc Encoder, encName, encInfo string, data []float64, vecLen int, datasetType string) (BenchmarkResult, error) {
 	result := BenchmarkResult{
 		DatasetType:   datasetType,
 		EncoderName:   encName,
