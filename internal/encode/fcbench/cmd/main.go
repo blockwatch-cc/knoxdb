@@ -1,8 +1,9 @@
 package main
 
 import (
-	"github.com/blockwatch-cc/knoxdb/encode/fcbench"
 	"log"
+
+	"blockwatch.cc/knoxdb/internal/encode/fcbench"
 )
 
 func main() {

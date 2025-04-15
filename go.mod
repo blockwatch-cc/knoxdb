@@ -1,6 +1,8 @@
 module blockwatch.cc/knoxdb
 
-go 1.23
+go 1.23.0
+
+toolchain go1.24.2
 
 require (
 	github.com/RoaringBitmap/roaring v1.9.4
@@ -20,9 +22,10 @@ require (
 	github.com/tetratelabs/wazero v1.8.2
 	go.etcd.io/bbolt v1.4.0
 	golang.org/x/exp v0.0.0-20250207012021-f9890c6ad9f3
-	golang.org/x/sync v0.11.0
+	golang.org/x/sync v0.12.0
 	golang.org/x/sys v0.30.0
 	golang.org/x/time v0.10.0
+	gonum.org/v1/gonum v0.16.0
 )
 
 require (
@@ -49,7 +52,7 @@ require (
 	go.opencensus.io v0.24.0 // indirect
 	golang.org/x/crypto v0.32.0 // indirect
 	golang.org/x/net v0.34.0 // indirect
-	golang.org/x/text v0.22.0 // indirect
+	golang.org/x/text v0.23.0 // indirect
 	google.golang.org/protobuf v1.36.5 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
