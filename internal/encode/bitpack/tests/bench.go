@@ -19,7 +19,7 @@ func EncodeBenchmark[T types.Unsigned](b *testing.B, fn EncodeFunc[T]) {
 	w := int(unsafe.Sizeof(T(0)))
 	for _, c := range tests.MakeBenchmarks[T]() {
 		minv, maxv := slices.Min(c.Data), slices.Max(c.Data)
-		buf := make([]byte, w*c.N)
+		buf := make([]byte, w*c.N*8)
 		var sz, n int
 		b.Run(fmt.Sprintf("u%d/%s", w*8, c.Name), func(b *testing.B) {
 			b.SetBytes(int64(w * c.N))
@@ -39,7 +39,7 @@ func DecodeBenchmark[T types.Unsigned](b *testing.B, enc EncodeFunc[T], dec Deco
 	w := int(unsafe.Sizeof(T(0)))
 	for _, c := range tests.MakeBenchmarks[T]() {
 		minv, maxv := slices.Min(c.Data), slices.Max(c.Data)
-		buf, log2, err := enc(make([]byte, w*c.N), c.Data, minv, maxv)
+		buf, log2, err := enc(make([]byte, w*c.N*8), c.Data, minv, maxv)
 		require.NoError(b, err)
 		dst := make([]T, c.N)
 		b.Run(fmt.Sprintf("u%d/%s", w*8, c.Name), func(b *testing.B) {
