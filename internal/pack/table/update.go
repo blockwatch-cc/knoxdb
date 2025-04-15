@@ -48,8 +48,8 @@ func (t *Table) UpdateRows(ctx context.Context, buf []byte) (uint64, error) {
 
 	// alloc scratch buffer for wal messages, we write 8 bytes first rid
 	// plus 4 bytes batch size plus 8 byte per reference row id
-	wb := arena.Alloc(arena.AllocBytes, t.journal.MaxSize()*8+12).([]byte)
-	defer arena.Free(arena.AllocBytes, wb)
+	wb := arena.AllocBytes(t.journal.MaxSize()*8 + 12)
+	defer arena.Free(wb)
 
 	// break message batch into pieces so that each piece fits into the
 	// current journal's active segment. for each pk lookup its current

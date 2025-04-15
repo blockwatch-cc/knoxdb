@@ -43,7 +43,7 @@ func (it *Iterator) Close() {
 	it.vmatch = nil
 	it.snode = nil
 	if len(it.match) > 1 {
-		arena.Free(arena.AllocUint32, it.match)
+		arena.Free(it.match)
 	}
 	it.match = nil
 	it.reverse = false

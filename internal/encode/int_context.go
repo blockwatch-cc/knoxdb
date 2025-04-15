@@ -243,8 +243,7 @@ func (c *IntegerContext[T]) Close() {
 	}
 	if c.Sample != nil {
 		if c.FreeSample {
-			// clear(c.Sample)
-			arena.FreeT(c.Sample)
+			arena.Free(c.Sample)
 		}
 		c.FreeSample = false
 		c.Sample = nil

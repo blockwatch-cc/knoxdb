@@ -26,7 +26,7 @@ func Sample[T types.Number](v []T) ([]T, bool) {
 	}
 
 	// allocate enough space for the sample
-	s := arena.AllocT[T](sz)[:sz]
+	s := arena.Alloc[T](sz)[:sz]
 
 	// calculate sampling chunk offsets, we don't sample from the last
 	// chunk if its not full size

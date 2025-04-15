@@ -68,9 +68,8 @@ func ReadInt128(dst *num.Int128Stride, r io.Reader) (int64, error) {
 	c := int64(4)
 
 	// prepare scratch space for this stride
-	scratch := arena.Alloc(arena.AllocBytes, Int64EncodedSize(dst.Cap()))
-	defer arena.Free(arena.AllocBytes, scratch)
-	buf := scratch.([]byte)[:sz]
+	buf := arena.AllocBytes(Int64EncodedSize(dst.Cap()))[:sz]
+	defer arena.Free(buf)
 	_, err = io.ReadFull(r, buf)
 	if err != nil {
 		return c, fmt.Errorf("zip: ReadInt128 stride x0: %v", err)
@@ -172,9 +171,8 @@ func ReadInt256(dst *num.Int256Stride, r io.Reader) (int64, error) {
 	c := int64(4)
 
 	// prepare scratch space for each stride of int64 data
-	scratch := arena.Alloc(arena.AllocBytes, Int64EncodedSize(dst.Cap()))
-	defer arena.Free(arena.AllocBytes, scratch)
-	buf := scratch.([]byte)[:sz]
+	buf := arena.AllocBytes(Int64EncodedSize(dst.Cap()))[:sz]
+	defer arena.Free(buf)
 	_, err = io.ReadFull(r, buf)
 	if err != nil {
 		return c, fmt.Errorf("zip: ReadInt256 read x0 data: %v", err)

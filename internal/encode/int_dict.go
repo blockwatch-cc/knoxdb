@@ -103,14 +103,14 @@ func (c *DictionaryContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl in
 	c.Dict = EncodeInt(vctx, dict, lvl-1)
 	vctx.Close()
 	if c.Dict.Type() != TIntegerRaw {
-		arena.FreeT(dict)
+		arena.Free(dict)
 	}
 
 	cctx := AnalyzeInt(codes, false)
 	c.Codes = EncodeInt(cctx, codes, lvl-1)
 	cctx.Close()
 	if c.Codes.Type() != TIntegerRaw {
-		arena.FreeT(codes)
+		arena.Free(codes)
 	}
 
 	return c
@@ -123,7 +123,7 @@ func dictEncodeArray[T types.Integer](ctx *IntegerContext[T], vals []T) ([]T, []
 	}
 
 	// construct sorted dict from code+1 array
-	dict := arena.AllocT[T](ctx.NumUnique)[:0]
+	dict := arena.Alloc[T](ctx.NumUnique)[:0]
 	for i, v := range ctx.UniqueArray {
 		if v > 0 {
 			// reverse min-FOR applied by buildUniqueArray()
@@ -133,7 +133,7 @@ func dictEncodeArray[T types.Integer](ctx *IntegerContext[T], vals []T) ([]T, []
 		}
 	}
 
-	codes := arena.Alloc(arena.AllocUint16, len(vals)).([]uint16)[:len(vals)]
+	codes := arena.AllocUint16(len(vals))[:len(vals)]
 	for i, v := range vals {
 		// apply min-FOR to value for compatibility with buildUniqueArray()
 		// subtract -1 from code (buildUniqueArray had added +1)

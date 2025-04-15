@@ -53,9 +53,8 @@ func DecodeFloat64(dst []float64, buf []byte) (int, error) {
 
 // ReadFloat32 is the io.Reader version for decoding 32bit float data.
 func ReadFloat32(dst []float32, r io.Reader) (int, int64, error) {
-	scratch := arena.Alloc(arena.AllocFloat64, cap(dst))
-	defer arena.Free(arena.AllocFloat64, scratch)
-	f64 := scratch.([]float64)[:0]
+	f64 := arena.AllocFloat64(cap(dst))
+	defer arena.Free(f64)
 	l, n, err := ReadFloat64(f64, r)
 	if err != nil {
 		return l, n, err
@@ -74,9 +73,9 @@ func ReadFloat64(dst []float64, r io.Reader) (int, int64, error) {
 
 	// we need the full data for gorilla decoding, its max size cannot be larger than
 	// the target slice plus encoder data
-	scratch := arena.Alloc(arena.AllocBytes, FloatEncodedSize(cap(dst)))
-	defer arena.Free(arena.AllocBytes, scratch)
-	buf := bytes.NewBuffer(scratch.([]byte)[:0])
+	scratch := arena.AllocBytes(FloatEncodedSize(cap(dst)))
+	defer arena.Free(scratch)
+	buf := bytes.NewBuffer(scratch[:0])
 	_, err := io.Copy(buf, r)
 	if err != nil {
 		return 0, 0, err
@@ -86,9 +85,8 @@ func ReadFloat64(dst []float64, r io.Reader) (int, int64, error) {
 }
 
 func decodeFloat32(dst []float32, buf []byte) (int, error) {
-	scratch := arena.Alloc(arena.AllocFloat64, cap(dst))
-	defer arena.Free(arena.AllocFloat64, scratch)
-	f64 := scratch.([]float64)[:0]
+	f64 := arena.AllocFloat64(cap(dst))
+	defer arena.Free(f64)
 	n, err := decodeFloat64(f64, buf)
 	if err != nil {
 		return 0, err

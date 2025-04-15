@@ -495,7 +495,7 @@ func BenchmarkEncodeInt(b *testing.B) {
 			ctx := AnalyzeInt(data, scheme == TIntegerDictionary)
 			once := etests.ShowInfo
 			b.Run(c.Name+"_"+scheme.String(), func(b *testing.B) {
-				if once  {
+				if once {
 					enc := NewInt[int64](scheme).Encode(ctx, data, MAX_CASCADE)
 					b.Log(enc.Info())
 					enc.Close()
@@ -739,8 +739,8 @@ func DictArrayBenchmark[T types.Integer](b *testing.B) {
 				for range b.N {
 					dict, codes := dictEncodeArray(ctx, data)
 					card = len(dict)
-					arena.FreeT(dict)
-					arena.FreeT(codes)
+					arena.Free(dict)
+					arena.Free(codes)
 				}
 				_ = card
 			})

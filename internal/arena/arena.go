@@ -3,10 +3,6 @@
 
 package arena
 
-import (
-	"unsafe"
-)
-
 type Integer interface {
 	int64 | int32 | int16 | int8 | uint64 | uint32 | uint16 | uint8
 }
@@ -17,99 +13,143 @@ type Number interface {
 
 // arena allocators
 const (
-	AllocTime = iota
-	AllocInt64
-	AllocInt32
-	AllocInt16
-	AllocInt8
-	AllocUint64
-	AllocUint32
-	AllocUint16
-	AllocUint8
-	AllocFloat64
-	AllocFloat32
-	AllocBytes
-	AllocBytesSlice
+	allocTypeInt64 = iota
+	allocTypeInt32
+	allocTypeInt16
+	allocTypeInt8
+	allocTypeUint64
+	allocTypeUint32
+	allocTypeUint16
+	allocTypeUint8
+	allocTypeFloat64
+	allocTypeFloat32
+	allocTypeBytes
+	allocTypeBytesSlice
 )
 
 var _arena = newArena()
 
-func Alloc(typ int, sz int) any {
-	return _arena.Alloc(typ, sz)
+func AllocInt64(sz int) []int64 {
+	return _arena.Alloc(allocTypeInt64, sz).([]int64)
 }
 
-func AllocPtr(typ int, sz int) unsafe.Pointer {
-	return _arena.AllocPtr(typ, sz)
+func AllocInt32(sz int) []int32 {
+	return _arena.Alloc(allocTypeInt32, sz).([]int32)
 }
 
-func AllocT[T Number](sz int) []T {
-	switch any(T(0)).(type) {
+func AllocInt16(sz int) []int16 {
+	return _arena.Alloc(allocTypeInt16, sz).([]int16)
+}
+
+func AllocInt8(sz int) []int8 {
+	return _arena.Alloc(allocTypeInt8, sz).([]int8)
+}
+
+func AllocUint64(sz int) []uint64 {
+	return _arena.Alloc(allocTypeUint64, sz).([]uint64)
+}
+
+func AllocUint32(sz int) []uint32 {
+	return _arena.Alloc(allocTypeUint32, sz).([]uint32)
+}
+
+func AllocUint16(sz int) []uint16 {
+	return _arena.Alloc(allocTypeUint16, sz).([]uint16)
+}
+
+func AllocUint8(sz int) []uint8 {
+	return _arena.Alloc(allocTypeUint8, sz).([]uint8)
+}
+
+func AllocFloat64(sz int) []float64 {
+	return _arena.Alloc(allocTypeFloat64, sz).([]float64)
+}
+
+func AllocFloat32(sz int) []float32 {
+	return _arena.Alloc(allocTypeFloat32, sz).([]float32)
+}
+
+func AllocBytes(sz int) []byte {
+	return _arena.Alloc(allocTypeBytes, sz).([]byte)
+}
+
+func AllocByteSlice(sz int) [][]byte {
+	return _arena.Alloc(allocTypeBytesSlice, sz).([][]byte)
+}
+
+func Alloc[T Number | []byte](sz int) []T {
+	var t T
+	switch any(t).(type) {
 	case int64:
-		return _arena.Alloc(AllocInt64, sz).([]T)
+		return _arena.Alloc(allocTypeInt64, sz).([]T)
 	case int32:
-		return _arena.Alloc(AllocInt32, sz).([]T)
+		return _arena.Alloc(allocTypeInt32, sz).([]T)
 	case int16:
-		return _arena.Alloc(AllocInt16, sz).([]T)
+		return _arena.Alloc(allocTypeInt16, sz).([]T)
 	case int8:
-		return _arena.Alloc(AllocInt8, sz).([]T)
+		return _arena.Alloc(allocTypeInt8, sz).([]T)
 	case uint64:
-		return _arena.Alloc(AllocUint64, sz).([]T)
+		return _arena.Alloc(allocTypeUint64, sz).([]T)
 	case uint32:
-		return _arena.Alloc(AllocUint32, sz).([]T)
+		return _arena.Alloc(allocTypeUint32, sz).([]T)
 	case uint16:
-		return _arena.Alloc(AllocUint16, sz).([]T)
-	case uint8:
-		return _arena.Alloc(AllocUint8, sz).([]T)
+		return _arena.Alloc(allocTypeUint16, sz).([]T)
+	case uint8: // == byte
+		return _arena.Alloc(allocTypeUint8, sz).([]T)
 	case float32:
-		return _arena.Alloc(AllocFloat32, sz).([]T)
+		return _arena.Alloc(allocTypeFloat32, sz).([]T)
 	case float64:
-		return _arena.Alloc(AllocFloat64, sz).([]T)
+		return _arena.Alloc(allocTypeFloat64, sz).([]T)
+	case []byte: // slice of bytes
+		return _arena.Alloc(allocTypeBytesSlice, sz).([]T)
 	default:
 		return nil
 	}
 }
 
-func Free(typ int, val any) {
-	_arena.Free(typ, val)
-}
-
-func FreePtr(typ int, ptr unsafe.Pointer) {
-	_arena.FreePtr(typ, ptr)
-}
-
-func FreeT[T Number](val []T) {
-	switch any(T(0)).(type) {
+func Free[T Number | []byte](val []T) {
+	var t T
+	switch any(t).(type) {
 	case int64:
-		_arena.Free(AllocInt64, val)
+		_arena.Free(allocTypeInt64, val)
 	case int32:
-		_arena.Free(AllocInt32, val)
+		_arena.Free(allocTypeInt32, val)
 	case int16:
-		_arena.Free(AllocInt16, val)
+		_arena.Free(allocTypeInt16, val)
 	case int8:
-		_arena.Free(AllocInt8, val)
+		_arena.Free(allocTypeInt8, val)
 	case uint64:
-		_arena.Free(AllocUint64, val)
+		_arena.Free(allocTypeUint64, val)
 	case uint32:
-		_arena.Free(AllocUint32, val)
+		_arena.Free(allocTypeUint32, val)
 	case uint16:
-		_arena.Free(AllocUint16, val)
-	case uint8:
-		_arena.Free(AllocUint8, val)
+		_arena.Free(allocTypeUint16, val)
+	case uint8: // == byte
+		_arena.Free(allocTypeUint8, val)
 	case float32:
-		_arena.Free(AllocFloat32, val)
+		_arena.Free(allocTypeFloat32, val)
 	case float64:
-		_arena.Free(AllocFloat64, val)
+		_arena.Free(allocTypeFloat64, val)
+	case []byte: // slice of bytes
+		_arena.Free(allocTypeBytesSlice, val)
 	}
 }
 
+func Clone[T Number | []byte](val []T) []T {
+	clone := Alloc[T](len(val))[:len(val)]
+	copy(clone, val)
+	return clone
+}
+
+// TODO: we could allocate []byte (and [][]byte) only and unsafe-cast
+// to user types, this would safe 10x16 sync pools
 type arena struct {
-	alloc [13]Allocator
+	alloc [12]Allocator
 }
 
 func newArena() *arena {
 	return &arena{
-		alloc: [13]Allocator{
-			newAllocator[int64](),
+		alloc: [12]Allocator{
 			newAllocator[int64](),
 			newAllocator[int32](),
 			newAllocator[int16](),
@@ -130,20 +170,9 @@ func (a *arena) Alloc(typ int, sz int) any {
 	return a.alloc[typ].Alloc(sz)
 }
 
-func (a *arena) AllocPtr(typ int, sz int) unsafe.Pointer {
-	return a.alloc[typ].AllocPtr(sz)
-}
-
 func (a *arena) Free(typ int, val any) {
 	if val == nil {
 		return
 	}
 	a.alloc[typ].Free(val)
-}
-
-func (a *arena) FreePtr(typ int, ptr unsafe.Pointer) {
-	if ptr == nil {
-		return
-	}
-	a.alloc[typ].FreePtr(ptr)
 }

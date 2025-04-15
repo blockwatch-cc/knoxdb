@@ -117,8 +117,8 @@ func DictBenchmark[T Integer](b *testing.B, fn buildFunc[T]) {
 				for range b.N {
 					dict, codes := fn(data, card)
 					card = len(dict)
-					arena.FreeT(dict)
-					arena.FreeT(codes)
+					arena.Free(dict)
+					arena.Free(codes)
 				}
 				_ = card
 			})
@@ -143,8 +143,8 @@ func DictBenchmarkFloat[T Float, U Integer](b *testing.B, fn buildFunc[U]) {
 				for range b.N {
 					dict, codes := fn(src, card)
 					card = len(dict)
-					arena.FreeT(dict)
-					arena.FreeT(codes)
+					arena.Free(dict)
+					arena.Free(codes)
 				}
 				_ = card
 			})
@@ -169,7 +169,7 @@ func buildDictMap[T Integer](vals []T, numUnique int) ([]T, []uint16) {
 	}
 
 	// construct dict from unique values (apply FOR)
-	dict := arena.AllocT[T](len(uniqueMap))[:0]
+	dict := arena.Alloc[T](len(uniqueMap))[:0]
 	for v := range uniqueMap {
 		dict = append(dict, v)
 	}
@@ -183,7 +183,7 @@ func buildDictMap[T Integer](vals []T, numUnique int) ([]T, []uint16) {
 	}
 
 	// translate values to codes
-	codes := arena.AllocT[uint16](len(vals))[:0]
+	codes := arena.Alloc[uint16](len(vals))[:0]
 	for _, v := range vals {
 		codes = append(codes, uniqueMap[v])
 	}

@@ -58,9 +58,8 @@ func AnalyzeFloat[T types.Float](vals []T, checkUnique, checkALP bool) *FloatCon
 		}
 
 		// count unique only if requested, prefer ALP over float dict
-		// Note: float dict construction via hashprobe requires the
-		// upper bits of the multiplicative hash to avoid excessive
-		// collisions, however, we just mask out the lower 16 bits.
+		// i.e. disable unique estimation when ALP is enabled which leads
+		// to not selecting dict encoding at this level
 		if !checkALP && checkUnique {
 			c.NumUnique = max(1, c.estimateCardinality(vals))
 		}
@@ -150,8 +149,7 @@ func (c *FloatContext[T]) Close() {
 	}
 	if c.Sample != nil {
 		if c.FreeSample {
-			// clear(c.Sample)
-			arena.FreeT(c.Sample)
+			arena.Free(c.Sample)
 		}
 		c.FreeSample = false
 		c.Sample = nil

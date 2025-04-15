@@ -373,7 +373,7 @@ func (e *Encoder[T]) selectBestEncoding(src []T) Encoding {
 	return best
 }
 
-func (e *Encoder[T]) Compress(src []T) *Encoder[T] {
+func (e *Encoder[T]) Encode(src []T) *Encoder[T] {
 	// alloc state and analyze vector (first pass)
 	if !e.IsInit() {
 		e.Analyze(src)

@@ -85,8 +85,6 @@ func EncodeFloat[T types.Float](ctx *FloatContext[T], v []T, lvl int) FloatConta
 		defer ctx.Close()
 	}
 
-	// fmt.Printf("Enc %d vals lvl=%d unique=%d schemes=%v----\n", len(v), lvl, ctx.NumUnique, ctx.EligibleSchemes(lvl))
-
 	// try all eligible encoding schemes
 	var (
 		bestScheme FloatContainerType = TFloatRaw
@@ -94,23 +92,12 @@ func EncodeFloat[T types.Float](ctx *FloatContext[T], v []T, lvl int) FloatConta
 	)
 	if lvl > 0 {
 		for _, scheme := range ctx.EligibleSchemes(lvl) {
-			// fmt.Printf("%s Try %s\n", strings.Repeat(">", 3-lvl), scheme)
 			if rd := EstimateFloat(scheme, ctx, v, lvl); rd < bestRatio {
 				bestRatio = rd
 				bestScheme = scheme
-
-				// TODO: consider a cut-off when already good enough
-				// if bestRatio < 0.05 {
-				// 	break
-				// }
-
-				// 	fmt.Printf("%s => %f !!\n", scheme, rd)
-				// } else {
-				// 	fmt.Printf("%s => %f\n", scheme, rd)
 			}
 		}
 	}
-	// fmt.Printf("%s Use %s => %f ----\n", strings.Repeat(">", 3-lvl), bestScheme, bestRatio)
 
 	// alloc best container and encode
 	return NewFloat[T](bestScheme).Encode(ctx, v, lvl)
@@ -125,19 +112,20 @@ func EstimateFloat[T types.Float](scheme FloatContainerType, ctx *FloatContext[T
 		w       int = SizeOf[T]()
 		rawSize int = ctx.rawCosts()
 		estSize int
-		ok      bool
 	)
 	switch scheme {
 	case TFloatConstant:
-		estSize, ok = 1+w+num.MaxVarintLen32, true
+		estSize = 1 + w + num.MaxVarintLen32
+
 	case TFloatRaw:
-		estSize, ok = rawSize, true
+		estSize = rawSize
+
 	case TFloatAlp, TFloatAlpRd:
 		// at this point we have an ALP analysis available
 		as := ctx.AlpEncoder.State()
-		// fmt.Printf("Analyzed ALP: escheme=%s scheme=%d alp=%#v rd=%#v\n", scheme, as.Scheme, as.Top(), as.RD)
 
 		// compare suggested ALP scheme with requested scheme
+		var ok bool
 		switch as.Scheme {
 		case alp.AlpScheme:
 			// predict encoding size from best sample encoding rate
@@ -158,33 +146,14 @@ func EstimateFloat[T types.Float](scheme FloatContainerType, ctx *FloatContext[T
 
 	case TFloatDictionary:
 		// upper bound for dict encoding using raw as child base
-		estSize, ok = dictCosts(ctx.NumValues, ctx.PhyBits, ctx.NumUnique), true
+		estSize = dictCosts(ctx.NumValues, ctx.PhyBits, ctx.NumUnique)
 
 	case TFloatRunEnd:
 		// upper bound for run end encoding using raw as child base
-		estSize, ok = runEndCosts(ctx.NumValues, ctx.NumRuns, ctx.PhyBits), true
-
-	}
-	if ok {
-		return float64(estSize) / float64(rawSize)
+		estSize = runEndCosts(ctx.NumValues, ctx.NumRuns, ctx.PhyBits)
 	}
 
-	// // the remaining schemes TFloatRunEnd, TFloatDictionary, TFloatAlp, TFloatAlpRd
-	// // use child containers which we cannot easily estimate without running
-	// // the encoder itself, to save time we use a sample
-
-	// // sample
-	// if ctx.Sample == nil {
-	// 	ctx.Sample, ctx.FreeSample = Sample(vals)
-	// 	ctx.SampleCtx = AnalyzeFloat(ctx.Sample, true, lvl == MAX_CASCADE)
-	// }
-
-	// // trail encode the sample as target scheme
-	// rawSize = 1 + num.MaxVarintLen32 + w*len(ctx.Sample)
-	// enc := NewFloat[T](scheme).Encode(ctx.SampleCtx, ctx.Sample, lvl)
-	// estSize = enc.MaxSize()
-	// enc.Close()
-
+	// return final rate
 	return float64(estSize) / float64(rawSize)
 }
 

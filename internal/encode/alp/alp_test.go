@@ -106,12 +106,12 @@ func TestAlp(t *testing.T) {
 func AlpTest[T types.Float](t *testing.T) {
 	for _, c := range MakeTestcases[T]() {
 		t.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(t *testing.T) {
-			e := NewEncoder[T]().Compress(c.Data)
+			e := NewEncoder[T]().Encode(c.Data)
 			s := e.State()
 			dec := NewDecoder[T](s.Encoding.F, s.Encoding.E).
 				WithExceptions(s.Exceptions, s.Positions)
 			res := make([]T, len(c.Data))
-			dec.Decompress(res, s.Integers)
+			dec.Decode(res, s.Integers)
 			assert.Equal(t, c.Data, res)
 			e.Close()
 		})

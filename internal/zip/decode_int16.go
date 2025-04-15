@@ -49,9 +49,9 @@ func DecodeInt16(dst []int16, buf []byte) (int, error) {
 // to be present.
 func ReadUint16(dst []uint16, r io.Reader) (int, int64, error) {
 	// assume max length of encoded data
-	scratch := arena.Alloc(arena.AllocBytes, Int16EncodedSize(cap(dst)))
-	defer arena.Free(arena.AllocBytes, scratch)
-	b := bytes.NewBuffer(scratch.([]byte)[:0])
+	scratch := arena.AllocBytes(Int16EncodedSize(cap(dst)))
+	defer arena.Free(scratch)
+	b := bytes.NewBuffer(scratch)
 	_, err := io.Copy(b, r)
 	if err != nil {
 		return 0, 0, err

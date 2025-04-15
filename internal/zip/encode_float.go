@@ -41,9 +41,8 @@ func FloatEncodedSize(n int) int {
 }
 
 func EncodeFloat32(src []float32, w io.Writer) (int, error) {
-	scratch := arena.Alloc(arena.AllocFloat64, len(src))
-	defer arena.Free(arena.AllocFloat64, scratch)
-	dst := scratch.([]float64)[:len(src)]
+	dst := arena.AllocFloat64(len(src))[:len(src)]
+	defer arena.Free(dst)
 	for i, v := range src {
 		dst[i] = float64(v)
 	}
@@ -56,9 +55,8 @@ func EncodeFloat64(src []float64, w io.Writer) (int, error) {
 	// the original algorithm writes directly to a target []byte
 	// slice and we don't want to change this. we allocate a slice
 	// and write it to the io.Writer at the very end
-	scratch := arena.Alloc(arena.AllocBytes, FloatEncodedSize(len(src)))
-	defer arena.Free(arena.AllocBytes, scratch)
-	b := scratch.([]byte)[:0]
+	b := arena.AllocBytes(FloatEncodedSize(len(src)))
+	defer arena.Free(b)
 
 	b = b[:1]
 	b[0] = floatCompressedGorilla << 4

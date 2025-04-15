@@ -65,9 +65,8 @@ func EncodeTime(s []int64, w io.Writer) (int, error) {
 	}
 
 	// alloc scratch space
-	scratch := arena.Alloc(arena.AllocUint64, len(src))
-	defer arena.Free(arena.AllocUint64, scratch)
-	deltas := scratch.([]uint64)[:len(src)]
+	deltas := arena.AllocUint64(len(src))[:len(src)]
+	defer arena.Free(deltas)
 	deltas[0] = src[0]
 
 	if len(src) > 1 {

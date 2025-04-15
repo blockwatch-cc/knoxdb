@@ -4,6 +4,9 @@
 package alp
 
 import (
+	"slices"
+
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/types"
 )
 
@@ -22,14 +25,33 @@ func NewDecoder[T types.Float](factor, exponent uint8) *Decoder[T] {
 	}
 }
 
+func (d *Decoder[T]) Close() {
+	if d.exceptions != nil {
+		arena.Free(d.exceptions)
+		d.exceptions = nil
+		arena.Free(d.positions)
+		d.positions = nil
+	}
+}
+
 func (d *Decoder[T]) WithExceptions(values []T, pos []uint32) *Decoder[T] {
 	d.exceptions = values
 	d.positions = pos
 	return d
 }
 
+// DecompressValue decompresses a single value without unFOR or exceptions.
+func (d *Decoder[T]) DecompressValue(v int64) T {
+	return T(v) * d.factor * d.exponent
+}
+
+// Scalar decoding a single value with ALP
+func decodeValue[T types.Float](v, fac int64, exp T) T {
+	return T(v) * T(fac) * exp
+}
+
 // Scalar decoding of an ALP vector
-func (d *Decoder[T]) Decompress(dst []T, src []int64) {
+func (d *Decoder[T]) Decode(dst []T, src []int64) {
 	l := len(src)
 	if l == 0 {
 		return
@@ -60,12 +82,30 @@ func (d *Decoder[T]) Decompress(dst []T, src []int64) {
 	}
 }
 
-// DecompressValue decompresses a single value without unFOR or exceptions.
-func (d *Decoder[T]) DecompressValue(v int64) T {
-	return T(v) * d.factor * d.exponent
-}
+func (d *Decoder[T]) DecodeChunk(dst *[128]T, src *[128]int64, ofs int) {
+	// decode values
+	var i int
+	for range 16 {
+		dst[i] = T(src[i]) * d.factor * d.exponent
+		dst[i+1] = T(src[i+1]) * d.factor * d.exponent
+		dst[i+2] = T(src[i+2]) * d.factor * d.exponent
+		dst[i+3] = T(src[i+3]) * d.factor * d.exponent
+		dst[i+4] = T(src[i+4]) * d.factor * d.exponent
+		dst[i+5] = T(src[i+5]) * d.factor * d.exponent
+		dst[i+6] = T(src[i+6]) * d.factor * d.exponent
+		dst[i+7] = T(src[i+7]) * d.factor * d.exponent
+		i += 8
+	}
 
-// Scalar decoding a single value with ALP
-func decodeValue[T types.Float](v, fac int64, exp T) T {
-	return T(v) * T(fac) * exp
+	// patch exceptions in range
+	if len(d.positions) > 0 {
+		i, _ := slices.BinarySearch(d.positions, uint32(ofs))
+		for i < len(d.positions) {
+			p := int(d.positions[i])
+			if p >= ofs+128 {
+				break
+			}
+			dst[p-ofs] = d.exceptions[i]
+		}
+	}
 }

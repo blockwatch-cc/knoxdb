@@ -88,15 +88,15 @@ func New(typ BlockType, sz int) *Block {
 	switch typ {
 	case BlockInt128:
 		var i128 num.Int128Stride
-		i128.X0 = arena.Alloc(arena.AllocInt64, sz).([]int64)[:0]
-		i128.X1 = arena.Alloc(arena.AllocUint64, sz).([]uint64)[:0]
+		i128.X0 = arena.AllocInt64(sz)
+		i128.X1 = arena.AllocUint64(sz)
 		b.ptr = unsafe.Pointer(&i128)
 	case BlockInt256:
 		var i256 num.Int256Stride
-		i256.X0 = arena.Alloc(arena.AllocInt64, sz).([]int64)[:0]
-		i256.X1 = arena.Alloc(arena.AllocUint64, sz).([]uint64)[:0]
-		i256.X2 = arena.Alloc(arena.AllocUint64, sz).([]uint64)[:0]
-		i256.X3 = arena.Alloc(arena.AllocUint64, sz).([]uint64)[:0]
+		i256.X0 = arena.AllocInt64(sz)
+		i256.X1 = arena.AllocUint64(sz)
+		i256.X2 = arena.AllocUint64(sz)
+		i256.X3 = arena.AllocUint64(sz)
 		b.ptr = unsafe.Pointer(&i256)
 	case BlockBool:
 		b.ptr = unsafe.Pointer(bitset.NewBitset(sz).Resize(0))
@@ -105,7 +105,7 @@ func New(typ BlockType, sz int) *Block {
 		b.ptr = unsafe.Pointer(&arr)
 	default:
 		byteSize := sz * blockTypeDataSize[typ]
-		b.buf = arena.Alloc(arena.AllocBytes, byteSize).([]byte)[:byteSize]
+		b.buf = arena.AllocBytes(byteSize)[:byteSize]
 		b.ptr = unsafe.Pointer(unsafe.SliceData(b.buf))
 	}
 	return b
@@ -398,7 +398,7 @@ func (b *Block) Grow(n int) {
 		buf := slices.Grow(b.buf, n)
 		buf = buf[:len(buf)+n]
 		if &buf[0] != &b.buf[0] {
-			arena.Free(arena.AllocBytes, b.buf)
+			arena.Free(b.buf)
 			b.buf = buf
 			b.ptr = unsafe.Pointer(unsafe.SliceData(b.buf))
 		}
@@ -470,16 +470,16 @@ func (b *Block) free() {
 	switch b.typ {
 	case BlockInt128:
 		i128 := (*num.Int128Stride)(b.ptr)
-		arena.Free(arena.AllocInt64, i128.X0[:0])
-		arena.Free(arena.AllocUint64, i128.X1[:0])
+		arena.Free(i128.X0[:0])
+		arena.Free(i128.X1[:0])
 		i128.X0 = nil
 		i128.X1 = nil
 	case BlockInt256:
 		i256 := (*num.Int256Stride)(b.ptr)
-		arena.Free(arena.AllocInt64, i256.X0[:0])
-		arena.Free(arena.AllocUint64, i256.X1[:0])
-		arena.Free(arena.AllocUint64, i256.X2[:0])
-		arena.Free(arena.AllocUint64, i256.X3[:0])
+		arena.Free(i256.X0[:0])
+		arena.Free(i256.X1[:0])
+		arena.Free(i256.X2[:0])
+		arena.Free(i256.X3[:0])
 		i256.X0 = nil
 		i256.X1 = nil
 		i256.X2 = nil
@@ -489,7 +489,7 @@ func (b *Block) free() {
 	case BlockBytes:
 		(*(*dedup.ByteArray)(b.ptr)).Release()
 	default:
-		arena.Free(arena.AllocBytes, b.buf)
+		arena.Free(b.buf)
 	}
 	b.dirty = false
 	b.ptr = nil

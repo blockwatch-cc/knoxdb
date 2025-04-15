@@ -8,7 +8,7 @@ import (
 )
 
 func toSlice(a ByteArray) [][]byte {
-	res := arena.Alloc(arena.AllocBytesSlice, a.Len()).([][]byte)
+	res := arena.AllocByteSlice(a.Len())
 	for i := 0; i < a.Len(); i++ {
 		res = append(res, a.Elem(i))
 	}
@@ -16,7 +16,7 @@ func toSlice(a ByteArray) [][]byte {
 }
 
 func toSubSlice(a ByteArray, start, end int) [][]byte {
-	res := arena.Alloc(arena.AllocBytesSlice, end-start).([][]byte)
+	res := arena.AllocByteSlice(end - start)
 	for i := start; i < end; i++ {
 		res = append(res, a.Elem(i))
 	}
@@ -24,7 +24,7 @@ func toSubSlice(a ByteArray, start, end int) [][]byte {
 }
 
 func recycle(buf [][]byte) {
-	arena.Free(arena.AllocBytesSlice, buf[:0])
+	arena.Free(buf[:0])
 }
 
 func uvarIntLen(n int) int {

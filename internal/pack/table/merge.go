@@ -163,7 +163,7 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 	if seg.Data().Len() > 0 {
 		if inJournalDeletes {
 			// create selection vector for split based on xmax
-			sel := arena.Alloc(arena.AllocUint32, seg.Data().Len()).([]uint32)[:0]
+			sel := arena.AllocUint32(seg.Data().Len())
 			for i, v := range seg.Data().Xmaxs().Uint64().Slice() {
 				if v == 0 {
 					sel = append(sel, uint32(i))
@@ -195,7 +195,7 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 
 			// free resources
 			pkg.Release()
-			arena.Free(arena.AllocUint32, sel)
+			arena.Free(sel)
 
 		} else {
 			pkg := seg.Data()

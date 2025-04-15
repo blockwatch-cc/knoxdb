@@ -83,7 +83,7 @@ func (t *Table) NewReader() engine.TableReader {
 			Log:     t.log,
 		},
 		reqFields: []uint16{uint16(rx), uint16(rx + 2), uint16(rx + 3)},
-		hits:      arena.Alloc(arena.AllocUint32, t.opts.PackSize).([]uint32),
+		hits:      arena.AllocUint32(t.opts.PackSize),
 		bits:      bitset.NewBitset(t.opts.PackSize),
 		useCache:  true,
 	}
@@ -148,7 +148,7 @@ func (r *Reader) Close() {
 	r.reqFields = nil
 	r.resFields = nil
 	r.mask = nil
-	arena.Free(arena.AllocUint32, r.hits[:0])
+	arena.Free(r.hits[:0])
 	r.hits = nil
 	r.bits.Close()
 	r.bits = nil

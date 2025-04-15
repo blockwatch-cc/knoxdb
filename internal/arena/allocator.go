@@ -6,14 +6,11 @@ package arena
 import (
 	"math/bits"
 	"sync"
-	"unsafe"
 )
 
 type Allocator interface {
 	Alloc(int) any
 	Free(any)
-	AllocPtr(int) unsafe.Pointer
-	FreePtr(unsafe.Pointer)
 }
 
 // 1k (10) .. 128k (17) .. 32M (25) = 16 sync.Pools
@@ -66,20 +63,3 @@ func (a *allocator[T]) Free(val any) {
 	// nolint:staticcheck
 	a.pools[idx].Put(slice[:0])
 }
-
-func (a *allocator[T]) AllocPtr(sz int) unsafe.Pointer {
-	v := a.Alloc(sz).([]T)
-	return unsafe.Pointer(&v)
-}
-
-func (a *allocator[T]) FreePtr(ptr unsafe.Pointer) {
-	v := *(*[]T)(ptr)
-	a.Free(v)
-}
-
-// type nullAllocator struct{}
-
-// func (_ nullAllocator) Alloc(_ int) any               { return nil }
-// func (_ nullAllocator) AllocPtr(_ int) unsafe.Pointer { return nil }
-// func (_ nullAllocator) Free(_ any)                    {}
-// func (_ nullAllocator) FreePtr(_ unsafe.Pointer)      {}

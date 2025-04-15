@@ -24,7 +24,7 @@ type NativeByteArray struct {
 
 func newNativeByteArray(sz int) *NativeByteArray {
 	return &NativeByteArray{
-		bufs: arena.Alloc(arena.AllocBytesSlice, sz).([][]byte)[:0],
+		bufs: arena.AllocByteSlice(sz),
 	}
 }
 
@@ -243,8 +243,8 @@ func (a *NativeByteArray) ReadFrom(r io.Reader) (int64, error) {
 
 	// prepare or re-alloc slice headers
 	if cap(a.bufs) < int(l) {
-		arena.Free(arena.AllocBytesSlice, a.bufs)
-		a.bufs = arena.Alloc(arena.AllocBytesSlice, int(l)).([][]byte)[:int(l)]
+		arena.Free(a.bufs)
+		a.bufs = arena.AllocByteSlice(int(l))[:int(l)]
 	} else {
 		a.bufs = a.bufs[:int(l)]
 	}
@@ -299,8 +299,8 @@ func (a *NativeByteArray) Decode(buf []byte) error {
 	buf = buf[4:]
 
 	if cap(a.bufs) < sz {
-		arena.Free(arena.AllocBytesSlice, a.bufs)
-		a.bufs = arena.Alloc(arena.AllocBytesSlice, sz).([][]byte)[:sz]
+		arena.Free(a.bufs)
+		a.bufs = arena.AllocByteSlice(sz)[:sz]
 	} else {
 		a.bufs = a.bufs[:sz]
 	}

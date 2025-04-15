@@ -104,21 +104,21 @@ func (c *FloatAlpRdContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 
 func (c *FloatAlpRdContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int) FloatContainer[T] {
 	cnt := len(vals)
-	left := arena.AllocT[uint16](cnt)[:cnt]
-	right := arena.AllocT[uint64](cnt)[:cnt]
+	left := arena.Alloc[uint16](cnt)[:cnt]
+	right := arena.Alloc[uint64](cnt)[:cnt]
 	c.typ = BlockType[T]()
 
 	// ensure we have an ALP analysis result (mostly relevant for testcases)
 	if !ctx.AlpEncoder.IsInit() || ctx.AlpEncoder.State().Scheme != alp.AlpRdScheme {
 		// produce a small sample
-		sample := arena.AllocT[T](alp.MaxSampleLen(cnt))
+		sample := arena.Alloc[T](alp.MaxSampleLen(cnt))
 		alp.FirstLevelSample(sample, vals)
 
 		// estimate best shift based on sample
-		unique := arena.AllocT[uint16](1 << 16)[:1<<16]
+		unique := arena.Alloc[uint16](1 << 16)[:1<<16]
 		c.Shift = alp.EstimateRD(sample, unique).Shift
-		arena.FreeT(unique)
-		arena.FreeT(sample)
+		arena.Free(unique)
+		arena.Free(sample)
 	} else {
 		c.Shift = ctx.AlpEncoder.State().RD.Shift
 	}
@@ -143,8 +143,8 @@ func (c *FloatAlpRdContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int)
 	// free temp allocations
 	lctx.Close()
 	rctx.Close()
-	arena.FreeT(left)
-	arena.FreeT(right)
+	arena.Free(left)
+	arena.Free(right)
 
 	return c
 }

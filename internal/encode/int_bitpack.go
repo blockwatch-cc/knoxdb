@@ -31,7 +31,7 @@ func (c *BitpackContainer[T]) Info() string {
 
 func (c *BitpackContainer[T]) Close() {
 	if c.free {
-		arena.Free(arena.AllocBytes, c.Packed)
+		arena.Free(c.Packed)
 	}
 	c.Packed = nil
 	c.free = false
@@ -103,7 +103,7 @@ func (c *BitpackContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 
 func (c *BitpackContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) IntegerContainer[T] {
 	sz := bitpack.EstimateMaxSize(ctx.UseBits, len(vals))
-	c.Packed = arena.Alloc(arena.AllocBytes, sz).([]byte)[:sz]
+	c.Packed = arena.AllocBytes(sz)[:sz]
 	clear(c.Packed) // arena does not allocate zeroed memory
 	c.free = true
 	c.Log2 = ctx.UseBits
@@ -233,14 +233,14 @@ func (c *BitpackContainer[T]) MatchSet(s any, bits, mask *Bitset) *Bitset {
 	set := s.(*xroar.Bitmap)
 	if mask != nil {
 		// only process values from mask
-		u32 := arena.AllocT[uint32](mask.Count())
+		u32 := arena.Alloc[uint32](mask.Count())
 		for _, k := range mask.Indexes(u32) {
 			i := int(k)
 			if set.Contains(uint64(T(c.unpack(c.Packed, i)) + c.For)) {
 				bits.Set(i)
 			}
 		}
-		arena.FreeT(u32)
+		arena.Free(u32)
 	} else {
 		for i := range c.Len() {
 			if set.Contains(uint64(T(c.unpack(c.Packed, i)) + c.For)) {
@@ -256,14 +256,14 @@ func (c *BitpackContainer[T]) MatchNotSet(s any, bits, mask *Bitset) *Bitset {
 	set := s.(*xroar.Bitmap)
 	if mask != nil {
 		// only process values from mask
-		u32 := arena.AllocT[uint32](mask.Count())
+		u32 := arena.Alloc[uint32](mask.Count())
 		for _, k := range mask.Indexes(u32) {
 			i := int(k)
 			if !set.Contains(uint64(T(c.unpack(c.Packed, i)) + c.For)) {
 				bits.Set(i)
 			}
 		}
-		arena.FreeT(u32)
+		arena.Free(u32)
 	} else {
 		for i := range c.Len() {
 			if !set.Contains(uint64(T(c.unpack(c.Packed, i)) + c.For)) {

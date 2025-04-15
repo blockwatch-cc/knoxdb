@@ -51,9 +51,9 @@ func DecodeInt32(dst []int32, buf []byte) (int, error) {
 // to be present.
 func ReadUint32(dst []uint32, r io.Reader) (int, int64, error) {
 	// assume max length of encoded data
-	scratch := arena.Alloc(arena.AllocBytes, Int32EncodedSize(cap(dst)))
-	defer arena.Free(arena.AllocBytes, scratch)
-	b := bytes.NewBuffer(scratch.([]byte)[:0])
+	scratch := arena.AllocBytes(Int32EncodedSize(cap(dst)))
+	defer arena.Free(scratch)
+	b := bytes.NewBuffer(scratch)
 	_, err := io.Copy(b, r)
 	if err != nil {
 		return 0, 0, err

@@ -57,7 +57,7 @@ func buildDictGeneric[T Integer](vals []T, numUnique int) ([]T, []uint16) {
 	}
 
 	// Step 2: Extract unique keys
-	dict := arena.AllocT[T](safeDictLen(numUnique))
+	dict := arena.Alloc[T](safeDictLen(numUnique))
 	for i, v := range table.codes {
 		if v != HASH_MASK {
 			dict = append(dict, table.keys[i])
@@ -79,7 +79,7 @@ func buildDictGeneric[T Integer](vals []T, numUnique int) ([]T, []uint16) {
 	}
 
 	// Step 4: encode values
-	codes := arena.AllocT[uint16](len(vals))[:len(vals)]
+	codes := arena.Alloc[uint16](len(vals))[:len(vals)]
 	for i, v := range vals {
 		h := table.hash16(uint64(v))
 		var p uint16

@@ -329,7 +329,7 @@ func (j *Journal) Query(node *query.FilterTreeNode, snap *types.Snapshot) *Resul
 	bits := bitset.NewBitset(j.maxsz)
 
 	// scratch space for bitset indexes
-	hits := arena.Alloc(arena.AllocUint32, j.maxsz).([]uint32)
+	hits := arena.AllocUint32(j.maxsz)
 
 	// Walk segments in LIFO order starting at active segment, this ensures we
 	// find the most recent visible update of a primary key first. We will then
@@ -363,7 +363,7 @@ func (j *Journal) Query(node *query.FilterTreeNode, snap *types.Snapshot) *Resul
 	}
 
 	// free scratch
-	arena.Free(arena.AllocUint32, hits[:0])
+	arena.Free(hits[:0])
 	bits.Close()
 
 	return res

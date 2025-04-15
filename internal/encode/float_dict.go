@@ -94,14 +94,14 @@ func (c *FloatDictionaryContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl
 	c.Dict = EncodeFloat(vctx, dict, lvl-1)
 	vctx.Close()
 	if c.Dict.Type() != TFloatRaw {
-		arena.FreeT(dict)
+		arena.Free(dict)
 	}
 
 	cctx := AnalyzeInt(codes, false)
 	c.Codes = EncodeInt(cctx, codes, lvl-1)
 	cctx.Close()
 	if c.Codes.Type() != TIntegerRaw {
-		arena.Free(arena.AllocUint16, codes)
+		arena.Free(codes)
 	}
 
 	return c

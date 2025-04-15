@@ -31,13 +31,13 @@ func (c *Simple8Container[T]) Info() string {
 
 func (c *Simple8Container[T]) Close() {
 	if c.free {
-		arena.Free(arena.AllocBytes, c.Packed)
+		arena.Free(c.Packed)
 		c.free = false
 	}
 	c.Packed = nil
 	if c.Unpacked != nil {
 		// FIXME: returns uint to int pools (problem?)
-		arena.FreeT(c.Unpacked)
+		arena.Free(c.Unpacked)
 		c.Unpacked = nil
 	}
 	putSimple8Container[T](c)
@@ -109,7 +109,7 @@ func (c *Simple8Container[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) 
 	c.typ = BlockType[T]()
 
 	sz := s8b.EstimateMaxSize(len(vals), ctx.Min, ctx.Max) * 8
-	buf := arena.Alloc(arena.AllocBytes, sz).([]byte)[:sz]
+	buf := arena.AllocBytes(sz)[:sz]
 	var err error
 	switch c.typ {
 	case types.BlockInt64:
@@ -154,19 +154,19 @@ func (c *Simple8Container[T]) decodeAll() {
 	var err error
 	switch c.typ {
 	case types.BlockInt64, types.BlockUint64:
-		u64 := arena.AllocT[uint64](n)[:n]
+		u64 := arena.Alloc[uint64](n)[:n]
 		n, err = s8b.DecodeUint64(u64, c.Packed)
 		c.Unpacked = util.ReinterpretSlice[uint64, T](u64[:n])
 	case types.BlockInt32, types.BlockUint32:
-		u32 := arena.AllocT[uint32](n)[:n]
+		u32 := arena.Alloc[uint32](n)[:n]
 		n, err = s8b.DecodeUint32(u32, c.Packed)
 		c.Unpacked = util.ReinterpretSlice[uint32, T](u32[:n])
 	case types.BlockInt16, types.BlockUint16:
-		u16 := arena.AllocT[uint16](n)[:n]
+		u16 := arena.Alloc[uint16](n)[:n]
 		n, err = s8b.DecodeUint16(u16, c.Packed)
 		c.Unpacked = util.ReinterpretSlice[uint16, T](u16[:n])
 	case types.BlockInt8, types.BlockUint8:
-		u8 := arena.AllocT[uint8](n)[:n]
+		u8 := arena.Alloc[uint8](n)[:n]
 		n, err = s8b.DecodeUint8(u8, c.Packed)
 		c.Unpacked = util.ReinterpretSlice[uint8, T](u8[:n])
 	}
@@ -443,14 +443,14 @@ func (c *Simple8Container[T]) MatchSet(s any, bits, mask *Bitset) *Bitset {
 	set := s.(*xroar.Bitmap)
 	if mask != nil {
 		// only process values from mask
-		u32 := arena.AllocT[uint32](mask.Count())
+		u32 := arena.Alloc[uint32](mask.Count())
 		for _, k := range mask.Indexes(u32) {
 			i := int(k)
 			if set.Contains(uint64(c.Unpacked[i] + c.For)) {
 				bits.Set(i)
 			}
 		}
-		arena.FreeT(u32)
+		arena.Free(u32)
 	} else {
 		for i, v := range c.Unpacked {
 			if set.Contains(uint64(v + c.For)) {
@@ -470,14 +470,14 @@ func (c *Simple8Container[T]) MatchNotSet(s any, bits, mask *Bitset) *Bitset {
 	set := s.(*xroar.Bitmap)
 	if mask != nil {
 		// only process values from mask
-		u32 := arena.AllocT[uint32](mask.Count())
+		u32 := arena.Alloc[uint32](mask.Count())
 		for _, k := range mask.Indexes(u32) {
 			i := int(k)
 			if !set.Contains(uint64(c.Unpacked[i] + c.For)) {
 				bits.Set(i)
 			}
 		}
-		arena.FreeT(u32)
+		arena.Free(u32)
 	} else {
 		for i, v := range c.Unpacked {
 			if !set.Contains(uint64(v + c.For)) {

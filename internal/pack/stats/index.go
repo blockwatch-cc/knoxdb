@@ -860,7 +860,7 @@ func (idx *Index) Query(ctx context.Context, flt *query.FilterTreeNode, dir type
 		use:     use,
 		smatch:  nodeBits,
 		vmatch:  bitset.NewBitset(STATS_PACK_SIZE),
-		match:   arena.Alloc(arena.AllocUint32, STATS_PACK_SIZE).([]uint32)[:0],
+		match:   arena.AllocUint32(STATS_PACK_SIZE),
 		sx:      -1, // start at first bit (it will +1)
 		n:       -1, // start at first offset (it will +1)
 		reverse: dir.IsReverse(),

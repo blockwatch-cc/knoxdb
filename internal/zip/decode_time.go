@@ -63,9 +63,9 @@ func decodeTime(dst []int64, buf []byte) (int, error) {
 // to be present.
 func ReadTime(dst []int64, r io.Reader) (int, int64, error) {
 	// assume max length of encoded data
-	scratch := arena.Alloc(arena.AllocBytes, TimeEncodedSize(cap(dst)))
-	defer arena.Free(arena.AllocBytes, scratch)
-	b := bytes.NewBuffer(scratch.([]byte)[:0])
+	scratch := arena.AllocBytes(TimeEncodedSize(cap(dst)))
+	defer arena.Free(scratch)
+	b := bytes.NewBuffer(scratch)
 	_, err := io.Copy(b, r)
 	if err != nil {
 		return 0, 0, err

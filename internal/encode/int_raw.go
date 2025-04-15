@@ -301,14 +301,14 @@ func (c *RawContainer[T]) MatchSet(s any, bits, mask *Bitset) *Bitset {
 	set := s.(*xroar.Bitmap)
 	if mask != nil {
 		// only process values from mask
-		u32 := arena.AllocT[uint32](mask.Count())
+		u32 := arena.Alloc[uint32](mask.Count())
 		for _, k := range mask.Indexes(u32) {
 			i := int(k)
 			if set.Contains(uint64(c.Values[i])) {
 				bits.Set(i)
 			}
 		}
-		arena.FreeT(u32)
+		arena.Free(u32)
 	} else {
 		for i, v := range c.Values {
 			if set.Contains(uint64(v)) {
@@ -324,14 +324,14 @@ func (c *RawContainer[T]) MatchNotSet(s any, bits, mask *Bitset) *Bitset {
 	set := s.(*xroar.Bitmap)
 	if mask != nil {
 		// only process values from mask
-		u32 := arena.AllocT[uint32](mask.Count())
+		u32 := arena.Alloc[uint32](mask.Count())
 		for _, k := range mask.Indexes(u32) {
 			i := int(k)
 			if !set.Contains(uint64(c.Values[i])) {
 				bits.Set(i)
 			}
 		}
-		arena.FreeT(u32)
+		arena.Free(u32)
 	} else {
 		for i, v := range c.Values {
 			if !set.Contains(uint64(v)) {

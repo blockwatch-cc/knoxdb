@@ -22,7 +22,7 @@ func BenchmarkAlp_CompressFloat64(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(c.N * 8))
 			for range b.N {
-				enc := NewEncoder[float64]().Compress(src)
+				enc := NewEncoder[float64]().Encode(src)
 				exn += len(enc.State().Exceptions)
 				n += c.N
 				r++
@@ -43,7 +43,7 @@ func BenchmarkAlp_CompressFloat32(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(c.N * 4))
 			for range b.N {
-				enc := NewEncoder[float32]().Compress(src)
+				enc := NewEncoder[float32]().Encode(src)
 				exn += len(enc.State().Exceptions)
 				n += c.N
 				r++
@@ -58,7 +58,7 @@ func BenchmarkAlp_CompressFloat32(b *testing.B) {
 func BenchmarkAlp_DecompressFloat64(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		src := tests.GenRndBits[float64](c.N, 24)
-		enc := NewEncoder[float64]().Compress(src)
+		enc := NewEncoder[float64]().Encode(src)
 		e := enc.State()
 		out := make([]float64, c.N)
 		dec := NewDecoder[float64](e.Encoding.F, e.Encoding.E).
@@ -66,7 +66,7 @@ func BenchmarkAlp_DecompressFloat64(b *testing.B) {
 		b.Run(c.Name, func(b *testing.B) {
 			b.SetBytes(int64(c.N * 8))
 			for range b.N {
-				dec.Decompress(out, e.Integers)
+				dec.Decode(out, e.Integers)
 			}
 		})
 	}
@@ -75,7 +75,7 @@ func BenchmarkAlp_DecompressFloat64(b *testing.B) {
 func BenchmarkAlp_DecompressFloat32(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		src := tests.GenRndBits[float32](c.N, 12)
-		enc := NewEncoder[float32]().Compress(src)
+		enc := NewEncoder[float32]().Encode(src)
 		e := enc.State()
 		out := make([]float32, c.N)
 		dec := NewDecoder[float32](e.Encoding.F, e.Encoding.E).
@@ -83,7 +83,7 @@ func BenchmarkAlp_DecompressFloat32(b *testing.B) {
 		b.Run(c.Name, func(b *testing.B) {
 			b.SetBytes(int64(c.N * 4))
 			for range b.N {
-				dec.Decompress(out, e.Integers)
+				dec.Decode(out, e.Integers)
 			}
 		})
 	}

@@ -28,7 +28,7 @@ type Bitset struct {
 func NewBitset(size int) *Bitset {
 	sz := bitFieldLen(size)
 	s := bitsetPool.Get().(*Bitset)
-	s.buf = arena.Alloc(arena.AllocBytes, sz).([]byte)[:sz]
+	s.buf = arena.AllocBytes(sz)[:sz]
 	clear(s.buf)
 	s.cnt = 0
 	s.size = size
@@ -115,10 +115,10 @@ func (s *Bitset) Copy(b *Bitset) *Bitset {
 	}
 	if cap(s.buf) < len(b.buf) {
 		if !s.noclose {
-			arena.Free(arena.AllocBytes, s.buf)
+			arena.Free(s.buf)
 			s.noclose = false
 		}
-		s.buf = arena.Alloc(arena.AllocBytes, len(b.buf)).([]byte)[:len(b.buf)]
+		s.buf = arena.AllocBytes(len(b.buf))[:len(b.buf)]
 	}
 	s.size = b.size
 	s.buf = s.buf[:len(b.buf)]
@@ -142,10 +142,10 @@ func (s *Bitset) Resize(size int) *Bitset {
 	}
 	sz := bitFieldLen(size)
 	if s.buf == nil || cap(s.buf) < sz {
-		buf := arena.Alloc(arena.AllocBytes, sz).([]byte)[:sz]
+		buf := arena.AllocBytes(sz)[:sz]
 		copy(buf, s.buf)
 		if !s.noclose {
-			arena.Free(arena.AllocBytes, s.buf)
+			arena.Free(s.buf)
 			s.noclose = false
 		}
 		s.buf = buf
@@ -192,7 +192,7 @@ func (s *Bitset) Close() {
 		return
 	}
 	if !s.noclose {
-		arena.Free(arena.AllocBytes, s.buf)
+		arena.Free(s.buf)
 		s.noclose = false
 	}
 	s.buf = nil
@@ -366,10 +366,10 @@ func (s *Bitset) SetFromBytes(buf []byte, size int, reverse bool) *Bitset {
 	l := bitFieldLen(size)
 	if cap(s.buf) < l {
 		if !s.noclose {
-			arena.Free(arena.AllocBytes, s.buf)
+			arena.Free(s.buf)
 			s.noclose = false
 		}
-		s.buf = arena.Alloc(arena.AllocBytes, l).([]byte)[:l]
+		s.buf = arena.AllocBytes(l)[:l]
 	} else if s.size > size && s.cnt >= 0 {
 		s.cnt = -1
 		clear(s.buf[size>>3:])

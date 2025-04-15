@@ -88,8 +88,8 @@ func EncodeInt128(src num.Int128Stride, w io.Writer) (int, error) {
 	}
 
 	// prepare scratch space for each stride of int64 data
-	scratch := arena.Alloc(arena.AllocBytes, Int64EncodedSize(src.Len()))
-	buf := bytes.NewBuffer(scratch.([]byte)[:0])
+	scratch := arena.AllocBytes(Int64EncodedSize(src.Len()))
+	buf := bytes.NewBuffer(scratch)
 
 	// write int128 as 2x int64 strides
 	n, err := EncodeUint64(asU64(src.X0), buf)
@@ -120,7 +120,7 @@ func EncodeInt128(src num.Int128Stride, w io.Writer) (int, error) {
 	n += m
 
 	// release scratch buffer
-	arena.Free(arena.AllocBytes, scratch)
+	arena.Free(scratch)
 
 	return n, err
 }
@@ -131,8 +131,8 @@ func EncodeInt256(src num.Int256Stride, w io.Writer) (int, error) {
 	}
 
 	// prepare scratch space for each stride of int64 data
-	scratch := arena.Alloc(arena.AllocBytes, Int64EncodedSize(src.Len()))
-	buf := bytes.NewBuffer(scratch.([]byte)[:0])
+	scratch := arena.AllocBytes(Int64EncodedSize(src.Len()))
+	buf := bytes.NewBuffer(scratch)
 
 	// write int256 as 4x int64 strides
 	n, err := EncodeUint64(asU64(src.X0), buf)
@@ -167,7 +167,7 @@ func EncodeInt256(src num.Int256Stride, w io.Writer) (int, error) {
 	}
 
 	// release scratch buffer
-	arena.Free(arena.AllocBytes, scratch)
+	arena.Free(scratch)
 
 	return n, nil
 
@@ -183,9 +183,8 @@ func EncodeUint64(src []uint64, w io.Writer) (int, error) {
 	}
 
 	// alloc scratch space for in-place encoders
-	buf := arena.Alloc(arena.AllocUint64, len(src))
-	scratch := buf.([]uint64)[:len(src)]
-	defer arena.Free(arena.AllocUint64, buf)
+	scratch := arena.AllocUint64(len(src))[:len(src)]
+	defer arena.Free(scratch)
 
 	// zzdelta writes to uint64 required by simple8b encoder
 	maxdelta := zzDeltaEncodeUint64(scratch, src)
@@ -219,9 +218,8 @@ func EncodeUint32(src []uint32, w io.Writer) (int, error) {
 	}
 
 	// alloc scratch space for in-place encoders
-	buf := arena.Alloc(arena.AllocUint64, len(src))
-	scratch := buf.([]uint64)[:len(src)]
-	defer arena.Free(arena.AllocUint64, buf)
+	scratch := arena.AllocUint64(len(src))[:len(src)]
+	defer arena.Free(scratch)
 
 	// zzdelta writes to uint64 required by simple8b encoder
 	maxdelta := zzDeltaEncodeUint32(scratch, src)
@@ -255,9 +253,8 @@ func EncodeUint16(src []uint16, w io.Writer) (int, error) {
 	}
 
 	// alloc scratch space for in-place encoders
-	buf := arena.Alloc(arena.AllocUint64, len(src))
-	scratch := buf.([]uint64)[:len(src)]
-	defer arena.Free(arena.AllocUint64, buf)
+	scratch := arena.AllocUint64(len(src))[:len(src)]
+	defer arena.Free(scratch)
 
 	// zzdelta writes to uint64 required by simple8b encoder
 	maxdelta := zzDeltaEncodeUint16(scratch, src)
@@ -291,9 +288,8 @@ func EncodeUint8(src []uint8, w io.Writer) (int, error) {
 	}
 
 	// alloc scratch space for in-place encoders
-	buf := arena.Alloc(arena.AllocUint64, len(src))
-	scratch := buf.([]uint64)[:len(src)]
-	defer arena.Free(arena.AllocUint64, buf)
+	scratch := arena.AllocUint64(len(src))[:len(src)]
+	defer arena.Free(scratch)
 
 	// zzdelta writes to uint64 required by simple8b encoder
 	zzDeltaEncodeUint8(scratch, src)

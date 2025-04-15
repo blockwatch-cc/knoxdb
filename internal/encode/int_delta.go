@@ -310,14 +310,14 @@ func (c *DeltaContainer[T]) MatchSet(s any, bits, mask *Bitset) *Bitset {
 
 	if mask != nil {
 		// only process values from mask
-		u32 := arena.AllocT[uint32](mask.Count())
+		u32 := arena.Alloc[uint32](mask.Count())
 		for _, k := range mask.Indexes(u32) {
 			i := int(k)
 			if set.Contains(uint64(c.Delta*T(i) + c.For)) {
 				bits.Set(i)
 			}
 		}
-		arena.FreeT(u32)
+		arena.Free(u32)
 	} else {
 		val := c.For
 		for i := range c.N {
@@ -336,14 +336,14 @@ func (c *DeltaContainer[T]) MatchNotSet(s any, bits, mask *Bitset) *Bitset {
 
 	if mask != nil {
 		// only process values from mask
-		u32 := arena.AllocT[uint32](mask.Count())
+		u32 := arena.Alloc[uint32](mask.Count())
 		for _, k := range mask.Indexes(u32) {
 			i := int(k)
 			if !set.Contains(uint64(c.Delta*T(i) + c.For)) {
 				bits.Set(i)
 			}
 		}
-		arena.FreeT(u32)
+		arena.Free(u32)
 	} else {
 		val := c.For
 		for i := range c.N {

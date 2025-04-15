@@ -240,7 +240,7 @@ func NewScanIterator(idx *Index, node *query.FilterTreeNode, useCache bool) *Sca
 	return &ScanIterator{
 		node:     node,
 		idx:      idx,
-		hits:     arena.Alloc(arena.AllocUint32, idx.opts.PackSize).([]uint32),
+		hits:     arena.AllocUint32(idx.opts.PackSize),
 		bits:     bitset.NewBitset(idx.opts.PackSize),
 		useCache: useCache,
 	}
@@ -321,7 +321,7 @@ func (it *ScanIterator) Close() {
 		it.tx.Rollback()
 		it.tx = nil
 	}
-	arena.Free(arena.AllocUint32, it.hits[:0])
+	arena.Free(it.hits[:0])
 	it.bits.Close()
 	it.bits = nil
 	it.pack = nil

@@ -161,9 +161,9 @@ func (a *CompactByteArray) WriteTo(w io.Writer) (int64, error) {
 	count += 4
 
 	// use scratch buffer
-	scratch := arena.Alloc(arena.AllocBytes, zip.Int32EncodedSize(len(a.offs)))
-	defer arena.Free(arena.AllocBytes, scratch)
-	buf := bytes.NewBuffer(scratch.([]byte)[:0])
+	scratch := arena.AllocBytes(zip.Int32EncodedSize(len(a.offs)))
+	defer arena.Free(scratch)
+	buf := bytes.NewBuffer(scratch)
 
 	// prepare and write offsets
 	olen, err := zip.EncodeInt32(a.offs, buf)
@@ -247,9 +247,9 @@ func (a *CompactByteArray) ReadFrom(r io.Reader) (int64, error) {
 	c += 4
 
 	// alloc scratch space large enough for offs and size encoded data
-	scratch := arena.Alloc(arena.AllocBytes, zip.Int32EncodedSize(int(l)))
-	defer arena.Free(arena.AllocBytes, scratch)
-	buf := scratch.([]byte)[:int(l)]
+	scratch := arena.AllocBytes(zip.Int32EncodedSize(int(l)))
+	defer arena.Free(scratch)
+	buf := scratch[:int(l)]
 
 	// read offs encoded data
 	n, err := io.ReadFull(r, buf)

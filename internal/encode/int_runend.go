@@ -122,8 +122,8 @@ func (c *RunEndContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 
 func (c *RunEndContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) IntegerContainer[T] {
 	// generate run-end encoding from originals, Min-FOR is done by values child
-	values := arena.AllocT[T](ctx.NumRuns)[:ctx.NumRuns]
-	ends := arena.AllocT[uint32](ctx.NumRuns)[:ctx.NumRuns]
+	values := arena.Alloc[T](ctx.NumRuns)[:ctx.NumRuns]
+	ends := arena.Alloc[uint32](ctx.NumRuns)[:ctx.NumRuns]
 	values[0] = vals[0]
 	var (
 		n uint32
@@ -146,14 +146,14 @@ func (c *RunEndContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) I
 	c.Values = EncodeInt(vctx, values, lvl-1)
 	vctx.Close()
 	if c.Values.Type() != TIntegerRaw {
-		arena.FreeT(values)
+		arena.Free(values)
 	}
 
 	ectx := AnalyzeInt(ends, false)
 	c.Ends = EncodeInt(ectx, ends, lvl-1)
 	ectx.Close()
 	if c.Ends.Type() != TIntegerRaw {
-		arena.FreeT(ends)
+		arena.Free(ends)
 	}
 
 	return c
@@ -242,7 +242,7 @@ func (c *RunEndContainer[T]) applyMatch(bits, vbits *Bitset) {
 	}
 
 	// handle value matches by unpacking range boundaries
-	u32 := arena.AllocT[uint32](vbits.Count())
+	u32 := arena.Alloc[uint32](vbits.Count())
 	for _, k := range vbits.Indexes(u32) {
 		var start uint32
 		if k > 0 {
@@ -251,7 +251,7 @@ func (c *RunEndContainer[T]) applyMatch(bits, vbits *Bitset) {
 		end := c.Ends.Get(int(k))
 		bits.SetRange(int(start), int(end))
 	}
-	arena.FreeT(u32)
+	arena.Free(u32)
 }
 
 type RunEndFactory struct {

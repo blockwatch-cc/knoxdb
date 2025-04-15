@@ -2,9 +2,9 @@ package encode
 
 import (
 	"fmt"
+	"slices"
 	"sync"
 
-	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/encode/alp"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
@@ -20,15 +20,15 @@ const (
 
 // TFloatAlp
 type FloatAlpContainer[T types.Float] struct {
-	Exponent     uint8
-	Factor       uint8
 	Values       IntegerContainer[int64]
 	Exception    FloatContainer[T]
 	Positions    IntegerContainer[uint32]
-	decoded      []T
+	Exponent     uint8
+	Factor       uint8
 	hasException bool
 	exceptions   map[uint32]T
 	dec          *alp.Decoder[T]
+	chunk        [CHUNK_SIZE]int64
 }
 
 func (c *FloatAlpContainer[T]) Info() string {
@@ -42,10 +42,6 @@ func (c *FloatAlpContainer[T]) Info() string {
 }
 
 func (c *FloatAlpContainer[T]) Close() {
-	if c.decoded != nil {
-		arena.FreeT(c.decoded)
-		c.decoded = nil
-	}
 	c.Values.Close()
 	if c.hasException {
 		c.Exception.Close()
@@ -173,7 +169,7 @@ func (c *FloatAlpContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int) F
 	if enc == nil {
 		enc = alp.NewEncoder[T]()
 	}
-	enc.Compress(vals)
+	enc.Encode(vals)
 	s := enc.State()
 
 	c.Exponent = s.Encoding.E
@@ -188,11 +184,19 @@ func (c *FloatAlpContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int) F
 		ectx := AnalyzeInt(s.Positions, false)
 		c.Positions = EncodeInt(ectx, s.Positions, lvl-1)
 		ectx.Close()
+		c.dec.WithExceptions(slices.Clone(s.Exceptions), slices.Clone(s.Positions))
 	}
 	enc.Close()
 	ctx.AlpEncoder = nil
 
 	return c
+}
+
+const CHUNK_SIZE = 128
+
+func (c *FloatAlpContainer[T]) DecodeChunk(dst *[CHUNK_SIZE]T, ofs int) {
+	// c.Values.DecodeChunk(&c.chunk, ofs)
+	// c.dec.DecodeChunk(dst, &c.chunk, ofs)
 }
 
 // func (c *FloatAlpContainer[T]) decodeAll() error {
