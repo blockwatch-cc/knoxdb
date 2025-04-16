@@ -236,8 +236,11 @@ func createBenchmarkConfig(dataset string, encoders []string) fcbench.BenchmarkC
 		}
 	case "observation":
 		cfg.HDRConfig = fcbench.HDRImageConfig{
-			Width: 1000, Height: 1000, Hotspots: 10,
-			BaseLevel: 0.1, MaxLevel: 10.0,
+			Width:     1000,
+			Height:    1000,
+			Hotspots:  50,
+			BaseLevel: 0.1,
+			MaxLevel:  10.0,
 		}
 	case "transaction":
 		cfg.TPCConfig = fcbench.TPCConfig{

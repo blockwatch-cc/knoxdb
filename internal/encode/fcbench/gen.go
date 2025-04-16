@@ -245,7 +245,8 @@ func GenerateHDRImage(cfg HDRImageConfig) [][]float64 {
 	for y := range img {
 		img[y] = make([]float64, cfg.Width)
 		for x := range img[y] {
-			img[y][x] = cfg.BaseLevel
+			// Add Gaussian noise (σ=0.01) to base level
+			img[y][x] = cfg.BaseLevel + rand.NormFloat64()*0.01
 		}
 	}
 	for i := 0; i < cfg.Hotspots; i++ {
