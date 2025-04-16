@@ -9,7 +9,6 @@ package fcbench
 
 import (
 	"fmt"
-	"log"
 	"math/rand"
 	"path/filepath"
 	"reflect"
@@ -21,90 +20,52 @@ import (
 )
 
 // Encoder defines the interface for KnoxDB encoders.
-type Encoder interface {
-	EncodeInt(v []int64) (int, error)
-	EncodeFloat(v []float64) (int, error)
-	Info() string
-}
-
-// encoderStruct wraps KnoxDB encoders, implementing the Encoder interface.
-type encoderStruct struct {
+type Encoder struct {
 	ienc encode.IntegerContainer[int64]
-	fenc encode.FloatContainer[float64]
+	info string
 }
 
-func (w *encoderStruct) EncodeInt(v []int64) (int, error) {
-	if w.ienc == nil {
+func (e *Encoder) EncodeInt(v []int64) (int, error) {
+	if e.ienc == nil {
 		return 0, fmt.Errorf("encoder: EncodeInt: integer encoder not supported")
 	}
-	ctx := encode.AnalyzeInt(v, true)
-	w.ienc.Encode(ctx, v, encode.MAX_CASCADE)
+	ctx := encode.AnalyzeInt(v, e.ienc.Type() == encode.TIntegerDictionary)
+	e.ienc.Encode(ctx, v, encode.MAX_CASCADE)
+	e.info = e.ienc.Info()
 	ctx.Close()
-	return w.ienc.MaxSize(), nil
+	return e.ienc.MaxSize(), nil
 }
 
-func (w *encoderStruct) EncodeFloat(v []float64) (int, error) {
-	if w.fenc == nil {
-		return 0, fmt.Errorf("encoder: EncodeFloat: float encoder not supported")
+func (e *Encoder) EncodeFloat(v []float64) (int, error) {
+	if len(v) == 0 {
+		return 0, nil
 	}
-	ctx := encode.AnalyzeFloat(v, true, true)
-	fenc := w.fenc
-	if ctx.AlpEncoder != nil {
-		switch ctx.AlpEncoder.State().Scheme {
-		case alp.AlpScheme:
-			fenc = encode.NewFloat[float64](encode.TFloatAlp)
-		case alp.AlpRdScheme:
-			fenc = encode.NewFloat[float64](encode.TFloatAlpRd)
-		}
+	// always create a new ALP encoder
+	ctx := encode.AnalyzeFloat(v, false, true)
+
+	// ensure internal ALP encoder exists (noyt initialized for constant data min=max)
+	if ctx.AlpEncoder == nil {
+		ctx.AlpEncoder = alp.NewEncoder[float64]().Analyze(v)
 	}
-	fenc.Encode(ctx, v, encode.MAX_CASCADE)
-	maxSize := fenc.MaxSize()
+
+	// select encoder based on detected scheme
+	var enc encode.FloatContainer[float64]
+	switch ctx.AlpEncoder.State().Scheme {
+	case alp.AlpScheme:
+		enc = encode.NewFloat[float64](encode.TFloatAlp)
+	case alp.AlpRdScheme:
+		enc = encode.NewFloat[float64](encode.TFloatAlpRd)
+	}
+	enc.Encode(ctx, v, encode.MAX_CASCADE)
+	maxSize := enc.MaxSize()
+	e.info = enc.Info()
+	enc.Close()
 	ctx.Close()
-	fenc.Close()
 	return maxSize, nil
 }
 
-func (w *encoderStruct) Info() string {
-	defer func() {
-		if r := recover(); r != nil {
-			log.Printf("Warning: Recovered from panic in Info(): %v\n", r)
-		}
-	}()
-	if w.ienc != nil {
-		if info := w.ienc.Info; info != nil {
-			var result string
-			var err interface{}
-			func() {
-				defer func() {
-					err = recover()
-				}()
-				result = info()
-			}()
-			if err == nil {
-				return result
-			}
-			return fmt.Sprintf("Integer encoder (%T) - Info() call failed", w.ienc)
-		}
-		return fmt.Sprintf("Integer encoder (%T)", w.ienc)
-	}
-	if w.fenc != nil {
-		if info := w.fenc.Info; info != nil {
-			var result string
-			var err interface{}
-			func() {
-				defer func() {
-					err = recover()
-				}()
-				result = info()
-			}()
-			if err == nil {
-				return result
-			}
-			return fmt.Sprintf("Float encoder (%T) - Info() call failed", w.fenc)
-		}
-		return fmt.Sprintf("Float encoder (%T)", w.fenc)
-	}
-	return "Unknown encoder configuration"
+func (e *Encoder) Info() string {
+	return e.info
 }
 
 // getEncoder retrieves an encoder instance by name.
@@ -118,22 +79,20 @@ func (w *encoderStruct) Info() string {
 //   - "alprd": ALP-RD floating point
 //
 // Returns an error if the requested encoder is not supported.
-func getEncoder(name string) (*encoderStruct, error) {
+func getEncoder(name string) (*Encoder, error) {
 	switch name {
 	case "delta":
-		return &encoderStruct{ienc: encode.NewInt[int64](encode.TIntegerDelta)}, nil
+		return &Encoder{ienc: encode.NewInt[int64](encode.TIntegerDelta)}, nil
 	case "run":
-		return &encoderStruct{ienc: encode.NewInt[int64](encode.TIntegerRunEnd)}, nil
+		return &Encoder{ienc: encode.NewInt[int64](encode.TIntegerRunEnd)}, nil
 	case "bp":
-		return &encoderStruct{ienc: encode.NewInt[int64](encode.TIntegerBitpacked)}, nil
+		return &Encoder{ienc: encode.NewInt[int64](encode.TIntegerBitpacked)}, nil
 	case "dict":
-		return &encoderStruct{ienc: encode.NewInt[int64](encode.TIntegerDictionary)}, nil
+		return &Encoder{ienc: encode.NewInt[int64](encode.TIntegerDictionary)}, nil
 	case "s8":
-		return &encoderStruct{ienc: encode.NewInt[int64](encode.TIntegerSimple8)}, nil
+		return &Encoder{ienc: encode.NewInt[int64](encode.TIntegerSimple8)}, nil
 	case "alp":
-		return &encoderStruct{fenc: encode.NewFloat[float64](encode.TFloatAlp)}, nil
-	case "alprd":
-		return &encoderStruct{fenc: encode.NewFloat[float64](encode.TFloatAlpRd)}, nil
+		return &Encoder{}, nil
 	default:
 		return nil, fmt.Errorf("getEncoder: unknown encoder: %s", name)
 	}
@@ -225,7 +184,6 @@ func RunBenchmarks(cfg BenchmarkConfig) ([]BenchmarkResult, error) {
 		if err != nil {
 			return nil, fmt.Errorf("RunBenchmarks: failed to get encoder %s: %w", encName, err)
 		}
-		encInfo := enc.Info()
 		for _, vecLen := range cfg.VectorLengths {
 			for rep := 0; rep < cfg.Repeat; rep++ {
 				var intData []int64
@@ -248,9 +206,9 @@ func RunBenchmarks(cfg BenchmarkConfig) ([]BenchmarkResult, error) {
 				}
 				var result BenchmarkResult
 				if len(intData) > 0 {
-					result, err = benchmarkIntEncoder(enc, encName, encInfo, intData, vecLen, cfg.DatasetType)
+					result, err = benchmarkIntEncoder(enc, encName, intData, vecLen, cfg.DatasetType)
 				} else {
-					result, err = benchmarkFloatEncoder(enc, encName, encInfo, floatData, vecLen, cfg.DatasetType)
+					result, err = benchmarkFloatEncoder(enc, encName, floatData, vecLen, cfg.DatasetType)
 				}
 				if err != nil {
 					return nil, fmt.Errorf("RunBenchmarks: failed to benchmark encoder %s: %w", encName, err)
@@ -382,13 +340,12 @@ func sliceTPCData(data []TransactionRow, vecLen, maxSize int) ([]int64, error) {
 
 // benchmarkIntEncoder runs a benchmark on an int64 vector using the specified encoder.
 // It measures encoding time, compression ratio, and throughput in values per second.
-func benchmarkIntEncoder(enc Encoder, encName, encInfo string, data []int64, vecLen int, datasetType string) (BenchmarkResult, error) {
+func benchmarkIntEncoder(enc *Encoder, encName string, data []int64, vecLen int, datasetType string) (BenchmarkResult, error) {
 	result := BenchmarkResult{
-		DatasetType:   datasetType,
-		EncoderName:   encName,
-		VectorLength:  vecLen,
-		EncoderConfig: encInfo,
-		Timestamp:     time.Now().Format("2006-01-02 15:04:05"),
+		DatasetType:  datasetType,
+		EncoderName:  encName,
+		VectorLength: vecLen,
+		Timestamp:    time.Now().Format("2006-01-02 15:04:05"),
 	}
 	start := time.Now()
 	for i := 0; i < len(data); i += vecLen {
@@ -398,6 +355,7 @@ func benchmarkIntEncoder(enc Encoder, encName, encInfo string, data []int64, vec
 			return result, fmt.Errorf("benchmarkIntEncoder: encode error: %w", err)
 		}
 		result.CompressedSize += int64(sz)
+		result.EncoderConfig = enc.Info()
 	}
 	encodeDuration := time.Since(start)
 	result.EncodeTimeNs = encodeDuration.Nanoseconds()
@@ -413,13 +371,12 @@ func benchmarkIntEncoder(enc Encoder, encName, encInfo string, data []int64, vec
 
 // benchmarkFloatEncoder runs a benchmark on a float64 vector using the specified encoder.
 // It measures encoding time, compression ratio, and throughput in values per second.
-func benchmarkFloatEncoder(enc Encoder, encName, encInfo string, data []float64, vecLen int, datasetType string) (BenchmarkResult, error) {
+func benchmarkFloatEncoder(enc *Encoder, encName string, data []float64, vecLen int, datasetType string) (BenchmarkResult, error) {
 	result := BenchmarkResult{
-		DatasetType:   datasetType,
-		EncoderName:   encName,
-		VectorLength:  vecLen,
-		EncoderConfig: encInfo,
-		Timestamp:     time.Now().Format("2006-01-02 15:04:05"),
+		DatasetType:  datasetType,
+		EncoderName:  encName,
+		VectorLength: vecLen,
+		Timestamp:    time.Now().Format("2006-01-02 15:04:05"),
 	}
 	start := time.Now()
 	for i := 0; i < len(data); i += vecLen {
@@ -429,6 +386,7 @@ func benchmarkFloatEncoder(enc Encoder, encName, encInfo string, data []float64,
 			return result, fmt.Errorf("benchmarkFloatEncoder: encode error: %w", err)
 		}
 		result.CompressedSize += int64(sz)
+		result.EncoderConfig = enc.Info()
 	}
 	encodeDuration := time.Since(start)
 	result.EncodeTimeNs = encodeDuration.Nanoseconds()

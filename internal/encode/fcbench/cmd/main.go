@@ -15,7 +15,7 @@ import (
 
 // main is the entry point for the KnoxDB FCBench benchmarking tool.
 // Usage:
-//   - Default: Run recommended combinations (float encoders ["alp", "alprd"] on
+//   - Default: Run recommended combinations (float encoders ["alp"] on
 //     float datasets [timeseries, hpc, observation]; integer encoders
 //     ["delta", "run", "bp", "dict", "s8"] on transaction dataset).
 //   - --all: Run all 28 encoder-dataset combinations (4 datasets × 7 encoders),
@@ -35,7 +35,7 @@ func main() {
 	all := flag.Bool("all", false, "Run all encoder-dataset combinations (including incompatible ones)")
 	recommended := flag.Bool("recommended", false, "Run only recommended combinations (default)")
 	dataset := flag.String("dataset", "", "Run specific dataset(s): timeseries,hpc,observation,transaction (comma-separated)")
-	encoder := flag.String("encoder", "", "Run specific encoder(s): alp,alprd,delta,run,bp,dict,s8 (comma-separated)")
+	encoder := flag.String("encoder", "", "Run specific encoder(s): alp,delta,run,bp,dict,s8 (comma-separated)")
 	flag.Parse()
 
 	// Ensure output directory exists
@@ -61,7 +61,7 @@ func main() {
 // runAllCombinations runs every encoder-dataset combination, logging errors for incompatible pairs
 func runAllCombinations(datasets, encoders []string) {
 	allDatasets := []string{"timeseries", "hpc", "observation", "transaction"}
-	allEncoders := []string{"alp", "alprd", "delta", "run", "bp", "dict", "s8"}
+	allEncoders := []string{"alp", "delta", "run", "bp", "dict", "s8"}
 
 	// Filter datasets and encoders if specified
 	if len(datasets) > 0 && datasets[0] != "" {
@@ -115,7 +115,7 @@ func runAllCombinations(datasets, encoders []string) {
 // runSelectedCombinations runs user-specified encoder-dataset pairs
 func runSelectedCombinations(datasets, encoders []string) {
 	allDatasets := []string{"timeseries", "hpc", "observation", "transaction"}
-	allEncoders := []string{"alp", "alprd", "delta", "run", "bp", "dict", "s8"}
+	allEncoders := []string{"alp", "delta", "run", "bp", "dict", "s8"}
 
 	// Use all if none specified
 	if len(datasets) == 0 || datasets[0] == "" {
@@ -160,7 +160,7 @@ func runRecommendedBenchmarks() {
 
 	// Time Series with Float Encoders
 	log.Println("\n=== TIME SERIES WITH FLOAT ENCODERS ===")
-	if results, err := runBenchmark("timeseries", []string{"alp", "alprd"}); err != nil {
+	if results, err := runBenchmark("timeseries", []string{"alp"}); err != nil {
 		log.Printf("Time Series benchmark failed: %v\n", err)
 		failure++
 	} else {
@@ -170,7 +170,7 @@ func runRecommendedBenchmarks() {
 
 	// HPC with Float Encoders
 	log.Println("\n=== HPC WITH FLOAT ENCODERS ===")
-	if results, err := runBenchmark("hpc", []string{"alp", "alprd"}); err != nil {
+	if results, err := runBenchmark("hpc", []string{"alp"}); err != nil {
 		log.Printf("HPC benchmark failed: %v\n", err)
 		failure++
 	} else {
@@ -180,7 +180,7 @@ func runRecommendedBenchmarks() {
 
 	// Observation with Float Encoders
 	log.Println("\n=== OBSERVATION WITH FLOAT ENCODERS ===")
-	if results, err := runBenchmark("observation", []string{"alp", "alprd"}); err != nil {
+	if results, err := runBenchmark("observation", []string{"alp"}); err != nil {
 		log.Printf("Observation benchmark failed: %v\n", err)
 		failure++
 	} else {
