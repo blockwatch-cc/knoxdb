@@ -126,20 +126,14 @@ func AnalyzeInt[T types.Integer](vals []T, checkUnique bool) *IntegerContext[T] 
 }
 
 func (c *IntegerContext[T]) estimateCardinality(vals []T) int {
-	sz := 256 / (c.PhyBits / 8) // need 256 byte scratch space
-	if cap(c.UniqueArray) < sz {
-		c.UniqueArray = make([]T, sz)
-	}
-	c.UniqueArray = c.UniqueArray[:sz]
-	unique, _ := llb.NewFilterBuffer(util.ToByteSlice(c.UniqueArray), 8)
+	var scratch [256]byte // need 256 byte scratch space
+	unique, _ := llb.NewFilterBuffer(scratch[:], 8)
 	if c.PhyBits == 64 {
 		unique.AddMultiUint64(util.ReinterpretSlice[T, uint64](vals))
 	} else {
 		unique.AddMultiUint32(util.ReinterpretSlice[T, uint32](vals))
 	}
 	card := int(unique.Cardinality())
-	clear(c.UniqueArray)
-	c.UniqueArray = c.UniqueArray[:0]
 	return card
 }
 

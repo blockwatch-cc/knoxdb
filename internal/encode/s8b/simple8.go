@@ -72,7 +72,7 @@ func EstimateMaxSize[T types.Integer](srcLen int, minv, maxv T) int {
 	}
 
 	if log2 == 0 { // All values zero after min-FOR
-		return (srcLen+59)/60 + packRemainder(srcLen%60)
+		return (srcLen+59)/60 + packRemainder(srcLen%60) + 1
 	}
 
 	// Map to values per word
@@ -108,7 +108,7 @@ func EstimateMaxSize[T types.Integer](srcLen int, minv, maxv T) int {
 		valuesPerWord = 1
 	}
 
-	return (srcLen+valuesPerWord-1)/valuesPerWord + packRemainder(srcLen%valuesPerWord)
+	return (srcLen+valuesPerWord-1)/valuesPerWord + packRemainder(srcLen%valuesPerWord) + 1
 }
 
 func packRemainder(k int) (n int) {

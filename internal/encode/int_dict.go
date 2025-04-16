@@ -118,7 +118,7 @@ func (c *DictionaryContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl in
 
 func dictEncodeArray[T types.Integer](ctx *IntegerContext[T], vals []T) ([]T, []uint16) {
 	// cross-check we have the unique array initialized
-	if ctx.UniqueArray == nil {
+	if len(ctx.UniqueArray) == 0 {
 		ctx.NumUnique = ctx.buildUniqueArray(vals)
 	}
 
