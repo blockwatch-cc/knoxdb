@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package pack
+package bitpack
 
 import (
 	"encoding/binary"

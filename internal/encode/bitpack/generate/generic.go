@@ -16,7 +16,7 @@ const (
 )
 
 var (
-	Package string = "pack"
+	Package string = "bitpack"
 )
 
 type Data struct {
@@ -55,7 +55,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	cwd = filepath.Join(cwd, "internal", "encode", "bitpack", "new")
+	cwd = filepath.Join(cwd, "internal", "encode", "bitpack")
 
 	t, err := loadTemplate(filepath.Join(cwd, "generate", "generic.go.tmpl"))
 	if err != nil {

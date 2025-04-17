@@ -552,7 +552,10 @@ func cmp_bp_7_ne(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 }
 
 func cmp_bp_8_ne(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
-	return cmp.MatchUint8NotEqual(buf[:n], uint8(val), bits, nil)
+	c := cmp.Uint8NotEqual(buf[:n], uint8(val), bits.Bytes())
+	bits.ResetCount(int(c))
+	return bits
+
 }
 
 func cmp_bp_9_ne(buf []byte, val uint64, n int, bits *Bitset) *Bitset {

@@ -2,7 +2,7 @@
 // Code automatically generated - DO NOT EDIT.
 // Any manual changes will be lost.
 
-package pack
+package bitpack
 
 func bitpack16[T uint16 | int16](minv T, in []T, out []uint16, log2 int) {
 	switch log2 {

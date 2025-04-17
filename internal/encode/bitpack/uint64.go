@@ -2,7 +2,7 @@
 // Code automatically generated - DO NOT EDIT.
 // Any manual changes will be lost.
 
-package pack
+package bitpack
 
 func bitpack64[T uint64 | int64](minv T, in []T, out []uint64, log2 int) {
 	switch log2 {

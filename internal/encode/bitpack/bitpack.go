@@ -51,6 +51,6 @@ var (
 	Between      = generic.Between
 )
 
-func EstimateMaxSize(width, n int) int {
+func EstimateSize(width, n int) int {
 	return (width*n + 7) / 8
 }

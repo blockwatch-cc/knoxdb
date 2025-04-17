@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Blockwatch Data Inc.
 // Author: abdul@blockwatch.cc
 
-package pack
+package bitpack
 
 import (
 	"unsafe"
@@ -35,7 +35,7 @@ func Decoder[T types.Integer](buf []byte, log2 int) DecodeFunc[T] {
 			pack |= uint64(inBuff[codeword+1]) << diff
 		}
 
-		pack &= mask
+		// pack &= mask
 
 		return T(pack & mask)
 	}
