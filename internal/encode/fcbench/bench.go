@@ -32,8 +32,9 @@ func (e *Encoder) EncodeInt(v []int64) (int, error) {
 	ctx := encode.AnalyzeInt(v, e.ienc.Type() == encode.TIntegerDictionary)
 	e.ienc.Encode(ctx, v, encode.MAX_CASCADE)
 	e.info = e.ienc.Info()
+	sz := e.ienc.Size()
 	ctx.Close()
-	return e.ienc.MaxSize(), nil
+	return sz, nil
 }
 
 func (e *Encoder) EncodeFloat(v []float64) (int, error) {
@@ -57,11 +58,11 @@ func (e *Encoder) EncodeFloat(v []float64) (int, error) {
 		enc = encode.NewFloat[float64](encode.TFloatAlpRd)
 	}
 	enc.Encode(ctx, v, encode.MAX_CASCADE)
-	maxSize := enc.MaxSize()
+	sz := enc.Size()
 	e.info = enc.Info()
 	enc.Close()
 	ctx.Close()
-	return maxSize, nil
+	return sz, nil
 }
 
 func (e *Encoder) Info() string {
