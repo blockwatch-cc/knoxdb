@@ -271,13 +271,13 @@ func sliceFloatData(data []float64, vecLen, maxSize int) ([]float64, error) {
 	if len(data) < vecLen {
 		return nil, fmt.Errorf("sliceFloatData: data size %d smaller than vector length %d", len(data), vecLen)
 	}
-	count := min(maxSize, len(data)) / vecLen
+	count := (maxSize + vecLen - 1) / vecLen // ceil()
 	result := make([]float64, count*vecLen)
 	for i := 0; i < count; i++ {
 		start := rand.Intn(len(data) - vecLen + 1)
 		copy(result[i*vecLen:(i+1)*vecLen], data[start:start+vecLen])
 	}
-	return result, nil
+	return result[:maxSize], nil
 }
 
 // sliceTimeSeriesData extracts readings from time series data into float64 vectors.
@@ -292,7 +292,7 @@ func sliceTimeSeriesData(data []TimeSeriesRow, vecLen, maxSize int) ([]float64, 
 	if len(data) < vecLen {
 		return nil, fmt.Errorf("sliceTimeSeriesData: data size %d smaller than vector length %d", len(data), vecLen)
 	}
-	count := min(maxSize, len(data)) / vecLen
+	count := (maxSize + vecLen - 1) / vecLen // ceil()
 	result := make([]float64, count*vecLen)
 	for i := 0; i < count; i++ {
 		start := rand.Intn(len(data) - vecLen + 1)
@@ -300,7 +300,7 @@ func sliceTimeSeriesData(data []TimeSeriesRow, vecLen, maxSize int) ([]float64, 
 			result[i*vecLen+j] = data[start+j].Reading
 		}
 	}
-	return result, nil
+	return result[:maxSize], nil
 }
 
 // sliceHDRData flattens and slices HDR image data (2D) into 1D float64 vectors.
@@ -331,15 +331,17 @@ func sliceTPCData(data []TransactionRow, vecLen, maxSize int) ([]int64, error) {
 	if len(data) < vecLen {
 		return nil, fmt.Errorf("sliceTPCData: data size %d smaller than vector length %d", len(data), vecLen)
 	}
-	count := min(maxSize, len(data)) / vecLen
-	result := make([]int64, count*vecLen)
+
+	count := (maxSize + vecLen - 1) / vecLen // ceil()
+	result := make([]int64, count*vecLen)    // ← **int64**
+
 	for i := 0; i < count; i++ {
 		start := rand.Intn(len(data) - vecLen + 1)
 		for j := 0; j < vecLen; j++ {
-			result[i*vecLen+j] = data[start+j].Quantity
+			result[i*vecLen+j] = data[start+j].Quantity // stays int64
 		}
 	}
-	return result, nil
+	return result[:maxSize], nil // returns []int64
 }
 
 // benchmarkIntEncoder runs a benchmark on an int64 vector using the specified encoder.
