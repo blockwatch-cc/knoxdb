@@ -18,7 +18,7 @@ func bytemask(size int) byte {
 	return byte(0xff >> (7 - uint(size-1)&0x7) & 0xff)
 }
 
-func matchEqual(a ByteArray, val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
+func matchEqual(a ByteArray, val []byte, bits, mask *bitset.Bitset) {
 	bits = bits.Resize(a.Len())
 	bbuf := bits.Bytes()
 	var cnt int
@@ -45,10 +45,9 @@ func matchEqual(a ByteArray, val []byte, bits, mask *bitset.Bitset) *bitset.Bits
 		}
 	}
 	bits.ResetCount(cnt)
-	return bits
 }
 
-func matchNotEqual(a ByteArray, val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
+func matchNotEqual(a ByteArray, val []byte, bits, mask *bitset.Bitset) {
 	bits = bits.Resize(a.Len())
 	bbuf := bits.Bytes()
 	var cnt int
@@ -75,10 +74,9 @@ func matchNotEqual(a ByteArray, val []byte, bits, mask *bitset.Bitset) *bitset.B
 		}
 	}
 	bits.ResetCount(cnt)
-	return bits
 }
 
-func matchLess(a ByteArray, val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
+func matchLess(a ByteArray, val []byte, bits, mask *bitset.Bitset) {
 	bits = bits.Resize(a.Len())
 	bbuf := bits.Bytes()
 	var cnt int
@@ -105,10 +103,9 @@ func matchLess(a ByteArray, val []byte, bits, mask *bitset.Bitset) *bitset.Bitse
 		}
 	}
 	bits.ResetCount(cnt)
-	return bits
 }
 
-func matchLessEqual(a ByteArray, val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
+func matchLessEqual(a ByteArray, val []byte, bits, mask *bitset.Bitset) {
 	bits = bits.Resize(a.Len())
 	bbuf := bits.Bytes()
 	var cnt int
@@ -135,10 +132,9 @@ func matchLessEqual(a ByteArray, val []byte, bits, mask *bitset.Bitset) *bitset.
 		}
 	}
 	bits.ResetCount(cnt)
-	return bits
 }
 
-func matchGreater(a ByteArray, val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
+func matchGreater(a ByteArray, val []byte, bits, mask *bitset.Bitset) {
 	bits = bits.Resize(a.Len())
 	bbuf := bits.Bytes()
 	var cnt int
@@ -165,10 +161,9 @@ func matchGreater(a ByteArray, val []byte, bits, mask *bitset.Bitset) *bitset.Bi
 		}
 	}
 	bits.ResetCount(cnt)
-	return bits
 }
 
-func matchGreaterEqual(a ByteArray, val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
+func matchGreaterEqual(a ByteArray, val []byte, bits, mask *bitset.Bitset) {
 	bits = bits.Resize(a.Len())
 	bbuf := bits.Bytes()
 	var cnt int
@@ -195,10 +190,9 @@ func matchGreaterEqual(a ByteArray, val []byte, bits, mask *bitset.Bitset) *bits
 		}
 	}
 	bits.ResetCount(cnt)
-	return bits
 }
 
-func matchBetween(a ByteArray, from, to []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
+func matchBetween(a ByteArray, from, to []byte, bits, mask *bitset.Bitset) {
 	bits = bits.Resize(a.Len())
 	bbuf := bits.Bytes()
 	// short-cut for empty min
@@ -214,11 +208,12 @@ func matchBetween(a ByteArray, from, to []byte, bits, mask *bitset.Bitset) *bits
 			bbuf[len(bbuf)-1] &= bytemask(a.Len())
 			bits.ResetCount(a.Len())
 		}
-		return bits
+		return
 	}
 
 	if bytes.Equal(from, to) {
-		return matchEqual(a, from, bits, mask)
+		matchEqual(a, from, bits, mask)
+		return
 	}
 
 	var cnt int
@@ -253,8 +248,6 @@ func matchBetween(a ByteArray, from, to []byte, bits, mask *bitset.Bitset) *bits
 		}
 	}
 	bits.ResetCount(cnt)
-	return bits
-
 }
 
 func minMaxArr(a ByteArray) ([]byte, []byte) {

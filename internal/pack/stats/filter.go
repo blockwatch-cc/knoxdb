@@ -7,7 +7,6 @@ import (
 	"slices"
 
 	"blockwatch.cc/knoxdb/internal/block"
-	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/filter"
 	"blockwatch.cc/knoxdb/internal/filter/bloom"
 	"blockwatch.cc/knoxdb/internal/filter/fuse"
@@ -206,7 +205,7 @@ func EstimateCardinality(b *block.Block, precision int) int {
 		return 1
 	case 2:
 		minVal, maxVal := b.MinMax()
-		if cmp.EQ(b.Type(), minVal, maxVal) {
+		if b.Type().EQ(minVal, maxVal) {
 			return 1
 		}
 		return 2

@@ -6,7 +6,6 @@ package stats
 import (
 	"bytes"
 
-	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
@@ -103,28 +102,28 @@ func (n *INode) Update(view *schema.View, build *schema.Builder, left, right Nod
 		case STATS_ROW_KEY:
 			// handle data pack key
 			// min key is the left subtree's min key
-			n.dirty = n.dirty || !cmp.EQ(typ, lval, vval)
+			n.dirty = n.dirty || !typ.EQ(lval, vval)
 			build.Write(i, lval)
 
 		case STATS_ROW_SCHEMA, STATS_ROW_NVALS, STATS_ROW_SIZE:
 			// 1: sum data pack count (in u64 field)
 			// 2: sum of number of records in data packs
 			// 3: sum of disk sizes
-			val := cmp.Add(typ, lval, rval)
-			n.dirty = n.dirty || !cmp.EQ(typ, val, vval)
+			val := typ.Add(lval, rval)
+			n.dirty = n.dirty || !typ.EQ(val, vval)
 			build.Write(i, val)
 
 		default:
 			// data column statistics
 			if i%2 == 0 {
 				// min fields
-				minVal := cmp.Min(typ, lval, rval)
-				n.dirty = n.dirty || !cmp.EQ(typ, minVal, vval)
+				minVal := typ.Min(lval, rval)
+				n.dirty = n.dirty || !typ.EQ(minVal, vval)
 				build.Write(i, minVal)
 			} else {
 				// max fields
-				maxVal := cmp.Max(typ, lval, rval)
-				n.dirty = n.dirty || !cmp.EQ(typ, maxVal, vval)
+				maxVal := typ.Max(lval, rval)
+				n.dirty = n.dirty || !typ.EQ(maxVal, vval)
 				build.Write(i, maxVal)
 			}
 		}

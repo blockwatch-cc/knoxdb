@@ -289,10 +289,10 @@ func (it *ScanIterator) Next(ctx context.Context) (*pack.Package, []uint32, erro
 			return nil, nil, err
 		}
 
-		// find actual matches
+		// find actual matches, zero bits before
 		// it.idx.log.Infof("Run filter %s %T %v idx=%d",
 		// it.node, it.node.Filter.Matcher, it.node.Filter.Matcher.Value(), it.node.Filter.Index)
-		it.bits = match.MatchTree(it.node, it.pack, nil, it.bits)
+		it.bits = match.MatchTree(it.node, it.pack, nil, it.bits.Zero())
 
 		// skip this pack when no matches were found
 		if it.bits.None() {

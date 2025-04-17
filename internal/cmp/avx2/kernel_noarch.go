@@ -1,130 +1,128 @@
 // Copyright (c) 2023 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
-
-//go:build !amd64 || appengine || gccgo
-// +build !amd64 appengine gccgo
+//go:build ignore
+// +build ignore
 
 package avx2
 
 import (
-	"blockwatch.cc/knoxdb/internal/cmp/generic"
+	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/pkg/num"
 )
+
+type nop[T types.Number] func(src []T, val T, bits []byte) int64
+type nop2[T types.Number] func(src []T, a, b T, bits []byte) int64
+type nop128 func(src num.Int128Stride, val num.Int128, bits, mask []byte) int64
+type nop128_2 func(src num.Int128Stride, a, b num.Int128, bits, mask []byte) int64
+type nop256 func(src num.Int256Stride, val num.Int256, bits, mask []byte) int64
+type nop256_2 func(src num.Int256Stride, a, b num.Int256, bits, mask []byte) int64
 
 var (
 	// uint8
-	MatchUint8Equal        = generic.MatchEqual[uint8]
-	MatchUint8NotEqual     = generic.MatchNotEqual[uint8]
-	MatchUint8Less         = generic.MatchLess[uint8]
-	MatchUint8LessEqual    = generic.MatchLessEqual[uint8]
-	MatchUint8Greater      = generic.MatchGreater[uint8]
-	MatchUint8GreaterEqual = generic.MatchGreaterEqual[uint8]
-	MatchUint8Between      = generic.MatchBetweenUnsigned[uint8]
+	Uint8Equal        nop[uint8]  = nil
+	Uint8NotEqual     nop[uint8]  = nil
+	Uint8Less         nop[uint8]  = nil
+	Uint8LessEqual    nop[uint8]  = nil
+	Uint8Greater      nop[uint8]  = nil
+	Uint8GreaterEqual nop[uint8]  = nil
+	Uint8Between      nop2[uint8] = nil
 
 	// uint16
-	MatchUint16Equal        = generic.MatchEqual[uint16]
-	MatchUint16NotEqual     = generic.MatchNotEqual[uint16]
-	MatchUint16Less         = generic.MatchLess[uint16]
-	MatchUint16LessEqual    = generic.MatchLessEqual[uint16]
-	MatchUint16Greater      = generic.MatchGreater[uint16]
-	MatchUint16GreaterEqual = generic.MatchGreaterEqual[uint16]
-	MatchUint16Between      = generic.MatchBetweenUnsigned[uint16]
+	Uint16Equal        nop[uint16]  = nil
+	Uint16NotEqual     nop[uint16]  = nil
+	Uint16Less         nop[uint16]  = nil
+	Uint16LessEqual    nop[uint16]  = nil
+	Uint16Greater      nop[uint16]  = nil
+	Uint16GreaterEqual nop[uint16]  = nil
+	Uint16Between      nop2[uint16] = nil
 
 	// uint32
-	MatchUint32Equal        = generic.MatchEqual[uint32]
-	MatchUint32NotEqual     = generic.MatchNotEqual[uint32]
-	MatchUint32Less         = generic.MatchLess[uint32]
-	MatchUint32LessEqual    = generic.MatchLessEqual[uint32]
-	MatchUint32Greater      = generic.MatchGreater[uint32]
-	MatchUint32GreaterEqual = generic.MatchGreaterEqual[uint32]
-	MatchUint32Between      = generic.MatchBetweenUnsigned[uint32]
+	Uint32Equal        nop[uint32]  = nil
+	Uint32NotEqual     nop[uint32]  = nil
+	Uint32Less         nop[uint32]  = nil
+	Uint32LessEqual    nop[uint32]  = nil
+	Uint32Greater      nop[uint32]  = nil
+	Uint32GreaterEqual nop[uint32]  = nil
+	Uint32Between      nop2[uint32] = nil
 
 	// uint64
-	MatchUint64Equal        = generic.MatchEqual[uint64]
-	MatchUint64NotEqual     = generic.MatchNotEqual[uint64]
-	MatchUint64Less         = generic.MatchLess[uint64]
-	MatchUint64LessEqual    = generic.MatchLessEqual[uint64]
-	MatchUint64Greater      = generic.MatchGreater[uint64]
-	MatchUint64GreaterEqual = generic.MatchGreaterEqual[uint64]
-	MatchUint64Between      = generic.MatchBetweenUnsigned[uint64]
+	Uint64Equal        nop[uint64]  = nil
+	Uint64NotEqual     nop[uint64]  = nil
+	Uint64Less         nop[uint64]  = nil
+	Uint64LessEqual    nop[uint64]  = nil
+	Uint64Greater      nop[uint64]  = nil
+	Uint64GreaterEqual nop[uint64]  = nil
+	Uint64Between      nop2[uint64] = nil
 
 	// int8
-	MatchInt8Equal        = generic.MatchEqual[int8]
-	MatchInt8NotEqual     = generic.MatchNotEqual[int8]
-	MatchInt8Less         = generic.MatchLess[int8]
-	MatchInt8LessEqual    = generic.MatchLessEqual[int8]
-	MatchInt8Greater      = generic.MatchGreater[int8]
-	MatchInt8GreaterEqual = generic.MatchGreaterEqual[int8]
-	MatchInt8Between      = generic.MatchBetweenSigned[int8]
+	Int8Equal        nop[int8]  = nil
+	Int8NotEqual     nop[int8]  = nil
+	Int8Less         nop[int8]  = nil
+	Int8LessEqual    nop[int8]  = nil
+	Int8Greater      nop[int8]  = nil
+	Int8GreaterEqual nop[int8]  = nil
+	Int8Between      nop2[int8] = nil
 
 	// int16
-	MatchInt16Equal        = generic.MatchEqual[int16]
-	MatchInt16NotEqual     = generic.MatchNotEqual[int16]
-	MatchInt16Less         = generic.MatchLess[int16]
-	MatchInt16LessEqual    = generic.MatchLessEqual[int16]
-	MatchInt16Greater      = generic.MatchGreater[int16]
-	MatchInt16GreaterEqual = generic.MatchGreaterEqual[int16]
-	MatchInt16Between      = generic.MatchBetweenSigned[int16]
+	Int16Equal        nop[int16]  = nil
+	Int16NotEqual     nop[int16]  = nil
+	Int16Less         nop[int16]  = nil
+	Int16LessEqual    nop[int16]  = nil
+	Int16Greater      nop[int16]  = nil
+	Int16GreaterEqual nop[int16]  = nil
+	Int16Between      nop2[int16] = nil
 
 	// int32
-	MatchInt32Equal        = generic.MatchEqual[int32]
-	MatchInt32NotEqual     = generic.MatchNotEqual[int32]
-	MatchInt32Less         = generic.MatchLess[int32]
-	MatchInt32LessEqual    = generic.MatchLessEqual[int32]
-	MatchInt32Greater      = generic.MatchGreater[int32]
-	MatchInt32GreaterEqual = generic.MatchGreaterEqual[int32]
-	MatchInt32Between      = generic.MatchBetweenSigned[int32]
+	Int32Equal        nop[int32]  = nil
+	Int32NotEqual     nop[int32]  = nil
+	Int32Less         nop[int32]  = nil
+	Int32LessEqual    nop[int32]  = nil
+	Int32Greater      nop[int32]  = nil
+	Int32GreaterEqual nop[int32]  = nil
+	Int32Between      nop2[int32] = nil
 
 	// int64
-	MatchInt64Equal        = generic.MatchEqual[int64]
-	MatchInt64NotEqual     = generic.MatchNotEqual[int64]
-	MatchInt64Less         = generic.MatchLess[int64]
-	MatchInt64LessEqual    = generic.MatchLessEqual[int64]
-	MatchInt64Greater      = generic.MatchGreater[int64]
-	MatchInt64GreaterEqual = generic.MatchGreaterEqual[int64]
-	MatchInt64Between      = generic.MatchBetweenSigned[int64]
+	Int64Equal        nop[int64]  = nil
+	Int64NotEqual     nop[int64]  = nil
+	Int64Less         nop[int64]  = nil
+	Int64LessEqual    nop[int64]  = nil
+	Int64Greater      nop[int64]  = nil
+	Int64GreaterEqual nop[int64]  = nil
+	Int64Between      nop2[int64] = nil
 
 	// float32
-	MatchFloat32Equal        = generic.MatchFloatEqual[float32]
-	MatchFloat32NotEqual     = generic.MatchFloatNotEqual[float32]
-	MatchFloat32Less         = generic.MatchFloatLess[float32]
-	MatchFloat32LessEqual    = generic.MatchFloatLessEqual[float32]
-	MatchFloat32Greater      = generic.MatchFloatGreater[float32]
-	MatchFloat32GreaterEqual = generic.MatchFloatGreaterEqual[float32]
-	MatchFloat32Between      = generic.MatchFloatBetween[float32]
+	Float32Equal        nop[float32]  = nil
+	Float32NotEqual     nop[float32]  = nil
+	Float32Less         nop[float32]  = nil
+	Float32LessEqual    nop[float32]  = nil
+	Float32Greater      nop[float32]  = nil
+	Float32GreaterEqual nop[float32]  = nil
+	Float32Between      nop2[float32] = nil
 
 	// float64
-	MatchFloat64Equal        = generic.MatchFloatEqual[float64]
-	MatchFloat64NotEqual     = generic.MatchFloatNotEqual[float64]
-	MatchFloat64Less         = generic.MatchFloatLess[float64]
-	MatchFloat64LessEqual    = generic.MatchFloatLessEqual[float64]
-	MatchFloat64Greater      = generic.MatchFloatGreater[float64]
-	MatchFloat64GreaterEqual = generic.MatchFloatGreaterEqual[float64]
-	MatchFloat64Between      = generic.MatchFloatBetween[float64]
-
-	// bytes
-	MatchBytesEqual        = generic.MatchBytesEqual
-	MatchBytesNotEqual     = generic.MatchBytesNotEqual
-	MatchBytesLess         = generic.MatchBytesLess
-	MatchBytesLessEqual    = generic.MatchBytesLessEqual
-	MatchBytesGreater      = generic.MatchBytesGreater
-	MatchBytesGreaterEqual = generic.MatchBytesGreaterEqual
-	MatchBytesBetween      = generic.MatchBytesBetween
+	Float64Equal        nop[float64]  = nil
+	Float64NotEqual     nop[float64]  = nil
+	Float64Less         nop[float64]  = nil
+	Float64LessEqual    nop[float64]  = nil
+	Float64Greater      nop[float64]  = nil
+	Float64GreaterEqual nop[float64]  = nil
+	Float64Between      nop2[float64] = nil
 
 	// int128
-	MatchInt128Equal        = generic.MatchInt128Equal
-	MatchInt128NotEqual     = generic.MatchInt128NotEqual
-	MatchInt128Less         = generic.MatchInt128Less
-	MatchInt128LessEqual    = generic.MatchInt128LessEqual
-	MatchInt128Greater      = generic.MatchInt128Greater
-	MatchInt128GreaterEqual = generic.MatchInt128GreaterEqual
-	MatchInt128Between      = generic.MatchInt128Between
+	Int128Equal        nop128   = nil
+	Int128NotEqual     nop128   = nil
+	Int128Less         nop128   = nil
+	Int128LessEqual    nop128   = nil
+	Int128Greater      nop128   = nil
+	Int128GreaterEqual nop128   = nil
+	Int128Between      nop128_2 = nil
 
 	// int256
-	MatchInt256Equal        = generic.MatchInt256Equal
-	MatchInt256NotEqual     = generic.MatchInt256NotEqual
-	MatchInt256Less         = generic.MatchInt256Less
-	MatchInt256LessEqual    = generic.MatchInt256LessEqual
-	MatchInt256Greater      = generic.MatchInt256Greater
-	MatchInt256GreaterEqual = generic.MatchInt256GreaterEqual
-	MatchInt256Between      = generic.MatchInt256Between
+	Int256Equal        nop256   = nil
+	Int256NotEqual     nop256   = nil
+	Int256Less         nop256   = nil
+	Int256LessEqual    nop256   = nil
+	Int256Greater      nop256   = nil
+	Int256GreaterEqual nop256   = nil
+	Int256Between      nop256_2 = nil
 )

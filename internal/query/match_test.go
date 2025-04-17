@@ -9,7 +9,6 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/block"
-	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/num"
@@ -129,14 +128,14 @@ func TestMatchValue(t *testing.T) {
 				require.Equal(t, v1, m.Value(), "set/get")
 				require.Equal(t, 1, m.Len(), "len")
 				require.Equal(t,
-					cmp.Match(mode, typ, v1, v1),
+					typ.Match(mode, v1, v1),
 					m.MatchValue(v1),
-					"match %v %s %v = %t", v1, mode, v1, cmp.Match(mode, typ, v1, v1),
+					"match %v %s %v = %t", v1, mode, v1, typ.Match(mode, v1, v1),
 				)
 				require.Equal(t,
-					cmp.Match(mode, typ, v2, v1),
+					typ.Match(mode, v2, v1),
 					m.MatchValue(v2),
-					"match %v %s %v = %t", v2, mode, v1, cmp.Match(mode, typ, v2, v1),
+					"match %v %s %v = %t", v2, mode, v1, typ.Match(mode, v2, v1),
 				)
 			}
 		}
@@ -154,9 +153,9 @@ func TestMatchVector(t *testing.T) {
 			b := makeRandomBlock(typ, matchBlockSize)
 			m.WithValue(v)
 			set := bitset.NewBitset(matchBlockSize)
-			set2 := m.MatchVector(b, set, nil)
-			require.NotNil(t, set2)
-			require.Equal(t, matchBlockSize, set2.Len())
+			m.MatchVector(b, set, nil)
+			require.NotNil(t, set)
+			require.Equal(t, matchBlockSize, set.Len())
 		}
 	}
 }
@@ -264,10 +263,10 @@ func TestMatchRegexp(t *testing.T) {
 	b.Bytes().Append(hello)
 	b.Bytes().Append(world)
 	set := bitset.NewBitset(2)
-	set2 := m.MatchVector(b, set, nil)
-	require.NotNil(t, set2)
-	require.Equal(t, 1, set2.Count())
-	require.True(t, set2.IsSet(0))
+	m.MatchVector(b, set, nil)
+	require.NotNil(t, set)
+	require.Equal(t, 1, set.Count())
+	require.True(t, set.IsSet(0))
 
 	// using compiled regexp value
 	m.WithValue(re)
@@ -275,10 +274,10 @@ func TestMatchRegexp(t *testing.T) {
 	assert.False(t, m.MatchValue(world), "nomatch")
 	assert.True(t, m.MatchRange(hello, world), "range-always-true")
 	set.Zero()
-	set2 = m.MatchVector(b, set, nil)
-	require.NotNil(t, set2)
-	require.Equal(t, 1, set2.Count())
-	require.True(t, set2.IsSet(0))
+	m.MatchVector(b, set, nil)
+	require.NotNil(t, set)
+	require.Equal(t, 1, set.Count())
+	require.True(t, set.IsSet(0))
 }
 
 func TestMatchBool(t *testing.T) {

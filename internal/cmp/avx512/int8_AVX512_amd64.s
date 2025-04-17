@@ -1,7 +1,7 @@
 // Copyright (c) 2019 - 2020 Blockwatch Data Inc.
 // Author: stefan@blockwatch.cc
 
-//go:build !appengine && gc && !purego && !noasm
+//go:build amd64
 
 #include "textflag.h"
 #include "constants_AVX512.h"

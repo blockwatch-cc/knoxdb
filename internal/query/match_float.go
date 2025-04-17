@@ -53,10 +53,11 @@ func (m floatInSetMatcher[T]) MatchFilter(flt filter.Filter) bool {
 	return flt.ContainsAny(m.hashes)
 }
 
-func (m floatInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m floatInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
 	acc := block.NewBlockAccessor[T](b)
 	if bm := acc.Matcher(); bm != nil {
-		return bm.MatchSet(m.slice, bits, mask)
+		bm.MatchInSet(m.slice, bits, mask)
+		return
 	}
 	if mask != nil {
 		// skip masked values
@@ -75,14 +76,13 @@ func (m floatInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bit
 			}
 		}
 	}
-	return bits
 }
 
-func (m floatInSetMatcher[T]) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m floatInSetMatcher[T]) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) {
 	setMin, setMax := m.slice.MinMax()
 	rg := newFactory(mins.Type()).New(FilterModeRange)
 	rg.WithValue(RangeValue{setMin, setMax})
-	return rg.MatchRangeVectors(mins, maxs, bits, mask)
+	rg.MatchRangeVectors(mins, maxs, bits, mask)
 }
 
 // NOT IN ---
@@ -123,10 +123,11 @@ func (m floatNotInSetMatcher[T]) MatchFilter(_ filter.Filter) bool {
 	return true
 }
 
-func (m floatNotInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m floatNotInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
 	acc := block.NewBlockAccessor[T](b)
 	if bm := acc.Matcher(); bm != nil {
-		return bm.MatchNotSet(m.slice, bits, mask)
+		bm.MatchNotInSet(m.slice, bits, mask)
+		return
 	}
 	if mask != nil {
 		// skip masked values
@@ -145,15 +146,13 @@ func (m floatNotInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.
 			}
 		}
 	}
-	return bits
 }
 
-func (m floatNotInSetMatcher[T]) MatchRangeVectors(_, _ *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m floatNotInSetMatcher[T]) MatchRangeVectors(_, _ *block.Block, bits, mask *bitset.Bitset) {
 	// undecided, always true
 	if mask != nil {
 		bits.Copy(mask)
 	} else {
 		bits.One()
 	}
-	return bits
 }

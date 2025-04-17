@@ -444,30 +444,30 @@ func (a CompactByteArray) ForEachUnique(fn func(int, []byte)) {
 	}
 }
 
-func (a *CompactByteArray) MatchEqual(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
-	return matchEqual(a, val, bits, mask)
+func (a *CompactByteArray) MatchEqual(val []byte, bits, mask *bitset.Bitset) {
+	matchEqual(a, val, bits, mask)
 }
 
-func (a *CompactByteArray) MatchNotEqual(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
-	return matchNotEqual(a, val, bits, mask)
+func (a *CompactByteArray) MatchNotEqual(val []byte, bits, mask *bitset.Bitset) {
+	matchNotEqual(a, val, bits, mask)
 }
 
-func (a *CompactByteArray) MatchLess(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
-	return matchLess(a, val, bits, mask)
+func (a *CompactByteArray) MatchLess(val []byte, bits, mask *bitset.Bitset) {
+	matchLess(a, val, bits, mask)
 }
 
-func (a *CompactByteArray) MatchLessEqual(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
-	return matchLessEqual(a, val, bits, mask)
+func (a *CompactByteArray) MatchLessEqual(val []byte, bits, mask *bitset.Bitset) {
+	matchLessEqual(a, val, bits, mask)
 }
 
-func (a *CompactByteArray) MatchGreater(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
-	return matchGreater(a, val, bits, mask)
+func (a *CompactByteArray) MatchGreater(val []byte, bits, mask *bitset.Bitset) {
+	matchGreater(a, val, bits, mask)
 }
 
-func (a *CompactByteArray) MatchGreaterEqual(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
-	return matchGreaterEqual(a, val, bits, mask)
+func (a *CompactByteArray) MatchGreaterEqual(val []byte, bits, mask *bitset.Bitset) {
+	matchGreaterEqual(a, val, bits, mask)
 }
 
-func (a *CompactByteArray) MatchBetween(from, to []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
-	return matchBetween(a, from, to, bits, mask)
+func (a *CompactByteArray) MatchBetween(from, to []byte, bits, mask *bitset.Bitset) {
+	matchBetween(a, from, to, bits, mask)
 }

@@ -6,7 +6,6 @@ package stats
 import (
 	"encoding/binary"
 
-	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
@@ -100,7 +99,7 @@ func NewRecordFromPack(pkg *pack.Package, n int) *Record {
 		var minv, maxv any
 		if b == nil {
 			// use zero values for invalid blocks (deleted from schema)
-			minv = cmp.Zero(types.BlockTypes[fields[i].Type])
+			minv = types.BlockTypes[fields[i].Type].Zero()
 			maxv = minv
 		} else {
 			// calculate min/max statistics
@@ -140,7 +139,7 @@ func (r *Record) Update(pkg *pack.Package) {
 		switch {
 		case b == nil:
 			// use zero values for invalid blocks (deleted from schema)
-			minv = cmp.Zero(types.BlockTypes[fields[i].Type])
+			minv = types.BlockTypes[fields[i].Type].Zero()
 			maxv = minv
 		case b.IsDirty():
 			// calculate min/max statistics

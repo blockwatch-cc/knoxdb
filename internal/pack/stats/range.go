@@ -15,7 +15,6 @@ import (
 	"math/bits"
 
 	"blockwatch.cc/knoxdb/internal/block"
-	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/types"
@@ -125,7 +124,7 @@ func (idx RangeIndex) Query(flt *query.Filter, minVal any, nRows int) pack.Range
 		return pack.Range{idx.lower[slot], idx.upper[slot] - 1}
 
 	case types.FilterModeLt:
-		endSlot, ok := getSlotTyped(flt.Type, cmp.Dec(flt.Type, flt.Value), minVal)
+		endSlot, ok := getSlotTyped(flt.Type, flt.Type.Dec(flt.Value), minVal)
 		if !ok {
 			return pack.InvalidRange
 		}
@@ -139,7 +138,7 @@ func (idx RangeIndex) Query(flt *query.Filter, minVal any, nRows int) pack.Range
 		return idx.mergeRange(0, endSlot, uint32(nRows))
 
 	case types.FilterModeGt:
-		startSlot, ok := getSlotTyped(flt.Type, cmp.Inc(flt.Type, flt.Value), minVal)
+		startSlot, ok := getSlotTyped(flt.Type, flt.Type.Inc(flt.Value), minVal)
 		if ok && startSlot >= len(idx.lower) {
 			return pack.InvalidRange
 		} else if !ok {
@@ -173,7 +172,7 @@ func (idx RangeIndex) Query(flt *query.Filter, minVal any, nRows int) pack.Range
 	case types.FilterModeIn:
 		// filter set -> min/max -> range
 		// note filters store sets as sorted slices, matchers as xroar bitmap
-		minFlt, maxFlt, _ := cmp.Range(flt.Type, flt.Value)
+		minFlt, maxFlt, _ := flt.Type.Range(flt.Value)
 		startSlot, ok := getSlotTyped(flt.Type, minFlt, minVal)
 		if ok && startSlot >= len(idx.lower) {
 			return pack.InvalidRange

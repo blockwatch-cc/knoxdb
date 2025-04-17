@@ -54,13 +54,13 @@ type ByteArray interface {
 	Dump() string
 
 	// condition match interface
-	MatchEqual(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset
-	MatchNotEqual(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset
-	MatchLess(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset
-	MatchLessEqual(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset
-	MatchGreater(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset
-	MatchGreaterEqual(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset
-	MatchBetween(a, b []byte, bits, mask *bitset.Bitset) *bitset.Bitset
+	MatchEqual(val []byte, bits, mask *bitset.Bitset)
+	MatchNotEqual(val []byte, bits, mask *bitset.Bitset)
+	MatchLess(val []byte, bits, mask *bitset.Bitset)
+	MatchLessEqual(val []byte, bits, mask *bitset.Bitset)
+	MatchGreater(val []byte, bits, mask *bitset.Bitset)
+	MatchGreaterEqual(val []byte, bits, mask *bitset.Bitset)
+	MatchBetween(a, b []byte, bits, mask *bitset.Bitset)
 }
 
 func NewByteArray(sz int) ByteArray {

@@ -11,24 +11,24 @@ import (
 	"blockwatch.cc/knoxdb/pkg/num"
 )
 
-type i256MatchFunc func(src num.Int256Stride, val num.Int256, bits, mask *bitset.Bitset) *bitset.Bitset
+type i256MatchFunc func(src num.Int256Stride, val num.Int256, bits, mask []byte) int64
 
 type I256MatcherFactory struct{}
 
 func (f I256MatcherFactory) New(m FilterMode) Matcher {
 	switch m {
 	case FilterModeEqual:
-		return &i256EqualMatcher{i256Matcher{match: cmp.MatchInt256Equal}}
+		return &i256EqualMatcher{i256Matcher{match: cmp.Int256Equal}}
 	case FilterModeNotEqual:
-		return &i256NotEqualMatcher{i256Matcher{match: cmp.MatchInt256NotEqual}}
+		return &i256NotEqualMatcher{i256Matcher{match: cmp.Int256NotEqual}}
 	case FilterModeGt:
-		return &i256GtMatcher{i256Matcher{match: cmp.MatchInt256Greater}}
+		return &i256GtMatcher{i256Matcher{match: cmp.Int256Greater}}
 	case FilterModeGe:
-		return &i256GeMatcher{i256Matcher{match: cmp.MatchInt256GreaterEqual}}
+		return &i256GeMatcher{i256Matcher{match: cmp.Int256GreaterEqual}}
 	case FilterModeLt:
-		return &i256LtMatcher{i256Matcher{match: cmp.MatchInt256Less}}
+		return &i256LtMatcher{i256Matcher{match: cmp.Int256Less}}
 	case FilterModeLe:
-		return &i256LeMatcher{i256Matcher{match: cmp.MatchInt256LessEqual}}
+		return &i256LeMatcher{i256Matcher{match: cmp.Int256LessEqual}}
 	case FilterModeRange:
 		return &i256RangeMatcher{}
 	case FilterModeIn:
@@ -58,24 +58,25 @@ func (m *i256Matcher) Value() any {
 	return m.val
 }
 
-func (m i256Matcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
-	return m.match(*b.Int256(), m.val, bits, mask)
+func (m i256Matcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
+	n := m.match(*b.Int256(), m.val, bits.Bytes(), mask.Bytes())
+	bits.ResetCount(int(n))
 }
 
-func (m i256Matcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m i256Matcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) {
 	// min <= v && max >= v, mask is optional
 	f := newFactory(mins.Type())
 	le, ge := f.New(FilterModeLe), f.New(FilterModeGe)
 	le.WithValue(m.val)
 	ge.WithValue(m.val)
-	minBits := le.MatchVector(mins, nil, mask)
+	minBits := bitset.NewBitset(mins.Len())
+	le.MatchVector(mins, minBits, mask)
 	if mask != nil {
 		minBits.And(mask)
 	}
-	bits = ge.MatchVector(maxs, bits, minBits)
+	ge.MatchVector(maxs, bits, minBits)
 	bits.And(minBits)
 	minBits.Close()
-	return bits
 }
 
 // EQUAL ---
@@ -92,20 +93,20 @@ func (m i256EqualMatcher) MatchRange(from, to any) bool {
 	return !(m.val.Lt(from.(num.Int256)) || m.val.Gt(to.(num.Int256)))
 }
 
-func (m i256EqualMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m i256EqualMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) {
 	// min <= v && max >= v, mask is optional
 	f := newFactory(mins.Type())
 	le, ge := f.New(FilterModeLe), f.New(FilterModeGe)
 	le.WithValue(m.val)
 	ge.WithValue(m.val)
-	minBits := le.MatchVector(mins, nil, mask)
+	minBits := bitset.NewBitset(mins.Len())
+	le.MatchVector(mins, minBits, mask)
 	if mask != nil {
 		minBits.And(mask)
 	}
-	bits = ge.MatchVector(maxs, bits, minBits)
+	ge.MatchVector(maxs, bits, minBits)
 	bits.And(minBits)
 	minBits.Close()
-	return bits
 }
 
 // NOT EQUAL ---
@@ -122,14 +123,13 @@ func (m i256NotEqualMatcher) MatchRange(from, to any) bool {
 	return m.val.Lt(from.(num.Int256)) || m.val.Gt(to.(num.Int256))
 }
 
-func (m i256NotEqualMatcher) MatchRangeVectors(_, _ *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m i256NotEqualMatcher) MatchRangeVectors(_, _ *block.Block, bits, mask *bitset.Bitset) {
 	// undecided, always true
 	if mask != nil {
 		bits.Copy(mask)
 	} else {
 		bits.One()
 	}
-	return bits
 }
 
 // GT ---
@@ -146,11 +146,11 @@ func (m i256GtMatcher) MatchRange(_, to any) bool {
 	return m.val.Lt(to.(num.Int256))
 }
 
-func (m i256GtMatcher) MatchRangeVectors(_, maxs *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m i256GtMatcher) MatchRangeVectors(_, maxs *block.Block, bits, mask *bitset.Bitset) {
 	// max > v
 	gt := newFactory(maxs.Type()).New(FilterModeGt)
 	gt.WithValue(m.val)
-	return gt.MatchVector(maxs, bits, mask)
+	gt.MatchVector(maxs, bits, mask)
 }
 
 // GE ---
@@ -160,18 +160,18 @@ type i256GeMatcher struct {
 }
 
 func (m i256GeMatcher) MatchValue(v any) bool {
-	return m.val.Lte(v.(num.Int256))
+	return m.val.Le(v.(num.Int256))
 }
 
 func (m i256GeMatcher) MatchRange(from, to any) bool {
-	return m.val.Lte(to.(num.Int256))
+	return m.val.Le(to.(num.Int256))
 }
 
-func (m i256GeMatcher) MatchRangeVectors(_, maxs *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m i256GeMatcher) MatchRangeVectors(_, maxs *block.Block, bits, mask *bitset.Bitset) {
 	// max >= v
 	ge := newFactory(maxs.Type()).New(FilterModeGe)
 	ge.WithValue(m.val)
-	return ge.MatchVector(maxs, bits, mask)
+	ge.MatchVector(maxs, bits, mask)
 }
 
 // LT ---
@@ -188,11 +188,11 @@ func (m i256LtMatcher) MatchRange(from, to any) bool {
 	return m.val.Gt(from.(num.Int256))
 }
 
-func (m i256LtMatcher) MatchRangeVectors(mins, _ *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m i256LtMatcher) MatchRangeVectors(mins, _ *block.Block, bits, mask *bitset.Bitset) {
 	// min < v
 	lt := newFactory(mins.Type()).New(FilterModeLt)
 	lt.WithValue(m.val)
-	return lt.MatchVector(mins, bits, mask)
+	lt.MatchVector(mins, bits, mask)
 }
 
 // LE ---
@@ -202,18 +202,18 @@ type i256LeMatcher struct {
 }
 
 func (m i256LeMatcher) MatchValue(v any) bool {
-	return m.val.Gte(v.(num.Int256))
+	return m.val.Ge(v.(num.Int256))
 }
 
 func (m i256LeMatcher) MatchRange(from, to any) bool {
-	return m.val.Gte(from.(num.Int256))
+	return m.val.Ge(from.(num.Int256))
 }
 
-func (m i256LeMatcher) MatchRangeVectors(mins, _ *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m i256LeMatcher) MatchRangeVectors(mins, _ *block.Block, bits, mask *bitset.Bitset) {
 	// min <= v
 	le := newFactory(mins.Type()).New(FilterModeLe)
 	le.WithValue(m.val)
-	return le.MatchVector(mins, bits, mask)
+	le.MatchVector(mins, bits, mask)
 }
 
 // RANGE ---
@@ -240,31 +240,32 @@ func (m *i256RangeMatcher) Value() any {
 }
 
 func (m i256RangeMatcher) MatchValue(v any) bool {
-	return m.from.Lte(v.(num.Int256)) && m.to.Gte(v.(num.Int256))
+	return m.from.Le(v.(num.Int256)) && m.to.Ge(v.(num.Int256))
 }
 
 func (m i256RangeMatcher) MatchRange(from, to any) bool {
 	return !(from.(num.Int256).Gt(m.to) || to.(num.Int256).Lt(m.from))
 }
 
-func (m i256RangeMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
-	return cmp.MatchInt256Between(*b.Int256(), m.from, m.to, bits, mask)
+func (m i256RangeMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
+	n := cmp.Int256Between(*b.Int256(), m.from, m.to, bits.Bytes(), mask.Bytes())
+	bits.ResetCount(int(n))
 }
 
-func (m i256RangeMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m i256RangeMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) {
 	// min <= to && max >= from
 	f := newFactory(mins.Type())
 	le, ge := f.New(FilterModeLe), f.New(FilterModeGe)
 	le.WithValue(m.to)
 	ge.WithValue(m.from)
-	minBits := le.MatchVector(mins, nil, mask)
+	minBits := bitset.NewBitset(mins.Len())
+	le.MatchVector(mins, minBits, mask)
 	if mask != nil {
 		minBits.And(mask)
 	}
-	bits = ge.MatchVector(maxs, bits, minBits)
+	ge.MatchVector(maxs, bits, minBits)
 	bits.And(minBits)
 	minBits.Close()
-	return bits
 }
 
 // IN ---
@@ -305,7 +306,7 @@ func (m i256InSetMatcher) MatchFilter(flt filter.Filter) bool {
 	return flt.ContainsAny(m.hashes)
 }
 
-func (m i256InSetMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m i256InSetMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
 	stride := b.Int256()
 	if mask != nil {
 		// skip masked values
@@ -324,14 +325,13 @@ func (m i256InSetMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset)
 			}
 		}
 	}
-	return bits
 }
 
-func (m i256InSetMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m i256InSetMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) {
 	setMin, setMax := m.slice[0], m.slice[len(m.slice)-1]
 	rg := newFactory(mins.Type()).New(FilterModeRange)
 	rg.WithValue(RangeValue{setMin, setMax})
-	return rg.MatchRangeVectors(mins, maxs, bits, mask)
+	rg.MatchRangeVectors(mins, maxs, bits, mask)
 }
 
 // NOT IN ---
@@ -370,7 +370,7 @@ func (m i256NotInSetMatcher) MatchFilter(_ filter.Filter) bool {
 	return true
 }
 
-func (m i256NotInSetMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m i256NotInSetMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
 	stride := b.Int256()
 	if mask != nil {
 		// skip masked values
@@ -389,16 +389,13 @@ func (m i256NotInSetMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bits
 			}
 		}
 	}
-	return bits
 }
 
-func (m i256NotInSetMatcher) MatchRangeVectors(_, _ *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m i256NotInSetMatcher) MatchRangeVectors(_, _ *block.Block, bits, mask *bitset.Bitset) {
 	// undecided, always true
 	if mask != nil {
 		bits.Copy(mask)
 	} else {
 		bits.One()
 	}
-	return bits
-
 }

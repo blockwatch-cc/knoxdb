@@ -52,10 +52,10 @@ func TestMatchEqual(t *testing.T) {
 			ExpectedCount: 1,
 		},
 	}
-	for _, testCase := range testCases {
-		t.Run(testCase.Name, func(t *testing.T) {
-			v := matchEqual(testCase.ByteArray, testCase.Value, testCase.Bits, testCase.Mask)
-			require.Equal(t, testCase.ExpectedCount, v.Count())
+	for _, c := range testCases {
+		t.Run(c.Name, func(t *testing.T) {
+			matchEqual(c.ByteArray, c.Value, c.Bits, c.Mask)
+			require.Equal(t, c.ExpectedCount, c.Bits.Count())
 		})
 	}
 }
@@ -95,10 +95,10 @@ func TestMatchNotEqual(t *testing.T) {
 			ExpectedCount: 0,
 		},
 	}
-	for _, testCase := range testCases {
-		t.Run(testCase.Name, func(t *testing.T) {
-			v := matchNotEqual(testCase.ByteArray, testCase.Value, testCase.Bits, testCase.Mask)
-			require.Equal(t, testCase.ExpectedCount, v.Count())
+	for _, c := range testCases {
+		t.Run(c.Name, func(t *testing.T) {
+			matchNotEqual(c.ByteArray, c.Value, c.Bits, c.Mask)
+			require.Equal(t, c.ExpectedCount, c.Bits.Count())
 		})
 	}
 }
@@ -138,10 +138,10 @@ func TestMatchLess(t *testing.T) {
 			ExpectedCount: 1,
 		},
 	}
-	for _, testCase := range testCases {
-		t.Run(testCase.Name, func(t *testing.T) {
-			v := matchLess(testCase.ByteArray, testCase.Value, testCase.Bits, testCase.Mask)
-			require.Equal(t, testCase.ExpectedCount, v.Count())
+	for _, c := range testCases {
+		t.Run(c.Name, func(t *testing.T) {
+			matchLess(c.ByteArray, c.Value, c.Bits, c.Mask)
+			require.Equal(t, c.ExpectedCount, c.Bits.Count())
 		})
 	}
 }
@@ -181,10 +181,10 @@ func TestMatchLessEqual(t *testing.T) {
 			ExpectedCount: 1,
 		},
 	}
-	for _, testCase := range testCases {
-		t.Run(testCase.Name, func(t *testing.T) {
-			v := matchLessEqual(testCase.ByteArray, testCase.Value, testCase.Bits, testCase.Mask)
-			require.Equal(t, testCase.ExpectedCount, v.Count())
+	for _, c := range testCases {
+		t.Run(c.Name, func(t *testing.T) {
+			matchLessEqual(c.ByteArray, c.Value, c.Bits, c.Mask)
+			require.Equal(t, c.ExpectedCount, c.Bits.Count())
 		})
 	}
 }
@@ -224,10 +224,10 @@ func TestMatchGreater(t *testing.T) {
 			ExpectedCount: 1,
 		},
 	}
-	for _, testCase := range testCases {
-		t.Run(testCase.Name, func(t *testing.T) {
-			v := matchGreater(testCase.ByteArray, testCase.Value, testCase.Bits, testCase.Mask)
-			require.Equal(t, testCase.ExpectedCount, v.Count())
+	for _, c := range testCases {
+		t.Run(c.Name, func(t *testing.T) {
+			matchGreater(c.ByteArray, c.Value, c.Bits, c.Mask)
+			require.Equal(t, c.ExpectedCount, c.Bits.Count())
 		})
 	}
 }
@@ -267,10 +267,10 @@ func TestMatchGreaterEqual(t *testing.T) {
 			ExpectedCount: 1,
 		},
 	}
-	for _, testCase := range testCases {
-		t.Run(testCase.Name, func(t *testing.T) {
-			v := matchGreaterEqual(testCase.ByteArray, testCase.Value, testCase.Bits, testCase.Mask)
-			require.Equal(t, testCase.ExpectedCount, v.Count())
+	for _, c := range testCases {
+		t.Run(c.Name, func(t *testing.T) {
+			matchGreaterEqual(c.ByteArray, c.Value, c.Bits, c.Mask)
+			require.Equal(t, c.ExpectedCount, c.Bits.Count())
 		})
 	}
 }
@@ -323,10 +323,10 @@ func TestMatchBetween(t *testing.T) {
 			ExpectedCount: 5,
 		},
 	}
-	for _, testCase := range testCases {
-		t.Run(testCase.Name, func(t *testing.T) {
-			v := matchBetween(testCase.ByteArray, testCase.Value, testCase.NValue, testCase.Bits, testCase.Mask)
-			require.Equal(t, testCase.ExpectedCount, v.Count())
+	for _, c := range testCases {
+		t.Run(c.Name, func(t *testing.T) {
+			matchBetween(c.ByteArray, c.Value, c.NValue, c.Bits, c.Mask)
+			require.Equal(t, c.ExpectedCount, c.Bits.Count())
 		})
 	}
 }
@@ -352,11 +352,11 @@ func TestMatchMinMax(t *testing.T) {
 			NValue:    nil,
 		},
 	}
-	for _, testCase := range testCases {
-		t.Run(testCase.Name, func(t *testing.T) {
-			min, max := testCase.ByteArray.MinMax()
-			require.Equal(t, testCase.Value, min)
-			require.Equal(t, testCase.NValue, max)
+	for _, c := range testCases {
+		t.Run(c.Name, func(t *testing.T) {
+			min, max := c.ByteArray.MinMax()
+			require.Equal(t, c.Value, min)
+			require.Equal(t, c.NValue, max)
 		})
 	}
 }

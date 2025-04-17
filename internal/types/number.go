@@ -29,6 +29,28 @@ type Number interface {
 	Integer | Float
 }
 
+type Bitset = bitset.Bitset
+
+type NumberMatcher[T Number] interface {
+	MatchEqual(val T, bits, mask *Bitset)
+	MatchNotEqual(val T, bits, mask *Bitset)
+	MatchLess(val T, bits, mask *Bitset)
+	MatchLessEqual(val T, bits, mask *Bitset)
+	MatchGreater(val T, bits, mask *Bitset)
+	MatchGreaterEqual(val T, bits, mask *Bitset)
+	MatchBetween(a, b T, bits, mask *Bitset)
+
+	// Int: *xorar.Bitmap
+	// Float: []float64, []float32
+	MatchInSet(s any, bits, mask *Bitset)
+	MatchNotInSet(s any, bits, mask *Bitset)
+}
+
+type NumberAccessor[T Number] interface {
+	Get(int) T
+	AppendTo([]uint32, []T) []T
+}
+
 func IsSigned[T Integer]() bool {
 	// Check if -1 is less than 0 in the type T
 	// For signed types, this is true (e.g., -1 < 0)
@@ -82,24 +104,31 @@ func MaxVal[T Integer]() T {
 	}
 }
 
-type Bitset = bitset.Bitset
-
-type NumberMatcher[T Number] interface {
-	MatchEqual(val T, bits, mask *Bitset) *Bitset
-	MatchNotEqual(val T, bits, mask *Bitset) *Bitset
-	MatchLess(val T, bits, mask *Bitset) *Bitset
-	MatchLessEqual(val T, bits, mask *Bitset) *Bitset
-	MatchGreater(val T, bits, mask *Bitset) *Bitset
-	MatchGreaterEqual(val T, bits, mask *Bitset) *Bitset
-	MatchBetween(a, b T, bits, mask *Bitset) *Bitset
-
-	// Int: *xorar.Bitmap
-	// Float: []float64, []float32
-	MatchSet(s any, bits, mask *Bitset) *Bitset
-	MatchNotSet(s any, bits, mask *Bitset) *Bitset
-}
-
-type NumberAccessor[T Number] interface {
-	Get(int) T
-	AppendTo([]uint32, []T) []T
+func Cast[T Integer](val any) (t T, ok bool) {
+	ok = true
+	switch v := val.(type) {
+	case int:
+		t = T(v)
+	case int64:
+		t = T(v)
+	case int32:
+		t = T(v)
+	case int16:
+		t = T(v)
+	case int8:
+		t = T(v)
+	case uint:
+		t = T(v)
+	case uint64:
+		t = T(v)
+	case uint32:
+		t = T(v)
+	case uint16:
+		t = T(v)
+	case uint8:
+		t = T(v)
+	default:
+		ok = false
+	}
+	return
 }

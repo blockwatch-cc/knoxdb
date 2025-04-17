@@ -326,7 +326,7 @@ func (a Decimal32) Gt(b Decimal32) bool {
 	return x.val > y.val
 }
 
-func (a Decimal32) Gte(b Decimal32) bool {
+func (a Decimal32) Ge(b Decimal32) bool {
 	x, y := EqualScaleDecimal32(a, b)
 	return x.val >= y.val
 }
@@ -336,7 +336,7 @@ func (a Decimal32) Lt(b Decimal32) bool {
 	return x.val < y.val
 }
 
-func (a Decimal32) Lte(b Decimal32) bool {
+func (a Decimal32) Le(b Decimal32) bool {
 	x, y := EqualScaleDecimal32(a, b)
 	return x.val <= y.val
 }
