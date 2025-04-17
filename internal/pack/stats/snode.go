@@ -10,7 +10,6 @@ import (
 	"sync/atomic"
 
 	"blockwatch.cc/knoxdb/internal/block"
-	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/query"
@@ -117,7 +116,7 @@ func (n *SNode) AppendPack(pkg *pack.Package) bool {
 		var minv, maxv any
 		if b == nil {
 			// use zero values for invalid blocks (deleted from schema)
-			minv = cmp.Zero(types.BlockTypes[fields[i].Type])
+			minv = types.BlockTypes[fields[i].Type].Zero()
 			maxv = minv
 		} else {
 			// calculate min/max statistics
@@ -162,11 +161,11 @@ func (n *SNode) UpdatePack(pkg *pack.Package) bool {
 		maxo := n.spack.Block(maxx).Get(k)
 
 		// set min/max when different
-		if !cmp.EQ(b.Type(), mino, minv) {
+		if !b.Type().EQ(mino, minv) {
 			n.spack.Block(minx).Set(k, minv)
 			n.dirty = true
 		}
-		if !cmp.EQ(b.Type(), maxo, maxv) {
+		if !b.Type().EQ(maxo, maxv) {
 			n.spack.Block(maxx).Set(k, maxv)
 			n.dirty = true
 		}
@@ -420,7 +419,7 @@ func (n *SNode) BuildMetaStats(view *schema.View, build *schema.Builder) bool {
 			}
 		}
 		// set dirty flag when any of the statistics has actually changed
-		dirty = dirty || !cmp.EQ(b.Type(), curr, val)
+		dirty = dirty || !b.Type().EQ(curr, val)
 
 		// write val to builder (even if not changed)
 		build.Write(i, val)

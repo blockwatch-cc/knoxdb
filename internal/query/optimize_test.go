@@ -9,7 +9,6 @@ import (
 	"slices"
 	"testing"
 
-	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"github.com/stretchr/testify/assert"
@@ -147,7 +146,7 @@ func TestOptimize(t *testing.T) {
 			{
 				name:      "GT(0) AND LT(100)",
 				input:     makeAndTree(makeGtNode(f1, v(0)), makeLtNode(f1, v(100))),
-				expected:  makeAndTree(makeRangeNode(f1, cmp.Inc(typ, v(0)), cmp.Dec(typ, v(100)))),
+				expected:  makeAndTree(makeRangeNode(f1, typ.Inc(v(0)), typ.Dec(v(100)))),
 				comment:   "> AND < should get merged into range",
 				skipTypes: []BlockType{BlockBool}, // contradiction due to limited domain range
 			},
@@ -319,7 +318,7 @@ func makeNode(field schema.Field, mode FilterMode, value any) *FilterTreeNode {
 		if err != nil {
 			panic(err)
 		}
-		f.Value = cmp.Unique(blockType, v)
+		f.Value = blockType.Unique(v)
 		f.Matcher.WithSlice(f.Value)
 	case FilterModeRange:
 		rg, ok := value.(RangeValue)

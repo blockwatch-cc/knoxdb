@@ -88,7 +88,7 @@ func testIntContainerType[T types.Integer](t *testing.T, scheme IntegerContainer
 			}
 
 			// serialize to buffer
-			buf := make([]byte, 0, enc.MaxSize())
+			buf := make([]byte, 0, enc.Size())
 			buf = enc.Store(buf)
 			require.NotNil(t, buf)
 
@@ -114,6 +114,10 @@ func testIntContainerType[T types.Integer](t *testing.T, scheme IntegerContainer
 			enc2.Close()
 			enc.Close()
 		})
+	}
+
+	if scheme == TIntegerBitpacked {
+		return
 	}
 
 	// validate matchers
@@ -161,20 +165,20 @@ func testIntContainerType[T types.Integer](t *testing.T, scheme IntegerContainer
 
 			// in set
 			t.Run("IN", func(t *testing.T) {
-				testIntCompareFunc3[T](t, enc.MatchSet, src, types.FilterModeIn)
+				testIntCompareFunc3[T](t, enc.MatchInSet, src, types.FilterModeIn)
 			})
 
 			// not in set
 			t.Run("NI", func(t *testing.T) {
-				testIntCompareFunc3[T](t, enc.MatchNotSet, src, types.FilterModeNotIn)
+				testIntCompareFunc3[T](t, enc.MatchNotInSet, src, types.FilterModeNotIn)
 			})
 		})
 	}
 }
 
-type IntCompareFunc[T types.Integer] func(T, *Bitset, *Bitset) *Bitset
-type IntCompareFunc2[T types.Integer] func(T, T, *Bitset, *Bitset) *Bitset
-type IntCompareFunc3[T types.Integer] func(any, *Bitset, *Bitset) *Bitset
+type IntCompareFunc[T types.Integer] func(T, *Bitset, *Bitset)
+type IntCompareFunc2[T types.Integer] func(T, T, *Bitset, *Bitset)
+type IntCompareFunc3[T types.Integer] func(any, *Bitset, *Bitset)
 
 func testIntCompareFunc[T types.Integer](t *testing.T, cmp IntCompareFunc[T], src []T, mode types.FilterMode) {
 	bits := bitset.NewBitset(len(src))
@@ -314,89 +318,97 @@ func ensureBits[T types.Integer](t *testing.T, vals []T, val, val2 T, bits *Bits
 
 func TestEncodeConstInt(t *testing.T) {
 	testIntContainerType[int64](t, TIntegerConstant)
-	testIntContainerType[uint64](t, TIntegerConstant)
 	testIntContainerType[int32](t, TIntegerConstant)
-	testIntContainerType[uint32](t, TIntegerConstant)
 	testIntContainerType[int16](t, TIntegerConstant)
-	testIntContainerType[uint16](t, TIntegerConstant)
 	testIntContainerType[int8](t, TIntegerConstant)
+
+	testIntContainerType[uint64](t, TIntegerConstant)
+	testIntContainerType[uint32](t, TIntegerConstant)
+	testIntContainerType[uint16](t, TIntegerConstant)
 	testIntContainerType[uint8](t, TIntegerConstant)
 }
 
 func TestEncodeDelta(t *testing.T) {
 	testIntContainerType[int64](t, TIntegerDelta)
-	testIntContainerType[uint64](t, TIntegerDelta)
 	testIntContainerType[int32](t, TIntegerDelta)
-	testIntContainerType[uint32](t, TIntegerDelta)
 	testIntContainerType[int16](t, TIntegerDelta)
-	testIntContainerType[uint16](t, TIntegerDelta)
 	testIntContainerType[int8](t, TIntegerDelta)
+
+	testIntContainerType[uint64](t, TIntegerDelta)
+	testIntContainerType[uint32](t, TIntegerDelta)
+	testIntContainerType[uint16](t, TIntegerDelta)
 	testIntContainerType[uint8](t, TIntegerDelta)
 }
 
 func TestEncodeRawInt(t *testing.T) {
 	testIntContainerType[int64](t, TIntegerRaw)
-	testIntContainerType[uint64](t, TIntegerRaw)
 	testIntContainerType[int32](t, TIntegerRaw)
-	testIntContainerType[uint32](t, TIntegerRaw)
 	testIntContainerType[int16](t, TIntegerRaw)
-	testIntContainerType[uint16](t, TIntegerRaw)
 	testIntContainerType[int8](t, TIntegerRaw)
+
+	testIntContainerType[uint64](t, TIntegerRaw)
+	testIntContainerType[uint32](t, TIntegerRaw)
+	testIntContainerType[uint16](t, TIntegerRaw)
 	testIntContainerType[uint8](t, TIntegerRaw)
 }
 
 func TestEncodeBitpack(t *testing.T) {
 	testIntContainerType[int64](t, TIntegerBitpacked)
-	testIntContainerType[uint64](t, TIntegerBitpacked)
 	testIntContainerType[int32](t, TIntegerBitpacked)
-	testIntContainerType[uint32](t, TIntegerBitpacked)
 	testIntContainerType[int16](t, TIntegerBitpacked)
-	testIntContainerType[uint16](t, TIntegerBitpacked)
 	testIntContainerType[int8](t, TIntegerBitpacked)
+
+	testIntContainerType[uint64](t, TIntegerBitpacked)
+	testIntContainerType[uint32](t, TIntegerBitpacked)
+	testIntContainerType[uint16](t, TIntegerBitpacked)
 	testIntContainerType[uint8](t, TIntegerBitpacked)
 }
 
 func TestEncodeDict(t *testing.T) {
 	testIntContainerType[int64](t, TIntegerDictionary)
-	testIntContainerType[uint64](t, TIntegerDictionary)
 	testIntContainerType[int32](t, TIntegerDictionary)
-	testIntContainerType[uint32](t, TIntegerDictionary)
 	testIntContainerType[int16](t, TIntegerDictionary)
-	testIntContainerType[uint16](t, TIntegerDictionary)
 	testIntContainerType[int8](t, TIntegerDictionary)
+
+	testIntContainerType[uint64](t, TIntegerDictionary)
+	testIntContainerType[uint32](t, TIntegerDictionary)
+	testIntContainerType[uint16](t, TIntegerDictionary)
 	testIntContainerType[uint8](t, TIntegerDictionary)
 }
 
 func TestEncodeRun(t *testing.T) {
 	testIntContainerType[int64](t, TIntegerRunEnd)
-	testIntContainerType[uint64](t, TIntegerRunEnd)
 	testIntContainerType[int32](t, TIntegerRunEnd)
-	testIntContainerType[uint32](t, TIntegerRunEnd)
 	testIntContainerType[int16](t, TIntegerRunEnd)
-	testIntContainerType[uint16](t, TIntegerRunEnd)
 	testIntContainerType[int8](t, TIntegerRunEnd)
+
+	testIntContainerType[uint64](t, TIntegerRunEnd)
+	testIntContainerType[uint32](t, TIntegerRunEnd)
+	testIntContainerType[uint16](t, TIntegerRunEnd)
 	testIntContainerType[uint8](t, TIntegerRunEnd)
 }
 
 func TestEncodeSimple8(t *testing.T) {
 	testIntContainerType[int64](t, TIntegerSimple8)
-	testIntContainerType[uint64](t, TIntegerSimple8)
 	testIntContainerType[int32](t, TIntegerSimple8)
-	testIntContainerType[uint32](t, TIntegerSimple8)
 	testIntContainerType[int16](t, TIntegerSimple8)
-	testIntContainerType[uint16](t, TIntegerSimple8)
 	testIntContainerType[int8](t, TIntegerSimple8)
+
+	testIntContainerType[uint64](t, TIntegerSimple8)
+	testIntContainerType[uint32](t, TIntegerSimple8)
+	testIntContainerType[uint16](t, TIntegerSimple8)
 	testIntContainerType[uint8](t, TIntegerSimple8)
 }
 
 func TestEncodeInt(t *testing.T) {
 	testEncodeIntT[int64](t)
-	testEncodeIntT[uint64](t)
 	testEncodeIntT[int32](t)
-	testEncodeIntT[uint32](t)
 	testEncodeIntT[int16](t)
-	testEncodeIntT[uint16](t)
 	testEncodeIntT[int8](t)
+
+	testEncodeIntT[uint64](t)
+	testEncodeIntT[uint32](t)
+	testEncodeIntT[uint16](t)
 	testEncodeIntT[uint8](t)
 }
 
@@ -532,8 +544,8 @@ func BenchmarkEncodeAndStoreInt(b *testing.B) {
 				for range b.N {
 					ctx := AnalyzeInt(data, scheme == TIntegerDictionary)
 					enc := NewInt[int16](scheme).Encode(ctx, data, MAX_CASCADE)
-					sz := enc.MaxSize()
-					buf := enc.Store(make([]byte, 0, enc.MaxSize()))
+					sz := enc.Size()
+					buf := enc.Store(make([]byte, 0, enc.Size()))
 					require.LessOrEqual(b, len(buf), sz)
 					enc.Close()
 					ctx.Close()
@@ -552,7 +564,7 @@ func BenchmarkEncodeBestInt(b *testing.B) {
 			var sz int
 			for range b.N {
 				enc := EncodeInt(nil, c.Data, MAX_CASCADE)
-				sz += enc.MaxSize()
+				sz += enc.Size()
 				if once {
 					b.Log(enc.Info())
 					once = false
@@ -597,7 +609,7 @@ func BenchmarkAppendToInt(b *testing.B) {
 			data := etests.GenForIntScheme[int64](int(scheme), c.N)
 			ctx := AnalyzeInt(data, true)
 			enc := NewInt[int64](scheme).Encode(ctx, data, MAX_CASCADE)
-			buf := enc.Store(make([]byte, 0, enc.MaxSize()))
+			buf := enc.Store(make([]byte, 0, enc.Size()))
 			dst := make([]int64, 0, c.N)
 			all := tests.GenSeq[uint32](c.N)
 

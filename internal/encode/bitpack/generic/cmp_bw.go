@@ -560,7 +560,9 @@ func cmp_bp_7_bw(buf []byte, val, val2 uint64, n int, bits *Bitset) *Bitset {
 }
 
 func cmp_bp_8_bw(buf []byte, val, val2 uint64, n int, bits *Bitset) *Bitset {
-	return cmp.MatchUint8Between(buf[:n], uint8(val), uint8(val2), bits, nil)
+	c := cmp.Uint8Between(buf[:n], uint8(val), uint8(val2), bits.Bytes())
+	bits.ResetCount(int(c))
+	return bits
 }
 
 func cmp_bp_9_bw(buf []byte, val, val2 uint64, n int, bits *Bitset) *Bitset {

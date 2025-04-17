@@ -73,19 +73,19 @@ func (m bitEqualMatcher) MatchRange(from, to any) bool {
 	return m.val == from.(bool) || m.val == to.(bool)
 }
 
-func (m bitEqualMatcher) MatchVector(b *block.Block, bits, _ *bitset.Bitset) *bitset.Bitset {
+func (m bitEqualMatcher) MatchVector(b *block.Block, bits, _ *bitset.Bitset) {
 	if m.val {
-		return bits.Copy(b.Bool())
+		bits.Copy(b.Bool())
 	} else {
-		return bits.Copy(b.Bool()).Neg()
+		bits.Copy(b.Bool()).Neg()
 	}
 }
 
-func (m bitEqualMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m bitEqualMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, _ *bitset.Bitset) {
 	if m.val {
-		return bits.Copy(maxs.Bool())
+		bits.Copy(maxs.Bool())
 	} else {
-		return bits.Copy(mins.Bool()).Neg()
+		bits.Copy(mins.Bool()).Neg()
 	}
 }
 
@@ -118,19 +118,19 @@ func (m bitNotEqualMatcher) MatchRange(from, to any) bool {
 	return true
 }
 
-func (m bitNotEqualMatcher) MatchVector(b *block.Block, bits, _ *bitset.Bitset) *bitset.Bitset {
+func (m bitNotEqualMatcher) MatchVector(b *block.Block, bits, _ *bitset.Bitset) {
 	if !m.val {
-		return bits.Copy(b.Bool())
+		bits.Copy(b.Bool())
 	} else {
-		return bits.Copy(b.Bool()).Neg()
+		bits.Copy(b.Bool()).Neg()
 	}
 }
 
-func (m bitNotEqualMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m bitNotEqualMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, _ *bitset.Bitset) {
 	if !m.val {
-		return bits.Copy(maxs.Bool())
+		bits.Copy(maxs.Bool())
 	} else {
-		return bits.Copy(mins.Bool()).Neg()
+		bits.Copy(mins.Bool()).Neg()
 	}
 }
 
@@ -148,19 +148,19 @@ func (m bitGtMatcher) MatchRange(_, to any) bool {
 	return to.(bool) && !m.val
 }
 
-func (m bitGtMatcher) MatchVector(b *block.Block, bits, _ *bitset.Bitset) *bitset.Bitset {
+func (m bitGtMatcher) MatchVector(b *block.Block, bits, _ *bitset.Bitset) {
 	if m.val {
-		return bits.Zero()
+		bits.Zero()
 	} else {
-		return bits.Copy(b.Bool())
+		bits.Copy(b.Bool())
 	}
 }
 
-func (m bitGtMatcher) MatchRangeVectors(_, maxs *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m bitGtMatcher) MatchRangeVectors(_, maxs *block.Block, bits, _ *bitset.Bitset) {
 	if m.val {
-		return bits.Zero()
+		bits.Zero()
 	} else {
-		return bits.Copy(maxs.Bool())
+		bits.Copy(maxs.Bool())
 	}
 }
 
@@ -187,7 +187,7 @@ func (m bitGeMatcher) MatchRange(from, to any) bool {
 	return true
 }
 
-func (m bitGeMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m bitGeMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
 	if m.val {
 		bits.Copy(b.Bool())
 	} else {
@@ -198,10 +198,9 @@ func (m bitGeMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bi
 			bits.One()
 		}
 	}
-	return bits
 }
 
-func (m bitGeMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m bitGeMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) {
 	if m.val {
 		bits.Copy(maxs.Bool())
 	} else {
@@ -212,7 +211,6 @@ func (m bitGeMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bit
 			bits.One()
 		}
 	}
-	return bits
 }
 
 // LT ---
@@ -229,19 +227,19 @@ func (m bitLtMatcher) MatchRange(from, _ any) bool {
 	return m.val && !from.(bool)
 }
 
-func (m bitLtMatcher) MatchVector(b *block.Block, bits, _ *bitset.Bitset) *bitset.Bitset {
+func (m bitLtMatcher) MatchVector(b *block.Block, bits, _ *bitset.Bitset) {
 	if m.val {
-		return bits.Copy(b.Bool()).Neg()
+		bits.Copy(b.Bool()).Neg()
 	} else {
-		return bits.Zero()
+		bits.Zero()
 	}
 }
 
-func (m bitLtMatcher) MatchRangeVectors(mins, _ *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m bitLtMatcher) MatchRangeVectors(mins, _ *block.Block, bits, _ *bitset.Bitset) {
 	if m.val {
-		return bits.Copy(mins.Bool()).Neg()
+		bits.Copy(mins.Bool()).Neg()
 	} else {
-		return bits.Zero()
+		bits.Zero()
 	}
 }
 
@@ -265,11 +263,11 @@ func (m bitLeMatcher) MatchRange(_, _ any) bool {
 	return true
 }
 
-func (m bitLeMatcher) MatchVector(b *block.Block, bits, _ *bitset.Bitset) *bitset.Bitset {
-	return bits.One()
+func (m bitLeMatcher) MatchVector(b *block.Block, bits, _ *bitset.Bitset) {
+	bits.One()
 }
 
-func (m bitLeMatcher) MatchRangeVectors(mins, _ *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m bitLeMatcher) MatchRangeVectors(mins, _ *block.Block, bits, mask *bitset.Bitset) {
 	if m.val {
 		// always true
 		if mask != nil {
@@ -280,7 +278,6 @@ func (m bitLeMatcher) MatchRangeVectors(mins, _ *block.Block, bits, mask *bitset
 	} else {
 		bits.Copy(mins.Bool()).Neg()
 	}
-	return bits
 }
 
 // RANGE ---
@@ -319,17 +316,18 @@ func (m bitRangeMatcher) MatchBitmap(flt *xroar.Bitmap) bool {
 	return flt.Contains(0)
 }
 
-func (m bitRangeMatcher) MatchVector(b *block.Block, bits, _ *bitset.Bitset) *bitset.Bitset {
-	if m.from {
-		return bits.Copy(b.Bool())
+func (m bitRangeMatcher) MatchVector(b *block.Block, bits, _ *bitset.Bitset) {
+	switch {
+	case m.from:
+		bits.Copy(b.Bool())
+	case m.to:
+		bits.One()
+	default:
+		bits.Copy(b.Bool()).Neg()
 	}
-	if m.to {
-		return bits.One()
-	}
-	return bits.Copy(b.Bool()).Neg()
 }
 
-func (m bitRangeMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m bitRangeMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) {
 	switch {
 	case !m.from && !m.to: // 00, data vec must contain false -> min = false
 		bits.Copy(mins.Bool()).Neg()
@@ -339,7 +337,6 @@ func (m bitRangeMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask *
 	default: // 11, data vec must contain true -> max = true
 		bits.Copy(maxs.Bool())
 	}
-	return bits
 }
 
 // IN ---
@@ -419,13 +416,10 @@ type bitNotInSetMatcher struct {
 }
 
 func (m bitNotInSetMatcher) MatchFilter(flt filter.Filter) bool {
-	if x, ok := flt.(*xroar.Bitmap); ok {
-		if m.to {
-			return !x.Contains(1)
-		}
-		return !x.Contains(0)
+	if m.to {
+		return !flt.Contains(1)
 	}
-	return true
+	return !flt.Contains(0)
 }
 
 func (m bitNotInSetMatcher) MatchValue(v any) bool {
@@ -436,10 +430,12 @@ func (m bitNotInSetMatcher) MatchRange(from, to any) bool {
 	return !m.bitInSetMatcher.MatchRange(from, to)
 }
 
-func (m bitNotInSetMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
-	return m.bitInSetMatcher.MatchVector(b, bits, mask).Neg()
+func (m bitNotInSetMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
+	m.bitInSetMatcher.MatchVector(b, bits, mask)
+	bits.Neg()
 }
 
-func (m bitNotInSetMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, _ *bitset.Bitset) *bitset.Bitset {
-	return m.bitInSetMatcher.MatchRangeVectors(mins, maxs, bits, nil).Neg()
+func (m bitNotInSetMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, _ *bitset.Bitset) {
+	m.bitInSetMatcher.MatchRangeVectors(mins, maxs, bits, nil)
+	bits.Neg()
 }

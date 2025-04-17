@@ -315,7 +315,7 @@ func (a Decimal64) Gt(b Decimal64) bool {
 	return x.val > y.val
 }
 
-func (a Decimal64) Gte(b Decimal64) bool {
+func (a Decimal64) Ge(b Decimal64) bool {
 	x, y := EqualScaleDecimal64(a, b)
 	return x.val >= y.val
 }
@@ -325,7 +325,7 @@ func (a Decimal64) Lt(b Decimal64) bool {
 	return x.val < y.val
 }
 
-func (a Decimal64) Lte(b Decimal64) bool {
+func (a Decimal64) Le(b Decimal64) bool {
 	x, y := EqualScaleDecimal64(a, b)
 	return x.val <= y.val
 }

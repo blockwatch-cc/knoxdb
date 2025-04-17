@@ -515,11 +515,11 @@ func (x Int128) Gt(y Int128) bool {
 	return int64(x[0]) > int64(y[0]) || (x[0] == y[0] && x[1] > y[1])
 }
 
-func (x Int128) Lte(y Int128) bool {
+func (x Int128) Le(y Int128) bool {
 	return int64(x[0]) < int64(y[0]) || (x[0] == y[0] && x[1] <= y[1])
 }
 
-func (x Int128) Gte(y Int128) bool {
+func (x Int128) Ge(y Int128) bool {
 	return int64(x[0]) > int64(y[0]) || (x[0] == y[0] && x[1] >= y[1])
 }
 

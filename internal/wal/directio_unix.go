@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
-//go:build !windows && !darwin && !openbsd && !plan9
-// +build !windows,!darwin,!openbsd,!plan9
+//go:build !windows && !darwin && !openbsd && !plan9 && !wasm
+// +build !windows,!darwin,!openbsd,!plan9,!wasm
 
 package wal
 

@@ -34,7 +34,7 @@ func (c *ConstContainer[T]) Len() int {
 	return c.N
 }
 
-func (c *ConstContainer[T]) MaxSize() int {
+func (c *ConstContainer[T]) Size() int {
 	return 1 + num.UvarintLen(c.Val) + num.UvarintLen(c.N)
 }
 
@@ -80,69 +80,83 @@ func (c *ConstContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) In
 	return c
 }
 
-func (c *ConstContainer[T]) MatchEqual(val T, bits, _ *Bitset) *Bitset {
+func (c *ConstContainer[T]) DecodeChunk(dst *[CHUNK_SIZE]T, ofs int) {
+	var i int
+	for range CHUNK_SIZE / 16 {
+		dst[i] = c.Val
+		dst[i+1] = c.Val
+		dst[i+2] = c.Val
+		dst[i+3] = c.Val
+		dst[i+4] = c.Val
+		dst[i+5] = c.Val
+		dst[i+6] = c.Val
+		dst[i+7] = c.Val
+		dst[i+8] = c.Val
+		dst[i+9] = c.Val
+		dst[i+10] = c.Val
+		dst[i+11] = c.Val
+		dst[i+12] = c.Val
+		dst[i+13] = c.Val
+		dst[i+14] = c.Val
+		dst[i+15] = c.Val
+		i += 16
+	}
+}
+
+func (c *ConstContainer[T]) MatchEqual(val T, bits, _ *Bitset) {
 	if c.Val == val {
 		bits.One()
 	}
-	return bits
 }
 
-func (c *ConstContainer[T]) MatchNotEqual(val T, bits, _ *Bitset) *Bitset {
+func (c *ConstContainer[T]) MatchNotEqual(val T, bits, _ *Bitset) {
 	if c.Val != val {
 		bits.One()
 	}
-	return bits
 }
 
-func (c *ConstContainer[T]) MatchLess(val T, bits, _ *Bitset) *Bitset {
+func (c *ConstContainer[T]) MatchLess(val T, bits, _ *Bitset) {
 	if c.Val < val {
 		bits.One()
 	}
-	return bits
 }
 
-func (c *ConstContainer[T]) MatchLessEqual(val T, bits, _ *Bitset) *Bitset {
+func (c *ConstContainer[T]) MatchLessEqual(val T, bits, _ *Bitset) {
 	if c.Val <= val {
 		bits.One()
 	}
-	return bits
 }
 
-func (c *ConstContainer[T]) MatchGreater(val T, bits, _ *Bitset) *Bitset {
+func (c *ConstContainer[T]) MatchGreater(val T, bits, _ *Bitset) {
 	if c.Val > val {
 		bits.One()
 	}
-	return bits
 }
 
-func (c *ConstContainer[T]) MatchGreaterEqual(val T, bits, _ *Bitset) *Bitset {
+func (c *ConstContainer[T]) MatchGreaterEqual(val T, bits, _ *Bitset) {
 	if c.Val >= val {
 		bits.One()
 	}
-	return bits
 }
 
-func (c *ConstContainer[T]) MatchBetween(a, b T, bits, _ *Bitset) *Bitset {
+func (c *ConstContainer[T]) MatchBetween(a, b T, bits, _ *Bitset) {
 	if c.Val >= a && c.Val <= b {
 		bits.One()
 	}
-	return bits
 }
 
-func (c *ConstContainer[T]) MatchSet(s any, bits, _ *Bitset) *Bitset {
+func (c *ConstContainer[T]) MatchInSet(s any, bits, _ *Bitset) {
 	set := s.(*xroar.Bitmap)
 	if set.Contains(uint64(c.Val)) {
 		bits.One()
 	}
-	return bits
 }
 
-func (c *ConstContainer[T]) MatchNotSet(s any, bits, _ *Bitset) *Bitset {
+func (c *ConstContainer[T]) MatchNotInSet(s any, bits, _ *Bitset) {
 	set := s.(*xroar.Bitmap)
 	if !set.Contains(uint64(c.Val)) {
 		bits.One()
 	}
-	return bits
 }
 
 type ConstFactory struct {
@@ -225,4 +239,9 @@ var constFactory = ConstFactory{
 	u8Pool: sync.Pool{
 		New: func() any { return new(ConstContainer[uint8]) },
 	},
+}
+
+// TODO
+func (c *ConstContainer[T]) Iterator() Iterator[T] {
+	return nil
 }

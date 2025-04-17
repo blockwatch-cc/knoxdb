@@ -509,30 +509,30 @@ func (a DictByteArray) ForEachUnique(fn func(int, []byte)) {
 	}
 }
 
-func (a *DictByteArray) MatchEqual(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
-	return matchEqual(a, val, bits, mask)
+func (a *DictByteArray) MatchEqual(val []byte, bits, mask *bitset.Bitset) {
+	matchEqual(a, val, bits, mask)
 }
 
-func (a *DictByteArray) MatchNotEqual(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
-	return matchNotEqual(a, val, bits, mask)
+func (a *DictByteArray) MatchNotEqual(val []byte, bits, mask *bitset.Bitset) {
+	matchNotEqual(a, val, bits, mask)
 }
 
-func (a *DictByteArray) MatchLess(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
-	return matchLess(a, val, bits, mask)
+func (a *DictByteArray) MatchLess(val []byte, bits, mask *bitset.Bitset) {
+	matchLess(a, val, bits, mask)
 }
 
-func (a *DictByteArray) MatchLessEqual(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
-	return matchLessEqual(a, val, bits, mask)
+func (a *DictByteArray) MatchLessEqual(val []byte, bits, mask *bitset.Bitset) {
+	matchLessEqual(a, val, bits, mask)
 }
 
-func (a *DictByteArray) MatchGreater(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
-	return matchGreater(a, val, bits, mask)
+func (a *DictByteArray) MatchGreater(val []byte, bits, mask *bitset.Bitset) {
+	matchGreater(a, val, bits, mask)
 }
 
-func (a *DictByteArray) MatchGreaterEqual(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
-	return matchGreaterEqual(a, val, bits, mask)
+func (a *DictByteArray) MatchGreaterEqual(val []byte, bits, mask *bitset.Bitset) {
+	matchGreaterEqual(a, val, bits, mask)
 }
 
-func (a *DictByteArray) MatchBetween(from, to []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
-	return matchBetween(a, from, to, bits, mask)
+func (a *DictByteArray) MatchBetween(from, to []byte, bits, mask *bitset.Bitset) {
+	matchBetween(a, from, to, bits, mask)
 }

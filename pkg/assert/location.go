@@ -8,12 +8,11 @@ package assert
 import (
 	"encoding/binary"
 	"fmt"
+	"hash/fnv"
 	"path"
 	"runtime"
 	"strings"
 	"sync"
-
-	"blockwatch.cc/knoxdb/internal/hash/xxhash"
 )
 
 // stackFrameOffset indicates how many stack frames to unwind
@@ -61,7 +60,7 @@ func newLocationInfo(nframes stackFrameOffset) *locationInfo {
 }
 
 func makeLocationId(filename string, line int) uint64 {
-	h := xxhash.New()
+	h := fnv.New64()
 	h.Write([]byte(filename))
 	var buf [8]byte
 	binary.LittleEndian.PutUint64(buf[:], uint64(line))

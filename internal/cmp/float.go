@@ -1,7 +1,7 @@
 // Copyright (c) 2023-2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package generic
+package cmp
 
 import (
 	"math/bits"
@@ -10,7 +10,7 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
-func MatchFloatEqual[T types.Float](src []T, val T, res []byte) int64 {
+func cmp_eq_f[T types.Float](src []T, val T, res []byte) int64 {
 	var cnt int64
 	n := len(src) / 8
 	var idx int
@@ -43,7 +43,7 @@ func MatchFloatEqual[T types.Float](src []T, val T, res []byte) int64 {
 	return cnt
 }
 
-func MatchFloatNotEqual[T types.Float](src []T, val T, res []byte) int64 {
+func cmp_ne_f[T types.Float](src []T, val T, res []byte) int64 {
 	var cnt int64
 	n := len(src) / 8
 	var idx int
@@ -76,7 +76,7 @@ func MatchFloatNotEqual[T types.Float](src []T, val T, res []byte) int64 {
 	return cnt
 }
 
-func MatchFloatLess[T types.Float](src []T, val T, res []byte) int64 {
+func cmp_lt_f[T types.Float](src []T, val T, res []byte) int64 {
 	var cnt int64
 	n := len(src) / 8
 	var idx int
@@ -109,7 +109,7 @@ func MatchFloatLess[T types.Float](src []T, val T, res []byte) int64 {
 	return cnt
 }
 
-func MatchFloatLessEqual[T types.Float](src []T, val T, res []byte) int64 {
+func cmp_le_f[T types.Float](src []T, val T, res []byte) int64 {
 	var cnt int64
 	n := len(src) / 8
 	var idx int
@@ -142,7 +142,7 @@ func MatchFloatLessEqual[T types.Float](src []T, val T, res []byte) int64 {
 	return cnt
 }
 
-func MatchFloatGreater[T types.Float](src []T, val T, res []byte) int64 {
+func cmp_gt_f[T types.Float](src []T, val T, res []byte) int64 {
 	var cnt int64
 	n := len(src) / 8
 	var idx int
@@ -175,7 +175,7 @@ func MatchFloatGreater[T types.Float](src []T, val T, res []byte) int64 {
 	return cnt
 }
 
-func MatchFloatGreaterEqual[T types.Float](src []T, val T, res []byte) int64 {
+func cmp_ge_f[T types.Float](src []T, val T, res []byte) int64 {
 	var cnt int64
 	n := len(src) / 8
 	var idx int
@@ -208,7 +208,7 @@ func MatchFloatGreaterEqual[T types.Float](src []T, val T, res []byte) int64 {
 	return cnt
 }
 
-func MatchFloatBetween[T types.Float](src []T, a, b T, res []byte) int64 {
+func cmp_bw_f[T types.Float](src []T, a, b T, res []byte) int64 {
 	var cnt int64
 	n := len(src) / 8
 	var idx int

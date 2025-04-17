@@ -18,91 +18,91 @@ type Number interface {
 	int64 | int32 | int16 | int8 | uint64 | uint32 | uint16 | uint8 | float64 | float32
 }
 
-type numMatchFunc[T Number] func(slice []T, val T, bits, mask *bitset.Bitset) *bitset.Bitset
+type numMatchFunc[T Number] func(slice []T, val T, bits []byte) int64
 
-type numRangeMatchFunc[T Number] func(slice []T, from, to T, bits, mask *bitset.Bitset) *bitset.Bitset
+type numRangeMatchFunc[T Number] func(slice []T, from, to T, bits []byte) int64
 
 var (
 	// use as placeholder for comparisons that don't exist
 	nullPtr = unsafe.Pointer(nil)
 
 	// pull in comparison kernels as variables so we can take their address below
-	u64_eq = cmp.MatchUint64Equal
-	u32_eq = cmp.MatchUint32Equal
-	u16_eq = cmp.MatchUint16Equal
-	u8_eq  = cmp.MatchUint8Equal
-	i64_eq = cmp.MatchInt64Equal
-	i32_eq = cmp.MatchInt32Equal
-	i16_eq = cmp.MatchInt16Equal
-	i8_eq  = cmp.MatchInt8Equal
-	f64_eq = cmp.MatchFloat64Equal
-	f32_eq = cmp.MatchFloat32Equal
+	u64_eq = cmp.Uint64Equal
+	u32_eq = cmp.Uint32Equal
+	u16_eq = cmp.Uint16Equal
+	u8_eq  = cmp.Uint8Equal
+	i64_eq = cmp.Int64Equal
+	i32_eq = cmp.Int32Equal
+	i16_eq = cmp.Int16Equal
+	i8_eq  = cmp.Int8Equal
+	f64_eq = cmp.Float64Equal
+	f32_eq = cmp.Float32Equal
 
-	u64_ne = cmp.MatchUint64NotEqual
-	u32_ne = cmp.MatchUint32NotEqual
-	u16_ne = cmp.MatchUint16NotEqual
-	u8_ne  = cmp.MatchUint8NotEqual
-	i64_ne = cmp.MatchInt64NotEqual
-	i32_ne = cmp.MatchInt32NotEqual
-	i16_ne = cmp.MatchInt16NotEqual
-	i8_ne  = cmp.MatchInt8NotEqual
-	f64_ne = cmp.MatchFloat64NotEqual
-	f32_ne = cmp.MatchFloat32NotEqual
+	u64_ne = cmp.Uint64NotEqual
+	u32_ne = cmp.Uint32NotEqual
+	u16_ne = cmp.Uint16NotEqual
+	u8_ne  = cmp.Uint8NotEqual
+	i64_ne = cmp.Int64NotEqual
+	i32_ne = cmp.Int32NotEqual
+	i16_ne = cmp.Int16NotEqual
+	i8_ne  = cmp.Int8NotEqual
+	f64_ne = cmp.Float64NotEqual
+	f32_ne = cmp.Float32NotEqual
 
-	u64_gt = cmp.MatchUint64Greater
-	u32_gt = cmp.MatchUint32Greater
-	u16_gt = cmp.MatchUint16Greater
-	u8_gt  = cmp.MatchUint8Greater
-	i64_gt = cmp.MatchInt64Greater
-	i32_gt = cmp.MatchInt32Greater
-	i16_gt = cmp.MatchInt16Greater
-	i8_gt  = cmp.MatchInt8Greater
-	f64_gt = cmp.MatchFloat64Greater
-	f32_gt = cmp.MatchFloat32Greater
+	u64_gt = cmp.Uint64Greater
+	u32_gt = cmp.Uint32Greater
+	u16_gt = cmp.Uint16Greater
+	u8_gt  = cmp.Uint8Greater
+	i64_gt = cmp.Int64Greater
+	i32_gt = cmp.Int32Greater
+	i16_gt = cmp.Int16Greater
+	i8_gt  = cmp.Int8Greater
+	f64_gt = cmp.Float64Greater
+	f32_gt = cmp.Float32Greater
 
-	u64_ge = cmp.MatchUint64GreaterEqual
-	u32_ge = cmp.MatchUint32GreaterEqual
-	u16_ge = cmp.MatchUint16GreaterEqual
-	u8_ge  = cmp.MatchUint8GreaterEqual
-	i64_ge = cmp.MatchInt64GreaterEqual
-	i32_ge = cmp.MatchInt32GreaterEqual
-	i16_ge = cmp.MatchInt16GreaterEqual
-	i8_ge  = cmp.MatchInt8GreaterEqual
-	f64_ge = cmp.MatchFloat64GreaterEqual
-	f32_ge = cmp.MatchFloat32GreaterEqual
+	u64_ge = cmp.Uint64GreaterEqual
+	u32_ge = cmp.Uint32GreaterEqual
+	u16_ge = cmp.Uint16GreaterEqual
+	u8_ge  = cmp.Uint8GreaterEqual
+	i64_ge = cmp.Int64GreaterEqual
+	i32_ge = cmp.Int32GreaterEqual
+	i16_ge = cmp.Int16GreaterEqual
+	i8_ge  = cmp.Int8GreaterEqual
+	f64_ge = cmp.Float64GreaterEqual
+	f32_ge = cmp.Float32GreaterEqual
 
-	u64_lt = cmp.MatchUint64Less
-	u32_lt = cmp.MatchUint32Less
-	u16_lt = cmp.MatchUint16Less
-	u8_lt  = cmp.MatchUint8Less
-	i64_lt = cmp.MatchInt64Less
-	i32_lt = cmp.MatchInt32Less
-	i16_lt = cmp.MatchInt16Less
-	i8_lt  = cmp.MatchInt8Less
-	f64_lt = cmp.MatchFloat64Less
-	f32_lt = cmp.MatchFloat32Less
+	u64_lt = cmp.Uint64Less
+	u32_lt = cmp.Uint32Less
+	u16_lt = cmp.Uint16Less
+	u8_lt  = cmp.Uint8Less
+	i64_lt = cmp.Int64Less
+	i32_lt = cmp.Int32Less
+	i16_lt = cmp.Int16Less
+	i8_lt  = cmp.Int8Less
+	f64_lt = cmp.Float64Less
+	f32_lt = cmp.Float32Less
 
-	u64_le = cmp.MatchUint64LessEqual
-	u32_le = cmp.MatchUint32LessEqual
-	u16_le = cmp.MatchUint16LessEqual
-	u8_le  = cmp.MatchUint8LessEqual
-	i64_le = cmp.MatchInt64LessEqual
-	i32_le = cmp.MatchInt32LessEqual
-	i16_le = cmp.MatchInt16LessEqual
-	i8_le  = cmp.MatchInt8LessEqual
-	f64_le = cmp.MatchFloat64LessEqual
-	f32_le = cmp.MatchFloat32LessEqual
+	u64_le = cmp.Uint64LessEqual
+	u32_le = cmp.Uint32LessEqual
+	u16_le = cmp.Uint16LessEqual
+	u8_le  = cmp.Uint8LessEqual
+	i64_le = cmp.Int64LessEqual
+	i32_le = cmp.Int32LessEqual
+	i16_le = cmp.Int16LessEqual
+	i8_le  = cmp.Int8LessEqual
+	f64_le = cmp.Float64LessEqual
+	f32_le = cmp.Float32LessEqual
 
-	u64_rg = cmp.MatchUint64Between
-	u32_rg = cmp.MatchUint32Between
-	u16_rg = cmp.MatchUint16Between
-	u8_rg  = cmp.MatchUint8Between
-	i64_rg = cmp.MatchInt64Between
-	i32_rg = cmp.MatchInt32Between
-	i16_rg = cmp.MatchInt16Between
-	i8_rg  = cmp.MatchInt8Between
-	f64_rg = cmp.MatchFloat64Between
-	f32_rg = cmp.MatchFloat32Between
+	u64_rg = cmp.Uint64Between
+	u32_rg = cmp.Uint32Between
+	u16_rg = cmp.Uint16Between
+	u8_rg  = cmp.Uint8Between
+	i64_rg = cmp.Int64Between
+	i32_rg = cmp.Int32Between
+	i16_rg = cmp.Int16Between
+	i8_rg  = cmp.Int8Between
+	f64_rg = cmp.Float64Between
+	f32_rg = cmp.Float32Between
 
 	// Virtual function pointer table for compare kernels. The purpose of this
 	// table is to have fast lookup access to kernel functions without long
@@ -303,7 +303,7 @@ func (f NumMatcherFactory[T]) New(m FilterMode) Matcher {
 
 // numMatcher is a generic value matcher that we use to avoid reimplementing
 // similar member functions for specialized matchers below. I.e. it implements
-// the WithValue() and MatchVector() parts of the Matcher interface.
+// the WithValue() and Value() parts of the Matcher interface.
 type numMatcher[T Number] struct {
 	noopMatcher
 	match numMatchFunc[T]
@@ -341,29 +341,30 @@ func (m numEqualMatcher[T]) MatchFilter(flt filter.Filter) bool {
 	return flt.Contains(uint64(m.val))
 }
 
-func (m numEqualMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m numEqualMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
 	acc := block.NewBlockAccessor[T](b)
 	if bm := acc.Matcher(); bm != nil {
-		return bm.MatchEqual(m.val, bits, mask)
+		bm.MatchEqual(m.val, bits, mask)
+	} else {
+		n := m.match(acc.Slice(), m.val, bits.Bytes())
+		bits.ResetCount(int(n))
 	}
-	return m.match(acc.Slice(), m.val, bits, mask)
 }
 
-func (m numEqualMatcher[T]) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m numEqualMatcher[T]) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) {
 	// min <= v && max >= v, mask is optional
 	f := newFactory(mins.Type())
 	le, ge := f.New(FilterModeLe), f.New(FilterModeGe)
 	le.WithValue(m.val)
 	ge.WithValue(m.val)
 	minBits := bitset.NewBitset(mins.Len())
-	minBits = le.MatchVector(mins, minBits, mask)
+	le.MatchVector(mins, minBits, mask)
 	if mask != nil {
 		minBits.And(mask)
 	}
-	bits = ge.MatchVector(maxs, bits, minBits)
+	ge.MatchVector(maxs, bits, minBits)
 	bits.And(minBits)
 	minBits.Close()
-	return bits
 }
 
 // NOT EQUAL ---
@@ -380,22 +381,23 @@ func (m numNotEqualMatcher[T]) MatchRange(from, to any) bool {
 	return m.val < from.(T) || m.val > to.(T)
 }
 
-func (m numNotEqualMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m numNotEqualMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
 	acc := block.NewBlockAccessor[T](b)
 	if bm := acc.Matcher(); bm != nil {
-		return bm.MatchNotEqual(m.val, bits, mask)
+		bm.MatchNotEqual(m.val, bits, mask)
+	} else {
+		n := m.match(acc.Slice(), m.val, bits.Bytes())
+		bits.ResetCount(int(n))
 	}
-	return m.match(acc.Slice(), m.val, bits, mask)
 }
 
-func (m numNotEqualMatcher[T]) MatchRangeVectors(_, _ *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m numNotEqualMatcher[T]) MatchRangeVectors(_, _ *block.Block, bits, mask *bitset.Bitset) {
 	// undecided, always true
 	if mask != nil {
 		bits.Copy(mask)
 	} else {
 		bits.One()
 	}
-	return bits
 }
 
 // GT ---
@@ -413,19 +415,21 @@ func (m numGtMatcher[T]) MatchRange(_, to any) bool {
 	return m.val < to.(T)
 }
 
-func (m numGtMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m numGtMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
 	acc := block.NewBlockAccessor[T](b)
 	if bm := acc.Matcher(); bm != nil {
-		return bm.MatchGreater(m.val, bits, mask)
+		bm.MatchGreater(m.val, bits, mask)
+	} else {
+		n := m.match(acc.Slice(), m.val, bits.Bytes())
+		bits.ResetCount(int(n))
 	}
-	return m.match(acc.Slice(), m.val, bits, mask)
 }
 
-func (m numGtMatcher[T]) MatchRangeVectors(_, maxs *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m numGtMatcher[T]) MatchRangeVectors(_, maxs *block.Block, bits, mask *bitset.Bitset) {
 	// max > v
 	gt := newFactory(maxs.Type()).New(FilterModeGt)
 	gt.WithValue(m.val)
-	return gt.MatchVector(maxs, bits, mask)
+	gt.MatchVector(maxs, bits, mask)
 }
 
 // GE ---
@@ -443,19 +447,21 @@ func (m numGeMatcher[T]) MatchRange(_, to any) bool {
 	return m.val <= to.(T)
 }
 
-func (m numGeMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m numGeMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
 	acc := block.NewBlockAccessor[T](b)
 	if bm := acc.Matcher(); bm != nil {
-		return bm.MatchGreaterEqual(m.val, bits, mask)
+		bm.MatchGreaterEqual(m.val, bits, mask)
+	} else {
+		n := m.match(acc.Slice(), m.val, bits.Bytes())
+		bits.ResetCount(int(n))
 	}
-	return m.match(acc.Slice(), m.val, bits, mask)
 }
 
-func (m numGeMatcher[T]) MatchRangeVectors(_, maxs *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m numGeMatcher[T]) MatchRangeVectors(_, maxs *block.Block, bits, mask *bitset.Bitset) {
 	// max >= v
 	ge := newFactory(maxs.Type()).New(FilterModeGe)
 	ge.WithValue(m.val)
-	return ge.MatchVector(maxs, bits, mask)
+	ge.MatchVector(maxs, bits, mask)
 }
 
 // LT ---
@@ -473,19 +479,21 @@ func (m numLtMatcher[T]) MatchRange(from, _ any) bool {
 	return m.val > from.(T)
 }
 
-func (m numLtMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m numLtMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
 	acc := block.NewBlockAccessor[T](b)
 	if bm := acc.Matcher(); bm != nil {
-		return bm.MatchLess(m.val, bits, mask)
+		bm.MatchLess(m.val, bits, mask)
+	} else {
+		n := m.match(acc.Slice(), m.val, bits.Bytes())
+		bits.ResetCount(int(n))
 	}
-	return m.match(acc.Slice(), m.val, bits, mask)
 }
 
-func (m numLtMatcher[T]) MatchRangeVectors(mins, _ *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m numLtMatcher[T]) MatchRangeVectors(mins, _ *block.Block, bits, mask *bitset.Bitset) {
 	// min < v
 	lt := newFactory(mins.Type()).New(FilterModeLt)
 	lt.WithValue(m.val)
-	return lt.MatchVector(mins, bits, mask)
+	lt.MatchVector(mins, bits, mask)
 }
 
 // LE ---
@@ -503,19 +511,21 @@ func (m numLeMatcher[T]) MatchRange(from, _ any) bool {
 	return m.val >= from.(T)
 }
 
-func (m numLeMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m numLeMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
 	acc := block.NewBlockAccessor[T](b)
 	if bm := acc.Matcher(); bm != nil {
-		return bm.MatchLessEqual(m.val, bits, mask)
+		bm.MatchLessEqual(m.val, bits, mask)
+	} else {
+		n := m.match(acc.Slice(), m.val, bits.Bytes())
+		bits.ResetCount(int(n))
 	}
-	return m.match(acc.Slice(), m.val, bits, mask)
 }
 
-func (m numLeMatcher[T]) MatchRangeVectors(mins, _ *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m numLeMatcher[T]) MatchRangeVectors(mins, _ *block.Block, bits, mask *bitset.Bitset) {
 	// min <= v
 	le := newFactory(mins.Type()).New(FilterModeLe)
 	le.WithValue(m.val)
-	return le.MatchVector(mins, bits, mask)
+	le.MatchVector(mins, bits, mask)
 }
 
 // RANGE ---
@@ -548,12 +558,14 @@ func (m numRangeMatcher[T]) MatchRange(from, to any) bool {
 	return !(from.(T) > m.to || to.(T) < m.from)
 }
 
-func (m numRangeMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m numRangeMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
 	acc := block.NewBlockAccessor[T](b)
 	if bm := acc.Matcher(); bm != nil {
-		return bm.MatchBetween(m.from, m.to, bits, mask)
+		bm.MatchBetween(m.from, m.to, bits, mask)
+	} else {
+		n := m.match(acc.Slice(), m.from, m.to, bits.Bytes())
+		bits.ResetCount(int(n))
 	}
-	return m.match(acc.Slice(), m.from, m.to, bits, mask)
 }
 
 func (m numRangeMatcher[T]) MatchFilter(flt filter.Filter) bool {
@@ -561,7 +573,7 @@ func (m numRangeMatcher[T]) MatchFilter(flt filter.Filter) bool {
 	return true
 }
 
-func (m numRangeMatcher[T]) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m numRangeMatcher[T]) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) {
 	// works with materialized and compressed blocks
 	// min <= to && max >= from
 	f := newFactory(mins.Type())
@@ -569,14 +581,13 @@ func (m numRangeMatcher[T]) MatchRangeVectors(mins, maxs *block.Block, bits, mas
 	le.WithValue(m.to)
 	ge.WithValue(m.from)
 	minBits := bitset.NewBitset(mins.Len())
-	minBits = le.MatchVector(mins, minBits, mask)
+	le.MatchVector(mins, minBits, mask)
 	if mask != nil {
 		minBits.And(mask)
 	}
-	bits = ge.MatchVector(maxs, bits, minBits)
+	ge.MatchVector(maxs, bits, minBits)
 	bits.And(minBits)
 	minBits.Close()
-	return bits
 }
 
 // IN ---
@@ -652,10 +663,11 @@ func (m numInSetMatcher[T]) MatchFilter(flt filter.Filter) bool {
 	return false
 }
 
-func (m numInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m numInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
 	acc := block.NewBlockAccessor[T](b)
 	if bm := acc.Matcher(); bm != nil {
-		return bm.MatchSet(m.set, bits, mask)
+		bm.MatchInSet(m.set, bits, mask)
+		return
 	}
 	if mask != nil {
 		// skip masked values
@@ -674,10 +686,9 @@ func (m numInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitse
 			}
 		}
 	}
-	return bits
 }
 
-func (m numInSetMatcher[T]) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m numInSetMatcher[T]) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) {
 	minAcc := block.NewBlockAccessor[T](mins)
 	maxAcc := block.NewBlockAccessor[T](maxs)
 
@@ -686,7 +697,8 @@ func (m numInSetMatcher[T]) MatchRangeVectors(mins, maxs *block.Block, bits, mas
 		setMin, setMax := m.set.Minimum(), m.set.Maximum()
 		rg := newFactory(mins.Type()).New(FilterModeRange)
 		rg.WithValue(RangeValue{T(setMin), T(setMax)})
-		return rg.MatchRangeVectors(mins, maxs, bits, mask)
+		rg.MatchRangeVectors(mins, maxs, bits, mask)
+		return
 	}
 
 	// handle fully materialized blocks with raw number vectors
@@ -718,7 +730,6 @@ func (m numInSetMatcher[T]) MatchRangeVectors(mins, maxs *block.Block, bits, mas
 			}
 		}
 	}
-	return bits
 }
 
 // NOT IN ---
@@ -778,10 +789,11 @@ func (m numNotInSetMatcher[T]) MatchFilter(flt filter.Filter) bool {
 	return true
 }
 
-func (m numNotInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m numNotInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
 	acc := block.NewBlockAccessor[T](b)
 	if bm := acc.Matcher(); bm != nil {
-		return bm.MatchNotSet(m.set, bits, mask)
+		bm.MatchNotInSet(m.set, bits, mask)
+		return
 	}
 	if mask != nil {
 		// skip masked values
@@ -800,15 +812,13 @@ func (m numNotInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bi
 			}
 		}
 	}
-	return bits
 }
 
-func (m numNotInSetMatcher[T]) MatchRangeVectors(_, _ *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m numNotInSetMatcher[T]) MatchRangeVectors(_, _ *block.Block, bits, mask *bitset.Bitset) {
 	// undecided, always true
 	if mask != nil {
 		bits.Copy(mask)
 	} else {
 		bits.One()
 	}
-	return bits
 }

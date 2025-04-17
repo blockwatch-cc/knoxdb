@@ -247,8 +247,8 @@ func (r *Reader) nextQueryMatch(ctx context.Context) (*pack.Package, error) {
 			return nil, err
 		}
 
-		// find actual matches
-		r.bits = match.MatchTree(r.query.Filters, r.pack, r.it, r.bits)
+		// find actual matches (zero bits befor checking a pack)
+		match.MatchTree(r.query.Filters, r.pack, r.it, r.bits.Zero())
 		r.query.Stats.Count(PACKS_SCHEDULED_KEY, 1)
 
 		// handle false positive metadata matches

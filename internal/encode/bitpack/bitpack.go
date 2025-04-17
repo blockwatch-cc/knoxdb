@@ -7,41 +7,41 @@ import (
 	"blockwatch.cc/knoxdb/internal/encode/bitpack/generic"
 )
 
-type (
-	PackFunc   = generic.PackFunc
-	UnpackFunc = generic.UnpackFunc
-)
+// type (
+// 	PackFunc   = generic.PackFunc
+// 	UnpackFunc = generic.UnpackFunc
+// )
 
 var (
 	// single
-	Pack     = generic.Pack
-	Unpack   = generic.Unpack
-	Packer   = generic.Packer
-	Unpacker = generic.Unpacker
+	// Pack     = generic.Pack
+	// Unpack   = generic.Unpack
+	// Packer   = generic.Packer
+	// Unpacker = generic.Unpacker
 
 	// encode
-	EncodeInt64 = generic.Encode[int64]
-	EncodeInt32 = generic.Encode[int32]
-	EncodeInt16 = generic.Encode[int16]
-	EncodeInt8  = generic.Encode[int8]
+	// EncodeInt64 = generic.Encode[int64]
+	// EncodeInt32 = generic.Encode[int32]
+	// EncodeInt16 = generic.Encode[int16]
+	// EncodeInt8  = generic.Encode[int8]
 
-	EncodeUint64 = generic.Encode[uint64]
-	EncodeUint32 = generic.Encode[uint32]
-	EncodeUint16 = generic.Encode[uint16]
-	EncodeUint8  = generic.Encode[uint8]
+	// EncodeUint64 = generic.Encode[uint64]
+	// EncodeUint32 = generic.Encode[uint32]
+	// EncodeUint16 = generic.Encode[uint16]
+	// EncodeUint8  = generic.Encode[uint8]
 
-	// decode
-	DecodeInt64 = generic.Decode[int64]
-	DecodeInt32 = generic.Decode[int32]
-	DecodeInt16 = generic.Decode[int16]
-	DecodeInt8  = generic.Decode[int8]
+	// // decode
+	// DecodeInt64 = generic.Decode[int64]
+	// DecodeInt32 = generic.Decode[int32]
+	// DecodeInt16 = generic.Decode[int16]
+	// DecodeInt8  = generic.Decode[int8]
 
-	DecodeUint64 = generic.Decode[uint64]
-	DecodeUint32 = generic.Decode[uint32]
-	DecodeUint16 = generic.Decode[uint16]
-	DecodeUint8  = generic.Decode[uint8]
+	// DecodeUint64 = generic.Decode[uint64]
+	// DecodeUint32 = generic.Decode[uint32]
+	// DecodeUint16 = generic.Decode[uint16]
+	// DecodeUint8  = generic.Decode[uint8]
 
-	// cmp
+	// cmp (incompatible with new encoding! tests disabled)
 	Equal        = generic.Equal
 	NotEqual     = generic.NotEqual
 	Less         = generic.Less
@@ -51,6 +51,12 @@ var (
 	Between      = generic.Between
 )
 
-func EstimateMaxSize(width, n int) int {
-	return (width*n + 7) / 8
+// Returns the amount of bytes needed to store bitpacked rounded up to
+// the nearest width to accomodate for padding introduced by code words.
+//
+// Legacy horizontal format used byte boundaries (width = 8)
+//
+// Current format uses code words of same width as source data (64, 32, 16 or 8).
+func EstimateSize(width, log2, n int) int {
+	return (log2*n + width - 1) &^ (width - 1) / 8
 }

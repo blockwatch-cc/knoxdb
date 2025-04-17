@@ -65,14 +65,14 @@ type Matcher interface {
 	// Optional mask allows to skip values from being matched. Masks are useful
 	// to skip earlier non-matches for AND conditions or cover only non-matches for
 	// OR condtions.
-	MatchVector(block *block.Block, res *bitset.Bitset, mask *bitset.Bitset) *bitset.Bitset
+	MatchVector(block *block.Block, res *bitset.Bitset, mask *bitset.Bitset)
 
 	// Vectorized match for min/max candidate ranges against the matcher's value.
 	// Returns a bitset of matching positions for the pair of min/max column vectors.
 	// Single value matchers return true when the matcher's configured value is
 	// within a range. RangeValue matchers return true when both ranges overlap.
 	// Set matchers return true when any set members are within candidate ranges.
-	MatchRangeVectors(mins, maxs *block.Block, res *bitset.Bitset, mask *bitset.Bitset) *bitset.Bitset
+	MatchRangeVectors(mins, maxs *block.Block, res *bitset.Bitset, mask *bitset.Bitset)
 }
 
 // MatcherFactory is a factory object that can generate type based matchers
@@ -145,18 +145,16 @@ func (m noopMatcher) MatchRange(_, _ any) bool { return false }
 
 func (m noopMatcher) MatchFilter(_ filter.Filter) bool { return false }
 
-func (m noopMatcher) MatchVector(_ *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m noopMatcher) MatchVector(_ *block.Block, bits, mask *bitset.Bitset) {
 	if mask != nil {
-		return bits.Copy(mask)
+		bits.Copy(mask)
 	}
-	return bits
 }
 
-func (m noopMatcher) MatchRangeVectors(_, _ *block.Block, bits, mask *bitset.Bitset) *bitset.Bitset {
+func (m noopMatcher) MatchRangeVectors(_, _ *block.Block, bits, mask *bitset.Bitset) {
 	if mask != nil {
-		return bits.Copy(mask)
+		bits.Copy(mask)
 	}
-	return bits
 }
 
 func MatchTree(n *FilterTreeNode, v *schema.View) bool {

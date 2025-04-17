@@ -1,3 +1,6 @@
+// Copyright (c) 2025 Blockwatch Data Inc.
+// Author: alex@blockwatch.cc
+
 package encode
 
 import (
@@ -40,8 +43,8 @@ func (c *FloatAlpRdContainer[T]) Len() int {
 	return c.Left.Len()
 }
 
-func (c *FloatAlpRdContainer[T]) MaxSize() int {
-	v := 2 + c.Left.MaxSize() + c.Right.MaxSize()
+func (c *FloatAlpRdContainer[T]) Size() int {
+	v := 2 + c.Left.Size() + c.Right.Size()
 	return v
 }
 
@@ -149,47 +152,43 @@ func (c *FloatAlpRdContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int)
 	return c
 }
 
-func (c *FloatAlpRdContainer[T]) MatchEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+func (c *FloatAlpRdContainer[T]) MatchEqual(val T, bits, mask *Bitset) {
+	matchIt(c.Iterator(), matchFn[T](types.FilterModeEqual), val, bits, mask)
 }
 
-func (c *FloatAlpRdContainer[T]) MatchNotEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+func (c *FloatAlpRdContainer[T]) MatchNotEqual(val T, bits, mask *Bitset) {
+	matchIt(c.Iterator(), matchFn[T](types.FilterModeNotEqual), val, bits, mask)
 }
 
-func (c *FloatAlpRdContainer[T]) MatchLess(val T, bits, mask *Bitset) *Bitset {
-	return nil
+func (c *FloatAlpRdContainer[T]) MatchLess(val T, bits, mask *Bitset) {
+	matchIt(c.Iterator(), matchFn[T](types.FilterModeLt), val, bits, mask)
 }
 
-func (c *FloatAlpRdContainer[T]) MatchLessEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+func (c *FloatAlpRdContainer[T]) MatchLessEqual(val T, bits, mask *Bitset) {
+	matchIt(c.Iterator(), matchFn[T](types.FilterModeLe), val, bits, mask)
 }
 
-func (c *FloatAlpRdContainer[T]) MatchGreater(val T, bits, mask *Bitset) *Bitset {
-	return nil
+func (c *FloatAlpRdContainer[T]) MatchGreater(val T, bits, mask *Bitset) {
+	matchIt(c.Iterator(), matchFn[T](types.FilterModeGt), val, bits, mask)
 }
 
-func (c *FloatAlpRdContainer[T]) MatchGreaterEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+func (c *FloatAlpRdContainer[T]) MatchGreaterEqual(val T, bits, mask *Bitset) {
+	matchIt(c.Iterator(), matchFn[T](types.FilterModeGe), val, bits, mask)
 }
 
-func (c *FloatAlpRdContainer[T]) MatchBetween(a, b T, bits, mask *Bitset) *Bitset {
-	return nil
+func (c *FloatAlpRdContainer[T]) MatchBetween(a, b T, bits, mask *Bitset) {
+	matchRangeIt(c.Iterator(), matchFn[T](types.FilterModeRange), a, b, bits, mask)
 }
 
-func (c *FloatAlpRdContainer[T]) MatchSet(_ any, bits, _ *Bitset) *Bitset {
-	// N.A.
-	return bits
-}
-
-func (c *FloatAlpRdContainer[T]) MatchNotSet(_ any, bits, _ *Bitset) *Bitset {
-	// N.A.
-	return bits
-}
+// N.A.
+func (c *FloatAlpRdContainer[T]) MatchInSet(_ any, _, _ *Bitset)    {}
+func (c *FloatAlpRdContainer[T]) MatchNotInSet(_ any, _, _ *Bitset) {}
 
 type FloatAlpRdFactory struct {
-	f64Pool sync.Pool
-	f32Pool sync.Pool
+	f64Pool   sync.Pool
+	f32Pool   sync.Pool
+	f64ItPool sync.Pool
+	f32ItPool sync.Pool
 }
 
 func newFloatAlpRdContainer[T types.Float]() FloatContainer[T] {
@@ -212,11 +211,141 @@ func putFloatAlpRdContainer[T types.Float](c FloatContainer[T]) {
 	}
 }
 
+func newFloatAlpRdIterator[T types.Float]() *FloatAlpRdIterator[T] {
+	switch any(T(0)).(type) {
+	case float64:
+		return floatAlpFactory.f64ItPool.Get().(*FloatAlpRdIterator[T])
+	case float32:
+		return floatAlpFactory.f32ItPool.Get().(*FloatAlpRdIterator[T])
+	default:
+		return nil
+	}
+}
+
+func putFloatAlpRdIterator[T types.Float](c *FloatAlpRdIterator[T]) {
+	switch any(T(0)).(type) {
+	case float64:
+		floatAlpFactory.f64ItPool.Put(c)
+	case float32:
+		floatAlpFactory.f32ItPool.Put(c)
+	}
+}
+
 var floatAlpRdFactory = FloatAlpRdFactory{
-	f64Pool: sync.Pool{
-		New: func() any { return new(FloatAlpRdContainer[float64]) },
-	},
-	f32Pool: sync.Pool{
-		New: func() any { return new(FloatAlpRdContainer[float32]) },
-	},
+	f64Pool:   sync.Pool{New: func() any { return new(FloatAlpRdContainer[float64]) }},
+	f32Pool:   sync.Pool{New: func() any { return new(FloatAlpRdContainer[float32]) }},
+	f64ItPool: sync.Pool{New: func() any { return new(FloatAlpRdIterator[float64]) }},
+	f32ItPool: sync.Pool{New: func() any { return new(FloatAlpRdIterator[float32]) }},
+}
+
+func (c *FloatAlpRdContainer[T]) Iterator() Iterator[T] {
+	it := newFloatAlpRdIterator[T]()
+	it.leftIt = c.Left.Iterator()
+	it.rightIt = c.Right.Iterator()
+	it.shift = c.Shift
+	it.len = c.Len()
+	it.ofs = 0
+	return it
+}
+
+type FloatAlpRdIterator[T types.Float] struct {
+	vals    [CHUNK_SIZE]T
+	leftIt  Iterator[uint16]
+	rightIt Iterator[uint64]
+	shift   int
+	len     int
+	ofs     int
+}
+
+func (it *FloatAlpRdIterator[T]) Close() {
+	it.leftIt.Close()
+	it.rightIt.Close()
+	it.leftIt = nil
+	it.rightIt = nil
+	it.shift = 0
+	it.len = 0
+	it.ofs = 0
+	putFloatAlpRdIterator(it)
+}
+
+func (it *FloatAlpRdIterator[T]) Reset() {
+	it.ofs = 0
+	it.leftIt.Reset()
+	it.rightIt.Reset()
+}
+
+func (it *FloatAlpRdIterator[T]) Len() int {
+	return it.len
+}
+
+func (it *FloatAlpRdIterator[T]) Next() (T, bool) {
+	if it.ofs >= it.len {
+		// EOF
+		return 0, false
+	}
+
+	// ofs % CHUNK_SIZE
+	i := it.ofs & CHUNK_MASK
+
+	// on first call or start of new chunk
+	if i == 0 {
+		// load next source chunks
+		left, ln := it.leftIt.NextChunk()
+		right, rn := it.rightIt.NextChunk()
+
+		// sanity check, should not happen
+		if ln == 0 || rn == 0 {
+			it.ofs = it.len
+			return 0, false
+		}
+
+		// decode
+		alp.MergeRD(it.vals[:], left[:], right[:], it.shift)
+	}
+
+	// advance ofs for next call
+	it.ofs++
+
+	// return value
+	return it.vals[i], true
+}
+
+func (it *FloatAlpRdIterator[T]) NextChunk() (*[CHUNK_SIZE]T, int) {
+	// EOF
+	if it.ofs >= it.len {
+		return nil, 0
+	}
+	left, ln := it.leftIt.NextChunk()
+	right, rn := it.rightIt.NextChunk()
+	if ln > 0 && rn > 0 {
+		alp.MergeRD(it.vals[:], left[:], right[:], it.shift)
+		it.ofs += ln
+	}
+	return &it.vals, ln
+}
+
+func (it *FloatAlpRdIterator[T]) SkipChunk() {
+	it.leftIt.SkipChunk()
+	it.rightIt.SkipChunk()
+	it.ofs = chunkStart(it.ofs + CHUNK_SIZE)
+}
+
+func (it *FloatAlpRdIterator[T]) Seek(n int) bool {
+	if n < 0 || n >= it.len {
+		return false
+	}
+	ls, rs := it.leftIt.Seek(n), it.rightIt.Seek(n)
+	if !ls || !rs {
+		return false
+	}
+
+	// load when n is in another chunk and not at first position
+	if n&CHUNK_MASK != 0 && chunkStart(n) != chunkStart(it.ofs) {
+		it.ofs = chunkStart(n)
+		it.NextChunk()
+	}
+
+	// reset ofs to n, so call to Next() delivers value
+	it.ofs = n
+	return true
 }

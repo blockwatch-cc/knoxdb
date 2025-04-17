@@ -36,13 +36,14 @@ func (c *FloatRawContainer[T]) Len() int {
 	return len(c.Values)
 }
 
-func (c *FloatRawContainer[T]) MaxSize() int {
-	return 1 + num.UvarintLen(uint64(SizeOf[T]()*len(c.Values))) + SizeOf[T]()*len(c.Values)
+func (c *FloatRawContainer[T]) Size() int {
+	return 1 + num.UvarintLen(uint64(util.SizeOf[T]()*len(c.Values))) +
+		util.SizeOf[T]()*len(c.Values)
 }
 
 func (c *FloatRawContainer[T]) Store(dst []byte) []byte {
 	dst = append(dst, byte(TFloatRaw))
-	dst = num.AppendUvarint(dst, uint64(SizeOf[T]()*len(c.Values)))
+	dst = num.AppendUvarint(dst, uint64(util.SizeOf[T]()*len(c.Values)))
 	return append(dst, util.ToByteSlice(c.Values)...)
 }
 
@@ -79,99 +80,105 @@ func (c *FloatRawContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int) F
 	return c
 }
 
-func (c *FloatRawContainer[T]) MatchEqual(val T, bits, mask *Bitset) *Bitset {
+// func (c *FloatRawContainer[T]) DecodeChunk(dst *[CHUNK_SIZE]T, ofs int) {
+// 	copy(dst[:], c.Values[ofs:])
+// }
+
+func (c *FloatRawContainer[T]) MatchEqual(val T, bits, _ *Bitset) {
+	var n int64
 	switch c.typ {
 	case types.BlockFloat64:
 		f64 := util.ReinterpretSlice[T, float64](c.Values)
-		return cmp.MatchFloat64Equal(f64, float64(val), bits, mask)
+		n = cmp.Float64Equal(f64, float64(val), bits.Bytes())
+
 	case types.BlockFloat32:
 		f32 := util.ReinterpretSlice[T, float32](c.Values)
-		return cmp.MatchFloat32Equal(f32, float32(val), bits, mask)
+		n = cmp.Float32Equal(f32, float32(val), bits.Bytes())
 	}
-	return bits
+	bits.ResetCount(int(n))
 }
 
-func (c *FloatRawContainer[T]) MatchNotEqual(val T, bits, mask *Bitset) *Bitset {
+func (c *FloatRawContainer[T]) MatchNotEqual(val T, bits, _ *Bitset) {
+	var n int64
 	switch c.typ {
 	case types.BlockFloat64:
 		f64 := util.ReinterpretSlice[T, float64](c.Values)
-		return cmp.MatchFloat64NotEqual(f64, float64(val), bits, mask)
+		n = cmp.Float64NotEqual(f64, float64(val), bits.Bytes())
 	case types.BlockFloat32:
 		f32 := util.ReinterpretSlice[T, float32](c.Values)
-		return cmp.MatchFloat32NotEqual(f32, float32(val), bits, mask)
+		n = cmp.Float32NotEqual(f32, float32(val), bits.Bytes())
 	}
-	return bits
+	bits.ResetCount(int(n))
 }
 
-func (c *FloatRawContainer[T]) MatchLess(val T, bits, mask *Bitset) *Bitset {
+func (c *FloatRawContainer[T]) MatchLess(val T, bits, _ *Bitset) {
+	var n int64
 	switch c.typ {
 	case types.BlockFloat64:
 		f64 := util.ReinterpretSlice[T, float64](c.Values)
-		return cmp.MatchFloat64Less(f64, float64(val), bits, mask)
+		n = cmp.Float64Less(f64, float64(val), bits.Bytes())
 	case types.BlockFloat32:
 		f32 := util.ReinterpretSlice[T, float32](c.Values)
-		return cmp.MatchFloat32Less(f32, float32(val), bits, mask)
+		n = cmp.Float32Less(f32, float32(val), bits.Bytes())
 	}
-	return bits
+	bits.ResetCount(int(n))
 }
 
-func (c *FloatRawContainer[T]) MatchLessEqual(val T, bits, mask *Bitset) *Bitset {
+func (c *FloatRawContainer[T]) MatchLessEqual(val T, bits, _ *Bitset) {
+	var n int64
 	switch c.typ {
 	case types.BlockFloat64:
 		f64 := util.ReinterpretSlice[T, float64](c.Values)
-		return cmp.MatchFloat64LessEqual(f64, float64(val), bits, mask)
+		n = cmp.Float64LessEqual(f64, float64(val), bits.Bytes())
 	case types.BlockFloat32:
 		f32 := util.ReinterpretSlice[T, float32](c.Values)
-		return cmp.MatchFloat32LessEqual(f32, float32(val), bits, mask)
+		n = cmp.Float32LessEqual(f32, float32(val), bits.Bytes())
 	}
-	return bits
+	bits.ResetCount(int(n))
 }
 
-func (c *FloatRawContainer[T]) MatchGreater(val T, bits, mask *Bitset) *Bitset {
+func (c *FloatRawContainer[T]) MatchGreater(val T, bits, _ *Bitset) {
+	var n int64
 	switch c.typ {
 	case types.BlockFloat64:
 		f64 := util.ReinterpretSlice[T, float64](c.Values)
-		return cmp.MatchFloat64Greater(f64, float64(val), bits, mask)
+		n = cmp.Float64Greater(f64, float64(val), bits.Bytes())
 	case types.BlockFloat32:
 		f32 := util.ReinterpretSlice[T, float32](c.Values)
-		return cmp.MatchFloat32Greater(f32, float32(val), bits, mask)
+		n = cmp.Float32Greater(f32, float32(val), bits.Bytes())
 	}
-	return bits
+	bits.ResetCount(int(n))
 }
 
-func (c *FloatRawContainer[T]) MatchGreaterEqual(val T, bits, mask *Bitset) *Bitset {
+func (c *FloatRawContainer[T]) MatchGreaterEqual(val T, bits, _ *Bitset) {
+	var n int64
 	switch c.typ {
 	case types.BlockFloat64:
 		f64 := util.ReinterpretSlice[T, float64](c.Values)
-		return cmp.MatchFloat64GreaterEqual(f64, float64(val), bits, mask)
+		n = cmp.Float64GreaterEqual(f64, float64(val), bits.Bytes())
 	case types.BlockFloat32:
 		f32 := util.ReinterpretSlice[T, float32](c.Values)
-		return cmp.MatchFloat32GreaterEqual(f32, float32(val), bits, mask)
+		n = cmp.Float32GreaterEqual(f32, float32(val), bits.Bytes())
 	}
-	return bits
+	bits.ResetCount(int(n))
 }
 
-func (c *FloatRawContainer[T]) MatchBetween(a, b T, bits, mask *Bitset) *Bitset {
+func (c *FloatRawContainer[T]) MatchBetween(a, b T, bits, _ *Bitset) {
+	var n int64
 	switch c.typ {
 	case types.BlockFloat64:
 		f64 := util.ReinterpretSlice[T, float64](c.Values)
-		return cmp.MatchFloat64Between(f64, float64(a), float64(b), bits, mask)
+		n = cmp.Float64Between(f64, float64(a), float64(b), bits.Bytes())
 	case types.BlockFloat32:
 		f32 := util.ReinterpretSlice[T, float32](c.Values)
-		return cmp.MatchFloat32Between(f32, float32(a), float32(b), bits, mask)
+		n = cmp.Float32Between(f32, float32(a), float32(b), bits.Bytes())
 	}
-	return bits
+	bits.ResetCount(int(n))
 }
 
-func (c *FloatRawContainer[T]) MatchSet(_ any, bits, _ *Bitset) *Bitset {
-	// N.A.
-	return bits
-}
-
-func (c *FloatRawContainer[T]) MatchNotSet(_ any, bits, _ *Bitset) *Bitset {
-	// N.A.
-	return bits
-}
+// N.A.
+func (c *FloatRawContainer[T]) MatchInSet(_ any, bits, _ *Bitset)    {}
+func (c *FloatRawContainer[T]) MatchNotInSet(_ any, bits, _ *Bitset) {}
 
 type FloatRawFactory struct {
 	f64Pool sync.Pool
@@ -205,4 +212,9 @@ var floatRawFactory = FloatRawFactory{
 	f32Pool: sync.Pool{
 		New: func() any { return new(FloatRawContainer[float32]) },
 	},
+}
+
+// TODO
+func (c *FloatRawContainer[T]) Iterator() Iterator[T] {
+	return nil
 }

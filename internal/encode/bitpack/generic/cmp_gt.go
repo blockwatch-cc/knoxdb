@@ -544,7 +544,10 @@ func cmp_bp_7_gt(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 }
 
 func cmp_bp_8_gt(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
-	return cmp.MatchUint8Greater(buf[:n], uint8(val), bits, nil)
+	c := cmp.Uint8Greater(buf[:n], uint8(val), bits.Bytes())
+	bits.ResetCount(int(c))
+	return bits
+
 }
 
 func cmp_bp_9_gt(buf []byte, val uint64, n int, bits *Bitset) *Bitset {

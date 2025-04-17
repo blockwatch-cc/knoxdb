@@ -4,6 +4,7 @@
 package bitset
 
 import (
+	"encoding/binary"
 	"encoding/hex"
 	"io"
 	"math/bits"
@@ -44,12 +45,12 @@ func FromBuffer(buf []byte, sz int) *Bitset {
 	if sz%8 > 0 {
 		buf[len(buf)-1] &= bytemask(sz)
 	}
-	return &Bitset{
-		buf:     buf,
-		cnt:     -1,
-		size:    sz,
-		noclose: true,
-	}
+	s := bitsetPool.Get().(*Bitset)
+	s.buf = buf
+	s.cnt = -1
+	s.size = sz
+	s.noclose = true
+	return s
 }
 
 func (s *Bitset) Count() int {
@@ -143,7 +144,8 @@ func (s *Bitset) Resize(size int) *Bitset {
 	sz := bitFieldLen(size)
 	if s.buf == nil || cap(s.buf) < sz {
 		buf := arena.AllocBytes(sz)[:sz]
-		copy(buf, s.buf)
+		n := copy(buf, s.buf)
+		clear(buf[n:])
 		if !s.noclose {
 			arena.Free(s.buf)
 			s.noclose = false
@@ -391,7 +393,7 @@ func (s *Bitset) SetFromBytes(buf []byte, size int, reverse bool) *Bitset {
 }
 
 func (s *Bitset) SetRange(start, end int) *Bitset {
-	x, y := start/8, end/8
+	x, y := start/8, min(end/8, len(s.buf)-1)
 
 	// short range within same byte
 	if x == y {
@@ -456,6 +458,57 @@ func (s *Bitset) IsSet(i int) bool {
 		return false
 	}
 	return (s.buf[i>>3] & bitmask[i%8]) > 0
+}
+
+func (s *Bitset) ContainsRange(start, end int) bool {
+	if start >= s.size {
+		return false
+	}
+	x, y := start/8, min(end/8, len(s.buf)-1)
+
+	// short range within same byte
+	if x == y {
+		return s.buf[x]&bytemask(start)&bytemask(end) > 0
+	}
+
+	// long range across bytes
+
+	// check masked start byte
+	if start%8 > 0 {
+		if s.buf[x]&255<<(start%8) > 0 {
+			return true
+		}
+		x++
+	}
+
+	// check masked end byte
+	if end%8 != 7 {
+		if s.buf[y]&(2<<(end%8)-1) > 0 {
+			return true
+		}
+		y--
+	}
+
+	// handle two byte range with masks
+	if x >= y {
+		return false
+	}
+
+	// check intermediate bytes
+	for x+7 < y {
+		if binary.LittleEndian.Uint64(s.buf[x:]) > 0 {
+			return true
+		}
+		x += 8
+	}
+	for x <= y {
+		if s.buf[x] > 0 {
+			return true
+		}
+		x++
+	}
+
+	return false
 }
 
 // Append grows bitset by 1 and sets the trailing bit to val

@@ -1,7 +1,7 @@
 // Copyright (c) 2023-2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package generic
+package cmp
 
 import (
 	"math/bits"
@@ -10,7 +10,7 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
-func MatchEqual[T types.Integer](src []T, val T, res []byte) int64 {
+func cmp_eq[T types.Integer](src []T, val T, res []byte) int64 {
 	var cnt int64
 	n := len(src) / 8
 	var idx int
@@ -43,7 +43,7 @@ func MatchEqual[T types.Integer](src []T, val T, res []byte) int64 {
 	return cnt
 }
 
-func MatchNotEqual[T types.Integer](src []T, val T, res []byte) int64 {
+func cmp_ne[T types.Integer](src []T, val T, res []byte) int64 {
 	var cnt int64
 	n := len(src) / 8
 	var idx int
@@ -76,7 +76,7 @@ func MatchNotEqual[T types.Integer](src []T, val T, res []byte) int64 {
 	return cnt
 }
 
-func MatchLess[T types.Integer](src []T, val T, res []byte) int64 {
+func cmp_lt[T types.Integer](src []T, val T, res []byte) int64 {
 	var cnt int64
 	n := len(src) / 8
 	var idx int
@@ -109,7 +109,7 @@ func MatchLess[T types.Integer](src []T, val T, res []byte) int64 {
 	return cnt
 }
 
-func MatchLessEqual[T types.Integer](src []T, val T, res []byte) int64 {
+func cmp_le[T types.Integer](src []T, val T, res []byte) int64 {
 	var cnt int64
 	n := len(src) / 8
 	var idx int
@@ -142,7 +142,7 @@ func MatchLessEqual[T types.Integer](src []T, val T, res []byte) int64 {
 	return cnt
 }
 
-func MatchGreater[T types.Integer](src []T, val T, res []byte) int64 {
+func cmp_gt[T types.Integer](src []T, val T, res []byte) int64 {
 	var cnt int64
 	n := len(src) / 8
 	var idx int
@@ -175,7 +175,7 @@ func MatchGreater[T types.Integer](src []T, val T, res []byte) int64 {
 	return cnt
 }
 
-func MatchGreaterEqual[T types.Integer](src []T, val T, res []byte) int64 {
+func cmp_ge[T types.Integer](src []T, val T, res []byte) int64 {
 	var cnt int64
 	n := len(src) / 8
 	var idx int
@@ -208,7 +208,7 @@ func MatchGreaterEqual[T types.Integer](src []T, val T, res []byte) int64 {
 	return cnt
 }
 
-func MatchBetweenUnsigned[T types.Unsigned](src []T, a, b T, res []byte) int64 {
+func cmp_bu[T types.Unsigned](src []T, a, b T, res []byte) int64 {
 	diff := uint64(b) - uint64(a) + 1
 	var cnt int64
 	n := len(src) / 8
@@ -242,7 +242,7 @@ func MatchBetweenUnsigned[T types.Unsigned](src []T, a, b T, res []byte) int64 {
 	return cnt
 }
 
-func MatchBetweenSigned[T types.Signed](src []T, a, b T, res []byte) int64 {
+func cmp_bs[T types.Signed](src []T, a, b T, res []byte) int64 {
 	diff := uint64(int64(b) - int64(a) + 1)
 	var cnt int64
 	n := len(src) / 8

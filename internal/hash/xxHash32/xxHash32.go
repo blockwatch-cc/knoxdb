@@ -140,9 +140,12 @@ func (xxh *xxHash) Sum32() uint32 {
 
 // Checksum returns the 32bits Hash value.
 func Checksum(input []byte, seed uint32) uint32 {
-	p := unsafe.Pointer(&input[0])
 	n := len(input)
 	h32 := uint32(n)
+	var p unsafe.Pointer
+	if n > 0 {
+		p = unsafe.Pointer(&input[0])
+	}
 
 	if n < 16 {
 		h32 += seed + prime32_5

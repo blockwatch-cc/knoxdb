@@ -405,9 +405,9 @@ func (a Decimal256) Gt(b Decimal256) bool {
 	return x.val.Gt(y.val)
 }
 
-func (a Decimal256) Gte(b Decimal256) bool {
+func (a Decimal256) Ge(b Decimal256) bool {
 	x, y := EqualScaleDecimal256(a, b)
-	return x.val.Gte(y.val)
+	return x.val.Ge(y.val)
 }
 
 func (a Decimal256) Lt(b Decimal256) bool {
@@ -415,9 +415,9 @@ func (a Decimal256) Lt(b Decimal256) bool {
 	return x.val.Lt(y.val)
 }
 
-func (a Decimal256) Lte(b Decimal256) bool {
+func (a Decimal256) Le(b Decimal256) bool {
 	x, y := EqualScaleDecimal256(a, b)
-	return x.val.Lte(y.val)
+	return x.val.Le(y.val)
 }
 
 func (a Decimal256) Cmp(b Decimal256) int {

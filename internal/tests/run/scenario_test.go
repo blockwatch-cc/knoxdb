@@ -44,7 +44,7 @@ func buildTest(t *testing.T, dirPath string) {
 	out, err := cmdScenarios.CombinedOutput()
 	if err != nil {
 		t.Logf("Build: %v", err)
-		t.Fatalf("Reason: %v", out)
+		t.Fatalf("Reason: %s", out)
 	}
 }
 

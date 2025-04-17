@@ -552,7 +552,10 @@ func cmp_bp_7_lt(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
 }
 
 func cmp_bp_8_lt(buf []byte, val uint64, n int, bits *Bitset) *Bitset {
-	return cmp.MatchUint8Less(buf[:n], uint8(val), bits, nil)
+	c := cmp.Uint8Less(buf[:n], uint8(val), bits.Bytes())
+	bits.ResetCount(int(c))
+	return bits
+
 }
 
 func cmp_bp_9_lt(buf []byte, val uint64, n int, bits *Bitset) *Bitset {

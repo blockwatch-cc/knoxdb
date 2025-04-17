@@ -121,7 +121,7 @@ func matchFilterVector(f *query.Filter, pkg *pack.Package, bits, mask *bitset.Bi
 	minx, maxx := minColIndex(int(f.Index)), maxColIndex(int(f.Index))
 
 	// let the matcher translate its query into a min/max range check
-	bits = f.Matcher.MatchRangeVectors(pkg.Block(minx), pkg.Block(maxx), bits, mask)
+	f.Matcher.MatchRangeVectors(pkg.Block(minx), pkg.Block(maxx), bits, mask)
 
 	// stop early (no match, no bloom bucket, incompatible with bloom)
 	if bits.None() || b == nil {

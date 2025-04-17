@@ -10,6 +10,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 var (
@@ -48,13 +49,14 @@ type IntegerContainer[T types.Integer] interface {
 	// data access
 	Get(int) T
 	AppendTo([]uint32, []T) []T
+	Iterator() Iterator[T]
 
 	// encode
 	Encode(ctx *IntegerContext[T], vals []T, lvl int) IntegerContainer[T]
 
 	// IO
-	MaxSize() int                // helps dimension buffer before write
-	Store([]byte) []byte         // simple, composable, pre-alloc via MaxSize
+	Size() int                   // helps dimension buffer before write
+	Store([]byte) []byte         // simple, composable, pre-alloc via Size
 	Load([]byte) ([]byte, error) // simple, composable
 	Close()                      // free resources
 
@@ -103,11 +105,6 @@ func EncodeInt[T types.Integer](ctx *IntegerContext[T], v []T, lvl int) IntegerC
 			if rd := EstimateInt(scheme, ctx, v, lvl); rd < bestRatio {
 				bestRatio = rd
 				bestScheme = scheme
-
-				// TODO: consider a cut-off when already good enough
-				// if bestRatio < 0.05 {
-				// 	break
-				// }
 			}
 		}
 	}
@@ -122,7 +119,7 @@ func EncodeInt[T types.Integer](ctx *IntegerContext[T], v []T, lvl int) IntegerC
 func EstimateInt[T types.Integer](scheme IntegerContainerType, ctx *IntegerContext[T], v []T, lvl int) float64 {
 	// estimate cheap encodings
 	var (
-		rawSize int = 1 + num.MaxVarintLen32 + len(v)*SizeOf[T]()
+		rawSize int = 1 + num.MaxVarintLen32 + len(v)*util.SizeOf[T]()
 		estSize int
 		ok      bool
 	)
@@ -153,11 +150,11 @@ func EstimateInt[T types.Integer](scheme IntegerContainerType, ctx *IntegerConte
 	}
 
 	// adjust raw size to sample len
-	rawSize = 1 + num.MaxVarintLen32 + len(ctx.Sample)*SizeOf[T]()
+	rawSize = 1 + num.MaxVarintLen32 + len(ctx.Sample)*util.SizeOf[T]()
 
 	// trail encode the sample as simple8
 	enc := NewInt[T](scheme).Encode(ctx.SampleCtx, ctx.Sample, lvl)
-	estSize = enc.MaxSize()
+	estSize = enc.Size()
 	enc.Close()
 
 	return float64(estSize) / float64(rawSize)

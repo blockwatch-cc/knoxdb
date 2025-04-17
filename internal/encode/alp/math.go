@@ -23,11 +23,11 @@ const (
  */
 func isImpossibleToEncode(f float64) bool {
 	x := *(*uint64)(unsafe.Pointer(&f))
-	return x == uvinf || x == uvneginf || // isInf
+	return f > ENCODING_UPPER_LIMIT ||
+		f < ENCODING_LOWER_LIMIT ||
+		x == uvinf || x == uvneginf || // isInf
 		x == uvnan || // isNan
-		x == sign || //! Verification for -0.0
-		(x > hi && x < sign) || // f > ENCODING_UPPER_LIMIT
-		(x > lo && x >= sign) // f < ENCODING_LOWER_LIMIT
+		x == sign //! Verification for -0.0
 }
 
 // see

@@ -12,6 +12,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/encode/hashprobe"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 // TIntegerDictionary
@@ -40,8 +41,8 @@ func (c *DictionaryContainer[T]) Len() int {
 	return c.Codes.Len()
 }
 
-func (c *DictionaryContainer[T]) MaxSize() int {
-	return 1 + c.Dict.MaxSize() + c.Codes.MaxSize()
+func (c *DictionaryContainer[T]) Size() int {
+	return 1 + c.Dict.Size() + c.Codes.Size()
 }
 
 func (c *DictionaryContainer[T]) Store(dst []byte) []byte {
@@ -92,7 +93,7 @@ func (c *DictionaryContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl in
 		dict  []T
 		codes []uint16
 	)
-	if len(ctx.UniqueArray) > 0 || SizeOf[T]() <= 2 {
+	if len(ctx.UniqueArray) > 0 || util.SizeOf[T]() <= 2 {
 		dict, codes = dictEncodeArray(ctx, vals)
 	} else {
 		dict, codes = hashprobe.BuildDict(vals, ctx.NumUnique)
@@ -114,6 +115,10 @@ func (c *DictionaryContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl in
 	}
 
 	return c
+}
+
+func (c *DictionaryContainer[T]) DecodeChunk(dst *[CHUNK_SIZE]T, ofs int) {
+	// decode code chunk, then lookup loop
 }
 
 func dictEncodeArray[T types.Integer](ctx *IntegerContext[T], vals []T) ([]T, []uint16) {
@@ -143,11 +148,11 @@ func dictEncodeArray[T types.Integer](ctx *IntegerContext[T], vals []T) ([]T, []
 	return dict, codes
 }
 
-func (c *DictionaryContainer[T]) MatchEqual(val T, bits, mask *Bitset) *Bitset {
+func (c *DictionaryContainer[T]) MatchEqual(val T, bits, mask *Bitset) {
 	// early skip if val is smaller than first or larger than last dict entry
 	l := c.Dict.Len()
 	if val < c.Dict.Get(0) || val > c.Dict.Get(l-1) {
-		return bits
+		return
 	}
 
 	// find position of val using binary search (dict is sorted and values are unique)
@@ -159,18 +164,19 @@ func (c *DictionaryContainer[T]) MatchEqual(val T, bits, mask *Bitset) *Bitset {
 
 	// if not found, equal match does not exist
 	if idx == l || c.Dict.Get(idx) != val {
-		return bits
+		return
 	}
 
 	// lookup code at index and run equal search on codes
-	return c.Codes.MatchEqual(uint16(idx), bits, mask)
+	c.Codes.MatchEqual(uint16(idx), bits, mask)
 }
 
-func (c *DictionaryContainer[T]) MatchNotEqual(val T, bits, mask *Bitset) *Bitset {
+func (c *DictionaryContainer[T]) MatchNotEqual(val T, bits, mask *Bitset) {
 	// early skip if val is smaller than first or larger than last dict entry
 	l := c.Dict.Len()
 	if val < c.Dict.Get(0) || val > c.Dict.Get(l-1) {
-		return bits.One()
+		bits.One()
+		return
 	}
 
 	// find position of val using binary search (dict is sorted and values are unique)
@@ -180,21 +186,23 @@ func (c *DictionaryContainer[T]) MatchNotEqual(val T, bits, mask *Bitset) *Bitse
 
 	// if not found, equal match does not exist and we can set all bits one
 	if idx == l || c.Dict.Get(idx) != val {
-		return bits.One()
+		bits.One()
+		return
 	}
 
 	// if found, we run a not equal scan on codes
-	return c.Codes.MatchNotEqual(uint16(idx), bits, mask)
+	c.Codes.MatchNotEqual(uint16(idx), bits, mask)
 }
 
-func (c *DictionaryContainer[T]) MatchLess(val T, bits, mask *Bitset) *Bitset {
+func (c *DictionaryContainer[T]) MatchLess(val T, bits, mask *Bitset) {
 	// early skip if val is smaller than first or larger last
 	if val < c.Dict.Get(0) {
-		return bits
+		return
 	}
 	l := c.Dict.Len()
 	if val > c.Dict.Get(l-1) {
-		return bits.One()
+		bits.One()
+		return
 	}
 
 	// find position of val using binary search (dict is sorted and values are unique)
@@ -211,17 +219,18 @@ func (c *DictionaryContainer[T]) MatchLess(val T, bits, mask *Bitset) *Bitset {
 	// the first value larger than val which is ok too. At this point
 	// we know idx is between 0 and l-1, so we can directly translate to a
 	// less(code) search.
-	return c.Codes.MatchLess(uint16(idx), bits, mask)
+	c.Codes.MatchLess(uint16(idx), bits, mask)
 }
 
-func (c *DictionaryContainer[T]) MatchLessEqual(val T, bits, mask *Bitset) *Bitset {
+func (c *DictionaryContainer[T]) MatchLessEqual(val T, bits, mask *Bitset) {
 	// early skip if val is smaller than first or larger than last
 	if val < c.Dict.Get(0) {
-		return bits
+		return
 	}
 	l := c.Dict.Len()
 	if val >= c.Dict.Get(l-1) {
-		return bits.One()
+		bits.One()
+		return
 	}
 
 	// find position of val using binary search (dict is sorted and values are unique)
@@ -238,17 +247,18 @@ func (c *DictionaryContainer[T]) MatchLessEqual(val T, bits, mask *Bitset) *Bits
 	// the first value larger than val which is ok too. At this point
 	// we know idx is between 0 and l-1, so we can directly translate to a
 	// less(code) search.
-	return c.Codes.MatchLessEqual(uint16(idx), bits, mask)
+	c.Codes.MatchLessEqual(uint16(idx), bits, mask)
 }
 
-func (c *DictionaryContainer[T]) MatchGreater(val T, bits, mask *Bitset) *Bitset {
+func (c *DictionaryContainer[T]) MatchGreater(val T, bits, mask *Bitset) {
 	// early skip if val is smaller than first or larger or equal to last
 	if val < c.Dict.Get(0) {
-		return bits.One()
+		bits.One()
+		return
 	}
 	l := c.Dict.Len()
 	if val >= c.Dict.Get(l-1) {
-		return bits
+		return
 	}
 
 	// find position of val using binary search (dict is sorted and values are unique)
@@ -260,17 +270,18 @@ func (c *DictionaryContainer[T]) MatchGreater(val T, bits, mask *Bitset) *Bitset
 	// the first value larger than val which is ok too. At this point
 	// we know idx is between 0 and l-1, so we can directly translate to a
 	// less(code) search.
-	return c.Codes.MatchGreater(uint16(idx), bits, mask)
+	c.Codes.MatchGreater(uint16(idx), bits, mask)
 }
 
-func (c *DictionaryContainer[T]) MatchGreaterEqual(val T, bits, mask *Bitset) *Bitset {
+func (c *DictionaryContainer[T]) MatchGreaterEqual(val T, bits, mask *Bitset) {
 	// early skip if val is smaller than first or larger to last
 	if val < c.Dict.Get(0) {
-		return bits.One()
+		bits.One()
+		return
 	}
 	l := c.Dict.Len()
 	if val > c.Dict.Get(l-1) {
-		return bits
+		return
 	}
 
 	// find position of val using binary search (dict is sorted and values are unique)
@@ -282,18 +293,19 @@ func (c *DictionaryContainer[T]) MatchGreaterEqual(val T, bits, mask *Bitset) *B
 	// the first value larger than val which is ok too. At this point
 	// we know idx is between 0 and l-1, so we can directly translate to a
 	// less(code) search.
-	return c.Codes.MatchGreaterEqual(uint16(idx), bits, mask)
+	c.Codes.MatchGreaterEqual(uint16(idx), bits, mask)
 }
 
-func (c *DictionaryContainer[T]) MatchBetween(a, b T, bits, mask *Bitset) *Bitset {
+func (c *DictionaryContainer[T]) MatchBetween(a, b T, bits, mask *Bitset) {
 	// skip when range does not intersect with dict or does fully contain dict
 	l := c.Dict.Len()
 	first, last := c.Dict.Get(0), c.Dict.Get(l-1)
 	if b < first || a > last {
-		return bits
+		return
 	}
 	if a <= first && b >= last {
-		return bits.One()
+		bits.One()
+		return
 	}
 
 	// translate range [a,b] into code range [ca, cb]
@@ -306,7 +318,7 @@ func (c *DictionaryContainer[T]) MatchBetween(a, b T, bits, mask *Bitset) *Bitse
 
 	// range is within a dict value gap
 	if v := c.Dict.Get(ai); ai == bi && v != a && v != b {
-		return bits
+		return
 	}
 
 	// adjust bi when b > last
@@ -315,45 +327,46 @@ func (c *DictionaryContainer[T]) MatchBetween(a, b T, bits, mask *Bitset) *Bitse
 	}
 
 	// forward between match on the code vector
-	return c.Codes.MatchBetween(uint16(ai), uint16(bi), bits, mask)
+	c.Codes.MatchBetween(uint16(ai), uint16(bi), bits, mask)
 }
 
-func (c *DictionaryContainer[T]) MatchSet(s any, bits, mask *Bitset) *Bitset {
+func (c *DictionaryContainer[T]) MatchInSet(s any, bits, mask *Bitset) {
 	// Translate set members to codes, ignore when not in dict. If none
 	// or only a single set value matches we can optimize.
 	cset, code, hasCode := c.translateSet(s)
 
 	// no match at all, return empty match
 	if !hasCode {
-		return bits
+		return
 	}
 
 	// single match, translate to equal match
 	if cset == nil {
-		return c.Codes.MatchEqual(code, bits, mask)
+		c.Codes.MatchEqual(code, bits, mask)
+	} else {
+		// code set match
+		c.Codes.MatchInSet(cset, bits, mask)
 	}
-
-	// code set match
-	return c.Codes.MatchSet(cset, bits, mask)
 }
 
-func (c *DictionaryContainer[T]) MatchNotSet(s any, bits, mask *Bitset) *Bitset {
+func (c *DictionaryContainer[T]) MatchNotInSet(s any, bits, mask *Bitset) {
 	// Translate set members to codes, ignore when not in dict. If none
 	// or only a single set value matches we can optimize.
 	cset, code, hasCode := c.translateSet(s)
 
 	// no set value matches, set all bits one
 	if !hasCode {
-		return bits.One()
+		bits.One()
+		return
 	}
 
 	// single match, translate to not equal match
 	if cset == nil {
-		return c.Codes.MatchNotEqual(code, bits, mask)
+		c.Codes.MatchNotEqual(code, bits, mask)
+	} else {
+		// code set match
+		c.Codes.MatchNotInSet(cset, bits, mask)
 	}
-
-	// code set match
-	return c.Codes.MatchNotSet(cset, bits, mask)
 }
 
 func (c *DictionaryContainer[T]) translateSet(s any) (any, uint16, bool) {
@@ -509,4 +522,9 @@ var dictionaryFactory = DictionaryFactory{
 	u8Pool: sync.Pool{
 		New: func() any { return new(DictionaryContainer[uint8]) },
 	},
+}
+
+// TODO
+func (c *DictionaryContainer[T]) Iterator() Iterator[T] {
+	return nil
 }

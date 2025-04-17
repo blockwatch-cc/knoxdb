@@ -1,8 +1,8 @@
 // Copyright (c) 2023 Blockwatch Data Inc.
 // Author: stefan@blockwatch.cc
 
-//go:build amd64 && !gccgo && !appengine
-// +build amd64,!gccgo,!appengine
+//go:build amd64
+// +build amd64
 
 package avx512
 
@@ -31,11 +31,11 @@ func cmp_i16_bw_x5(src []int16, a, b int16, bits []byte) int64
 
 // Go exports
 var (
-	MatchInt16Equal        = cmp_i16_eq_x5
-	MatchInt16NotEqual     = cmp_i16_ne_x5
-	MatchInt16Less         = cmp_i16_lt_x5
-	MatchInt16LessEqual    = cmp_i16_le_x5
-	MatchInt16Greater      = cmp_i16_gt_x5
-	MatchInt16GreaterEqual = cmp_i16_ge_x5
-	MatchInt16Between      = cmp_i16_bw_x5
+	Int16Equal        = cmp_i16_eq_x5
+	Int16NotEqual     = cmp_i16_ne_x5
+	Int16Less         = cmp_i16_lt_x5
+	Int16LessEqual    = cmp_i16_le_x5
+	Int16Greater      = cmp_i16_gt_x5
+	Int16GreaterEqual = cmp_i16_ge_x5
+	Int16Between      = cmp_i16_bw_x5
 )

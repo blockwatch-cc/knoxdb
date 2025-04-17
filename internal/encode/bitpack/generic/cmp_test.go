@@ -176,16 +176,18 @@ func CmpEqualUnpackedBenchmark[T types.Unsigned](b *testing.B) {
 					for range b.N {
 						dst := make([]T, c.N)
 						Decode(dst, buf, w, 0)
+						var n int64
 						switch any(T(0)).(type) {
 						case uint64:
-							cmp.MatchUint64Equal(util.ReinterpretSlice[T, uint64](dst), uint64(val), bits, nil)
+							n = cmp.Uint64Equal(util.ReinterpretSlice[T, uint64](dst), uint64(val), bits.Bytes())
 						case uint32:
-							cmp.MatchUint32Equal(util.ReinterpretSlice[T, uint32](dst), uint32(val), bits, nil)
+							n = cmp.Uint32Equal(util.ReinterpretSlice[T, uint32](dst), uint32(val), bits.Bytes())
 						case uint16:
-							cmp.MatchUint16Equal(util.ReinterpretSlice[T, uint16](dst), uint16(val), bits, nil)
+							n = cmp.Uint16Equal(util.ReinterpretSlice[T, uint16](dst), uint16(val), bits.Bytes())
 						case uint8:
-							cmp.MatchUint8Equal(util.ReinterpretSlice[T, uint8](dst), uint8(val), bits, nil)
+							n = cmp.Uint8Equal(util.ReinterpretSlice[T, uint8](dst), uint8(val), bits.Bytes())
 						}
+						bits.ResetCount(int(n))
 					}
 				})
 			}

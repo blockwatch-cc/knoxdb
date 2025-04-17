@@ -5,7 +5,6 @@ package match
 
 import (
 	"blockwatch.cc/knoxdb/internal/bitset"
-	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/pack/stats"
 	"blockwatch.cc/knoxdb/internal/query"
@@ -22,7 +21,8 @@ func MatchFilter(f *query.Filter, pkg *pack.Package, bits, mask *bitset.Bitset) 
 	if bits == nil {
 		bits = bitset.NewBitset(pkg.Len())
 	}
-	return f.Matcher.MatchVector(pkg.Block(int(f.Index)), bits, mask)
+	f.Matcher.MatchVector(pkg.Block(int(f.Index)), bits, mask)
+	return bits
 }
 
 // MatchTree matches pack contents against a query condition (sub)tree.
@@ -74,38 +74,38 @@ func MatchTreeAnd(n *query.FilterTreeNode, pkg *pack.Package, r stats.Reader, bi
 				switch f.Mode {
 				case types.FilterModeEqual:
 					// condition is always true iff min == max == f.Value
-					if cmp.EQ(f.Type, min, f.Value) && cmp.EQ(f.Type, max, f.Value) {
+					if f.Type.EQ(min, f.Value) && f.Type.EQ(max, f.Value) {
 						continue
 					}
 				case types.FilterModeNotEqual:
 					// condition is always true iff f.Value < min || f.Value > max
-					if cmp.LT(f.Type, f.Value, min) || cmp.GT(f.Type, f.Value, max) {
+					if f.Type.LT(f.Value, min) || f.Type.GT(f.Value, max) {
 						continue
 					}
 				case types.FilterModeRange:
 					// condition is always true iff pack range <= condition range
 					rg := f.Value.(query.RangeValue)
-					if cmp.LE(f.Type, rg[0], min) && cmp.GE(f.Type, rg[1], max) {
+					if f.Type.LE(rg[0], min) && f.Type.GE(rg[1], max) {
 						continue
 					}
 				case types.FilterModeGt:
 					// condition is always true iff min > f.Value
-					if cmp.GT(f.Type, min, f.Value) {
+					if f.Type.GT(min, f.Value) {
 						continue
 					}
 				case types.FilterModeGe:
 					// condition is always true iff min >= f.Value
-					if cmp.GE(f.Type, min, f.Value) {
+					if f.Type.GE(min, f.Value) {
 						continue
 					}
 				case types.FilterModeLt:
 					// condition is always true iff max < f.Value
-					if cmp.LT(f.Type, max, f.Value) {
+					if f.Type.LT(max, f.Value) {
 						continue
 					}
 				case types.FilterModeLe:
 					// condition is always true iff max <= f.Value
-					if cmp.LE(f.Type, max, f.Value) {
+					if f.Type.LE(max, f.Value) {
 						continue
 					}
 				}
@@ -156,32 +156,32 @@ func MatchTreeOr(n *query.FilterTreeNode, pkg *pack.Package, r stats.Reader, bit
 				switch f.Mode {
 				case types.FilterModeEqual:
 					// condition is always true iff min == max == f.Value
-					skipEarly = cmp.EQ(f.Type, min, f.Value) && cmp.EQ(f.Type, max, f.Value)
+					skipEarly = f.Type.EQ(min, f.Value) && f.Type.EQ(max, f.Value)
 
 				case types.FilterModeNotEqual:
 					// condition is always true iff f.Value < min || f.Value > max
-					skipEarly = cmp.LT(f.Type, f.Value, min) || cmp.GT(f.Type, f.Value, max)
+					skipEarly = f.Type.LT(f.Value, min) || f.Type.GT(f.Value, max)
 
 				case types.FilterModeRange:
 					// condition is always true iff pack range <= condition range
 					rg := f.Value.(query.RangeValue)
-					skipEarly = cmp.LE(f.Type, rg[0], min) && cmp.GE(f.Type, rg[1], max)
+					skipEarly = f.Type.LE(rg[0], min) && f.Type.GE(rg[1], max)
 
 				case types.FilterModeGt:
 					// condition is always true iff min > f.Value
-					skipEarly = cmp.GT(f.Type, min, f.Value)
+					skipEarly = f.Type.GT(min, f.Value)
 
 				case types.FilterModeGe:
 					// condition is always true iff min >= f.Value
-					skipEarly = cmp.GE(f.Type, min, f.Value)
+					skipEarly = f.Type.GE(min, f.Value)
 
 				case types.FilterModeLt:
 					// condition is always true iff max < f.Value
-					skipEarly = cmp.LT(f.Type, max, f.Value)
+					skipEarly = f.Type.LT(max, f.Value)
 
 				case types.FilterModeLe:
 					// condition is always true iff max <= f.Value
-					skipEarly = cmp.LE(f.Type, max, f.Value)
+					skipEarly = f.Type.LE(max, f.Value)
 				}
 				if skipEarly {
 					return bits.One()

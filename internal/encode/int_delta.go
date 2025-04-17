@@ -36,7 +36,7 @@ func (c *DeltaContainer[T]) Len() int {
 	return c.N
 }
 
-func (c *DeltaContainer[T]) MaxSize() int {
+func (c *DeltaContainer[T]) Size() int {
 	return 1 + num.UvarintLen(c.For) + num.UvarintLen(c.Delta) + num.UvarintLen(c.N)
 }
 
@@ -89,15 +89,39 @@ func (c *DeltaContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) In
 	return c
 }
 
-func (c *DeltaContainer[T]) MatchEqual(val T, bits, _ *Bitset) *Bitset {
+func (c *DeltaContainer[T]) DecodeChunk(dst *[CHUNK_SIZE]T, ofs int) {
+	var i int
+	val := c.For + T(ofs)*c.Delta
+	for range CHUNK_SIZE / 16 {
+		dst[i], val = val, val+c.Delta
+		dst[i+1], val = val, val+c.Delta
+		dst[i+2], val = val, val+c.Delta
+		dst[i+3], val = val, val+c.Delta
+		dst[i+4], val = val, val+c.Delta
+		dst[i+5], val = val, val+c.Delta
+		dst[i+6], val = val, val+c.Delta
+		dst[i+7], val = val, val+c.Delta
+		dst[i+8], val = val, val+c.Delta
+		dst[i+9], val = val, val+c.Delta
+		dst[i+10], val = val, val+c.Delta
+		dst[i+11], val = val, val+c.Delta
+		dst[i+12], val = val, val+c.Delta
+		dst[i+13], val = val, val+c.Delta
+		dst[i+14], val = val, val+c.Delta
+		dst[i+15], val = val, val+c.Delta
+		i += 16
+	}
+}
+
+func (c *DeltaContainer[T]) MatchEqual(val T, bits, _ *Bitset) {
 	if val < c.For {
-		return bits
+		return
 	}
 	if c.Delta == 0 {
 		if val == c.For {
-			return bits.One()
+			bits.One()
 		}
-		return bits
+		return
 	}
 
 	val -= c.For
@@ -107,19 +131,18 @@ func (c *DeltaContainer[T]) MatchEqual(val T, bits, _ *Bitset) *Bitset {
 			bits.Set(n)
 		}
 	}
-
-	return bits
 }
 
-func (c *DeltaContainer[T]) MatchNotEqual(val T, bits, _ *Bitset) *Bitset {
+func (c *DeltaContainer[T]) MatchNotEqual(val T, bits, _ *Bitset) {
 	if val < c.For {
-		return bits.One()
+		bits.One()
+		return
 	}
 	if c.Delta == 0 {
-		if val == c.For {
-			return bits
+		if val != c.For {
+			bits.One()
 		}
-		return bits.One()
+		return
 	}
 	val -= c.For
 
@@ -129,25 +152,24 @@ func (c *DeltaContainer[T]) MatchNotEqual(val T, bits, _ *Bitset) *Bitset {
 			bits.Clear(n)
 		}
 	}
-
-	return bits
 }
 
-func (c *DeltaContainer[T]) MatchLess(val T, bits, _ *Bitset) *Bitset {
+func (c *DeltaContainer[T]) MatchLess(val T, bits, _ *Bitset) {
 	if val < c.For {
-		return bits
+		return
 	}
 	if c.Delta == 0 {
 		if val > c.For {
-			return bits.One()
+			bits.One()
 		}
-		return bits
+		return
 	}
 	val -= c.For
 
 	// is val larger than container?
 	if c.Delta*T(c.N-1) < val {
-		return bits.One()
+		bits.One()
+		return
 	}
 
 	// calculate val position
@@ -163,25 +185,24 @@ func (c *DeltaContainer[T]) MatchLess(val T, bits, _ *Bitset) *Bitset {
 	} else {
 		bits.SetRange(0, n)
 	}
-
-	return bits
 }
 
-func (c *DeltaContainer[T]) MatchLessEqual(val T, bits, _ *Bitset) *Bitset {
+func (c *DeltaContainer[T]) MatchLessEqual(val T, bits, _ *Bitset) {
 	if val < c.For {
-		return bits
+		return
 	}
 	if c.Delta == 0 {
 		if val >= c.For {
-			return bits.One()
+			bits.One()
 		}
-		return bits
+		return
 	}
 	val -= c.For
 
 	// is val larger than container?
 	if c.Delta*T(c.N-1) < val {
-		return bits.One()
+		bits.One()
+		return
 	}
 
 	// set all bits below or equal to val's position
@@ -191,25 +212,24 @@ func (c *DeltaContainer[T]) MatchLessEqual(val T, bits, _ *Bitset) *Bitset {
 	} else {
 		bits.SetRange(0, n)
 	}
-
-	return bits
 }
 
-func (c *DeltaContainer[T]) MatchGreater(val T, bits, _ *Bitset) *Bitset {
+func (c *DeltaContainer[T]) MatchGreater(val T, bits, _ *Bitset) {
 	if val < c.For {
-		return bits.One()
+		bits.One()
+		return
 	}
 	if c.Delta == 0 {
 		if val < c.For {
-			return bits.One()
+			bits.One()
 		}
-		return bits
+		return
 	}
 	val -= c.For
 
 	// is val larger than container?
 	if c.Delta*T(c.N-1) < val {
-		return bits
+		return
 	}
 
 	// calculate val position
@@ -226,25 +246,24 @@ func (c *DeltaContainer[T]) MatchGreater(val T, bits, _ *Bitset) *Bitset {
 	} else {
 		bits.SetRange(n, c.N-1)
 	}
-
-	return bits
 }
 
-func (c *DeltaContainer[T]) MatchGreaterEqual(val T, bits, _ *Bitset) *Bitset {
+func (c *DeltaContainer[T]) MatchGreaterEqual(val T, bits, _ *Bitset) {
 	if val < c.For {
-		return bits.One()
+		bits.One()
+		return
 	}
 	if c.Delta == 0 {
 		if val <= c.For {
-			return bits.One()
+			bits.One()
 		}
-		return bits
+		return
 	}
 	val -= c.For
 
 	// is val larger than container?
 	if c.Delta*T(c.N-1) < val {
-		return bits
+		return
 	}
 
 	// calculate val position
@@ -259,20 +278,19 @@ func (c *DeltaContainer[T]) MatchGreaterEqual(val T, bits, _ *Bitset) *Bitset {
 	default:
 		bits.SetRange(n, c.N-1)
 	}
-
-	return bits
 }
 
-func (c *DeltaContainer[T]) MatchBetween(a, b T, bits, _ *Bitset) *Bitset {
+func (c *DeltaContainer[T]) MatchBetween(a, b T, bits, _ *Bitset) {
 	// quick checks for outlier cases (no or all matches)
 	if b < c.For {
-		return bits
+		return
 	}
 	if a <= c.For && b >= c.Delta*T(c.N-1)+c.For {
-		return bits.One()
+		bits.One()
+		return
 	}
 	if c.Delta == 0 {
-		return bits
+		return
 	}
 
 	// adjust for out of bounds a
@@ -301,11 +319,9 @@ func (c *DeltaContainer[T]) MatchBetween(a, b T, bits, _ *Bitset) *Bitset {
 	} else {
 		bits.SetRange(na, nb)
 	}
-
-	return bits
 }
 
-func (c *DeltaContainer[T]) MatchSet(s any, bits, mask *Bitset) *Bitset {
+func (c *DeltaContainer[T]) MatchInSet(s any, bits, mask *Bitset) {
 	set := s.(*xroar.Bitmap)
 
 	if mask != nil {
@@ -327,11 +343,9 @@ func (c *DeltaContainer[T]) MatchSet(s any, bits, mask *Bitset) *Bitset {
 			val += c.Delta
 		}
 	}
-
-	return bits
 }
 
-func (c *DeltaContainer[T]) MatchNotSet(s any, bits, mask *Bitset) *Bitset {
+func (c *DeltaContainer[T]) MatchNotInSet(s any, bits, mask *Bitset) {
 	set := s.(*xroar.Bitmap)
 
 	if mask != nil {
@@ -353,8 +367,6 @@ func (c *DeltaContainer[T]) MatchNotSet(s any, bits, mask *Bitset) *Bitset {
 			val += c.Delta
 		}
 	}
-
-	return bits
 }
 
 type DeltaFactory struct {
@@ -437,4 +449,9 @@ var deltaFactory = DeltaFactory{
 	u8Pool: sync.Pool{
 		New: func() any { return new(DeltaContainer[uint8]) },
 	},
+}
+
+// TODO
+func (c *DeltaContainer[T]) Iterator() Iterator[T] {
+	return nil
 }

@@ -701,11 +701,11 @@ func (x Int256) Gt(y Int256) bool {
 	}
 }
 
-func (x Int256) Lte(y Int256) bool {
+func (x Int256) Le(y Int256) bool {
 	return x == y || x.Lt(y)
 }
 
-func (x Int256) Gte(y Int256) bool {
+func (x Int256) Ge(y Int256) bool {
 	return x == y || x.Gt(y)
 }
 
@@ -731,6 +731,6 @@ func (x Uint256) Int256() Int256 {
 	return Int256{x[0], x[1], x[2], x[3]}
 }
 
-func (x Uint256) Gte(y Uint256) bool {
+func (x Uint256) Ge(y Uint256) bool {
 	return !x.Int256().ult(y.Int256())
 }

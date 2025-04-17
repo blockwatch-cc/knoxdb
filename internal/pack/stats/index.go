@@ -16,7 +16,6 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/bitset"
-	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/query"
@@ -627,7 +626,7 @@ func (idx Index) GlobalMinPk() uint64 {
 	if !ok {
 		return 0
 	}
-	cval, ok := cmp.Cast(types.BlockUint64, val)
+	cval, ok := types.BlockUint64.Cast(val)
 	if ok {
 		return cval.(uint64)
 	}
@@ -639,7 +638,7 @@ func (idx Index) GlobalMaxPk() uint64 {
 	if !ok {
 		return 0
 	}
-	cval, ok := cmp.Cast(types.BlockUint64, val)
+	cval, ok := types.BlockUint64.Cast(val)
 	if ok {
 		return cval.(uint64)
 	}

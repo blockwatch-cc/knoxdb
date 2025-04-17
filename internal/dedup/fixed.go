@@ -284,30 +284,30 @@ func (a FixedByteArray) ForEachUnique(fn func(int, []byte)) {
 	a.ForEach(fn)
 }
 
-func (a *FixedByteArray) MatchEqual(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
-	return matchEqual(a, val, bits, mask)
+func (a *FixedByteArray) MatchEqual(val []byte, bits, mask *bitset.Bitset) {
+	matchEqual(a, val, bits, mask)
 }
 
-func (a *FixedByteArray) MatchNotEqual(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
-	return matchNotEqual(a, val, bits, mask)
+func (a *FixedByteArray) MatchNotEqual(val []byte, bits, mask *bitset.Bitset) {
+	matchNotEqual(a, val, bits, mask)
 }
 
-func (a *FixedByteArray) MatchLess(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
-	return matchLess(a, val, bits, mask)
+func (a *FixedByteArray) MatchLess(val []byte, bits, mask *bitset.Bitset) {
+	matchLess(a, val, bits, mask)
 }
 
-func (a *FixedByteArray) MatchLessEqual(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
-	return matchLessEqual(a, val, bits, mask)
+func (a *FixedByteArray) MatchLessEqual(val []byte, bits, mask *bitset.Bitset) {
+	matchLessEqual(a, val, bits, mask)
 }
 
-func (a *FixedByteArray) MatchGreater(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
-	return matchGreater(a, val, bits, mask)
+func (a *FixedByteArray) MatchGreater(val []byte, bits, mask *bitset.Bitset) {
+	matchGreater(a, val, bits, mask)
 }
 
-func (a *FixedByteArray) MatchGreaterEqual(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
-	return matchGreaterEqual(a, val, bits, mask)
+func (a *FixedByteArray) MatchGreaterEqual(val []byte, bits, mask *bitset.Bitset) {
+	matchGreaterEqual(a, val, bits, mask)
 }
 
-func (a *FixedByteArray) MatchBetween(from, to []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
-	return matchBetween(a, from, to, bits, mask)
+func (a *FixedByteArray) MatchBetween(from, to []byte, bits, mask *bitset.Bitset) {
+	matchBetween(a, from, to, bits, mask)
 }

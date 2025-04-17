@@ -378,9 +378,9 @@ func (a Decimal128) Gt(b Decimal128) bool {
 	return x.val.Gt(y.val)
 }
 
-func (a Decimal128) Gte(b Decimal128) bool {
+func (a Decimal128) Ge(b Decimal128) bool {
 	x, y := EqualScaleDecimal128(a, b)
-	return x.val.Gte(y.val)
+	return x.val.Ge(y.val)
 }
 
 func (a Decimal128) Lt(b Decimal128) bool {
@@ -388,9 +388,9 @@ func (a Decimal128) Lt(b Decimal128) bool {
 	return x.val.Lt(y.val)
 }
 
-func (a Decimal128) Lte(b Decimal128) bool {
+func (a Decimal128) Le(b Decimal128) bool {
 	x, y := EqualScaleDecimal128(a, b)
-	return x.val.Lte(y.val)
+	return x.val.Le(y.val)
 }
 
 func (a Decimal128) Cmp(b Decimal128) int {

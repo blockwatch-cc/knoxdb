@@ -365,30 +365,30 @@ func (a NativeByteArray) ForEachUnique(fn func(int, []byte)) {
 	a.ForEach(fn)
 }
 
-func (a NativeByteArray) MatchEqual(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
-	return cmp.MatchBytesEqual(a.bufs, val, bits, mask)
+func (a NativeByteArray) MatchEqual(val []byte, bits, mask *bitset.Bitset) {
+	cmp.BytesEqual(a.bufs, val, bits.Bytes(), mask.Bytes())
 }
 
-func (a NativeByteArray) MatchNotEqual(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
-	return cmp.MatchBytesNotEqual(a.bufs, val, bits, mask)
+func (a NativeByteArray) MatchNotEqual(val []byte, bits, mask *bitset.Bitset) {
+	cmp.BytesNotEqual(a.bufs, val, bits.Bytes(), mask.Bytes())
 }
 
-func (a NativeByteArray) MatchLess(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
-	return cmp.MatchBytesLess(a.bufs, val, bits, mask)
+func (a NativeByteArray) MatchLess(val []byte, bits, mask *bitset.Bitset) {
+	cmp.BytesLess(a.bufs, val, bits.Bytes(), mask.Bytes())
 }
 
-func (a NativeByteArray) MatchLessEqual(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
-	return cmp.MatchBytesLessEqual(a.bufs, val, bits, mask)
+func (a NativeByteArray) MatchLessEqual(val []byte, bits, mask *bitset.Bitset) {
+	cmp.BytesLessEqual(a.bufs, val, bits.Bytes(), mask.Bytes())
 }
 
-func (a NativeByteArray) MatchGreater(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
-	return cmp.MatchBytesGreater(a.bufs, val, bits, mask)
+func (a NativeByteArray) MatchGreater(val []byte, bits, mask *bitset.Bitset) {
+	cmp.BytesGreater(a.bufs, val, bits.Bytes(), mask.Bytes())
 }
 
-func (a NativeByteArray) MatchGreaterEqual(val []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
-	return cmp.MatchBytesGreaterEqual(a.bufs, val, bits, mask)
+func (a NativeByteArray) MatchGreaterEqual(val []byte, bits, mask *bitset.Bitset) {
+	cmp.BytesGreaterEqual(a.bufs, val, bits.Bytes(), mask.Bytes())
 }
 
-func (a NativeByteArray) MatchBetween(from, to []byte, bits, mask *bitset.Bitset) *bitset.Bitset {
-	return cmp.MatchBytesBetween(a.bufs, from, to, bits, mask)
+func (a NativeByteArray) MatchBetween(from, to []byte, bits, mask *bitset.Bitset) {
+	cmp.BytesBetween(a.bufs, from, to, bits.Bytes(), mask.Bytes())
 }

@@ -17,7 +17,6 @@ import (
 	"strings"
 	"time"
 
-	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
@@ -649,13 +648,13 @@ func (p *JoinPlan) doQuery(ctx context.Context, x, y JoinTable) (xRes engine.Que
 func (p *JoinPlan) matchAt(a engine.QueryResult, ra int, b engine.QueryResult, rb int) bool {
 	v1, _ := a.Row(ra).Index(int(p.Left.On.Id()) - 1)
 	v2, _ := b.Row(rb).Index(int(p.Right.On.Id()) - 1)
-	return cmp.Match(p.Mode, p.Left.Typ, v1, v2)
+	return p.Left.Typ.Match(p.Mode, v1, v2)
 }
 
 func (p *JoinPlan) compareAt(a engine.QueryResult, ra int, b engine.QueryResult, rb int) int {
 	v1, _ := a.Row(ra).Index(int(p.Left.On.Id()) - 1)
 	v2, _ := b.Row(rb).Index(int(p.Right.On.Id()) - 1)
-	return cmp.Cmp(p.Left.Typ, v1, v2)
+	return p.Left.Typ.Cmp(v1, v2)
 }
 
 func (p *JoinPlan) appendResult(out QueryResultConsumer, left engine.QueryResult, l int, right engine.QueryResult, r int) error {
