@@ -31,7 +31,7 @@ type FloatContext[T types.Float] struct {
 // find the most efficient encoding scheme.
 func AnalyzeFloat[T types.Float](vals []T, checkUnique, checkALP bool) *FloatContext[T] {
 	c := newFloatContext[T]()
-	c.PhyBits = SizeOf[T]() * 8
+	c.PhyBits = util.SizeOf[T]() * 8
 	if len(vals) == 0 {
 		return c
 	}
@@ -71,7 +71,7 @@ func AnalyzeFloat[T types.Float](vals []T, checkUnique, checkALP bool) *FloatCon
 func (c *FloatContext[T]) estimateCardinality(vals []T) int {
 	var scratch [256]byte // need 256 byte scratch space
 	unique, _ := llb.NewFilterBuffer(scratch[:], 8)
-	if SizeOf[T]() == 8 {
+	if c.PhyBits == 64 {
 		unique.AddMultiUint64(util.ReinterpretSlice[T, uint64](vals))
 	} else {
 		unique.AddMultiUint32(util.ReinterpretSlice[T, uint32](vals))

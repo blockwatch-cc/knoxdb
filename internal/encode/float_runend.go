@@ -44,8 +44,8 @@ func (c *FloatRunEndContainer[T]) Len() int {
 	return int(c.Ends.Get(l-1)) + 1
 }
 
-func (c *FloatRunEndContainer[T]) MaxSize() int {
-	return 1 + c.Values.MaxSize() + c.Ends.MaxSize()
+func (c *FloatRunEndContainer[T]) Size() int {
+	return 1 + c.Values.Size() + c.Ends.Size()
 }
 
 func (c *FloatRunEndContainer[T]) Store(dst []byte) []byte {
@@ -159,71 +159,71 @@ func (c *FloatRunEndContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int
 	return c
 }
 
-func (c *FloatRunEndContainer[T]) MatchEqual(val T, bits, mask *Bitset) *Bitset {
+// func (c *FloatRunEndContainer[T]) DecodeChunk(dst *[CHUNK_SIZE]T, ofs int) {
+// 	// find run start/end from ofs
+// 	// decode chunk(s) from values between start/end
+// 	// copy chunk values for each run
+// }
+
+func (c *FloatRunEndContainer[T]) MatchEqual(val T, bits, mask *Bitset) {
 	// match values container and translate matches
-	vbits := c.Values.MatchEqual(val, bitset.NewBitset(c.Values.Len()), mask)
+	vbits := bitset.NewBitset(c.Values.Len())
+	c.Values.MatchEqual(val, vbits, mask)
 	c.applyMatch(bits, vbits)
 	vbits.Close()
-	return bits
 }
 
-func (c *FloatRunEndContainer[T]) MatchNotEqual(val T, bits, mask *Bitset) *Bitset {
+func (c *FloatRunEndContainer[T]) MatchNotEqual(val T, bits, mask *Bitset) {
 	// match values container and translate matches
-	vbits := c.Values.MatchNotEqual(val, bitset.NewBitset(c.Values.Len()), mask)
+	vbits := bitset.NewBitset(c.Values.Len())
+	c.Values.MatchNotEqual(val, vbits, mask)
 	c.applyMatch(bits, vbits)
 	vbits.Close()
-	return bits
 }
 
-func (c *FloatRunEndContainer[T]) MatchLess(val T, bits, mask *Bitset) *Bitset {
+func (c *FloatRunEndContainer[T]) MatchLess(val T, bits, mask *Bitset) {
 	// match values container and translate matches
-	vbits := c.Values.MatchLess(val, bitset.NewBitset(c.Values.Len()), mask)
+	vbits := bitset.NewBitset(c.Values.Len())
+	c.Values.MatchLess(val, vbits, mask)
 	c.applyMatch(bits, vbits)
 	vbits.Close()
-	return bits
 }
 
-func (c *FloatRunEndContainer[T]) MatchLessEqual(val T, bits, mask *Bitset) *Bitset {
+func (c *FloatRunEndContainer[T]) MatchLessEqual(val T, bits, mask *Bitset) {
 	// match values container and translate matches
-	vbits := c.Values.MatchLessEqual(val, bitset.NewBitset(c.Values.Len()), mask)
+	vbits := bitset.NewBitset(c.Values.Len())
+	c.Values.MatchLessEqual(val, vbits, mask)
 	c.applyMatch(bits, vbits)
 	vbits.Close()
-	return bits
 }
 
-func (c *FloatRunEndContainer[T]) MatchGreater(val T, bits, mask *Bitset) *Bitset {
+func (c *FloatRunEndContainer[T]) MatchGreater(val T, bits, mask *Bitset) {
 	// match values container and translate matches
-	vbits := c.Values.MatchGreater(val, bitset.NewBitset(c.Values.Len()), mask)
+	vbits := bitset.NewBitset(c.Values.Len())
+	c.Values.MatchGreater(val, vbits, mask)
 	c.applyMatch(bits, vbits)
 	vbits.Close()
-	return bits
 }
 
-func (c *FloatRunEndContainer[T]) MatchGreaterEqual(val T, bits, mask *Bitset) *Bitset {
+func (c *FloatRunEndContainer[T]) MatchGreaterEqual(val T, bits, mask *Bitset) {
 	// match values container and translate matches
-	vbits := c.Values.MatchGreaterEqual(val, bitset.NewBitset(c.Values.Len()), mask)
+	vbits := bitset.NewBitset(c.Values.Len())
+	c.Values.MatchGreaterEqual(val, vbits, mask)
 	c.applyMatch(bits, vbits)
 	vbits.Close()
-	return bits
 }
 
-func (c *FloatRunEndContainer[T]) MatchBetween(a, b T, bits, mask *Bitset) *Bitset {
+func (c *FloatRunEndContainer[T]) MatchBetween(a, b T, bits, mask *Bitset) {
 	// match values container and translate matches
-	vbits := c.Values.MatchBetween(a, b, bitset.NewBitset(c.Values.Len()), mask)
+	vbits := bitset.NewBitset(c.Values.Len())
+	c.Values.MatchBetween(a, b, vbits, mask)
 	c.applyMatch(bits, vbits)
 	vbits.Close()
-	return bits
 }
 
-func (c *FloatRunEndContainer[T]) MatchSet(_ any, bits, _ *Bitset) *Bitset {
-	// N.A.
-	return bits
-}
-
-func (c *FloatRunEndContainer[T]) MatchNotSet(_ any, bits, _ *Bitset) *Bitset {
-	// N.A.
-	return bits
-}
+// N.A.
+func (c *FloatRunEndContainer[T]) MatchInSet(_ any, bits, _ *Bitset)    {}
+func (c *FloatRunEndContainer[T]) MatchNotInSet(_ any, bits, _ *Bitset) {}
 
 func (c *FloatRunEndContainer[T]) applyMatch(bits, vbits *Bitset) {
 	// catch easy corner cases
@@ -280,4 +280,9 @@ var floatRunEndFactory = FloatRunEndFactory{
 	f32Pool: sync.Pool{
 		New: func() any { return new(FloatRunEndContainer[float32]) },
 	},
+}
+
+// TODO
+func (c *FloatRunEndContainer[T]) Iterator() Iterator[T] {
+	return nil
 }

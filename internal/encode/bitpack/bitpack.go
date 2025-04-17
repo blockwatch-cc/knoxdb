@@ -51,6 +51,12 @@ var (
 	Between      = generic.Between
 )
 
-func EstimateSize(width, n int) int {
-	return (width*n + 7) / 8
+// Returns the amount of bytes needed to store bitpacked rounded up to
+// the nearest width to accomodate for padding introduced by code words.
+//
+// Legacy horizontal format used byte boundaries (width = 8)
+//
+// Current format uses code words of same width as source data (64, 32, 16 or 8).
+func EstimateSize(width, bits, n int) int {
+	return (bits*n + width - 1) / 8
 }

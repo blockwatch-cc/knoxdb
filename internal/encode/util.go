@@ -6,18 +6,27 @@ package encode
 import (
 	"fmt"
 	"math/bits"
-	"unsafe"
 
 	"blockwatch.cc/knoxdb/internal/types"
 )
+
+const (
+	CHUNK_SIZE = 128 // must be pow2!
+	CHUNK_MASK = CHUNK_SIZE - 1
+)
+
+func chunkStart(n int) int {
+	return n &^ CHUNK_MASK
+}
 
 var (
 	BitLen64 = bits.Len64
 )
 
-func SizeOf[T types.Number]() int {
-	return int(unsafe.Sizeof(T(0)))
-}
+type (
+	NumberMatchFunc[T types.Number]      func(src []T, val T, bits []byte) int64
+	NumberRangeMatchFunc[T types.Number] func(src []T, from, to T, bits []byte) int64
+)
 
 func BlockType[T types.Number]() types.BlockType {
 	switch any(T(0)).(type) {

@@ -88,7 +88,7 @@ func testIntContainerType[T types.Integer](t *testing.T, scheme IntegerContainer
 			}
 
 			// serialize to buffer
-			buf := make([]byte, 0, enc.MaxSize())
+			buf := make([]byte, 0, enc.Size())
 			buf = enc.Store(buf)
 			require.NotNil(t, buf)
 
@@ -161,20 +161,20 @@ func testIntContainerType[T types.Integer](t *testing.T, scheme IntegerContainer
 
 			// in set
 			t.Run("IN", func(t *testing.T) {
-				testIntCompareFunc3[T](t, enc.MatchSet, src, types.FilterModeIn)
+				testIntCompareFunc3[T](t, enc.MatchInSet, src, types.FilterModeIn)
 			})
 
 			// not in set
 			t.Run("NI", func(t *testing.T) {
-				testIntCompareFunc3[T](t, enc.MatchNotSet, src, types.FilterModeNotIn)
+				testIntCompareFunc3[T](t, enc.MatchNotInSet, src, types.FilterModeNotIn)
 			})
 		})
 	}
 }
 
-type IntCompareFunc[T types.Integer] func(T, *Bitset, *Bitset) *Bitset
-type IntCompareFunc2[T types.Integer] func(T, T, *Bitset, *Bitset) *Bitset
-type IntCompareFunc3[T types.Integer] func(any, *Bitset, *Bitset) *Bitset
+type IntCompareFunc[T types.Integer] func(T, *Bitset, *Bitset)
+type IntCompareFunc2[T types.Integer] func(T, T, *Bitset, *Bitset)
+type IntCompareFunc3[T types.Integer] func(any, *Bitset, *Bitset)
 
 func testIntCompareFunc[T types.Integer](t *testing.T, cmp IntCompareFunc[T], src []T, mode types.FilterMode) {
 	bits := bitset.NewBitset(len(src))
@@ -532,8 +532,8 @@ func BenchmarkEncodeAndStoreInt(b *testing.B) {
 				for range b.N {
 					ctx := AnalyzeInt(data, scheme == TIntegerDictionary)
 					enc := NewInt[int16](scheme).Encode(ctx, data, MAX_CASCADE)
-					sz := enc.MaxSize()
-					buf := enc.Store(make([]byte, 0, enc.MaxSize()))
+					sz := enc.Size()
+					buf := enc.Store(make([]byte, 0, enc.Size()))
 					require.LessOrEqual(b, len(buf), sz)
 					enc.Close()
 					ctx.Close()
@@ -552,7 +552,7 @@ func BenchmarkEncodeBestInt(b *testing.B) {
 			var sz int
 			for range b.N {
 				enc := EncodeInt(nil, c.Data, MAX_CASCADE)
-				sz += enc.MaxSize()
+				sz += enc.Size()
 				if once {
 					b.Log(enc.Info())
 					once = false
@@ -597,7 +597,7 @@ func BenchmarkAppendToInt(b *testing.B) {
 			data := etests.GenForIntScheme[int64](int(scheme), c.N)
 			ctx := AnalyzeInt(data, true)
 			enc := NewInt[int64](scheme).Encode(ctx, data, MAX_CASCADE)
-			buf := enc.Store(make([]byte, 0, enc.MaxSize()))
+			buf := enc.Store(make([]byte, 0, enc.Size()))
 			dst := make([]int64, 0, c.N)
 			all := tests.GenSeq[uint32](c.N)
 

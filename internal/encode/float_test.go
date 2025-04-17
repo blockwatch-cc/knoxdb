@@ -58,7 +58,7 @@ func testFloatContainerType[T types.Float](t *testing.T, scheme FloatContainerTy
 			}
 
 			// serialize to buffer
-			buf := make([]byte, 0, enc.MaxSize())
+			buf := make([]byte, 0, enc.Size())
 			buf = enc.Store(buf)
 			require.NotNil(t, buf)
 
@@ -221,7 +221,7 @@ func BenchmarkEncodeAndStoreFloat(b *testing.B) {
 				for range b.N {
 					ctx := AnalyzeFloat(data, scheme == TFloatDictionary, scheme == TFloatAlp)
 					enc := NewFloat[float64](scheme).Encode(ctx, data, MAX_CASCADE)
-					_ = enc.Store(make([]byte, 0, enc.MaxSize()))
+					_ = enc.Store(make([]byte, 0, enc.Size()))
 					enc.Close()
 					ctx.Close()
 				}
@@ -239,7 +239,7 @@ func BenchmarkEncodeBestFloat(b *testing.B) {
 			var sz int
 			for range b.N {
 				enc := EncodeFloat(nil, c.Data, MAX_CASCADE)
-				sz += enc.MaxSize()
+				sz += enc.Size()
 				if once {
 					b.Log(enc.Info())
 					once = false
@@ -283,7 +283,7 @@ func BenchmarkAppendToFloat(b *testing.B) {
 			data := etests.GenForFloatScheme[float64](int(scheme), c.N)
 			ctx := AnalyzeFloat(data, scheme == TFloatDictionary, scheme == TFloatAlp)
 			enc := NewFloat[float64](scheme).Encode(ctx, data, MAX_CASCADE)
-			buf := enc.Store(make([]byte, 0, enc.MaxSize()))
+			buf := enc.Store(make([]byte, 0, enc.Size()))
 			dst := make([]float64, 0, c.N)
 			all := tests.GenSeq[uint32](c.N)
 

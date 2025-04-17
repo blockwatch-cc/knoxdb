@@ -1,10 +1,15 @@
+// Copyright (c) 2025 Blockwatch Data Inc.
+// Author: alex@blockwatch.cc
+
 package encode
 
 import (
 	"fmt"
-	"slices"
 	"sync"
+	"unsafe"
 
+	"blockwatch.cc/knoxdb/internal/arena"
+	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/encode/alp"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
@@ -26,9 +31,7 @@ type FloatAlpContainer[T types.Float] struct {
 	Exponent     uint8
 	Factor       uint8
 	hasException bool
-	exceptions   map[uint32]T
 	dec          *alp.Decoder[T]
-	chunk        [CHUNK_SIZE]int64
 }
 
 func (c *FloatAlpContainer[T]) Info() string {
@@ -50,7 +53,6 @@ func (c *FloatAlpContainer[T]) Close() {
 		c.Positions = nil
 		c.hasException = false
 	}
-	clear(c.exceptions)
 	c.dec = nil
 	putFloatAlpContainer(c)
 }
@@ -63,10 +65,10 @@ func (c *FloatAlpContainer[T]) Len() int {
 	return c.Values.Len()
 }
 
-func (c *FloatAlpContainer[T]) MaxSize() int {
-	v := 1 + 2 + c.Values.MaxSize()
+func (c *FloatAlpContainer[T]) Size() int {
+	v := 1 + 2 + c.Values.Size()
 	if c.hasException {
-		v += c.Exception.MaxSize() + c.Positions.MaxSize()
+		v += c.Exception.Size() + c.Positions.Size()
 	}
 	return v
 }
@@ -106,6 +108,7 @@ func (c *FloatAlpContainer[T]) Load(buf []byte) ([]byte, error) {
 		return buf, err
 	}
 
+	// load exceptions
 	c.hasException = buf[0] == byte(HasException)
 	buf = buf[1:]
 	if c.hasException {
@@ -122,41 +125,32 @@ func (c *FloatAlpContainer[T]) Load(buf []byte) ([]byte, error) {
 		if err != nil {
 			return buf, err
 		}
-
-		// construct exception map
-		c.exceptions = make(map[uint32]T, c.Positions.Len())
-		for i := range c.Positions.Len() {
-			c.exceptions[c.Positions.Get(i)] = c.Exception.Get(i)
-		}
 	}
-	c.dec = alp.NewDecoder[T](c.Factor, c.Exponent)
 
 	return buf, nil
 }
 
 func (c *FloatAlpContainer[T]) Get(n int) T {
-	if c.hasException {
-		if c.exceptions == nil {
-			c.exceptions = make(map[uint32]T, c.Positions.Len())
-		}
-		if len(c.exceptions) == 0 {
-			for i := range c.Positions.Len() {
-				c.exceptions[c.Positions.Get(i)] = c.Exception.Get(i)
-			}
-		}
-		if v, ok := c.exceptions[uint32(n)]; ok {
-			return v
-		}
-	}
-	return c.dec.DecompressValue(c.Values.Get(n))
+	// ok := c.it.Seek(n)
+	// v, ok := c.it.Next()
+	c.initDecoder()
+	return c.dec.DecodeValue(c.Values.Get(n), n)
 }
 
 func (c *FloatAlpContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 	if sel == nil {
-		for i := range c.Len() {
-			dst = append(dst, c.Get(i))
+		c.initDecoder()
+		it := c.Iterator()
+		for {
+			src, n := it.NextChunk()
+			if n == 0 {
+				break
+			}
+			dst = append(dst, src[:n]...)
 		}
+		it.Close()
 	} else {
+		// TODO: measure iterator vs get performance
 		for _, v := range sel {
 			dst = append(dst, c.Get(int(v)))
 		}
@@ -168,13 +162,13 @@ func (c *FloatAlpContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int) F
 	enc := ctx.AlpEncoder
 	if enc == nil {
 		enc = alp.NewEncoder[T]()
+		defer enc.Close()
 	}
 	enc.Encode(vals)
 	s := enc.State()
 
 	c.Exponent = s.Encoding.E
 	c.Factor = s.Encoding.F
-	c.dec = alp.NewDecoder[T](c.Factor, c.Exponent)
 
 	// encode child containers
 	c.Values = EncodeInt(nil, s.Integers, lvl-1)
@@ -184,84 +178,104 @@ func (c *FloatAlpContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int) F
 		ectx := AnalyzeInt(s.Positions, false)
 		c.Positions = EncodeInt(ectx, s.Positions, lvl-1)
 		ectx.Close()
-		c.dec.WithExceptions(slices.Clone(s.Exceptions), slices.Clone(s.Positions))
 	}
-	enc.Close()
-	ctx.AlpEncoder = nil
 
 	return c
 }
 
-const CHUNK_SIZE = 128
-
-func (c *FloatAlpContainer[T]) DecodeChunk(dst *[CHUNK_SIZE]T, ofs int) {
-	// c.Values.DecodeChunk(&c.chunk, ofs)
-	// c.dec.DecodeChunk(dst, &c.chunk, ofs)
+func (c *FloatAlpContainer[T]) initDecoder() {
+	if c.dec != nil {
+		return
+	}
+	c.dec = alp.NewDecoder[T](c.Factor, c.Exponent)
+	if c.hasException {
+		cnt := c.Exception.Len()
+		c.dec.WithExceptions(
+			c.Exception.AppendTo(nil, arena.Alloc[T](cnt)),
+			c.Positions.AppendTo(nil, arena.Alloc[uint32](cnt)),
+		)
+	}
 }
 
-// func (c *FloatAlpContainer[T]) decodeAll() error {
-// 	var cnt, valsLen int
-// 	if c.hasException {
-// 		cnt = c.Exception.Len()
-// 	}
-// 	exceptions := arena.AllocT[T](cnt)[:cnt]
-// 	positions := arena.AllocT[uint32](cnt)[:cnt]
-
-// 	valsLen = c.Values.Len()
-// 	values := arena.AllocT[int64](valsLen)
-// 	values = c.Values.AppendTo(nil, values)
-
-// 	c.decoded = arena.AllocT[T](valsLen)[:valsLen]
-// 	c.dec.Decompress(c.decoded, c.Factor, c.Exponent, c.For, exceptions, positions, values)
-
-// 	arena.FreeT(exceptions)
-// 	arena.FreeT(positions)
-// 	arena.FreeT(values)
-
-// 	return nil
-// }
-
-func (c *FloatAlpContainer[T]) MatchEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+func (c *FloatAlpContainer[T]) MatchEqual(val T, bits, mask *Bitset) {
+	it := c.Iterator()
+	if util.SizeOf[T]() == 8 {
+		matchIt(it, unsafe.Pointer(&cmp.Float64Equal), val, bits, mask)
+	} else {
+		matchIt(it, unsafe.Pointer(&cmp.Float32Equal), val, bits, mask)
+	}
+	it.Close()
 }
 
-func (c *FloatAlpContainer[T]) MatchNotEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+func (c *FloatAlpContainer[T]) MatchNotEqual(val T, bits, mask *Bitset) {
+	it := c.Iterator()
+	if util.SizeOf[T]() == 8 {
+		matchIt(it, unsafe.Pointer(&cmp.Float64NotEqual), val, bits, mask)
+	} else {
+		matchIt(it, unsafe.Pointer(&cmp.Float32NotEqual), val, bits, mask)
+	}
+	it.Close()
 }
 
-func (c *FloatAlpContainer[T]) MatchLess(val T, bits, mask *Bitset) *Bitset {
-	return nil
+func (c *FloatAlpContainer[T]) MatchLess(val T, bits, mask *Bitset) {
+	it := c.Iterator()
+	if util.SizeOf[T]() == 8 {
+		matchIt(it, unsafe.Pointer(&cmp.Float64Less), val, bits, mask)
+	} else {
+		matchIt(it, unsafe.Pointer(&cmp.Float32Less), val, bits, mask)
+	}
+	it.Close()
 }
 
-func (c *FloatAlpContainer[T]) MatchLessEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+func (c *FloatAlpContainer[T]) MatchLessEqual(val T, bits, mask *Bitset) {
+	it := c.Iterator()
+	if util.SizeOf[T]() == 8 {
+		matchIt(it, unsafe.Pointer(&cmp.Float64LessEqual), val, bits, mask)
+	} else {
+		matchIt(it, unsafe.Pointer(&cmp.Float32LessEqual), val, bits, mask)
+	}
+	it.Close()
 }
 
-func (c *FloatAlpContainer[T]) MatchGreater(val T, bits, mask *Bitset) *Bitset {
-	return nil
+func (c *FloatAlpContainer[T]) MatchGreater(val T, bits, mask *Bitset) {
+	it := c.Iterator()
+	if util.SizeOf[T]() == 8 {
+		matchIt(it, unsafe.Pointer(&cmp.Float64Greater), val, bits, mask)
+	} else {
+		matchIt(it, unsafe.Pointer(&cmp.Float32Greater), val, bits, mask)
+	}
+	it.Close()
 }
 
-func (c *FloatAlpContainer[T]) MatchGreaterEqual(val T, bits, mask *Bitset) *Bitset {
-	return nil
+func (c *FloatAlpContainer[T]) MatchGreaterEqual(val T, bits, mask *Bitset) {
+	it := c.Iterator()
+	if util.SizeOf[T]() == 8 {
+		matchIt(it, unsafe.Pointer(&cmp.Float64GreaterEqual), val, bits, mask)
+	} else {
+		matchIt(it, unsafe.Pointer(&cmp.Float32GreaterEqual), val, bits, mask)
+	}
+	it.Close()
 }
 
-func (c *FloatAlpContainer[T]) MatchBetween(a, b T, bits, mask *Bitset) *Bitset {
-	return nil
+func (c *FloatAlpContainer[T]) MatchBetween(a, b T, bits, mask *Bitset) {
+	it := c.Iterator()
+	if util.SizeOf[T]() == 8 {
+		matchRangeIt(it, unsafe.Pointer(&cmp.Float64Between), a, b, bits, mask)
+	} else {
+		matchRangeIt(it, unsafe.Pointer(&cmp.Float32Between), a, b, bits, mask)
+	}
+	it.Close()
 }
 
-func (c *FloatAlpContainer[T]) MatchSet(_ any, bits, _ *Bitset) *Bitset {
-	// N.A.
-	return bits
-}
-
-func (c *FloatAlpContainer[T]) MatchNotSet(_ any, bits, _ *Bitset) *Bitset {
-	// N.A.
-	return bits
-}
+// N.A.
+func (c *FloatAlpContainer[T]) MatchInSet(_ any, _, _ *Bitset)    {}
+func (c *FloatAlpContainer[T]) MatchNotInSet(_ any, _, _ *Bitset) {}
 
 type FloatAlpFactory struct {
-	f64Pool sync.Pool
-	f32Pool sync.Pool
+	f64Pool   sync.Pool
+	f32Pool   sync.Pool
+	f64ItPool sync.Pool
+	f32ItPool sync.Pool
 }
 
 func newFloatAlpContainer[T types.Float]() FloatContainer[T] {
@@ -284,6 +298,26 @@ func putFloatAlpContainer[T types.Float](c FloatContainer[T]) {
 	}
 }
 
+func newFloatAlpIterator[T types.Float]() *FloatAlpIterator[T] {
+	switch any(T(0)).(type) {
+	case float64:
+		return floatAlpFactory.f64ItPool.Get().(*FloatAlpIterator[T])
+	case float32:
+		return floatAlpFactory.f32ItPool.Get().(*FloatAlpIterator[T])
+	default:
+		return nil
+	}
+}
+
+func putFloatAlpIterator[T types.Float](c *FloatAlpIterator[T]) {
+	switch any(T(0)).(type) {
+	case float64:
+		floatAlpFactory.f64ItPool.Put(c)
+	case float32:
+		floatAlpFactory.f32ItPool.Put(c)
+	}
+}
+
 var floatAlpFactory = FloatAlpFactory{
 	f64Pool: sync.Pool{
 		New: func() any { return new(FloatAlpContainer[float64]) },
@@ -291,4 +325,111 @@ var floatAlpFactory = FloatAlpFactory{
 	f32Pool: sync.Pool{
 		New: func() any { return new(FloatAlpContainer[float32]) },
 	},
+	f64ItPool: sync.Pool{
+		New: func() any { return new(FloatAlpIterator[float64]) },
+	},
+	f32ItPool: sync.Pool{
+		New: func() any { return new(FloatAlpIterator[float32]) },
+	},
+}
+
+func (c *FloatAlpContainer[T]) Iterator() Iterator[T] {
+	it := newFloatAlpIterator[T]()
+	it.len = c.Len()
+	it.dec = c.dec
+	it.valIt = c.Values.Iterator()
+	it.ofs = 0
+	return it
+}
+
+type FloatAlpIterator[T types.Float] struct {
+	vals  [CHUNK_SIZE]T
+	dec   *alp.Decoder[T]
+	valIt Iterator[int64]
+	len   int
+	ofs   int
+}
+
+func (it *FloatAlpIterator[T]) Close() {
+	it.dec = nil
+	it.valIt.Close()
+	it.valIt = nil
+	it.len = 0
+	it.ofs = 0
+	putFloatAlpIterator(it)
+}
+
+func (it *FloatAlpIterator[T]) Reset() {
+	it.ofs = 0
+	it.valIt.Reset()
+}
+
+func (it *FloatAlpIterator[T]) Len() int {
+	return it.len
+}
+
+func (it *FloatAlpIterator[T]) Next() (T, bool) {
+	if it.ofs >= it.len {
+		// EOF
+		return 0, false
+	}
+
+	// ofs % CHUNK_SIZE
+	i := it.ofs & CHUNK_MASK
+
+	// on first call or start of new chunk
+	if i == 0 {
+		// load next source chunk
+		src, n := it.valIt.NextChunk()
+
+		// sanity check, should not happen
+		if n == 0 {
+			it.ofs = it.len
+			return 0, false
+		}
+
+		// decode
+		it.dec.DecodeChunk(&it.vals, src, it.ofs)
+	}
+
+	// advance ofs for next call
+	it.ofs++
+
+	// return value
+	return it.vals[i], true
+}
+
+func (it *FloatAlpIterator[T]) NextChunk() (*[CHUNK_SIZE]T, int) {
+	// EOF
+	if it.ofs >= it.len {
+		return nil, 0
+	}
+	src, n := it.valIt.NextChunk()
+	if n > 0 {
+		it.dec.DecodeChunk(&it.vals, src, it.ofs)
+		it.ofs += n
+	}
+	return &it.vals, n
+}
+
+func (it *FloatAlpIterator[T]) SkipChunk() {
+	it.valIt.SkipChunk()
+	it.ofs = chunkStart(it.ofs + CHUNK_SIZE)
+}
+
+func (it *FloatAlpIterator[T]) Seek(n int) bool {
+	if n < 0 || n >= it.len {
+		return false
+	}
+	it.valIt.Seek(n)
+
+	// load when n is in another chunk and not at first position
+	if n&CHUNK_MASK != 0 && chunkStart(n) != chunkStart(it.ofs) {
+		it.ofs = chunkStart(n)
+		it.NextChunk()
+	}
+
+	// reset ofs to n, so call to Next() delivers value
+	it.ofs = n
+	return true
 }

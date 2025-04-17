@@ -11,6 +11,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/encode/alp"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 type FloatContainerType byte
@@ -42,13 +43,14 @@ type FloatContainer[T types.Float] interface {
 	// data access
 	Get(int) T
 	AppendTo([]uint32, []T) []T
+	Iterator() Iterator[T]
 
 	// encode
 	Encode(ctx *FloatContext[T], vals []T, lvl int) FloatContainer[T]
 
 	// IO
-	MaxSize() int                // helps dimension buffer before write
-	Store([]byte) []byte         // simple, composable, pre-alloc via MaxSize
+	Size() int                   // helps dimension buffer before write
+	Store([]byte) []byte         // simple, composable, pre-alloc via Size
 	Load([]byte) ([]byte, error) // simple, composable
 	Close()                      // free resources
 
@@ -109,7 +111,7 @@ func EncodeFloat[T types.Float](ctx *FloatContext[T], v []T, lvl int) FloatConta
 func EstimateFloat[T types.Float](scheme FloatContainerType, ctx *FloatContext[T], vals []T, lvl int) float64 {
 	// estimate cheap encodings
 	var (
-		w       int = SizeOf[T]()
+		w       int = util.SizeOf[T]()
 		rawSize int = ctx.rawCosts()
 		estSize int
 	)
