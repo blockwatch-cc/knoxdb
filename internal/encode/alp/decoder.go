@@ -15,6 +15,7 @@ type Decoder[T types.Float] struct {
 	exponent   T
 	exceptions []T
 	positions  []uint32
+	exmap      map[uint32]T
 }
 
 func NewDecoder[T types.Float](factor, exponent uint8) *Decoder[T] {
@@ -31,17 +32,30 @@ func (d *Decoder[T]) Close() {
 		d.exceptions = nil
 		arena.Free(d.positions)
 		d.positions = nil
+		clear(d.exmap)
 	}
 }
 
 func (d *Decoder[T]) WithExceptions(values []T, pos []uint32) *Decoder[T] {
 	d.exceptions = values
 	d.positions = pos
+	if d.exmap == nil {
+		d.exmap = make(map[uint32]T, len(values))
+	}
+	for i, v := range values {
+		d.exmap[pos[i]] = v
+	}
 	return d
 }
 
-// DecompressValue decompresses a single value without unFOR or exceptions.
-func (d *Decoder[T]) DecompressValue(v int64) T {
+func (d *Decoder[T]) DecodeValue(v int64, i int) T {
+	if e, ok := d.exmap[uint32(i)]; ok {
+		return e
+	}
+	return d.decode(v)
+}
+
+func (d *Decoder[T]) decode(v int64) T {
 	return T(v) * d.factor * d.exponent
 }
 
