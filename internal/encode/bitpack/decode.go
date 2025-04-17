@@ -56,13 +56,18 @@ func (d *Decoder[T]) DecodeValue(index int) T {
 	return T(pack)&d.mask + d.minv
 }
 
+// TODO: use fast decode kernels
+// ofs must be a multiple of 128!
 func (d *Decoder[T]) DecodeChunk(dst *[128]T, ofs int) int {
-	// maxlen := len(d.buf)*8/d.log2
-	// if ofs >= maxlen {
-	// 	return 0
-	// }
-	// start :=
-	return 0
+	maxn := len(d.buf) * 8 / d.log2
+	if ofs >= maxn {
+		return 0
+	}
+	n := min(128, maxn-ofs)
+	startpos := d.log2 * (ofs >> 3)
+	endpos := startpos + d.log2*16 // for chunk-size 128
+	Decode[T](dst[:n], d.buf[startpos:endpos], d.log2, d.minv)
+	return n
 }
 
 func Decode[T types.Integer](out []T, in []byte, log2 int, minv T) (int, error) {

@@ -57,6 +57,6 @@ var (
 // Legacy horizontal format used byte boundaries (width = 8)
 //
 // Current format uses code words of same width as source data (64, 32, 16 or 8).
-func EstimateSize(width, bits, n int) int {
-	return (bits*n + width - 1) / 8
+func EstimateSize(width, log2, n int) int {
+	return (log2*n + width - 1) &^ (width - 1) / 8
 }
