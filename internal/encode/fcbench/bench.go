@@ -362,6 +362,7 @@ func benchmarkIntEncoder(enc *Encoder, encName string, data []int64, vecLen int,
 		}
 		result.CompressedSize += int64(sz)
 		result.EncoderConfig = enc.Info()
+		result.VectorCount++
 	}
 	encodeDuration := time.Since(start)
 	result.EncodeTimeNs = encodeDuration.Nanoseconds()
@@ -393,6 +394,7 @@ func benchmarkFloatEncoder(enc *Encoder, encName string, data []float64, vecLen 
 		}
 		result.CompressedSize += int64(sz)
 		result.EncoderConfig = enc.Info()
+		result.VectorCount++
 	}
 	encodeDuration := time.Since(start)
 	result.EncodeTimeNs = encodeDuration.Nanoseconds()
