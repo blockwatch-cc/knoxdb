@@ -211,7 +211,7 @@ func runBenchmark(dataset string, encoders []string) ([]fcbench.BenchmarkResult,
 // createBenchmarkConfig creates a config for a given dataset and encoders
 func createBenchmarkConfig(dataset string, encoders []string) fcbench.BenchmarkConfig {
 	cfg := fcbench.BenchmarkConfig{
-		VectorLengths: []int{128, 256, 512, 1024},
+		VectorLengths: []int{128, 256, 512, 1024, 2048, 4096, 8192, 16384},
 		DatasetSize:   1000000,
 		DatasetType:   dataset,
 		OutputDir:     "./bench_results",
