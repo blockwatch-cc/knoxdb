@@ -19,7 +19,10 @@ import (
 	"blockwatch.cc/knoxdb/internal/encode/alp"
 )
 
-// Encoder defines the interface for KnoxDB encoders.
+// =====================================================================
+// ENCODER WRAPPER
+// =====================================================================
+
 type Encoder struct {
 	ienc encode.IntegerContainer[int64]
 	info string
@@ -27,7 +30,7 @@ type Encoder struct {
 
 func (e *Encoder) EncodeInt(v []int64) (int, error) {
 	if e.ienc == nil {
-		return 0, fmt.Errorf("encoder: EncodeInt: integer encoder not supported")
+		return 0, fmt.Errorf("encoder: EncodeInt: integer encoder not configured")
 	}
 	ctx := encode.AnalyzeInt(v, e.ienc.Type() == encode.TIntegerDictionary)
 	e.ienc.Encode(ctx, v, encode.MAX_CASCADE)
@@ -41,15 +44,11 @@ func (e *Encoder) EncodeFloat(v []float64) (int, error) {
 	if len(v) == 0 {
 		return 0, nil
 	}
-	// always create a new ALP encoder
 	ctx := encode.AnalyzeFloat(v, false, true)
-
-	// ensure internal ALP encoder exists (noyt initialized for constant data min=max)
 	if ctx.AlpEncoder == nil {
 		ctx.AlpEncoder = alp.NewEncoder[float64]().Analyze(v)
 	}
 
-	// select encoder based on detected scheme
 	var enc encode.FloatContainer[float64]
 	switch ctx.AlpEncoder.State().Scheme {
 	case alp.AlpScheme:
@@ -65,21 +64,12 @@ func (e *Encoder) EncodeFloat(v []float64) (int, error) {
 	return sz, nil
 }
 
-func (e *Encoder) Info() string {
-	return e.info
-}
+func (e *Encoder) Info() string { return e.info }
 
-// getEncoder retrieves an encoder instance by name.
-// Supported encoders are:
-//   - "delta": Delta encoding, efficient for slowly changing values
-//   - "run": run end encoding, efficient for repeated values
-//   - "bp": bit packed
-//   - "dict": dictionary
-//   - "s8": simple 8
-//   - "alp": ALP floating point
-//   - "alprd": ALP-RD floating point
-//
-// Returns an error if the requested encoder is not supported.
+// =====================================================================
+// ENCODER FACTORY
+// =====================================================================
+
 func getEncoder(name string) (*Encoder, error) {
 	switch name {
 	case "delta":
@@ -95,17 +85,14 @@ func getEncoder(name string) (*Encoder, error) {
 	case "alp":
 		return &Encoder{}, nil
 	default:
-		return nil, fmt.Errorf("getEncoder: unknown encoder: %s", name)
+		return nil, fmt.Errorf("getEncoder: unknown encoder %q", name)
 	}
 }
 
 // =====================================================================
-// BENCHMARKING UTILITIES
+// BENCHMARKING CONFIG / RESULT
 // =====================================================================
 
-// BenchmarkConfig defines the parameters for a benchmarking run.
-// It controls all aspects of the benchmark including which encoders to test,
-// what data to generate, and how to output results.
 type BenchmarkConfig struct {
 	VectorLengths []int
 	DatasetSize   int
@@ -113,12 +100,14 @@ type BenchmarkConfig struct {
 	OutputDir     string
 	Encoders      []string
 	Repeat        int
-	Seed          int64          // Seed for reproducible random generation
-	HPCConfig     Grid3D         // For "hpc"
-	ZipfConfig    ZipfConfig     // For "timeseries" and "transaction"
-	MarkovConfig  MarkovConfig   // For "timeseries"
-	HDRConfig     HDRImageConfig // For "observation"
-	TPCConfig     TPCConfig      // For "transaction"
+	Seed          int64 // Seed for reproducible random generation
+
+	// dataset‑specific generator knobs
+	HPCConfig    Grid3D         // For "hpc"
+	ZipfConfig   ZipfConfig     // For "timeseries" and "transaction"
+	MarkovConfig MarkovConfig   // For "timeseries"
+	HDRConfig    HDRImageConfig // For "observation"
+	TPCConfig    TPCConfig      // For "transaction"
 }
 
 // BenchmarkResult captures metrics for a single benchmark run.
@@ -136,6 +125,44 @@ type BenchmarkResult struct {
 	Timestamp        string
 }
 
+// =====================================================================
+// RESERVOIR SAMPLING (uniform k‑out‑of‑n)
+// =====================================================================
+
+func reservoir[T any](src []T, k int, rng *rand.Rand) []T {
+	if k >= len(src) {
+		out := make([]T, len(src))
+		copy(out, src)
+		return out
+	}
+	out := make([]T, k)
+	copy(out, src[:k])
+	for i := k; i < len(src); i++ {
+		if j := rng.Intn(i + 1); j < k {
+			out[j] = src[i]
+		}
+	}
+	return out
+}
+
+func packFloatVectors(src []float64, vecLen int) []float64 {
+	need := ((len(src) + vecLen - 1) / vecLen) * vecLen
+	out := make([]float64, need)
+	copy(out, src)
+	return out[:len(src)]
+}
+
+func packIntVectors(src []int64, vecLen int) []int64 {
+	need := ((len(src) + vecLen - 1) / vecLen) * vecLen
+	out := make([]int64, need)
+	copy(out, src)
+	return out[:len(src)]
+}
+
+// =====================================================================
+// PUBLIC DRIVER
+// =====================================================================
+
 // RunBenchmarks executes the benchmarking suite according to the provided configuration.
 // It generates synthetic data based on the specified dataset type, runs each
 // configured encoder against the data with various vector lengths, measures
@@ -143,30 +170,28 @@ type BenchmarkResult struct {
 // Returns the benchmark results and any errors encountered during execution.
 func RunBenchmarks(cfg BenchmarkConfig) ([]BenchmarkResult, error) {
 	if len(cfg.VectorLengths) == 0 {
-		return nil, fmt.Errorf("RunBenchmarks: BenchmarkConfig.VectorLengths must not be empty")
+		return nil, fmt.Errorf("VectorLengths empty")
 	}
-	for _, vl := range cfg.VectorLengths {
-		if vl <= 0 {
-			return nil, fmt.Errorf("RunBenchmarks: BenchmarkConfig.VectorLengths must contain positive values")
-		}
-	}
-	if cfg.DatasetSize <= 0 {
-		return nil, fmt.Errorf("RunBenchmarks: BenchmarkConfig.DatasetSize must be positive")
-	}
-	if cfg.Repeat <= 0 {
-		return nil, fmt.Errorf("RunBenchmarks: BenchmarkConfig.Repeat must be positive")
+	if cfg.DatasetSize <= 0 || cfg.Repeat <= 0 {
+		return nil, fmt.Errorf("DatasetSize and Repeat must be >0")
 	}
 	if len(cfg.Encoders) == 0 {
-		return nil, fmt.Errorf("RunBenchmarks: BenchmarkConfig.Encoders must not be empty")
+		return nil, fmt.Errorf("no encoder selected")
 	}
 	if cfg.OutputDir == "" {
-		return nil, fmt.Errorf("RunBenchmarks: BenchmarkConfig.OutputDir must not be empty")
+		return nil, fmt.Errorf("OutputDir empty")
 	}
-	if cfg.Seed != 0 {
-		rand.Seed(cfg.Seed)
-	} else {
-		rand.Seed(time.Now().UnixNano())
-	}
+
+	// deterministic RNG when cfg.Seed != 0
+	rng := rand.New(rand.NewSource(
+		func() int64 {
+			if cfg.Seed != 0 {
+				return cfg.Seed
+			}
+			return time.Now().UnixNano()
+		}()))
+
+	// --- generate synthetic data ------------------------------------------------
 	var data interface{}
 	switch cfg.DatasetType {
 	case "hpc":
@@ -178,71 +203,78 @@ func RunBenchmarks(cfg BenchmarkConfig) ([]BenchmarkResult, error) {
 	case "transaction":
 		data = GenerateTPCDataset(cfg.TPCConfig)
 	default:
-		return nil, fmt.Errorf("RunBenchmarks: unsupported dataset type: %s", cfg.DatasetType)
+		return nil, fmt.Errorf("unsupported dataset %q", cfg.DatasetType)
 	}
-	results := []BenchmarkResult{}
+
+	// --- run benchmarks ---------------------------------------------------------
+	var results []BenchmarkResult
 	for _, encName := range cfg.Encoders {
-		enc, err := getEncoder(encName)
+		encProto, err := getEncoder(encName)
 		if err != nil {
-			return nil, fmt.Errorf("RunBenchmarks: failed to get encoder %s: %w", encName, err)
+			return nil, err
 		}
-		for _, vecLen := range cfg.VectorLengths {
+		for _, vlen := range cfg.VectorLengths {
 			for rep := 0; rep < cfg.Repeat; rep++ {
-				var intData []int64
-				var floatData []float64
-				var sliceErr error
-				switch d := data.(type) {
+				enc := *encProto // fresh state
+
+				var (
+					ints   []int64
+					floats []float64
+					sErr   error
+				)
+				switch col := data.(type) {
 				case []float64:
-					floatData, sliceErr = sliceFloatData(d, vecLen, cfg.DatasetSize)
+					floats, sErr = sliceFloatData(col, vlen, cfg.DatasetSize, rng)
 				case []TimeSeriesRow:
-					floatData, sliceErr = sliceTimeSeriesData(d, vecLen, cfg.DatasetSize)
+					floats, sErr = sliceTimeSeriesData(col, vlen, cfg.DatasetSize, rng)
 				case [][]float64:
-					floatData, sliceErr = sliceHDRData(d, vecLen, cfg.DatasetSize)
+					floats, sErr = sliceHDRData(col, vlen, cfg.DatasetSize, rng)
 				case []TransactionRow:
-					intData, sliceErr = sliceTPCData(d, vecLen, cfg.DatasetSize)
+					ints, sErr = sliceTPCData(col, vlen, cfg.DatasetSize, rng)
 				default:
-					return nil, fmt.Errorf("RunBenchmarks: unsupported data type: %v", reflect.TypeOf(data))
+					return nil, fmt.Errorf("unsupported data kind %v", reflect.TypeOf(data))
 				}
-				if sliceErr != nil {
-					return nil, fmt.Errorf("RunBenchmarks: failed to slice data: %w", sliceErr)
+				if sErr != nil {
+					return nil, sErr
 				}
-				var result BenchmarkResult
-				if len(intData) > 0 {
-					result, err = benchmarkIntEncoder(enc, encName, intData, vecLen, cfg.DatasetType)
+
+				var res BenchmarkResult
+				if len(ints) > 0 {
+					res, err = benchmarkIntEncoder(&enc, encName, ints, vlen, cfg.DatasetType)
 				} else {
-					result, err = benchmarkFloatEncoder(enc, encName, floatData, vecLen, cfg.DatasetType)
+					res, err = benchmarkFloatEncoder(&enc, encName, floats, vlen, cfg.DatasetType)
 				}
 				if err != nil {
-					return nil, fmt.Errorf("RunBenchmarks: failed to benchmark encoder %s: %w", encName, err)
+					return nil, err
 				}
-				results = append(results, result)
+				results = append(results, res)
 			}
 		}
 	}
-	outputFile := filepath.Join(cfg.OutputDir, fmt.Sprintf("fcbench_%s_%d.csv", cfg.DatasetType, time.Now().Unix()))
-	if err := exportCSV(outputFile, []string{
-		"timestamp",
-		"dataset_type",
-		"encoder_name",
-		"vector_length",
-		"encoder_config",
-		"original_size_bytes",
-		"compressed_size_bytes",
-		"compression_ratio",
-		"encode_time_ns",
-		"throughput_values_per_sec",
+
+	// --- CSV export -------------------------------------------------------------
+	out := filepath.Join(cfg.OutputDir,
+		fmt.Sprintf("fcbench_%s_%d.csv", cfg.DatasetType, time.Now().Unix()))
+	headers := []string{
+		"timestamp", "dataset_type", "encoder_name", "vector_length",
+		"encoder_config", "original_size_bytes", "compressed_size_bytes",
+		"compression_ratio", "encode_time_ns", "throughput_values_per_sec",
 		"vector_count",
-	}, resultsToCSVRecords(results)); err != nil {
-		return nil, fmt.Errorf("RunBenchmarks: failed to export results: %w", err)
+	}
+	if err := exportCSV(out, headers, resultsToCSVRecords(results)); err != nil {
+		return nil, err
 	}
 	return results, nil
 }
 
-// resultsToCSVRecords converts benchmark results to CSV records.
-func resultsToCSVRecords(results []BenchmarkResult) [][]string {
-	records := make([][]string, len(results))
-	for i, r := range results {
-		records[i] = []string{
+// =====================================================================
+// CSV HELPER
+// =====================================================================
+
+func resultsToCSVRecords(res []BenchmarkResult) [][]string {
+	rows := make([][]string, len(res))
+	for i, r := range res {
+		rows[i] = []string{
 			r.Timestamp,
 			r.DatasetType,
 			r.EncoderName,
@@ -256,154 +288,121 @@ func resultsToCSVRecords(results []BenchmarkResult) [][]string {
 			strconv.Itoa(r.VectorCount),
 		}
 	}
-	return records
+	return rows
 }
 
-// sliceFloatData slices a float64 dataset into vectors of specified length.
-// It randomly selects starting positions to ensure diverse data patterns.
-func sliceFloatData(data []float64, vecLen, maxSize int) ([]float64, error) {
-	if vecLen <= 0 {
-		return nil, fmt.Errorf("sliceFloatData: vecLen must be positive")
+// =====================================================================
+// SAMPLING HELPERS
+// =====================================================================
+
+func sliceFloatData(col []float64, vecLen, maxSize int, rng *rand.Rand) ([]float64, error) {
+	if vecLen <= 0 || maxSize <= 0 || len(col) < vecLen {
+		return nil, fmt.Errorf("bad params")
 	}
-	if maxSize <= 0 {
-		return nil, fmt.Errorf("sliceFloatData: maxSize must be positive")
-	}
-	if len(data) < vecLen {
-		return nil, fmt.Errorf("sliceFloatData: data size %d smaller than vector length %d", len(data), vecLen)
-	}
-	count := (maxSize + vecLen - 1) / vecLen // ceil()
-	result := make([]float64, count*vecLen)
-	for i := 0; i < count; i++ {
-		start := rand.Intn(len(data) - vecLen + 1)
-		copy(result[i*vecLen:(i+1)*vecLen], data[start:start+vecLen])
-	}
-	return result[:maxSize], nil
+	sample := reservoir(col, maxSize, rng)
+	return packFloatVectors(sample, vecLen), nil
 }
 
-// sliceTimeSeriesData extracts readings from time series data into float64 vectors.
-// It focuses on the Reading field of TimeSeriesRow for encoding benchmarks.
-func sliceTimeSeriesData(data []TimeSeriesRow, vecLen, maxSize int) ([]float64, error) {
-	if vecLen <= 0 {
-		return nil, fmt.Errorf("sliceTimeSeriesData: vecLen must be positive")
+func sliceTimeSeriesData(col []TimeSeriesRow, vecLen, maxSize int, rng *rand.Rand) ([]float64, error) {
+	if vecLen <= 0 || maxSize <= 0 || len(col) < vecLen {
+		return nil, fmt.Errorf("bad params")
 	}
-	if maxSize <= 0 {
-		return nil, fmt.Errorf("sliceTimeSeriesData: maxSize must be positive")
+	tmp := make([]float64, len(col))
+	for i, r := range col {
+		tmp[i] = r.Reading
 	}
-	if len(data) < vecLen {
-		return nil, fmt.Errorf("sliceTimeSeriesData: data size %d smaller than vector length %d", len(data), vecLen)
-	}
-	count := (maxSize + vecLen - 1) / vecLen // ceil()
-	result := make([]float64, count*vecLen)
-	for i := 0; i < count; i++ {
-		start := rand.Intn(len(data) - vecLen + 1)
-		for j := 0; j < vecLen; j++ {
-			result[i*vecLen+j] = data[start+j].Reading
-		}
-	}
-	return result[:maxSize], nil
+	sample := reservoir(tmp, maxSize, rng)
+	return packFloatVectors(sample, vecLen), nil
 }
 
-// sliceHDRData flattens and slices HDR image data (2D) into 1D float64 vectors.
-// This simulates processing image data in encoding applications.
-func sliceHDRData(data [][]float64, vecLen, maxSize int) ([]float64, error) {
-	if vecLen <= 0 {
-		return nil, fmt.Errorf("sliceHDRData: vecLen must be positive")
-	}
-	if maxSize <= 0 {
-		return nil, fmt.Errorf("sliceHDRData: maxSize must be positive")
-	}
-	flat := make([]float64, 0, len(data)*len(data[0]))
-	for _, row := range data {
+func sliceHDRData(img [][]float64, vecLen, maxSize int, rng *rand.Rand) ([]float64, error) {
+	flat := make([]float64, 0, len(img)*len(img[0]))
+	for _, row := range img {
 		flat = append(flat, row...)
 	}
-	return sliceFloatData(flat, vecLen, maxSize)
+	if vecLen <= 0 || maxSize <= 0 || len(flat) < vecLen {
+		return nil, fmt.Errorf("bad params")
+	}
+	sample := reservoir(flat, maxSize, rng)
+	return packFloatVectors(sample, vecLen), nil
 }
 
-// sliceTPCData extracts quantities from transaction data into int64 vectors.
-// It focuses on the Quantity field of TransactionRow for integer encoding benchmarks.
-func sliceTPCData(data []TransactionRow, vecLen, maxSize int) ([]int64, error) {
-	if vecLen <= 0 {
-		return nil, fmt.Errorf("sliceTPCData: vecLen must be positive")
+func sliceTPCData(col []TransactionRow, vecLen, maxSize int, rng *rand.Rand) ([]int64, error) {
+	if vecLen <= 0 || maxSize <= 0 || len(col) < vecLen {
+		return nil, fmt.Errorf("bad params")
 	}
-	if maxSize <= 0 {
-		return nil, fmt.Errorf("sliceTPCData: maxSize must be positive")
+	tmp := make([]int64, len(col))
+	for i, r := range col {
+		tmp[i] = r.Quantity
 	}
-	if len(data) < vecLen {
-		return nil, fmt.Errorf("sliceTPCData: data size %d smaller than vector length %d", len(data), vecLen)
-	}
-
-	count := (maxSize + vecLen - 1) / vecLen // ceil()
-	result := make([]int64, count*vecLen)    // ← **int64**
-
-	for i := 0; i < count; i++ {
-		start := rand.Intn(len(data) - vecLen + 1)
-		for j := 0; j < vecLen; j++ {
-			result[i*vecLen+j] = data[start+j].Quantity // stays int64
-		}
-	}
-	return result[:maxSize], nil // returns []int64
+	sample := reservoir(tmp, maxSize, rng)
+	return packIntVectors(sample, vecLen), nil
 }
 
-// benchmarkIntEncoder runs a benchmark on an int64 vector using the specified encoder.
-// It measures encoding time, compression ratio, and throughput in values per second.
-func benchmarkIntEncoder(enc *Encoder, encName string, data []int64, vecLen int, datasetType string) (BenchmarkResult, error) {
-	result := BenchmarkResult{
-		DatasetType:  datasetType,
-		EncoderName:  encName,
-		VectorLength: vecLen,
-		Timestamp:    time.Now().Format("2006-01-02 15:04:05"),
-	}
+// =====================================================================
+// BENCHMARK CORE
+// =====================================================================
+
+func benchmarkIntEncoder(enc *Encoder, name string, data []int64, vecLen int,
+	dtype string) (BenchmarkResult, error) {
+
+	br := BenchmarkResult{DatasetType: dtype, EncoderName: name,
+		VectorLength: vecLen, Timestamp: time.Now().Format("2006-01-02 15:04:05")}
 	start := time.Now()
 	for i := 0; i < len(data); i += vecLen {
 		chunk := data[i:min(i+vecLen, len(data))]
 		sz, err := enc.EncodeInt(chunk)
 		if err != nil {
-			return result, fmt.Errorf("benchmarkIntEncoder: encode error: %w", err)
+			return br, err
 		}
-		result.CompressedSize += int64(sz)
-		result.EncoderConfig = enc.Info()
-		result.VectorCount++
+		br.CompressedSize += int64(sz)
+		br.VectorCount++
+		br.EncoderConfig = enc.Info()
 	}
-	encodeDuration := time.Since(start)
-	result.EncodeTimeNs = encodeDuration.Nanoseconds()
-	result.OriginalSize = int64(len(data) * 8)
-	if result.CompressedSize > 0 {
-		result.CompressionRatio = float64(result.OriginalSize) / float64(result.CompressedSize)
+	elapsed := time.Since(start)
+	br.EncodeTimeNs = elapsed.Nanoseconds()
+	br.OriginalSize = int64(len(data) * 8)
+	if br.CompressedSize > 0 {
+		br.CompressionRatio = float64(br.OriginalSize) / float64(br.CompressedSize)
 	}
-	if result.EncodeTimeNs > 0 {
-		result.Throughput = float64(len(data)) / (float64(result.EncodeTimeNs) / 1e9)
+	if br.EncodeTimeNs > 0 {
+		br.Throughput = float64(len(data)) / (float64(br.EncodeTimeNs) / 1e9)
 	}
-	return result, nil
+	return br, nil
 }
 
-// benchmarkFloatEncoder runs a benchmark on a float64 vector using the specified encoder.
-// It measures encoding time, compression ratio, and throughput in values per second.
-func benchmarkFloatEncoder(enc *Encoder, encName string, data []float64, vecLen int, datasetType string) (BenchmarkResult, error) {
-	result := BenchmarkResult{
-		DatasetType:  datasetType,
-		EncoderName:  encName,
-		VectorLength: vecLen,
-		Timestamp:    time.Now().Format("2006-01-02 15:04:05"),
-	}
+func benchmarkFloatEncoder(enc *Encoder, name string, data []float64, vecLen int,
+	dtype string) (BenchmarkResult, error) {
+
+	br := BenchmarkResult{DatasetType: dtype, EncoderName: name,
+		VectorLength: vecLen, Timestamp: time.Now().Format("2006-01-02 15:04:05")}
 	start := time.Now()
 	for i := 0; i < len(data); i += vecLen {
 		chunk := data[i:min(i+vecLen, len(data))]
 		sz, err := enc.EncodeFloat(chunk)
 		if err != nil {
-			return result, fmt.Errorf("benchmarkFloatEncoder: encode error: %w", err)
+			return br, err
 		}
-		result.CompressedSize += int64(sz)
-		result.EncoderConfig = enc.Info()
-		result.VectorCount++
+		br.CompressedSize += int64(sz)
+		br.VectorCount++
+		br.EncoderConfig = enc.Info()
 	}
-	encodeDuration := time.Since(start)
-	result.EncodeTimeNs = encodeDuration.Nanoseconds()
-	result.OriginalSize = int64(len(data) * 8)
-	if result.CompressedSize > 0 {
-		result.CompressionRatio = float64(result.OriginalSize) / float64(result.CompressedSize)
+	elapsed := time.Since(start)
+	br.EncodeTimeNs = elapsed.Nanoseconds()
+	br.OriginalSize = int64(len(data) * 8)
+	if br.CompressedSize > 0 {
+		br.CompressionRatio = float64(br.OriginalSize) / float64(br.CompressedSize)
 	}
-	if result.EncodeTimeNs > 0 {
-		result.Throughput = float64(len(data)) / (float64(result.EncodeTimeNs) / 1e9)
+	if br.EncodeTimeNs > 0 {
+		br.Throughput = float64(len(data)) / (float64(br.EncodeTimeNs) / 1e9)
 	}
-	return result, nil
+	return br, nil
+}
+
+// min helper
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
