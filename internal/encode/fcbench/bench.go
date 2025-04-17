@@ -125,6 +125,7 @@ type BenchmarkConfig struct {
 type BenchmarkResult struct {
 	DatasetType      string
 	EncoderName      string
+	VectorCount      int
 	VectorLength     int
 	EncoderConfig    string
 	OriginalSize     int64
@@ -230,6 +231,7 @@ func RunBenchmarks(cfg BenchmarkConfig) ([]BenchmarkResult, error) {
 		"compression_ratio",
 		"encode_time_ns",
 		"throughput_values_per_sec",
+		"vector_count",
 	}, resultsToCSVRecords(results)); err != nil {
 		return nil, fmt.Errorf("RunBenchmarks: failed to export results: %w", err)
 	}
@@ -251,6 +253,7 @@ func resultsToCSVRecords(results []BenchmarkResult) [][]string {
 			strconv.FormatFloat(r.CompressionRatio, 'f', 6, 64),
 			strconv.FormatInt(r.EncodeTimeNs, 10),
 			strconv.FormatFloat(r.Throughput, 'f', 6, 64),
+			strconv.Itoa(r.VectorCount),
 		}
 	}
 	return records
