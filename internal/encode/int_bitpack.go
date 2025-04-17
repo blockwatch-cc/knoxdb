@@ -85,7 +85,7 @@ func (c *BitpackContainer[T]) Load(buf []byte) ([]byte, error) {
 	buf = buf[n:]
 
 	// reference next sz bytes as bitpacked data
-	sz := bitpack.EstimateSize(c.Log2, c.N)
+	sz := bitpack.EstimateSize(util.SizeOf[T]()*8, c.Log2, c.N)
 	c.Packed = buf[:sz]
 
 	// init decoder
@@ -95,17 +95,17 @@ func (c *BitpackContainer[T]) Load(buf []byte) ([]byte, error) {
 }
 
 func (c *BitpackContainer[T]) Get(n int) T {
-	return c.dec.Decode(n)
+	return c.dec.DecodeValue(n)
 }
 
 func (c *BitpackContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 	if sel == nil {
 		for i := range c.Len() {
-			dst = append(dst, c.dec.Decode(i))
+			dst = append(dst, c.dec.DecodeValue(i))
 		}
 	} else {
 		for _, v := range sel {
-			dst = append(dst, c.dec.Decode(int(v)))
+			dst = append(dst, c.dec.DecodeValue(int(v)))
 		}
 	}
 	return dst
@@ -225,14 +225,14 @@ func (c *BitpackContainer[T]) MatchInSet(s any, bits, mask *Bitset) {
 		u32 := arena.Alloc[uint32](mask.Count())
 		for _, k := range mask.Indexes(u32) {
 			i := int(k)
-			if set.Contains(uint64(T(c.unpack(c.Packed, i)) + c.For)) {
+			if set.Contains(uint64(c.dec.DecodeValue(i))) {
 				bits.Set(i)
 			}
 		}
 		arena.Free(u32)
 	} else {
 		for i := range c.Len() {
-			if set.Contains(uint64(T(c.unpack(c.Packed, i)) + c.For)) {
+			if set.Contains(uint64(c.dec.DecodeValue(i))) {
 				bits.Set(i)
 			}
 		}
@@ -247,14 +247,14 @@ func (c *BitpackContainer[T]) MatchNotInSet(s any, bits, mask *Bitset) {
 		u32 := arena.Alloc[uint32](mask.Count())
 		for _, k := range mask.Indexes(u32) {
 			i := int(k)
-			if !set.Contains(uint64(T(c.unpack(c.Packed, i)) + c.For)) {
+			if !set.Contains(uint64(c.dec.DecodeValue(i))) {
 				bits.Set(i)
 			}
 		}
 		arena.Free(u32)
 	} else {
 		for i := range c.Len() {
-			if !set.Contains(uint64(T(c.unpack(c.Packed, i)) + c.For)) {
+			if !set.Contains(uint64(c.dec.DecodeValue(i))) {
 				bits.Set(i)
 			}
 		}
@@ -393,10 +393,7 @@ var bitpackFactory = BitpackFactory{
 
 // ---------------------------------------
 // Iterator
-func bitpackDecodeChunk[T types.Integer](dst *[CHUNK_SIZE]T, buf []byte, log2 int) int {
-	w := util.SizeOf[T]()
-
-}
+//
 
 func (c *BitpackContainer[T]) Iterator() Iterator[T] {
 	it := newBitpackIterator[T]()

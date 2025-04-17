@@ -19,6 +19,8 @@ type DecodeFunc[T types.Integer] func(index int) T
 type Decoder[T types.Integer] struct {
 	buf  []byte
 	log2 int
+	bits int
+	mask T
 	minv T
 }
 
@@ -26,33 +28,35 @@ func NewDecoder[T types.Integer](buf []byte, log2 int, minv T) *Decoder[T] {
 	return &Decoder[T]{
 		buf:  buf,
 		log2: log2,
+		bits: util.SizeOf[T]() * 8,
+		mask: T((1 << log2) - 1),
 		minv: minv,
 	}
 }
 
-func (d *Decode) Decode(dst []T) int {
+func (d *Decoder[T]) Decode(dst []T) int {
 	n, _ := Decode[T](dst, d.buf, d.log2, d.minv)
 	return n
 }
 
-func (d *Decode) DecodeValue(index int) T {
+func (d *Decoder[T]) DecodeValue(index int) T {
 	idx := index * d.log2
-	codeword := idx >> ShiftAmount[bits>>3-1]
+	codeword := idx >> ShiftAmount[d.bits>>3-1]
 
-	shift := idx & (1<<bits - 1)
-	if shift > bits {
-		shift = shift - (codeword * bits)
+	shift := idx & (1<<d.bits - 1)
+	if shift > d.bits {
+		shift = shift - (codeword * d.bits)
 	}
 	pack := uint64(d.buf[codeword]) >> shift
 
-	if diff := bits - shift; diff < log2 {
+	if diff := d.bits - shift; diff < d.log2 {
 		pack |= uint64(d.buf[codeword+1]) << diff
 	}
 
-	return T(pack&mask) + d.minv
+	return T(pack)&d.mask + d.minv
 }
 
-func (d *Decode) DecodeChunk(dst *[128]T, ofs int) int {
+func (d *Decoder[T]) DecodeChunk(dst *[128]T, ofs int) int {
 	// maxlen := len(d.buf)*8/d.log2
 	// if ofs >= maxlen {
 	// 	return 0
