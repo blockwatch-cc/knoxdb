@@ -76,22 +76,22 @@ func Bitpack8[T int8 | uint8](src []T, dst []byte, minv, maxv T) (int, int, erro
 
 		// write groups (4 x 8 packed inputs)
 		bitpack8(minv, group1, out[outpos:], log2)
-		outpos += log2 * groupSize / 8
+		outpos += log2
 		bitpack8(minv, group2, out[outpos:], log2)
-		outpos += log2 * groupSize / 8
+		outpos += log2
 		bitpack8(minv, group3, out[outpos:], log2)
-		outpos += log2 * groupSize / 8
+		outpos += log2
 		bitpack8(minv, group4, out[outpos:], log2)
-		outpos += log2 * groupSize / 8
+		outpos += log2
 	}
 
 	// tail loop
-	n, err := encode(dst[outpos*4:], in[blockN*BitPackingBlockSize8:], log2, minv)
+	n, err := encode(dst[outpos:], in[blockN*BitPackingBlockSize8:], log2, minv)
 	if err != nil {
 		return 0, log2, err
 	}
 
-	return outpos*4 + len(n), log2, err
+	return outpos + len(n), log2, err
 }
 
 func Bitpack16[T int16 | uint16](src []T, dst []byte, minv, maxv T) (int, int, error) {
@@ -117,22 +117,22 @@ func Bitpack16[T int16 | uint16](src []T, dst []byte, minv, maxv T) (int, int, e
 
 		// write groups (4 x 16 packed inputs)
 		bitpack16(minv, group1, out[outpos:], log2)
-		outpos += log2 * groupSize / 8
+		outpos += log2
 		bitpack16(minv, group2, out[outpos:], log2)
-		outpos += log2 * groupSize / 8
+		outpos += log2
 		bitpack16(minv, group3, out[outpos:], log2)
-		outpos += log2 * groupSize / 8
+		outpos += log2
 		bitpack16(minv, group4, out[outpos:], log2)
-		outpos += log2 * groupSize / 8
+		outpos += log2
 	}
 
 	// tail loop
-	n, err := encode(dst[outpos*4:], in[blockN*BitPackingBlockSize16:], log2, minv)
+	n, err := encode(dst[outpos*2:], in[blockN*BitPackingBlockSize16:], log2, minv)
 	if err != nil {
 		return 0, log2, err
 	}
 
-	return outpos*4 + len(n), log2, err
+	return outpos*2 + len(n), log2, err
 }
 
 func Bitpack32[T int32 | uint32](src []T, dst []byte, minv, maxv T) (int, int, error) {
@@ -158,13 +158,13 @@ func Bitpack32[T int32 | uint32](src []T, dst []byte, minv, maxv T) (int, int, e
 
 		// write groups (4 x 32 packed inputs)
 		bitpack32(minv, group1, out[outpos:], log2)
-		outpos += log2 * groupSize / 8
+		outpos += log2
 		bitpack32(minv, group2, out[outpos:], log2)
-		outpos += log2 * groupSize / 8
+		outpos += log2
 		bitpack32(minv, group3, out[outpos:], log2)
-		outpos += log2 * groupSize / 8
+		outpos += log2
 		bitpack32(minv, group4, out[outpos:], log2)
-		outpos += log2 * groupSize / 8
+		outpos += log2
 	}
 
 	// tail loop
@@ -191,7 +191,7 @@ func Bitpack64[T int64 | uint64](src []T, dst []byte, minv, maxv T) (int, int, e
 
 	const groupSize = BitPackingBlockSize64 / 4
 	for blockI := range blockN {
-		i := blockI * BitPackingBlockSize32
+		i := blockI * BitPackingBlockSize64
 		group1 := in[i+0*groupSize : i+1*groupSize]
 		group2 := in[i+1*groupSize : i+2*groupSize]
 		group3 := in[i+2*groupSize : i+3*groupSize]
@@ -199,22 +199,22 @@ func Bitpack64[T int64 | uint64](src []T, dst []byte, minv, maxv T) (int, int, e
 
 		// write groups (4 x 64 packed inputs)
 		bitpack64(minv, group1, out[outpos:], log2)
-		outpos += log2 * groupSize / 8
+		outpos += log2
 		bitpack64(minv, group2, out[outpos:], log2)
-		outpos += log2 * groupSize / 8
+		outpos += log2
 		bitpack64(minv, group3, out[outpos:], log2)
-		outpos += log2 * groupSize / 8
+		outpos += log2
 		bitpack64(minv, group4, out[outpos:], log2)
-		outpos += log2 * groupSize / 8
+		outpos += log2
 	}
 
 	// tail loop
-	n, err := encode(dst[outpos*4:], in[blockN*BitPackingBlockSize64:], log2, minv)
+	n, err := encode(dst[outpos*8:], in[blockN*BitPackingBlockSize64:], log2, minv)
 	if err != nil {
 		return 0, log2, err
 	}
 
-	return outpos*4 + len(n), log2, err
+	return outpos*8 + len(n), log2, err
 }
 
 func encode[T types.Integer](buf []byte, vals []T, log2 int, minv T) ([]byte, error) {

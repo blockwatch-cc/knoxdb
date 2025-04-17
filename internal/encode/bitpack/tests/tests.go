@@ -44,7 +44,7 @@ func MakeTests[T types.Integer]() []TestCase[T] {
 }
 
 var (
-	TestSizes          = []int{1, 7, 15, 16} // algorithm boundaries (8x loop unrolled, 7x tail)
+	TestSizes          = []int{1, 7, 15, 16, 128, 1024, 1025} // algorithm boundaries (8x loop unrolled, 7x tail)
 	Chars     CharType = "abcdefgh"
 	WarnSym            = map[bool]string{false: "!!!"}
 )
