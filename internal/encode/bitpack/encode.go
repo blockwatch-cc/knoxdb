@@ -4,7 +4,6 @@
 package bitpack
 
 import (
-	"math/bits"
 	"unsafe"
 
 	"blockwatch.cc/knoxdb/internal/types"
@@ -56,7 +55,7 @@ func Encode[T types.Integer](buf []byte, vals []T, minv, maxv T) ([]byte, int, e
 func Bitpack8[T int8 | uint8](src []T, dst []byte, minv, maxv T) (int, int, error) {
 	in := src
 	out := util.FromByteSlice[uint8](dst)
-	log2 := bits.Len64(uint64(maxv - minv))
+	log2 := types.Log2Range(minv, maxv)
 	blockN := len(in) / BitPackingBlockSize8
 	if blockN == 0 {
 		// input less than block size, use generic encoder
@@ -97,7 +96,7 @@ func Bitpack8[T int8 | uint8](src []T, dst []byte, minv, maxv T) (int, int, erro
 func Bitpack16[T int16 | uint16](src []T, dst []byte, minv, maxv T) (int, int, error) {
 	in := src
 	out := util.FromByteSlice[uint16](dst)
-	log2 := bits.Len64(uint64(maxv - minv))
+	log2 := types.Log2Range(minv, maxv)
 	blockN := len(in) / BitPackingBlockSize16
 	if blockN == 0 {
 		// input less than block size, use generic encoder
@@ -138,7 +137,7 @@ func Bitpack16[T int16 | uint16](src []T, dst []byte, minv, maxv T) (int, int, e
 func Bitpack32[T int32 | uint32](src []T, dst []byte, minv, maxv T) (int, int, error) {
 	in := src
 	out := util.FromByteSlice[uint32](dst)
-	log2 := bits.Len64(uint64(maxv - minv))
+	log2 := types.Log2Range(minv, maxv)
 	blockN := len(in) / BitPackingBlockSize32
 	if blockN == 0 {
 		// input less than block size, use generic encoder
@@ -179,7 +178,7 @@ func Bitpack32[T int32 | uint32](src []T, dst []byte, minv, maxv T) (int, int, e
 func Bitpack64[T int64 | uint64](src []T, dst []byte, minv, maxv T) (int, int, error) {
 	in := src
 	out := util.FromByteSlice[uint64](dst)
-	log2 := bits.Len64(uint64(maxv - minv))
+	log2 := types.Log2Range(minv, maxv)
 	blockN := len(in) / BitPackingBlockSize64
 	if blockN == 0 {
 		// input less than block size, use generic encoder

@@ -39,16 +39,16 @@ func (d *Decoder[T]) Close() {
 func (d *Decoder[T]) WithExceptions(values []T, pos []uint32) *Decoder[T] {
 	d.exceptions = values
 	d.positions = pos
-	if d.exmap == nil {
-		d.exmap = make(map[uint32]T, len(values))
-	}
-	for i, v := range values {
-		d.exmap[pos[i]] = v
-	}
 	return d
 }
 
 func (d *Decoder[T]) DecodeValue(v int64, i int) T {
+	if d.exceptions != nil && d.exmap == nil {
+		d.exmap = make(map[uint32]T, len(d.exceptions))
+		for i, v := range d.exceptions {
+			d.exmap[d.positions[i]] = v
+		}
+	}
 	if e, ok := d.exmap[uint32(i)]; ok {
 		return e
 	}

@@ -5,6 +5,7 @@ package types
 
 import (
 	"math"
+	"math/bits"
 
 	"blockwatch.cc/knoxdb/internal/bitset"
 )
@@ -56,6 +57,14 @@ func IsSigned[T Integer]() bool {
 	// For signed types, this is true (e.g., -1 < 0)
 	// For unsigned types, -1 wraps to MaxValue (e.g., 0xFF...FF), so it's false
 	return T(0)-T(1) < T(0)
+}
+
+func Log2Range[T Integer](minv, maxv T) int {
+	if IsSigned[T]() {
+		return bits.Len64(uint64(int64(maxv) - int64(minv)))
+	} else {
+		return bits.Len64(uint64(maxv - minv))
+	}
 }
 
 func MinVal[T Integer]() T {

@@ -15,8 +15,8 @@ import (
 )
 
 type FloatContext[T types.Float] struct {
-	Min        T                // vector minimum
-	Max        T                // vector maximum
+	// Min        T                // vector minimum
+	// Max        T                // vector maximum
 	PhyBits    int              // float bit width
 	NumUnique  int              // vector cardinality (hint, may not be precise)
 	NumRuns    int              // vector runs
@@ -35,22 +35,32 @@ func AnalyzeFloat[T types.Float](vals []T, checkUnique, checkALP bool) *FloatCon
 	if len(vals) == 0 {
 		return c
 	}
-	c.Min = vals[0]
-	c.Max = vals[0]
-	c.NumRuns = 1
 	c.NumValues = len(vals)
-	for i, v := range vals[1:] {
-		if v < c.Min {
-			c.Min = v
-		} else if v > c.Max {
-			c.Max = v
-		}
-		c.NumRuns += util.Bool2int(vals[i] != v)
+
+	// unrolled run count
+	c.NumRuns = 1
+	i := 0
+	for range (len(vals) - 1) / 8 {
+		c.NumRuns += util.Bool2int(vals[i] != vals[i+1]) +
+			util.Bool2int(vals[i+1] != vals[i+2]) +
+			util.Bool2int(vals[i+2] != vals[i+3]) +
+			util.Bool2int(vals[i+3] != vals[i+4]) +
+			util.Bool2int(vals[i+4] != vals[i+5]) +
+			util.Bool2int(vals[i+5] != vals[i+6]) +
+			util.Bool2int(vals[i+6] != vals[i+7]) +
+			util.Bool2int(vals[i+7] != vals[i+8]) +
+			util.Bool2int(vals[i+8] != vals[i+9])
+		i += 8
 	}
+	for i < len(vals)-1 {
+		c.NumRuns += util.Bool2int(vals[i] != vals[i+1])
+		i++
+	}
+
 	c.NumUnique = c.NumRuns
 
 	// run more analysis steps when const encoding is excluded
-	if c.Min != c.Max {
+	if c.NumRuns > 1 {
 		// let ALP estimate the best scheme, avoid ALP-in-ALP nesting
 		if checkALP {
 			// analyze full vector for compatibility, ALP will do its own sampling
@@ -82,7 +92,7 @@ func (c *FloatContext[T]) estimateCardinality(vals []T) int {
 
 func (c *FloatContext[T]) EligibleSchemes(lvl int) []FloatContainerType {
 	// constant only
-	if c.Min == c.Max {
+	if c.NumRuns == 1 {
 		return []FloatContainerType{TFloatConstant}
 	}
 
@@ -158,8 +168,6 @@ func (c *FloatContext[T]) Close() {
 		c.AlpEncoder.Close()
 		c.AlpEncoder = nil
 	}
-	c.Min = 0
-	c.Max = 0
 	c.PhyBits = 0
 	c.NumUnique = 0
 	c.NumRuns = 0

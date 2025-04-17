@@ -6,10 +6,8 @@ package encode
 import (
 	"fmt"
 	"sync"
-	"unsafe"
 
 	"blockwatch.cc/knoxdb/internal/arena"
-	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/encode/alp"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
@@ -139,7 +137,6 @@ func (c *FloatAlpContainer[T]) Get(n int) T {
 
 func (c *FloatAlpContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 	if sel == nil {
-		c.initDecoder()
 		it := c.Iterator()
 		for {
 			src, n := it.NextChunk()
@@ -170,6 +167,8 @@ func (c *FloatAlpContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int) F
 	c.Exponent = s.Encoding.E
 	c.Factor = s.Encoding.F
 
+	// fmt.Printf("ALP [%d,%d] vals=%d ex=%d\n", c.Exponent, c.Factor, len(s.Integers), len(s.Exceptions))
+
 	// encode child containers
 	c.Values = EncodeInt(nil, s.Integers, lvl-1)
 	if len(s.Exceptions) > 0 {
@@ -198,73 +197,31 @@ func (c *FloatAlpContainer[T]) initDecoder() {
 }
 
 func (c *FloatAlpContainer[T]) MatchEqual(val T, bits, mask *Bitset) {
-	it := c.Iterator()
-	if util.SizeOf[T]() == 8 {
-		matchIt(it, unsafe.Pointer(&cmp.Float64Equal), val, bits, mask)
-	} else {
-		matchIt(it, unsafe.Pointer(&cmp.Float32Equal), val, bits, mask)
-	}
-	it.Close()
+	matchIt(c.Iterator(), matchFn[T](types.FilterModeEqual), val, bits, mask)
 }
 
 func (c *FloatAlpContainer[T]) MatchNotEqual(val T, bits, mask *Bitset) {
-	it := c.Iterator()
-	if util.SizeOf[T]() == 8 {
-		matchIt(it, unsafe.Pointer(&cmp.Float64NotEqual), val, bits, mask)
-	} else {
-		matchIt(it, unsafe.Pointer(&cmp.Float32NotEqual), val, bits, mask)
-	}
-	it.Close()
+	matchIt(c.Iterator(), matchFn[T](types.FilterModeNotEqual), val, bits, mask)
 }
 
 func (c *FloatAlpContainer[T]) MatchLess(val T, bits, mask *Bitset) {
-	it := c.Iterator()
-	if util.SizeOf[T]() == 8 {
-		matchIt(it, unsafe.Pointer(&cmp.Float64Less), val, bits, mask)
-	} else {
-		matchIt(it, unsafe.Pointer(&cmp.Float32Less), val, bits, mask)
-	}
-	it.Close()
+	matchIt(c.Iterator(), matchFn[T](types.FilterModeLt), val, bits, mask)
 }
 
 func (c *FloatAlpContainer[T]) MatchLessEqual(val T, bits, mask *Bitset) {
-	it := c.Iterator()
-	if util.SizeOf[T]() == 8 {
-		matchIt(it, unsafe.Pointer(&cmp.Float64LessEqual), val, bits, mask)
-	} else {
-		matchIt(it, unsafe.Pointer(&cmp.Float32LessEqual), val, bits, mask)
-	}
-	it.Close()
+	matchIt(c.Iterator(), matchFn[T](types.FilterModeLe), val, bits, mask)
 }
 
 func (c *FloatAlpContainer[T]) MatchGreater(val T, bits, mask *Bitset) {
-	it := c.Iterator()
-	if util.SizeOf[T]() == 8 {
-		matchIt(it, unsafe.Pointer(&cmp.Float64Greater), val, bits, mask)
-	} else {
-		matchIt(it, unsafe.Pointer(&cmp.Float32Greater), val, bits, mask)
-	}
-	it.Close()
+	matchIt(c.Iterator(), matchFn[T](types.FilterModeGt), val, bits, mask)
 }
 
 func (c *FloatAlpContainer[T]) MatchGreaterEqual(val T, bits, mask *Bitset) {
-	it := c.Iterator()
-	if util.SizeOf[T]() == 8 {
-		matchIt(it, unsafe.Pointer(&cmp.Float64GreaterEqual), val, bits, mask)
-	} else {
-		matchIt(it, unsafe.Pointer(&cmp.Float32GreaterEqual), val, bits, mask)
-	}
-	it.Close()
+	matchIt(c.Iterator(), matchFn[T](types.FilterModeGe), val, bits, mask)
 }
 
 func (c *FloatAlpContainer[T]) MatchBetween(a, b T, bits, mask *Bitset) {
-	it := c.Iterator()
-	if util.SizeOf[T]() == 8 {
-		matchRangeIt(it, unsafe.Pointer(&cmp.Float64Between), a, b, bits, mask)
-	} else {
-		matchRangeIt(it, unsafe.Pointer(&cmp.Float32Between), a, b, bits, mask)
-	}
-	it.Close()
+	matchRangeIt(c.Iterator(), matchFn[T](types.FilterModeRange), a, b, bits, mask)
 }
 
 // N.A.
@@ -334,6 +291,7 @@ var floatAlpFactory = FloatAlpFactory{
 }
 
 func (c *FloatAlpContainer[T]) Iterator() Iterator[T] {
+	c.initDecoder()
 	it := newFloatAlpIterator[T]()
 	it.len = c.Len()
 	it.dec = c.dec

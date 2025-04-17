@@ -19,8 +19,6 @@ import (
 func TestAnalyzeFloat(t *testing.T) {
 	// runs
 	x := AnalyzeFloat([]float64{-1.044, -1.044, 5.245, 5.245, 1.50, 1.50}, true, true)
-	assert.Equal(t, float64(-1.044), x.Min, "min")
-	assert.Equal(t, float64(5.245), x.Max, "max")
 	assert.InDelta(t, 3, x.NumUnique, 1.0, "num_unique")
 	assert.Equal(t, 3, x.NumRuns, "num_runs")
 	assert.Equal(t, 6, x.NumValues, "num_values")
@@ -30,8 +28,6 @@ func TestAnalyzeFloat(t *testing.T) {
 
 	// dict-friendly
 	x = AnalyzeFloat([]float64{-1.05, 1.05, 5.05, 1.05, -1.05, 1.05}, true, false)
-	assert.Equal(t, float64(-1.05), x.Min, "min")
-	assert.Equal(t, float64(5.05), x.Max, "max")
 	assert.InDelta(t, 3, x.NumUnique, 1.0, "num_unique")
 	assert.Equal(t, 6, x.NumRuns, "num_runs")
 	assert.Equal(t, 6, x.NumValues, "num_values")
@@ -125,7 +121,7 @@ func testEncodeFloatT[T types.Float](t *testing.T) {
 			e := EncodeFloat(x, c.Data, MAX_CASCADE)
 			require.Equal(t, len(c.Data), e.Len(), "x=%#v", x)
 			for i, v := range c.Data {
-				require.Equal(t, v, e.Get(i), "i=%d d=%x", i, c.Data)
+				require.Equal(t, v, e.Get(i), "i=%d d=%x e=%s", i, c.Data, e.Info())
 			}
 		})
 	}
@@ -151,7 +147,6 @@ func BenchmarkAnalyzeFloat(b *testing.B) {
 
 func BenchmarkEstimateFloat(b *testing.B) {
 	for _, c := range tests.MakeBenchmarks[float64]() {
-		ctx := AnalyzeFloat(c.Data, true, true)
 		for _, scheme := range []FloatContainerType{
 			TFloatConstant,
 			TFloatRunEnd,
@@ -164,7 +159,9 @@ func BenchmarkEstimateFloat(b *testing.B) {
 				b.ReportAllocs()
 				b.SetBytes(int64(len(c.Data) * 8))
 				for range b.N {
+					ctx := AnalyzeFloat(c.Data, true, true)
 					_ = EstimateFloat(scheme, ctx, c.Data, MAX_CASCADE)
+					ctx.Close()
 				}
 			})
 		}
@@ -182,24 +179,26 @@ func BenchmarkEncodeFloat(b *testing.B) {
 			TFloatRaw,
 		} {
 			data := etests.GenForFloatScheme[float64](int(scheme), c.N)
-			ctx := AnalyzeFloat(data, scheme == TFloatDictionary, scheme == TFloatAlp)
 			once := etests.ShowInfo
 			b.Run(c.Name+"_"+scheme.String(), func(b *testing.B) {
 				if once && etests.ShowInfo {
+					ctx := AnalyzeFloat(data, scheme == TFloatDictionary, scheme == TFloatAlp)
 					enc := NewFloat[float64](scheme).Encode(ctx, data, MAX_CASCADE)
 					b.Log(enc.Info())
 					enc.Close()
+					ctx.Close()
 					once = false
 				}
 				b.ResetTimer()
 				b.ReportAllocs()
 				b.SetBytes(int64(c.N * 8))
 				for range b.N {
+					ctx := AnalyzeFloat(data, scheme == TFloatDictionary, scheme == TFloatAlp)
 					enc := NewFloat[float64](scheme).Encode(ctx, data, MAX_CASCADE)
 					enc.Close()
+					ctx.Close()
 				}
 			})
-			ctx.Close()
 		}
 	}
 }

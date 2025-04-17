@@ -153,24 +153,31 @@ func (c *FloatAlpRdContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int)
 }
 
 func (c *FloatAlpRdContainer[T]) MatchEqual(val T, bits, mask *Bitset) {
+	matchIt(c.Iterator(), matchFn[T](types.FilterModeEqual), val, bits, mask)
 }
 
 func (c *FloatAlpRdContainer[T]) MatchNotEqual(val T, bits, mask *Bitset) {
+	matchIt(c.Iterator(), matchFn[T](types.FilterModeNotEqual), val, bits, mask)
 }
 
 func (c *FloatAlpRdContainer[T]) MatchLess(val T, bits, mask *Bitset) {
+	matchIt(c.Iterator(), matchFn[T](types.FilterModeLt), val, bits, mask)
 }
 
 func (c *FloatAlpRdContainer[T]) MatchLessEqual(val T, bits, mask *Bitset) {
+	matchIt(c.Iterator(), matchFn[T](types.FilterModeLe), val, bits, mask)
 }
 
 func (c *FloatAlpRdContainer[T]) MatchGreater(val T, bits, mask *Bitset) {
+	matchIt(c.Iterator(), matchFn[T](types.FilterModeGt), val, bits, mask)
 }
 
 func (c *FloatAlpRdContainer[T]) MatchGreaterEqual(val T, bits, mask *Bitset) {
+	matchIt(c.Iterator(), matchFn[T](types.FilterModeGe), val, bits, mask)
 }
 
 func (c *FloatAlpRdContainer[T]) MatchBetween(a, b T, bits, mask *Bitset) {
+	matchRangeIt(c.Iterator(), matchFn[T](types.FilterModeRange), a, b, bits, mask)
 }
 
 // N.A.

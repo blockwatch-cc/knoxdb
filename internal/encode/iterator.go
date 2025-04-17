@@ -6,7 +6,9 @@ package encode
 import (
 	"unsafe"
 
+	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 type Iterator[T types.Number] interface {
@@ -47,6 +49,7 @@ func matchIt[T types.Number](it Iterator[T], cmpFn unsafe.Pointer, val T, bits, 
 		i += n
 	}
 	bits.ResetCount(int(cnt))
+	it.Close()
 }
 
 func matchRangeIt[T types.Number](it Iterator[T], cmpFn unsafe.Pointer, a, b T, bits, mask *Bitset) {
@@ -77,4 +80,41 @@ func matchRangeIt[T types.Number](it Iterator[T], cmpFn unsafe.Pointer, a, b T, 
 		i += n
 	}
 	bits.ResetCount(int(cnt))
+	it.Close()
+}
+
+var (
+	floatMatch64Fn = [...]unsafe.Pointer{
+		nil,                                      // FilterModeInvalid
+		unsafe.Pointer(&cmp.Float64Equal),        // FilterModeEqual
+		unsafe.Pointer(&cmp.Float64NotEqual),     // FilterModeNotEqual
+		unsafe.Pointer(&cmp.Float64Greater),      // FilterModeGt
+		unsafe.Pointer(&cmp.Float64GreaterEqual), // FilterModeGe
+		unsafe.Pointer(&cmp.Float64Less),         // FilterModeLt
+		unsafe.Pointer(&cmp.Float64LessEqual),    // FilterModeLe
+		nil,                                      // FilterModeIn
+		nil,                                      // FilterModeNotIn
+		unsafe.Pointer(&cmp.Float64Between),      // FilterModeRange
+	}
+
+	floatMatch32Fn = [...]unsafe.Pointer{
+		nil,                                      // FilterModeInvalid
+		unsafe.Pointer(&cmp.Float32Equal),        // FilterModeEqual
+		unsafe.Pointer(&cmp.Float32NotEqual),     // FilterModeNotEqual
+		unsafe.Pointer(&cmp.Float32Greater),      // FilterModeGt
+		unsafe.Pointer(&cmp.Float32GreaterEqual), // FilterModeGe
+		unsafe.Pointer(&cmp.Float32Less),         // FilterModeLt
+		unsafe.Pointer(&cmp.Float32LessEqual),    // FilterModeLe
+		nil,                                      // FilterModeIn
+		nil,                                      // FilterModeNotIn
+		unsafe.Pointer(&cmp.Float32Between),      // FilterModeRange
+	}
+)
+
+func matchFn[T types.Float](mode types.FilterMode) unsafe.Pointer {
+	if util.SizeOf[T]() == 8 {
+		return floatMatch64Fn[mode]
+	} else {
+		return floatMatch32Fn[mode]
+	}
 }

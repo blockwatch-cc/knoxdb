@@ -16,8 +16,6 @@ import (
 )
 
 // TODO: bitpack package
-// - init decoder with min-FOR, add during fusion
-// - need a chunked decoder
 // - loop decoder is slow, need fast decode funcs like encode funcs
 // - avx2 decode funcs
 // - fusion compare (without min-FOR)
@@ -116,11 +114,12 @@ func (c *BitpackContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) 
 	c.For = ctx.Min
 
 	sz := bitpack.EstimateSize(ctx.PhyBits, ctx.UseBits, len(vals))
-	fmt.Printf("BP size for %d vals at %d bits and %d-bit padding is %d bytes (%d bits), minv=%d maxv=%d typ=%T\n",
-		len(vals), ctx.UseBits, ctx.PhyBits, sz, sz*8, ctx.Min, ctx.Max, T(0))
+	// fmt.Printf("BP size for %d vals at %d bits and %d-bit padding is %d bytes (%d bits), minv=%d maxv=%d typ=%T\n",
+	// 	len(vals), ctx.UseBits, ctx.PhyBits, sz, sz*8, ctx.Min, ctx.Max, T(0))
 	buf := arena.AllocBytes(sz)[:sz]
 	// clear(c.Packed) // arena does not allocate zeroed memory
 
+	// TODO: BP should not return errors
 	var err error
 	c.Packed, c.Log2, err = bitpack.Encode[T](buf, vals, ctx.Min, ctx.Max)
 	if err != nil {

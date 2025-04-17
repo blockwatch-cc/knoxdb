@@ -73,7 +73,7 @@ func (c *FloatConstContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 }
 
 func (c *FloatConstContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int) FloatContainer[T] {
-	c.Val = ctx.Min
+	c.Val = vals[0]
 	c.N = len(vals)
 	return c
 }

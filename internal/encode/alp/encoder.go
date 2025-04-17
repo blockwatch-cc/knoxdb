@@ -9,7 +9,6 @@ import (
 	"math/bits"
 	"sort"
 	"sync"
-	"unsafe"
 
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/util"
@@ -124,12 +123,15 @@ func NewState[T types.Float](sz int) *State[T] {
 
 func (s *State[T]) Reset() {
 	s.Scheme = InvalidScheme
-	s.Positions = s.Positions[:0]
-	s.sample = s.sample[:0]
-	s.topk = s.topk[:0]
-	clear(s.allk)
 	s.Integers = s.Integers[:0]
 	s.Exceptions = s.Exceptions[:0]
+	clear(s.Positions)
+	s.Positions = s.Positions[:0]
+	s.Encoding = Encoding{}
+	s.RD = EncodingRD{}
+	s.topk = s.topk[:0]
+	clear(s.allk)
+	s.sample = s.sample[:0]
 }
 
 func (s *State[T]) Top() Combination {
@@ -140,7 +142,7 @@ func (s *State[T]) Top() Combination {
 }
 
 type Encoder[T types.Float] struct {
-	bits     int
+	width    int
 	state    *State[T]
 	constant *constant
 }
@@ -152,14 +154,15 @@ func (e *Encoder[T]) State() *State[T] {
 func (e *Encoder[T]) Close() {
 	if e.state != nil {
 		putState(e.state)
+		e.state = nil
 	}
-	e.state = nil
+	e.width = 0
 	e.constant = nil
 }
 
 func NewEncoder[T types.Float]() *Encoder[T] {
 	return &Encoder[T]{
-		bits:     int(unsafe.Sizeof(T(0)) * 8),
+		width:    util.SizeOf[T](),
 		constant: newConstant[T](),
 	}
 }
@@ -196,7 +199,7 @@ func (e *Encoder[T]) analyzeSample(sample []T) {
 
 	// init best size found so far to a worst-case max
 	bestSize := math.MaxInt
-	rawSize := len(sample) * int(unsafe.Sizeof(T(0)))
+	rawSize := len(sample) * e.width
 
 	// For each vector in the rg sample
 	for range nVectors {
