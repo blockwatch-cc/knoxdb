@@ -45,7 +45,7 @@ func buildDict64AVX2(vals []uint64, numUnique int) ([]uint64, []uint16) {
 	// Step 1: Deduplicate into hash table and extract unique keys
 	var retDictSize uint32
 	dictLen := safeDictLen(numUnique)
-	dict := arena.AllocT[uint64](dictLen)[:dictLen]
+	dict := arena.Alloc[uint64](dictLen)[:dictLen]
 	ht_build64(
 		&vals[0],
 		&dict[0],
@@ -57,7 +57,8 @@ func buildDict64AVX2(vals []uint64, numUnique int) ([]uint64, []uint16) {
 	dict = dict[:retDictSize] // Trim to actual size
 
 	// Step 2: Sort keys
-	util.Sort(dict, 0)
+	// util.Sort(dict, 0)
+	Sort64(dict, 0)
 
 	// Step 3: Assign codes in sorted order
 	for i, key := range dict {
@@ -71,7 +72,7 @@ func buildDict64AVX2(vals []uint64, numUnique int) ([]uint64, []uint16) {
 	}
 
 	// encode values
-	codes := arena.AllocT[uint16](len(vals))[:len(vals)]
+	codes := arena.Alloc[uint16](len(vals))[:len(vals)]
 	ht_encode64(
 		&vals[0],
 		&table.keys[0],
@@ -93,7 +94,7 @@ func buildDict32AVX2(vals []uint32, numUnique int) ([]uint32, []uint16) {
 	// Step 1: Deduplicate into hash table and extract unique keys
 	var retDictSize uint32
 	dictLen := safeDictLen(numUnique)
-	dict := arena.AllocT[uint32](dictLen)[:dictLen]
+	dict := arena.Alloc[uint32](dictLen)[:dictLen]
 	ht_build32(
 		&vals[0],
 		&dict[0],
@@ -119,7 +120,7 @@ func buildDict32AVX2(vals []uint32, numUnique int) ([]uint32, []uint16) {
 	}
 
 	// encode values
-	codes := arena.AllocT[uint16](len(vals))[:len(vals)]
+	codes := arena.Alloc[uint16](len(vals))[:len(vals)]
 	ht_encode32(
 		&vals[0],
 		&table.keys[0],
