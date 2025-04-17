@@ -16,7 +16,7 @@ var (
 
 type DecodeFunc[T types.Integer] func(index int) T
 
-func Decoder[T types.Integer](buf []byte, log2 int) DecodeFunc[T] {
+func Decoder[T types.Integer](buf []byte, log2 int, minv T) DecodeFunc[T] {
 	mask := uint64((1 << log2) - 1)
 	bits := int(unsafe.Sizeof(T(0)) * 8)
 	inBuff := util.FromByteSlice[T](buf)
@@ -35,9 +35,7 @@ func Decoder[T types.Integer](buf []byte, log2 int) DecodeFunc[T] {
 			pack |= uint64(inBuff[codeword+1]) << diff
 		}
 
-		// pack &= mask
-
-		return T(pack & mask)
+		return T(pack&mask) + minv
 	}
 }
 
