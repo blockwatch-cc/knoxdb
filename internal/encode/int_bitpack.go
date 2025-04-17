@@ -116,8 +116,8 @@ func (c *BitpackContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) 
 	c.For = ctx.Min
 
 	sz := bitpack.EstimateSize(ctx.PhyBits, ctx.UseBits, len(vals))
-	fmt.Printf("BP size for %d vals at %d bits and %d-bit padding is %d bytes (%d bits)\n",
-		len(vals), ctx.UseBits, ctx.PhyBits, sz, sz*8)
+	fmt.Printf("BP size for %d vals at %d bits and %d-bit padding is %d bytes (%d bits), minv=%d maxv=%d typ=%T\n",
+		len(vals), ctx.UseBits, ctx.PhyBits, sz, sz*8, ctx.Min, ctx.Max, T(0))
 	buf := arena.AllocBytes(sz)[:sz]
 	// clear(c.Packed) // arena does not allocate zeroed memory
 

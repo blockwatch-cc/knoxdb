@@ -237,5 +237,5 @@ func encode[T types.Integer](buf []byte, vals []T, log2 int, minv T) ([]byte, er
 		bufIdx++
 	}
 
-	return buf[:bufIdx*8], nil
+	return buf[:bufIdx*bits/8], nil
 }

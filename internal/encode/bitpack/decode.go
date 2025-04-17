@@ -34,23 +34,28 @@ func NewDecoder[T types.Integer](buf []byte, log2 int, minv T) *Decoder[T] {
 	}
 }
 
+// TODO: use fast decode kernels
 func (d *Decoder[T]) Decode(dst []T) int {
 	n, _ := Decode[T](dst, d.buf, d.log2, d.minv)
 	return n
 }
 
 func (d *Decoder[T]) DecodeValue(index int) T {
+	if d.log2 == 0 {
+		return d.minv
+	}
 	idx := index * d.log2
 	codeword := idx >> ShiftAmount[d.bits>>3-1]
+	cbuf := util.FromByteSlice[T](d.buf)
 
 	shift := idx & (1<<d.bits - 1)
 	if shift > d.bits {
 		shift = shift - (codeword * d.bits)
 	}
-	pack := uint64(d.buf[codeword]) >> shift
+	pack := uint64(cbuf[codeword]) >> shift
 
 	if diff := d.bits - shift; diff < d.log2 {
-		pack |= uint64(d.buf[codeword+1]) << diff
+		pack |= uint64(cbuf[codeword+1]) << diff
 	}
 
 	return T(pack)&d.mask + d.minv
@@ -65,7 +70,7 @@ func (d *Decoder[T]) DecodeChunk(dst *[128]T, ofs int) int {
 	}
 	n := min(128, maxn-ofs)
 	startpos := d.log2 * (ofs >> 3)
-	endpos := startpos + d.log2*16 // for chunk-size 128
+	endpos := min(startpos+d.log2*16, len(d.buf)) // for chunk-size 128
 	Decode[T](dst[:n], d.buf[startpos:endpos], d.log2, d.minv)
 	return n
 }

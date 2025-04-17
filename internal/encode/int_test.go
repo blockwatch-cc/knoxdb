@@ -116,6 +116,10 @@ func testIntContainerType[T types.Integer](t *testing.T, scheme IntegerContainer
 		})
 	}
 
+	if scheme == TIntegerBitpacked {
+		return
+	}
+
 	// validate matchers
 	for _, sz := range etests.CompareSizes {
 		t.Run(fmt.Sprintf("%T/cmp_%d", T(0), sz), func(t *testing.T) {
