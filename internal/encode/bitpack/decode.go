@@ -17,20 +17,25 @@ var (
 type DecodeFunc[T types.Integer] func(index int) T
 
 type Decoder[T types.Integer] struct {
-	buf  []byte
-	log2 int
-	bits int
-	mask T
-	minv T
+	buf   []byte
+	log2  int
+	bits  int
+	shift int
+	rmask uint64 // read mask (to hide sign extension on signed code words)
+	vmask uint64 // value mask
+	minv  T
 }
 
 func NewDecoder[T types.Integer](buf []byte, log2 int, minv T) *Decoder[T] {
+	w := util.SizeOf[T]() * 8
 	return &Decoder[T]{
-		buf:  buf,
-		log2: log2,
-		bits: util.SizeOf[T]() * 8,
-		mask: T((1 << log2) - 1),
-		minv: minv,
+		buf:   buf,
+		log2:  log2,
+		bits:  w,
+		shift: ShiftAmount[w>>3-1],
+		rmask: uint64(1<<w - 1),
+		vmask: uint64((1 << log2) - 1),
+		minv:  minv,
 	}
 }
 
@@ -45,20 +50,16 @@ func (d *Decoder[T]) DecodeValue(index int) T {
 		return d.minv
 	}
 	idx := index * d.log2
-	codeword := idx >> ShiftAmount[d.bits>>3-1]
+	pos := idx >> d.shift
+	shift := idx & (d.bits - 1)
+
 	cbuf := util.FromByteSlice[T](d.buf)
-
-	shift := idx & (1<<d.bits - 1)
-	if shift > d.bits {
-		shift = shift - (codeword * d.bits)
-	}
-	pack := uint64(cbuf[codeword]) >> shift
-
+	word := uint64(cbuf[pos]) & d.rmask >> shift
 	if diff := d.bits - shift; diff < d.log2 {
-		pack |= uint64(cbuf[codeword+1]) << diff
+		word |= uint64(cbuf[pos+1]) << diff
 	}
 
-	return T(pack)&d.mask + d.minv
+	return T(word&d.vmask) + d.minv
 }
 
 // TODO: use fast decode kernels
@@ -84,14 +85,15 @@ func Decode[T types.Integer](out []T, in []byte, log2 int, minv T) (int, error) 
 
 	inBuff := util.FromByteSlice[T](in)
 
-	mask := uint64((1 << log2) - 1) // Mask for b bits, e.g., b=3 -> 0b111
 	bits := int(unsafe.Sizeof(T(0)) * 8)
+	vmask := uint64((1 << log2) - 1) // Mask for b bits, e.g., b=3 -> 0b111
+	rmask := uint64(1<<bits - 1)
 
 	for outIdx = 0; outIdx < len(out); outIdx++ {
 		// Ensure we have enough bits in pack
 		for offset < log2 && inIdx < len(inBuff) {
 			if lost > 0 {
-				pack |= uint64(inBuff[inIdx]) >> (bits - offset - lost) &^ (1<<offset - 1)
+				pack |= uint64(inBuff[inIdx]) & rmask >> (bits - offset - lost) &^ (1<<offset - 1)
 				inIdx++
 				offset += lost
 				lost = 0
@@ -109,7 +111,7 @@ func Decode[T types.Integer](out []T, in []byte, log2 int, minv T) (int, error) 
 		}
 
 		// Extract b bits from pack
-		out[outIdx] = T(pack&mask) + minv
+		out[outIdx] = T(pack&vmask) + minv
 		pack >>= log2
 		offset -= log2
 	}

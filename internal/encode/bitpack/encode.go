@@ -23,16 +23,28 @@ func Encode[T types.Integer](buf []byte, vals []T, minv, maxv T) ([]byte, int, e
 	var err error
 	switch any(T(0)).(type) {
 	case uint8:
-		n, log2, err = BitpackUint8(util.ReinterpretSlice[T, uint8](vals), buf, uint8(minv), uint8(maxv))
+		n, log2, err = Bitpack8(util.ReinterpretSlice[T, uint8](vals), buf, uint8(minv), uint8(maxv))
 
 	case uint16:
-		n, log2, err = BitpackUint16(util.ReinterpretSlice[T, uint16](vals), buf, uint16(minv), uint16(maxv))
+		n, log2, err = Bitpack16(util.ReinterpretSlice[T, uint16](vals), buf, uint16(minv), uint16(maxv))
 
 	case uint32:
-		n, log2, err = BitpackUint32(util.ReinterpretSlice[T, uint32](vals), buf, uint32(minv), uint32(maxv))
+		n, log2, err = Bitpack32(util.ReinterpretSlice[T, uint32](vals), buf, uint32(minv), uint32(maxv))
 
 	case uint64:
-		n, log2, err = BitpackUint64(util.ReinterpretSlice[T, uint64](vals), buf, uint64(minv), uint64(maxv))
+		n, log2, err = Bitpack64(util.ReinterpretSlice[T, uint64](vals), buf, uint64(minv), uint64(maxv))
+
+	case int8:
+		n, log2, err = Bitpack8(util.ReinterpretSlice[T, int8](vals), buf, int8(minv), int8(maxv))
+
+	case int16:
+		n, log2, err = Bitpack16(util.ReinterpretSlice[T, int16](vals), buf, int16(minv), int16(maxv))
+
+	case int32:
+		n, log2, err = Bitpack32(util.ReinterpretSlice[T, int32](vals), buf, int32(minv), int32(maxv))
+
+	case int64:
+		n, log2, err = Bitpack64(util.ReinterpretSlice[T, int64](vals), buf, int64(minv), int64(maxv))
 	}
 	if err != nil {
 		return nil, 0, err
@@ -41,7 +53,7 @@ func Encode[T types.Integer](buf []byte, vals []T, minv, maxv T) ([]byte, int, e
 	return buf[:n], log2, nil
 }
 
-func BitpackUint8(src []uint8, dst []byte, minv, maxv uint8) (int, int, error) {
+func Bitpack8[T int8 | uint8](src []T, dst []byte, minv, maxv T) (int, int, error) {
 	in := src
 	out := util.FromByteSlice[uint8](dst)
 	log2 := bits.Len64(uint64(maxv - minv))
@@ -82,7 +94,7 @@ func BitpackUint8(src []uint8, dst []byte, minv, maxv uint8) (int, int, error) {
 	return outpos*4 + len(n), log2, err
 }
 
-func BitpackUint16(src []uint16, dst []byte, minv, maxv uint16) (int, int, error) {
+func Bitpack16[T int16 | uint16](src []T, dst []byte, minv, maxv T) (int, int, error) {
 	in := src
 	out := util.FromByteSlice[uint16](dst)
 	log2 := bits.Len64(uint64(maxv - minv))
@@ -123,7 +135,7 @@ func BitpackUint16(src []uint16, dst []byte, minv, maxv uint16) (int, int, error
 	return outpos*4 + len(n), log2, err
 }
 
-func BitpackUint32(src []uint32, dst []byte, minv, maxv uint32) (int, int, error) {
+func Bitpack32[T int32 | uint32](src []T, dst []byte, minv, maxv T) (int, int, error) {
 	in := src
 	out := util.FromByteSlice[uint32](dst)
 	log2 := bits.Len64(uint64(maxv - minv))
@@ -164,7 +176,7 @@ func BitpackUint32(src []uint32, dst []byte, minv, maxv uint32) (int, int, error
 	return outpos*4 + len(n), log2, err
 }
 
-func BitpackUint64(src []uint64, dst []byte, minv, maxv uint64) (int, int, error) {
+func Bitpack64[T int64 | uint64](src []T, dst []byte, minv, maxv T) (int, int, error) {
 	in := src
 	out := util.FromByteSlice[uint64](dst)
 	log2 := bits.Len64(uint64(maxv - minv))
