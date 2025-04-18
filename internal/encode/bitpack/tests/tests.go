@@ -12,19 +12,20 @@ import (
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/internal/types"
+
 	"github.com/stretchr/testify/require"
 )
 
-type EncodeFunc[T types.Integer] func([]byte, []T, T, T) ([]byte, int, error)
+type EncodeFunc[T types.Integer] func([]byte, []T, T, T) ([]byte, int)
 type DecodeFunc[T types.Integer] func([]T, []byte, int, T) (int, error)
-type CompareFunc func([]byte, int, uint64, int, *bitset.Bitset) *bitset.Bitset
+type DecodeIndex[T types.Integer] func(index int) T
+type CompareFunc[T types.Integer] func([]byte, int, T, int, *bitset.Bitset) *bitset.Bitset
 type CompareFunc2 func([]byte, int, uint64, uint64, int, *bitset.Bitset) *bitset.Bitset
 
 type TestCase[T types.Integer] struct {
 	Name string
 	Vals []T
 	Gen  func() []T
-	Err  bool
 }
 
 func (c TestCase[T]) Data() []T {
@@ -70,8 +71,7 @@ func EncodeTest[T types.Integer](t *testing.T, enc EncodeFunc[T], dec DecodeFunc
 				minv, maxv := slices.Min(src), slices.Max(src)
 				buf := make([]byte, len(src)*8)
 
-				buf, log2, err := enc(buf, src, minv, maxv)
-				require.NoError(t, err)
+				buf, log2 := enc(buf, src, minv, maxv)
 
 				dst := make([]T, len(src))
 				n, err := dec(dst, buf, log2, minv)
@@ -101,14 +101,7 @@ func EncodeTest[T types.Integer](t *testing.T, enc EncodeFunc[T], dec DecodeFunc
 			buf := make([]byte, len(src)*8)
 
 			// encode without min-FOR to be compatible with testcase data
-			buf, log2, err := enc(buf, slices.Clone(src), 0, maxv)
-			if test.Err {
-				require.Error(t, err)
-				return
-			} else {
-				require.NoError(t, err)
-			}
-
+			buf, log2 := enc(buf, slices.Clone(src), 0, maxv)
 			dst := make([]T, len(src))
 			n, err := dec(dst, buf, log2, 0)
 			require.NoError(t, err)
@@ -120,36 +113,39 @@ func EncodeTest[T types.Integer](t *testing.T, enc EncodeFunc[T], dec DecodeFunc
 	}
 }
 
-type CompareCase struct {
+type GenFunc[T types.Integer] func(int, int) []T
+type CompareCase[T types.Integer] struct {
 	Name string
-	Gen  func(int, int) []uint64
+	Gen  GenFunc[T]
 }
 
-var CompareCases = []CompareCase{
-	{"one", func(n, w int) []uint64 {
-		x := 1
-		if w == 0 {
-			x = 0
-		}
-		return tests.GenConst[uint64](n, uint64(x))
-	}},
-	{"rnd", tests.GenRndBits[uint64]},
+func MakeCompareCases[T types.Integer]() []CompareCase[T] {
+	return []CompareCase[T]{
+		{"one", func(n, w int) []T {
+			x := 1
+			if w == 0 {
+				x = 0
+			}
+			return tests.GenConst(n, T(x))
+		}},
+		{"rnd", tests.GenRndBits[T]},
+	}
 }
 
 var CompareSizes = []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 23}
 
-func CompareTest(t *testing.T, cmp CompareFunc, mode types.FilterMode) {
+func CompareTest[T types.Integer](t *testing.T, cmp CompareFunc[T], mode types.FilterMode, enc EncodeFunc[T]) {
 	for _, sz := range CompareSizes {
-		for _, c := range CompareCases {
+		for _, c := range MakeCompareCases[T]() {
 			for w := range 63 { // bit widths 1..63
 				w++
 				t.Run(fmt.Sprintf("%s/%d_bits/sz_%d", c.Name, w, sz), func(t *testing.T) {
 					src := c.Gen(sz, w)
-					minv, maxv := slices.Min(src), slices.Max(src)
+					minv, maxv := T(0), T(1<<w-1) // manually setting minv and maxv because the Gen sometimes doesnt produce the full range for the bitwidth
 					buf := make([]byte, sz*8)
-					for i, v := range src {
-						pack(buf, i, w, v)
-					}
+					buf, log2 := enc(buf, src, minv, maxv)
+					require.Equal(t, w, log2, "bit width for generated data should be equal to compressed data bit width")
+
 					bits := bitset.NewBitset(sz)
 
 					// value exists
@@ -186,7 +182,7 @@ func CompareTest(t *testing.T, cmp CompareFunc, mode types.FilterMode) {
 // range mode specific test with 2 values
 func CompareTest2(t *testing.T, cmp CompareFunc2, mode types.FilterMode) {
 	for _, sz := range CompareSizes {
-		for _, c := range CompareCases {
+		for _, c := range MakeCompareCases[uint64]() {
 			for w := range 63 { // bit widths 1..63
 				w++
 				t.Run(fmt.Sprintf("%s/%d_bits/sz_%d", c.Name, w, sz), func(t *testing.T) {
@@ -237,10 +233,11 @@ func CompareTest2(t *testing.T, cmp CompareFunc2, mode types.FilterMode) {
 	}
 }
 
-func ensureBits(t *testing.T, buf []byte, log2 int, vals []uint64, val, val2 uint64, bits *bitset.Bitset, mode types.FilterMode) {
+func ensureBits[T types.Integer](t *testing.T, buf []byte, log2 int, vals []T, val, val2 T, bits *bitset.Bitset, mode types.FilterMode) {
 	if !testing.Short() {
+		dec := decoder[T](buf, log2)
 		for i, v := range vals {
-			t.Logf("Val %s=%x decoded %x", Chars.Get(i), v, unpack(buf, i, log2))
+			t.Logf("Val %s=%x decoded %x", Chars.Get(i), v, dec(i))
 		}
 	}
 	switch mode {

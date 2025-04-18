@@ -4,21 +4,20 @@
 
 package {{.Package}}
 
+// Packer
+
 {{- $bitsRange := bitsFuncRange .Bits}}
-
-
-func bitpack{{$.Bits}}[T uint{{$.Bits}} | int{{$.Bits}}](minv T, in []T, out []uint{{$.Bits}}, log2 int) {
+func bitpack{{$.Bits}}[T uint{{$.Bits}} | int{{$.Bits}}](minv T, in []T, out []uint64, log2 int) {
 	switch log2 {
 		{{- range $bitsize, $value := $bitsRange}}
 			case {{$bitsize}}:
-				bp{{$.Bits}}_{{$bitsize}}((*[{{$.Bits}}]T)(in), (*[{{$bitsize}}]uint{{$.Bits}})(out), minv)
+				bp{{$.Bits}}_{{$bitsize}}((*[64]T)(in), (*[{{$bitsize}}]uint64)(out), uint64(minv))
 		{{- end }}
 	}
-
 }
 
 {{- range $bitsize, $value := $bitsRange}}        
-func bp{{$.Bits}}_{{$bitsize}}[T uint{{$.Bits}} | int{{$.Bits}}](in *[{{$.Bits}}]T, out *[{{$bitsize}}]uint{{$.Bits}}, minv T) {
+func bp{{$.Bits}}_{{$bitsize}}[T uint{{$.Bits}} | int{{$.Bits}}](in *[64]T, out *[{{$bitsize}}]uint64, minv uint64) {
 	{{- $inputIdx := 0 }}
 	{{- $offset  := 0 }}
 	{{- $offsetShifter := 0 }}
@@ -26,37 +25,94 @@ func bp{{$.Bits}}_{{$bitsize}}[T uint{{$.Bits}} | int{{$.Bits}}](in *[{{$.Bits}}
 	{{- $shiftRight := false }}
 	{{- $bitsizeInnerRange := bitsFuncRange $bitsize}}
 	{{- range $vIdx, $vVal := $bitsizeInnerRange }}
-		{{- $bitVals := bitRange $.Bits $bitsize $offset}}
-		out[{{$vIdx}}] = uint{{$.Bits}}(
+		{{- $bitVals := bitRange 64 $bitsize $offset}}
+		out[{{$vIdx}}] = 
 			{{- range $bvIdx, $bvVal := $bitVals}}
-				{{- if lt $shifter $.Bits }}
+				{{- if lt $shifter 64 }}
 					{{- if $shiftRight }}	
 						{{- $inputIdx = dec $inputIdx 1 }}
-						((in[{{$inputIdx}}] - minv) >> {{$shifter}}) |
+						(uint64(in[{{$inputIdx}}])-minv) >> {{$shifter}} |
 						{{- $shifter = dec $bitsize $shifter }}
 						{{- $offset = 0 }}
 						{{- $inputIdx = inc $inputIdx 1 }}
 						{{ $shiftRight = false }}
 					{{ else }}
 						{{- $nextShift := inc $shifter $bitsize }}
-						((in[{{$inputIdx}}] - minv) << {{$shifter}}) {{- if ge $nextShift $.Bits }}) 
-						{{ else }} | {{- end}}
+						(uint64(in[{{$inputIdx}}])-minv) << {{$shifter}} {{- if lt $nextShift 64 }} | {{- end}}
 						{{- $shifter = $nextShift }}
 						{{- $inputIdx = inc $inputIdx 1 }}
 						{{- $offset = inc $offset $bitsize }}
 					{{- end}}
 				{{- end }}
 			{{- end}}
-		{{- if eq $offset $.Bits }}
+		{{- if eq $offset 64 }}
 			{{- $offset = 0 }}
 			{{- $shifter = 0 }}
 			{{ $shiftRight = false }}
 		{{- else }}
 			{{ $shiftRight = true }}
 			{{- $shifter = dec $shifter $bitsize }}
-		 	{{- $shifter = dec $.Bits $shifter}}
+		 	{{- $shifter = dec 64 $shifter}}
 		{{- end }}
 	{{- end}}
 }
+{{- end}}
 
+// Reader
+func bitread{{$.Bits}}[T uint{{$.Bits}} | int{{$.Bits}}](out []T, in []uint64, log2 int, minv T) {
+	switch log2 {
+		{{- range $bitsize, $value := $bitsRange}}
+			case {{$bitsize}}:
+				br{{$.Bits}}_{{$bitsize}}((*[64]T)(out), (*[{{$bitsize}}]uint64)(in), uint64(minv))
+		{{- end }}
+	}
+}
+
+{{- range $bitsize, $value := $bitsRange}}    
+func br{{$.Bits}}_{{$bitsize}}[T uint{{$.Bits}} | int{{$.Bits}}](out *[64]T,  in *[{{$bitsize}}]uint64, minv uint64) {
+	{{- if gt $bitsize 0 }}
+		mask := uint64((1 << {{$bitsize}}) - 1)
+	{{- end}}
+	
+	{{- $inputIdx := 0 }}
+	{{- $offset  := 0 }}
+	{{- $offsetShifter := 0 }}
+	{{- $shifter := 0 }}
+	{{- $shiftRight := false }}
+
+	{{- $bitsizeOuterRange := bitsFuncRange $bitsize }}
+	{{- range $v0Idx, $v0Val := $bitsizeOuterRange }}
+		{{- $bitsizeInnerRange := bitRange 64 $bitsize $offset}}
+		{{- range $vIdx, $vVal := $bitsizeInnerRange }}
+			{{- if lt $shifter 64 }}
+				{{- if $shiftRight }}
+					{{- $inputIdx = dec $inputIdx 1 }}
+					{{- $nextShift := dec $bitsize $shifter }}
+					out[{{$inputIdx}}] = out[{{$inputIdx}}] + T(((in[{{$v0Idx}}]<<{{$shifter}}))&mask)
+					{{- $offset = 0 }}
+					{{- $inputIdx = inc $inputIdx 1 }}
+					{{- $shiftRight = false }}
+					{{- $shifter = $nextShift }}
+				{{ else }}
+					{{- $nextShift := inc $shifter $bitsize }}
+					out[{{$inputIdx}}] = T((in[{{$v0Idx}}]>>{{$shifter}})&mask + minv)
+					{{- $shifter = $nextShift }}
+					{{- $inputIdx = inc $inputIdx 1 }}
+					{{- $offset = inc $offset $bitsize }}
+				{{- end }}
+			{{- end}}
+		{{- end}}
+		{{- if eq $offset 64 }}
+
+			{{- $offset = 0 }}
+			{{- $shifter = 0 }}
+			{{ $shiftRight = false }}
+		{{- else }}
+			{{ $shiftRight = true }}
+			{{- $shifter = dec $shifter $bitsize }}
+			{{- $shifter = dec 64 $shifter}}
+		{{- end}}
+	
+	{{- end}}
+}
 {{- end}}

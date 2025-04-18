@@ -4,70 +4,55 @@
 package bitpack
 
 import (
-	"unsafe"
-
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 const (
-	BitPackingBlockSize8  = 32
-	BitPackingBlockSize16 = 64
-	BitPackingBlockSize32 = 128
-	BitPackingBlockSize64 = 256
+	BitsSize            = 64
+	BitPackingBlockSize = 256
+	BitReadingBlockSize = 4
 )
 
-func Encode[T types.Integer](buf []byte, vals []T, minv, maxv T) ([]byte, int, error) {
+func Encode[T types.Integer](buf []byte, vals []T, minv, maxv T) ([]byte, int) {
 	var n, log2 int
-	var err error
 	switch any(T(0)).(type) {
 	case uint8:
-		n, log2, err = Bitpack8(util.ReinterpretSlice[T, uint8](vals), buf, uint8(minv), uint8(maxv))
-
+		n, log2 = Bitpack8(util.ReinterpretSlice[T, uint8](vals), buf, uint8(minv), uint8(maxv))
 	case uint16:
-		n, log2, err = Bitpack16(util.ReinterpretSlice[T, uint16](vals), buf, uint16(minv), uint16(maxv))
-
+		n, log2 = Bitpack16(util.ReinterpretSlice[T, uint16](vals), buf, uint16(minv), uint16(maxv))
 	case uint32:
-		n, log2, err = Bitpack32(util.ReinterpretSlice[T, uint32](vals), buf, uint32(minv), uint32(maxv))
-
+		n, log2 = Bitpack32(util.ReinterpretSlice[T, uint32](vals), buf, uint32(minv), uint32(maxv))
 	case uint64:
-		n, log2, err = Bitpack64(util.ReinterpretSlice[T, uint64](vals), buf, uint64(minv), uint64(maxv))
-
+		n, log2 = Bitpack64(util.ReinterpretSlice[T, uint64](vals), buf, uint64(minv), uint64(maxv))
 	case int8:
-		n, log2, err = Bitpack8(util.ReinterpretSlice[T, int8](vals), buf, int8(minv), int8(maxv))
-
+		n, log2 = Bitpack8(util.ReinterpretSlice[T, int8](vals), buf, int8(minv), int8(maxv))
 	case int16:
-		n, log2, err = Bitpack16(util.ReinterpretSlice[T, int16](vals), buf, int16(minv), int16(maxv))
-
+		n, log2 = Bitpack16(util.ReinterpretSlice[T, int16](vals), buf, int16(minv), int16(maxv))
 	case int32:
-		n, log2, err = Bitpack32(util.ReinterpretSlice[T, int32](vals), buf, int32(minv), int32(maxv))
-
+		n, log2 = Bitpack32(util.ReinterpretSlice[T, int32](vals), buf, int32(minv), int32(maxv))
 	case int64:
-		n, log2, err = Bitpack64(util.ReinterpretSlice[T, int64](vals), buf, int64(minv), int64(maxv))
+		n, log2 = Bitpack64(util.ReinterpretSlice[T, int64](vals), buf, int64(minv), int64(maxv))
 	}
-	if err != nil {
-		return nil, 0, err
-	}
-
-	return buf[:n], log2, nil
+	return buf[:n], log2
 }
 
-func Bitpack8[T int8 | uint8](src []T, dst []byte, minv, maxv T) (int, int, error) {
+func Bitpack8[T int8 | uint8](src []T, dst []byte, minv, maxv T) (int, int) {
 	in := src
-	out := util.FromByteSlice[uint8](dst)
+	out := util.FromByteSlice[uint64](dst)
 	log2 := types.Log2Range(minv, maxv)
-	blockN := len(in) / BitPackingBlockSize8
+	blockN := len(in) / BitPackingBlockSize
 	if blockN == 0 {
 		// input less than block size, use generic encoder
-		n, err := encode(dst, in, log2, minv)
-		return len(n), log2, err
+		n := encode(out, in, log2, minv)
+		return n, log2
 	}
 
 	var outpos int
 
-	const groupSize = BitPackingBlockSize8 / 4
+	const groupSize = BitPackingBlockSize / 4
 	for blockI := range blockN {
-		i := blockI * BitPackingBlockSize8
+		i := blockI * BitPackingBlockSize
 		group1 := in[i+0*groupSize : i+1*groupSize]
 		group2 := in[i+1*groupSize : i+2*groupSize]
 		group3 := in[i+2*groupSize : i+3*groupSize]
@@ -85,30 +70,27 @@ func Bitpack8[T int8 | uint8](src []T, dst []byte, minv, maxv T) (int, int, erro
 	}
 
 	// tail loop
-	n, err := encode(dst[outpos:], in[blockN*BitPackingBlockSize8:], log2, minv)
-	if err != nil {
-		return 0, log2, err
-	}
+	n := encode(out[outpos:], in[blockN*BitPackingBlockSize:], log2, minv)
 
-	return outpos + len(n), log2, err
+	return outpos*8 + n, log2
 }
 
-func Bitpack16[T int16 | uint16](src []T, dst []byte, minv, maxv T) (int, int, error) {
+func Bitpack16[T int16 | uint16](src []T, dst []byte, minv, maxv T) (int, int) {
 	in := src
-	out := util.FromByteSlice[uint16](dst)
+	out := util.FromByteSlice[uint64](dst)
 	log2 := types.Log2Range(minv, maxv)
-	blockN := len(in) / BitPackingBlockSize16
+	blockN := len(in) / BitPackingBlockSize
 	if blockN == 0 {
 		// input less than block size, use generic encoder
-		n, err := encode(dst, in, log2, minv)
-		return len(n), log2, err
+		n := encode(out, in, log2, minv)
+		return n, log2
 	}
 
 	var outpos int
 
-	const groupSize = BitPackingBlockSize16 / 4
+	const groupSize = BitPackingBlockSize / 4
 	for blockI := range blockN {
-		i := blockI * BitPackingBlockSize16
+		i := blockI * BitPackingBlockSize
 		group1 := in[i+0*groupSize : i+1*groupSize]
 		group2 := in[i+1*groupSize : i+2*groupSize]
 		group3 := in[i+2*groupSize : i+3*groupSize]
@@ -126,30 +108,27 @@ func Bitpack16[T int16 | uint16](src []T, dst []byte, minv, maxv T) (int, int, e
 	}
 
 	// tail loop
-	n, err := encode(dst[outpos*2:], in[blockN*BitPackingBlockSize16:], log2, minv)
-	if err != nil {
-		return 0, log2, err
-	}
+	n := encode(out[outpos:], in[blockN*BitPackingBlockSize:], log2, minv)
 
-	return outpos*2 + len(n), log2, err
+	return outpos*8 + n, log2
 }
 
-func Bitpack32[T int32 | uint32](src []T, dst []byte, minv, maxv T) (int, int, error) {
+func Bitpack32[T int32 | uint32](src []T, dst []byte, minv, maxv T) (int, int) {
 	in := src
-	out := util.FromByteSlice[uint32](dst)
+	out := util.FromByteSlice[uint64](dst)
 	log2 := types.Log2Range(minv, maxv)
-	blockN := len(in) / BitPackingBlockSize32
+	blockN := len(in) / BitPackingBlockSize
 	if blockN == 0 {
 		// input less than block size, use generic encoder
-		n, err := encode(dst, in, log2, minv)
-		return len(n), log2, err
+		n := encode(out, in, log2, minv)
+		return n, log2
 	}
 
 	var outpos int
 
-	const groupSize = BitPackingBlockSize32 / 4
+	const groupSize = BitPackingBlockSize / 4
 	for blockI := range blockN {
-		i := blockI * BitPackingBlockSize32
+		i := blockI * BitPackingBlockSize
 		group1 := in[i+0*groupSize : i+1*groupSize]
 		group2 := in[i+1*groupSize : i+2*groupSize]
 		group3 := in[i+2*groupSize : i+3*groupSize]
@@ -167,30 +146,27 @@ func Bitpack32[T int32 | uint32](src []T, dst []byte, minv, maxv T) (int, int, e
 	}
 
 	// tail loop
-	n, err := encode(dst[outpos*4:], in[blockN*BitPackingBlockSize32:], log2, minv)
-	if err != nil {
-		return 0, log2, err
-	}
+	n := encode(out[outpos:], in[blockN*BitPackingBlockSize:], log2, minv)
 
-	return outpos*4 + len(n), log2, err
+	return outpos*8 + n, log2
 }
 
-func Bitpack64[T int64 | uint64](src []T, dst []byte, minv, maxv T) (int, int, error) {
+func Bitpack64[T int64 | uint64](src []T, dst []byte, minv, maxv T) (int, int) {
 	in := src
 	out := util.FromByteSlice[uint64](dst)
 	log2 := types.Log2Range(minv, maxv)
-	blockN := len(in) / BitPackingBlockSize64
+	blockN := len(in) / BitPackingBlockSize
 	if blockN == 0 {
 		// input less than block size, use generic encoder
-		n, err := encode(dst, in, log2, minv)
-		return len(n), log2, err
+		n := encode(out, in, log2, minv)
+		return n, log2
 	}
 
 	var outpos int
 
-	const groupSize = BitPackingBlockSize64 / 4
+	const groupSize = BitPackingBlockSize / 4
 	for blockI := range blockN {
-		i := blockI * BitPackingBlockSize64
+		i := blockI * BitPackingBlockSize
 		group1 := in[i+0*groupSize : i+1*groupSize]
 		group2 := in[i+1*groupSize : i+2*groupSize]
 		group3 := in[i+2*groupSize : i+3*groupSize]
@@ -208,35 +184,28 @@ func Bitpack64[T int64 | uint64](src []T, dst []byte, minv, maxv T) (int, int, e
 	}
 
 	// tail loop
-	n, err := encode(dst[outpos*8:], in[blockN*BitPackingBlockSize64:], log2, minv)
-	if err != nil {
-		return 0, log2, err
-	}
+	n := encode(out[outpos:], in[blockN*BitPackingBlockSize:], log2, minv)
 
-	return outpos*8 + len(n), log2, err
+	return outpos*8 + n, log2
 }
 
-func encode[T types.Integer](buf []byte, vals []T, log2 int, minv T) ([]byte, error) {
-	var pack uint64            // Accumulator for packed bits
-	var offset int             // Bit offset in the current 64-bit word
-	bufIdx := 0                // Index into the output buffer
-	mask := T((1 << log2) - 1) // e.g., b=3 -> mask=0b111
-
-	buffer := util.FromByteSlice[T](buf)
-	bits := int(unsafe.Sizeof(T(0)) * 8)
+func encode[T types.Integer](buffer []uint64, vals []T, log2 int, minv T) int {
+	var pack uint64                 // Accumulator for packed bits
+	var offset int                  // Bit offset in the current 64-bit word
+	bufIdx := 0                     // Index into the output buffer
+	mask := uint64((1 << log2) - 1) // e.g., b=3 -> mask=0b111
 
 	for i := 0; i < len(vals); i++ {
-		pack |= uint64((vals[i]-minv)&mask) << offset
+		pack |= uint64((vals[i] - minv)) & mask << offset
 		offset += log2
-
-		if offset >= bits { // If we've filled a 64-bit word
-			buffer[bufIdx] = T(pack) // Write to buffer
+		if offset >= BitsSize { // If we've filled a 64-bit word
+			buffer[bufIdx] = uint64(pack) // Write to buffer
 
 			bufIdx++
-			offset -= bits // Reset offset
+			offset -= BitsSize // Reset offset
 			// Carry over any remaining bits if b > (64 - previous offset)
 			if offset > 0 {
-				pack = uint64((vals[i]-minv)&mask) >> (log2 - offset)
+				pack = uint64((vals[i] - minv)) & mask >> (log2 - offset)
 			} else {
 				pack = 0
 			}
@@ -244,9 +213,8 @@ func encode[T types.Integer](buf []byte, vals []T, log2 int, minv T) ([]byte, er
 	}
 
 	if offset > 0 { // Write any remaining bits
-		buffer[bufIdx] = T(pack)
+		buffer[bufIdx] = uint64(pack)
 		bufIdx++
 	}
-
-	return buf[:bufIdx*bits/8], nil
+	return bufIdx * BitsSize / 8
 }
