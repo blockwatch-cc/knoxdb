@@ -42,7 +42,7 @@ func FromBuffer(buf []byte, sz int) *Bitset {
 		sz = len(buf) << 3
 	}
 	buf = buf[:(sz+7)>>3]
-	if sz%8 > 0 {
+	if sz&7 > 0 {
 		buf[len(buf)-1] &= bytemask(sz)
 	}
 	s := bitsetPool.Get().(*Bitset)
@@ -126,7 +126,7 @@ func (s *Bitset) Copy(b *Bitset) *Bitset {
 	copy(s.buf, b.buf)
 	s.cnt = b.cnt
 	// ensure the last byte is masked
-	if s.size%8 > 0 {
+	if s.size&7 > 0 {
 		s.buf[len(s.buf)-1] &= bytemask(s.size)
 	}
 	return s
@@ -359,7 +359,7 @@ func (s *Bitset) Set(i int) *Bitset {
 	if i < 0 || i >= s.size {
 		return s
 	}
-	s.buf[i>>3] |= bitmask[i%8]
+	s.buf[i>>3] |= bitmask[i&7]
 	s.cnt = -1
 	return s
 }
@@ -386,7 +386,7 @@ func (s *Bitset) SetFromBytes(buf []byte, size int, reverse bool) *Bitset {
 	}
 	s.cnt = -1
 	// ensure the last byte is masked
-	if size%8 > 0 {
+	if size&7 > 0 {
 		s.buf[l-1] &= bytemask(size)
 	}
 	return s
@@ -398,7 +398,7 @@ func (s *Bitset) SetRange(start, end int) *Bitset {
 	// short range within same byte
 	if x == y {
 		var b byte
-		for i := start % 8; i <= end%8; i++ {
+		for i := start & 7; i <= end&7; i++ {
 			b |= 1 << i
 		}
 		s.buf[x] |= b
@@ -409,16 +409,16 @@ func (s *Bitset) SetRange(start, end int) *Bitset {
 	// long range across bytes
 
 	// write start byte
-	if start%8 > 0 {
+	if start&7 > 0 {
 		// mask start byte
-		s.buf[x] |= 255 << (start % 8)
+		s.buf[x] |= 255 << (start & 7)
 		x++
 	}
 
 	// write end byte
-	if end%8 != 7 {
+	if end&7 != 7 {
 		// mask end byte
-		s.buf[y] |= 2<<(end%8) - 1
+		s.buf[y] |= 2<<(end&7) - 1
 		y--
 	}
 
@@ -434,14 +434,14 @@ func (s *Bitset) SetRange(start, end int) *Bitset {
 }
 
 func (s *Bitset) setbit(i int) {
-	s.buf[i>>3] |= bitmask[i%8]
+	s.buf[i>>3] |= bitmask[i&7]
 }
 
 func (s *Bitset) Clear(i int) *Bitset {
 	if i < 0 || i >= s.size {
 		return s
 	}
-	mask := bitmask[i%8]
+	mask := bitmask[i&7]
 	if s.cnt > 0 && s.buf[i>>3]&mask > 0 {
 		s.cnt--
 	}
@@ -450,14 +450,14 @@ func (s *Bitset) Clear(i int) *Bitset {
 }
 
 func (s *Bitset) clearbit(i int) {
-	s.buf[i>>3] &^= bitmask[i%8]
+	s.buf[i>>3] &^= bitmask[i&7]
 }
 
 func (s *Bitset) IsSet(i int) bool {
 	if i < 0 || i >= s.size {
 		return false
 	}
-	return (s.buf[i>>3] & bitmask[i%8]) > 0
+	return (s.buf[i>>3] & bitmask[i&7]) > 0
 }
 
 func (s *Bitset) ContainsRange(start, end int) bool {
@@ -474,16 +474,16 @@ func (s *Bitset) ContainsRange(start, end int) bool {
 	// long range across bytes
 
 	// check masked start byte
-	if start%8 > 0 {
-		if s.buf[x]&255<<(start%8) > 0 {
+	if start&7 > 0 {
+		if s.buf[x]&255<<(start&7) > 0 {
 			return true
 		}
 		x++
 	}
 
 	// check masked end byte
-	if end%8 != 7 {
-		if s.buf[y]&(2<<(end%8)-1) > 0 {
+	if end&7 != 7 {
+		if s.buf[y]&(2<<(end&7)-1) > 0 {
 			return true
 		}
 		y--
@@ -717,7 +717,7 @@ func (s Bitset) Indexes(result []uint32) []uint32 {
 // Slice returns a boolean slice containing all values
 func (s Bitset) Slice() []bool {
 	res := make([]bool, s.size)
-	for i, l := 0, s.size-s.size%8; i < l; i += 8 {
+	for i, l := 0, s.size-s.size&7; i < l; i += 8 {
 		b := s.buf[i>>3]
 		res[i] = b&0x01 > 0
 		res[i+1] = b&0x02 > 0
@@ -730,7 +730,7 @@ func (s Bitset) Slice() []bool {
 	}
 	// tail
 	for i := s.size & ^0x7; i < s.size; i++ {
-		res[i] = s.buf[i>>3]&bitmask[i%8] > 0
+		res[i] = s.buf[i>>3]&bitmask[i&7] > 0
 	}
 	return res
 }
@@ -750,8 +750,8 @@ func (s Bitset) SubSlice(start, n int) []bool {
 	res := make([]bool, n)
 	var j int
 	// head
-	for i := start; i < start+n && i%8 > 0; i, j = i+1, j+1 {
-		res[j] = s.buf[i>>3]&bitmask[i%8] > 0
+	for i := start; i < start+n && i&7 > 0; i, j = i+1, j+1 {
+		res[j] = s.buf[i>>3]&bitmask[i&7] > 0
 	}
 	// fast inner loop
 	for i := start + j; i < (start+n) & ^0x7; i, j = i+8, j+8 {
@@ -767,7 +767,7 @@ func (s Bitset) SubSlice(start, n int) []bool {
 	}
 	// tail
 	for i := start + j; i < start+n; i, j = i+1, j+1 {
-		res[j] = s.buf[i>>3]&bitmask[i%8] > 0
+		res[j] = s.buf[i>>3]&bitmask[i&7] > 0
 	}
 	return res
 }
