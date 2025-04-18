@@ -4,6 +4,7 @@
 package tests
 
 import (
+	"encoding/hex"
 	"fmt"
 	"slices"
 	"testing"
@@ -18,8 +19,8 @@ import (
 
 type EncodeFunc[T types.Integer] func([]byte, []T, T, T) ([]byte, error)
 type DecodeFunc[T types.Unsigned] func([]T, []byte) (int, error)
-type CompareFunc func([]byte, uint64, *bitset.Bitset) *bitset.Bitset
-type CompareFunc2 func([]byte, uint64, uint64, *bitset.Bitset) *bitset.Bitset
+type CompareFunc func([]byte, uint64, *bitset.Bitset)
+type CompareFunc2 func([]byte, uint64, uint64, *bitset.Bitset)
 
 type TestCase[T types.Unsigned] struct {
 	Name string
@@ -191,6 +192,21 @@ type CompareCase struct {
 var CompareCases = []CompareCase{
 	{"one", func(n int) []uint64 { return tests.GenConst[uint64](n, 1) }},
 	{"rnd", tests.GenRnd[uint64]},
+	// test each selector
+	{"s2", func(n int) []uint64 { return tests.GenRndBits[uint64](n, 1) }},
+	{"s3", func(n int) []uint64 { return tests.GenRndBits[uint64](n, 2) }},
+	{"s4", func(n int) []uint64 { return tests.GenRndBits[uint64](n, 3) }},
+	{"s5", func(n int) []uint64 { return tests.GenRndBits[uint64](n, 4) }},
+	{"s6", func(n int) []uint64 { return tests.GenRndBits[uint64](n, 5) }},
+	{"s7", func(n int) []uint64 { return tests.GenRndBits[uint64](n, 6) }},
+	{"s8", func(n int) []uint64 { return tests.GenRndBits[uint64](n, 7) }},
+	{"s9", func(n int) []uint64 { return tests.GenRndBits[uint64](n, 8) }},
+	{"s10", func(n int) []uint64 { return tests.GenRndBits[uint64](n, 10) }},
+	{"s11", func(n int) []uint64 { return tests.GenRndBits[uint64](n, 12) }},
+	{"s12", func(n int) []uint64 { return tests.GenRndBits[uint64](n, 15) }},
+	{"s13", func(n int) []uint64 { return tests.GenRndBits[uint64](n, 20) }},
+	{"s14", func(n int) []uint64 { return tests.GenRndBits[uint64](n, 30) }},
+	{"s15", func(n int) []uint64 { return tests.GenRndBits[uint64](n, 60) }},
 }
 
 var CompareSizes = []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20, 30, 60, 120, 240, 1024}
@@ -249,28 +265,44 @@ func CompareTest2(t *testing.T, enc EncodeFunc[uint64], cmp CompareFunc2, mode t
 				cmp(buf, val, val, bits)
 				ensureBits(t, vals, val, val, bits, mode)
 				bits.Zero()
+				require.Equal(t, 0, bits.Count(), "cleared")
 
 				// full range
 				cmp(buf, minv, maxv, bits)
+				t.Logf("Full Min=%d Max=%d", minv, maxv)
+				t.Log(hex.Dump(bits.Bytes()))
 				ensureBits(t, vals, minv, maxv, bits, mode)
 				bits.Zero()
+				require.Equal(t, 0, bits.Count(), "cleared")
 
 				// partial range
 				from, to := max(val/2, minv+1), min(val*2, maxv-1)
+				if from > to {
+					from, to = to, from
+				}
 				cmp(buf, from, to, bits)
+				t.Logf("Partial Min=%d Max=%d From=%d To=%d", minv, maxv, from, to)
+				t.Log(hex.Dump(bits.Bytes()))
 				ensureBits(t, vals, from, to, bits, mode)
 				bits.Zero()
+				require.Equal(t, 0, bits.Count(), "cleared")
 
 				// out of bounds (over)
 				cmp(buf, maxv+1, maxv+2, bits)
+				t.Logf("Over Min=%d Max=%d From=%d To=%d", minv, maxv, maxv+1, maxv+2)
+				t.Log(hex.Dump(bits.Bytes()))
 				ensureBits(t, vals, maxv+1, maxv+2, bits, mode)
 				bits.Zero()
+				require.Equal(t, 0, bits.Count(), "cleared")
 
 				// out of bounds (under)
 				if minv > 2 {
 					cmp(buf, minv-2, minv-1, bits)
+					t.Logf("Under Min=%d Max=%d From=%d To=%d", minv, maxv, minv+2, minv+1)
+					t.Log(hex.Dump(bits.Bytes()))
 					ensureBits(t, vals, minv-2, minv-1, bits, mode)
 					bits.Zero()
+					require.Equal(t, 0, bits.Count(), "cleared")
 				}
 			})
 		}
@@ -278,6 +310,12 @@ func CompareTest2(t *testing.T, enc EncodeFunc[uint64], cmp CompareFunc2, mode t
 }
 
 func ensureBits(t *testing.T, vals []uint64, val, val2 uint64, bits *bitset.Bitset, mode types.FilterMode) {
+	// if !testing.Short() {
+	// 	for i, v := range vals {
+	// 		t.Logf("Val %d: %d", i, v)
+	// 	}
+	// 	t.Logf("Bitset %x", bits.Bytes())
+	// }
 	switch mode {
 	case types.FilterModeEqual:
 		for i, v := range vals {

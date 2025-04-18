@@ -11,41 +11,41 @@ import (
 type cmpFunc func(word, val uint64) (int, uint64)
 type cmpFunc2 func(word, val, val2 uint64) (int, uint64)
 
-func Equal(src []byte, val uint64, bits *bitset.Bitset) *bitset.Bitset {
-	return compare(src, val, bits, cmp_eq, false)
+func Equal(src []byte, val uint64, bits *bitset.Bitset) {
+	compare(src, val, bits, cmp_eq, false)
 }
 
-func NotEqual(src []byte, val uint64, bits *bitset.Bitset) *bitset.Bitset {
+func NotEqual(src []byte, val uint64, bits *bitset.Bitset) {
 	// re-use equal compare and flip bits
-	return compare(src, val, bits, cmp_eq, true)
+	compare(src, val, bits, cmp_eq, true)
 }
 
-func Less(src []byte, val uint64, bits *bitset.Bitset) *bitset.Bitset {
+func Less(src []byte, val uint64, bits *bitset.Bitset) {
 	// re-use greater equal compare and flip bits
-	return compare(src, val, bits, cmp_ge, true)
+	compare(src, val, bits, cmp_ge, true)
 }
 
-func LessEqual(src []byte, val uint64, bits *bitset.Bitset) *bitset.Bitset {
+func LessEqual(src []byte, val uint64, bits *bitset.Bitset) {
 	// re-use greater than compare and flip bits
-	return compare(src, val, bits, cmp_gt, true)
+	compare(src, val, bits, cmp_gt, true)
 }
 
-func Greater(src []byte, val uint64, bits *bitset.Bitset) *bitset.Bitset {
-	return compare(src, val, bits, cmp_gt, false)
+func Greater(src []byte, val uint64, bits *bitset.Bitset) {
+	compare(src, val, bits, cmp_gt, false)
 }
 
-func GreaterEqual(src []byte, val uint64, bits *bitset.Bitset) *bitset.Bitset {
-	return compare(src, val, bits, cmp_ge, false)
+func GreaterEqual(src []byte, val uint64, bits *bitset.Bitset) {
+	compare(src, val, bits, cmp_ge, false)
 }
 
-func Between(src []byte, val, val2 uint64, bits *bitset.Bitset) *bitset.Bitset {
-	return compare2(src, val, val2, bits, cmp_bw)
+func Between(src []byte, val, val2 uint64, bits *bitset.Bitset) {
+	compare2(src, val, val2, bits, cmp_bw)
 }
 
-func compare(src []byte, val uint64, bits *bitset.Bitset, cmp [16]cmpFunc, neg bool) *bitset.Bitset {
+func compare(src []byte, val uint64, bits *bitset.Bitset, cmp [16]cmpFunc, neg bool) {
 	var k, i int
 	buf := bits.Bytes()
-
+	// fmt.Printf("s8 cmp: val=%d len=%d ----------------------\n", val, CountValues(src))
 	// aggregate output bits and flush in batches
 	var (
 		out  uint64
@@ -55,6 +55,7 @@ func compare(src []byte, val uint64, bits *bitset.Bitset, cmp [16]cmpFunc, neg b
 	for _, word := range util.FromByteSlice[uint64](src) {
 		sel := byte(word>>60) & 0xF
 		n, mask := cmp[sel](word, val)
+		// fmt.Printf("s8: cmp val=%d sel=%d n=%d res=0x%x\n", val, sel, n, mask)
 
 		if neg {
 			mask = ^mask & (1<<n - 1)
@@ -63,7 +64,7 @@ func compare(src []byte, val uint64, bits *bitset.Bitset, cmp [16]cmpFunc, neg b
 		// skip selectors 0,1 because our encoder does not emit them
 		// if sel <= 1 && mask > 0 {
 		// 	if outn > 0 {
-		// 		aggregate(out, outn, k, buf)
+		// 		writeBits(out, outn, k, buf)
 		// 		k += outn
 		// 		outn = 0
 		// 		out = 0
@@ -90,12 +91,12 @@ func compare(src []byte, val uint64, bits *bitset.Bitset, cmp [16]cmpFunc, neg b
 	}
 
 	// flush remaining bits
-	if outn > 0 {
+	if outn > 0 && out > 0 {
 		writeBits(out, outn, k, buf)
 	}
 
 	bits.ResetCount(-1)
-	return bits
+	return
 }
 
 // Writes bitset compatible layout directly into bitset memory
@@ -116,6 +117,7 @@ func writeBits(mask uint64, n, k int, buf []byte) {
 	i, j := -adj, k>>3
 
 	// merge first byte
+	// fmt.Printf("s8: write buf[%d] |= o%08b\n", j, byte(mask2))
 	buf[j] |= byte(mask2)
 	mask2 >>= 8
 	i += 8
@@ -123,6 +125,7 @@ func writeBits(mask uint64, n, k int, buf []byte) {
 
 	// override following bytes
 	for i < n {
+		// fmt.Printf("s8: write buf[%d] = o%08b\n", j, byte(mask2))
 		buf[j] = byte(mask2)
 		mask2 >>= 8
 		i += 8
@@ -130,15 +133,17 @@ func writeBits(mask uint64, n, k int, buf []byte) {
 	}
 
 	// correct for missing mask2 bits on selector 2 (60 bits)
-	// which may have been shifted out be a too large adjustment (>4)
-	if n >= 60 && adj > 4 {
+	// which may have been shifted out
+	if n >= 60 && adj > 0 {
+		// fmt.Printf("s8: adj buf[%d] |= o%08b\n", j-1, byte(mask>>(64-adj)))
 		buf[j-1] |= byte(mask >> (64 - adj))
 	}
 }
 
-func compare2(src []byte, val, val2 uint64, bits *bitset.Bitset, cmp [16]cmpFunc2) *bitset.Bitset {
+func compare2(src []byte, val, val2 uint64, bits *bitset.Bitset, cmp [16]cmpFunc2) {
 	var k, i int
 	buf := bits.Bytes()
+	// fmt.Printf("s8 cmp: val=[%d,%d] len=%d ----------------------\n", val, val2, CountValues(src))
 
 	// aggregate output bits and flush in batches
 	var (
@@ -149,11 +154,12 @@ func compare2(src []byte, val, val2 uint64, bits *bitset.Bitset, cmp [16]cmpFunc
 	for _, word := range util.FromByteSlice[uint64](src) {
 		sel := byte(word>>60) & 0xF
 		n, mask := cmp[sel](word, val, val2)
+		// fmt.Printf("s8: cmp val=%d sel=%d n=%d k=%d res=0x%x\n", val, sel, n, k+outn, mask)
 
 		// skip selectors 0,1 because our encoder does not emit them
 		// if sel <= 1 && mask > 0 {
 		// 	if outn > 0 {
-		// 		aggregate(out, outn, k, buf)
+		// 		writeBits(out, outn, k, buf)
 		// 		k += outn
 		// 		outn = 0
 		// 		out = 0
@@ -180,12 +186,11 @@ func compare2(src []byte, val, val2 uint64, bits *bitset.Bitset, cmp [16]cmpFunc
 	}
 
 	// flush remaining bits
-	if outn > 0 {
+	if outn > 0 && out > 0 {
 		writeBits(out, outn, k, buf)
 	}
 
 	bits.ResetCount(-1)
-	return bits
 }
 
 // Simple (and slower) compare func left for reference
