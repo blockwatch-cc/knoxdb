@@ -357,7 +357,9 @@ func benchmarkIntEncoder(enc *Encoder, name string, data []int64, vecLen int,
 		}
 		br.CompressedSize += int64(sz)
 		br.VectorCount++
-		br.EncoderConfig = enc.Info()
+		if br.EncoderConfig == "" {
+			br.EncoderConfig = enc.Info()
+		}
 	}
 	elapsed := time.Since(start)
 	br.EncodeTimeNs = elapsed.Nanoseconds()
@@ -385,7 +387,9 @@ func benchmarkFloatEncoder(enc *Encoder, name string, data []float64, vecLen int
 		}
 		br.CompressedSize += int64(sz)
 		br.VectorCount++
-		br.EncoderConfig = enc.Info()
+		if br.EncoderConfig == "" {
+			br.EncoderConfig = enc.Info()
+		}
 	}
 	elapsed := time.Since(start)
 	br.EncodeTimeNs = elapsed.Nanoseconds()

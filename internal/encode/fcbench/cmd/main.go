@@ -212,7 +212,7 @@ func runBenchmark(dataset string, encoders []string) ([]fcbench.BenchmarkResult,
 func createBenchmarkConfig(dataset string, encoders []string) fcbench.BenchmarkConfig {
 	cfg := fcbench.BenchmarkConfig{
 		VectorLengths: []int{128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536},
-		DatasetSize:   1000000,
+		DatasetSize:   1048576,
 		DatasetType:   dataset,
 		OutputDir:     "./bench_results",
 		Encoders:      encoders,
@@ -222,11 +222,11 @@ func createBenchmarkConfig(dataset string, encoders []string) fcbench.BenchmarkC
 	switch dataset {
 	case "timeseries":
 		cfg.ZipfConfig = fcbench.ZipfConfig{
-			S: 1.5, V: 1.0, N: 1000, Count: 1000000,
+			S: 1.5, V: 1.0, N: 1000, Count: 1048576,
 		}
 		cfg.MarkovConfig = fcbench.MarkovConfig{
 			MeanA: 10.0, MeanB: 20.0, Stddev: 2.0,
-			ProbStayA: 0.9, ProbStayB: 0.8, Count: 1000000,
+			ProbStayA: 0.9, ProbStayB: 0.8, Count: 1048576,
 		}
 	case "hpc":
 		cfg.HPCConfig = fcbench.Grid3D{
@@ -244,7 +244,7 @@ func createBenchmarkConfig(dataset string, encoders []string) fcbench.BenchmarkC
 		}
 	case "transaction":
 		cfg.TPCConfig = fcbench.TPCConfig{
-			Count:           1000000,
+			Count:           1048576,
 			CustomerZipf:    fcbench.ZipfConfig{S: 1.5, V: 1.0, N: 10000},
 			ProductZipf:     fcbench.ZipfConfig{S: 1.2, V: 1.0, N: 50000},
 			QuantityZipf:    fcbench.ZipfConfig{S: 1.8, V: 1.0, N: 100},
