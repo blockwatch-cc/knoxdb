@@ -10,7 +10,7 @@ import (
 )
 
 func TestAlpRD(t *testing.T) {
-	// AlpRDTest[float32, uint32](t)
+	AlpRDTest[float32, uint32](t)
 	AlpRDTest[float64, uint64](t)
 }
 

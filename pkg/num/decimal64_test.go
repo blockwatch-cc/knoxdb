@@ -477,13 +477,13 @@ func TestDecimal64Compare(t *testing.T) {
 		if got, want := A.Lt(B), cmp[1]; got != want {
 			t.Errorf("%s: lt error exp %t, got %t", test.name, want, got)
 		}
-		if got, want := A.Lte(B), cmp[2]; got != want {
+		if got, want := A.Le(B), cmp[2]; got != want {
 			t.Errorf("%s: lte error exp %t, got %t", test.name, want, got)
 		}
 		if got, want := A.Gt(B), cmp[3]; got != want {
 			t.Errorf("%s: gt error exp %t, got %t", test.name, want, got)
 		}
-		if got, want := A.Gte(B), cmp[4]; got != want {
+		if got, want := A.Ge(B), cmp[4]; got != want {
 			t.Errorf("%s: gte error exp %t, got %t", test.name, want, got)
 		}
 	}
