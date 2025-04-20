@@ -9,17 +9,17 @@ var cmp_eq [16]cmpFunc = [16]cmpFunc{
 }
 
 func cmp_eq_0(_, val uint64) (int, uint64) {
-	if val == 1 {
-		return 240, 1
+	if val == 0 {
+		return 1, 1
 	}
-	return 240, 0
+	return 1, 0
 }
 
 func cmp_eq_1(_, val uint64) (int, uint64) {
 	if val == 1 {
-		return 120, 1
+		return 1, 1
 	}
-	return 120, 0
+	return 1, 0
 }
 
 func cmp_eq_2(word, val uint64) (int, uint64) {

@@ -5,9 +5,9 @@
 #include "constants_uint64_AVX512.h"
 
 TEXT ·initUint64AVX512(SB), NOSPLIT, $0-0
-        LEAQ            ·unpack240Uint64AVX512(SB), DX
+        LEAQ            ·unpackZerosUint64AVX512(SB), DX
         MOVQ            DX, funcTableUint64AVX512<>(SB)
-        LEAQ            ·unpack120Uint64AVX512(SB), DX
+        LEAQ            ·unpackOnesUint64AVX512(SB), DX
         MOVQ            DX, funcTableUint64AVX512<>+8(SB)
         LEAQ            ·unpack60Uint64AVX512(SB), DX
         MOVQ            DX, funcTableUint64AVX512<>+16(SB)
@@ -295,32 +295,8 @@ TEXT ·unpack60Uint64AVX512(SB), NOSPLIT, $0-0
         ADDQ            $480, DI
         RET
 
-// func unpack120Uint64AVX512()
-TEXT ·unpack120Uint64AVX512(SB), NOSPLIT, $0-0
-        MOVQ            $1, AX
-        VPBROADCASTQ    AX, Z0          // Z0 = [1,1,...]
-
-        VMOVDQU64         Z0, (DI)
-        VMOVDQU64         Z0, 64(DI)
-        VMOVDQU64         Z0, 128(DI)
-        VMOVDQU64         Z0, 192(DI)
-        VMOVDQU64         Z0, 256(DI)
-        VMOVDQU64         Z0, 320(DI)
-        VMOVDQU64         Z0, 384(DI)
-        VMOVDQU64         Z0, 448(DI)
-        VMOVDQU64         Z0, 512(DI)
-        VMOVDQU64         Z0, 576(DI)
-        VMOVDQU64         Z0, 640(DI)
-        VMOVDQU64         Z0, 704(DI)
-        VMOVDQU64         Z0, 768(DI)
-        VMOVDQU64         Z0, 832(DI)
-        VMOVDQU64         Z0, 896(DI)
-
-        ADDQ            $960, DI
-        RET
-
-// func unpack240Uint64AVX512()
-TEXT ·unpack240Uint64AVX512(SB), NOSPLIT, $0-0
+// func unpackOnesUint64AVX512()
+TEXT ·unpackOnesUint64AVX512(SB), NOSPLIT, $0-0
         MOVQ            $1, AX
         VPBROADCASTQ    AX, Z0          // Z0 = [1,1,...]
 
@@ -340,20 +316,31 @@ TEXT ·unpack240Uint64AVX512(SB), NOSPLIT, $0-0
         VMOVDQU64         Z0, 832(DI)
         VMOVDQU64         Z0, 896(DI)
         VMOVDQU64         Z0, 960(DI)
-        VMOVDQU64         Z0, 1024(DI)
-        VMOVDQU64         Z0, 1088(DI)
-        VMOVDQU64         Z0, 1152(DI)
-        VMOVDQU64         Z0, 1216(DI)
-        VMOVDQU64         Z0, 1280(DI)
-        VMOVDQU64         Z0, 1344(DI)
-        VMOVDQU64         Z0, 1408(DI)
-        VMOVDQU64         Z0, 1472(DI)
-        VMOVDQU64         Z0, 1536(DI)
-        VMOVDQU64         Z0, 1600(DI)
-        VMOVDQU64         Z0, 1664(DI)
-        VMOVDQU64         Z0, 1728(DI)
-        VMOVDQU64         Z0, 1792(DI)
-        VMOVDQU64         Z0, 1856(DI)
 
-        ADDQ            $1920, DI
+        ADDQ            $1024, DI
+        RET
+
+// func unpackZerosUint64AVX512()
+TEXT ·unpackZerosUint64AVX512(SB), NOSPLIT, $0-0
+        XORQ            AX, AX
+        VPBROADCASTQ    AX, Z0          // Z0 = [0,0,...]
+
+        VMOVDQU64         Z0, (DI)
+        VMOVDQU64         Z0, 64(DI)
+        VMOVDQU64         Z0, 128(DI)
+        VMOVDQU64         Z0, 192(DI)
+        VMOVDQU64         Z0, 256(DI)
+        VMOVDQU64         Z0, 320(DI)
+        VMOVDQU64         Z0, 384(DI)
+        VMOVDQU64         Z0, 448(DI)
+        VMOVDQU64         Z0, 512(DI)
+        VMOVDQU64         Z0, 576(DI)
+        VMOVDQU64         Z0, 640(DI)
+        VMOVDQU64         Z0, 704(DI)
+        VMOVDQU64         Z0, 768(DI)
+        VMOVDQU64         Z0, 832(DI)
+        VMOVDQU64         Z0, 896(DI)
+        VMOVDQU64         Z0, 960(DI)
+
+        ADDQ            $1024, DI
         RET

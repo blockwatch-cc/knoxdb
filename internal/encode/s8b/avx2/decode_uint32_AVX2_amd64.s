@@ -9,9 +9,9 @@
 #define ALLOW_BO
 
 TEXT ·initUint32AVX2(SB), NOSPLIT, $0-0
-        LEAQ            ·unpack240Uint32AVX2(SB), DX
+        LEAQ            ·unpackZerosUint32AVX2(SB), DX
         MOVQ            DX, funcTableUint32AVX2<>(SB)
-        LEAQ            ·unpack120Uint32AVX2(SB), DX
+        LEAQ            ·unpackOnesUint32AVX2(SB), DX
         MOVQ            DX, funcTableUint32AVX2<>+8(SB)
         LEAQ            ·unpack60Uint32AVX2(SB), DX
         MOVQ            DX, funcTableUint32AVX2<>+16(SB)
@@ -527,42 +527,8 @@ TEXT ·unpack60Uint32AVX2(SB), NOSPLIT, $0-0
 exit:
         JMP ·decodeUint32AVX2Exit(SB)
 
-// func unpack120AVX2()
-TEXT ·unpack120Uint32AVX2(SB), NOSPLIT, $0-0
-        VPCMPEQQ        Y0, Y0, Y0
-        VPSRLD          $31, Y0, Y0             // Y0 = [1,1,...] 
-
-        VMOVDQU         Y0, (DI)
-        VMOVDQU         Y0, 32(DI)
-        VMOVDQU         Y0, 64(DI)
-        VMOVDQU         Y0, 96(DI)
-        VMOVDQU         Y0, 128(DI)
-        VMOVDQU         Y0, 160(DI)
-        VMOVDQU         Y0, 192(DI)
-        VMOVDQU         Y0, 224(DI)
-        VMOVDQU         Y0, 256(DI)
-        VMOVDQU         Y0, 288(DI)
-        VMOVDQU         Y0, 320(DI)
-        VMOVDQU         Y0, 352(DI)
-        VMOVDQU         Y0, 384(DI)
-        VMOVDQU         Y0, 416(DI)
-        VMOVDQU         Y0, 448(DI)
-
-        ADDQ            $480, DI
-
-        ADDQ            $8, SI
-        SUBQ            $1, BX
-        JZ              exit
-
-        MOVQ            (SI), DX
-        SHRQ            $60, DX                 // calc selector
-        MOVQ            (R14)(DX*8), AX         // read jump adress
-        JMP             AX
-exit:
-        JMP ·decodeUint32AVX2Exit(SB)
-
-// func unpack240AVX2()
-TEXT ·unpack240Uint32AVX2(SB), NOSPLIT, $0-0
+// func unpackOnesAVX2()
+TEXT ·unpackOnesUint32AVX2(SB), NOSPLIT, $0-0
         VPCMPEQQ        Y0, Y0, Y0
         VPSRLD          $31, Y0, Y0             // Y0 = [1,1,...] 
 
@@ -582,22 +548,42 @@ TEXT ·unpack240Uint32AVX2(SB), NOSPLIT, $0-0
         VMOVDQU         Y0, 416(DI)
         VMOVDQU         Y0, 448(DI)
         VMOVDQU         Y0, 480(DI)
-        VMOVDQU         Y0, 512(DI)
-        VMOVDQU         Y0, 544(DI)
-        VMOVDQU         Y0, 576(DI)
-        VMOVDQU         Y0, 608(DI)
-        VMOVDQU         Y0, 640(DI)
-        VMOVDQU         Y0, 672(DI)
-        VMOVDQU         Y0, 704(DI)
-        VMOVDQU         Y0, 736(DI)
-        VMOVDQU         Y0, 768(DI)
-        VMOVDQU         Y0, 800(DI)
-        VMOVDQU         Y0, 832(DI)
-        VMOVDQU         Y0, 864(DI)
-        VMOVDQU         Y0, 896(DI)
-        VMOVDQU         Y0, 928(DI)
 
-        ADDQ            $960, DI
+        ADDQ            $512, DI
+
+        ADDQ            $8, SI
+        SUBQ            $1, BX
+        JZ              exit
+
+        MOVQ            (SI), DX
+        SHRQ            $60, DX                 // calc selector
+        MOVQ            (R14)(DX*8), AX         // read jump adress
+        JMP             AX
+exit:
+        JMP ·decodeUint32AVX2Exit(SB)
+
+// func unpackZerosAVX2()
+TEXT ·unpackZerosUint32AVX2(SB), NOSPLIT, $0-0
+        VPXORQ          Y0, Y0, Y0              // Y0 = [0,0,...]
+
+        VMOVDQU         Y0, (DI)
+        VMOVDQU         Y0, 32(DI)
+        VMOVDQU         Y0, 64(DI)
+        VMOVDQU         Y0, 96(DI)
+        VMOVDQU         Y0, 128(DI)
+        VMOVDQU         Y0, 160(DI)
+        VMOVDQU         Y0, 192(DI)
+        VMOVDQU         Y0, 224(DI)
+        VMOVDQU         Y0, 256(DI)
+        VMOVDQU         Y0, 288(DI)
+        VMOVDQU         Y0, 320(DI)
+        VMOVDQU         Y0, 352(DI)
+        VMOVDQU         Y0, 384(DI)
+        VMOVDQU         Y0, 416(DI)
+        VMOVDQU         Y0, 448(DI)
+        VMOVDQU         Y0, 480(DI)
+
+        ADDQ            $512, DI
 
         ADDQ            $8, SI
         SUBQ            $1, BX

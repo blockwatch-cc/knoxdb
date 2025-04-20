@@ -9,9 +9,9 @@
 #define ALLOW_BO
 
 TEXT ·initUint16AVX2(SB), NOSPLIT, $0-0
-        LEAQ            ·unpack240Uint16AVX2(SB), DX
+        LEAQ            ·unpackZerosUint16AVX2(SB), DX
         MOVQ            DX, funcTableUint16AVX2<>(SB)
-        LEAQ            ·unpack120Uint16AVX2(SB), DX
+        LEAQ            ·unpackOnesUint16AVX2(SB), DX
         MOVQ            DX, funcTableUint16AVX2<>+8(SB)
         LEAQ            ·unpack60Uint16AVX2(SB), DX
         MOVQ            DX, funcTableUint16AVX2<>+16(SB)
@@ -586,8 +586,8 @@ TEXT ·unpack60Uint16AVX2(SB), NOSPLIT, $0-0
 exit:
         JMP ·decodeUint16AVX2Exit(SB)
 
-// func unpack120AVX2()
-TEXT ·unpack120Uint16AVX2(SB), NOSPLIT, $0-0
+// func unpackOnesAVX2()
+TEXT ·unpackOnesUint16AVX2(SB), NOSPLIT, $0-0
         VPCMPEQQ        Y0, Y0, Y0
         VPSRLW          $15, Y0, Y0             // Y0 = [1,1,...] 
 
@@ -598,9 +598,9 @@ TEXT ·unpack120Uint16AVX2(SB), NOSPLIT, $0-0
         VMOVDQU         Y0, 128(DI)
         VMOVDQU         Y0, 160(DI)
         VMOVDQU         Y0, 192(DI)
-        VMOVDQU         X0, 224(DI)
+        VMOVDQU         Y0, 224(DI)
     
-        ADDQ            $240, DI
+        ADDQ            $256, DI
 
         ADDQ            $8, SI
         SUBQ            $1, BX
@@ -613,10 +613,9 @@ TEXT ·unpack120Uint16AVX2(SB), NOSPLIT, $0-0
 exit:
         JMP ·decodeUint16AVX2Exit(SB)
 
-// func unpack240AVX2()
-TEXT ·unpack240Uint16AVX2(SB), NOSPLIT, $0-0
-        VPCMPEQQ        Y0, Y0, Y0
-        VPSRLW          $15, Y0, Y0             // Y0 = [1,1,...] 
+// func unpackZerosAVX2()
+TEXT ·unpackZerosUint16AVX2(SB), NOSPLIT, $0-0
+        VPXORQ          Y0, Y0, Y0             // Y0 = [0,0,...]
 
         VMOVDQU         Y0, (DI)
         VMOVDQU         Y0, 32(DI)
@@ -626,15 +625,8 @@ TEXT ·unpack240Uint16AVX2(SB), NOSPLIT, $0-0
         VMOVDQU         Y0, 160(DI)
         VMOVDQU         Y0, 192(DI)
         VMOVDQU         Y0, 224(DI)
-        VMOVDQU         Y0, 256(DI)
-        VMOVDQU         Y0, 288(DI)
-        VMOVDQU         Y0, 320(DI)
-        VMOVDQU         Y0, 352(DI)
-        VMOVDQU         Y0, 384(DI)
-        VMOVDQU         Y0, 416(DI)
-        VMOVDQU         Y0, 448(DI)
 
-        ADDQ            $480, DI
+        ADDQ            $256, DI
 
         ADDQ            $8, SI
         SUBQ            $1, BX

@@ -295,13 +295,13 @@ func GenRndBits[T types.Number](n, w int) []T {
 	var res []T
 	switch any(T(0)).(type) {
 	case int64:
-		res = util.ReinterpretSlice[int64, T](util.RandIntsn[int64](n, 1<<w-1))
+		res = util.ReinterpretSlice[int64, T](util.RandIntsn[int64](n, 1<<min(w, 63)-1))
 	case int32:
-		res = util.ReinterpretSlice[int32, T](util.RandIntsn[int32](n, 1<<w-1))
+		res = util.ReinterpretSlice[int32, T](util.RandIntsn[int32](n, 1<<min(w, 31)-1))
 	case int16:
-		res = util.ReinterpretSlice[int16, T](util.RandIntsn[int16](n, 1<<w-1))
+		res = util.ReinterpretSlice[int16, T](util.RandIntsn[int16](n, 1<<min(w, 15)-1))
 	case int8:
-		res = util.ReinterpretSlice[int8, T](util.RandIntsn[int8](n, 1<<w-1))
+		res = util.ReinterpretSlice[int8, T](util.RandIntsn[int8](n, 1<<min(w, 7)-1))
 	case uint64:
 		res = util.ReinterpretSlice[uint64, T](util.RandUintsn[uint64](n, 1<<w-1))
 	case uint32:
@@ -342,7 +342,7 @@ func GenDups[T types.Number](n, c, w int) []T {
 	res := make([]T, n)
 	switch any(T(0)).(type) {
 	case int64:
-		unique := util.RandIntsn[int64](c, 1<<w-1)
+		unique := util.RandIntsn[int64](c, 1<<min(w, 63)-1)
 		for i := range res {
 			res[i] = T(unique[util.RandIntn(c)])
 		}
@@ -352,12 +352,12 @@ func GenDups[T types.Number](n, c, w int) []T {
 			res[i] = T(unique[util.RandIntn(c)])
 		}
 	case int16:
-		unique := util.RandInts[int16](c)
+		unique := util.RandIntsn[int16](c, 1<<min(w, 15)-1)
 		for i := range res {
 			res[i] = T(unique[util.RandIntn(c)])
 		}
 	case int8:
-		unique := util.RandInts[int8](c)
+		unique := util.RandIntsn[int8](c, 1<<min(w, 7)-1)
 		for i := range res {
 			res[i] = T(unique[util.RandIntn(c)])
 		}
@@ -372,12 +372,12 @@ func GenDups[T types.Number](n, c, w int) []T {
 			res[i] = T(unique[util.RandIntn(c)])
 		}
 	case uint16:
-		unique := util.RandUints[uint16](c)
+		unique := util.RandUintsn[uint16](c, 1<<min(w, 16)-1)
 		for i := range res {
 			res[i] = T(unique[util.RandIntn(c)])
 		}
 	case uint8:
-		unique := util.RandUints[uint8](c)
+		unique := util.RandUintsn[uint8](c, 1<<min(w, 8)-1)
 		for i := range res {
 			res[i] = T(unique[util.RandIntn(c)])
 		}
@@ -421,7 +421,7 @@ func GenRuns[T types.Number](n, r, w int) []T {
 			}
 		}
 	case int32:
-		for _, v := range util.RandIntsn[int32](sz, 1<<(w/2-1)) {
+		for _, v := range util.RandIntsn[int32](sz, 1<<min(w, 31)-1) {
 			for range r {
 				if len(res) == n {
 					break
@@ -430,7 +430,7 @@ func GenRuns[T types.Number](n, r, w int) []T {
 			}
 		}
 	case int16:
-		for _, v := range util.RandInts[int16](sz) {
+		for _, v := range util.RandIntsn[int16](sz, 1<<min(w, 15)-1) {
 			for range r {
 				if len(res) == n {
 					break
@@ -439,7 +439,7 @@ func GenRuns[T types.Number](n, r, w int) []T {
 			}
 		}
 	case int8:
-		for _, v := range util.RandInts[int8](sz) {
+		for _, v := range util.RandIntsn[int8](sz, 1<<min(w, 7)-1) {
 			for range r {
 				if len(res) == n {
 					break
@@ -457,7 +457,7 @@ func GenRuns[T types.Number](n, r, w int) []T {
 			}
 		}
 	case uint32:
-		for _, v := range util.RandUintsn[uint32](sz, 1<<(w/2-1)) {
+		for _, v := range util.RandUintsn[uint32](sz, 1<<min(w, 32)-1) {
 			for range r {
 				if len(res) == n {
 					break
@@ -466,7 +466,7 @@ func GenRuns[T types.Number](n, r, w int) []T {
 			}
 		}
 	case uint16:
-		for _, v := range util.RandUints[uint16](sz) {
+		for _, v := range util.RandUintsn[uint16](sz, 1<<min(w, 16)-1) {
 			for range r {
 				if len(res) == n {
 					break
@@ -475,7 +475,7 @@ func GenRuns[T types.Number](n, r, w int) []T {
 			}
 		}
 	case uint8:
-		for _, v := range util.RandUints[uint8](sz) {
+		for _, v := range util.RandUintsn[uint8](sz, 1<<min(w, 8)-1) {
 			for range r {
 				if len(res) == n {
 					break

@@ -1,5 +1,6 @@
 Copyright (c) 2015 Jason Wilder (original code)
-Copyright (c) 2022 Blockwatch Data Inc. (vectorized code)
+Copyright (c) 2022 Blockwatch Data Inc. (vectorized and improved legacy code)
+Copyright (c) 2025 Blockwatch Data Inc. (new encoder and extensions)
 
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the

@@ -3,18 +3,28 @@
 
 package generic
 
-// Package simple8b implements the 64bit integer encoding algoritm as published
+// Package s8b implements the 64bit integer encoding algoritm as published
 // by Ann and Moffat in "Index compression using 64-bit words", Softw. Pract.
-// Exper. 2010; 40:131–147
+// Exper. 2010; 40:131–147 with modifications outlined below.
 //
-// It is capable of encoding multiple integers with values betweeen 0 and to 1^60 -1,
-// in a single word. Code adapted from github.com/jwilder/encoding
+// It is capable of encoding multiple integers with values betweeen 0 and up
+// to 1^60-1, in a single uint64 word using adaptive bit-packing. Each code
+// word uses the same bit-width signalled as 4bit selector in the most
+// significant bits.
 //
-// Notable changes
-// - removed Encoder and Decoder
-// - changed layout to LittleEndian from BigEndian
-// - use Go generics to support multiple input bit widths
-// - don't use selector 0 and 1 (we likely not have such pattern, speeds up encode)
+// Simple8b always fills up a code word with values, which can lead to
+// lower efficiency at the tail end of a vector or when consecutive values
+// vary widely in bit-width as in these cases lower width values are flushed
+// into the next word(s) at higher width to accomodate the packing factor.
+//
+// Notable changes to the original simple8b implementation by jwilder:
+// - selector 0 is repurposed to represent 128 zeros instead of 240 ones
+// - selector 1 is repurposed to represent 128 ones instead of 120 ones
+// - encoder performs min-FOR fusion and requires minv/maxv for the input vector
+// - changed memory layout to LittleEndian from BigEndian
+// - use Go generics to support all integer types as input instead of only uint64
+// - new incremental packing algorithm with early stop
+//
 
 // Simple8b is 64bit word-sized encoder that packs multiple integers into a
 // single word using a 4 bit selector values and up to 60 bits for the remaining
@@ -25,7 +35,7 @@ package generic
 // ├──────────────┼─────────────────────────────────────────────────────────────┤
 // │     Bits     │       0    0   1   2   3   4   5   6  7  8 10 12 15 20 30 60│
 // ├──────────────┼─────────────────────────────────────────────────────────────┤
-// │      N       │     240  120  60  30  20  15  12  10  8  7  6  5  4  3  2  1│
+// │      N       │     128  128  60  30  20  15  12  10  8  7  6  5  4  3  2  1│
 // ├──────────────┼─────────────────────────────────────────────────────────────┤
 // │   Wasted Bits│      60   60   0   0   0   0  12   0  4  4  0  0  0  0  0  0│
 // └──────────────┴─────────────────────────────────────────────────────────────┘
@@ -34,14 +44,12 @@ package generic
 // is encoded in the 4 most significant bits followed by 15 values encoded used
 // 4 bits each in the remaining 60 bits.
 import (
-	"encoding/binary"
 	"errors"
 	"math/bits"
 	"unsafe"
 
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/util"
-	"golang.org/x/sys/cpu"
 )
 
 const (
@@ -50,106 +58,56 @@ const (
 )
 
 var (
-	shiftBits = [16]byte{
-		0,  // code 0 (240 1s)
-		0,  // code 1 (120 1s)
-		1,  // code 2
-		2,  // code 3
-		3,  // code 4
-		4,  // code 5
-		5,  // code 6
-		6,  // code 7
-		7,  // code 8
-		8,  // code 9
-		10, // code 10
-		12, // code 11
-		15, // code 12
-		20, // code 13
-		30, // code 14
-		60, // code 15
+	maxNPerSelector = [16]int{128, 128, 60, 30, 20, 15, 12, 10, 8, 7, 6, 5, 4, 3, 2, 1}
+
+	// max values per bit width
+	maxNPerBits = [64]byte{
+		60,   // 0 -- 60x 0bit values per uint64
+		60,   // 1 -- 60x 1bit values per uint64
+		30,   // 2 -- 30x 2bit values per uint64
+		20,   // 3 -- 20x 3bit values per uint64
+		15,   // 4 -- 15x 4bit values per uint64
+		12,   // 5 -- 12x 5bit values per uint64
+		10,   // 6 -- 10x 6bit values per uint64
+		8,    // 7 -- 8x 7bit values per uint64
+		7,    // 8 -- 7x 8bit values per uint64
+		6, 6, // [9,10] 6x 10bit values per uint64
+		5, 5, // [11,12] 5x 12bit values per uint64
+		4, 4, 4, // [13..15] 4x 15bit values per uint64
+		3, 3, 3, 3, 3, // [16..20] 3x 20 bit values per uint64
+		2, 2, 2, 2, 2, 2, 2, 2, 2, 2, // [21..30] 2x 30bit values per uint64
+		1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // [31..60] 1x 60bit value per uint64
+		1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		0, 0, 0, // [61..63] undefined
 	}
-	maxValsPerBits = [...]struct {
-		N    byte
-		Code byte
-	}{
-		// {max values per bit width, selector code}
-		{60, 2}, // 0 -- 60x 0bit values per uint64
-		{60, 2}, // 1 -- 60x 1bit values per uint64
-		{30, 3}, // 2 -- 30x 2bit values per uint64
-		{20, 4}, // 3 -- 20x 3bit values per uint64
-		{15, 5}, // 4 -- 15x 4bit values per uint64
-		{12, 6}, // 5 -- 12x 5bit values per uint64
-		{10, 7}, // 6 -- 10x 6bit values per uint64
-		{8, 8},  // 7 -- 8x 7bit values per uint64
-		{7, 9},  // 8 -- 7x 8bit values per uint64
-		// 6x 10bit values per uint64
-		{6, 10}, // 9
-		{6, 10}, // 10
-		// 5x 12bit values per uint64
-		{5, 11}, // 11
-		{5, 11}, // 12
-		// 4x 15bit values per uint64
-		{4, 12}, // 13
-		{4, 12}, // 14
-		{4, 12}, // 15
-		// 3x 20 bit values per uint64
-		{3, 13}, // 16
-		{3, 13}, // 17
-		{3, 13}, // 18
-		{3, 13}, // 19
-		{3, 13}, // 20
-		// 2x 30bit values per uint64
-		{2, 14}, // 21
-		{2, 14}, // 22
-		{2, 14}, // 23
-		{2, 14}, // 24
-		{2, 14}, // 25
-		{2, 14}, // 26
-		{2, 14}, // 27
-		{2, 14}, // 28
-		{2, 14}, // 29
-		{2, 14}, // 30
-		// 1x 60bit value per uint64
-		{1, 15},  // 31
-		{1, 15},  // 32
-		{1, 15},  // 33
-		{1, 15},  // 34
-		{1, 15},  // 35
-		{1, 15},  // 36
-		{1, 15},  // 37
-		{1, 15},  // 38
-		{1, 15},  // 39
-		{1, 15},  // 40
-		{1, 15},  // 41
-		{1, 15},  // 42
-		{1, 15},  // 43
-		{1, 15},  // 44
-		{1, 15},  // 45
-		{1, 15},  // 46
-		{1, 15},  // 47
-		{1, 15},  // 48
-		{1, 15},  // 49
-		{1, 15},  // 50
-		{1, 15},  // 51
-		{1, 15},  // 42
-		{1, 15},  // 53
-		{1, 15},  // 54
-		{1, 15},  // 55
-		{1, 15},  // 56
-		{1, 15},  // 57
-		{1, 15},  // 58
-		{1, 15},  // 59
-		{1, 15},  // 60
-		{0, 255}, // 61
-		{0, 255}, // 62
-		{0, 255}, // 63
-		{0, 255}, // 64
+
+	// selector code per bit width
+	codeByBits = [64]byte{
+		2,      // 0 -- 60x 0bit values per uint64
+		2,      // 1 -- 60x 1bit values per uint64
+		3,      // 2 -- 30x 2bit values per uint64
+		4,      // 3 -- 20x 3bit values per uint64
+		5,      // 4 -- 15x 4bit values per uint64
+		6,      // 5 -- 12x 5bit values per uint64
+		7,      // 6 -- 10x 6bit values per uint64
+		8,      // 7 -- 8x 7bit values per uint64
+		9,      // 8 -- 7x 8bit values per uint64
+		10, 10, // [9,10] 6x 10bit values per uint64
+		11, 11, // [11,12] 5x 12bit values per uint64
+		12, 12, 12, // [13..15] 4x 15bit values per uint64
+		13, 13, 13, 13, 13, // [16..20] 3x 20 bit values per uint64
+		14, 14, 14, 14, 14, 14, 14, 14, 14, 14, // [21..30] 2x 30bit values per uint64
+		15, 15, 15, 15, 15, 15, 15, 15, 15, 15, // [31..60] 1x 60bit value per uint64
+		15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+		15, 15, 15, 15, 15, 15, 15, 15, 15, 15,
+		255, 255, 255, // [61..63] undefined
 	}
 
 	ErrValueOutOfBounds    = errors.New("value out of bounds")
 	ErrInvalidBufferLength = errors.New("dst length is not multiple of 8")
 )
 
+//go:nocheckptr
 func Encode[T types.Integer](dst []byte, src []T, minv, maxv T) ([]byte, error) {
 	if len(src) == 0 {
 		return nil, nil
@@ -158,80 +116,93 @@ func Encode[T types.Integer](dst []byte, src []T, minv, maxv T) ([]byte, error) 
 		return nil, ErrInvalidBufferLength
 	}
 
+	// pick selector based on input bit width
+	selector := packSelector[T](minv)
+
+	// determine the maximum possible bit width for this vector (post min-FOR)
+	// we use it to
+	// - check the 60 bit limit
+	// - stop the incremental packing loop early (benefits small bit widths most)
+	maxLog2 := bits.Len64(uint64(maxv) - uint64(minv))
+	if maxLog2 > 60 {
+		return nil, ErrValueOutOfBounds
+	}
+
 	out := util.FromByteSlice[uint64](dst)
 	var i, j int
 	for i < len(src) {
 		remaining := src[i:]
 
-		// try to pack run of 240 or 120 1s
-		// if len(remaining) >= 120 {
-		// 	k := 0
-		// 	for k < len(remaining) && k < 240 && remaining[k]-minv == 1 {
-		// 		k++
-		// 	}
-
-		// 	if k >= 120 {
-		// 		if k >= 240 {
-		// 			out[j] = 0
-		// 			i += 240
-		// 		} else {
-		// 			out[j] = uint64(1) << S8B_BIT_SIZE
-		// 			i += 120
-		// 		}
-		// 		j++
-		// 		continue
-		// 	}
-		// }
+		// try to pack runs of 128x 0s or 1s (pre-check if first value actually
+		// translates to 0 or one, skip expensive check otherwise)
+		if len(remaining) >= 128 && uint64(remaining[0])-uint64(minv) <= 1 {
+			isZero, isOne := zeroOrOne(unsafe.Pointer(&remaining[0]), minv)
+			if isZero {
+				out[j] = 0
+				j++
+				i += 128
+				continue
+			} else if isOne {
+				out[j] = uint64(1) << S8B_BIT_SIZE
+				j++
+				i += 128
+				continue
+			}
+		}
 
 		var (
 			n        int
-			maxSeen  uint64
-			usedBits int
+			nleft    int    = len(remaining)
+			maxSeen  uint64 = 1
+			maxN     int    = 60
+			usedBits int    = 1
 			isFull   bool
 		)
-		code := maxValsPerBits[0]
 
 		// Incremental packing
-		for n < len(remaining) {
+		for n < nleft {
 			val := uint64(remaining[n]) - uint64(minv)
 			if val > maxSeen {
 				maxSeen = val
 				usedBits = bits.Len64(val)
-				if usedBits > 60 {
-					return nil, ErrValueOutOfBounds
-				}
-				code = maxValsPerBits[usedBits]
-				if n > int(code.N) {
+				maxN = int(maxNPerBits[usedBits])
+				if n > maxN {
 					// cannot use this value this round
+					break
+				}
+
+				// stop search early when maxLog2 is reached
+				// bad when sel is already large (low packing rate) because
+				// then the check is pure overhead. We have determined experimentally
+				// that maxN > 5 is a good compromise for prefixing the maxlog2 check
+				if maxN > 5 && usedBits == maxLog2 {
+					// stop early and try packing the max number of values at this bit width
+					n = min(maxN, nleft)
+					isFull = maxN <= nleft
 					break
 				}
 			}
 			n++
-			if n == int(code.N) {
+			if n == maxN {
 				isFull = true
 				break
 			}
 		}
 
-		// adjust selector when uint64 is not full by increasing usedBits
-		// and possible adjusting down n
-		sel := code.Code
+		// adjust selector when code word is not full by increasing usedBits
+		// and possible adjusting down n (note: code words must always be full)
+		sel := codeByBits[usedBits]
 		if !isFull {
-			for sel < 15 && n < selector64[sel].n {
+			for sel < 15 && n < maxNPerSelector[sel] {
 				sel++
 			}
-			n = min(n, selector64[sel].n)
+			n = min(n, maxNPerSelector[sel])
 		}
 
 		// pack values
-		shift := shiftBits[sel]
-		var shl byte
-		val := uint64(sel) << S8B_BIT_SIZE
-		for k := 0; k < n; k++ {
-			val |= (uint64(remaining[k]) - uint64(minv)) << shl
-			shl += shift
-		}
-		out[j] = val
+		out[j] = selector[sel](unsafe.Pointer(&remaining[0]), uint64(minv))
+		// fmt.Printf("Pack %T sel=%d i=%d n=%d minv=%d(%T) out[%d]=%016x\n", T(0), sel, i, n, minv, minv, j, out[j])
+
 		j++
 		i += n
 	}
@@ -239,100 +210,28 @@ func Encode[T types.Integer](dst []byte, src []T, minv, maxv T) ([]byte, error) 
 	return dst[:j*8], nil
 }
 
-func Decode[T types.Unsigned](dst []T, buf []byte) (int, error) {
-	if len(buf) == 0 {
-		return 0, nil
-	}
-	if len(buf)&7 != 0 {
-		return 0, ErrInvalidBufferLength
-	}
-	var selector [16]packing
-	w := unsafe.Sizeof(T(0))
-	switch w {
-	case 8:
-		selector = selector64
-	case 4:
-		selector = selector32
-	case 2:
-		selector = selector16
-	case 1:
-		selector = selector8
-	}
+// BenchmarkZeroOrOneV9/Zeros         	31235934	        37.58 ns/op
+// BenchmarkZeroOrOneV9/Ones          	32417026	        37.21 ns/op
+// BenchmarkZeroOrOneV9/Dups          	1000000000	         0.7041 ns/op
+// BenchmarkZeroOrOneV9/Runs          	1000000000	         0.7182 ns/op
+// BenchmarkZeroOrOneV9/Seq           	1000000000	         1.208 ns/op
+func zeroOrOne[T types.Integer](p unsafe.Pointer, minv T) (bool, bool) {
+	src := (*[128]T)(p)
+	var zeroAcc, oneAcc T = 0, 0
 
-	j := 0
-	if cpu.IsBigEndian {
-		for i := 0; i < len(buf); i += 8 {
-			v := binary.LittleEndian.Uint64(buf[i:])
-			sel := (v >> 60)
-			selector[sel].unpack(v, unsafe.Pointer(&dst[j]))
-			j += selector[sel].n
+	// 2x loop unrolling
+	for i := 0; i < 128; i += 2 {
+		d0 := src[i] - minv
+		d1 := src[i+1] - minv
+
+		// early exit
+		if d0 > 1 || d1 > 1 {
+			return false, false
 		}
-	} else {
-		for _, v := range util.FromByteSlice[uint64](buf) {
-			sel := (v >> 60) & 0xf
-			selector[sel].unpack(v, unsafe.Pointer(&dst[j]))
-			j += selector[sel].n
-		}
+
+		// efficient accumulation to optimize runtime for 128 matches
+		zeroAcc |= d0 | d1
+		oneAcc |= (d0 ^ 1) | (d1 ^ 1)
 	}
-	return j, nil
-}
-
-func CountValues(src []byte) int {
-	var (
-		i int = 7 // little endian encoding
-		n int
-	)
-
-	for range len(src) / 64 {
-		n += selector64[src[i]>>4].n
-		i += 8
-		n += selector64[src[i]>>4].n
-		i += 8
-		n += selector64[src[i]>>4].n
-		i += 8
-		n += selector64[src[i]>>4].n
-		i += 8
-		n += selector64[src[i]>>4].n
-		i += 8
-		n += selector64[src[i]>>4].n
-		i += 8
-		n += selector64[src[i]>>4].n
-		i += 8
-		n += selector64[src[i]>>4].n
-		i += 8
-	}
-
-	for i < len(src) {
-		n += selector64[src[i]>>4].n
-		i += 8
-	}
-
-	return n
-}
-
-func DecodeWord[T types.Unsigned](dst []T, buf []byte) (int, error) {
-	if len(buf) == 0 {
-		return 0, nil
-	}
-	if len(buf) != 8 {
-		return 0, ErrInvalidBufferLength
-	}
-
-	var selector [16]packing
-	w := unsafe.Sizeof(T(0))
-	switch w {
-	case 8:
-		selector = selector64
-	case 4:
-		selector = selector32
-	case 2:
-		selector = selector16
-	case 1:
-		selector = selector8
-	}
-
-	v := binary.LittleEndian.Uint64(buf)
-	sel := (v >> 60)
-	selector[sel].unpack(v, unsafe.Pointer(&dst[0]))
-	return selector[sel].n, nil
+	return zeroAcc == 0, oneAcc == 0
 }

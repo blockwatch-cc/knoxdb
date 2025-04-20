@@ -15,9 +15,15 @@ import (
 )
 
 var (
-	// Encoders
-	EncodeLegacy = generic.EncodeLegacy
+	// Legacy format and implementations
+	CountLegacy        = generic.CountLegacy
+	EncodeLegacy       = generic.EncodeLegacy
+	DecodeLegacyUint64 = generic.DecodeLegacyUint64
+	DecodeLegacyUint32 = generic.DecodeLegacyUint32
+	DecodeLegacyUint16 = generic.DecodeLegacyUint16
+	DecodeLegacyUint8  = generic.DecodeLegacyUint8
 
+	// Encoders
 	EncodeUint64 = generic.Encode[uint64]
 	EncodeInt64  = generic.Encode[int64]
 	EncodeUint32 = generic.Encode[uint32]
@@ -167,7 +173,7 @@ func (idx IndexImpl[T]) Find(n int) int {
 	return i
 }
 
-var selector = [16]int{240, 120, 60, 30, 20, 15, 12, 10, 8, 7, 6, 5, 4, 3, 2, 1}
+var selector = [16]int{128, 128, 60, 30, 20, 15, 12, 10, 8, 7, 6, 5, 4, 3, 2, 1}
 
 func MakeIndex[T uint16 | uint32](src []byte, dst []T) Index {
 	var (

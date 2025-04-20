@@ -99,8 +99,8 @@ func decodePackedUint64(dst []uint64, buf []byte) (int, error) {
 		return 0, fmt.Errorf("zip: decodeSimpleInt64 not enough data")
 	}
 
-	n := s8b.CountValues(buf[8:])
-	if n < 0 {
+	n, err := s8b.CountLegacy(buf[8:])
+	if err != nil {
 		return 0, fmt.Errorf("zip: decodeSimpleInt64 bad count")
 	}
 	n += 1
@@ -115,7 +115,7 @@ func decodePackedUint64(dst []uint64, buf []byte) (int, error) {
 	dst[0] = binary.LittleEndian.Uint64(buf)
 
 	// decode compressed values
-	c, err := s8b.DecodeUint64(dst[1:], buf[8:])
+	c, err := s8b.DecodeLegacyUint64(dst[1:], buf[8:])
 	if err != nil {
 		return 0, fmt.Errorf("zip: decodeSimpleInt64 decode: %v", err)
 	}

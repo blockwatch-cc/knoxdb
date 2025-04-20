@@ -6,6 +6,7 @@ package generic
 import (
 	"slices"
 	"testing"
+	"unsafe"
 
 	stests "blockwatch.cc/knoxdb/internal/encode/s8b/tests"
 	"blockwatch.cc/knoxdb/internal/tests"
@@ -15,10 +16,10 @@ import (
 )
 
 func TestEncode(t *testing.T) {
-	stests.EncodeTest[uint64](t, Encode[uint64], DecodeLegacyWrapper[uint64])
-	stests.EncodeTest[uint32](t, Encode[uint32], DecodeLegacyWrapper[uint32])
-	stests.EncodeTest[uint16](t, Encode[uint16], DecodeLegacyWrapper[uint16])
-	stests.EncodeTest[uint8](t, Encode[uint8], DecodeLegacyWrapper[uint8])
+	stests.EncodeTest[uint64](t, Encode[uint64], Decode[uint64])
+	stests.EncodeTest[uint32](t, Encode[uint32], Decode[uint32])
+	stests.EncodeTest[uint16](t, Encode[uint16], Decode[uint16])
+	stests.EncodeTest[uint8](t, Encode[uint8], Decode[uint8])
 }
 
 func TestDecode(t *testing.T) {
@@ -69,6 +70,72 @@ func BenchmarkCount(b *testing.B) {
 			b.SetBytes(int64(len(c.Data) * 8))
 			for i := 0; i < b.N; i++ {
 				_ = CountValues(buf)
+			}
+		})
+	}
+}
+
+type zeroOneBenchmark struct {
+	Name string
+	Data []uint64
+}
+
+type zeroOneVersion struct {
+	Name string
+	Fn   func(p unsafe.Pointer, minv uint64) (bool, bool)
+}
+
+func TestZeroOrOnes(t *testing.T) {
+	for i, c := range []zeroOneBenchmark{
+		{"Zeros", tests.GenConst[uint64](128, 0)},
+		{"Ones", tests.GenConst[uint64](128, 1)},
+		{"Dups", tests.GenDups[uint64](128, 16, -1)},
+		{"Runs", tests.GenRuns[uint64](128, 10, -1)},
+		{"Seq", tests.GenSeq[uint64](128)},
+	} {
+		for _, f := range []zeroOneVersion{
+			{"V9", zeroOrOne[uint64]},
+		} {
+			minv := slices.Min(c.Data)
+			if i == 1 {
+				minv = 0
+			}
+			t.Run(f.Name+"/"+c.Name, func(t *testing.T) {
+				z, o := f.Fn(unsafe.Pointer(&c.Data[0]), minv)
+				switch i {
+				case 0:
+					// zeros case
+					require.True(t, z, "zeros not detected")
+					require.False(t, o, "ones mistakenly detected")
+				case 1:
+					// ones case
+					require.False(t, z, "zeros mistakenly detected")
+					require.True(t, o, "ones not detected")
+				default:
+					// other cases
+					require.False(t, z, "zeros mistakenly detected")
+					require.False(t, o, "ones mistakenly detected")
+				}
+			})
+		}
+	}
+}
+
+func BenchmarkZeroOrOne(b *testing.B) {
+	for i, c := range []zeroOneBenchmark{
+		{"Zeros", tests.GenConst[uint64](128, 0)},
+		{"Ones", tests.GenConst[uint64](128, 1)},
+		{"Dups", tests.GenDups[uint64](128, 16, -1)},
+		{"Runs", tests.GenRuns[uint64](128, 10, -1)},
+		{"Seq", tests.GenSeq[uint64](128)},
+	} {
+		minv := slices.Min(c.Data)
+		if i == 1 {
+			minv = 0
+		}
+		b.Run(c.Name, func(b *testing.B) {
+			for range b.N {
+				_, _ = zeroOrOne(unsafe.Pointer(&c.Data[0]), minv)
 			}
 		})
 	}

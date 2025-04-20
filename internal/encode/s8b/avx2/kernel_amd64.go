@@ -1,8 +1,8 @@
 // Copyright (c) 2022 Blockwatch Data Inc.
 // Author: stefan@blockwatch.cc
 
-//go:build amd64 && !gccgo && !appengine
-// +build amd64,!gccgo,!appengine
+//go:build amd64
+// +build amd64
 
 // nolint
 package avx2

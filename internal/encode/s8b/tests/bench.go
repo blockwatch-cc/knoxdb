@@ -27,9 +27,6 @@ func EncodeBenchmark[T types.Unsigned](b *testing.B, fn EncodeFunc[T]) {
 				sz += len(buf)
 				n++
 			}
-			// b.ReportMetric(float64(sz)/float64(n), "mean_bytes")
-			// b.ReportMetric(float64(minv), "min_val")
-			// b.ReportMetric(float64(maxv), "max_val")
 		})
 	}
 }

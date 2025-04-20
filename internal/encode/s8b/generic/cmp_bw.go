@@ -17,17 +17,17 @@ var cmp_bw [16]cmpFunc2 = [16]cmpFunc2{
 }
 
 func cmp_bw_0(_, val, val2 uint64) (int, uint64) {
-	if val <= 1 && val2 >= 1 {
-		return 240, 1
+	if val == 0 {
+		return 1, 1
 	}
-	return 240, 0
+	return 1, 0
 }
 
 func cmp_bw_1(_, val, val2 uint64) (int, uint64) {
 	if val <= 1 && val2 >= 1 {
-		return 120, 1
+		return 1, 1
 	}
-	return 120, 0
+	return 1, 0
 }
 
 func cmp_bw_2(word, val, val2 uint64) (int, uint64) {

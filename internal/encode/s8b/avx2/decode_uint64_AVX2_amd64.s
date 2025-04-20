@@ -9,9 +9,9 @@
 // #define ALLOW_BO
 
 TEXT ·initUint64AVX2(SB), NOSPLIT, $0-0
-        LEAQ            ·unpack240Uint64AVX2(SB), DX
+        LEAQ            ·unpackZerosUint64AVX2(SB), DX
         MOVQ            DX, funcTableUint64AVX2<>(SB)
-        LEAQ            ·unpack120Uint64AVX2(SB), DX
+        LEAQ            ·unpackOnesUint64AVX2(SB), DX
         MOVQ            DX, funcTableUint64AVX2<>+8(SB)
         LEAQ            ·unpack60Uint64AVX2(SB), DX
         MOVQ            DX, funcTableUint64AVX2<>+16(SB)
@@ -505,57 +505,8 @@ TEXT ·unpack60Uint64AVX2(SB), NOSPLIT, $0-0
 exit:
         JMP ·decodeUint64AVX2Exit(SB)
 
-// func unpack120Uint64AVX2()
-TEXT ·unpack120Uint64AVX2(SB), NOSPLIT, $0-0
-        VPCMPEQQ        Y0, Y0, Y0
-        VPSRLQ          $63, Y0, Y0             // Y0 = [1,1,...] 
-
-        VMOVDQU         Y0, (DI)
-        VMOVDQU         Y0, 32(DI)
-        VMOVDQU         Y0, 64(DI)
-        VMOVDQU         Y0, 96(DI)
-        VMOVDQU         Y0, 128(DI)
-        VMOVDQU         Y0, 160(DI)
-        VMOVDQU         Y0, 192(DI)
-        VMOVDQU         Y0, 224(DI)
-        VMOVDQU         Y0, 256(DI)
-        VMOVDQU         Y0, 288(DI)
-        VMOVDQU         Y0, 320(DI)
-        VMOVDQU         Y0, 352(DI)
-        VMOVDQU         Y0, 384(DI)
-        VMOVDQU         Y0, 416(DI)
-        VMOVDQU         Y0, 448(DI)
-        VMOVDQU         Y0, 480(DI)
-        VMOVDQU         Y0, 512(DI)
-        VMOVDQU         Y0, 544(DI)
-        VMOVDQU         Y0, 576(DI)
-        VMOVDQU         Y0, 608(DI)
-        VMOVDQU         Y0, 640(DI)
-        VMOVDQU         Y0, 672(DI)
-        VMOVDQU         Y0, 704(DI)
-        VMOVDQU         Y0, 736(DI)
-        VMOVDQU         Y0, 768(DI)
-        VMOVDQU         Y0, 800(DI)
-        VMOVDQU         Y0, 832(DI)
-        VMOVDQU         Y0, 864(DI)
-        VMOVDQU         Y0, 896(DI)
-        VMOVDQU         Y0, 928(DI)
-
-        ADDQ            $960, DI
-
-        ADDQ            $8, SI
-        SUBQ            $1, BX
-        JZ              exit
-
-        MOVQ            (SI), DX
-        SHRQ            $60, DX                 // calc selector
-        MOVQ            (R14)(DX*8), AX         // read jump adress
-        JMP             AX
-exit:
-        JMP ·decodeUint64AVX2Exit(SB)
-
-// func unpack240Uint64AVX2()
-TEXT ·unpack240Uint64AVX2(SB), NOSPLIT, $0-0
+// func unpackOnesUint64AVX2()
+TEXT ·unpackOnesUint64AVX2(SB), NOSPLIT, $0-0
         VPCMPEQQ        Y0, Y0, Y0
         VPSRLQ          $63, Y0, Y0             // Y0 = [1,1,...] 
 
@@ -591,36 +542,58 @@ TEXT ·unpack240Uint64AVX2(SB), NOSPLIT, $0-0
         VMOVDQU         Y0, 928(DI)
         VMOVDQU         Y0, 960(DI)
         VMOVDQU         Y0, 992(DI)
-        VMOVDQU         Y0, 1024(DI)
-        VMOVDQU         Y0, 1056(DI)
-        VMOVDQU         Y0, 1088(DI)
-        VMOVDQU         Y0, 1120(DI)
-        VMOVDQU         Y0, 1152(DI)
-        VMOVDQU         Y0, 1184(DI)
-        VMOVDQU         Y0, 1216(DI)
-        VMOVDQU         Y0, 1248(DI)
-        VMOVDQU         Y0, 1280(DI)
-        VMOVDQU         Y0, 1312(DI)
-        VMOVDQU         Y0, 1344(DI)
-        VMOVDQU         Y0, 1376(DI)
-        VMOVDQU         Y0, 1408(DI)
-        VMOVDQU         Y0, 1440(DI)
-        VMOVDQU         Y0, 1472(DI)
-        VMOVDQU         Y0, 1504(DI)
-        VMOVDQU         Y0, 1536(DI)
-        VMOVDQU         Y0, 1568(DI)
-        VMOVDQU         Y0, 1600(DI)
-        VMOVDQU         Y0, 1632(DI)
-        VMOVDQU         Y0, 1664(DI)
-        VMOVDQU         Y0, 1696(DI)
-        VMOVDQU         Y0, 1728(DI)
-        VMOVDQU         Y0, 1760(DI)
-        VMOVDQU         Y0, 1792(DI)
-        VMOVDQU         Y0, 1824(DI)
-        VMOVDQU         Y0, 1856(DI)
-        VMOVDQU         Y0, 1888(DI)
 
-        ADDQ            $1920, DI
+        ADDQ            $1024, DI
+
+        ADDQ            $8, SI
+        SUBQ            $1, BX
+        JZ              exit
+
+        MOVQ            (SI), DX
+        SHRQ            $60, DX                 // calc selector
+        MOVQ            (R14)(DX*8), AX         // read jump adress
+        JMP             AX
+exit:
+        JMP ·decodeUint64AVX2Exit(SB)
+
+// func unpackZerosUint64AVX2()
+TEXT ·unpackZerosUint64AVX2(SB), NOSPLIT, $0-0
+        VPXORQ          Y0, Y0, Y0      // Y0 = [1,1,...]
+
+        VMOVDQU         Y0, (DI)
+        VMOVDQU         Y0, 32(DI)
+        VMOVDQU         Y0, 64(DI)
+        VMOVDQU         Y0, 96(DI)
+        VMOVDQU         Y0, 128(DI)
+        VMOVDQU         Y0, 160(DI)
+        VMOVDQU         Y0, 192(DI)
+        VMOVDQU         Y0, 224(DI)
+        VMOVDQU         Y0, 256(DI)
+        VMOVDQU         Y0, 288(DI)
+        VMOVDQU         Y0, 320(DI)
+        VMOVDQU         Y0, 352(DI)
+        VMOVDQU         Y0, 384(DI)
+        VMOVDQU         Y0, 416(DI)
+        VMOVDQU         Y0, 448(DI)
+        VMOVDQU         Y0, 480(DI)
+        VMOVDQU         Y0, 512(DI)
+        VMOVDQU         Y0, 544(DI)
+        VMOVDQU         Y0, 576(DI)
+        VMOVDQU         Y0, 608(DI)
+        VMOVDQU         Y0, 640(DI)
+        VMOVDQU         Y0, 672(DI)
+        VMOVDQU         Y0, 704(DI)
+        VMOVDQU         Y0, 736(DI)
+        VMOVDQU         Y0, 768(DI)
+        VMOVDQU         Y0, 800(DI)
+        VMOVDQU         Y0, 832(DI)
+        VMOVDQU         Y0, 864(DI)
+        VMOVDQU         Y0, 896(DI)
+        VMOVDQU         Y0, 928(DI)
+        VMOVDQU         Y0, 960(DI)
+        VMOVDQU         Y0, 992(DI)
+
+        ADDQ            $1024, DI
 
         ADDQ            $8, SI
         SUBQ            $1, BX

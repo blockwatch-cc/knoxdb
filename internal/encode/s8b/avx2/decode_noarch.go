@@ -1,8 +1,8 @@
 // Copyright (c) 2020 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-//go:build !amd64 || appengine || gccgo
-// +build !amd64 appengine gccgo
+//go:build !amd64
+// +build !amd64
 
 package avx2
 
@@ -11,9 +11,9 @@ import (
 )
 
 var (
-	DecodeUint64 = generic.DecodeUint64
-	DecodeUint32 = generic.DecodeUint32
-	DecodeUint16 = generic.DecodeUint16
-	DecodeUint8  = generic.DecodeUint8
+	DecodeUint64 = generic.Decode[uint64]
+	DecodeUint32 = generic.Decode[uint32]
+	DecodeUint16 = generic.Decode[uint16]
+	DecodeUint8  = generic.Decode[uint8]
 	CountValues  = generic.CountValues
 )

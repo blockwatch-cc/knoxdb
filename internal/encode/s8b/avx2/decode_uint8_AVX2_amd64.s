@@ -9,9 +9,9 @@
 #define ALLOW_BO
 
 TEXT ·initUint8AVX2(SB), NOSPLIT, $0-0
-        LEAQ            ·unpack240Uint8AVX2(SB), DX
+        LEAQ            ·unpackZerosUint8AVX2(SB), DX
         MOVQ            DX, funcTableUint8AVX2<>(SB)
-        LEAQ            ·unpack120Uint8AVX2(SB), DX
+        LEAQ            ·unpackOnesUint8AVX2(SB), DX
         MOVQ            DX, funcTableUint8AVX2<>+8(SB)
         LEAQ            ·unpack60Uint8AVX2(SB), DX
         MOVQ            DX, funcTableUint8AVX2<>+16(SB)
@@ -570,17 +570,16 @@ TEXT ·unpack60Uint8AVX2(SB), NOSPLIT, $0-0
 exit:
         JMP ·decodeUint8AVX2Exit(SB)
 
-// func unpack120AVX2()
-TEXT ·unpack120Uint8AVX2(SB), NOSPLIT, $0-0
+// func unpackOnesAVX2()
+TEXT ·unpackOnesUint8AVX2(SB), NOSPLIT, $0-0
         VPBROADCASTB    const1<>(SB), Y0
 
         VMOVDQU         Y0, (DI)
         VMOVDQU         Y0, 32(DI)
         VMOVDQU         Y0, 64(DI)
-        VMOVDQU         X0, 96(DI)
-        VMOVQ           X0, 112(DI)
-    
-        ADDQ            $120, DI
+        VMOVDQU         Y0, 96(DI)
+
+        ADDQ            $128, DI
 
         ADDQ            $8, SI
         SUBQ            $1, BX
@@ -593,20 +592,16 @@ TEXT ·unpack120Uint8AVX2(SB), NOSPLIT, $0-0
 exit:
         JMP ·decodeUint8AVX2Exit(SB)
 
-// func unpack240AVX2()
-TEXT ·unpack240Uint8AVX2(SB), NOSPLIT, $0-0
-        VPBROADCASTB    const1<>(SB), Y0
+// func unpackZerosAVX2()
+TEXT ·unpackZerosUint8AVX2(SB), NOSPLIT, $0-0
+        VPBROADCASTB    const0<>(SB), Y0
 
         VMOVDQU         Y0, (DI)
         VMOVDQU         Y0, 32(DI)
         VMOVDQU         Y0, 64(DI)
         VMOVDQU         Y0, 96(DI)
-        VMOVDQU         Y0, 128(DI)
-        VMOVDQU         Y0, 160(DI)
-        VMOVDQU         Y0, 192(DI)
-        VMOVDQU         X0, 224(DI)
 
-        ADDQ            $240, DI
+        ADDQ            $128, DI
 
         ADDQ            $8, SI
         SUBQ            $1, BX

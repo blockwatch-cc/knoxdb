@@ -1,6 +1,9 @@
 // Copyright (c) 2023 Blockwatch Data Inc.
 // Author: stefan@blockwatch.cc
 
+DATA const0<>+0x0(SB)/1, $(0)
+GLOBL const0<>(SB), (RODATA+NOPTR), $1
+
 DATA const1<>+0x0(SB)/1, $(1)
 GLOBL const1<>(SB), (RODATA+NOPTR), $1
 
