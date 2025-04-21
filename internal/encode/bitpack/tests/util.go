@@ -95,12 +95,12 @@ func unpack(buf []byte, index, log2 int) uint64 {
 	}
 }
 
-func encode[T types.Integer](buf []byte, vals []T, minv, maxv T) ([]byte, int, error) {
+func encode[T types.Integer](buf []byte, vals []T, minv, maxv T) ([]byte, int) {
 	log2 := bits.Len64(uint64(maxv - minv))
 	for i, v := range vals {
 		pack(buf, i, log2, uint64(v-minv))
 	}
-	return buf, log2, nil
+	return buf, log2
 }
 
 func decode[T types.Integer](dst []T, src []byte, log2 int, minv T) (int, error) {

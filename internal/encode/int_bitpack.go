@@ -119,15 +119,9 @@ func (c *BitpackContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) 
 	buf := arena.AllocBytes(sz)[:sz]
 	// clear(c.Packed) // arena does not allocate zeroed memory
 
-	// TODO: BP should not return errors
-	var err error
-	c.Packed, c.Log2, err = bitpack.Encode[T](buf, vals, ctx.Min, ctx.Max)
-	if err != nil {
-		arena.Free(buf)
-		panic(err)
-	}
+	c.Packed, c.Log2 = bitpack.Encode(buf, vals, ctx.Min, ctx.Max)
 	c.free = true
-	c.dec = bitpack.NewDecoder[T](c.Packed, c.Log2, c.For)
+	c.dec = bitpack.NewDecoder(c.Packed, c.Log2, c.For)
 
 	return c
 }

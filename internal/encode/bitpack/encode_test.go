@@ -11,9 +11,13 @@ import (
 )
 
 func TestEncode(t *testing.T) {
+	bptest.EncodeTest(t, Encode[int8], Decode)
 	bptest.EncodeTest(t, Encode[uint8], Decode)
+	bptest.EncodeTest(t, Encode[int16], Decode)
 	bptest.EncodeTest(t, Encode[uint16], Decode)
+	bptest.EncodeTest(t, Encode[int32], Decode)
 	bptest.EncodeTest(t, Encode[uint32], Decode)
+	bptest.EncodeTest(t, Encode[int64], Decode)
 	bptest.EncodeTest(t, Encode[uint64], Decode)
 }
 
@@ -46,7 +50,7 @@ func BenchmarkEncode(b *testing.B) {
 	bptest.EncodeBenchmark(b, Encode[uint64])
 }
 
-func BenchmarkDecodeConst(b *testing.B) {
+func BenchmarkDecode(b *testing.B) {
 	bptest.DecodeBenchmark(b, Encode[uint8], Decode[uint8])
 	bptest.DecodeBenchmark(b, Encode[uint16], Decode[uint16])
 	bptest.DecodeBenchmark(b, Encode[uint32], Decode[uint32])

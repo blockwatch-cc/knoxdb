@@ -4,8 +4,6 @@
 package bitpack
 
 import (
-	"unsafe"
-
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
@@ -41,7 +39,8 @@ func NewDecoder[T types.Integer](buf []byte, log2 int, minv T) *Decoder[T] {
 
 // TODO: use fast decode kernels
 func (d *Decoder[T]) Decode(dst []T) int {
-	n, _ := Decode[T](dst, d.buf, d.log2, d.minv)
+	in := util.FromByteSlice[uint64](d.buf)
+	n, _ := decode[T](dst, in, d.log2, d.minv)
 	return n
 }
 
@@ -72,44 +71,51 @@ func (d *Decoder[T]) DecodeChunk(dst *[128]T, ofs int) int {
 	n := min(128, maxn-ofs)
 	startpos := d.log2 * (ofs >> 3)
 	endpos := min(startpos+d.log2*16, len(d.buf)) // for chunk-size 128
-	Decode[T](dst[:n], d.buf[startpos:endpos], d.log2, d.minv)
+	in := util.FromByteSlice[uint64](d.buf[startpos:endpos])
+	decode[T](dst[:n], in, d.log2, d.minv)
 	return n
 }
 
-func Decode[T types.Integer](out []T, in []byte, log2 int, minv T) (int, error) {
+// out []T, in []uint64, log2 int, minv T
+
+func decode[T types.Integer](out []T, in []uint64, log2 int, minv T) (int, error) {
 	var pack uint64 // Current 64-bit word being unpacked
 	var offset int  // Bit offset within the current word
 	var inIdx int   // Index into the input byte slice
 	var outIdx int  // Index into the output array
 	var lost int    // must shift right next in word instead of left
 
-	inBuff := util.FromByteSlice[T](in)
-
-	bits := int(unsafe.Sizeof(T(0)) * 8)
 	vmask := uint64((1 << log2) - 1) // Mask for b bits, e.g., b=3 -> 0b111
-	rmask := uint64(1<<bits - 1)
+	// rmask := uint64(1<<bits - 1)
 
 	for outIdx = 0; outIdx < len(out); outIdx++ {
 		// Ensure we have enough bits in pack
-		for offset < log2 && inIdx < len(inBuff) {
+		// fmt.Printf("offset => %d log2 => %d inDx => %d len(inBuff) => %d\n", offset, log2, inIdx, len(in))
+		// fmt.Println("(offset < log2 && inIdx < len(inBuff))", offset < log2 && inIdx < len(in))
+		for offset < log2 && inIdx < len(in) {
+			// fmt.Println("hey")
 			if lost > 0 {
-				pack |= uint64(inBuff[inIdx]) & rmask >> (bits - offset - lost) &^ (1<<offset - 1)
+				pack |= uint64(in[inIdx]) >> (BitsSize - offset - lost) &^ (1<<offset - 1)
+				// fmt.Printf("pack(z) => %b\n", pack)
 				inIdx++
 				offset += lost
 				lost = 0
 				if offset < log2 {
-					pack |= uint64(inBuff[inIdx]) << offset
+					pack |= uint64(in[inIdx]) << offset
+					// fmt.Printf("pack(x) => %b\n", pack)
 					lost = offset
-					offset += bits - offset
+					offset += BitsSize - offset
 				}
 			} else {
-				pack |= uint64(inBuff[inIdx]) << offset
+				pack |= uint64(in[inIdx]) << offset
+				// fmt.Printf("pack(c) => %b\n", pack)
 				lost = offset
 				inIdx += util.Bool2int(offset == 0)
-				offset += bits - offset
+				offset += BitsSize - offset
 			}
 		}
 
+		// fmt.Printf("outIdx => %d out => %d\n", outIdx, out[outIdx])
 		// Extract b bits from pack
 		out[outIdx] = T(pack&vmask) + minv
 		pack >>= log2
@@ -117,4 +123,177 @@ func Decode[T types.Integer](out []T, in []byte, log2 int, minv T) (int, error) 
 	}
 
 	return outIdx, nil
+}
+
+func Decode[T types.Integer](out []T, in []byte, log2 int, minv T) (int, error) {
+	var outIdx int
+	var err error
+	switch any(T(0)).(type) {
+	case uint8:
+		outIdx, err = Decode8(util.ReinterpretSlice[T, uint8](out), in, log2, uint8(minv))
+	case uint16:
+		outIdx, err = Decode16(util.ReinterpretSlice[T, uint16](out), in, log2, uint16(minv))
+	case uint32:
+		outIdx, err = Decode32(util.ReinterpretSlice[T, uint32](out), in, log2, uint32(minv))
+	case uint64:
+		outIdx, err = Decode64(util.ReinterpretSlice[T, uint64](out), in, log2, uint64(minv))
+	case int8:
+		outIdx, err = Decode8(util.ReinterpretSlice[T, int8](out), in, log2, int8(minv))
+	case int16:
+		outIdx, err = Decode16(util.ReinterpretSlice[T, int16](out), in, log2, int16(minv))
+	case int32:
+		outIdx, err = Decode32(util.ReinterpretSlice[T, int32](out), in, log2, int32(minv))
+	case int64:
+		outIdx, err = Decode64(util.ReinterpretSlice[T, int64](out), in, log2, int64(minv))
+
+	}
+	return outIdx, err
+}
+
+func Decode8[T int8 | uint8](out []T, in []byte, log2 int, minv T) (int, error) {
+	inBuff := util.FromByteSlice[uint64](in)
+	var blockN int
+	if inBufflen := len(inBuff); inBufflen > 0 {
+		blockN = len(inBuff) / (log2 * BitReadingBlockSize)
+	}
+	if blockN == 0 {
+		// input less than block size, use generic decoder
+		n, err := decode(out, inBuff, log2, minv)
+		return n, err
+	}
+
+	var outpos int
+	groupSize := log2
+	for blockI := range blockN {
+		i := blockI * BitReadingBlockSize * groupSize
+		group1 := inBuff[i+0*groupSize : i+1*groupSize]
+		group2 := inBuff[i+1*groupSize : i+2*groupSize]
+		group3 := inBuff[i+2*groupSize : i+3*groupSize]
+		group4 := inBuff[i+3*groupSize : i+4*groupSize]
+
+		bitread8(out[outpos:], group1, log2, minv)
+		outpos += 64
+		bitread8(out[outpos:], group2, log2, minv)
+		outpos += 64
+		bitread8(out[outpos:], group3, log2, minv)
+		outpos += 64
+		bitread8(out[outpos:], group4, log2, minv)
+		outpos += 64
+	}
+
+	// tail loop
+	n, err := decode(out[outpos:], inBuff[blockN*(groupSize*BitReadingBlockSize):], log2, minv)
+
+	return outpos + n, err
+}
+
+func Decode16[T int16 | uint16](out []T, in []byte, log2 int, minv T) (int, error) {
+	inBuff := util.FromByteSlice[uint64](in)
+	var blockN int
+	if inBufflen := len(inBuff); inBufflen > 0 {
+		blockN = len(inBuff) / (log2 * BitReadingBlockSize)
+	}
+	if blockN == 0 {
+		// input less than block size, use generic decoder
+		n, err := decode(out, inBuff, log2, minv)
+		return n, err
+	}
+
+	var outpos int
+	groupSize := log2
+	for blockI := range blockN {
+		i := blockI * BitReadingBlockSize * groupSize
+		group1 := inBuff[i+0*groupSize : i+1*groupSize]
+		group2 := inBuff[i+1*groupSize : i+2*groupSize]
+		group3 := inBuff[i+2*groupSize : i+3*groupSize]
+		group4 := inBuff[i+3*groupSize : i+4*groupSize]
+
+		bitread16(out[outpos:], group1, log2, minv)
+		outpos += 64
+		bitread16(out[outpos:], group2, log2, minv)
+		outpos += 64
+		bitread16(out[outpos:], group3, log2, minv)
+		outpos += 64
+		bitread16(out[outpos:], group4, log2, minv)
+		outpos += 64
+	}
+
+	// tail loop
+	n, err := decode(out[outpos:], inBuff[blockN*groupSize*BitReadingBlockSize:], log2, minv)
+
+	return outpos + n, err
+}
+
+func Decode32[T int32 | uint32](out []T, in []byte, log2 int, minv T) (int, error) {
+	inBuff := util.FromByteSlice[uint64](in)
+	var blockN int
+	if inBufflen := len(inBuff); inBufflen > 0 {
+		blockN = len(inBuff) / (log2 * BitReadingBlockSize)
+	}
+	if blockN == 0 {
+		// input less than block size, use generic decoder
+		n, err := decode(out, inBuff, log2, minv)
+		return n, err
+	}
+
+	var outpos int
+	groupSize := log2
+	for blockI := range blockN {
+		i := blockI * BitReadingBlockSize * groupSize
+		group1 := inBuff[i+0*groupSize : i+1*groupSize]
+		group2 := inBuff[i+1*groupSize : i+2*groupSize]
+		group3 := inBuff[i+2*groupSize : i+3*groupSize]
+		group4 := inBuff[i+3*groupSize : i+4*groupSize]
+
+		bitread32(out[outpos:], group1, log2, minv)
+		outpos += 64
+		bitread32(out[outpos:], group2, log2, minv)
+		outpos += 64
+		bitread32(out[outpos:], group3, log2, minv)
+		outpos += 64
+		bitread32(out[outpos:], group4, log2, minv)
+		outpos += 64
+	}
+
+	// tail loop
+	n, err := decode(out[outpos:], inBuff[blockN*groupSize*BitReadingBlockSize:], log2, minv)
+
+	return outpos + n, err
+}
+
+func Decode64[T int64 | uint64](out []T, in []byte, log2 int, minv T) (int, error) {
+	inBuff := util.FromByteSlice[uint64](in)
+	var blockN int
+	if inBufflen := len(inBuff); inBufflen > 0 {
+		blockN = len(inBuff) / (log2 * BitReadingBlockSize)
+	}
+	if blockN == 0 {
+		// input less than block size, use generic decoder
+		n, err := decode(out, inBuff, log2, minv)
+		return n, err
+	}
+
+	var outpos int
+	groupSize := log2
+	for blockI := range blockN {
+		i := blockI * BitReadingBlockSize * groupSize
+		group1 := inBuff[i+0*groupSize : i+1*groupSize]
+		group2 := inBuff[i+1*groupSize : i+2*groupSize]
+		group3 := inBuff[i+2*groupSize : i+3*groupSize]
+		group4 := inBuff[i+3*groupSize : i+4*groupSize]
+
+		bitread64(out[outpos:], group1, log2, minv)
+		outpos += 64
+		bitread64(out[outpos:], group2, log2, minv)
+		outpos += 64
+		bitread64(out[outpos:], group3, log2, minv)
+		outpos += 64
+		bitread64(out[outpos:], group4, log2, minv)
+		outpos += 64
+	}
+
+	// tail loop
+	n, err := decode(out[outpos:], inBuff[blockN*groupSize*BitReadingBlockSize:], log2, minv)
+
+	return outpos + n, err
 }
