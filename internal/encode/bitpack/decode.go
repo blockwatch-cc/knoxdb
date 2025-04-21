@@ -54,7 +54,7 @@ func (d *Decoder[T]) DecodeValue(index int) T {
 
 	cbuf := util.FromByteSlice[T](d.buf)
 	word := uint64(cbuf[pos]) & d.rmask >> shift
-	if diff := d.bits - shift; diff < d.log2 {
+	if diff := d.bits - shift; diff < d.log2 && pos+1 < len(cbuf) {
 		word |= uint64(cbuf[pos+1]) << diff
 	}
 

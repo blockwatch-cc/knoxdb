@@ -10,15 +10,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/types"
 )
 
-const (
-	CHUNK_SIZE = 128 // must be pow2!
-	CHUNK_MASK = CHUNK_SIZE - 1
-)
-
-func chunkStart(n int) int {
-	return n &^ CHUNK_MASK
-}
-
 var (
 	BitLen64 = bits.Len64
 )

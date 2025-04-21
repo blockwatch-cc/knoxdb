@@ -124,7 +124,7 @@ func (c *DeltaContainer[T]) MatchEqual(val T, bits, _ *Bitset) {
 		return
 	}
 
-	val -= c.For
+	val -= c.For // FIXME: overflow
 
 	if val%c.Delta == 0 {
 		if n := int(val / c.Delta); n < c.N {

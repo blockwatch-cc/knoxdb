@@ -129,6 +129,12 @@ func (c *FloatAlpRdContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int)
 	// split input float vector into left and right integer parts
 	alp.SplitRD(vals, left, right, c.Shift)
 
+	// TODO
+	// - left: always use dict, analyze unique during split (build array)
+	// - right: always BP, aggregate min/max during split
+	// - skip int analyze and encode direct
+	// - fusion: right always bitpack to max width during split
+
 	// analyze parts
 	lctx := AnalyzeInt(left, true)
 	rctx := AnalyzeInt(right, false)
@@ -324,10 +330,11 @@ func (it *FloatAlpRdIterator[T]) NextChunk() (*[CHUNK_SIZE]T, int) {
 	return &it.vals, ln
 }
 
-func (it *FloatAlpRdIterator[T]) SkipChunk() {
+func (it *FloatAlpRdIterator[T]) SkipChunk() int {
 	it.leftIt.SkipChunk()
 	it.rightIt.SkipChunk()
 	it.ofs = chunkStart(it.ofs + CHUNK_SIZE)
+	return CHUNK_SIZE
 }
 
 func (it *FloatAlpRdIterator[T]) Seek(n int) bool {

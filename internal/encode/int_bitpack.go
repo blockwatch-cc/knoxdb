@@ -15,13 +15,6 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
-// TODO: bitpack package
-// - loop decoder is slow, need fast decode funcs like encode funcs
-// - avx2 decode funcs
-// - fusion compare (without min-FOR)
-//   - to avoid 4x different fusion kernels, every encoding must pack to uint64
-//   - suggest all kernels process 128 values
-
 // TIntegerBitpacked
 type BitpackContainer[T types.Integer] struct {
 	Packed []byte
@@ -458,8 +451,9 @@ func (it *BitpackIterator[T]) NextChunk() (*[CHUNK_SIZE]T, int) {
 	return &it.vals, n
 }
 
-func (it *BitpackIterator[T]) SkipChunk() {
+func (it *BitpackIterator[T]) SkipChunk() int {
 	it.ofs = chunkStart(it.ofs + CHUNK_SIZE)
+	return CHUNK_SIZE
 }
 
 func (it *BitpackIterator[T]) Seek(n int) bool {

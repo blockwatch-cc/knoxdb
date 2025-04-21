@@ -11,12 +11,21 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
+const (
+	CHUNK_SIZE = 128 // must be pow2!
+	CHUNK_MASK = CHUNK_SIZE - 1
+)
+
+func chunkStart(n int) int {
+	return n &^ CHUNK_MASK
+}
+
 type Iterator[T types.Number] interface {
 	Len() int
 	Next() (T, bool)
 	Seek(n int) bool
 	NextChunk() (*[CHUNK_SIZE]T, int)
-	SkipChunk()
+	SkipChunk() int
 	Reset()
 	Close()
 }
@@ -31,8 +40,8 @@ func matchIt[T types.Number](it Iterator[T], cmpFn unsafe.Pointer, val T, bits, 
 	for {
 		// check mask and skip chunks if not required
 		if mask != nil && !mask.ContainsRange(i, i+CHUNK_SIZE-1) {
-			it.SkipChunk()
-			i += CHUNK_SIZE
+			n := it.SkipChunk()
+			i += n
 			if i >= it.Len() {
 				break
 			}
@@ -62,8 +71,8 @@ func matchRangeIt[T types.Number](it Iterator[T], cmpFn unsafe.Pointer, a, b T, 
 	for {
 		// check mask and skip chunks if not required
 		if mask != nil && !mask.ContainsRange(i, i+CHUNK_SIZE-1) {
-			it.SkipChunk()
-			i += CHUNK_SIZE
+			n := it.SkipChunk()
+			i += n
 			if i >= it.Len() {
 				break
 			}

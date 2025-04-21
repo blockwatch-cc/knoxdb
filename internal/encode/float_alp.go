@@ -169,6 +169,13 @@ func (c *FloatAlpContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int) F
 
 	// fmt.Printf("ALP [%d,%d] vals=%d ex=%d\n", c.Exponent, c.Factor, len(s.Integers), len(s.Exceptions))
 
+	// TODO
+	// - aggregate min/max on the fly, set in context -> bitpack width
+	// - encode integers as BP (no analysis needed)
+	// - encode exceptions as raw (no analysis needed)
+	// - encode ex positions as BP (no analysis needed: ex list is ordered: min/max = first/last)
+	// - kernel fusion? maybe on decode only
+
 	// encode child containers
 	c.Values = EncodeInt(nil, s.Integers, lvl-1)
 	if len(s.Exceptions) > 0 {
@@ -370,9 +377,10 @@ func (it *FloatAlpIterator[T]) NextChunk() (*[CHUNK_SIZE]T, int) {
 	return &it.vals, n
 }
 
-func (it *FloatAlpIterator[T]) SkipChunk() {
+func (it *FloatAlpIterator[T]) SkipChunk() int {
 	it.valIt.SkipChunk()
 	it.ofs = chunkStart(it.ofs + CHUNK_SIZE)
+	return CHUNK_SIZE
 }
 
 func (it *FloatAlpIterator[T]) Seek(n int) bool {

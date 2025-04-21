@@ -15,8 +15,6 @@ import (
 )
 
 type FloatContext[T types.Float] struct {
-	// Min        T                // vector minimum
-	// Max        T                // vector maximum
 	PhyBits    int              // float bit width
 	NumUnique  int              // vector cardinality (hint, may not be precise)
 	NumRuns    int              // vector runs
@@ -40,7 +38,7 @@ func AnalyzeFloat[T types.Float](vals []T, checkUnique, checkALP bool) *FloatCon
 	// unrolled run count
 	c.NumRuns = 1
 	i := 0
-	for range (len(vals) - 1) / 8 {
+	for range (len(vals) - 7) / 8 {
 		c.NumRuns += util.Bool2int(vals[i] != vals[i+1]) +
 			util.Bool2int(vals[i+1] != vals[i+2]) +
 			util.Bool2int(vals[i+2] != vals[i+3]) +
