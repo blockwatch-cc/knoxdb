@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/arena"
-	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/encode/s8b"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
@@ -18,11 +17,11 @@ import (
 
 // TIntegerSimple8
 type Simple8Container[T types.Integer] struct {
-	For      T
-	Packed   []byte
-	Unpacked []T // TODO: fusion kernels ok, iterator WIP
-	free     bool
-	typ      types.BlockType
+	For    T
+	Packed []byte
+	N      int
+	it     *s8b.Iterator[T]
+	free   bool
 }
 
 func (c *Simple8Container[T]) Info() string {
@@ -35,10 +34,9 @@ func (c *Simple8Container[T]) Close() {
 		c.free = false
 	}
 	c.Packed = nil
-	if c.Unpacked != nil {
-		// FIXME: returns uint to int pools (problem?)
-		arena.Free(c.Unpacked)
-		c.Unpacked = nil
+	if c.it != nil {
+		c.it.Close()
+		c.it = nil
 	}
 	putSimple8Container[T](c)
 }
@@ -48,15 +46,16 @@ func (c *Simple8Container[T]) Type() IntegerContainerType {
 }
 
 func (c *Simple8Container[T]) Len() int {
-	if c.Unpacked == nil {
-		c.decodeAll()
-	}
-	return len(c.Unpacked)
+	return c.N
 }
 
 func (c *Simple8Container[T]) Size() int {
 	return 1 + num.UvarintLen(uint64(c.For)) + num.UvarintLen(uint64(len(c.Packed))) +
 		len(c.Packed)
+}
+
+func (c *Simple8Container[T]) Iterator() Iterator[T] {
+	return s8b.NewIterator[T](c.Packed, c.N)
 }
 
 func (c *Simple8Container[T]) Store(dst []byte) []byte {
@@ -79,344 +78,147 @@ func (c *Simple8Container[T]) Load(buf []byte) ([]byte, error) {
 	buf = buf[n:]
 	c.Packed = buf[:int(v)]
 	c.free = false
-	c.typ = BlockType[T]()
+	c.N = s8b.CountValues(c.Packed)
 	return buf[int(v):], nil
 }
 
 func (c *Simple8Container[T]) Get(n int) T {
-	if c.Unpacked == nil {
-		c.decodeAll()
+	if c.it == nil {
+		c.it = s8b.NewIterator[T](c.Packed, c.N)
 	}
-	return c.Unpacked[n] + c.For
+	c.it.Seek(n)
+	val, _ := c.it.Next()
+	return val + c.For
 }
 
 func (c *Simple8Container[T]) AppendTo(sel []uint32, dst []T) []T {
-	if c.Unpacked == nil {
-		c.decodeAll()
-	}
+	it := c.Iterator()
 	if sel == nil {
-		dst = append(dst, c.Unpacked...)
+		// TODO: support FOR in s8b decoder/iterator
+		for {
+			vals, n := it.NextChunk()
+			if n == 0 {
+				break
+			}
+			for _, v := range vals[:n] {
+				dst = append(dst, v+c.For)
+			}
+		}
 	} else {
 		for _, v := range sel {
-			dst = append(dst, c.Unpacked[int(v)]+c.For)
+			it.Seek(int(v))
+			val, _ := it.Next()
+			dst = append(dst, val+c.For)
 		}
 	}
+	it.Close()
 	return dst
 }
 
 func (c *Simple8Container[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) IntegerContainer[T] {
-	c.For = ctx.Min
-	c.typ = BlockType[T]()
-
 	sz := s8b.EstimateMaxSize(len(vals), ctx.Min, ctx.Max) * 8
 	buf := arena.AllocBytes(sz)[:sz]
 	var err error
-	switch c.typ {
-	case types.BlockInt64:
-		v := util.ReinterpretSlice[T, int64](vals)
-		buf, err = s8b.EncodeInt64(buf, v, int64(ctx.Min), int64(ctx.Max))
-	case types.BlockUint64:
+	switch any(T(0)).(type) {
+	case uint64:
 		v := util.ReinterpretSlice[T, uint64](vals)
 		buf, err = s8b.EncodeUint64(buf, v, uint64(ctx.Min), uint64(ctx.Max))
-	case types.BlockInt32:
-		v := util.ReinterpretSlice[T, int32](vals)
-		buf, err = s8b.EncodeInt32(buf, v, int32(ctx.Min), int32(ctx.Max))
-	case types.BlockUint32:
+	case uint32:
 		v := util.ReinterpretSlice[T, uint32](vals)
 		buf, err = s8b.EncodeUint32(buf, v, uint32(ctx.Min), uint32(ctx.Max))
-	case types.BlockInt16:
-		v := util.ReinterpretSlice[T, int16](vals)
-		buf, err = s8b.EncodeInt16(buf, v, int16(ctx.Min), int16(ctx.Max))
-	case types.BlockUint16:
+	case uint16:
 		v := util.ReinterpretSlice[T, uint16](vals)
 		buf, err = s8b.EncodeUint16(buf, v, uint16(ctx.Min), uint16(ctx.Max))
-	case types.BlockInt8:
-		v := util.ReinterpretSlice[T, int8](vals)
-		buf, err = s8b.EncodeInt8(buf, v, int8(ctx.Min), int8(ctx.Max))
-	case types.BlockUint8:
+	case uint8:
 		v := util.ReinterpretSlice[T, uint8](vals)
 		buf, err = s8b.EncodeUint8(buf, v, uint8(ctx.Min), uint8(ctx.Max))
+	case int64:
+		v := util.ReinterpretSlice[T, int64](vals)
+		buf, err = s8b.EncodeInt64(buf, v, int64(ctx.Min), int64(ctx.Max))
+	case int32:
+		v := util.ReinterpretSlice[T, int32](vals)
+		buf, err = s8b.EncodeInt32(buf, v, int32(ctx.Min), int32(ctx.Max))
+	case int16:
+		v := util.ReinterpretSlice[T, int16](vals)
+		buf, err = s8b.EncodeInt16(buf, v, int16(ctx.Min), int16(ctx.Max))
+	case int8:
+		v := util.ReinterpretSlice[T, int8](vals)
+		buf, err = s8b.EncodeInt8(buf, v, int8(ctx.Min), int8(ctx.Max))
 	}
 	if err != nil {
 		panic(err)
 	}
 	c.Packed = buf
 	c.free = true
+	c.For = ctx.Min
+	c.N = len(vals)
 
 	return c
 }
 
-func (c *Simple8Container[T]) DecodeChunk(dst *[CHUNK_SIZE]T, ofs int) {
-	if c.Unpacked == nil {
-		c.decodeAll()
-	}
-	copy(dst[:], c.Unpacked[ofs:])
-
-	// TODO: s8b iterator, seek to ofs, then decode N
-}
-
-func (c *Simple8Container[T]) decodeAll() {
-	n := s8b.CountValues(c.Packed)
-	if n < 0 {
-		panic(fmt.Errorf("simple8 corrupted data"))
-	}
-	var err error
-	switch c.typ {
-	case types.BlockInt64, types.BlockUint64:
-		u64 := arena.Alloc[uint64](n)[:n]
-		n, err = s8b.DecodeUint64(u64, c.Packed)
-		c.Unpacked = util.ReinterpretSlice[uint64, T](u64[:n])
-	case types.BlockInt32, types.BlockUint32:
-		u32 := arena.Alloc[uint32](n)[:n]
-		n, err = s8b.DecodeUint32(u32, c.Packed)
-		c.Unpacked = util.ReinterpretSlice[uint32, T](u32[:n])
-	case types.BlockInt16, types.BlockUint16:
-		u16 := arena.Alloc[uint16](n)[:n]
-		n, err = s8b.DecodeUint16(u16, c.Packed)
-		c.Unpacked = util.ReinterpretSlice[uint16, T](u16[:n])
-	case types.BlockInt8, types.BlockUint8:
-		u8 := arena.Alloc[uint8](n)[:n]
-		n, err = s8b.DecodeUint8(u8, c.Packed)
-		c.Unpacked = util.ReinterpretSlice[uint8, T](u8[:n])
-	}
-	if err != nil {
-		panic(err)
-	}
-}
-
 func (c *Simple8Container[T]) MatchEqual(val T, bits, _ *Bitset) {
-	// Note: Fusion kernel may be slower based on data type and contents
-	// return s8b.Equal(c.Packed, uint64(val), bits)
-
-	// need unpacked data
-	if c.Unpacked == nil {
-		c.decodeAll()
-	}
-
 	// sanity checks of value range
 	if val < c.For {
 		return
 	}
-	val -= c.For
 
-	// use type-based matcher
-	var n int64
-	switch c.typ {
-	case types.BlockInt64, types.BlockUint64:
-		u64 := util.ReinterpretSlice[T, uint64](c.Unpacked)
-		n = cmp.Uint64Equal(u64, uint64(val), bits.Bytes())
-
-	case types.BlockInt32, types.BlockUint32:
-		u32 := util.ReinterpretSlice[T, uint32](c.Unpacked)
-		n = cmp.Uint32Equal(u32, uint32(val), bits.Bytes())
-
-	case types.BlockInt16, types.BlockUint16:
-		u16 := util.ReinterpretSlice[T, uint16](c.Unpacked)
-		n = cmp.Uint16Equal(u16, uint16(val), bits.Bytes())
-
-	case types.BlockInt8, types.BlockUint8:
-		u8 := util.ReinterpretSlice[T, uint8](c.Unpacked)
-		n = cmp.Uint8Equal(u8, uint8(val), bits.Bytes())
-	}
-	bits.ResetCount(int(n))
+	// use Fusion kernel, safely subtract FOR
+	s8b.Equal(c.Packed, uint64(val)-uint64(c.For), bits)
 }
 
 func (c *Simple8Container[T]) MatchNotEqual(val T, bits, _ *Bitset) {
-	// Note: Fusion kernel may be slower based on data type and contents
-	// return s8b.NotEqual(c.Packed, uint64(val), bits)
-
-	// need unpacked data
-	if c.Unpacked == nil {
-		c.decodeAll()
-	}
-
 	// sanity checks of value range
 	if val < c.For {
 		bits.One()
 		return
 	}
-	val -= c.For
 
-	// use type-based matcher
-	var n int64
-	switch c.typ {
-	case types.BlockInt64, types.BlockUint64:
-		u64 := util.ReinterpretSlice[T, uint64](c.Unpacked)
-		n = cmp.Uint64NotEqual(u64, uint64(val), bits.Bytes())
-
-	case types.BlockInt32, types.BlockUint32:
-		u32 := util.ReinterpretSlice[T, uint32](c.Unpacked)
-		n = cmp.Uint32NotEqual(u32, uint32(val), bits.Bytes())
-
-	case types.BlockInt16, types.BlockUint16:
-		u16 := util.ReinterpretSlice[T, uint16](c.Unpacked)
-		n = cmp.Uint16NotEqual(u16, uint16(val), bits.Bytes())
-
-	case types.BlockInt8, types.BlockUint8:
-		u8 := util.ReinterpretSlice[T, uint8](c.Unpacked)
-		n = cmp.Uint8NotEqual(u8, uint8(val), bits.Bytes())
-	}
-	bits.ResetCount(int(n))
+	// use Fusion kernel, safely subtract FOR
+	s8b.NotEqual(c.Packed, uint64(val)-uint64(c.For), bits)
 }
 
 func (c *Simple8Container[T]) MatchLess(val T, bits, mask *Bitset) {
-	// Note: Fusion kernel may be slower based on data type and contents
-	// return s8b.Less(c.Packed, uint64(val), bits)
-
-	// need unpacked data
-	if c.Unpacked == nil {
-		c.decodeAll()
-	}
-
 	// sanity checks of value range
 	if val < c.For {
 		return
 	}
-	val -= c.For
 
-	// use type-based matcher
-	var n int64
-	switch c.typ {
-	case types.BlockInt64, types.BlockUint64:
-		u64 := util.ReinterpretSlice[T, uint64](c.Unpacked)
-		n = cmp.Uint64Less(u64, uint64(val), bits.Bytes())
-
-	case types.BlockInt32, types.BlockUint32:
-		u32 := util.ReinterpretSlice[T, uint32](c.Unpacked)
-		n = cmp.Uint32Less(u32, uint32(val), bits.Bytes())
-
-	case types.BlockInt16, types.BlockUint16:
-		u16 := util.ReinterpretSlice[T, uint16](c.Unpacked)
-		n = cmp.Uint16Less(u16, uint16(val), bits.Bytes())
-
-	case types.BlockInt8, types.BlockUint8:
-		u8 := util.ReinterpretSlice[T, uint8](c.Unpacked)
-		n = cmp.Uint8Less(u8, uint8(val), bits.Bytes())
-	}
-	bits.ResetCount(int(n))
+	// use Fusion kernel, safely subtract FOR
+	s8b.Less(c.Packed, uint64(val)-uint64(c.For), bits)
 }
 
 func (c *Simple8Container[T]) MatchLessEqual(val T, bits, mask *Bitset) {
-	// Note: Fusion kernel may be slower based on data type and contents
-	// return s8b.LessEqual(c.Packed, uint64(val), bits)
-
-	// need unpacked data
-	if c.Unpacked == nil {
-		c.decodeAll()
-	}
-
 	// sanity checks of value range
 	if val < c.For {
 		return
 	}
-	val -= c.For
 
-	// use type-based matcher
-	var n int64
-	switch c.typ {
-	case types.BlockInt64, types.BlockUint64:
-		u64 := util.ReinterpretSlice[T, uint64](c.Unpacked)
-		n = cmp.Uint64LessEqual(u64, uint64(val), bits.Bytes())
-
-	case types.BlockInt32, types.BlockUint32:
-		u32 := util.ReinterpretSlice[T, uint32](c.Unpacked)
-		n = cmp.Uint32LessEqual(u32, uint32(val), bits.Bytes())
-
-	case types.BlockInt16, types.BlockUint16:
-		u16 := util.ReinterpretSlice[T, uint16](c.Unpacked)
-		n = cmp.Uint16LessEqual(u16, uint16(val), bits.Bytes())
-
-	case types.BlockInt8, types.BlockUint8:
-		u8 := util.ReinterpretSlice[T, uint8](c.Unpacked)
-		n = cmp.Uint8LessEqual(u8, uint8(val), bits.Bytes())
-	}
-	bits.ResetCount(int(n))
+	// use Fusion kernel, safely subtract FOR
+	s8b.LessEqual(c.Packed, uint64(val)-uint64(c.For), bits)
 }
 
 func (c *Simple8Container[T]) MatchGreater(val T, bits, mask *Bitset) {
-	// Note: Fusion kernel may be slower based on data type and contents
-	// return s8b.Greater(c.Packed, uint64(val), bits)
-
-	// need unpacked data
-	if c.Unpacked == nil {
-		c.decodeAll()
-	}
-
 	// sanity checks of value range
 	if val < c.For {
 		bits.One()
 		return
 	}
-	val -= c.For
 
-	// use type-based matcher
-	var n int64
-	switch c.typ {
-	case types.BlockInt64, types.BlockUint64:
-		u64 := util.ReinterpretSlice[T, uint64](c.Unpacked)
-		n = cmp.Uint64Greater(u64, uint64(val), bits.Bytes())
-
-	case types.BlockInt32, types.BlockUint32:
-		u32 := util.ReinterpretSlice[T, uint32](c.Unpacked)
-		n = cmp.Uint32Greater(u32, uint32(val), bits.Bytes())
-
-	case types.BlockInt16, types.BlockUint16:
-		u16 := util.ReinterpretSlice[T, uint16](c.Unpacked)
-		n = cmp.Uint16Greater(u16, uint16(val), bits.Bytes())
-
-	case types.BlockInt8, types.BlockUint8:
-		u8 := util.ReinterpretSlice[T, uint8](c.Unpacked)
-		n = cmp.Uint8Greater(u8, uint8(val), bits.Bytes())
-	}
-	bits.ResetCount(int(n))
+	// use Fusion kernel, safely subtract FOR
+	s8b.Greater(c.Packed, uint64(val)-uint64(c.For), bits)
 }
 
 func (c *Simple8Container[T]) MatchGreaterEqual(val T, bits, mask *Bitset) {
-	// Note: Fusion kernel may be slower based on data type and contents
-	// return s8b.GreaterEqual(c.Packed, uint64(val), bits)
-
-	// need unpacked data
-	if c.Unpacked == nil {
-		c.decodeAll()
-	}
-
 	// sanity checks of value range
 	if val < c.For {
 		val = c.For
 	}
-	val -= c.For
 
-	// use type-based matcher
-	var n int64
-	switch c.typ {
-	case types.BlockInt64, types.BlockUint64:
-		u64 := util.ReinterpretSlice[T, uint64](c.Unpacked)
-		n = cmp.Uint64GreaterEqual(u64, uint64(val), bits.Bytes())
-
-	case types.BlockInt32, types.BlockUint32:
-		u32 := util.ReinterpretSlice[T, uint32](c.Unpacked)
-		n = cmp.Uint32GreaterEqual(u32, uint32(val), bits.Bytes())
-
-	case types.BlockInt16, types.BlockUint16:
-		u16 := util.ReinterpretSlice[T, uint16](c.Unpacked)
-		n = cmp.Uint16GreaterEqual(u16, uint16(val), bits.Bytes())
-
-	case types.BlockInt8, types.BlockUint8:
-		u8 := util.ReinterpretSlice[T, uint8](c.Unpacked)
-		n = cmp.Uint8GreaterEqual(u8, uint8(val), bits.Bytes())
-	}
-	bits.ResetCount(int(n))
+	// use Fusion kernel, safely subtract FOR
+	s8b.GreaterEqual(c.Packed, uint64(val)-uint64(c.For), bits)
 }
 
 func (c *Simple8Container[T]) MatchBetween(a, b T, bits, mask *Bitset) {
-	// Note: Fusion kernel may be slower based on data type and contents
-	// return s8b.Between(c.Packed, uint64(a), uint64(b), bits)
-
-	// need unpacked data
-	if c.Unpacked == nil {
-		c.decodeAll()
-	}
-
 	// sanity checks of value range
 	if b < c.For {
 		return
@@ -425,81 +227,74 @@ func (c *Simple8Container[T]) MatchBetween(a, b T, bits, mask *Bitset) {
 		a = c.For
 	}
 
-	// ensure overflow free calculations
-	a = T(uint64(a - c.For))
-	b = T(uint64(b - c.For))
-
-	// use type-based matcher, after min-FOR all values can be treated as
-	// unsigned
-	var n int64
-	switch c.typ {
-	case types.BlockUint64, types.BlockInt64:
-		u64 := util.ReinterpretSlice[T, uint64](c.Unpacked)
-		n = cmp.Uint64Between(u64, uint64(a), uint64(b), bits.Bytes())
-
-	case types.BlockUint32, types.BlockInt32:
-		u32 := util.ReinterpretSlice[T, uint32](c.Unpacked)
-		n = cmp.Uint32Between(u32, uint32(a), uint32(b), bits.Bytes())
-
-	case types.BlockUint16, types.BlockInt16:
-		u16 := util.ReinterpretSlice[T, uint16](c.Unpacked)
-		n = cmp.Uint16Between(u16, uint16(a), uint16(b), bits.Bytes())
-
-	case types.BlockUint8, types.BlockInt8:
-		u8 := util.ReinterpretSlice[T, uint8](c.Unpacked)
-		n = cmp.Uint8Between(u8, uint8(a), uint8(b), bits.Bytes())
-	}
-	bits.ResetCount(int(n))
+	// use Fusion kernel, safely subtract FOR
+	s8b.Between(c.Packed, uint64(a)-uint64(c.For), uint64(b)-uint64(c.For), bits)
 }
 
 func (c *Simple8Container[T]) MatchInSet(s any, bits, mask *Bitset) {
-	if c.Unpacked == nil {
-		c.decodeAll()
-	}
-
+	it := c.Iterator()
 	set := s.(*xroar.Bitmap)
 	if mask != nil {
 		// only process values from mask
 		u32 := arena.Alloc[uint32](mask.Count())
 		for _, k := range mask.Indexes(u32) {
 			i := int(k)
-			if set.Contains(uint64(c.Unpacked[i] + c.For)) {
+			it.Seek(i)
+			val, _ := it.Next()
+			if set.Contains(uint64(val + c.For)) {
 				bits.Set(i)
 			}
 		}
 		arena.Free(u32)
 	} else {
-		for i, v := range c.Unpacked {
-			if set.Contains(uint64(v + c.For)) {
-				bits.Set(i)
+		var i int
+		for {
+			vals, n := it.NextChunk()
+			if n == 0 {
+				break
+			}
+			for _, v := range vals[:n] {
+				if set.Contains(uint64(v + c.For)) {
+					bits.Set(i)
+				}
+				i++
 			}
 		}
 	}
+	it.Close()
 }
 
 func (c *Simple8Container[T]) MatchNotInSet(s any, bits, mask *Bitset) {
-	if c.Unpacked == nil {
-		c.decodeAll()
-	}
-
+	it := c.Iterator()
 	set := s.(*xroar.Bitmap)
 	if mask != nil {
 		// only process values from mask
 		u32 := arena.Alloc[uint32](mask.Count())
 		for _, k := range mask.Indexes(u32) {
 			i := int(k)
-			if !set.Contains(uint64(c.Unpacked[i] + c.For)) {
+			it.Seek(i)
+			val, _ := it.Next()
+			if !set.Contains(uint64(val + c.For)) {
 				bits.Set(i)
 			}
 		}
 		arena.Free(u32)
 	} else {
-		for i, v := range c.Unpacked {
-			if !set.Contains(uint64(v + c.For)) {
-				bits.Set(i)
+		var i int
+		for {
+			vals, n := it.NextChunk()
+			if n == 0 {
+				break
+			}
+			for _, v := range vals[:n] {
+				if !set.Contains(uint64(v + c.For)) {
+					bits.Set(i)
+				}
+				i++
 			}
 		}
 	}
+	it.Close()
 }
 
 type Simple8Factory struct {
@@ -511,6 +306,15 @@ type Simple8Factory struct {
 	u32Pool sync.Pool
 	u16Pool sync.Pool
 	u8Pool  sync.Pool
+
+	i64ItPool sync.Pool
+	i32ItPool sync.Pool
+	i16ItPool sync.Pool
+	i8ItPool  sync.Pool
+	u64ItPool sync.Pool
+	u32ItPool sync.Pool
+	u16ItPool sync.Pool
+	u8ItPool  sync.Pool
 }
 
 func newSimple8Container[T types.Integer]() IntegerContainer[T] {
@@ -582,9 +386,4 @@ var simple8Factory = Simple8Factory{
 	u8Pool: sync.Pool{
 		New: func() any { return new(Simple8Container[uint8]) },
 	},
-}
-
-// TODO
-func (c *Simple8Container[T]) Iterator() Iterator[T] {
-	return nil
 }
