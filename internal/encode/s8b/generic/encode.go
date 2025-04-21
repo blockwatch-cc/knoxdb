@@ -116,7 +116,7 @@ func Encode[T types.Integer](dst []byte, src []T, minv, maxv T) ([]byte, error) 
 		return nil, ErrInvalidBufferLength
 	}
 
-	// pick selector based on input bit width
+	// pick selector based on input bit width and minv (zero or not)
 	selector := packSelector[T](minv)
 
 	// determine the maximum possible bit width for this vector (post min-FOR)

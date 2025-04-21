@@ -9,11 +9,11 @@ import (
 	"blockwatch.cc/knoxdb/internal/types"
 )
 
-func unpack_zero[T types.Integer](_ uint64, _ unsafe.Pointer) {
-	// noop
+func unpack_zero[T types.Integer](_ uint64, p unsafe.Pointer) {
+	clear((*[128]T)(p)[:])
 }
 
-func unpack_one[T types.Integer](v uint64, p unsafe.Pointer) {
+func unpack_one[T types.Integer](_ uint64, p unsafe.Pointer) {
 	dst := (*[128]T)(p)
 	for i := range dst {
 		dst[i] = 1

@@ -106,12 +106,69 @@ func CountValues(src []byte) int {
 	return n
 }
 
-func DecodeWord[T types.Unsigned](dst []T, buf []byte) (int, error) {
-	if len(buf) == 0 {
-		return 0, nil
+// Seek returns code word position in src and value offset inside code word.
+func Seek(src []byte, v int) (int, int) {
+	var (
+		i int = 7 // little endian encoding
+		n int
+	)
+
+	if v == 0 {
+		return 0, 0
 	}
-	if len(buf) != 8 {
-		return 0, ErrInvalidBufferLength
+
+	// skip large portions when seeking further ahead
+	if v > 256 {
+		for range len(src) / 64 {
+			n += maxNPerSelector[src[i]>>4]
+			n += maxNPerSelector[src[i+8]>>4]
+			n += maxNPerSelector[src[i+16]>>4]
+			n += maxNPerSelector[src[i+24]>>4]
+			n += maxNPerSelector[src[i+32]>>4]
+			n += maxNPerSelector[src[i+40]>>4]
+			n += maxNPerSelector[src[i+48]>>4]
+			n += maxNPerSelector[src[i+56]>>4]
+			i += 64
+			if n >= v {
+				break
+			}
+		}
+	}
+
+	switch {
+	case v < n:
+		// walk back in case large ranges overcounted
+		i -= 8
+		for i >= -1 {
+			n -= maxNPerSelector[src[i]>>4]
+			if n <= v {
+				return i - 7, v - n
+			}
+			i -= 8
+		}
+	case n > 0 && v == n:
+		// exact match (seldom)
+		return i - 7, 0
+	default:
+		// walk forward (regular and tail case)
+		for i < len(src) {
+			s := maxNPerSelector[src[i]>>4]
+			if n+s > v {
+				return i - 7, v - n
+			}
+			n += s
+			i += 8
+		}
+	}
+
+	// not found
+	return -1, -1
+}
+
+func DecodeWord[T types.Integer](dst []T, buf []byte) int {
+	// ensure space
+	if len(buf) < 4 || len(dst) < 128 {
+		return 0
 	}
 
 	// pick selector based on input bit width
@@ -120,5 +177,5 @@ func DecodeWord[T types.Unsigned](dst []T, buf []byte) (int, error) {
 	v := binary.LittleEndian.Uint64(buf)
 	sel := (v >> 60)
 	selector[sel](v, unsafe.Pointer(&dst[0]))
-	return maxNPerSelector[sel], nil
+	return maxNPerSelector[sel]
 }

@@ -41,9 +41,10 @@ func BenchmarkEncodeLegacy(b *testing.B) {
 	for _, c := range tests.MakeBenchmarks[uint64]() {
 		b.Run("uint64/"+c.Name, func(b *testing.B) {
 			b.SetBytes(int64(8 * len(c.Data)))
-			for range b.N {
+			for b.Loop() {
 				EncodeLegacy(slices.Clone(c.Data))
 			}
+			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 		})
 	}
 }
@@ -54,9 +55,10 @@ func BenchmarkDecodeLegacy(b *testing.B) {
 		dec := make([]uint64, len(c.Data))
 		b.Run("uint64/"+c.Name, func(b *testing.B) {
 			b.SetBytes(int64(len(c.Data) * 8))
-			for range b.N {
+			for b.Loop() {
 				_, _ = DecodeLegacy(dec, enc)
 			}
+			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 		})
 	}
 }
@@ -66,9 +68,10 @@ func BenchmarkCountLegacy(b *testing.B) {
 		enc, _ := EncodeLegacy(slices.Clone(c.Data))
 		b.Run("uint64/"+c.Name, func(b *testing.B) {
 			b.SetBytes(int64(len(c.Data) * 8))
-			for range b.N {
+			for b.Loop() {
 				_, _ = CountLegacy(util.ToByteSlice(enc))
 			}
+			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 		})
 	}
 }

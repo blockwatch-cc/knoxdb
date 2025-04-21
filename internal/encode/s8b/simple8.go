@@ -1,11 +1,10 @@
-// Copyright (c) 2022 Blockwatch Data Inc.
-// Author: stefan@blockwatch.cc
+// Copyright (c) 2022-2025 Blockwatch Data Inc.
+// Author: alex@blockwatch,stefan@blockwatch.cc
 
 package s8b
 
 import (
 	"math/bits"
-	"sort"
 
 	"blockwatch.cc/knoxdb/internal/encode/s8b/avx2"
 	"blockwatch.cc/knoxdb/internal/encode/s8b/avx512"
@@ -147,135 +146,3 @@ func packRemainder(k int) (n int) {
 	}
 	return
 }
-
-type Index interface {
-	Len() int
-	End() int
-	Find(n int) int
-}
-
-type IndexImpl[T uint16 | uint32] struct {
-	ends []T
-}
-
-func (idx IndexImpl[T]) Len() int {
-	return len(idx.ends)
-}
-
-func (idx IndexImpl[T]) End() int {
-	return int(idx.ends[len(idx.ends)-1])
-}
-
-func (idx IndexImpl[T]) Find(n int) int {
-	i := sort.Search(len(idx.ends), func(i int) bool {
-		return idx.ends[i] >= T(n)
-	})
-	return i
-}
-
-var selector = [16]int{128, 128, 60, 30, 20, 15, 12, 10, 8, 7, 6, 5, 4, 3, 2, 1}
-
-func MakeIndex[T uint16 | uint32](src []byte, dst []T) Index {
-	var (
-		i int
-		n T
-	)
-
-	if dst == nil {
-		dst = make([]T, 0)
-	}
-	dst = dst[:0]
-
-	for range len(src) / 64 {
-		n += T(selector[src[i]>>4])
-		dst = append(dst, n)
-		i += 8
-		n += T(selector[src[i]>>4])
-		dst = append(dst, n)
-		i += 8
-		n += T(selector[src[i]>>4])
-		dst = append(dst, n)
-		i += 8
-		n += T(selector[src[i]>>4])
-		dst = append(dst, n)
-		i += 8
-		n += T(selector[src[i]>>4])
-		dst = append(dst, n)
-		i += 8
-		n += T(selector[src[i]>>4])
-		dst = append(dst, n)
-		i += 8
-		n += T(selector[src[i]>>4])
-		dst = append(dst, n)
-		i += 8
-		n += T(selector[src[i]>>4])
-		dst = append(dst, n)
-		i += 8
-	}
-
-	for i < len(src) {
-		n += T(selector[src[i]>>4])
-		dst = append(dst, n)
-		i += 8
-	}
-
-	return &IndexImpl[T]{ends: dst}
-}
-
-type Iterator[T types.Unsigned] struct {
-	src []byte
-	ofs int
-	pos int
-	n   int
-	tmp [60]T
-}
-
-func NewIterator[T types.Unsigned](buf []byte) *Iterator[T] {
-	return &Iterator[T]{
-		src: buf,
-	}
-}
-
-// it := s8b.NewIterator[uint64](c.Packed)
-// var i int
-// for {
-// 	vals, err := it.Next()
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	if len(vals) == 0 {
-// 		break
-// 	}
-// 	for _, v := range vals {
-// 		val := T(v) + c.For
-// 		if set.Contains(uint64(val)) {
-// 			bits.Set(i)
-// 		}
-// 		i++
-// 	}
-// }
-
-func (it *Iterator[T]) Next() ([]T, error) {
-	if it.ofs >= len(it.src) {
-		return nil, nil
-	}
-	it.pos += it.n
-
-	n, err := generic.DecodeWord(it.tmp[:], it.src[it.ofs:])
-	if err != nil {
-		return nil, err
-	}
-	it.ofs += 8
-	it.n = n
-
-	return it.tmp[:n], nil
-}
-
-// TODO: find a given value by position, amortize cost by caching the word or its decoded vals
-// func (it *Iterator[T]) Seek(n int) (T, error) {
-// 	if n>it.pos {
-// 		it.pos = 0
-// 		it.n = 0
-// 		it.ofs = 0
-// 	}
-// }

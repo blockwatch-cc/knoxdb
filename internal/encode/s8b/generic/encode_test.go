@@ -68,9 +68,10 @@ func BenchmarkCount(b *testing.B) {
 		require.NoError(b, err)
 		b.Run("uint64/"+c.Name, func(b *testing.B) {
 			b.SetBytes(int64(len(c.Data) * 8))
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				_ = CountValues(buf)
 			}
+			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 		})
 	}
 }
@@ -136,6 +137,41 @@ func BenchmarkZeroOrOne(b *testing.B) {
 		b.Run(c.Name, func(b *testing.B) {
 			for range b.N {
 				_, _ = zeroOrOne(unsafe.Pointer(&c.Data[0]), minv)
+			}
+		})
+	}
+}
+
+func TestSeek(t *testing.T) {
+	for _, c := range stests.MakeTests[uint64]() {
+		t.Run(c.Name, func(t *testing.T) {
+			if c.Err {
+				t.Skip()
+			}
+			in := c.Data
+			if c.Gen != nil {
+				in = c.Gen()
+			}
+			var minv, maxv uint64
+			if len(in) > 0 {
+				minv, maxv = slices.Min(in), slices.Max(in)
+			}
+			buf, err := Encode(make([]byte, len(in)*8), in, minv, maxv)
+			require.NoError(t, err)
+			dst := make([]uint64, 128)
+
+			for i, v := range in {
+				// t.Logf("Seek to %d, expecting %d", i, v)
+				bpos, vpos := Seek(buf, i)
+				require.NotEqual(t, -1, bpos, "illegal buffer pos")
+				require.NotEqual(t, -1, vpos, "illegal code word pos")
+				require.LessOrEqual(t, vpos, 128, "code word pos too large")
+				require.Less(t, bpos, len(buf), "buf pos too large")
+				// t.Logf("> found buf[%d] sel=%d vals=%d code[%d]",
+				// 	bpos, buf[bpos+7]>>4, maxNPerSelector[buf[bpos+7]>>4], vpos)
+				n := DecodeWord(dst, buf[bpos:])
+				require.LessOrEqual(t, vpos, n, "vpos behind word contents")
+				require.Equal(t, v, dst[vpos]+minv, "seek position mismatch")
 			}
 		})
 	}
