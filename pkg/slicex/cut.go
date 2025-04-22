@@ -22,3 +22,14 @@ func CutFunc[T ~[]E, E any](s T, f func(e E) bool) (T, T, bool) {
 	}
 	return left, right, len(right) > 0
 }
+
+// Fills a slices with given value. Slice len must be > 0.
+func Fill[T ~[]E, E any](s T, e E) {
+	if len(s) == 0 {
+		return
+	}
+	s[0] = e
+	for j := 1; j < len(s); j *= 2 {
+		copy(s[j:], s[:j])
+	}
+}

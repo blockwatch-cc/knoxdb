@@ -43,6 +43,12 @@ func (c *RawContainer[T]) Size() int {
 	return 1 + num.UvarintLen(uint64(c.sz*len(c.Values))) + c.sz*len(c.Values)
 }
 
+func (c *RawContainer[T]) Iterator() Iterator[T] {
+	return &RawIterator[T]{
+		vals: c.Values,
+	}
+}
+
 func (c *RawContainer[T]) Store(dst []byte) []byte {
 	dst = append(dst, byte(TIntegerRaw))
 	dst = num.AppendUvarint(dst, uint64(c.sz*len(c.Values)))
@@ -82,13 +88,9 @@ func (c *RawContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 
 func (c *RawContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) IntegerContainer[T] {
 	c.Values = vals
-	c.sz = ctx.PhyBits / 8
+	c.sz = util.SizeOf[T]()
 	c.typ = BlockType[T]()
 	return c
-}
-
-func (c *RawContainer[T]) DecodeChunk(dst *[CHUNK_SIZE]T, ofs int) {
-	copy(dst[:], c.Values[ofs:])
 }
 
 func (c *RawContainer[T]) MatchEqual(val T, bits, _ *Bitset) {
@@ -406,33 +408,12 @@ func putRawContainer[T types.Integer](c IntegerContainer[T]) {
 }
 
 var rawFactory = RawFactory{
-	i64Pool: sync.Pool{
-		New: func() any { return new(RawContainer[int64]) },
-	},
-	i32Pool: sync.Pool{
-		New: func() any { return new(RawContainer[int32]) },
-	},
-	i16Pool: sync.Pool{
-		New: func() any { return new(RawContainer[int16]) },
-	},
-	i8Pool: sync.Pool{
-		New: func() any { return new(RawContainer[int8]) },
-	},
-	u64Pool: sync.Pool{
-		New: func() any { return new(RawContainer[uint64]) },
-	},
-	u32Pool: sync.Pool{
-		New: func() any { return new(RawContainer[uint32]) },
-	},
-	u16Pool: sync.Pool{
-		New: func() any { return new(RawContainer[uint16]) },
-	},
-	u8Pool: sync.Pool{
-		New: func() any { return new(RawContainer[uint8]) },
-	},
-}
-
-// TODO
-func (c *RawContainer[T]) Iterator() Iterator[T] {
-	return nil
+	i64Pool: sync.Pool{New: func() any { return new(RawContainer[int64]) }},
+	i32Pool: sync.Pool{New: func() any { return new(RawContainer[int32]) }},
+	i16Pool: sync.Pool{New: func() any { return new(RawContainer[int16]) }},
+	i8Pool:  sync.Pool{New: func() any { return new(RawContainer[int8]) }},
+	u64Pool: sync.Pool{New: func() any { return new(RawContainer[uint64]) }},
+	u32Pool: sync.Pool{New: func() any { return new(RawContainer[uint32]) }},
+	u16Pool: sync.Pool{New: func() any { return new(RawContainer[uint16]) }},
+	u8Pool:  sync.Pool{New: func() any { return new(RawContainer[uint8]) }},
 }

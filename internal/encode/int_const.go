@@ -10,6 +10,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/num"
+	"blockwatch.cc/knoxdb/pkg/slicex"
 )
 
 // TIntegerConstant
@@ -38,6 +39,14 @@ func (c *ConstContainer[T]) Size() int {
 	return 1 + num.UvarintLen(c.Val) + num.UvarintLen(c.N)
 }
 
+func (c *ConstContainer[T]) Iterator() Iterator[T] {
+	it := &ConstIterator[T]{
+		len: c.N,
+	}
+	slicex.Fill(it.vals[:], c.Val)
+	return it
+}
+
 func (c *ConstContainer[T]) Store(dst []byte) []byte {
 	dst = append(dst, byte(TIntegerConstant))
 	dst = num.AppendUvarint(dst, uint64(c.Val))
@@ -62,27 +71,13 @@ func (c *ConstContainer[T]) Get(_ int) T {
 }
 
 func (c *ConstContainer[T]) AppendTo(sel []uint32, dst []T) []T {
-	if sel == nil {
-		for range c.Len() {
-			dst = append(dst, c.Val)
-		}
-	} else {
-		for range len(sel) {
-			dst = append(dst, c.Val)
-		}
+	n := c.N
+	if sel != nil {
+		n = len(sel)
 	}
-	return dst
-}
-
-func (c *ConstContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) IntegerContainer[T] {
-	c.Val = ctx.Min
-	c.N = len(vals)
-	return c
-}
-
-func (c *ConstContainer[T]) DecodeChunk(dst *[CHUNK_SIZE]T, ofs int) {
+	dst = dst[:n]
 	var i int
-	for range CHUNK_SIZE / 16 {
+	for range n / 16 {
 		dst[i] = c.Val
 		dst[i+1] = c.Val
 		dst[i+2] = c.Val
@@ -101,6 +96,17 @@ func (c *ConstContainer[T]) DecodeChunk(dst *[CHUNK_SIZE]T, ofs int) {
 		dst[i+15] = c.Val
 		i += 16
 	}
+	for i < n {
+		dst[i] = c.Val
+		i++
+	}
+	return dst
+}
+
+func (c *ConstContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) IntegerContainer[T] {
+	c.Val = ctx.Min
+	c.N = len(vals)
+	return c
 }
 
 func (c *ConstContainer[T]) MatchEqual(val T, bits, _ *Bitset) {
@@ -239,9 +245,4 @@ var constFactory = ConstFactory{
 	u8Pool: sync.Pool{
 		New: func() any { return new(ConstContainer[uint8]) },
 	},
-}
-
-// TODO
-func (c *ConstContainer[T]) Iterator() Iterator[T] {
-	return nil
 }

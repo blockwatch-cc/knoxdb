@@ -40,6 +40,14 @@ func (c *DeltaContainer[T]) Size() int {
 	return 1 + num.UvarintLen(c.For) + num.UvarintLen(c.Delta) + num.UvarintLen(c.N)
 }
 
+func (c *DeltaContainer[T]) Iterator() Iterator[T] {
+	return &DeltaIterator[T]{
+		delta: c.Delta,
+		ffor:  c.For,
+		len:   c.N,
+	}
+}
+
 func (c *DeltaContainer[T]) Store(dst []byte) []byte {
 	dst = append(dst, byte(TIntegerDelta))
 	dst = num.AppendUvarint(dst, uint64(c.For))
@@ -64,19 +72,45 @@ func (c *DeltaContainer[T]) Load(buf []byte) ([]byte, error) {
 }
 
 func (c *DeltaContainer[T]) Get(n int) T {
-	return c.Delta*T(n) + c.For
+	return T(n)*c.Delta + c.For
 }
 
 func (c *DeltaContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 	if sel == nil {
-		val := c.For
-		for range c.Len() {
-			dst = append(dst, val)
-			val += c.Delta
+		dst = dst[:c.N]
+		var i int
+		for range c.N / 8 {
+			dst[i] = T(i)*c.Delta + c.For
+			dst[i+1] = T(i+1)*c.Delta + c.For
+			dst[i+2] = T(i+2)*c.Delta + c.For
+			dst[i+3] = T(i+3)*c.Delta + c.For
+			dst[i+4] = T(i+4)*c.Delta + c.For
+			dst[i+5] = T(i+5)*c.Delta + c.For
+			dst[i+6] = T(i+6)*c.Delta + c.For
+			dst[i+7] = T(i+7)*c.Delta + c.For
+			i += 8
+		}
+		for i < c.N {
+			dst[i] = T(i)*c.Delta + c.For
+			i++
 		}
 	} else {
-		for _, v := range sel {
-			dst = append(dst, c.Delta*T(v)+c.For)
+		dst = dst[:len(sel)]
+		var i int
+		for range len(sel) / 8 {
+			dst[i] = T(sel[i])*c.Delta + c.For
+			dst[i+1] = T(sel[i+1])*c.Delta + c.For
+			dst[i+2] = T(sel[i+2])*c.Delta + c.For
+			dst[i+3] = T(sel[i+3])*c.Delta + c.For
+			dst[i+4] = T(sel[i+4])*c.Delta + c.For
+			dst[i+5] = T(sel[i+5])*c.Delta + c.For
+			dst[i+6] = T(sel[i+6])*c.Delta + c.For
+			dst[i+7] = T(sel[i+7])*c.Delta + c.For
+			i += 8
+		}
+		for i < len(sel) {
+			dst[i] = T(sel[i])*c.Delta + c.For
+			i++
 		}
 	}
 	return dst
@@ -508,32 +542,3 @@ var deltaFactory = DeltaFactory{
 		New: func() any { return new(DeltaContainer[uint8]) },
 	},
 }
-
-// TODO
-func (c *DeltaContainer[T]) Iterator() Iterator[T] {
-	return nil
-}
-
-// func (c *DeltaContainer[T]) DecodeChunk(dst *[CHUNK_SIZE]T, ofs int) {
-// 	var i int
-// 	val := c.For + T(ofs)*c.Delta
-// 	for range CHUNK_SIZE / 16 {
-// 		dst[i], val = val, val+c.Delta
-// 		dst[i+1], val = val, val+c.Delta
-// 		dst[i+2], val = val, val+c.Delta
-// 		dst[i+3], val = val, val+c.Delta
-// 		dst[i+4], val = val, val+c.Delta
-// 		dst[i+5], val = val, val+c.Delta
-// 		dst[i+6], val = val, val+c.Delta
-// 		dst[i+7], val = val, val+c.Delta
-// 		dst[i+8], val = val, val+c.Delta
-// 		dst[i+9], val = val, val+c.Delta
-// 		dst[i+10], val = val, val+c.Delta
-// 		dst[i+11], val = val, val+c.Delta
-// 		dst[i+12], val = val, val+c.Delta
-// 		dst[i+13], val = val, val+c.Delta
-// 		dst[i+14], val = val, val+c.Delta
-// 		dst[i+15], val = val, val+c.Delta
-// 		i += 16
-// 	}
-// }

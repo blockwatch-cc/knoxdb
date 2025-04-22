@@ -65,19 +65,15 @@ func BenchmarkFloatEncode(b *testing.B) {
 			data := etests.GenForFloatScheme[float64](int(scheme), c.N)
 			once := etests.ShowInfo
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
-				if once && etests.ShowInfo {
-					ctx := AnalyzeFloat(data, scheme == TFloatDictionary, scheme == TFloatAlp)
-					enc := NewFloat[float64](scheme).Encode(ctx, data, MAX_CASCADE)
-					b.Log(enc.Info())
-					enc.Close()
-					ctx.Close()
-					once = false
-				}
 				b.ReportAllocs()
 				b.SetBytes(int64(c.N * 8))
 				for b.Loop() {
 					ctx := AnalyzeFloat(data, scheme == TFloatDictionary, scheme == TFloatAlp)
 					enc := NewFloat[float64](scheme).Encode(ctx, data, MAX_CASCADE)
+					if once {
+						b.Log(enc.Info())
+						once = false
+					}
 					enc.Close()
 					ctx.Close()
 				}
@@ -98,6 +94,7 @@ func BenchmarkFloatEncodeAndStore(b *testing.B) {
 			TFloatRaw,
 		} {
 			data := etests.GenForFloatScheme[float64](int(scheme), c.N)
+			once := etests.ShowInfo
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
 				b.ReportAllocs()
 				b.SetBytes(int64(c.N * 8))
@@ -105,6 +102,10 @@ func BenchmarkFloatEncodeAndStore(b *testing.B) {
 					ctx := AnalyzeFloat(data, scheme == TFloatDictionary, scheme == TFloatAlp)
 					enc := NewFloat[float64](scheme).Encode(ctx, data, MAX_CASCADE)
 					_ = enc.Store(make([]byte, 0, enc.Size()))
+					if once {
+						b.Log(enc.Info())
+						once = false
+					}
 					enc.Close()
 					ctx.Close()
 				}
@@ -171,7 +172,7 @@ func BenchmarkFloatAppend(b *testing.B) {
 			enc := NewFloat[float64](scheme).Encode(ctx, data, MAX_CASCADE)
 			buf := enc.Store(make([]byte, 0, enc.Size()))
 			dst := make([]float64, 0, c.N)
-
+			once := etests.ShowInfo
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
 				b.ReportAllocs()
 				b.SetBytes(int64(c.N * 8))
@@ -181,6 +182,10 @@ func BenchmarkFloatAppend(b *testing.B) {
 					require.NoError(b, err)
 					dst = enc2.AppendTo(nil, dst)
 					dst = dst[:0]
+					if once {
+						b.Log(enc2.Info())
+						once = false
+					}
 					enc2.Close()
 				}
 				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")

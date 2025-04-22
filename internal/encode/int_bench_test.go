@@ -80,16 +80,14 @@ func BenchmarkIntEncode(b *testing.B) {
 			ctx := AnalyzeInt(data, scheme == TIntegerDictionary)
 			once := etests.ShowInfo
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
-				if once {
-					enc := NewInt[int64](scheme).Encode(ctx, data, MAX_CASCADE)
-					b.Log(enc.Info())
-					enc.Close()
-					once = false
-				}
 				b.ReportAllocs()
 				b.SetBytes(int64(c.N * 8))
 				for b.Loop() {
 					enc := NewInt[int64](scheme).Encode(ctx, data, MAX_CASCADE)
+					if once {
+						b.Log(enc.Info())
+						once = false
+					}
 					enc.Close()
 				}
 				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
@@ -111,6 +109,7 @@ func BenchmarkIntEncodeAndStore(b *testing.B) {
 			TIntegerRaw,
 		} {
 			data := etests.GenForIntScheme[int16](int(scheme), c.N)
+			once := etests.ShowInfo
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
 				b.ReportAllocs()
 				b.SetBytes(int64(c.N * 8))
@@ -120,6 +119,10 @@ func BenchmarkIntEncodeAndStore(b *testing.B) {
 					sz := enc.Size()
 					buf := enc.Store(make([]byte, 0, enc.Size()))
 					require.LessOrEqual(b, len(buf), sz)
+					if once {
+						b.Log(enc.Info())
+						once = false
+					}
 					enc.Close()
 					ctx.Close()
 				}
@@ -187,7 +190,7 @@ func BenchmarkIntAppend(b *testing.B) {
 			enc := NewInt[int64](scheme).Encode(ctx, data, MAX_CASCADE)
 			buf := enc.Store(make([]byte, 0, enc.Size()))
 			dst := make([]int64, 0, c.N)
-
+			once := etests.ShowInfo
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
 				b.ReportAllocs()
 				b.SetBytes(int64(c.N * 8))
@@ -197,6 +200,10 @@ func BenchmarkIntAppend(b *testing.B) {
 					require.NoError(b, err)
 					dst = enc2.AppendTo(nil, dst)
 					dst = dst[:0]
+					if once {
+						b.Log(enc2.Info())
+						once = false
+					}
 					enc2.Close()
 				}
 				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
@@ -220,7 +227,7 @@ func BenchmarkIntCmp(b *testing.B) {
 			ctx := AnalyzeInt(data, true)
 			enc := NewInt[uint64](scheme).Encode(ctx, data, MAX_CASCADE)
 			bits := bitset.NewBitset(c.N)
-
+			b.Log(enc.Info())
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
 				b.ReportAllocs()
 				b.SetBytes(int64(c.N * 8))

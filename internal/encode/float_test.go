@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	etests "blockwatch.cc/knoxdb/internal/encode/tests"
-	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/assert"
@@ -138,11 +137,20 @@ func testFloatContainerEncode[T types.Float](t *testing.T, scheme FloatContainer
 			}
 
 			// validate append
-			all := tests.GenSeq[uint32](len(c.Data), 1)
 			dst := make([]T, 0, len(c.Data))
-			dst = enc2.AppendTo(all, dst)
+			dst = enc2.AppendTo(nil, dst)
 			assert.Len(t, dst, len(c.Data))
 			assert.Equal(t, c.Data, dst)
+
+			// validate append selector
+			sel := util.RandUintsn[uint32](len(c.Data)/2, uint32(len(c.Data)))
+			clear(dst)
+			dst = dst[:0]
+			dst = enc2.AppendTo(sel, dst)
+			assert.Len(t, dst, len(sel))
+			for i, v := range sel {
+				assert.Equal(t, c.Data[v], dst[i], "sel[%d]", v)
+			}
 
 			enc2.Close()
 			enc.Close()

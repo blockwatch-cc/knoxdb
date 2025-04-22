@@ -51,6 +51,14 @@ func (it *Iterator[T]) Len() int {
 	return it.len
 }
 
+func (it *Iterator[T]) Get(n int) T {
+	if it.Seek(n) {
+		val, _ := it.Next()
+		return val
+	}
+	return 0
+}
+
 func (it *Iterator[T]) Next() (T, bool) {
 	if it.n == it.cnt {
 		// EOF

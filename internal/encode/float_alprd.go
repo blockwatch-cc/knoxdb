@@ -220,9 +220,9 @@ func putFloatAlpRdContainer[T types.Float](c FloatContainer[T]) {
 func newFloatAlpRdIterator[T types.Float]() *FloatAlpRdIterator[T] {
 	switch any(T(0)).(type) {
 	case float64:
-		return floatAlpFactory.f64ItPool.Get().(*FloatAlpRdIterator[T])
+		return floatAlpRdFactory.f64ItPool.Get().(*FloatAlpRdIterator[T])
 	case float32:
-		return floatAlpFactory.f32ItPool.Get().(*FloatAlpRdIterator[T])
+		return floatAlpRdFactory.f32ItPool.Get().(*FloatAlpRdIterator[T])
 	default:
 		return nil
 	}
@@ -231,9 +231,9 @@ func newFloatAlpRdIterator[T types.Float]() *FloatAlpRdIterator[T] {
 func putFloatAlpRdIterator[T types.Float](c *FloatAlpRdIterator[T]) {
 	switch any(T(0)).(type) {
 	case float64:
-		floatAlpFactory.f64ItPool.Put(c)
+		floatAlpRdFactory.f64ItPool.Put(c)
 	case float32:
-		floatAlpFactory.f32ItPool.Put(c)
+		floatAlpRdFactory.f32ItPool.Put(c)
 	}
 }
 
@@ -284,6 +284,14 @@ func (it *FloatAlpRdIterator[T]) Len() int {
 	return it.len
 }
 
+func (it *FloatAlpRdIterator[T]) Get(n int) T {
+	if it.Seek(n) {
+		val, _ := it.Next()
+		return val
+	}
+	return 0
+}
+
 func (it *FloatAlpRdIterator[T]) Next() (T, bool) {
 	if it.ofs >= it.len {
 		// EOF
@@ -295,12 +303,15 @@ func (it *FloatAlpRdIterator[T]) Next() (T, bool) {
 
 	// on first call or start of new chunk
 	if i == 0 {
+		// fmt.Printf("ALP-RD next load ofs=%d\n", it.ofs)
+
 		// load next source chunks
 		left, ln := it.leftIt.NextChunk()
 		right, rn := it.rightIt.NextChunk()
 
 		// sanity check, should not happen
 		if ln == 0 || rn == 0 {
+			// fmt.Printf("ALP-RD failed base seek left=%d right=%d\n", ln, rn)
 			it.ofs = it.len
 			return 0, false
 		}
@@ -312,6 +323,8 @@ func (it *FloatAlpRdIterator[T]) Next() (T, bool) {
 	// advance ofs for next call
 	it.ofs++
 
+	// fmt.Printf("ALP-RD next ofs=%d i=%d\n", it.ofs, i)
+
 	// return value
 	return it.vals[i], true
 }
@@ -321,35 +334,61 @@ func (it *FloatAlpRdIterator[T]) NextChunk() (*[CHUNK_SIZE]T, int) {
 	if it.ofs >= it.len {
 		return nil, 0
 	}
+	// fmt.Printf("ALP-RD next-chunk load ofs=%d\n", it.ofs)
 	left, ln := it.leftIt.NextChunk()
 	right, rn := it.rightIt.NextChunk()
 	if ln > 0 && rn > 0 {
 		alp.MergeRD(it.vals[:], left[:], right[:], it.shift)
-		it.ofs += ln
+		it.ofs += rn
 	}
-	return &it.vals, ln
+	return &it.vals, rn
 }
 
 func (it *FloatAlpRdIterator[T]) SkipChunk() int {
 	it.leftIt.SkipChunk()
-	it.rightIt.SkipChunk()
-	it.ofs = chunkStart(it.ofs + CHUNK_SIZE)
-	return CHUNK_SIZE
+	n := it.rightIt.SkipChunk()
+	it.ofs += n
+	return n
 }
 
 func (it *FloatAlpRdIterator[T]) Seek(n int) bool {
+	// bounds check
 	if n < 0 || n >= it.len {
-		return false
-	}
-	ls, rs := it.leftIt.Seek(n), it.rightIt.Seek(n)
-	if !ls || !rs {
+		it.ofs = it.len
 		return false
 	}
 
-	// load when n is in another chunk and not at first position
-	if n&CHUNK_MASK != 0 && chunkStart(n) != chunkStart(it.ofs) {
-		it.ofs = chunkStart(n)
-		it.NextChunk()
+	// calculate chunk start offsets for n and current offset
+	nc := chunkStart(n)
+	oc := chunkStart(it.ofs)
+
+	// fmt.Printf("ALP-RD seek n=%d ofs=%d nc=%d oc=%d\n", n, it.ofs, nc, oc)
+
+	// TODO: simplify load logic (keep oc as state and replace it.ofs & CHUNK_MASK == 0
+	// as load criteria in Next), this should make seek easier
+
+	// load when n is in another chunk
+	if nc != oc || it.ofs&CHUNK_MASK == 0 {
+		// seek base-it to new chunk start
+		// fmt.Printf("> ALP-RD: seeking bases nc=%d...\n", nc)
+		ls, rs := it.leftIt.Seek(nc), it.rightIt.Seek(nc)
+		if !ls || !rs {
+			// fmt.Printf("> ALP-RD: seek bases failed; left=%t righ=%t\n", ls, rs)
+			it.ofs = it.len
+			return false
+		}
+
+		// load next chunk when not seeking to start (re-use NextChunk method)
+		if n&CHUNK_MASK != 0 {
+			// fmt.Printf("> ALP-RD: try loading chunk from nc=%d\n", nc)
+			it.ofs = nc
+			it.NextChunk()
+		}
+	} else if n == 0 {
+		// edge case: reset base-it for n=0 because Next() loads again
+		// fmt.Printf("> ALP-RD: resetting bases\n")
+		it.leftIt.Reset()
+		it.rightIt.Reset()
 	}
 
 	// reset ofs to n, so call to Next() delivers value

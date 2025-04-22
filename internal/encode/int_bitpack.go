@@ -12,7 +12,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/num"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 // TIntegerBitpacked
@@ -23,6 +22,7 @@ type BitpackContainer[T types.Integer] struct {
 	For    T
 	free   bool
 	dec    *bitpack.Decoder[T]
+	it     Iterator[T]
 }
 
 func (c *BitpackContainer[T]) Info() string {
@@ -30,12 +30,22 @@ func (c *BitpackContainer[T]) Info() string {
 }
 
 func (c *BitpackContainer[T]) Close() {
-	if c.free {
+	if c.it != nil {
+		c.it.Close()
+		c.it = nil
+	}
+	if c.dec != nil {
+		c.dec.Close()
+		c.dec = nil
+	}
+	if c.Packed != nil && c.free {
 		arena.Free(c.Packed)
 	}
 	c.Packed = nil
 	c.free = false
-	c.dec = nil
+	c.Log2 = 0
+	c.N = 0
+	c.For = 0
 	putBitpackContainer[T](c)
 }
 
@@ -76,24 +86,28 @@ func (c *BitpackContainer[T]) Load(buf []byte) ([]byte, error) {
 	buf = buf[n:]
 
 	// reference next sz bytes as bitpacked data
-	sz := bitpack.EstimateSize(util.SizeOf[T]()*8, c.Log2, c.N)
+	sz := bitpack.EstimateSize(c.Log2, c.N)
 	c.Packed = buf[:sz]
+	c.free = false
 
 	// init decoder
-	c.dec = bitpack.NewDecoder[T](c.Packed, c.Log2, c.For)
+	c.dec = bitpack.NewDecoder[T](c.Packed, c.Log2, c.N, c.For)
 
 	return buf[sz:], nil
 }
 
 func (c *BitpackContainer[T]) Get(n int) T {
-	return c.dec.DecodeValue(n)
+	if c.it == nil {
+		c.it = c.Iterator()
+	}
+	return c.it.Get(n)
+	// return c.dec.DecodeValue(n)
 }
 
 func (c *BitpackContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 	if sel == nil {
-		for i := range c.Len() {
-			dst = append(dst, c.dec.DecodeValue(i))
-		}
+		dst = dst[:c.N]
+		c.dec.Decode(dst)
 	} else {
 		for _, v := range sel {
 			dst = append(dst, c.dec.DecodeValue(int(v)))
@@ -106,15 +120,11 @@ func (c *BitpackContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) 
 	c.N = len(vals)
 	c.For = ctx.Min
 
-	sz := bitpack.EstimateSize(ctx.PhyBits, ctx.UseBits, len(vals))
-	// fmt.Printf("BP size for %d vals at %d bits and %d-bit padding is %d bytes (%d bits), minv=%d maxv=%d typ=%T\n",
-	// 	len(vals), ctx.UseBits, ctx.PhyBits, sz, sz*8, ctx.Min, ctx.Max, T(0))
-	buf := arena.AllocBytes(sz)[:sz]
-	// clear(c.Packed) // arena does not allocate zeroed memory
-
-	c.Packed, c.Log2 = bitpack.Encode(buf, vals, ctx.Min, ctx.Max)
+	sz := bitpack.EstimateSize(ctx.UseBits, len(vals))
+	c.Packed = arena.AllocBytes(sz)[:sz]
+	_, c.Log2 = bitpack.Encode(c.Packed, vals, ctx.Min, ctx.Max)
+	c.dec = bitpack.NewDecoder(c.Packed, c.Log2, c.N, c.For)
 	c.free = true
-	c.dec = bitpack.NewDecoder(c.Packed, c.Log2, c.For)
 
 	return c
 }
@@ -387,6 +397,7 @@ func (c *BitpackContainer[T]) Iterator() Iterator[T] {
 	it := newBitpackIterator[T]()
 	it.dec = c.dec
 	it.len = c.Len()
+	clear(it.vals[:])
 	return it
 }
 
@@ -404,11 +415,22 @@ func (it *BitpackIterator[T]) Close() {
 }
 
 func (it *BitpackIterator[T]) Reset() {
+	// fmt.Printf("> BP reset\n")
 	it.ofs = 0
 }
 
 func (it *BitpackIterator[T]) Len() int {
 	return it.len
+}
+
+func (it *BitpackIterator[T]) Get(n int) T {
+	// TODO: faster decision, call seek in slow path only
+	if it.Seek(n) {
+		val, _ := it.Next()
+		return val
+	}
+	return it.dec.DecodeValue(n)
+	// return 0
 }
 
 func (it *BitpackIterator[T]) Next() (T, bool) {
@@ -448,22 +470,36 @@ func (it *BitpackIterator[T]) NextChunk() (*[CHUNK_SIZE]T, int) {
 	if n > 0 {
 		it.ofs += n
 	}
+	// fmt.Printf("BP decoded %d vals, now at ofs %d/%d => %v\n", n, it.ofs, it.len, it.vals[:n])
 	return &it.vals, n
 }
 
 func (it *BitpackIterator[T]) SkipChunk() int {
-	it.ofs = chunkStart(it.ofs + CHUNK_SIZE)
-	return CHUNK_SIZE
+	n := min(CHUNK_SIZE, it.len-it.ofs)
+	it.ofs += n
+	return n
 }
 
 func (it *BitpackIterator[T]) Seek(n int) bool {
 	if n < 0 || n >= it.len {
+		it.ofs = it.len
 		return false
 	}
 
-	// load when n is in another chunk and not at first position
-	if n&CHUNK_MASK != 0 && chunkStart(n) != chunkStart(it.ofs) {
-		it.ofs = chunkStart(n)
+	// TODO:
+	// - improve logic flow, make no-load decision much faster
+	// - see ALP(RD) also
+
+	// calculate chunk start offsets for n and current offset
+	nc := chunkStart(n)
+	oc := chunkStart(it.ofs)
+
+	// fmt.Printf("BP seek n=%d ofs=%d nc=%d oc=%d\n", n, it.ofs, nc, oc)
+
+	// load when n is in another chunk or on first call
+	if nc != oc || it.ofs == 0 {
+		// fmt.Printf("> BP seek to nc=%d\n", nc)
+		it.ofs = nc
 		it.NextChunk()
 	}
 

@@ -5,10 +5,41 @@ package alp
 
 import (
 	"slices"
+	"sync"
 
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/types"
 )
+
+var alpDecFactory = alpDecoderFactory{
+	f64Pool: sync.Pool{New: func() any { return new(Decoder[float64]) }},
+	f32Pool: sync.Pool{New: func() any { return new(Decoder[float32]) }},
+}
+
+type alpDecoderFactory struct {
+	f64Pool sync.Pool
+	f32Pool sync.Pool
+}
+
+func newAlpDecoder[T types.Float]() *Decoder[T] {
+	switch any(T(0)).(type) {
+	case float64:
+		return alpDecFactory.f64Pool.Get().(*Decoder[T])
+	case float32:
+		return alpDecFactory.f32Pool.Get().(*Decoder[T])
+	default:
+		return nil
+	}
+}
+
+func putAlpDecoder[T types.Float](c *Decoder[T]) {
+	switch any(T(0)).(type) {
+	case float64:
+		alpDecFactory.f64Pool.Put(c)
+	case float32:
+		alpDecFactory.f32Pool.Put(c)
+	}
+}
 
 type Decoder[T types.Float] struct {
 	factor     T
@@ -20,10 +51,10 @@ type Decoder[T types.Float] struct {
 
 func NewDecoder[T types.Float](factor, exponent uint8) *Decoder[T] {
 	c := newConstant[T]()
-	return &Decoder[T]{
-		factor:   T(FACT_ARR[factor]),
-		exponent: T(c.FRAC_ARR[exponent]),
-	}
+	d := newAlpDecoder[T]()
+	d.factor = T(FACT_ARR[factor])
+	d.exponent = T(c.FRAC_ARR[exponent])
+	return d
 }
 
 func (d *Decoder[T]) Close() {
@@ -34,6 +65,7 @@ func (d *Decoder[T]) Close() {
 		d.positions = nil
 		clear(d.exmap)
 	}
+	putAlpDecoder(d)
 }
 
 func (d *Decoder[T]) WithExceptions(values []T, pos []uint32) *Decoder[T] {

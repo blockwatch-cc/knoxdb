@@ -8,6 +8,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/encode/alp"
+	"blockwatch.cc/knoxdb/internal/encode/analyze"
 	"blockwatch.cc/knoxdb/internal/encode/hashprobe"
 	"blockwatch.cc/knoxdb/internal/filter/llb"
 	"blockwatch.cc/knoxdb/internal/types"
@@ -15,6 +16,8 @@ import (
 )
 
 type FloatContext[T types.Float] struct {
+	Min        T                // vector minimum
+	Max        T                // vector maximum
 	PhyBits    int              // float bit width
 	NumUnique  int              // vector cardinality (hint, may not be precise)
 	NumRuns    int              // vector runs
@@ -23,6 +26,17 @@ type FloatContext[T types.Float] struct {
 	SampleCtx  *FloatContext[T] // sample analysis
 	FreeSample bool             // hint whether sample may be reused
 	AlpEncoder *alp.Encoder[T]  // ALP encoder state
+}
+
+func NewFloatContext[T types.Float](minv, maxv T, n int) *FloatContext[T] {
+	c := newFloatContext[T]()
+	c.PhyBits = util.SizeOf[T]() * 8
+	c.NumValues = n
+	c.Min = minv
+	c.Max = maxv
+	c.NumRuns = n
+	c.NumUnique = n
+	return c
 }
 
 // AnalyzeFloat produces statistics about slice vals which are used to
@@ -35,24 +49,12 @@ func AnalyzeFloat[T types.Float](vals []T, checkUnique, checkALP bool) *FloatCon
 	}
 	c.NumValues = len(vals)
 
-	// unrolled run count
-	c.NumRuns = 1
-	i := 0
-	for range (len(vals) - 7) / 8 {
-		c.NumRuns += util.Bool2int(vals[i] != vals[i+1]) +
-			util.Bool2int(vals[i+1] != vals[i+2]) +
-			util.Bool2int(vals[i+2] != vals[i+3]) +
-			util.Bool2int(vals[i+3] != vals[i+4]) +
-			util.Bool2int(vals[i+4] != vals[i+5]) +
-			util.Bool2int(vals[i+5] != vals[i+6]) +
-			util.Bool2int(vals[i+6] != vals[i+7]) +
-			util.Bool2int(vals[i+7] != vals[i+8]) +
-			util.Bool2int(vals[i+8] != vals[i+9])
-		i += 8
-	}
-	for i < len(vals)-1 {
-		c.NumRuns += util.Bool2int(vals[i] != vals[i+1])
-		i++
+	if c.PhyBits == 64 {
+		minv, maxv, nruns := analyze.AnalyzeFloat64(util.ReinterpretSlice[T, float64](vals))
+		c.Min, c.Max, c.NumRuns = T(minv), T(maxv), nruns
+	} else {
+		minv, maxv, nruns := analyze.AnalyzeFloat32(util.ReinterpretSlice[T, float32](vals))
+		c.Min, c.Max, c.NumRuns = T(minv), T(maxv), nruns
 	}
 
 	c.NumUnique = c.NumRuns
@@ -166,6 +168,8 @@ func (c *FloatContext[T]) Close() {
 		c.AlpEncoder.Close()
 		c.AlpEncoder = nil
 	}
+	c.Min = 0
+	c.Max = 0
 	c.PhyBits = 0
 	c.NumUnique = 0
 	c.NumRuns = 0

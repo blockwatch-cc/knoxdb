@@ -44,6 +44,7 @@ func (c *FloatAlpContainer[T]) Info() string {
 
 func (c *FloatAlpContainer[T]) Close() {
 	c.Values.Close()
+	c.Values = nil
 	if c.hasException {
 		c.Exception.Close()
 		c.Positions.Close()
@@ -51,7 +52,10 @@ func (c *FloatAlpContainer[T]) Close() {
 		c.Positions = nil
 		c.hasException = false
 	}
-	c.dec = nil
+	if c.dec != nil {
+		c.dec.Close()
+		c.dec = nil
+	}
 	putFloatAlpContainer(c)
 }
 
@@ -333,6 +337,14 @@ func (it *FloatAlpIterator[T]) Len() int {
 	return it.len
 }
 
+func (it *FloatAlpIterator[T]) Get(n int) T {
+	if it.Seek(n) {
+		val, _ := it.Next()
+		return val
+	}
+	return 0
+}
+
 func (it *FloatAlpIterator[T]) Next() (T, bool) {
 	if it.ofs >= it.len {
 		// EOF
@@ -354,7 +366,7 @@ func (it *FloatAlpIterator[T]) Next() (T, bool) {
 		}
 
 		// decode
-		it.dec.DecodeChunk(&it.vals, src, it.ofs)
+		it.dec.DecodeChunk(&it.vals, src, n, it.ofs)
 	}
 
 	// advance ofs for next call
@@ -371,31 +383,51 @@ func (it *FloatAlpIterator[T]) NextChunk() (*[CHUNK_SIZE]T, int) {
 	}
 	src, n := it.valIt.NextChunk()
 	if n > 0 {
-		it.dec.DecodeChunk(&it.vals, src, it.ofs)
+		it.dec.DecodeChunk(&it.vals, src, n, it.ofs)
 		it.ofs += n
 	}
 	return &it.vals, n
 }
 
 func (it *FloatAlpIterator[T]) SkipChunk() int {
-	it.valIt.SkipChunk()
-	it.ofs = chunkStart(it.ofs + CHUNK_SIZE)
-	return CHUNK_SIZE
+	n := it.valIt.SkipChunk()
+	it.ofs += n
+	return n
 }
 
 func (it *FloatAlpIterator[T]) Seek(n int) bool {
+	// bounds check
 	if n < 0 || n >= it.len {
+		it.ofs = it.len
 		return false
 	}
-	it.valIt.Seek(n)
 
-	// load when n is in another chunk and not at first position
-	if n&CHUNK_MASK != 0 && chunkStart(n) != chunkStart(it.ofs) {
-		it.ofs = chunkStart(n)
-		it.NextChunk()
+	// calculate chunk start offsets for n and current offset
+	nc := chunkStart(n)
+	oc := chunkStart(it.ofs)
+
+	// fmt.Printf("ALP seek n=%d ofs=%d nc=%d oc=%d\n", n, it.ofs, nc, oc)
+
+	// load when n is in another chunk or seek on init
+	if nc != oc || it.ofs == 0 {
+		// seek base-it to new chunk start
+		if !it.valIt.Seek(nc) {
+			it.ofs = it.len
+			return false
+		}
+
+		// load next chunk when not seeking to start (re-use NextChunk method)
+		if n&CHUNK_MASK != 0 {
+			it.ofs = nc
+			it.NextChunk()
+		}
+	} else if n == 0 {
+		// edge case: reset base-it for n=0 because Next() loads again
+		it.valIt.Reset()
 	}
 
 	// reset ofs to n, so call to Next() delivers value
 	it.ofs = n
+
 	return true
 }

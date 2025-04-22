@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sync"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
@@ -24,6 +25,7 @@ func (c *FloatRawContainer[T]) Info() string {
 }
 
 func (c *FloatRawContainer[T]) Close() {
+	arena.Free(c.Values)
 	c.Values = nil
 	putFloatRawContainer(c)
 }
@@ -39,6 +41,12 @@ func (c *FloatRawContainer[T]) Len() int {
 func (c *FloatRawContainer[T]) Size() int {
 	return 1 + num.UvarintLen(uint64(util.SizeOf[T]()*len(c.Values))) +
 		util.SizeOf[T]()*len(c.Values)
+}
+
+func (c *FloatRawContainer[T]) Iterator() Iterator[T] {
+	return &RawIterator[T]{
+		vals: c.Values,
+	}
 }
 
 func (c *FloatRawContainer[T]) Store(dst []byte) []byte {
@@ -79,10 +87,6 @@ func (c *FloatRawContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int) F
 	c.typ = BlockType[T]()
 	return c
 }
-
-// func (c *FloatRawContainer[T]) DecodeChunk(dst *[CHUNK_SIZE]T, ofs int) {
-// 	copy(dst[:], c.Values[ofs:])
-// }
 
 func (c *FloatRawContainer[T]) MatchEqual(val T, bits, _ *Bitset) {
 	var n int64
@@ -212,9 +216,4 @@ var floatRawFactory = FloatRawFactory{
 	f32Pool: sync.Pool{
 		New: func() any { return new(FloatRawContainer[float32]) },
 	},
-}
-
-// TODO
-func (c *FloatRawContainer[T]) Iterator() Iterator[T] {
-	return nil
 }

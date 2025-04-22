@@ -85,12 +85,20 @@ func (c *FloatRunEndContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 		l := uint32(c.Len())
 		var i uint32
 		var k int
+		dst = dst[:l]
 		for i < l {
 			end, val := c.Ends.Get(k), c.Values.Get(k)
-			for range end - i {
-				dst = append(dst, val)
+			for range (end - i) / 4 {
+				dst[i] = val
+				dst[i+1] = val
+				dst[i+2] = val
+				dst[i+3] = val
+				i += 4
 			}
-			i = end
+			for i <= end {
+				dst[i] = val
+				i++
+			}
 			k++
 		}
 	} else {
@@ -141,15 +149,16 @@ func (c *FloatRunEndContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int
 	}
 	ends[p] = n
 
-	// encode child containers
-	vctx := AnalyzeFloat(values, true, lvl == MAX_CASCADE)
-	c.Values = EncodeFloat(vctx, values, lvl-1)
-	vctx.Close()
+	// encode child containers, reuse analysis context
+	ctx.NumValues = ctx.NumRuns
+	c.Values = EncodeFloat(ctx, values, lvl-1)
 	if c.Values.Type() != TFloatRaw {
 		arena.Free(values)
 	}
+	ctx.NumValues = len(vals)
 
-	ectx := AnalyzeInt(ends, false)
+	// create analysis context for known sequential data (min=first, max=last)
+	ectx := NewIntegerContext[uint32](ends[0], ends[len(ends)-1], len(ends))
 	c.Ends = EncodeInt(ectx, ends, lvl-1)
 	ectx.Close()
 	if c.Ends.Type() != TIntegerRaw {
@@ -158,12 +167,6 @@ func (c *FloatRunEndContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int
 
 	return c
 }
-
-// func (c *FloatRunEndContainer[T]) DecodeChunk(dst *[CHUNK_SIZE]T, ofs int) {
-// 	// find run start/end from ofs
-// 	// decode chunk(s) from values between start/end
-// 	// copy chunk values for each run
-// }
 
 func (c *FloatRunEndContainer[T]) MatchEqual(val T, bits, mask *Bitset) {
 	// match values container and translate matches
@@ -235,7 +238,6 @@ func (c *FloatRunEndContainer[T]) applyMatch(bits, vbits *Bitset) {
 		return
 	}
 
-	// handle value matches by unpacking range boundaries
 	u32 := arena.Alloc[uint32](vbits.Count())
 	for _, k := range vbits.Indexes(u32) {
 		var start uint32

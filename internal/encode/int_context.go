@@ -32,11 +32,23 @@ type IntegerContext[T types.Integer] struct {
 	UniqueArray []T                // unique values as array (optional)
 }
 
+func NewIntegerContext[T types.Integer](minv, maxv T, n int) *IntegerContext[T] {
+	c := newIntegerContext[T]()
+	c.PhyBits = int(unsafe.Sizeof(T(0))) * 8
+	c.UseBits = types.Log2Range(minv, maxv)
+	c.NumValues = n
+	c.Min = minv
+	c.Max = maxv
+	c.NumRuns = n
+	c.NumUnique = n
+	return c
+}
+
 // AnalyzeInt produces statistics about slice vals which are used to
 // find the most efficient encoding scheme.
 func AnalyzeInt[T types.Integer](vals []T, checkUnique bool) *IntegerContext[T] {
 	c := newIntegerContext[T]()
-	c.PhyBits = int(unsafe.Sizeof(T(0))) * 8
+	c.PhyBits = util.SizeOf[T]() * 8
 	c.NumValues = len(vals)
 
 	// vector analyze
@@ -70,11 +82,11 @@ func AnalyzeInt[T types.Integer](vals []T, checkUnique bool) *IntegerContext[T] 
 	// count unique only if necessary
 	doCountUnique := checkUnique && c.Min != c.Max && c.Delta == 0
 	c.NumUnique = min(c.NumRuns, int(c.Max)-int(c.Min)+1)
+	c.UseBits = types.Log2Range(c.Min, c.Max)
 
-	switch c.PhyBits {
-	case 64:
-		c.UseBits = types.Log2Range(c.Min, c.Max)
-		if doCountUnique {
+	if doCountUnique {
+		switch c.PhyBits {
+		case 64:
 			// use array when c.Max-c.Min < 64k
 			sz := int(c.Max) - int(c.Min) + 1
 			if sz <= 1<<16 {
@@ -82,10 +94,7 @@ func AnalyzeInt[T types.Integer](vals []T, checkUnique bool) *IntegerContext[T] 
 			} else {
 				c.NumUnique = max(1, c.estimateCardinality(vals))
 			}
-		}
-	case 32:
-		c.UseBits = types.Log2Range(c.Min, c.Max)
-		if doCountUnique {
+		case 32:
 			// use array when c.Max-c.Min < 64k
 			sz := int(c.Max) - int(c.Min) + 1
 			if sz <= 1<<16 {
@@ -93,15 +102,9 @@ func AnalyzeInt[T types.Integer](vals []T, checkUnique bool) *IntegerContext[T] 
 			} else {
 				c.NumUnique = max(1, c.estimateCardinality(vals))
 			}
-		}
-	case 16:
-		c.UseBits = types.Log2Range(c.Min, c.Max)
-		if doCountUnique {
+		case 16:
 			c.NumUnique = c.buildUniqueArray(vals)
-		}
-	case 8:
-		c.UseBits = types.Log2Range(c.Min, c.Max)
-		if doCountUnique {
+		case 8:
 			c.NumUnique = c.buildUniqueArray(vals)
 		}
 	}

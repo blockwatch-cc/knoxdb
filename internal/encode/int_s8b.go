@@ -55,7 +55,7 @@ func (c *Simple8Container[T]) Size() int {
 }
 
 func (c *Simple8Container[T]) Iterator() Iterator[T] {
-	return s8b.NewIterator[T](c.Packed, c.N)
+	return s8b.NewIterator[T](c.Packed, c.N, c.For)
 }
 
 func (c *Simple8Container[T]) Store(dst []byte) []byte {
@@ -84,11 +84,9 @@ func (c *Simple8Container[T]) Load(buf []byte) ([]byte, error) {
 
 func (c *Simple8Container[T]) Get(n int) T {
 	if c.it == nil {
-		c.it = s8b.NewIterator[T](c.Packed, c.N)
+		c.it = s8b.NewIterator[T](c.Packed, c.N, c.For)
 	}
-	c.it.Seek(n)
-	val, _ := c.it.Next()
-	return val + c.For
+	return c.it.Get(n)
 }
 
 func (c *Simple8Container[T]) AppendTo(sel []uint32, dst []T) []T {
@@ -101,14 +99,12 @@ func (c *Simple8Container[T]) AppendTo(sel []uint32, dst []T) []T {
 				break
 			}
 			for _, v := range vals[:n] {
-				dst = append(dst, v+c.For)
+				dst = append(dst, v)
 			}
 		}
 	} else {
 		for _, v := range sel {
-			it.Seek(int(v))
-			val, _ := it.Next()
-			dst = append(dst, val+c.For)
+			dst = append(dst, it.Get(int(v)))
 		}
 	}
 	it.Close()
@@ -241,7 +237,7 @@ func (c *Simple8Container[T]) MatchInSet(s any, bits, mask *Bitset) {
 			i := int(k)
 			it.Seek(i)
 			val, _ := it.Next()
-			if set.Contains(uint64(val + c.For)) {
+			if set.Contains(uint64(val)) {
 				bits.Set(i)
 			}
 		}
@@ -254,7 +250,7 @@ func (c *Simple8Container[T]) MatchInSet(s any, bits, mask *Bitset) {
 				break
 			}
 			for _, v := range vals[:n] {
-				if set.Contains(uint64(v + c.For)) {
+				if set.Contains(uint64(v)) {
 					bits.Set(i)
 				}
 				i++
@@ -274,7 +270,7 @@ func (c *Simple8Container[T]) MatchNotInSet(s any, bits, mask *Bitset) {
 			i := int(k)
 			it.Seek(i)
 			val, _ := it.Next()
-			if !set.Contains(uint64(val + c.For)) {
+			if !set.Contains(uint64(val)) {
 				bits.Set(i)
 			}
 		}
@@ -287,7 +283,7 @@ func (c *Simple8Container[T]) MatchNotInSet(s any, bits, mask *Bitset) {
 				break
 			}
 			for _, v := range vals[:n] {
-				if !set.Contains(uint64(v + c.For)) {
+				if !set.Contains(uint64(v)) {
 					bits.Set(i)
 				}
 				i++
