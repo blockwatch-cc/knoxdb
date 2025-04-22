@@ -27,3 +27,4 @@ db/
 playground/
 vendor/
 go.work*
+data/
