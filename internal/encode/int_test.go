@@ -102,17 +102,17 @@ func TestEncodeIntRaw(t *testing.T) {
 	testIntContainer[uint8](t, TIntegerRaw)
 }
 
-// func TestEncodeIntBitpack(t *testing.T) {
-// 	testIntContainer[int64](t, TIntegerBitpacked)
-// 	testIntContainer[int32](t, TIntegerBitpacked)
-// 	testIntContainer[int16](t, TIntegerBitpacked)
-// 	testIntContainer[int8](t, TIntegerBitpacked)
+func TestEncodeIntBitpack(t *testing.T) {
+	testIntContainer[int64](t, TIntegerBitpacked)
+	testIntContainer[int32](t, TIntegerBitpacked)
+	testIntContainer[int16](t, TIntegerBitpacked)
+	testIntContainer[int8](t, TIntegerBitpacked)
 
-// 	testIntContainer[uint64](t, TIntegerBitpacked)
-// 	testIntContainer[uint32](t, TIntegerBitpacked)
-// 	testIntContainer[uint16](t, TIntegerBitpacked)
-// 	testIntContainer[uint8](t, TIntegerBitpacked)
-// }
+	testIntContainer[uint64](t, TIntegerBitpacked)
+	testIntContainer[uint32](t, TIntegerBitpacked)
+	testIntContainer[uint16](t, TIntegerBitpacked)
+	testIntContainer[uint8](t, TIntegerBitpacked)
+}
 
 func TestEncodeIntDict(t *testing.T) {
 	testIntContainer[int64](t, TIntegerDictionary)
