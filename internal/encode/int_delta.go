@@ -89,42 +89,19 @@ func (c *DeltaContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) In
 	return c
 }
 
-func (c *DeltaContainer[T]) DecodeChunk(dst *[CHUNK_SIZE]T, ofs int) {
-	var i int
-	val := c.For + T(ofs)*c.Delta
-	for range CHUNK_SIZE / 16 {
-		dst[i], val = val, val+c.Delta
-		dst[i+1], val = val, val+c.Delta
-		dst[i+2], val = val, val+c.Delta
-		dst[i+3], val = val, val+c.Delta
-		dst[i+4], val = val, val+c.Delta
-		dst[i+5], val = val, val+c.Delta
-		dst[i+6], val = val, val+c.Delta
-		dst[i+7], val = val, val+c.Delta
-		dst[i+8], val = val, val+c.Delta
-		dst[i+9], val = val, val+c.Delta
-		dst[i+10], val = val, val+c.Delta
-		dst[i+11], val = val, val+c.Delta
-		dst[i+12], val = val, val+c.Delta
-		dst[i+13], val = val, val+c.Delta
-		dst[i+14], val = val, val+c.Delta
-		dst[i+15], val = val, val+c.Delta
-		i += 16
-	}
-}
-
 func (c *DeltaContainer[T]) MatchEqual(val T, bits, _ *Bitset) {
-	if val < c.For {
-		return
-	}
-	if c.Delta == 0 {
-		if val == c.For {
-			bits.One()
+	// Note: delta = 0 is forbidden
+	if c.Delta > 0 {
+		if val < c.For {
+			return
 		}
-		return
+	} else {
+		if val > c.For {
+			return
+		}
 	}
 
-	val -= c.For // FIXME: overflow
+	val -= c.For // may wrap
 
 	if val%c.Delta == 0 {
 		if n := int(val / c.Delta); n < c.N {
@@ -134,17 +111,20 @@ func (c *DeltaContainer[T]) MatchEqual(val T, bits, _ *Bitset) {
 }
 
 func (c *DeltaContainer[T]) MatchNotEqual(val T, bits, _ *Bitset) {
-	if val < c.For {
-		bits.One()
-		return
-	}
-	if c.Delta == 0 {
-		if val != c.For {
+	// Note: delta = 0 is forbidden
+	if c.Delta > 0 {
+		if val < c.For {
 			bits.One()
+			return
 		}
-		return
+	} else {
+		if val > c.For {
+			bits.One()
+			return
+		}
 	}
-	val -= c.For
+
+	val -= c.For // may wrap
 
 	bits.One()
 	if c.Delta == 1 || val%c.Delta == 0 {
@@ -155,169 +135,247 @@ func (c *DeltaContainer[T]) MatchNotEqual(val T, bits, _ *Bitset) {
 }
 
 func (c *DeltaContainer[T]) MatchLess(val T, bits, _ *Bitset) {
-	if val < c.For {
-		return
-	}
-	if c.Delta == 0 {
+	// work in int64 space to avoid sign and wrap issues
+	v64 := int64(val) - int64(c.For)
+	d64 := int64(c.Delta)
+
+	if c.Delta > 0 {
+		// positive delta: [for ... for+d*(n-1)]
+
+		// is val smaller than container?
+		if val < c.For {
+			return
+		}
+
+		// is val larger than container?
+		if d64*int64(c.N-1) < v64 {
+			bits.One()
+			return
+		}
+
+		// calculate val position
+		n := int(v64 / d64)
+
+		// strict less, sub 1 when val is in match set
+		if v64%d64 == 0 {
+			n--
+		}
+
+		bits.SetRange(0, n)
+
+	} else {
+		// negative delta: [for-d*(n-1) ... for]
+
+		// is val larger than container?
 		if val > c.For {
 			bits.One()
+			return
 		}
-		return
-	}
-	val -= c.For
 
-	// is val larger than container?
-	if c.Delta*T(c.N-1) < val {
-		bits.One()
-		return
-	}
+		// is val smaller than container?
+		if d64*int64(c.N-1) >= v64 {
+			return
+		}
 
-	// calculate val position
-	n := int(val / c.Delta)
+		// calculate val position
+		n := int(v64 / d64)
 
-	// strict less, sub 1 when val is in match set
-	if c.Delta == 1 || val%c.Delta == 0 {
-		n--
-	}
+		// strict less: add 1 when val is in match set
+		if v64%d64 == 0 {
+			n++
+		}
 
-	if n == 0 {
-		bits.Set(n)
-	} else {
-		bits.SetRange(0, n)
+		bits.SetRange(n, c.N-1)
 	}
 }
 
 func (c *DeltaContainer[T]) MatchLessEqual(val T, bits, _ *Bitset) {
-	if val < c.For {
-		return
-	}
-	if c.Delta == 0 {
+	// work in int64 space to avoid sign and wrap issues
+	v64 := int64(val) - int64(c.For)
+	d64 := int64(c.Delta)
+
+	if c.Delta > 0 {
+		// positive delta: [for ... for+d*(n-1)]
+
+		// is val smaller than container?
+		if val < c.For {
+			return
+		}
+
+		// is val larger than container?
+		if d64*int64(c.N-1) < v64 {
+			bits.One()
+			return
+		}
+
+		// calculate val position
+		bits.SetRange(0, int(v64/d64))
+
+	} else {
+		// negative delta: [for-d*(n-1) ... for]
+
+		// is val larger than container?
 		if val >= c.For {
 			bits.One()
+			return
 		}
-		return
-	}
-	val -= c.For
 
-	// is val larger than container?
-	if c.Delta*T(c.N-1) < val {
-		bits.One()
-		return
-	}
+		// is val smaller than container?
+		if d64*int64(c.N-1) > v64 {
+			return
+		}
 
-	// set all bits below or equal to val's position
-	n := int(val / c.Delta)
-	if n == 0 {
-		bits.Set(n)
-	} else {
-		bits.SetRange(0, n)
+		// calculate val position
+		bits.SetRange(int(v64/d64), c.N-1)
 	}
 }
 
 func (c *DeltaContainer[T]) MatchGreater(val T, bits, _ *Bitset) {
-	if val < c.For {
-		bits.One()
-		return
-	}
-	if c.Delta == 0 {
+	// work in int64 space to avoid sign and wrap issues
+	v64 := int64(val) - int64(c.For)
+	d64 := int64(c.Delta)
+
+	if c.Delta > 0 {
+		// positive delta: [for ... for+d*(n-1)]
+
+		// is val smaller than container?
 		if val < c.For {
 			bits.One()
+			return
 		}
-		return
-	}
-	val -= c.For
 
-	// is val larger than container?
-	if c.Delta*T(c.N-1) < val {
-		return
-	}
+		// is val larger than container?
+		if d64*int64(c.N-1) < v64 {
+			return
+		}
 
-	// calculate val position
-	n := int(val / c.Delta)
+		// calculate val position
+		n := int(v64 / d64)
 
-	// strict greater, add 1 when val is in match set
-	if c.Delta == 1 || val%c.Delta == 0 {
-		n++
-	}
+		// strict greater, add 1 when val is in match set
+		if v64%d64 == 0 {
+			n++
+		}
 
-	// set bits range
-	if n == c.N-1 {
-		bits.Set(n)
-	} else {
 		bits.SetRange(n, c.N-1)
+
+	} else {
+		// negative delta: [for-d*(n-1) ... for]
+
+		// is val larger than container?
+		if val > c.For {
+			return
+		}
+
+		// is val smaller than container?
+		if d64*int64(c.N-1) > v64 {
+			bits.One()
+			return
+		}
+
+		// calculate val position
+		n := int(v64 / d64)
+
+		// strict greater, sub 1 when val is in match set
+		if v64%d64 == 0 {
+			n--
+		}
+
+		bits.SetRange(0, n)
 	}
 }
 
 func (c *DeltaContainer[T]) MatchGreaterEqual(val T, bits, _ *Bitset) {
-	if val < c.For {
-		bits.One()
-		return
-	}
-	if c.Delta == 0 {
+	// work in int64 space to avoid sign and wrap issues
+	v64 := int64(val) - int64(c.For)
+	d64 := int64(c.Delta)
+
+	if c.Delta > 0 {
+		// positive delta: [for ... for+d*(n-1)]
+
+		// is val smaller than container?
 		if val <= c.For {
 			bits.One()
+			return
 		}
-		return
-	}
-	val -= c.For
 
-	// is val larger than container?
-	if c.Delta*T(c.N-1) < val {
-		return
-	}
+		// is val larger than container?
+		if d64*int64(c.N-1) < v64 {
+			return
+		}
 
-	// calculate val position
-	n := int(val / c.Delta)
+		// calculate val position
+		bits.SetRange(int(v64/d64), c.N-1)
 
-	// set bits range
-	switch {
-	case n == 0:
-		bits.One()
-	case n == c.N-1:
-		bits.Set(n)
-	default:
-		bits.SetRange(n, c.N-1)
+	} else {
+		// negative delta: [for-d*(n-1) ... for]
+
+		// is val larger than container?
+		if val > c.For {
+			return
+		}
+
+		// is val smaller than container?
+		if d64*int64(c.N-1) > v64 {
+			bits.One()
+			return
+		}
+
+		// calculate val position
+		bits.SetRange(0, int(v64/d64))
 	}
 }
 
 func (c *DeltaContainer[T]) MatchBetween(a, b T, bits, _ *Bitset) {
+	// work in int64 space to avoid sign and wrap issues
+	a64 := int64(a) - int64(c.For)
+	b64 := int64(b) - int64(c.For)
+	d64 := int64(c.Delta)
+
 	// quick checks for outlier cases (no or all matches)
-	if b < c.For {
-		return
-	}
-	if a <= c.For && b >= c.Delta*T(c.N-1)+c.For {
-		bits.One()
-		return
-	}
-	if c.Delta == 0 {
-		return
-	}
+	if c.Delta > 0 {
+		// positive delta: [for ... for+d*(n-1)]
 
-	// adjust for out of bounds a
-	// ensure overflow free calculations
-	if a <= c.For {
-		a = 0
-	} else {
-		a = T(uint64(a - c.For))
-	}
-	b = T(uint64(b - c.For))
+		// vals don't overlap container?
+		if b < c.For || a64 > d64*int64(c.N-1) {
+			return
+		}
 
-	// calculate boundary positions
-	na := int(a / c.Delta)
-	nb := int(b / c.Delta)
+		// calculate boundary positions
+		na := int(a64 / d64)
+		nb := int(b64 / d64)
 
-	// adjust a for non-direct match
-	if a%c.Delta != 0 {
-		na++
-	}
+		// adjust a for non-direct match
+		if a64%d64 != 0 {
+			na++
+		}
 
-	// adjust for out of bounds b
-	nb = min(nb, c.N-1)
+		// adjust for out of bounds b
+		nb = min(nb, c.N-1)
 
-	if na == nb {
-		bits.Set(na)
-	} else {
 		bits.SetRange(na, nb)
+
+	} else {
+		// negative delta: [for-d*(n-1) ... for]
+
+		// vals don't overlap container?
+		if a > c.For || b64 < d64*int64(c.N-1) {
+			return
+		}
+
+		// calculate boundary positions
+		na := int(a64 / d64)
+		nb := int(b64 / d64)
+
+		// adjust a for non-direct match
+		if a64%d64 != 0 {
+			na--
+		}
+
+		// adjust for out of bounds b
+		nb = min(nb, c.N-1)
+
+		bits.SetRange(nb, na)
 	}
 }
 
@@ -455,3 +513,27 @@ var deltaFactory = DeltaFactory{
 func (c *DeltaContainer[T]) Iterator() Iterator[T] {
 	return nil
 }
+
+// func (c *DeltaContainer[T]) DecodeChunk(dst *[CHUNK_SIZE]T, ofs int) {
+// 	var i int
+// 	val := c.For + T(ofs)*c.Delta
+// 	for range CHUNK_SIZE / 16 {
+// 		dst[i], val = val, val+c.Delta
+// 		dst[i+1], val = val, val+c.Delta
+// 		dst[i+2], val = val, val+c.Delta
+// 		dst[i+3], val = val, val+c.Delta
+// 		dst[i+4], val = val, val+c.Delta
+// 		dst[i+5], val = val, val+c.Delta
+// 		dst[i+6], val = val, val+c.Delta
+// 		dst[i+7], val = val, val+c.Delta
+// 		dst[i+8], val = val, val+c.Delta
+// 		dst[i+9], val = val, val+c.Delta
+// 		dst[i+10], val = val, val+c.Delta
+// 		dst[i+11], val = val, val+c.Delta
+// 		dst[i+12], val = val, val+c.Delta
+// 		dst[i+13], val = val, val+c.Delta
+// 		dst[i+14], val = val, val+c.Delta
+// 		dst[i+15], val = val, val+c.Delta
+// 		i += 16
+// 	}
+// }
