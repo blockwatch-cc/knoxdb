@@ -14,7 +14,7 @@ func GenForIntScheme[T types.Integer](scheme, n int) []T {
 	case 0: // TIntegerConstant,
 		return tests.GenConst[T](n, 42)
 	case 1: // TIntegerDelta,
-		return tests.GenSeq[T](n)
+		return tests.GenSeq[T](n, 0)
 	case 2: // TIntegerRunEnd,
 		return tests.GenRuns[T](n, min(n, 5), -1)
 	case 3: // TIntegerBitpacked,

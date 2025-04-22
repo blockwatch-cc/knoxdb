@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func BenchmarkAnalyzeFloat(b *testing.B) {
+func BenchmarkFloatAnalyze(b *testing.B) {
 	for _, c := range tests.MakeBenchmarks[float64]() {
 		b.Run(c.Name, func(b *testing.B) {
 			b.ReportAllocs()
@@ -28,7 +28,7 @@ func BenchmarkAnalyzeFloat(b *testing.B) {
 	}
 }
 
-func BenchmarkEstimateFloat(b *testing.B) {
+func BenchmarkFloatEstimate(b *testing.B) {
 	for _, c := range tests.MakeBenchmarks[float64]() {
 		for _, scheme := range []FloatContainerType{
 			TFloatConstant,
@@ -52,7 +52,7 @@ func BenchmarkEstimateFloat(b *testing.B) {
 	}
 }
 
-func BenchmarkEncodeFloat(b *testing.B) {
+func BenchmarkFloatEncode(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		for _, scheme := range []FloatContainerType{
 			TFloatConstant,
@@ -87,7 +87,7 @@ func BenchmarkEncodeFloat(b *testing.B) {
 	}
 }
 
-func BenchmarkEncodeAndStoreFloat(b *testing.B) {
+func BenchmarkFloatEncodeAndStore(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		for _, scheme := range []FloatContainerType{
 			TFloatConstant,
@@ -114,7 +114,7 @@ func BenchmarkEncodeAndStoreFloat(b *testing.B) {
 	}
 }
 
-func BenchmarkEncodeBestFloat(b *testing.B) {
+func BenchmarkFloatEncodeBest(b *testing.B) {
 	for _, c := range tests.MakeBenchmarks[float64]() {
 		once := etests.ShowInfo
 		b.Run(c.Name, func(b *testing.B) {
@@ -137,7 +137,7 @@ func BenchmarkEncodeBestFloat(b *testing.B) {
 	}
 }
 
-func BenchmarkEncodeLegacyFloat(b *testing.B) {
+func BenchmarkFloatEncodeLegacy(b *testing.B) {
 	for _, c := range tests.MakeBenchmarks[float64]() {
 		buf := bytes.NewBuffer(make([]byte, zip.Int64EncodedSize(len(c.Data))))
 		b.Run(c.Name, func(b *testing.B) {
@@ -156,7 +156,7 @@ func BenchmarkEncodeLegacyFloat(b *testing.B) {
 	}
 }
 
-func BenchmarkAppendToFloat(b *testing.B) {
+func BenchmarkFloatAppend(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		for _, scheme := range []FloatContainerType{
 			TFloatConstant,
@@ -189,7 +189,7 @@ func BenchmarkAppendToFloat(b *testing.B) {
 	}
 }
 
-func BenchmarkCmpEqualFloat(b *testing.B) {
+func BenchmarkFloatCmp(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		for _, scheme := range []FloatContainerType{
 			TFloatConstant,

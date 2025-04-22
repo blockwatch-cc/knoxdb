@@ -25,7 +25,7 @@ import (
 // Benchmarks
 //
 
-func BenchmarkAnalyzeInt(b *testing.B) {
+func BenchmarkIntAnalyze(b *testing.B) {
 	for _, c := range tests.MakeBenchmarks[uint64]() {
 		b.Run(c.Name, func(b *testing.B) {
 			b.ReportAllocs()
@@ -39,7 +39,7 @@ func BenchmarkAnalyzeInt(b *testing.B) {
 	}
 }
 
-func BenchmarkEstimateInt(b *testing.B) {
+func BenchmarkIntEstimate(b *testing.B) {
 	for _, c := range tests.MakeBenchmarks[uint64]() {
 		ctx := AnalyzeInt(c.Data, true)
 		for _, scheme := range []IntegerContainerType{
@@ -65,7 +65,7 @@ func BenchmarkEstimateInt(b *testing.B) {
 	}
 }
 
-func BenchmarkEncodeInt(b *testing.B) {
+func BenchmarkIntEncode(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		for _, scheme := range []IntegerContainerType{
 			TIntegerConstant,
@@ -99,7 +99,7 @@ func BenchmarkEncodeInt(b *testing.B) {
 	}
 }
 
-func BenchmarkEncodeAndStoreInt(b *testing.B) {
+func BenchmarkIntEncodeAndStore(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		for _, scheme := range []IntegerContainerType{
 			TIntegerConstant,
@@ -129,7 +129,7 @@ func BenchmarkEncodeAndStoreInt(b *testing.B) {
 	}
 }
 
-func BenchmarkEncodeBestInt(b *testing.B) {
+func BenchmarkIntEncodeBest(b *testing.B) {
 	for _, c := range tests.MakeBenchmarks[uint64]() {
 		once := etests.ShowInfo
 		b.Run(c.Name, func(b *testing.B) {
@@ -152,7 +152,7 @@ func BenchmarkEncodeBestInt(b *testing.B) {
 	}
 }
 
-func BenchmarkEncodeLegacyInt(b *testing.B) {
+func BenchmarkIntEncodeLegacy(b *testing.B) {
 	for _, c := range tests.MakeBenchmarks[uint64]() {
 		buf := bytes.NewBuffer(make([]byte, zip.Int64EncodedSize(len(c.Data))))
 		b.Run(c.Name, func(b *testing.B) {
@@ -171,7 +171,7 @@ func BenchmarkEncodeLegacyInt(b *testing.B) {
 	}
 }
 
-func BenchmarkAppendToInt(b *testing.B) {
+func BenchmarkIntAppend(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		for _, scheme := range []IntegerContainerType{
 			TIntegerConstant,
@@ -205,7 +205,7 @@ func BenchmarkAppendToInt(b *testing.B) {
 	}
 }
 
-func BenchmarkCmpEqualInt(b *testing.B) {
+func BenchmarkIntCmp(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		for _, scheme := range []IntegerContainerType{
 			TIntegerConstant,

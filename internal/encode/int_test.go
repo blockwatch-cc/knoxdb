@@ -67,342 +67,88 @@ func TestAnalyzeInt(t *testing.T) {
 	assert.Contains(t, x.EligibleSchemes(), TIntegerSimple8, "missing eligible scheme")
 }
 
-func testIntContainerType[T types.Integer](t *testing.T, scheme IntegerContainerType) {
-	for _, c := range etests.MakeShortIntTests[T](int(scheme)) {
-		t.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(t *testing.T) {
-			enc := NewInt[T](scheme)
+func TestEncodeIntConst(t *testing.T) {
+	testIntContainer[int64](t, TIntegerConstant)
+	testIntContainer[int32](t, TIntegerConstant)
+	testIntContainer[int16](t, TIntegerConstant)
+	testIntContainer[int8](t, TIntegerConstant)
 
-			// analyze and encode data into container
-			ctx := AnalyzeInt(c.Data, true)
-			enc.Encode(ctx, c.Data, 1)
-
-			// validate contents
-			require.Equal(t, len(c.Data), enc.Len())
-			for i, v := range c.Data {
-				assert.Equal(t, v, enc.Get(i))
-			}
-
-			// serialize to buffer
-			buf := make([]byte, 0, enc.Size())
-			buf = enc.Store(buf)
-			require.NotNil(t, buf)
-
-			// load back into new container
-			enc2 := NewInt[T](scheme)
-			buf, err := enc2.Load(buf)
-			require.NoError(t, err)
-			assert.Len(t, buf, 0)
-
-			// validate contents
-			require.Equal(t, len(c.Data), enc2.Len())
-			for i, v := range c.Data {
-				assert.Equal(t, v, enc2.Get(i))
-			}
-
-			// validate append
-			all := tests.GenSeq[uint32](len(c.Data))
-			dst := make([]T, 0, len(c.Data))
-			dst = enc2.AppendTo(all, dst)
-			assert.Len(t, dst, len(c.Data))
-			assert.Equal(t, c.Data, dst)
-
-			enc2.Close()
-			enc.Close()
-		})
-	}
-
-	if scheme == TIntegerBitpacked {
-		return
-	}
-
-	// validate matchers
-	for _, sz := range etests.CompareSizes {
-		t.Run(fmt.Sprintf("%T/cmp_%d", T(0), sz), func(t *testing.T) {
-			src := etests.GenForIntScheme[T](int(scheme), sz)
-			enc := NewInt[T](scheme)
-			ctx := AnalyzeInt(src, true)
-			enc.Encode(ctx, src, 1)
-
-			// equal
-			t.Run("EQ", func(t *testing.T) {
-				testIntCompareFunc[T](t, enc.MatchEqual, src, types.FilterModeEqual)
-			})
-
-			// not equal
-			t.Run("NE", func(t *testing.T) {
-				testIntCompareFunc[T](t, enc.MatchNotEqual, src, types.FilterModeNotEqual)
-			})
-
-			// less
-			t.Run("LT", func(t *testing.T) {
-				testIntCompareFunc[T](t, enc.MatchLess, src, types.FilterModeLt)
-			})
-
-			// less equal
-			t.Run("LE", func(t *testing.T) {
-				testIntCompareFunc[T](t, enc.MatchLessEqual, src, types.FilterModeLe)
-			})
-
-			// greater
-			t.Run("GT", func(t *testing.T) {
-				testIntCompareFunc[T](t, enc.MatchGreater, src, types.FilterModeGt)
-			})
-
-			// greater equal
-			t.Run("GE", func(t *testing.T) {
-				testIntCompareFunc[T](t, enc.MatchGreaterEqual, src, types.FilterModeGe)
-			})
-
-			// between
-			t.Run("RG", func(t *testing.T) {
-				testIntCompareFunc2[T](t, enc.MatchBetween, src, types.FilterModeRange)
-			})
-
-			// in set
-			t.Run("IN", func(t *testing.T) {
-				testIntCompareFunc3[T](t, enc.MatchInSet, src, types.FilterModeIn)
-			})
-
-			// not in set
-			t.Run("NI", func(t *testing.T) {
-				testIntCompareFunc3[T](t, enc.MatchNotInSet, src, types.FilterModeNotIn)
-			})
-		})
-	}
+	testIntContainer[uint64](t, TIntegerConstant)
+	testIntContainer[uint32](t, TIntegerConstant)
+	testIntContainer[uint16](t, TIntegerConstant)
+	testIntContainer[uint8](t, TIntegerConstant)
 }
 
-type IntCompareFunc[T types.Integer] func(T, *Bitset, *Bitset)
-type IntCompareFunc2[T types.Integer] func(T, T, *Bitset, *Bitset)
-type IntCompareFunc3[T types.Integer] func(any, *Bitset, *Bitset)
+func TestEncodeDelta(t *testing.T) {
+	testIntContainer[int64](t, TIntegerDelta)
+	testIntContainer[int32](t, TIntegerDelta)
+	testIntContainer[int16](t, TIntegerDelta)
+	testIntContainer[int8](t, TIntegerDelta)
 
-func testIntCompareFunc[T types.Integer](t *testing.T, cmp IntCompareFunc[T], src []T, mode types.FilterMode) {
-	bits := bitset.NewBitset(len(src))
-	minv, maxv := slices.Min(src), slices.Max(src)
-
-	// single value
-	val := src[len(src)/2]
-	cmp(val, bits, nil)
-	ensureBits(t, src, val, val, bits, nil, mode)
-	bits.Zero()
-	require.Equal(t, 0, bits.Count(), "cleared")
-
-	// value over bounds
-	over := maxv + 1
-	cmp(over, bits, nil)
-	ensureBits(t, src, over, over, bits, nil, mode)
-	bits.Zero()
-	require.Equal(t, 0, bits.Count(), "cleared")
-
-	// value under bounds
-	under := minv
-	if under > 0 {
-		under--
-	}
-	cmp(under, bits, nil)
-	ensureBits(t, src, under, under, bits, nil, mode)
-	bits.Zero()
-	require.Equal(t, 0, bits.Count(), "cleared")
+	testIntContainer[uint64](t, TIntegerDelta)
+	testIntContainer[uint32](t, TIntegerDelta)
+	testIntContainer[uint16](t, TIntegerDelta)
+	testIntContainer[uint8](t, TIntegerDelta)
 }
 
-func testIntCompareFunc2[T types.Integer](t *testing.T, cmp IntCompareFunc2[T], src []T, mode types.FilterMode) {
-	bits := bitset.NewBitset(len(src))
-	minv, maxv := slices.Min(src), slices.Max(src)
+func TestEncodeIntRaw(t *testing.T) {
+	testIntContainer[int64](t, TIntegerRaw)
+	testIntContainer[int32](t, TIntegerRaw)
+	testIntContainer[int16](t, TIntegerRaw)
+	testIntContainer[int8](t, TIntegerRaw)
 
-	// single value
-	val := src[len(src)/2]
-	cmp(val, val, bits, nil)
-	ensureBits(t, src, val, val, bits, nil, mode)
-	bits.Zero()
-	require.Equal(t, 0, bits.Count(), "cleared")
-
-	// full range
-	cmp(minv, maxv, bits, nil)
-	ensureBits(t, src, minv, maxv, bits, nil, mode)
-	bits.Zero()
-
-	// partial range
-	from, to := max(val/2, minv+1), min(val*2, maxv-1)
-	if from > to {
-		from, to = to, from
-	}
-	cmp(from, to, bits, nil)
-	ensureBits(t, src, from, to, bits, nil, mode)
-	bits.Zero()
-
-	// out of bounds (over)
-	cmp(maxv+1, maxv+1, bits, nil)
-	ensureBits(t, src, maxv+1, maxv+1, bits, nil, mode)
-	bits.Zero()
-
-	// out of bounds (under)
-	if minv > 2 {
-		cmp(minv-1, minv-1, bits, nil)
-		ensureBits(t, src, minv-1, minv-1, bits, nil, mode)
-		bits.Zero()
-	}
+	testIntContainer[uint64](t, TIntegerRaw)
+	testIntContainer[uint32](t, TIntegerRaw)
+	testIntContainer[uint16](t, TIntegerRaw)
+	testIntContainer[uint8](t, TIntegerRaw)
 }
 
-func testIntCompareFunc3[T types.Integer](t *testing.T, cmp IntCompareFunc3[T], src []T, mode types.FilterMode) {
-	bits := bitset.NewBitset(len(src))
+func TestEncodeIntBitpack(t *testing.T) {
+	testIntContainer[int64](t, TIntegerBitpacked)
+	testIntContainer[int32](t, TIntegerBitpacked)
+	testIntContainer[int16](t, TIntegerBitpacked)
+	testIntContainer[int8](t, TIntegerBitpacked)
 
-	// construct set
-	set := xroar.NewBitmap()
-	for range 10 {
-		set.Set(uint64(src[util.RandIntn(len(src))]))
-	}
-
-	// run cmp
-	cmp(set, bits, nil)
-	ensureBits(t, src, 0, 0, bits, set, mode)
+	testIntContainer[uint64](t, TIntegerBitpacked)
+	testIntContainer[uint32](t, TIntegerBitpacked)
+	testIntContainer[uint16](t, TIntegerBitpacked)
+	testIntContainer[uint8](t, TIntegerBitpacked)
 }
 
-func ensureBits[T types.Integer](t *testing.T, vals []T, val, val2 T, bits *Bitset, set *xroar.Bitmap, mode types.FilterMode) {
-	if !testing.Short() {
-		for i, v := range vals {
-			t.Logf("Val %d: %d", i, v)
-		}
-		t.Logf("Bitset %x", bits.Bytes())
-	}
-	minv, maxv := slices.Min(vals), slices.Max(vals)
-	switch mode {
-	case types.FilterModeEqual:
-		for i, v := range vals {
-			require.Equal(t, v == val, bits.IsSet(i), "bit=%d val=%d %s %d min=%d max=%d",
-				i, v, mode, val, minv, maxv)
-		}
+func TestEncodeIntDict(t *testing.T) {
+	testIntContainer[int64](t, TIntegerDictionary)
+	testIntContainer[int32](t, TIntegerDictionary)
+	testIntContainer[int16](t, TIntegerDictionary)
+	testIntContainer[int8](t, TIntegerDictionary)
 
-	case types.FilterModeNotEqual:
-		for i, v := range vals {
-			require.Equal(t, v != val, bits.IsSet(i), "bit=%d val=%d %s %d min=%d max=%d",
-				i, v, mode, val, minv, maxv)
-		}
-
-	case types.FilterModeLt:
-		for i, v := range vals {
-			require.Equal(t, v < val, bits.IsSet(i), "bit=%d val=%d %s %d min=%d max=%d",
-				i, v, mode, val, minv, maxv)
-		}
-
-	case types.FilterModeLe:
-		for i, v := range vals {
-			require.Equal(t, v <= val, bits.IsSet(i), "bit=%d val=%d %s %d min=%d max=%d",
-				i, v, mode, val, minv, maxv)
-		}
-
-	case types.FilterModeGt:
-		for i, v := range vals {
-			require.Equal(t, v > val, bits.IsSet(i), "bit=%d val=%d %s %d min=%d max=%d",
-				i, v, mode, val, minv, maxv)
-		}
-
-	case types.FilterModeGe:
-		for i, v := range vals {
-			require.Equal(t, v >= val, bits.IsSet(i), "bit=%d val=%d %s %d min=%d max=%d",
-				i, v, mode, val, minv, maxv)
-		}
-
-	case types.FilterModeRange:
-		for i, v := range vals {
-			require.Equal(t, v >= val && v <= val2, bits.IsSet(i), "bit=%d val=%d %s [%d,%d] min=%d max=%d",
-				i, v, mode, val, val2, minv, maxv)
-		}
-
-	case types.FilterModeIn:
-		for i, v := range vals {
-			require.Equal(t, set.Contains(uint64(v)), bits.IsSet(i), "bit=%d min=%d max=%d val=%d %s %v",
-				i, minv, maxv, v, mode, set.ToArray())
-		}
-
-	case types.FilterModeNotIn:
-		for i, v := range vals {
-			require.Equal(t, !set.Contains(uint64(v)), bits.IsSet(i), "bit=%d min=%d max=%d val=%d %s %v",
-				i, minv, maxv, v, mode, set.ToArray())
-		}
-	}
+	testIntContainer[uint64](t, TIntegerDictionary)
+	testIntContainer[uint32](t, TIntegerDictionary)
+	testIntContainer[uint16](t, TIntegerDictionary)
+	testIntContainer[uint8](t, TIntegerDictionary)
 }
 
-func TestEncodeConstInt(t *testing.T) {
-	testIntContainerType[int64](t, TIntegerConstant)
-	testIntContainerType[int32](t, TIntegerConstant)
-	testIntContainerType[int16](t, TIntegerConstant)
-	testIntContainerType[int8](t, TIntegerConstant)
+func TestEncodeIntRun(t *testing.T) {
+	testIntContainer[int64](t, TIntegerRunEnd)
+	testIntContainer[int32](t, TIntegerRunEnd)
+	testIntContainer[int16](t, TIntegerRunEnd)
+	testIntContainer[int8](t, TIntegerRunEnd)
 
-	testIntContainerType[uint64](t, TIntegerConstant)
-	testIntContainerType[uint32](t, TIntegerConstant)
-	testIntContainerType[uint16](t, TIntegerConstant)
-	testIntContainerType[uint8](t, TIntegerConstant)
+	testIntContainer[uint64](t, TIntegerRunEnd)
+	testIntContainer[uint32](t, TIntegerRunEnd)
+	testIntContainer[uint16](t, TIntegerRunEnd)
+	testIntContainer[uint8](t, TIntegerRunEnd)
 }
 
-// func TestEncodeDelta(t *testing.T) {
-// 	testIntContainerType[int64](t, TIntegerDelta)
-// 	testIntContainerType[int32](t, TIntegerDelta)
-// 	testIntContainerType[int16](t, TIntegerDelta)
-// 	testIntContainerType[int8](t, TIntegerDelta)
+func TestEncodeIntSimple8(t *testing.T) {
+	testIntContainer[int64](t, TIntegerSimple8)
+	testIntContainer[int32](t, TIntegerSimple8)
+	testIntContainer[int16](t, TIntegerSimple8)
+	testIntContainer[int8](t, TIntegerSimple8)
 
-// 	testIntContainerType[uint64](t, TIntegerDelta)
-// 	testIntContainerType[uint32](t, TIntegerDelta)
-// 	testIntContainerType[uint16](t, TIntegerDelta)
-// 	testIntContainerType[uint8](t, TIntegerDelta)
-// }
-
-func TestEncodeRawInt(t *testing.T) {
-	testIntContainerType[int64](t, TIntegerRaw)
-	testIntContainerType[int32](t, TIntegerRaw)
-	testIntContainerType[int16](t, TIntegerRaw)
-	testIntContainerType[int8](t, TIntegerRaw)
-
-	testIntContainerType[uint64](t, TIntegerRaw)
-	testIntContainerType[uint32](t, TIntegerRaw)
-	testIntContainerType[uint16](t, TIntegerRaw)
-	testIntContainerType[uint8](t, TIntegerRaw)
-}
-
-func TestEncodeBitpack(t *testing.T) {
-	testIntContainerType[int64](t, TIntegerBitpacked)
-	testIntContainerType[int32](t, TIntegerBitpacked)
-	testIntContainerType[int16](t, TIntegerBitpacked)
-	testIntContainerType[int8](t, TIntegerBitpacked)
-
-	testIntContainerType[uint64](t, TIntegerBitpacked)
-	testIntContainerType[uint32](t, TIntegerBitpacked)
-	testIntContainerType[uint16](t, TIntegerBitpacked)
-	testIntContainerType[uint8](t, TIntegerBitpacked)
-}
-
-func TestEncodeDict(t *testing.T) {
-	testIntContainerType[int64](t, TIntegerDictionary)
-	testIntContainerType[int32](t, TIntegerDictionary)
-	testIntContainerType[int16](t, TIntegerDictionary)
-	testIntContainerType[int8](t, TIntegerDictionary)
-
-	testIntContainerType[uint64](t, TIntegerDictionary)
-	testIntContainerType[uint32](t, TIntegerDictionary)
-	testIntContainerType[uint16](t, TIntegerDictionary)
-	testIntContainerType[uint8](t, TIntegerDictionary)
-}
-
-func TestEncodeRun(t *testing.T) {
-	testIntContainerType[int64](t, TIntegerRunEnd)
-	testIntContainerType[int32](t, TIntegerRunEnd)
-	testIntContainerType[int16](t, TIntegerRunEnd)
-	testIntContainerType[int8](t, TIntegerRunEnd)
-
-	testIntContainerType[uint64](t, TIntegerRunEnd)
-	testIntContainerType[uint32](t, TIntegerRunEnd)
-	testIntContainerType[uint16](t, TIntegerRunEnd)
-	testIntContainerType[uint8](t, TIntegerRunEnd)
-}
-
-func TestEncodeSimple8(t *testing.T) {
-	testIntContainerType[int64](t, TIntegerSimple8)
-	testIntContainerType[int32](t, TIntegerSimple8)
-	testIntContainerType[int16](t, TIntegerSimple8)
-	testIntContainerType[int8](t, TIntegerSimple8)
-
-	testIntContainerType[uint64](t, TIntegerSimple8)
-	testIntContainerType[uint32](t, TIntegerSimple8)
-	testIntContainerType[uint16](t, TIntegerSimple8)
-	testIntContainerType[uint8](t, TIntegerSimple8)
+	testIntContainer[uint64](t, TIntegerSimple8)
+	testIntContainer[uint32](t, TIntegerSimple8)
+	testIntContainer[uint16](t, TIntegerSimple8)
+	testIntContainer[uint8](t, TIntegerSimple8)
 }
 
 func TestEncodeInt(t *testing.T) {
@@ -430,29 +176,351 @@ func testEncodeIntT[T types.Integer](t *testing.T) {
 	}
 }
 
-func TestUniqueArray(t *testing.T) {
-	for _, c := range tests.BenchmarkSizes {
-		data := util.RandInts[int16](c.N)
-		minx := slices.Min(data)
-		maxx := slices.Max(data)
+func testIntContainer[T types.Integer](t *testing.T, scheme IntegerContainerType) {
+	// general
+	testIntContainerEncode[T](t, scheme)
+	if t.Failed() {
+		t.FailNow()
+	}
 
-		// map
-		u := make(map[int16]struct{}, c.N)
-		for _, v := range data {
-			u[v] = struct{}{}
-		}
+	// iterator
+	testIntContainerIterator[T](t, scheme)
+	if t.Failed() {
+		t.FailNow()
+	}
 
-		// array
-		var card int
-		a := make([]uint16, int(maxx)-int(minx)+1)
-		for _, v := range data {
-			a[int(v)-int(minx)] = 1
-		}
-		for _, v := range a {
-			if v > 0 {
-				card++
+	// skip cmp tests for bitpack until implemented
+	if scheme == TIntegerBitpacked {
+		t.Logf("WARN: skipping bitpack compare tests")
+		t.Skip()
+	}
+
+	// compare
+	testIntContainerCompare[T](t, scheme)
+	if t.Failed() {
+		t.FailNow()
+	}
+}
+
+func testIntContainerEncode[T types.Integer](t *testing.T, scheme IntegerContainerType) {
+	for _, c := range etests.MakeShortIntTests[T](int(scheme)) {
+		t.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(t *testing.T) {
+			enc := NewInt[T](scheme)
+
+			// analyze and encode data into container
+			ctx := AnalyzeInt(c.Data, true)
+			enc.Encode(ctx, c.Data, 1)
+			t.Logf("Info: %s", enc.Info())
+
+			// validate contents
+			require.Equal(t, len(c.Data), enc.Len())
+			for i, v := range c.Data {
+				assert.Equal(t, v, enc.Get(i))
 			}
+
+			// serialize to buffer
+			buf := make([]byte, 0, enc.Size())
+			buf = enc.Store(buf)
+			require.NotNil(t, buf)
+
+			// load back into new container
+			enc2 := NewInt[T](scheme)
+			buf, err := enc2.Load(buf)
+			require.NoError(t, err)
+			assert.Len(t, buf, 0)
+
+			// validate contents
+			require.Equal(t, len(c.Data), enc2.Len())
+			for i, v := range c.Data {
+				assert.Equal(t, v, enc2.Get(i))
+			}
+
+			// validate append
+			all := tests.GenSeq[uint32](len(c.Data), 1)
+			dst := make([]T, 0, len(c.Data))
+			dst = enc2.AppendTo(all, dst)
+			assert.Len(t, dst, len(c.Data))
+			assert.Equal(t, c.Data, dst)
+
+			enc2.Close()
+			enc.Close()
+		})
+		if t.Failed() {
+			t.FailNow()
 		}
-		require.Equal(t, card, len(u))
+	}
+}
+
+func isCompatibleTest[T types.Integer](scheme IntegerContainerType, ctx *IntegerContext[T]) bool {
+	maxv := uint64(1<<(util.SizeOf[T]()*8) - 1)
+	if types.IsSigned[T]() {
+		maxv >>= 1
+	}
+	if scheme == TIntegerDelta {
+		if uint64(ctx.NumValues) > maxv || ctx.Delta == 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func testIntContainerCompare[T types.Integer](t *testing.T, scheme IntegerContainerType) {
+	// validate matchers
+	for _, sz := range etests.CompareSizes {
+		t.Run(fmt.Sprintf("%T/cmp/%d", T(0), sz), func(t *testing.T) {
+			src := etests.GenForIntScheme[T](int(scheme), sz)
+			enc := NewInt[T](scheme)
+			ctx := AnalyzeInt(src, true)
+
+			if !isCompatibleTest[T](scheme, ctx) {
+				t.Logf("Skipping cmp test sz=%d for %s/%T", sz, scheme, T(0))
+				t.Skip()
+			}
+
+			enc.Encode(ctx, src, 1)
+			t.Logf("Info: %s", enc.Info())
+
+			// equal
+			t.Run("EQ", func(t *testing.T) {
+				testCompareFunc[T](t, enc.MatchEqual, src, types.FilterModeEqual)
+			})
+
+			// not equal
+			t.Run("NE", func(t *testing.T) {
+				testCompareFunc[T](t, enc.MatchNotEqual, src, types.FilterModeNotEqual)
+			})
+
+			// less
+			t.Run("LT", func(t *testing.T) {
+				testCompareFunc[T](t, enc.MatchLess, src, types.FilterModeLt)
+			})
+
+			// less equal
+			t.Run("LE", func(t *testing.T) {
+				testCompareFunc[T](t, enc.MatchLessEqual, src, types.FilterModeLe)
+			})
+
+			// greater
+			t.Run("GT", func(t *testing.T) {
+				testCompareFunc[T](t, enc.MatchGreater, src, types.FilterModeGt)
+			})
+
+			// greater equal
+			t.Run("GE", func(t *testing.T) {
+				testCompareFunc[T](t, enc.MatchGreaterEqual, src, types.FilterModeGe)
+			})
+
+			// between
+			t.Run("RG", func(t *testing.T) {
+				testCompareFunc2[T](t, enc.MatchBetween, src, types.FilterModeRange)
+			})
+
+			// in set
+			t.Run("IN", func(t *testing.T) {
+				testCompareFunc3[T](t, enc.MatchInSet, src, types.FilterModeIn)
+			})
+
+			// not in set
+			t.Run("NI", func(t *testing.T) {
+				testCompareFunc3[T](t, enc.MatchNotInSet, src, types.FilterModeNotIn)
+			})
+		})
+		if t.Failed() {
+			t.FailNow()
+		}
+	}
+}
+
+type CompareFunc[T types.Number] func(T, *Bitset, *Bitset)
+type CompareFunc2[T types.Number] func(T, T, *Bitset, *Bitset)
+type CompareFunc3[T types.Number] func(any, *Bitset, *Bitset)
+
+func testCompareFunc[T types.Number](t *testing.T, cmp CompareFunc[T], src []T, mode types.FilterMode) {
+	bits := bitset.NewBitset(len(src))
+	minv, maxv := slices.Min(src), slices.Max(src)
+
+	// single value
+	val := src[len(src)/2]
+	cmp(val, bits, nil)
+	etests.EnsureBits(t, src, val, val, bits, nil, mode)
+	bits.Zero()
+	require.Equal(t, 0, bits.Count(), "cleared")
+
+	// value over bounds
+	if maxv < types.MaxVal[T]() {
+		over := maxv + 1
+		cmp(over, bits, nil)
+		etests.EnsureBits(t, src, over, over, bits, nil, mode)
+		bits.Zero()
+		require.Equal(t, 0, bits.Count(), "cleared")
+	}
+
+	// value under bounds
+	if minv > types.MinVal[T]() {
+		under := minv - 1
+		cmp(under, bits, nil)
+		etests.EnsureBits(t, src, under, under, bits, nil, mode)
+		bits.Zero()
+		require.Equal(t, 0, bits.Count(), "cleared")
+	}
+}
+
+func testCompareFunc2[T types.Number](t *testing.T, cmp CompareFunc2[T], src []T, mode types.FilterMode) {
+	bits := bitset.NewBitset(len(src))
+	minv, maxv := slices.Min(src), slices.Max(src)
+
+	// single value
+	val := src[len(src)/2]
+	cmp(val, val, bits, nil)
+	etests.EnsureBits(t, src, val, val, bits, nil, mode)
+	bits.Zero()
+	require.Equal(t, 0, bits.Count(), "cleared")
+
+	// full range
+	cmp(minv, maxv, bits, nil)
+	etests.EnsureBits(t, src, minv, maxv, bits, nil, mode)
+	bits.Zero()
+
+	// partial range
+	from, to := max(val/2, minv+1), min(val*2, maxv-1)
+	if from > to {
+		from, to = to, from
+	}
+	// skip test if values would wrap around
+	if from > minv && to < maxv {
+		cmp(from, to, bits, nil)
+		etests.EnsureBits(t, src, from, to, bits, nil, mode)
+		bits.Zero()
+	}
+
+	// out of bounds (over)
+	if maxv < types.MaxVal[T]()-1 {
+		cmp(maxv+1, maxv+1, bits, nil)
+		etests.EnsureBits(t, src, maxv+1, maxv+1, bits, nil, mode)
+		bits.Zero()
+	}
+
+	// out of bounds (under)
+	if minv > types.MinVal[T]()+2 {
+		cmp(minv-1, minv-1, bits, nil)
+		etests.EnsureBits(t, src, minv-1, minv-1, bits, nil, mode)
+		bits.Zero()
+	}
+}
+
+func testCompareFunc3[T types.Number](t *testing.T, cmp CompareFunc3[T], src []T, mode types.FilterMode) {
+	bits := bitset.NewBitset(len(src))
+
+	// construct set
+	set := xroar.NewBitmap()
+	for range 10 {
+		set.Set(uint64(src[util.RandIntn(len(src))]))
+	}
+
+	// run cmp
+	cmp(set, bits, nil)
+	etests.EnsureBits(t, src, 0, 0, bits, set, mode)
+}
+
+func testIntContainerIterator[T types.Integer](t *testing.T, scheme IntegerContainerType) {
+	for _, sz := range etests.ItSizes {
+		t.Run(fmt.Sprintf("%T/it-next/%d", T(0), sz), func(t *testing.T) {
+			// setup
+			src := etests.GenForIntScheme[T](int(scheme), sz)
+			enc := NewInt[T](scheme)
+			ctx := AnalyzeInt(src, true)
+			enc.Encode(ctx, src, 1)
+			it := enc.Iterator()
+			if it == nil {
+				t.Skip()
+			}
+
+			// --------------------------
+			// test next
+			//
+			for i, v := range src {
+				val, ok := it.Next()
+				require.True(t, ok, "short iterator at pos %d", i)
+				require.Equal(t, v, val, "invalid val=%d pos=%d src=%d min=%d", val, i, src[i], ctx.Min)
+			}
+
+			// --------------------------
+			// test reset
+			//
+			it.Reset()
+			require.Equal(t, len(src), it.Len(), "bad it len post reset")
+			for i, v := range src {
+				val, ok := it.Next()
+				require.True(t, ok, "short iterator at pos %d post reset", i)
+				require.Equal(t, v, val, "invalid val=%d pos=%d post reset", val, i)
+			}
+
+			// --------------------
+			// test chunk
+			//
+			it.Reset()
+			var seen int
+			for {
+				dst, n := it.NextChunk()
+				if n == 0 {
+					break
+				}
+				require.LessOrEqual(t, seen+n, len(src), "next chunk returned too large n")
+				for i, v := range dst[:n] {
+					require.Equal(t, src[seen+i], v, "invalid val=%d pos=%d src=%d", v, seen+i, src[seen+i])
+				}
+				seen += n
+			}
+			require.Equal(t, len(src), seen, "next chunk did not return all values")
+
+			// --------------------------
+			// test skip
+			it.Reset()
+			seen = it.SkipChunk()
+			seen += it.SkipChunk()
+			for {
+				dst, n := it.NextChunk()
+				if n == 0 {
+					break
+				}
+				require.LessOrEqual(t, seen+n, len(src), "next chunk returned too large n")
+				for i, v := range dst[:n] {
+					require.Equal(t, src[seen+i], v, "invalid val=%d pos=%d src=%d after skip", v, seen+i, src[seen+i])
+				}
+				seen += n
+			}
+			require.Equal(t, len(src), seen, "skip&next chunk did not return all values")
+
+			// --------------------------
+			// test seek
+			//
+			it.Reset()
+			for range len(src) {
+				i := util.RandIntn(len(src))
+				ok := it.Seek(i)
+				require.True(t, ok, "seek to existing pos %d/%d failed", i, len(src))
+				val, ok := it.Next()
+				require.True(t, ok, "next after seek to existing pos %d/%d failed", i, len(src))
+				require.Equal(t, src[i], val, "invalid val=%d pos=%d after seek", val, i)
+			}
+
+			// seek to invalid values
+			require.False(t, it.Seek(-1), "seek to negative")
+			_, ok := it.Next()
+			require.False(t, ok, "next after bad seek")
+
+			require.False(t, it.Seek(len(src)), "seek to end")
+			_, ok = it.Next()
+			require.False(t, it.Seek(len(src)), "seek to end")
+
+			require.False(t, it.Seek(len(src)+1), "seek beyond end")
+			_, ok = it.Next()
+			require.False(t, it.Seek(len(src)), "seek to end")
+
+			it.Close()
+		})
+		if t.Failed() {
+			t.FailNow()
+		}
 	}
 }

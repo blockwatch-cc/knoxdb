@@ -34,9 +34,9 @@ func MakeBenchmarks[T types.Number]() []Benchmark[T] {
 		{"runs_16k", GenRuns[T](16*1024, 10, 24), 16 * 1024}, // run length 10, 24 bit width
 		{"runs_64k", GenRuns[T](64*1024, 10, 24), 64 * 1024}, // run length 10, 24 bit width
 
-		{"seq_1k", GenSeq[T](1024), 1024},
-		{"seq_16k", GenSeq[T](16 * 1024), 16 * 1024},
-		{"seq_64k", GenSeq[T](64 * 1024), 64 * 1024},
+		{"seq_1k", GenSeq[T](1024, 1), 1024},
+		{"seq_16k", GenSeq[T](16*1024, 1), 16 * 1024},
+		{"seq_64k", GenSeq[T](64*1024, 1), 64 * 1024},
 	}
 }
 

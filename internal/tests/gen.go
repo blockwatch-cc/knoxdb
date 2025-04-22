@@ -231,10 +231,17 @@ func (_ Int256Generator) MakeSlice(n ...int) any {
 // Generic Generator Functions
 
 // creates n sequential values
-func GenSeq[T types.Number](n int) []T {
+func GenSeq[T types.Number](n, d int) []T {
 	res := make([]T, n)
+	if d == 0 {
+		if types.IsSigned[T]() {
+			d = -1
+		} else {
+			d = 1
+		}
+	}
 	for i := range res {
-		res[i] = T(i)
+		res[i] = T(i * d)
 	}
 	return res
 }

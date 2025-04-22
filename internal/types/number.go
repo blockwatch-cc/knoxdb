@@ -52,11 +52,21 @@ type NumberAccessor[T Number] interface {
 	AppendTo([]uint32, []T) []T
 }
 
-func IsSigned[T Integer]() bool {
+func IsSigned[T Number]() bool {
 	// Check if -1 is less than 0 in the type T
 	// For signed types, this is true (e.g., -1 < 0)
 	// For unsigned types, -1 wraps to MaxValue (e.g., 0xFF...FF), so it's false
 	return T(0)-T(1) < T(0)
+}
+
+func IsInteger[T Number]() bool {
+	switch any(T(0)).(type) {
+	case float64:
+	case float32:
+	default:
+		return true
+	}
+	return false
 }
 
 func Log2Range[T Integer](minv, maxv T) int {
