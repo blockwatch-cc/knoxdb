@@ -237,7 +237,7 @@ func (e *Encoder[T]) analyzeSample(sample []T) {
 				}
 
 				// Ignore combinations with many exceptions
-				if nNonEx < 2 {
+				if nEx > 0 && nNonEx < 2 {
 					// fmt.Printf("> E=%d F=%d => too many exceptions %d/%d\n", ei, fi, nEx, nSamples)
 					continue
 				}
