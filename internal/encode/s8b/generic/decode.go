@@ -12,7 +12,7 @@ import (
 )
 
 //go:nocheckptr
-func Decode[T types.Unsigned](dst []T, buf []byte) (int, error) {
+func Decode[T types.Unsigned](dst []T, buf []byte, minv T) (int, error) {
 	if len(buf) == 0 {
 		return 0, nil
 	}
@@ -21,7 +21,7 @@ func Decode[T types.Unsigned](dst []T, buf []byte) (int, error) {
 	}
 
 	// pick selector based on input bit width
-	unpack := unpackSelector[T]()
+	unpack := unpackSelector[T](minv)
 
 	var i, j int
 	src := util.FromByteSlice[uint64](buf)
@@ -29,43 +29,43 @@ func Decode[T types.Unsigned](dst []T, buf []byte) (int, error) {
 		v0 := src[i]
 		s0 := (v0 >> 60) & 0xf
 		n0 := maxNPerSelector[s0]
-		unpack[s0](v0, unsafe.Pointer(&dst[j]))
+		unpack[s0](v0, unsafe.Pointer(&dst[j]), uint64(minv))
 
 		v1 := src[i+1]
 		s1 := (v1 >> 60) & 0xf
 		n1 := maxNPerSelector[s1]
-		unpack[s1](v1, unsafe.Pointer(&dst[j+n0]))
+		unpack[s1](v1, unsafe.Pointer(&dst[j+n0]), uint64(minv))
 
 		v2 := src[i+2]
 		s2 := (v2 >> 60) & 0xf
 		n2 := maxNPerSelector[s2]
-		unpack[s2](v2, unsafe.Pointer(&dst[j+n0+n1]))
+		unpack[s2](v2, unsafe.Pointer(&dst[j+n0+n1]), uint64(minv))
 
 		v3 := src[i+3]
 		s3 := (v3 >> 60) & 0xf
 		n3 := maxNPerSelector[s3]
-		unpack[s3](v3, unsafe.Pointer(&dst[j+n0+n1+n2]))
+		unpack[s3](v3, unsafe.Pointer(&dst[j+n0+n1+n2]), uint64(minv))
 		j += n0 + n1 + n2 + n3
 
 		v4 := src[i+4]
 		s4 := (v4 >> 60) & 0xf
 		n4 := maxNPerSelector[s4]
-		unpack[s4](v4, unsafe.Pointer(&dst[j]))
+		unpack[s4](v4, unsafe.Pointer(&dst[j]), uint64(minv))
 
 		v5 := src[i+5]
 		s5 := (v5 >> 60) & 0xf
 		n5 := maxNPerSelector[s5]
-		unpack[s5](v5, unsafe.Pointer(&dst[j+n4]))
+		unpack[s5](v5, unsafe.Pointer(&dst[j+n4]), uint64(minv))
 
 		v6 := src[i+6]
 		s6 := (v6 >> 60) & 0xf
 		n6 := maxNPerSelector[s6]
-		unpack[s6](v6, unsafe.Pointer(&dst[j+n4+n5]))
+		unpack[s6](v6, unsafe.Pointer(&dst[j+n4+n5]), uint64(minv))
 
 		v7 := src[i+7]
 		s7 := (v7 >> 60) & 0xf
 		n7 := maxNPerSelector[s7]
-		unpack[s7](v7, unsafe.Pointer(&dst[j+n4+n5+n6]))
+		unpack[s7](v7, unsafe.Pointer(&dst[j+n4+n5+n6]), uint64(minv))
 		j += n4 + n5 + n6 + n7
 		i += 8
 	}
@@ -73,7 +73,7 @@ func Decode[T types.Unsigned](dst []T, buf []byte) (int, error) {
 	for i < len(src) {
 		v := src[i]
 		sel := (v >> 60) & 0xf
-		unpack[sel](v, unsafe.Pointer(&dst[j]))
+		unpack[sel](v, unsafe.Pointer(&dst[j]), uint64(minv))
 		j += maxNPerSelector[sel]
 		i++
 	}
@@ -165,17 +165,17 @@ func Seek(src []byte, v int) (int, int) {
 	return -1, -1
 }
 
-func DecodeWord[T types.Integer](dst []T, buf []byte) int {
+func DecodeWord[T types.Integer](dst []T, buf []byte, minv T) int {
 	// ensure space
 	if len(buf) < 4 || len(dst) < 128 {
 		return 0
 	}
 
 	// pick selector based on input bit width
-	selector := unpackSelector[T]()
+	selector := unpackSelector[T](minv)
 
 	v := binary.LittleEndian.Uint64(buf)
 	sel := (v >> 60)
-	selector[sel](v, unsafe.Pointer(&dst[0]))
+	selector[sel](v, unsafe.Pointer(&dst[0]), uint64(minv))
 	return maxNPerSelector[sel]
 }

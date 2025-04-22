@@ -44,13 +44,36 @@ TEXT ·initUint8AVX2(SB), NOSPLIT, $0-0
 
         RET
 
-// func decodeUint8AVX2Core(dst []uint16, src []byte) (value int)
-TEXT ·decodeUint8AVX2Core(SB), NOSPLIT, $0-56
+// func decodeUint8AVX2Core(dst []uint16, src []byte, minv uint8) (value int)
+TEXT ·decodeUint8AVX2Core(SB), NOSPLIT, $0-64
         MOVQ            dst_base(FP), DI
         MOVQ            src_base+24(FP), SI
         MOVQ            src_len+32(FP), BX
+        XORQ            R9, R9
+        MOVB            minv+48(FP), R9
+        VPBROADCASTB    minv+48(FP), Y5
         SHRQ            $3, BX
         MOVQ            DI, R15                     // save DI
+
+#ifdef ALLOW_BO
+        // prepare R9 bytes (8x minv)
+        XORQ            AX, AX
+        MOVB            R9, AX
+        SHLQ            $8, AX
+        ORQ             AX, R9
+        SHLQ            $8, AX
+        ORQ             AX, R9
+        SHLQ            $8, AX
+        ORQ             AX, R9
+        SHLQ            $8, AX
+        ORQ             AX, R9
+        SHLQ            $8, AX
+        ORQ             AX, R9
+        SHLQ            $8, AX
+        ORQ             AX, R9
+        SHLQ            $8, AX
+        ORQ             AX, R9
+#endif
 
     	CMPQ	        BX, $0
 	JNE		start
@@ -68,13 +91,14 @@ start:
 TEXT ·decodeUint8AVX2Exit(SB), NOSPLIT, $0-0
         VZEROUPPER
         SUBQ            R15, DI
-        MOVQ            DI, value+48(FP)
+        MOVQ            DI, value+56(FP)
         RET
 
 // func unpack1AVX2()
 TEXT ·unpack1Uint8AVX2(SB), NOSPLIT, $0-0
         MOVQ            mask1, R8
         ANDQ            (SI), R8            
+        ADDB            R9, R8
         MOVB            R8, (DI)
 
         ADDQ            $1, DI
@@ -95,7 +119,7 @@ TEXT ·unpack2Uint8AVX2(SB), NOSPLIT, $0-0
         VMOVQ           (SI), X0
         VPSRLQ          $22, X0, X1
         VPBLENDVB       X13, X1, X0, X0
-
+        VPADDB          X0, X5, X0
         VPEXTRW         $0, X0, (DI)
 
         ADDQ            $2, DI
@@ -119,6 +143,8 @@ TEXT ·unpack3Uint8AVX2(SB), NOSPLIT, $0-0
         VPSRLQ          $24, X0, X2
 
         VPBLENDVB       X13, X1, X0, X0
+        VPADDB          X0, X5, X0
+        VPADDB          X2, X5, X2
 
         VPEXTRW         $0, X0, (DI)
         VPEXTRB         $2, X2, 2(DI)
@@ -147,6 +173,7 @@ TEXT ·unpack4Uint8AVX2(SB), NOSPLIT, $0-0
         VPBLENDVB       X13, X1, X0, X0
         VPBLENDVB       X13, X2, X3, X2
         VPBLENDW        $(0x02), X2, X0, X0
+        VPADDB          X0, X5, X0
 
         VMOVD           X0, (DI)
 
@@ -175,6 +202,8 @@ TEXT ·unpack5Uint8AVX2(SB), NOSPLIT, $0-0
         VPBLENDVB       X13, X1, X0, X1
         VPBLENDVB       X13, X2, X3, X2
         VPBLENDW        $(0x02), X2, X1, X1
+        VPADDB          X0, X5, X0
+        VPADDB          X1, X5, X1
 
         VMOVD           X1, (DI)
 
@@ -204,12 +233,14 @@ TEXT ·unpack6Uint8AVX2(SB), NOSPLIT, $0-0
         VPBLENDVB       X13, X1, X0, X1
         VPBLENDVB       X13, X2, X3, X2
         VPBLENDW        $(0x02), X2, X1, X1
+        VPADDB          X1, X5, X1
 
         VMOVD           X1, (DI)
 
         VPSRLQ          $42, X0, X1
         VPSRLQ          $40, X0, X0
         VPBLENDVB       X13, X1, X0, X0
+        VPADDB          X0, X5, X0
 
         VPEXTRW         $0, X0, 4(DI)
 
@@ -230,9 +261,11 @@ exit:
 TEXT ·unpack7Uint8AVX2(SB), NOSPLIT, $0-0
 #ifdef ALLOW_BO
         MOVQ            (SI),AX
+        ADDQ            R9, AX
         MOVQ            AX, (DI)
 #else
         VMOVQ           (SI), X0
+        VPADDB          X0, X5, X0
         VPEXTRD         $0, X0, 0(DI)
         VPEXTRW         $2, X0, 4(DI)
         VPEXTRB         $6, X0, 6(DI)
@@ -269,6 +302,7 @@ TEXT ·unpack8Uint8AVX2(SB), NOSPLIT, $0-0
         VPBLENDW        $(0xaa), X1, X3, X3
         VPSHUFD         $8, X3, X3
         VPAND           mask8<>(SB), X3, X3
+        VPADDB          X3, X5, X3
 
         VMOVQ           X3, (DI)
 
@@ -288,7 +322,7 @@ exit:
 // func unpack10AVX2()
 TEXT ·unpack10Uint8AVX2(SB), NOSPLIT, $0-0
         VPBROADCASTQ    (SI), Y0
-        VMOVDQU         permDWord10<>(SB), Y5
+        VMOVDQU         permDWord10<>(SB), Y6
 
         VPSRLVQ         shift10<>+0x00(SB), Y0, Y3
         VPSRLVQ         shift10<>+0x20(SB), Y0, Y2
@@ -302,8 +336,9 @@ TEXT ·unpack10Uint8AVX2(SB), NOSPLIT, $0-0
         VPBLENDVB       Y13, Y2, Y3, Y3
         VPBLENDVB       Y13, Y0, Y1, Y1
         VPBLENDW        $(0xaa), Y1, Y3, Y3
-        VPERMD          Y3, Y5, Y3
+        VPERMD          Y3, Y6, Y3
         VPAND           mask10<>(SB), X3, X3
+        VPADDB          X3, X5, X3
 
 #ifdef ALLOW_BO
         VMOVDQU         X3, (DI)
@@ -349,6 +384,7 @@ TEXT ·unpack12Uint8AVX2(SB), NOSPLIT, $0-0
         VPERMD          Y3, Y15, Y3
 
         VPAND           mask12<>(SB), X3, X3
+        VPADDB          X3, X5, X3
 
 #ifdef ALLOW_BO
         VMOVDQU         X3, (DI)
@@ -393,6 +429,7 @@ TEXT ·unpack15Uint8AVX2(SB), NOSPLIT, $0-0
         VPERMD          Y3, Y15, Y3
 
         VPAND           mask15<>(SB), X3, X3
+        VPADDB          X3, X5, X3
 
 #ifdef ALLOW_BO
         VMOVDQU         X3, (DI)
@@ -435,6 +472,7 @@ TEXT ·unpack20Uint8AVX2(SB), NOSPLIT, $0-0
         VPBLENDW        $(0xaa), Y1, Y3, Y3
         VPERMD          Y3, Y14, Y3
         VPAND           X15, X3, X3
+        VPADDB          X3, X5, X3
 
         VMOVDQU         X3, (DI)
 
@@ -444,6 +482,7 @@ TEXT ·unpack20Uint8AVX2(SB), NOSPLIT, $0-0
 
         VPSHUFB         shuf4Bytes<>(SB), X3, X3
         VPAND           X15, X3, X3
+        VPADDB          X3, X5, X3
 
         VMOVD           X3, 16(DI)
 
@@ -480,6 +519,7 @@ TEXT ·unpack30Uint8AVX2(SB), NOSPLIT, $0-0
         VPBLENDVB       X13, X0, X1, X0
         VPBLENDW        $(0xaa), X0, X2, X0
         VPAND           X0, X15, X0
+        VPADDB          X0, X5, X0
 
         VMOVDQU         X0, 0(DI)
 
@@ -497,6 +537,7 @@ TEXT ·unpack30Uint8AVX2(SB), NOSPLIT, $0-0
         VPBLENDVB       X13, X0, X1, X0
         VPBLENDW        $(0xaa), X0, X2, X0
         VPAND           X0, X15, X0
+        VPADDB          X0, X5, X0
 
 #ifdef ALLOW_BO
         VMOVDQU         X0, 16(DI)
@@ -537,6 +578,7 @@ TEXT ·unpack60Uint8AVX2(SB), NOSPLIT, $0-0
         VPBLENDVB       Y13, Y0, Y1, Y0
         VPBLENDW        $(0xaa), Y0, Y2, Y0
         VPAND           Y0, Y15, Y0
+        VPADDB          Y0, Y5, Y0
 
         VMOVDQU         Y0, 0(DI)
 
@@ -554,6 +596,7 @@ TEXT ·unpack60Uint8AVX2(SB), NOSPLIT, $0-0
         VPBLENDVB       Y13, Y0, Y1, Y0
         VPBLENDW        $(0xaa), Y0, Y2, Y0
         VPAND           Y0, Y15, Y0
+        VPADDB          Y0, Y5, Y0
 
         VPMASKMOVD      Y0, Y14, 32(DI)
 
@@ -573,6 +616,7 @@ exit:
 // func unpackOnesAVX2()
 TEXT ·unpackOnesUint8AVX2(SB), NOSPLIT, $0-0
         VPBROADCASTB    const1<>(SB), Y0
+        VPADDB          Y0, Y5, Y0
 
         VMOVDQU         Y0, (DI)
         VMOVDQU         Y0, 32(DI)
@@ -594,12 +638,12 @@ exit:
 
 // func unpackZerosAVX2()
 TEXT ·unpackZerosUint8AVX2(SB), NOSPLIT, $0-0
-        VPBROADCASTB    const0<>(SB), Y0
+        //VPBROADCASTB    const0<>(SB), Y0
 
-        VMOVDQU         Y0, (DI)
-        VMOVDQU         Y0, 32(DI)
-        VMOVDQU         Y0, 64(DI)
-        VMOVDQU         Y0, 96(DI)
+        VMOVDQU         Y5, (DI)                // Y5 = minv
+        VMOVDQU         Y5, 32(DI)
+        VMOVDQU         Y5, 64(DI)
+        VMOVDQU         Y5, 96(DI)
 
         ADDQ            $128, DI
 

@@ -114,7 +114,7 @@ func decodePackedTime(dst []int64, buf []byte, mod int64) (int, error) {
 	dst[0] = int64(binary.LittleEndian.Uint64(buf))
 
 	// decode compressed values
-	c, err := s8b.DecodeUint64(asU64(dst[1:]), buf[8:])
+	c, err := s8b.DecodeUint64(asU64(dst[1:]), buf[8:], 0)
 	if err != nil {
 		return 0, fmt.Errorf("zip: decodePackedTime decode: %v", err)
 	}
@@ -210,7 +210,7 @@ func decodeZigZagPackedTime(dst []int64, buf []byte, mod int64) (int, error) {
 	dst[0] = int64(binary.LittleEndian.Uint64(buf))
 
 	// decode compressed values
-	c, err := s8b.DecodeUint64(asU64(dst[1:]), buf[8:])
+	c, err := s8b.DecodeUint64(asU64(dst[1:]), buf[8:], 0)
 	if err != nil {
 		return 0, fmt.Errorf("zip: decodeZigZagPackedTime decode: %v", err)
 	}

@@ -281,9 +281,9 @@ func (t BlockType) Inc(v any) any {
 	case BlockBool:
 		return true
 	case BlockFloat64:
-		return math.Nextafter(v.(float64), t.MaxNumericVal().(float64))
+		return math.Nextafter(v.(float64), MaxVal[float64]())
 	case BlockFloat32:
-		return math.Nextafter32(v.(float32), t.MaxNumericVal().(float32))
+		return math.Nextafter32(v.(float32), MaxVal[float32]())
 	case BlockBytes:
 		c := bytes.Clone(v.([]byte))
 		var ok bool
@@ -329,9 +329,9 @@ func (t BlockType) Dec(v any) any {
 	case BlockBool:
 		return false
 	case BlockFloat64:
-		return math.Nextafter(v.(float64), t.MinNumericVal().(float64))
+		return math.Nextafter(v.(float64), MinVal[float64]())
 	case BlockFloat32:
-		return math.Nextafter32(v.(float32), t.MinNumericVal().(float32))
+		return math.Nextafter32(v.(float32), MinVal[float32]())
 	case BlockBytes:
 		c := bytes.Clone(v.([]byte))
 		var ok bool

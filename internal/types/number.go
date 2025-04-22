@@ -67,7 +67,7 @@ func Log2Range[T Integer](minv, maxv T) int {
 	}
 }
 
-func MinVal[T Integer]() T {
+func MinVal[T Number]() T {
 	switch any(T(0)).(type) {
 	case int64:
 		return any(int64(math.MinInt64)).(T)
@@ -85,12 +85,16 @@ func MinVal[T Integer]() T {
 		return 0
 	case uint8:
 		return 0
+	case float32:
+		return any(float32(-math.MaxFloat32)).(T)
+	case float64:
+		return any(float64(-math.MaxFloat64)).(T)
 	default:
 		return 0
 	}
 }
 
-func MaxVal[T Integer]() T {
+func MaxVal[T Number]() T {
 	switch any(T(0)).(type) {
 	case int64:
 		return any(int64(math.MaxInt64)).(T)
@@ -108,6 +112,10 @@ func MaxVal[T Integer]() T {
 		return any(uint16(math.MaxUint16)).(T)
 	case uint8:
 		return any(uint8(math.MaxUint8)).(T)
+	case float32:
+		return any(float32(math.MaxFloat32)).(T)
+	case float64:
+		return any(float64(math.MaxFloat64)).(T)
 	default:
 		return 0
 	}

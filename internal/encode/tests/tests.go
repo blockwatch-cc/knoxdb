@@ -8,13 +8,21 @@ import (
 	"reflect"
 	"slices"
 	"strconv"
+	"testing"
 
+	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/internal/xroar"
+	"github.com/stretchr/testify/require"
 )
 
 var (
-	ShowInfo bool
+	ShowInfo   bool
+	ShowValues bool
+
+	CompareSizes = []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 23, 128, 129}
+	ItSizes      = []int{7, 8, 15, 16, 63, 64, 65, 127, 128, 129}
 
 	constCase  = []int{1, 1, 1, 1, 1, 1}
 	deltaCase  = []int{1, 2, 3, 4, 5, 6} // delta = 1
@@ -34,9 +42,8 @@ var (
 
 func init() {
 	flag.BoolVar(&ShowInfo, "info", false, "be more verbose")
+	flag.BoolVar(&ShowValues, "detail", false, "show values")
 }
-
-var CompareSizes = []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 23}
 
 type TestCase[T types.Number] struct {
 	Name string
@@ -129,5 +136,70 @@ func MakeFloatTests[T types.Float](n int) []TestCase[T] {
 		{"dups_" + name, tests.GenDups[T](n, n/10, -1)},
 		{"runs_" + name, tests.GenRuns[T](n, 5, -1)},
 		{"rand_" + name, tests.GenRnd[T](n)},
+	}
+}
+
+func EnsureBits[T types.Number](t *testing.T, vals []T, val, val2 T, bits *bitset.Bitset, set *xroar.Bitmap, mode types.FilterMode) {
+	if ShowValues {
+		for i, v := range vals {
+			t.Logf("Val %d: %v", i, v)
+		}
+		t.Logf("Bitset %x", bits.Bytes())
+	}
+	minv, maxv := slices.Min(vals), slices.Max(vals)
+	switch mode {
+	case types.FilterModeEqual:
+		for i, v := range vals {
+			require.Equal(t, v == val, bits.IsSet(i), "bit=%d val=%v %s %v min=%v max=%v",
+				i, v, mode, val, minv, maxv)
+		}
+
+	case types.FilterModeNotEqual:
+		for i, v := range vals {
+			require.Equal(t, v != val, bits.IsSet(i), "bit=%d val=%v %s %v min=%v max=%v",
+				i, v, mode, val, minv, maxv)
+		}
+
+	case types.FilterModeLt:
+		for i, v := range vals {
+			require.Equal(t, v < val, bits.IsSet(i), "bit=%d val=%v %s %v min=%v max=%v",
+				i, v, mode, val, minv, maxv)
+		}
+
+	case types.FilterModeLe:
+		for i, v := range vals {
+			require.Equal(t, v <= val, bits.IsSet(i), "bit=%d val=%v %s %v min=%v max=%v",
+				i, v, mode, val, minv, maxv)
+		}
+
+	case types.FilterModeGt:
+		for i, v := range vals {
+			require.Equal(t, v > val, bits.IsSet(i), "bit=%d val=%v %s %v min=%v max=%v",
+				i, v, mode, val, minv, maxv)
+		}
+
+	case types.FilterModeGe:
+		for i, v := range vals {
+			require.Equal(t, v >= val, bits.IsSet(i), "bit=%d val=%v %s %v min=%v max=%v",
+				i, v, mode, val, minv, maxv)
+		}
+
+	case types.FilterModeRange:
+		for i, v := range vals {
+			require.Equal(t, v >= val && v <= val2, bits.IsSet(i), "bit=%d val=%v %s [%v,%v] min=%v max=%v",
+				i, v, mode, val, val2, minv, maxv)
+		}
+
+	case types.FilterModeIn:
+		for i, v := range vals {
+			require.Equal(t, set.Contains(uint64(v)), bits.IsSet(i), "bit=%d min=%v max=%v val=%v %s %v",
+				i, minv, maxv, v, mode, set.ToArray())
+		}
+
+	case types.FilterModeNotIn:
+		for i, v := range vals {
+			require.Equal(t, !set.Contains(uint64(v)), bits.IsSet(i), "bit=%d min=%v max=%v val=%v %s %v",
+				i, minv, maxv, v, mode, set.ToArray())
+		}
 	}
 }

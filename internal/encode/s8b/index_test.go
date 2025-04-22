@@ -97,22 +97,22 @@ func CmpEqualUnpackedBenchmark[T types.Unsigned](b *testing.B) {
 				switch any(T(0)).(type) {
 				case uint64:
 					u64 := util.ReinterpretSlice[T, uint64](dst)
-					_, err = DecodeUint64(u64, buf)
+					_, err = DecodeUint64(u64, buf, uint64(minv))
 					require.NoError(b, err)
 					n = cmp.Uint64Equal(u64, uint64(val), bits.Bytes())
 				case uint32:
 					u32 := util.ReinterpretSlice[T, uint32](dst)
-					_, err = DecodeUint32(u32, buf)
+					_, err = DecodeUint32(u32, buf, uint32(minv))
 					require.NoError(b, err)
 					n = cmp.Uint32Equal(u32, uint32(val), bits.Bytes())
 				case uint16:
 					u16 := util.ReinterpretSlice[T, uint16](dst)
-					_, err = DecodeUint16(u16, buf)
+					_, err = DecodeUint16(u16, buf, uint16(minv))
 					require.NoError(b, err)
 					n = cmp.Uint16Equal(u16, uint16(val), bits.Bytes())
 				case uint8:
 					u8 := util.ReinterpretSlice[T, uint8](dst)
-					_, err = DecodeUint8(u8, buf)
+					_, err = DecodeUint8(u8, buf, uint8(minv))
 					require.NoError(b, err)
 					n = cmp.Uint8Equal(u8, uint8(val), bits.Bytes())
 				}

@@ -31,13 +31,13 @@ func TestIteratorNext(t *testing.T) {
 			buf, err := EncodeUint64(make([]byte, len(src)*8), src, minv, maxv)
 			require.NoError(t, err)
 
-			it := NewIterator[uint64](buf, len(src))
+			it := NewIterator[uint64](buf, len(src), minv)
 			require.Equal(t, len(src), it.Len(), "bad it len")
 			for i, v := range src {
 				val, ok := it.Next()
 				require.True(t, ok, "short iterator at pos %d", i)
-				require.Equal(t, val+minv, v, "invalid val=%d pos=%d src=%d minv=%d",
-					val+minv, i, src[i], minv)
+				require.Equal(t, val, v, "invalid val=%d pos=%d src=%d minv=%d",
+					val, i, src[i], minv)
 			}
 
 			// reset and again
@@ -47,12 +47,12 @@ func TestIteratorNext(t *testing.T) {
 			for i, v := range src {
 				val, ok := it.Next()
 				require.True(t, ok, "short iterator at pos %d post reset", i)
-				require.Equal(t, val+minv, v, "invalid val=%d pos=%d post reset", val+minv, i)
+				require.Equal(t, val, v, "invalid val=%d pos=%d post reset", val, i)
 			}
 			it.Close()
 
 			// init without len
-			it = NewIterator[uint64](buf, 0)
+			it = NewIterator[uint64](buf, 0, minv)
 			require.Equal(t, len(src), it.Len(), "bad it len when detected")
 			it.Close()
 		})
@@ -76,7 +76,7 @@ func TestIteratorNextChunk(t *testing.T) {
 			buf, err := EncodeUint64(make([]byte, len(src)*8), src, minv, maxv)
 			require.NoError(t, err)
 
-			it := NewIterator[uint64](buf, len(src))
+			it := NewIterator[uint64](buf, len(src), minv)
 			require.Equal(t, len(src), it.Len(), "bad it len")
 			var seen int
 			for {
@@ -85,7 +85,7 @@ func TestIteratorNextChunk(t *testing.T) {
 					break
 				}
 				for i, v := range dst[:n] {
-					require.Equal(t, v+minv, src[seen+i], "invalid val=%d pos=%d src=%d", v+minv, seen+i, src[seen+i])
+					require.Equal(t, v, src[seen+i], "invalid val=%d pos=%d src=%d", v, seen+i, src[seen+i])
 				}
 				seen += n
 			}
@@ -103,7 +103,7 @@ func TestIteratorNextChunk(t *testing.T) {
 					break
 				}
 				for i, v := range dst[:n] {
-					require.Equal(t, v+minv, src[seen+i], "invalid val=%d pos=%d src=%d after skip", v+minv, seen+i, src[seen+i])
+					require.Equal(t, v, src[seen+i], "invalid val=%d pos=%d src=%d after skip", v, seen+i, src[seen+i])
 				}
 				seen += n
 			}
@@ -130,7 +130,7 @@ func TestIteratorSeek(t *testing.T) {
 			buf, err := EncodeUint64(make([]byte, len(src)*8), src, minv, maxv)
 			require.NoError(t, err)
 
-			it := NewIterator[uint64](buf, len(src))
+			it := NewIterator[uint64](buf, len(src), minv)
 			require.Equal(t, len(src), it.Len(), "bad it len")
 
 			// seek random to existing values
@@ -140,7 +140,7 @@ func TestIteratorSeek(t *testing.T) {
 				require.True(t, ok, "seek to existing pos %d/%d failed", i, len(src))
 				val, ok := it.Next()
 				require.True(t, ok, "next after seek to existing pos %d/%d failed", i, len(src))
-				require.Equal(t, val+minv, src[i], "invalid val=%d pos=%d after seek", val+minv, i)
+				require.Equal(t, val, src[i], "invalid val=%d pos=%d after seek", val, i)
 			}
 
 			// seek to invalid values

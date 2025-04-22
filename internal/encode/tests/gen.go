@@ -6,6 +6,7 @@ package tests
 import (
 	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 func GenForIntScheme[T types.Integer](scheme, n int) []T {
@@ -38,9 +39,17 @@ func GenForFloatScheme[T types.Float](scheme, n int) []T {
 	case 2: // TFloatDictionary,
 		return tests.GenDups[T](n, n/10, -1)
 	case 3: // TFloatAlp,
-		return tests.GenRndBits[T](n, 28)
+		w := 29
+		if util.SizeOf[T]() == 4 {
+			w = 14
+		}
+		return tests.GenRndBits[T](n, w)
 	case 4: // TFloatAlpRd,
-		return tests.GenRndBits[T](n, 49)
+		w := 49
+		if util.SizeOf[T]() == 4 {
+			w = 28
+		}
+		return tests.GenRndBits[T](n, w)
 	case 5: // TFloatRaw,
 		return tests.GenRnd[T](n)
 	default:

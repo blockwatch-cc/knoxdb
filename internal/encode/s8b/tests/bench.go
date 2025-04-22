@@ -40,7 +40,7 @@ func DecodeBenchmark[T types.Unsigned](b *testing.B, enc EncodeFunc[T], dec Deco
 		b.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(b *testing.B) {
 			b.SetBytes(int64(len(c.Data) * int(unsafe.Sizeof(T(0)))))
 			for b.Loop() {
-				dec(dst, buf)
+				dec(dst, buf, minv)
 			}
 			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 		})

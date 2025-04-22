@@ -18,7 +18,7 @@ import (
 )
 
 type EncodeFunc[T types.Integer] func([]byte, []T, T, T) ([]byte, error)
-type DecodeFunc[T types.Unsigned] func([]T, []byte) (int, error)
+type DecodeFunc[T types.Unsigned] func([]T, []byte, T) (int, error)
 type CompareFunc func([]byte, uint64, *bitset.Bitset)
 type CompareFunc2 func([]byte, uint64, uint64, *bitset.Bitset)
 
@@ -174,7 +174,7 @@ func EncodeTest[T types.Unsigned](t *testing.T, enc EncodeFunc[T], dec DecodeFun
 			}
 
 			dst := make([]T, len(in))
-			n, err := dec(dst, buf)
+			n, err := dec(dst, buf, 0)
 			require.NoError(t, err)
 
 			if len(in) > 0 {
@@ -315,7 +315,7 @@ func CompareTest[T types.Integer](t *testing.T, enc EncodeFunc[T], dec DecodeFun
 				require.NoError(t, err)
 				bits := bitset.NewBitset(sz)
 				dst := make([]uint64, sz)
-				dec(dst, buf)
+				dec(dst, buf, 0) // sic! we manually add minv below
 
 				// value exists
 				val := vals[len(vals)/2]
@@ -376,7 +376,7 @@ func CompareTest2[T types.Integer](t *testing.T, enc EncodeFunc[T], dec DecodeFu
 				require.NoError(t, err)
 				bits := bitset.NewBitset(sz)
 				dst := make([]uint64, sz)
-				dec(dst, buf)
+				dec(dst, buf, 0) // sic! we manually add minv below
 
 				// single value
 				val := vals[len(vals)/2]
@@ -413,8 +413,7 @@ func CompareTest2[T types.Integer](t *testing.T, enc EncodeFunc[T], dec DecodeFu
 				}
 
 				// skip test if value would wrap around
-				over := maxv
-				if over < types.MaxVal[T]()-1 {
+				if maxv < types.MaxVal[T]()-1 {
 					// out of bounds (over)
 					cmp(buf, uint64(maxv+1)-uint64(minv), uint64(maxv+2)-uint64(minv), bits)
 					t.Logf("Over Min=%d Max=%d From=%d To=%d", minv, maxv, maxv+1, maxv+2)

@@ -169,9 +169,9 @@ func TestSeek(t *testing.T) {
 				require.Less(t, bpos, len(buf), "buf pos too large")
 				// t.Logf("> found buf[%d] sel=%d vals=%d code[%d]",
 				// 	bpos, buf[bpos+7]>>4, maxNPerSelector[buf[bpos+7]>>4], vpos)
-				n := DecodeWord(dst, buf[bpos:])
+				n := DecodeWord(dst, buf[bpos:], minv)
 				require.LessOrEqual(t, vpos, n, "vpos behind word contents")
-				require.Equal(t, v, dst[vpos]+minv, "seek position mismatch")
+				require.Equal(t, v, dst[vpos], "seek position mismatch")
 			}
 		})
 	}

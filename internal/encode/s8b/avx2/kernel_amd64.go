@@ -16,7 +16,7 @@ func countValuesAVX2Core(src []byte) (count int)
 func initUint64AVX2()
 
 //go:noescape
-func decodeUint64AVX2(dst []uint64, src []byte) (value int)
+func decodeUint64AVX2(dst []uint64, src []byte, minv uint64) (value int)
 
 /************************ AVX2 32bit ***************************/
 
@@ -24,7 +24,7 @@ func decodeUint64AVX2(dst []uint64, src []byte) (value int)
 func initUint32AVX2()
 
 //go:noescape
-func decodeUint32AVX2Core(dst []uint32, src []byte) (value int)
+func decodeUint32AVX2Core(dst []uint32, src []byte, minv uint32) (value int)
 
 /************************ AVX2 16bit ***************************/
 
@@ -32,7 +32,7 @@ func decodeUint32AVX2Core(dst []uint32, src []byte) (value int)
 func initUint16AVX2()
 
 //go:noescape
-func decodeUint16AVX2Core(dst []uint16, src []byte) (value int)
+func decodeUint16AVX2Core(dst []uint16, src []byte, minv uint16) (value int)
 
 /************************ AVX2 8bit ***************************/
 
@@ -40,4 +40,4 @@ func decodeUint16AVX2Core(dst []uint16, src []byte) (value int)
 func initUint8AVX2()
 
 //go:noescape
-func decodeUint8AVX2Core(dst []uint8, src []byte) (value int)
+func decodeUint8AVX2Core(dst []uint8, src []byte, minv uint8) (value int)

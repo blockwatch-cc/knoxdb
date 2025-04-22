@@ -313,7 +313,7 @@ func GenRndBits[T types.Number](n, w int) []T {
 	case float64:
 		res = make([]T, n)
 		for i, v := range util.RandUintsn[uint64](n, 1<<min(w, 49)-1) {
-			res[i] = T(v) / 100.0
+			res[i] = T(v) /// 100.0
 		}
 	case float32:
 		res = make([]T, n)

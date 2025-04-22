@@ -13,19 +13,21 @@ import (
 type Iterator[T types.Integer] struct {
 	vals [128]T
 	src  []byte
+	minv T
 	ofs  int // next src read offset
 	len  int // total count of encoded values in src
 	cnt  int // count of valid values in vals
 	n    int // next value position in vals
 }
 
-func NewIterator[T types.Integer](buf []byte, n int) *Iterator[T] {
+func NewIterator[T types.Integer](buf []byte, n int, minv T) *Iterator[T] {
 	if n <= 0 {
 		n = CountValues(buf)
 	}
 	it := newIterator[T]()
 	it.src = buf
 	it.len = n
+	it.minv = minv
 	return it
 }
 
@@ -33,6 +35,7 @@ func (it *Iterator[T]) Close() {
 	it.src = nil
 	it.ofs = 0
 	it.len = 0
+	it.minv = 0
 	it.cnt = 0
 	it.n = 0
 	putIterator(it)
@@ -56,7 +59,7 @@ func (it *Iterator[T]) Next() (T, bool) {
 		}
 
 		// decode next encoded word
-		n := generic.DecodeWord(it.vals[:], it.src[it.ofs:])
+		n := generic.DecodeWord(it.vals[:], it.src[it.ofs:], it.minv)
 
 		// sanity EOF check
 		if n == 0 {
@@ -94,7 +97,7 @@ func (it *Iterator[T]) NextChunk() (*[128]T, int) {
 	// }
 
 	// decode next encoded word
-	n := generic.DecodeWord(it.vals[:], it.src[it.ofs:])
+	n := generic.DecodeWord(it.vals[:], it.src[it.ofs:], it.minv)
 	if n > 0 {
 		it.ofs += 8
 		it.cnt = n

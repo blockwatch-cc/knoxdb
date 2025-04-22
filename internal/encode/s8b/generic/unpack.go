@@ -9,18 +9,18 @@ import (
 	"blockwatch.cc/knoxdb/internal/types"
 )
 
-func unpack_zero[T types.Integer](_ uint64, p unsafe.Pointer) {
+func unpack_zero[T types.Integer](_ uint64, p unsafe.Pointer, _ uint64) {
 	clear((*[128]T)(p)[:])
 }
 
-func unpack_one[T types.Integer](_ uint64, p unsafe.Pointer) {
+func unpack_one[T types.Integer](_ uint64, p unsafe.Pointer, _ uint64) {
 	dst := (*[128]T)(p)
 	for i := range dst {
 		dst[i] = 1
 	}
 }
 
-func unpack_60[T types.Integer](v uint64, p unsafe.Pointer) {
+func unpack_60[T types.Integer](v uint64, p unsafe.Pointer, _ uint64) {
 	dst := (*[60]T)(p)
 	dst[0] = T(v & 1)
 	dst[1] = T((v >> 1) & 1)
@@ -84,7 +84,7 @@ func unpack_60[T types.Integer](v uint64, p unsafe.Pointer) {
 	dst[59] = T((v >> 59) & 1)
 }
 
-func unpack_30[T types.Integer](v uint64, p unsafe.Pointer) {
+func unpack_30[T types.Integer](v uint64, p unsafe.Pointer, _ uint64) {
 	dst := (*[30]T)(p)
 	dst[0] = T(v & 3)
 	dst[1] = T((v >> 2) & 3)
@@ -118,7 +118,7 @@ func unpack_30[T types.Integer](v uint64, p unsafe.Pointer) {
 	dst[29] = T((v >> 58) & 3)
 }
 
-func unpack_20[T types.Integer](v uint64, p unsafe.Pointer) {
+func unpack_20[T types.Integer](v uint64, p unsafe.Pointer, _ uint64) {
 	dst := (*[20]T)(p)
 	dst[0] = T(v & 7)
 	dst[1] = T((v >> 3) & 7)
@@ -142,7 +142,7 @@ func unpack_20[T types.Integer](v uint64, p unsafe.Pointer) {
 	dst[19] = T((v >> 57) & 7)
 }
 
-func unpack_15[T types.Integer](v uint64, p unsafe.Pointer) {
+func unpack_15[T types.Integer](v uint64, p unsafe.Pointer, _ uint64) {
 	dst := (*[15]T)(p)
 	dst[0] = T(v & 15)
 	dst[1] = T((v >> 4) & 15)
@@ -161,7 +161,7 @@ func unpack_15[T types.Integer](v uint64, p unsafe.Pointer) {
 	dst[14] = T((v >> 56) & 15)
 }
 
-func unpack_12[T types.Integer](v uint64, p unsafe.Pointer) {
+func unpack_12[T types.Integer](v uint64, p unsafe.Pointer, _ uint64) {
 	dst := (*[12]T)(p)
 	dst[0] = T(v & 31)
 	dst[1] = T((v >> 5) & 31)
@@ -177,7 +177,7 @@ func unpack_12[T types.Integer](v uint64, p unsafe.Pointer) {
 	dst[11] = T((v >> 55) & 31)
 }
 
-func unpack_10[T types.Integer](v uint64, p unsafe.Pointer) {
+func unpack_10[T types.Integer](v uint64, p unsafe.Pointer, _ uint64) {
 	dst := (*[10]T)(p)
 	dst[0] = T(v & 63)
 	dst[1] = T((v >> 6) & 63)
@@ -191,7 +191,7 @@ func unpack_10[T types.Integer](v uint64, p unsafe.Pointer) {
 	dst[9] = T((v >> 54) & 63)
 }
 
-func unpack_8[T types.Integer](v uint64, p unsafe.Pointer) {
+func unpack_8[T types.Integer](v uint64, p unsafe.Pointer, _ uint64) {
 	dst := (*[8]T)(p)
 	dst[0] = T(v & 127)
 	dst[1] = T((v >> 7) & 127)
@@ -203,7 +203,7 @@ func unpack_8[T types.Integer](v uint64, p unsafe.Pointer) {
 	dst[7] = T((v >> 49) & 127)
 }
 
-func unpack_7[T types.Integer](v uint64, p unsafe.Pointer) {
+func unpack_7[T types.Integer](v uint64, p unsafe.Pointer, _ uint64) {
 	dst := (*[7]T)(p)
 	dst[0] = T(v & 255)
 	dst[1] = T((v >> 8) & 255)
@@ -214,7 +214,7 @@ func unpack_7[T types.Integer](v uint64, p unsafe.Pointer) {
 	dst[6] = T((v >> 48) & 255)
 }
 
-func unpack_6[T types.Integer](v uint64, p unsafe.Pointer) {
+func unpack_6[T types.Integer](v uint64, p unsafe.Pointer, _ uint64) {
 	dst := (*[6]T)(p)
 	dst[0] = T(v & 1023)
 	dst[1] = T((v >> 10) & 1023)
@@ -224,7 +224,7 @@ func unpack_6[T types.Integer](v uint64, p unsafe.Pointer) {
 	dst[5] = T((v >> 50) & 1023)
 }
 
-func unpack_5[T types.Integer](v uint64, p unsafe.Pointer) {
+func unpack_5[T types.Integer](v uint64, p unsafe.Pointer, _ uint64) {
 	dst := (*[5]T)(p)
 	dst[0] = T(v & 4095)
 	dst[1] = T((v >> 12) & 4095)
@@ -233,7 +233,7 @@ func unpack_5[T types.Integer](v uint64, p unsafe.Pointer) {
 	dst[4] = T((v >> 48) & 4095)
 }
 
-func unpack_4[T types.Integer](v uint64, p unsafe.Pointer) {
+func unpack_4[T types.Integer](v uint64, p unsafe.Pointer, _ uint64) {
 	dst := (*[4]T)(p)
 	dst[0] = T(v & 32767)
 	dst[1] = T((v >> 15) & 32767)
@@ -241,20 +241,20 @@ func unpack_4[T types.Integer](v uint64, p unsafe.Pointer) {
 	dst[3] = T((v >> 45) & 32767)
 }
 
-func unpack_3[T types.Integer](v uint64, p unsafe.Pointer) {
+func unpack_3[T types.Integer](v uint64, p unsafe.Pointer, _ uint64) {
 	dst := (*[3]T)(p)
 	dst[0] = T(v & 1048575)
 	dst[1] = T((v >> 20) & 1048575)
 	dst[2] = T((v >> 40) & 1048575)
 }
 
-func unpack_2[T types.Integer](v uint64, p unsafe.Pointer) {
+func unpack_2[T types.Integer](v uint64, p unsafe.Pointer, _ uint64) {
 	dst := (*[2]T)(p)
 	dst[0] = T(v & 1073741823)
 	dst[1] = T((v >> 30) & 1073741823)
 }
 
-func unpack_1[T types.Integer](v uint64, p unsafe.Pointer) {
+func unpack_1[T types.Integer](v uint64, p unsafe.Pointer, _ uint64) {
 	dst := (*[1]T)(p)
 	dst[0] = T(v & 1152921504606846975)
 }

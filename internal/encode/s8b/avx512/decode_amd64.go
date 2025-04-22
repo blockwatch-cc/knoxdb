@@ -16,11 +16,11 @@ import (
 func initUint64AVX512()
 
 //go:noescape
-func decodeUint64AVX512(dst []uint64, src []byte) (value int)
+func decodeUint64AVX512(dst []uint64, src []byte, minv uint64) (value int)
 
 // Go exports
-func DecodeUint64(dst []uint64, src []byte) (int, error) {
-	return decodeUint64AVX512(dst, src), nil
+func DecodeUint64(dst []uint64, src []byte, minv uint64) (int, error) {
+	return decodeUint64AVX512(dst, src, minv), nil
 }
 
 func init() {

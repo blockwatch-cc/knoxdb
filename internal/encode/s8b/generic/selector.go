@@ -11,7 +11,7 @@ import (
 
 type (
 	packFunc   func(unsafe.Pointer, uint64) uint64
-	unpackFunc func(uint64, unsafe.Pointer)
+	unpackFunc func(uint64, unsafe.Pointer, uint64)
 )
 
 var (
@@ -35,11 +35,25 @@ var (
 	pack_i16 = makePackSelector[int16](false)
 	pack_i8  = makePackSelector[int8](false)
 
+	// min_FOR decode kernels
+	unpack_for_u64 = makeUnpackSelector[uint64](true)
+	unpack_for_u32 = makeUnpackSelector[uint32](true)
+	unpack_for_u16 = makeUnpackSelector[uint16](true)
+	unpack_for_u8  = makeUnpackSelector[uint8](true)
+	unpack_for_i64 = makeUnpackSelector[int64](true)
+	unpack_for_i32 = makeUnpackSelector[int32](true)
+	unpack_for_i16 = makeUnpackSelector[int16](true)
+	unpack_for_i8  = makeUnpackSelector[int8](true)
+
 	// simple decode kernels
-	unpack_u64 = makeUnpackSelector[uint64]()
-	unpack_u32 = makeUnpackSelector[uint32]()
-	unpack_u16 = makeUnpackSelector[uint16]()
-	unpack_u8  = makeUnpackSelector[uint8]()
+	unpack_u64 = makeUnpackSelector[uint64](false)
+	unpack_u32 = makeUnpackSelector[uint32](false)
+	unpack_u16 = makeUnpackSelector[uint16](false)
+	unpack_u8  = makeUnpackSelector[uint8](false)
+	unpack_i64 = makeUnpackSelector[int64](false)
+	unpack_i32 = makeUnpackSelector[int32](false)
+	unpack_i16 = makeUnpackSelector[int16](false)
+	unpack_i8  = makeUnpackSelector[int8](false)
 )
 
 func packSelector[T types.Integer](minv T) *[16]packFunc {
@@ -99,24 +113,48 @@ func packSelector[T types.Integer](minv T) *[16]packFunc {
 
 // unpack currently does not support min-FOR reversal and therefore
 // we only create unsigned kernels
-func unpackSelector[T types.Integer]() *[16]unpackFunc {
+func unpackSelector[T types.Integer](minv T) *[16]unpackFunc {
 	switch any(T(0)).(type) {
 	case uint64:
-		return &unpack_u64
+		if minv == 0 {
+			return &unpack_u64
+		}
+		return &unpack_for_u64
 	case uint32:
-		return &unpack_u32
+		if minv == 0 {
+			return &unpack_u32
+		}
+		return &unpack_for_u32
 	case uint16:
-		return &unpack_u16
+		if minv == 0 {
+			return &unpack_u16
+		}
+		return &unpack_for_u16
 	case uint8:
-		return &unpack_u8
+		if minv == 0 {
+			return &unpack_u8
+		}
+		return &unpack_for_u8
 	case int64:
-		return &unpack_u64
+		if minv == 0 {
+			return &unpack_i64
+		}
+		return &unpack_for_i64
 	case int32:
-		return &unpack_u32
+		if minv == 0 {
+			return &unpack_i32
+		}
+		return &unpack_for_i32
 	case int16:
-		return &unpack_u16
+		if minv == 0 {
+			return &unpack_i16
+		}
+		return &unpack_for_i16
 	case int8:
-		return &unpack_u8
+		if minv == 0 {
+			return &unpack_i8
+		}
+		return &unpack_for_i8
 	default:
 		return nil
 	}
@@ -163,7 +201,27 @@ func makePackSelector[T types.Integer](withMinFor bool) [16]packFunc {
 	}
 }
 
-func makeUnpackSelector[T types.Integer]() [16]unpackFunc {
+func makeUnpackSelector[T types.Integer](withMinFor bool) [16]unpackFunc {
+	if withMinFor {
+		return [16]unpackFunc{
+			unpack_for_zero[T],
+			unpack_for_one[T],
+			unpack_for_60[T],
+			unpack_for_30[T],
+			unpack_for_20[T],
+			unpack_for_15[T],
+			unpack_for_12[T],
+			unpack_for_10[T],
+			unpack_for_8[T],
+			unpack_for_7[T],
+			unpack_for_6[T],
+			unpack_for_5[T],
+			unpack_for_4[T],
+			unpack_for_3[T],
+			unpack_for_2[T],
+			unpack_for_1[T],
+		}
+	}
 	return [16]unpackFunc{
 		unpack_zero[T],
 		unpack_one[T],

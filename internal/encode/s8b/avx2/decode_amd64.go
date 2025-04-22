@@ -28,7 +28,7 @@ var (
 	bufOvUint8 = [16]int{0, 0, 0, 2, 0, 1, 4, 6, 0, 1, 0, 0, 0, 0, 0, 0}
 )
 
-func DecodeUint8(dst []uint8, src []byte) (int, error) {
+func DecodeUint8(dst []uint8, src []byte, minv uint8) (int, error) {
 	pos := len(src)
 	if pos&7 != 0 {
 		return 0, generic.ErrInvalidBufferLength
@@ -47,14 +47,14 @@ func DecodeUint8(dst []uint8, src []byte) (int, error) {
 		num_val += packing16[sel]
 		pos -= 8
 	}
-	n1 := decodeUint8AVX2Core(dst, src[:max_pos])
-	n2, err := generic.DecodeUint8(dst[n1:], src[max_pos:])
+	n1 := decodeUint8AVX2Core(dst, src[:max_pos], minv)
+	n2, err := generic.Decode(dst[n1:], src[max_pos:], minv)
 	return n1 + n2, err
 }
 
 var bufOvUint16 = [16]int{0, 0, 4, 2, 0, 1, 4, 6, 0, 1, 2, 0, 0, 1, 0, 0}
 
-func DecodeUint16(dst []uint16, src []byte) (int, error) {
+func DecodeUint16(dst []uint16, src []byte, minv uint16) (int, error) {
 	pos := len(src)
 	if pos&7 != 0 {
 		return 0, generic.ErrInvalidBufferLength
@@ -73,14 +73,14 @@ func DecodeUint16(dst []uint16, src []byte) (int, error) {
 		num_val += packing16[sel]
 		pos -= 8
 	}
-	n1 := decodeUint16AVX2Core(dst, src[:max_pos])
-	n2, err := generic.DecodeUint16(dst[n1:], src[max_pos:])
+	n1 := decodeUint16AVX2Core(dst, src[:max_pos], minv)
+	n2, err := generic.Decode(dst[n1:], src[max_pos:], minv)
 	return n1 + n2, err
 }
 
 var bufOvUint32 = [16]int{0, 0, 0, 2, 0, 1, 0, 0, 0, 1, 2, 3, 0, 1, 0, 0}
 
-func DecodeUint32(dst []uint32, src []byte) (int, error) {
+func DecodeUint32(dst []uint32, src []byte, minv uint32) (int, error) {
 	pos := len(src)
 	if pos&7 != 0 {
 		return 0, generic.ErrInvalidBufferLength
@@ -99,13 +99,13 @@ func DecodeUint32(dst []uint32, src []byte) (int, error) {
 		num_val += packing16[sel]
 		pos -= 8
 	}
-	n1 := decodeUint32AVX2Core(dst, src[:max_pos])
-	n2, err := generic.DecodeUint32(dst[n1:], src[max_pos:])
+	n1 := decodeUint32AVX2Core(dst, src[:max_pos], minv)
+	n2, err := generic.Decode(dst[n1:], src[max_pos:], minv)
 	return n1 + n2, err
 }
 
-func DecodeUint64(dst []uint64, src []byte) (int, error) {
-	return decodeUint64AVX2(dst, src), nil
+func DecodeUint64(dst []uint64, src []byte, minv uint64) (int, error) {
+	return decodeUint64AVX2(dst, src, minv), nil
 }
 
 func CountValues(src []byte) int {

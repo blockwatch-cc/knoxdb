@@ -40,7 +40,7 @@ var (
 
 type packing struct {
 	n, bit int
-	unpack func(uint64, unsafe.Pointer)
+	unpack func(uint64, unsafe.Pointer, uint64)
 	pack   func(unsafe.Pointer, uint64) uint64
 }
 
@@ -121,14 +121,14 @@ var selectorLegacy8 [16]packing = [16]packing{
 }
 
 // legacy use only
-func unpack_240[T types.Integer](v uint64, p unsafe.Pointer) {
+func unpack_240[T types.Integer](v uint64, p unsafe.Pointer, _ uint64) {
 	dst := (*[240]T)(p)
 	for i := range dst {
 		dst[i] = 1
 	}
 }
 
-func unpack_120[T types.Integer](v uint64, p unsafe.Pointer) {
+func unpack_120[T types.Integer](v uint64, p unsafe.Pointer, _ uint64) {
 	dst := (*[120]T)(p)
 	for i := range dst {
 		dst[i] = 1
@@ -239,7 +239,7 @@ func DecodeLegacy(dst, src []uint64) (value int, err error) {
 	j := 0
 	for _, v := range src {
 		sel := (v >> 60) & 0xf
-		selectorLegacy64[sel].unpack(v, unsafe.Pointer(&dst[j]))
+		selectorLegacy64[sel].unpack(v, unsafe.Pointer(&dst[j]), 0)
 		j += selectorLegacy64[sel].n
 	}
 	return j, nil
@@ -278,7 +278,7 @@ func DecodeLegacyUint64(dst []uint64, src []byte) (value int, err error) {
 	for i < l {
 		v := binary.LittleEndian.Uint64(src[i:])
 		sel := (v >> 60) & 0xf
-		selectorLegacy64[sel].unpack(v, unsafe.Pointer(&dst[j]))
+		selectorLegacy64[sel].unpack(v, unsafe.Pointer(&dst[j]), 0)
 		j += selectorLegacy64[sel].n
 		i += 8
 	}
@@ -299,7 +299,7 @@ func DecodeLegacyUint32(dst []uint32, src []byte) (value int, err error) {
 	for i < l {
 		v := binary.LittleEndian.Uint64(src[i:])
 		sel := (v >> 60) & 0xf
-		selectorLegacy32[sel].unpack(v, unsafe.Pointer(&dst[j]))
+		selectorLegacy32[sel].unpack(v, unsafe.Pointer(&dst[j]), 0)
 		j += selectorLegacy32[sel].n
 		i += 8
 	}
@@ -320,7 +320,7 @@ func DecodeLegacyUint16(dst []uint16, src []byte) (value int, err error) {
 	for i < l {
 		v := binary.LittleEndian.Uint64(src[i:])
 		sel := (v >> 60) & 0xf
-		selectorLegacy16[sel].unpack(v, unsafe.Pointer(&dst[j]))
+		selectorLegacy16[sel].unpack(v, unsafe.Pointer(&dst[j]), 0)
 		j += selectorLegacy16[sel].n
 		i += 8
 	}
@@ -341,7 +341,7 @@ func DecodeLegacyUint8(dst []uint8, src []byte) (value int, err error) {
 	for i < l {
 		v := binary.LittleEndian.Uint64(src[i:])
 		sel := (v >> 60) & 0xf
-		selectorLegacy8[sel].unpack(v, unsafe.Pointer(&dst[j]))
+		selectorLegacy8[sel].unpack(v, unsafe.Pointer(&dst[j]), 0)
 		j += selectorLegacy8[sel].n
 		i += 8
 	}
