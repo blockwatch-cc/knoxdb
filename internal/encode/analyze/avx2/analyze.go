@@ -1,8 +1,8 @@
 // Copyright (c) 2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-//go:build !amd64 || appengine || gccgo
-// +build !amd64 appengine gccgo
+//go:build !amd64
+// +build !amd64
 
 package avx2
 
@@ -19,4 +19,7 @@ var (
 	AnalyzeUint32 = generic.Analyze[uint32]
 	AnalyzeUint16 = generic.Analyze[uint16]
 	AnalyzeUint8  = generic.Analyze[uint8]
+
+	AnalyzeFloat64 = generic.AnalyzeFloat[float64]
+	AnalyzeFloat32 = generic.AnalyzeFloat[float32]
 )

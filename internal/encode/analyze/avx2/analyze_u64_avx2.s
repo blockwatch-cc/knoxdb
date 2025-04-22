@@ -72,11 +72,6 @@ vector_loop:
     VPCMPGTQ Y5, Y1, Y3
     VPBLENDVB Y3, Y1, Y5, Y5
 
-    // Create shifted vector
-    //VPERMQ $0x93, Y1, Y2
-    //VPINSRQ $0, R13, X2, X6
-    //VINSERTI128 $0, X6, Y2, Y2
-
     // count num_runs
     VPCMPEQQ Y1, Y2, Y6
     VMOVMSKPD Y6, AX

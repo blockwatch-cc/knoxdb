@@ -1,8 +1,8 @@
 // Copyright (c) 2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-//go:build amd64 && !gccgo && !appengine
-// +build amd64,!gccgo,!appengine
+//go:build amd64
+// +build amd64
 
 package avx2
 
@@ -10,7 +10,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/types"
 )
 
-type Context[T types.Integer] struct {
+type Context[T types.Number] struct {
 	Min     T      // vector minimum
 	Max     T      // vector maximum
 	Delta   T      // common delta between vector values
@@ -43,6 +43,12 @@ func analyze_i8_avx2(vals *int8, ctx *Context[int8], len int)
 
 //go:noescape
 func analyze_u8_avx2(vals *uint8, ctx *Context[uint8], len int)
+
+//go:noescape
+func analyze_f64_avx2(vals *float64, ctx *Context[float64], len int)
+
+//go:noescape
+func analyze_f32_avx2(vals *float32, ctx *Context[float32], len int)
 
 // Go exports
 
@@ -140,4 +146,28 @@ func AnalyzeUint8(vals []uint8) (uint8, uint8, uint8, int) {
 	}
 	analyze_u8_avx2(&vals[0], &ctx, len(vals))
 	return ctx.Min, ctx.Max, ctx.Delta, int(ctx.NumRuns)
+}
+
+func AnalyzeFloat64(vals []float64) (float64, float64, int) {
+	if len(vals) == 0 {
+		return 0, 0, 0
+	}
+	var ctx Context[float64]
+	if len(vals) > 1 {
+		ctx.Delta = vals[1] - vals[0]
+	}
+	analyze_f64_avx2(&vals[0], &ctx, len(vals))
+	return ctx.Min, ctx.Max, int(ctx.NumRuns)
+}
+
+func AnalyzeFloat32(vals []float32) (float32, float32, int) {
+	if len(vals) == 0 {
+		return 0, 0, 0
+	}
+	var ctx Context[float32]
+	if len(vals) > 1 {
+		ctx.Delta = vals[1] - vals[0]
+	}
+	analyze_f32_avx2(&vals[0], &ctx, len(vals))
+	return ctx.Min, ctx.Max, int(ctx.NumRuns)
 }

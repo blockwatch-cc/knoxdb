@@ -20,6 +20,9 @@ var (
 	AnalyzeUint32 = generic.Analyze[uint32]
 	AnalyzeUint16 = generic.Analyze[uint16]
 	AnalyzeUint8  = generic.Analyze[uint8]
+
+	AnalyzeFloat64 = generic.AnalyzeFloat[float64]
+	AnalyzeFloat32 = generic.AnalyzeFloat[float32]
 )
 
 func init() {
@@ -33,6 +36,8 @@ func init() {
 		AnalyzeUint32 = avx2.AnalyzeUint32
 		AnalyzeUint16 = avx2.AnalyzeUint16
 		AnalyzeUint8 = avx2.AnalyzeUint8
+		AnalyzeFloat64 = avx2.AnalyzeFloat64
+		AnalyzeFloat32 = avx2.AnalyzeFloat32
 	case cpu.ARM64.HasASIMD:
 		// AnalyzeInt64 = arm64.AnalyzeInt64
 		// 	AnalyzeInt32 = arm64.AnalyzeInt32

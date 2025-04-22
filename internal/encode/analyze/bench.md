@@ -44,85 +44,73 @@
 
 ```
 M1 Max
+BenchmarkAnalyze/uint64/dups_64k-10        53062 ns/op    9880.62 MB/s          1.235 vals/ns
+BenchmarkAnalyze/uint64/runs_64k-10        49225 ns/op    10650.77 MB/s         1.331 vals/ns
+BenchmarkAnalyze/uint64/seq_64k-10         66425 ns/op    7892.94 MB/s          0.9866 vals/ns
+BenchmarkAnalyze/uint32/dups_64k-10        53062 ns/op    4940.29 MB/s          1.235 vals/ns
+BenchmarkAnalyze/uint32/runs_64k-10        49198 ns/op    5328.39 MB/s          1.332 vals/ns
+BenchmarkAnalyze/uint32/seq_64k-10         68164 ns/op    3845.78 MB/s          0.9614 vals/ns
+BenchmarkAnalyze/uint16/dups_64k-10        61851 ns/op    2119.15 MB/s          1.060 vals/ns
+BenchmarkAnalyze/uint16/runs_64k-10        65797 ns/op    1992.05 MB/s          0.9960 vals/ns
+BenchmarkAnalyze/uint16/seq_64k-10         67271 ns/op    1948.41 MB/s          0.9742 vals/ns
+BenchmarkAnalyze/uint8/dups_64k-10         64453 ns/op    1016.80 MB/s          1.017 vals/ns
+BenchmarkAnalyze/uint8/runs_64k-10         66710 ns/op     982.39 MB/s          0.9824 vals/ns
+BenchmarkAnalyze/uint8/seq_64k-10          64707 ns/op    1012.81 MB/s          1.013 vals/ns
 
-BenchmarkAnalyzeInt64/dups_64K-10              19516         61658 ns/op    8503.11 MB/s
-BenchmarkAnalyzeInt64/runs_64K-10              25422         47821 ns/op    10963.64 MB/s
-BenchmarkAnalyzeInt64/seq_64K-10               19518         61561 ns/op    8516.54 MB/s
-BenchmarkAnalyzeUint64/dups_64K-10             19486         61783 ns/op    8485.91 MB/s
-BenchmarkAnalyzeUint64/runs_64K-10             25468         47310 ns/op    11081.99 MB/s
-BenchmarkAnalyzeUint64/seq_64K-10              19293         61539 ns/op    8519.58 MB/s
-BenchmarkAnalyzeInt32/dups_64K-10              19358         61561 ns/op    4258.25 MB/s
-BenchmarkAnalyzeInt32/runs_64K-10              25501         47299 ns/op    5542.30 MB/s
-BenchmarkAnalyzeInt32/seq_64K-10               19500         61524 ns/op    4260.87 MB/s
-BenchmarkAnalyzeUint32/dups_64K-10             19492         61751 ns/op    4245.18 MB/s
-BenchmarkAnalyzeUint32/runs_64K-10             25424         47167 ns/op    5557.80 MB/s
-BenchmarkAnalyzeUint32/seq_64K-10              19483         61377 ns/op    4271.06 MB/s
-BenchmarkAnalyzeInt16/dups_64K-10              18687         64127 ns/op    2043.93 MB/s
-BenchmarkAnalyzeInt16/runs_64K-10              19491         61530 ns/op    2130.23 MB/s
-BenchmarkAnalyzeInt16/seq_64K-10               14649         82852 ns/op    1582.01 MB/s
-BenchmarkAnalyzeUint16/dups_64K-10             19537         61573 ns/op    2128.72 MB/s
-BenchmarkAnalyzeUint16/runs_64K-10             19489         61449 ns/op    2133.03 MB/s
-BenchmarkAnalyzeUint16/seq_64K-10              14616         82125 ns/op    1596.01 MB/s
-BenchmarkAnalyzeInt8/dups_64K-10               18072         66025 ns/op     992.59 MB/s
-BenchmarkAnalyzeInt8/runs_64K-10               19542         61610 ns/op    1063.72 MB/s
-BenchmarkAnalyzeInt8/seq_64K-10                14673         81848 ns/op     800.70 MB/s
-BenchmarkAnalyzeUint8/dups_64K-10              19040         62812 ns/op    1043.37 MB/s
-BenchmarkAnalyzeUint8/runs_64K-10              19570         61368 ns/op    1067.92 MB/s
-BenchmarkAnalyzeUint8/seq_64K-10               14626         82048 ns/op     798.75 MB/s
+BenchmarkAnalyze/int64/dups_64k-10         53294 ns/op    9837.73 MB/s          1.230 vals/ns
+BenchmarkAnalyze/int64/runs_64k-10         49077 ns/op    10682.99 MB/s         1.335 vals/ns
+BenchmarkAnalyze/int64/seq_64k-10          66919 ns/op    7834.67 MB/s          0.9793 vals/ns
+BenchmarkAnalyze/int32/dups_64k-10         53453 ns/op    4904.24 MB/s          1.226 vals/ns
+BenchmarkAnalyze/int32/runs_64k-10         49128 ns/op    5335.93 MB/s          1.334 vals/ns
+BenchmarkAnalyze/int32/seq_64k-10          68476 ns/op    3828.25 MB/s          0.9571 vals/ns
+BenchmarkAnalyze/int16/dups_64k-10         61760 ns/op    2122.26 MB/s          1.061 vals/ns
+BenchmarkAnalyze/int16/runs_64k-10         65566 ns/op    1999.09 MB/s          0.9995 vals/ns
+BenchmarkAnalyze/int16/seq_64k-10          68317 ns/op    1918.58 MB/s          0.9593 vals/ns
+BenchmarkAnalyze/int8/dups_64k-10          65746 ns/op     996.80 MB/s          0.9968 vals/ns
+BenchmarkAnalyze/int8/runs_64k-10          65847 ns/op     995.28 MB/s          0.9953 vals/ns
+BenchmarkAnalyze/int8/seq_64k-10           68419 ns/op     957.86 MB/s          0.9579 vals/ns
 
-
-M4 Pro
-
-BenchmarkAnalyzeInt64/dups_64K-14              26109         46079 ns/op    11378.08 MB/s
-BenchmarkAnalyzeInt64/runs_64K-14              29037         41209 ns/op    12722.67 MB/s
-BenchmarkAnalyzeInt64/seq_64K-14               32239         37235 ns/op    14080.66 MB/s
-BenchmarkAnalyzeUint64/dups_64K-14             25776         46238 ns/op    11338.89 MB/s
-BenchmarkAnalyzeUint64/runs_64K-14             33477         35752 ns/op    14664.67 MB/s
-BenchmarkAnalyzeUint64/seq_64K-14              32192         37226 ns/op    14084.07 MB/s
-BenchmarkAnalyzeInt32/dups_64K-14              26124         45950 ns/op    5704.96 MB/s
-BenchmarkAnalyzeInt32/runs_64K-14              33949         38398 ns/op    6826.95 MB/s
-BenchmarkAnalyzeInt32/seq_64K-14               25754         46580 ns/op    5627.83 MB/s
-BenchmarkAnalyzeUint32/dups_64K-14             26080         46191 ns/op    5675.27 MB/s
-BenchmarkAnalyzeUint32/runs_64K-14             30490         40261 ns/op    6511.18 MB/s
-BenchmarkAnalyzeUint32/seq_64K-14              32208         37256 ns/op    7036.31 MB/s
-BenchmarkAnalyzeInt16/dups_64K-14              24966         48093 ns/op    2725.36 MB/s
-BenchmarkAnalyzeInt16/runs_64K-14              25348         47389 ns/op    2765.88 MB/s
-BenchmarkAnalyzeInt16/seq_64K-14               24622         48884 ns/op    2681.29 MB/s
-BenchmarkAnalyzeUint16/dups_64K-14             24997         48034 ns/op    2728.76 MB/s
-BenchmarkAnalyzeUint16/runs_64K-14             25278         47607 ns/op    2753.23 MB/s
-BenchmarkAnalyzeUint16/seq_64K-14              24602         48810 ns/op    2685.36 MB/s
-BenchmarkAnalyzeInt8/dups_64K-14               24751         48455 ns/op    1352.52 MB/s
-BenchmarkAnalyzeInt8/runs_64K-14               25446         47195 ns/op    1388.62 MB/s
-BenchmarkAnalyzeInt8/seq_64K-14                24645         48588 ns/op    1348.82 MB/s
-BenchmarkAnalyzeUint8/dups_64K-14              24806         48430 ns/op    1353.21 MB/s
-BenchmarkAnalyzeUint8/runs_64K-14              25352         47250 ns/op    1387.01 MB/s
-BenchmarkAnalyzeUint8/seq_64K-14               24684         48511 ns/op    1350.95 MB/s
+BenchmarkAnalyze/float64/dups_64k-10       41259 ns/op    12707.20 MB/s         1.588 vals/ns
+BenchmarkAnalyze/float64/runs_64k-10       41228 ns/op    12716.91 MB/s         1.590 vals/ns
+BenchmarkAnalyze/float64/seq_64k-10        41049 ns/op    12772.17 MB/s         1.597 vals/ns
+BenchmarkAnalyze/float32/dups_64k-10       41063 ns/op    6383.89 MB/s          1.596 vals/ns
+BenchmarkAnalyze/float32/runs_64k-10       41170 ns/op    6367.36 MB/s          1.592 vals/ns
+BenchmarkAnalyze/float32/seq_64k-10        41246 ns/op    6355.65 MB/s          1.589 vals/ns
+```
 
 AVX2
-
+```
 cpu: 12th Gen Intel(R) Core(TM) i9-12900K
-BenchmarkAnalyzeInt64/dups_64k             56910             20712 ns/op    25313.00 MB/s
-BenchmarkAnalyzeInt64/runs_64k             57787             20688 ns/op    25342.78 MB/s
-BenchmarkAnalyzeInt64/seq_64k              54862             21677 ns/op    24186.81 MB/s
-BenchmarkAnalyzeUint64/dups_64k            57973             20536 ns/op    25529.96 MB/s
-BenchmarkAnalyzeUint64/runs_64k            58725             20523 ns/op    25545.99 MB/s
-BenchmarkAnalyzeUint64/seq_64k             56091             21642 ns/op    24225.36 MB/s
-BenchmarkAnalyzeInt32/dups_64k            207718              5763 ns/op    45486.79 MB/s
-BenchmarkAnalyzeInt32/runs_64k            209896              5745 ns/op    45627.71 MB/s
-BenchmarkAnalyzeInt32/seq_64k             151885              7661 ns/op    34219.92 MB/s
-BenchmarkAnalyzeUint32/dups_64k           207506              5767 ns/op    45456.42 MB/s
-BenchmarkAnalyzeUint32/runs_64k           209606              5753 ns/op    45565.45 MB/s
-BenchmarkAnalyzeUint32/seq_64k            156606              7693 ns/op    34077.72 MB/s
-BenchmarkAnalyzeInt16/dups_64k            533709              2264 ns/op    57904.58 MB/s
-BenchmarkAnalyzeInt16/runs_64k            533079              2269 ns/op    57767.81 MB/s
-BenchmarkAnalyzeInt16/seq_64k             350948              3428 ns/op    38233.40 MB/s
-BenchmarkAnalyzeUint16/dups_64k           531379              2255 ns/op    58132.70 MB/s
-BenchmarkAnalyzeUint16/runs_64k           533856              2258 ns/op    58035.61 MB/s
-BenchmarkAnalyzeUint16/seq_64k            352704              3434 ns/op    38171.37 MB/s
-BenchmarkAnalyzeInt8/dups_64k            1000000              1135 ns/op    57735.48 MB/s
-BenchmarkAnalyzeInt8/runs_64k            1000000              1129 ns/op    58034.86 MB/s
-BenchmarkAnalyzeInt8/seq_64k              759028              1588 ns/op    41265.38 MB/s
-BenchmarkAnalyzeUint8/dups_64k           1000000              1177 ns/op    55696.41 MB/s
-BenchmarkAnalyzeUint8/runs_64k           1000000              1190 ns/op    55077.36 MB/s
-BenchmarkAnalyzeUint8/seq_64k             751188              1589 ns/op    41249.55 MB/s
+BenchmarkAnalyze/uint64/dups_64k-24        21303 ns/op    24611.07 MB/s         3.076 vals/ns
+BenchmarkAnalyze/uint64/runs_64k-24        20715 ns/op    25309.46 MB/s         3.164 vals/ns
+BenchmarkAnalyze/uint64/seq_64k-24         21590 ns/op    24283.88 MB/s         3.035 vals/ns
+BenchmarkAnalyze/uint32/dups_64k-24         5953 ns/op    44035.66 MB/s        11.01 vals/ns
+BenchmarkAnalyze/uint32/runs_64k-24         5803 ns/op    45169.99 MB/s        11.29 vals/ns
+BenchmarkAnalyze/uint32/seq_64k-24          7726 ns/op    33927.93 MB/s         8.482 vals/ns
+BenchmarkAnalyze/uint16/dups_64k-24         2253 ns/op    58183.07 MB/s        29.09 vals/ns
+BenchmarkAnalyze/uint16/runs_64k-24         2461 ns/op    53266.84 MB/s        26.63 vals/ns
+BenchmarkAnalyze/uint16/seq_64k-24          3499 ns/op    37464.71 MB/s        18.73 vals/ns
+BenchmarkAnalyze/uint8/dups_64k-24          1163 ns/op    56367.76 MB/s        56.37 vals/ns
+BenchmarkAnalyze/uint8/runs_64k-24          1193 ns/op    54941.30 MB/s        54.94 vals/ns
+BenchmarkAnalyze/uint8/seq_64k-24           1594 ns/op    41120.14 MB/s        41.12 vals/ns
+
+BenchmarkAnalyze/int64/dups_64k-24         20902 ns/op    25083.59 MB/s         3.135 vals/ns
+BenchmarkAnalyze/int64/runs_64k-24         20960 ns/op    25013.53 MB/s         3.127 vals/ns
+BenchmarkAnalyze/int64/seq_64k-24          22176 ns/op    23642.26 MB/s         2.955 vals/ns
+BenchmarkAnalyze/int32/dups_64k-24          6027 ns/op    43492.22 MB/s        10.87 vals/ns
+BenchmarkAnalyze/int32/runs_64k-24          5781 ns/op    45343.84 MB/s        11.34 vals/ns
+BenchmarkAnalyze/int32/seq_64k-24           8695 ns/op    30148.07 MB/s         7.537 vals/ns
+BenchmarkAnalyze/int16/dups_64k-24          2317 ns/op    56562.65 MB/s        28.28 vals/ns
+BenchmarkAnalyze/int16/runs_64k-24          2382 ns/op    55031.70 MB/s        27.52 vals/ns
+BenchmarkAnalyze/int16/seq_64k-24           3918 ns/op    33454.39 MB/s        16.73 vals/ns
+BenchmarkAnalyze/int8/dups_64k-24           1144 ns/op    57278.91 MB/s        57.28 vals/ns
+BenchmarkAnalyze/int8/runs_64k-24           1154 ns/op    56789.06 MB/s        56.79 vals/ns
+BenchmarkAnalyze/int8/seq_64k-24            1633 ns/op    40124.12 MB/s        40.12 vals/ns
+
+BenchmarkAnalyze/float64/dups_64k-24       12732 ns/op    41178.09 MB/s         5.147 vals/ns
+BenchmarkAnalyze/float64/runs_64k-24       12701 ns/op    41279.58 MB/s         5.160 vals/ns
+BenchmarkAnalyze/float64/seq_64k-24        12658 ns/op    41418.05 MB/s         5.177 vals/ns
+BenchmarkAnalyze/float32/dups_64k-24        6395 ns/op    40994.77 MB/s        10.25 vals/ns
+BenchmarkAnalyze/float32/runs_64k-24        6378 ns/op    41104.12 MB/s        10.28 vals/ns
+BenchmarkAnalyze/float32/seq_64k-24         6326 ns/op    41440.76 MB/s        10.36 vals/ns
 ```
