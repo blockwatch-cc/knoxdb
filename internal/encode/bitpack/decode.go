@@ -4,81 +4,131 @@
 package bitpack
 
 import (
+	"sync"
+
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/util"
-)
-
-var (
-	ShiftAmount = [8]int{3, 4, 0, 5, 0, 0, 0, 6}
 )
 
 type DecodeFunc[T types.Integer] func(index int) T
 
 type Decoder[T types.Integer] struct {
-	buf   []byte
+	src   []uint64
 	log2  int
-	bits  int
 	len   int
-	shift int
-	rmask uint64 // read mask (to hide sign extension on signed code words)
 	vmask uint64 // value mask
 	minv  T
 }
 
 func NewDecoder[T types.Integer](buf []byte, log2, n int, minv T) *Decoder[T] {
-	w := util.SizeOf[T]() * 8
-	return &Decoder[T]{
-		buf:   buf,
-		log2:  log2,
-		bits:  w,
-		len:   n,
-		shift: ShiftAmount[w>>3-1],
-		rmask: uint64(1<<w - 1),
-		vmask: uint64((1 << log2) - 1),
-		minv:  minv,
-	}
+	d := newDecoder[T]()
+	d.src = util.FromByteSlice[uint64](buf)
+	d.log2 = log2
+	d.len = n
+	d.vmask = uint64((1 << log2) - 1)
+	d.minv = minv
+	return d
 }
 
-// TODO: use fast decode kernels
+func (d *Decoder[T]) Close() {
+	d.src = nil
+	d.log2 = 0
+	d.len = 0
+	d.vmask = 0
+	d.minv = 0
+	putDecoder(d)
+}
+
+// Decode unpacks the full source vector into dst and returns the number of
+// elements. Dst must have sufficient capacity.
 func (d *Decoder[T]) Decode(dst []T) int {
-	in := util.FromByteSlice[uint64](d.buf)
-	n, _ := decode[T](dst[:d.len], in, d.log2, d.minv)
+	n, _ := Decode[T](dst[:d.len], util.ToByteSlice(d.src), d.log2, d.minv)
 	return n
 }
 
-func (d *Decoder[T]) DecodeValue(index int) T {
+// DecodeValue unpacks a single value at position n where n must be within
+// bounds [0, len]. Bounds checks are disabled for performance.
+func (d *Decoder[T]) DecodeValue(n int) T {
 	if d.log2 == 0 {
 		return d.minv
 	}
-	idx := index * d.log2
-	pos := idx >> d.shift
-	shift := idx & (d.bits - 1)
+	idx := n * d.log2 // packed data start index in bits
+	pos := idx >> 6   // code word position /64
+	shift := idx & 63 // code word shift at this index
 
-	cbuf := util.FromByteSlice[T](d.buf)
-	word := uint64(cbuf[pos]) & d.rmask >> shift
-	if diff := d.bits - shift; diff < d.log2 && pos+1 < len(cbuf) {
-		word |= uint64(cbuf[pos+1]) << diff
+	// read code word
+	word := d.src[pos] >> shift
+
+	// mix bits when encoded data is split across code words
+	if diff := 64 - shift; diff < d.log2 && pos+1 < len(d.src) {
+		word |= uint64(d.src[pos+1]) << diff
 	}
 
+	// mask value and undo min-FOR
 	return T(word&d.vmask) + d.minv
 }
 
-// TODO: use fast decode kernels
-// ofs must be a multiple of 128!
+// DecodeChunk unpacks up to chunk size (128) values starting at position
+// ofs. Ofs must be a multiple of 128 and within bounds. Returns the number
+// of decoded values which is always chunk size unless at shorter tail ends.
 func (d *Decoder[T]) DecodeChunk(dst *[128]T, ofs int) int {
 	if ofs >= d.len {
 		return 0
 	}
 	n := min(128, d.len-ofs)
-	startpos := d.log2 * (ofs >> 3)
-	endpos := min(startpos+d.log2*16, len(d.buf)) // for chunk-size 128
-	in := util.FromByteSlice[uint64](d.buf[startpos:endpos])
-	decode[T](dst[:n], in, d.log2, d.minv)
+	k := ofs >> 6 // = ofs/64 (must be multiple of 128)
+
+	// take slow path for tails
+	if n < 128 {
+		_, _ = decode(dst[:n], d.src[k*d.log2:], d.log2, d.minv)
+		return n
+	}
+
+	// calculate source code word group offsets for chunks size 128
+	group0 := d.src[k*d.log2 : (k+1)*d.log2]     // n words -> 64 values
+	group1 := d.src[(k+1)*d.log2 : (k+2)*d.log2] // n words -> 64 values
+
+	// call the correct kernel
+	switch any(T(0)).(type) {
+	case uint8:
+		d8 := util.ReinterpretSlice[T, uint8](dst[:])
+		bitread8(d8[:64], group0, d.log2, uint8(d.minv))
+		bitread8(d8[64:], group1, d.log2, uint8(d.minv))
+	case uint16:
+		d16 := util.ReinterpretSlice[T, uint16](dst[:])
+		bitread16(d16[:64], group0, d.log2, uint16(d.minv))
+		bitread16(d16[64:], group1, d.log2, uint16(d.minv))
+	case uint32:
+		d32 := util.ReinterpretSlice[T, uint32](dst[:])
+		bitread32(d32[:64], group0, d.log2, uint32(d.minv))
+		bitread32(d32[64:], group1, d.log2, uint32(d.minv))
+	case uint64:
+		d64 := util.ReinterpretSlice[T, uint64](dst[:])
+		bitread64(d64[:64], group0, d.log2, uint64(d.minv))
+		bitread64(d64[64:], group1, d.log2, uint64(d.minv))
+	case int8:
+		d8 := util.ReinterpretSlice[T, int8](dst[:])
+		bitread8(d8[:64], group0, d.log2, int8(d.minv))
+		bitread8(d8[64:], group1, d.log2, int8(d.minv))
+	case int16:
+		d16 := util.ReinterpretSlice[T, int16](dst[:])
+		bitread16(d16[:64], group0, d.log2, int16(d.minv))
+		bitread16(d16[64:], group1, d.log2, int16(d.minv))
+	case int32:
+		d32 := util.ReinterpretSlice[T, int32](dst[:])
+		bitread32(d32[:64], group0, d.log2, int32(d.minv))
+		bitread32(d32[64:], group1, d.log2, int32(d.minv))
+	case int64:
+		d64 := util.ReinterpretSlice[T, int64](dst[:])
+		bitread64(d64[:64], group0, d.log2, int64(d.minv))
+		bitread64(d64[64:], group1, d.log2, int64(d.minv))
+	}
+
 	return n
 }
 
-// out []T, in []uint64, log2 int, minv T
-
+// decode is an internal loop decoder for full vectors. It is used as fallback
+// for tail processing.
 func decode[T types.Integer](out []T, in []uint64, log2 int, minv T) (int, error) {
 	var pack uint64 // Current 64-bit word being unpacked
 	var offset int  // Bit offset within the current word
@@ -297,4 +347,70 @@ func Decode64[T int64 | uint64](out []T, in []byte, log2 int, minv T) (int, erro
 	n, err := decode(out[outpos:], inBuff[blockN*groupSize*BitReadingBlockSize:], log2, minv)
 
 	return outpos + n, err
+}
+
+type decoderFactoryType struct {
+	i64Pool sync.Pool
+	i32Pool sync.Pool
+	i16Pool sync.Pool
+	i8Pool  sync.Pool
+	u64Pool sync.Pool
+	u32Pool sync.Pool
+	u16Pool sync.Pool
+	u8Pool  sync.Pool
+}
+
+func newDecoder[T types.Integer]() *Decoder[T] {
+	switch any(T(0)).(type) {
+	case int64:
+		return decoderFactory.i64Pool.Get().(*Decoder[T])
+	case int32:
+		return decoderFactory.i32Pool.Get().(*Decoder[T])
+	case int16:
+		return decoderFactory.i16Pool.Get().(*Decoder[T])
+	case int8:
+		return decoderFactory.i8Pool.Get().(*Decoder[T])
+	case uint64:
+		return decoderFactory.u64Pool.Get().(*Decoder[T])
+	case uint32:
+		return decoderFactory.u32Pool.Get().(*Decoder[T])
+	case uint16:
+		return decoderFactory.u16Pool.Get().(*Decoder[T])
+	case uint8:
+		return decoderFactory.u8Pool.Get().(*Decoder[T])
+	default:
+		return nil
+	}
+}
+
+func putDecoder[T types.Integer](c *Decoder[T]) {
+	switch (any(T(0))).(type) {
+	case int64:
+		decoderFactory.i64Pool.Put(c)
+	case int32:
+		decoderFactory.i32Pool.Put(c)
+	case int16:
+		decoderFactory.i16Pool.Put(c)
+	case int8:
+		decoderFactory.i8Pool.Put(c)
+	case uint64:
+		decoderFactory.u64Pool.Put(c)
+	case uint32:
+		decoderFactory.u32Pool.Put(c)
+	case uint16:
+		decoderFactory.u16Pool.Put(c)
+	case uint8:
+		decoderFactory.u8Pool.Put(c)
+	}
+}
+
+var decoderFactory = decoderFactoryType{
+	i64Pool: sync.Pool{New: func() any { return new(Decoder[int64]) }},
+	i32Pool: sync.Pool{New: func() any { return new(Decoder[int32]) }},
+	i16Pool: sync.Pool{New: func() any { return new(Decoder[int16]) }},
+	i8Pool:  sync.Pool{New: func() any { return new(Decoder[int8]) }},
+	u64Pool: sync.Pool{New: func() any { return new(Decoder[uint64]) }},
+	u32Pool: sync.Pool{New: func() any { return new(Decoder[uint32]) }},
+	u16Pool: sync.Pool{New: func() any { return new(Decoder[uint16]) }},
+	u8Pool:  sync.Pool{New: func() any { return new(Decoder[uint8]) }},
 }
