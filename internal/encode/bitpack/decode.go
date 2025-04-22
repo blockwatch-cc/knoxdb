@@ -18,18 +18,20 @@ type Decoder[T types.Integer] struct {
 	buf   []byte
 	log2  int
 	bits  int
+	len   int
 	shift int
 	rmask uint64 // read mask (to hide sign extension on signed code words)
 	vmask uint64 // value mask
 	minv  T
 }
 
-func NewDecoder[T types.Integer](buf []byte, log2 int, minv T) *Decoder[T] {
+func NewDecoder[T types.Integer](buf []byte, log2, n int, minv T) *Decoder[T] {
 	w := util.SizeOf[T]() * 8
 	return &Decoder[T]{
 		buf:   buf,
 		log2:  log2,
 		bits:  w,
+		len:   n,
 		shift: ShiftAmount[w>>3-1],
 		rmask: uint64(1<<w - 1),
 		vmask: uint64((1 << log2) - 1),
@@ -40,7 +42,7 @@ func NewDecoder[T types.Integer](buf []byte, log2 int, minv T) *Decoder[T] {
 // TODO: use fast decode kernels
 func (d *Decoder[T]) Decode(dst []T) int {
 	in := util.FromByteSlice[uint64](d.buf)
-	n, _ := decode[T](dst, in, d.log2, d.minv)
+	n, _ := decode[T](dst[:d.len], in, d.log2, d.minv)
 	return n
 }
 
@@ -64,11 +66,10 @@ func (d *Decoder[T]) DecodeValue(index int) T {
 // TODO: use fast decode kernels
 // ofs must be a multiple of 128!
 func (d *Decoder[T]) DecodeChunk(dst *[128]T, ofs int) int {
-	maxn := len(d.buf) * 8 / d.log2
-	if ofs >= maxn {
+	if ofs >= d.len {
 		return 0
 	}
-	n := min(128, maxn-ofs)
+	n := min(128, d.len-ofs)
 	startpos := d.log2 * (ofs >> 3)
 	endpos := min(startpos+d.log2*16, len(d.buf)) // for chunk-size 128
 	in := util.FromByteSlice[uint64](d.buf[startpos:endpos])
