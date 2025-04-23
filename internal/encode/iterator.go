@@ -8,6 +8,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/pkg/slicex"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
@@ -16,18 +17,55 @@ const (
 	CHUNK_MASK = CHUNK_SIZE - 1
 )
 
-func chunkStart(n int) int {
+func chunkBase(n int) int {
 	return n &^ CHUNK_MASK
 }
 
+func chunkPos(n int) int {
+	return n & CHUNK_MASK
+}
+
+// Iterators allow efficient seqential and random access to
+// compressed vector data. They use an internal buffer to keep
+// chunks of decoded data in L1 cache to minimize costs of
+// linear and (limited range) random access.
+//
+// Users can use Next or NextChunk for linear walks, Get for
+// point access and Seek or SkipChunk for jumping.
 type Iterator[T types.Number] interface {
+	// Returns the total number of elements in this container.
 	Len() int
+
+	// Returns next element and true if valid or false on EOF.
+	// Implicitly decodes the next chunk.
 	Next() (T, bool)
+
+	// Returns element at position n or zero when out of bounds.
+	// Implicitly seeks and decodes the chunk containing n.
 	Get(int) T
+
+	// Seeks to position n and decodes the relevant chunk.
+	// Compatible with Next and Get.
 	Seek(int) bool
+
+	// Decodes and returns the next chunk at CHUNK_SIZE boundaries
+	// and the number of valid elements in the chunk. Past EOF
+	// returns nil and zero n. When used in combination with Next,
+	// users must first Reset the iterator before calling NextChunk.
 	NextChunk() (*[CHUNK_SIZE]T, int)
+
+	// Skips a chunk efficiently without decoding data and returns
+	// the number of elements skipped or zero when at EOF. Users may
+	// call skip repeatedly before requesting data from NextChunk.
 	SkipChunk() int
+
+	// Resets iterator state so that NextChunk/SkipChunk or Next
+	// restart at the first vector element.
 	Reset()
+
+	// Close releases pointers and allows for efficient re-use
+	// of iterators. Users are encouraged to call Close after use
+	// to reduce allocations and GC overhead.
 	Close()
 }
 
@@ -130,6 +168,108 @@ func matchFn[T types.Float](mode types.FilterMode) unsafe.Pointer {
 }
 
 // ---------------------------------
+// Base Iterator
+//
+
+var _ Iterator[uint64] = (*BaseIterator[uint64])(nil)
+
+type BaseIterator[T types.Number] struct {
+	chunk [CHUNK_SIZE]T
+	base  int
+	len   int
+	ofs   int
+	fill  func(int) int // implementations must overload this function
+}
+
+func (it *BaseIterator[T]) Close() {
+	it.base = 0
+	it.len = 0
+	it.ofs = 0
+	it.fill = nil
+}
+
+func (it *BaseIterator[T]) Reset() {
+	it.ofs = 0
+}
+
+func (it *BaseIterator[T]) Len() int {
+	return it.len
+}
+
+func (it *BaseIterator[T]) Get(n int) T {
+	if n < 0 || n >= it.len {
+		return 0
+	}
+	if base := chunkBase(n); base != it.base {
+		it.fill(base)
+	}
+	return it.chunk[chunkPos(n)]
+}
+
+func (it *BaseIterator[T]) Next() (T, bool) {
+	if it.ofs >= it.len {
+		// EOF
+		return 0, false
+	}
+
+	// refill on chunk boundary
+	if base := chunkBase(it.ofs); base != it.base {
+		it.fill(base)
+	}
+	i := chunkPos(it.ofs)
+
+	// advance ofs for next call
+	it.ofs++
+
+	// return calculated value
+	return it.chunk[i], true
+}
+
+func (it *BaseIterator[T]) NextChunk() (*[CHUNK_SIZE]T, int) {
+	// EOF
+	if it.ofs >= it.len {
+		return nil, 0
+	}
+
+	// refill (considering seek/skip/reset state updates)
+	n := min(CHUNK_SIZE, it.len-it.base)
+	if base := chunkBase(it.ofs); base != it.base {
+		n = it.fill(base)
+	}
+	it.ofs = it.base + n
+
+	return &it.chunk, n
+}
+
+func (it *BaseIterator[T]) SkipChunk() int {
+	n := min(CHUNK_SIZE, it.len-it.ofs)
+	it.ofs += n
+	return n
+}
+
+func (it *BaseIterator[T]) Seek(n int) bool {
+	if n < 0 || n >= it.len {
+		it.ofs = it.len
+		return false
+	}
+
+	// fill on seek to an unloaded chunk
+	if base := chunkBase(n); base != it.base {
+		it.fill(base)
+	}
+
+	// reset ofs to n, so call to Next() delivers value
+	it.ofs = n
+	return true
+}
+
+// Must be overloaed by derived implementations, left here for reference
+// func (it *BaseIterator[T]) fill(base int) int {
+// 	it.base = base
+// 	return min(CHUNK_SIZE, it.len-it.base)
+// }
+
+// ---------------------------------
 // Raw Iterator
 //
 
@@ -138,6 +278,12 @@ var _ Iterator[uint64] = (*RawIterator[uint64])(nil)
 type RawIterator[T types.Number] struct {
 	vals []T
 	ofs  int
+}
+
+func NewRawIterator[T types.Number](vals []T) *RawIterator[T] {
+	return &RawIterator[T]{
+		vals: vals,
+	}
 }
 
 func (it *RawIterator[T]) Close() {
@@ -178,10 +324,10 @@ func (it *RawIterator[T]) NextChunk() (*[CHUNK_SIZE]T, int) {
 	if it.ofs >= len(it.vals) {
 		return nil, 0
 	}
-	pos := it.ofs
-	n := min(CHUNK_SIZE, len(it.vals)-it.ofs)
+	base := chunkBase(it.ofs)
+	n := min(CHUNK_SIZE, len(it.vals)-base)
 	it.ofs += n
-	return (*[CHUNK_SIZE]T)(unsafe.Pointer(&it.vals[pos])), n
+	return (*[CHUNK_SIZE]T)(unsafe.Pointer(&it.vals[base])), n
 }
 
 func (it *RawIterator[T]) SkipChunk() int {
@@ -207,169 +353,65 @@ func (it *RawIterator[T]) Seek(n int) bool {
 var _ Iterator[uint64] = (*ConstIterator[uint64])(nil)
 
 type ConstIterator[T types.Number] struct {
-	vals [CHUNK_SIZE]T
-	ofs  int
-	len  int
+	BaseIterator[T]
 }
 
-func (it *ConstIterator[T]) Close() {
-	// noop
-}
-
-func (it *ConstIterator[T]) Reset() {
-	it.ofs = 0
-}
-
-func (it *ConstIterator[T]) Len() int {
-	return it.len
-}
-
-func (it *ConstIterator[T]) Get(n int) T {
-	return it.vals[0]
-}
-
-func (it *ConstIterator[T]) Next() (T, bool) {
-	if it.ofs >= it.len {
-		// EOF
-		return 0, false
+func NewConstIterator[T types.Number](val T, n int) *ConstIterator[T] {
+	it := &ConstIterator[T]{
+		BaseIterator: BaseIterator[T]{
+			base: -1,
+			len:  n,
+		},
 	}
-
-	// advance ofs for next call
-	it.ofs++
-
-	return it.vals[0], true
+	slicex.Fill(it.chunk[:], val)
+	it.BaseIterator.fill = it.fill
+	return it
 }
 
-func (it *ConstIterator[T]) NextChunk() (*[CHUNK_SIZE]T, int) {
-	// EOF
-	if it.ofs >= it.len {
-		return nil, 0
-	}
-	n := min(CHUNK_SIZE, it.len-it.ofs)
-	it.ofs += n
-	return &it.vals, n
-}
-
-func (it *ConstIterator[T]) SkipChunk() int {
-	n := min(CHUNK_SIZE, it.len-it.ofs)
-	it.ofs += n
-	return n
-}
-
-func (it *ConstIterator[T]) Seek(n int) bool {
-	if n < 0 || n >= it.len {
-		it.ofs = it.len
-		return false
-	}
-	// reset ofs to n, so call to Next() delivers value
-	it.ofs = n
-	return true
+func (it *ConstIterator[T]) fill(base int) int {
+	it.base = base
+	return min(CHUNK_SIZE, it.len-it.base)
 }
 
 // ---------------------------------
-// Raw Iterator
+// Delta Iterator
 //
 
 var _ Iterator[uint64] = (*DeltaIterator[uint64])(nil)
 
 type DeltaIterator[T types.Integer] struct {
-	vals  [CHUNK_SIZE]T
+	BaseIterator[T]
 	delta T
 	ffor  T
-	ofs   int
-	len   int
 }
 
-func (it *DeltaIterator[T]) Close() {
-	// noop
-}
-
-func (it *DeltaIterator[T]) Reset() {
-	it.ofs = 0
-}
-
-func (it *DeltaIterator[T]) Len() int {
-	return it.len
-}
-
-func (it *DeltaIterator[T]) Get(n int) T {
-	if n >= 0 && n < it.len {
-		return T(n)*it.delta + it.ffor
+func NewDeltaIterator[T types.Integer](delta, ffor T, n int) *DeltaIterator[T] {
+	it := &DeltaIterator[T]{
+		delta: delta,
+		ffor:  ffor,
+		BaseIterator: BaseIterator[T]{
+			base: -1,
+			len:  n,
+		},
 	}
-	return 0
+	it.BaseIterator.fill = it.fill
+	return it
 }
 
-func (it *DeltaIterator[T]) Next() (T, bool) {
-	if it.ofs >= it.len {
-		// EOF
-		return 0, false
-	}
-
-	// refill with values at this offset
-	if it.ofs&CHUNK_MASK == 0 {
-		it.fill()
-	}
-
-	// advance ofs for next call
-	it.ofs++
-
-	// return value
-	return T(it.ofs-1)*it.delta + it.ffor, true
-}
-
-func (it *DeltaIterator[T]) NextChunk() (*[CHUNK_SIZE]T, int) {
-	// EOF
-	if it.ofs >= it.len {
-		return nil, 0
-	}
-
-	// refill at this offset
-	it.fill()
-
-	// calculate chunk or tail size
-	n := min(CHUNK_SIZE, it.len-it.ofs)
-	it.ofs += n
-	return &it.vals, n
-}
-
-func (it *DeltaIterator[T]) SkipChunk() int {
-	n := min(CHUNK_SIZE, it.len-it.ofs)
-	it.ofs += n
-	return n
-}
-
-func (it *DeltaIterator[T]) Seek(n int) bool {
-	if n < 0 || n >= it.len {
-		it.ofs = it.len
-		return false
-	}
-
-	// calculate chunk start offsets for n and current offset
-	nc := chunkStart(n)
-	oc := chunkStart(it.ofs)
-
-	// fill when seek is first call or n is in another chunk
-	if nc != oc || it.ofs == 0 {
-		it.ofs = nc
-		it.fill()
-	}
-
-	// reset ofs to n, so call to Next() delivers value
-	it.ofs = n
-	return true
-}
-
-func (it *DeltaIterator[T]) fill() {
+func (it *DeltaIterator[T]) fill(base int) int {
+	it.base = base
 	var i int
 	for range CHUNK_SIZE / 8 {
-		it.vals[i] = T(i+it.ofs)*it.delta + it.ffor
-		it.vals[i+1] = T(i+1+it.ofs)*it.delta + it.ffor
-		it.vals[i+2] = T(i+2+it.ofs)*it.delta + it.ffor
-		it.vals[i+3] = T(i+3+it.ofs)*it.delta + it.ffor
-		it.vals[i+4] = T(i+4+it.ofs)*it.delta + it.ffor
-		it.vals[i+5] = T(i+5+it.ofs)*it.delta + it.ffor
-		it.vals[i+6] = T(i+6+it.ofs)*it.delta + it.ffor
-		it.vals[i+7] = T(i+7+it.ofs)*it.delta + it.ffor
+		it.chunk[i] = T(base)*it.delta + it.ffor
+		it.chunk[i+1] = T(base+1)*it.delta + it.ffor
+		it.chunk[i+2] = T(base+2)*it.delta + it.ffor
+		it.chunk[i+3] = T(base+3)*it.delta + it.ffor
+		it.chunk[i+4] = T(base+4)*it.delta + it.ffor
+		it.chunk[i+5] = T(base+5)*it.delta + it.ffor
+		it.chunk[i+6] = T(base+6)*it.delta + it.ffor
+		it.chunk[i+7] = T(base+7)*it.delta + it.ffor
 		i += 8
+		base += 8
 	}
+	return min(CHUNK_SIZE, it.len-it.base)
 }

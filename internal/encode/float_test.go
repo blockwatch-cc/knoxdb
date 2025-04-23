@@ -34,37 +34,37 @@ func TestAnalyzeFloat(t *testing.T) {
 	assert.Contains(t, x.EligibleSchemes(MAX_CASCADE), TFloatDictionary, "eligible")
 }
 
-func TestEncodeFloatConst(t *testing.T) {
+func TestFloatEncodeConst(t *testing.T) {
 	testFloatContainer[float64](t, TFloatConstant)
 	testFloatContainer[float32](t, TFloatConstant)
 }
 
-func TestEncodeFloatRaw(t *testing.T) {
+func TestFloatEncodeRaw(t *testing.T) {
 	testFloatContainer[float64](t, TFloatRaw)
 	testFloatContainer[float32](t, TFloatRaw)
 }
 
-func TestEncodeFloatRun(t *testing.T) {
+func TestFloatEncodeRun(t *testing.T) {
 	testFloatContainer[float64](t, TFloatRunEnd)
 	testFloatContainer[float32](t, TFloatRunEnd)
 }
 
-func TestEncodeFloatDict(t *testing.T) {
+func TestFloatEncodeDict(t *testing.T) {
 	testFloatContainer[float64](t, TFloatDictionary)
 	testFloatContainer[float32](t, TFloatDictionary)
 }
 
-func TestEncodeFloatAlp(t *testing.T) {
+func TestFloatEncodeAlp(t *testing.T) {
 	testFloatContainer[float64](t, TFloatAlp)
 	testFloatContainer[float32](t, TFloatAlp)
 }
 
-func TestEncodeFloatAlpRd(t *testing.T) {
+func TestFloatEncodeAlpRd(t *testing.T) {
 	testFloatContainer[float64](t, TFloatAlpRd)
 	testFloatContainer[float32](t, TFloatAlpRd)
 }
 
-func TestEncodeFloat(t *testing.T) {
+func TestFloatEncode(t *testing.T) {
 	testEncodeFloatT[float64](t)
 	testEncodeFloatT[float32](t)
 }
@@ -250,6 +250,7 @@ func testFloatContainerIterator[T types.Float](t *testing.T, scheme FloatContain
 				if n == 0 {
 					break
 				}
+				require.GreaterOrEqual(t, n, 0, "next chunk returned negative n")
 				require.LessOrEqual(t, seen+n, len(src), "next chunk returned too large n")
 				for i, v := range dst[:n] {
 					require.Equal(t, src[seen+i], v, "invalid val=%v pos=%d src=%v", v, seen+i, src[seen+i])
@@ -268,6 +269,7 @@ func testFloatContainerIterator[T types.Float](t *testing.T, scheme FloatContain
 				if n == 0 {
 					break
 				}
+				require.GreaterOrEqual(t, n, 0, "next chunk returned negative n")
 				require.LessOrEqual(t, seen+n, len(src), "next chunk returned too large n")
 				for i, v := range dst[:n] {
 					require.Equal(t, src[seen+i], v, "invalid val=%v pos=%d src=%v after skip", v, seen+i, src[seen+i])

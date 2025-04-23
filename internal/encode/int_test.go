@@ -66,7 +66,7 @@ func TestAnalyzeInt(t *testing.T) {
 	assert.Contains(t, x.EligibleSchemes(), TIntegerSimple8, "missing eligible scheme")
 }
 
-func TestEncodeIntConst(t *testing.T) {
+func TestIntEncodeConst(t *testing.T) {
 	testIntContainer[int64](t, TIntegerConstant)
 	testIntContainer[int32](t, TIntegerConstant)
 	testIntContainer[int16](t, TIntegerConstant)
@@ -78,7 +78,7 @@ func TestEncodeIntConst(t *testing.T) {
 	testIntContainer[uint8](t, TIntegerConstant)
 }
 
-func TestEncodeDelta(t *testing.T) {
+func TestIntEncodeDelta(t *testing.T) {
 	testIntContainer[int64](t, TIntegerDelta)
 	testIntContainer[int32](t, TIntegerDelta)
 	testIntContainer[int16](t, TIntegerDelta)
@@ -90,7 +90,7 @@ func TestEncodeDelta(t *testing.T) {
 	testIntContainer[uint8](t, TIntegerDelta)
 }
 
-func TestEncodeIntRaw(t *testing.T) {
+func TestIntEncodeRaw(t *testing.T) {
 	testIntContainer[int64](t, TIntegerRaw)
 	testIntContainer[int32](t, TIntegerRaw)
 	testIntContainer[int16](t, TIntegerRaw)
@@ -102,7 +102,7 @@ func TestEncodeIntRaw(t *testing.T) {
 	testIntContainer[uint8](t, TIntegerRaw)
 }
 
-func TestEncodeIntBitpack(t *testing.T) {
+func TestIntEncodeBitpack(t *testing.T) {
 	testIntContainer[int64](t, TIntegerBitpacked)
 	testIntContainer[int32](t, TIntegerBitpacked)
 	testIntContainer[int16](t, TIntegerBitpacked)
@@ -114,7 +114,7 @@ func TestEncodeIntBitpack(t *testing.T) {
 	testIntContainer[uint8](t, TIntegerBitpacked)
 }
 
-func TestEncodeIntDict(t *testing.T) {
+func TestIntEncodeDict(t *testing.T) {
 	testIntContainer[int64](t, TIntegerDictionary)
 	testIntContainer[int32](t, TIntegerDictionary)
 	testIntContainer[int16](t, TIntegerDictionary)
@@ -126,7 +126,7 @@ func TestEncodeIntDict(t *testing.T) {
 	testIntContainer[uint8](t, TIntegerDictionary)
 }
 
-func TestEncodeIntRun(t *testing.T) {
+func TestIntEncodeRun(t *testing.T) {
 	testIntContainer[int64](t, TIntegerRunEnd)
 	testIntContainer[int32](t, TIntegerRunEnd)
 	testIntContainer[int16](t, TIntegerRunEnd)
@@ -138,7 +138,7 @@ func TestEncodeIntRun(t *testing.T) {
 	testIntContainer[uint8](t, TIntegerRunEnd)
 }
 
-func TestEncodeIntSimple8(t *testing.T) {
+func TestIntEncodeSimple8(t *testing.T) {
 	testIntContainer[int64](t, TIntegerSimple8)
 	testIntContainer[int32](t, TIntegerSimple8)
 	testIntContainer[int16](t, TIntegerSimple8)
@@ -150,19 +150,19 @@ func TestEncodeIntSimple8(t *testing.T) {
 	testIntContainer[uint8](t, TIntegerSimple8)
 }
 
-func TestEncodeInt(t *testing.T) {
-	testEncodeIntT[int64](t)
-	testEncodeIntT[int32](t)
-	testEncodeIntT[int16](t)
-	testEncodeIntT[int8](t)
+func TestIntEncode(t *testing.T) {
+	testIntEncodeT[int64](t)
+	testIntEncodeT[int32](t)
+	testIntEncodeT[int16](t)
+	testIntEncodeT[int8](t)
 
-	testEncodeIntT[uint64](t)
-	testEncodeIntT[uint32](t)
-	testEncodeIntT[uint16](t)
-	testEncodeIntT[uint8](t)
+	testIntEncodeT[uint64](t)
+	testIntEncodeT[uint32](t)
+	testIntEncodeT[uint16](t)
+	testIntEncodeT[uint8](t)
 }
 
-func testEncodeIntT[T types.Integer](t *testing.T) {
+func testIntEncodeT[T types.Integer](t *testing.T) {
 	for _, c := range etests.MakeIntTests[T](1024) {
 		t.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(t *testing.T) {
 			x := AnalyzeInt(c.Data, true)
@@ -432,7 +432,7 @@ func testCompareFunc3[T types.Number](t *testing.T, cmp CompareFunc3[T], src []T
 
 func testIntContainerIterator[T types.Integer](t *testing.T, scheme IntegerContainerType) {
 	for _, sz := range etests.ItSizes {
-		t.Run(fmt.Sprintf("%T/it-next/%d", T(0), sz), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%T/it/%d", T(0), sz), func(t *testing.T) {
 			// setup
 			src := etests.GenForIntScheme[T](int(scheme), sz)
 			enc := NewInt[T](scheme)
@@ -473,6 +473,7 @@ func testIntContainerIterator[T types.Integer](t *testing.T, scheme IntegerConta
 				if n == 0 {
 					break
 				}
+				require.GreaterOrEqual(t, n, 0, "next chunk returned negative n")
 				require.LessOrEqual(t, seen+n, len(src), "next chunk returned too large n")
 				for i, v := range dst[:n] {
 					require.Equal(t, src[seen+i], v, "invalid val=%d pos=%d src=%d", v, seen+i, src[seen+i])
@@ -491,6 +492,7 @@ func testIntContainerIterator[T types.Integer](t *testing.T, scheme IntegerConta
 				if n == 0 {
 					break
 				}
+				require.GreaterOrEqual(t, n, 0, "next chunk returned negative n")
 				require.LessOrEqual(t, seen+n, len(src), "next chunk returned too large n")
 				for i, v := range dst[:n] {
 					require.Equal(t, src[seen+i], v, "invalid val=%d pos=%d src=%d after skip", v, seen+i, src[seen+i])

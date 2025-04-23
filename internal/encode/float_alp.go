@@ -133,15 +133,13 @@ func (c *FloatAlpContainer[T]) Load(buf []byte) ([]byte, error) {
 }
 
 func (c *FloatAlpContainer[T]) Get(n int) T {
-	// ok := c.it.Seek(n)
-	// v, ok := c.it.Next()
 	c.initDecoder()
 	return c.dec.DecodeValue(c.Values.Get(n), n)
 }
 
 func (c *FloatAlpContainer[T]) AppendTo(sel []uint32, dst []T) []T {
+	it := c.Iterator()
 	if sel == nil {
-		it := c.Iterator()
 		for {
 			src, n := it.NextChunk()
 			if n == 0 {
@@ -149,13 +147,12 @@ func (c *FloatAlpContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 			}
 			dst = append(dst, src[:n]...)
 		}
-		it.Close()
 	} else {
-		// TODO: measure iterator vs get performance
 		for _, v := range sel {
-			dst = append(dst, c.Get(int(v)))
+			dst = append(dst, it.Get(int(v)))
 		}
 	}
+	it.Close()
 	return dst
 }
 
@@ -287,147 +284,55 @@ func putFloatAlpIterator[T types.Float](c *FloatAlpIterator[T]) {
 }
 
 var floatAlpFactory = FloatAlpFactory{
-	f64Pool: sync.Pool{
-		New: func() any { return new(FloatAlpContainer[float64]) },
-	},
-	f32Pool: sync.Pool{
-		New: func() any { return new(FloatAlpContainer[float32]) },
-	},
-	f64ItPool: sync.Pool{
-		New: func() any { return new(FloatAlpIterator[float64]) },
-	},
-	f32ItPool: sync.Pool{
-		New: func() any { return new(FloatAlpIterator[float32]) },
-	},
+	f64Pool:   sync.Pool{New: func() any { return new(FloatAlpContainer[float64]) }},
+	f32Pool:   sync.Pool{New: func() any { return new(FloatAlpContainer[float32]) }},
+	f64ItPool: sync.Pool{New: func() any { return new(FloatAlpIterator[float64]) }},
+	f32ItPool: sync.Pool{New: func() any { return new(FloatAlpIterator[float32]) }},
 }
+
+// ---------------------------------------
+// Iterator
+//
 
 func (c *FloatAlpContainer[T]) Iterator() Iterator[T] {
 	c.initDecoder()
-	it := newFloatAlpIterator[T]()
-	it.len = c.Len()
-	it.dec = c.dec
-	it.valIt = c.Values.Iterator()
-	it.ofs = 0
-	return it
+	return NewFloatAlpIterator(c)
 }
 
 type FloatAlpIterator[T types.Float] struct {
-	vals  [CHUNK_SIZE]T
-	dec   *alp.Decoder[T]
-	valIt Iterator[int64]
-	len   int
-	ofs   int
+	BaseIterator[T]
+	dec *alp.Decoder[T]
+	src Iterator[int64]
+}
+
+func NewFloatAlpIterator[T types.Float](c *FloatAlpContainer[T]) *FloatAlpIterator[T] {
+	it := newFloatAlpIterator[T]()
+	it.dec = c.dec
+	it.src = c.Values.Iterator()
+	it.base = -1
+	it.len = c.Len()
+	it.BaseIterator.fill = it.fill
+	return it
 }
 
 func (it *FloatAlpIterator[T]) Close() {
 	it.dec = nil
-	it.valIt.Close()
-	it.valIt = nil
-	it.len = 0
-	it.ofs = 0
+	it.src.Close()
+	it.src = nil
+	it.BaseIterator.Close()
 	putFloatAlpIterator(it)
 }
 
-func (it *FloatAlpIterator[T]) Reset() {
-	it.ofs = 0
-	it.valIt.Reset()
-}
-
-func (it *FloatAlpIterator[T]) Len() int {
-	return it.len
-}
-
-func (it *FloatAlpIterator[T]) Get(n int) T {
-	if it.Seek(n) {
-		val, _ := it.Next()
-		return val
-	}
-	return 0
-}
-
-func (it *FloatAlpIterator[T]) Next() (T, bool) {
-	if it.ofs >= it.len {
-		// EOF
-		return 0, false
-	}
-
-	// ofs % CHUNK_SIZE
-	i := it.ofs & CHUNK_MASK
-
-	// on first call or start of new chunk
-	if i == 0 {
-		// load next source chunk
-		src, n := it.valIt.NextChunk()
-
-		// sanity check, should not happen
-		if n == 0 {
-			it.ofs = it.len
-			return 0, false
-		}
-
-		// decode
-		it.dec.DecodeChunk(&it.vals, src, n, it.ofs)
-	}
-
-	// advance ofs for next call
-	it.ofs++
-
-	// return value
-	return it.vals[i], true
-}
-
-func (it *FloatAlpIterator[T]) NextChunk() (*[CHUNK_SIZE]T, int) {
-	// EOF
-	if it.ofs >= it.len {
-		return nil, 0
-	}
-	src, n := it.valIt.NextChunk()
-	if n > 0 {
-		it.dec.DecodeChunk(&it.vals, src, n, it.ofs)
-		it.ofs += n
-	}
-	return &it.vals, n
-}
-
-func (it *FloatAlpIterator[T]) SkipChunk() int {
-	n := it.valIt.SkipChunk()
-	it.ofs += n
-	return n
-}
-
-func (it *FloatAlpIterator[T]) Seek(n int) bool {
-	// bounds check
-	if n < 0 || n >= it.len {
+func (it *FloatAlpIterator[T]) fill(base int) int {
+	// load next source chunk at base and translate
+	it.src.Seek(base)
+	src, n := it.src.NextChunk()
+	if n == 0 {
 		it.ofs = it.len
-		return false
+		it.base = -1
+		return 0
 	}
-
-	// calculate chunk start offsets for n and current offset
-	nc := chunkStart(n)
-	oc := chunkStart(it.ofs)
-
-	// fmt.Printf("ALP seek n=%d ofs=%d nc=%d oc=%d\n", n, it.ofs, nc, oc)
-
-	// load when n is in another chunk or seek on init
-	if nc != oc || it.ofs == 0 {
-		// seek base-it to new chunk start
-		if !it.valIt.Seek(nc) {
-			it.ofs = it.len
-			return false
-		}
-
-		// load next chunk when not seeking to start (re-use NextChunk method)
-		if n&CHUNK_MASK != 0 {
-			it.ofs = nc
-			it.NextChunk()
-		}
-	} else if n == 0 {
-		// edge case: reset base-it for n=0 because Next() loads again
-		it.valIt.Reset()
-	}
-
-	// reset ofs to n, so call to Next() delivers value
-	it.ofs = n
-
-	return true
+	it.dec.DecodeChunk(&it.chunk, src, n, base)
+	it.base = base
+	return n
 }

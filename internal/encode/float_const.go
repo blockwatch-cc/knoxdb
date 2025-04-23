@@ -9,7 +9,6 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
-	"blockwatch.cc/knoxdb/pkg/slicex"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
@@ -40,11 +39,7 @@ func (c *FloatConstContainer[T]) Size() int {
 }
 
 func (c *FloatConstContainer[T]) Iterator() Iterator[T] {
-	it := &ConstIterator[T]{
-		len: c.N,
-	}
-	slicex.Fill(it.vals[:], c.Val)
-	return it
+	return NewConstIterator(c.Val, c.N)
 }
 
 func (c *FloatConstContainer[T]) Store(dst []byte) []byte {

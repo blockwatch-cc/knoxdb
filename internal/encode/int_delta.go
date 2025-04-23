@@ -41,11 +41,7 @@ func (c *DeltaContainer[T]) Size() int {
 }
 
 func (c *DeltaContainer[T]) Iterator() Iterator[T] {
-	return &DeltaIterator[T]{
-		delta: c.Delta,
-		ffor:  c.For,
-		len:   c.N,
-	}
+	return NewDeltaIterator[T](c.Delta, c.For, c.N)
 }
 
 func (c *DeltaContainer[T]) Store(dst []byte) []byte {

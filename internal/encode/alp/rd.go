@@ -147,7 +147,7 @@ func split64(src []uint64, left []uint16, right []uint64, shift int) {
 		i += 128
 	}
 
-	mask := uint64(1<<shift) - 1
+	mask := uint64(1<<shift - 1)
 	for i < len(src) {
 		val := src[i]
 		left[i] = uint16(val >> shift)
@@ -285,7 +285,7 @@ func merge64(dst []uint64, left []uint16, right []uint64, shift int) {
 	}
 
 	for i < len(dst) {
-		dst[i] = uint64(left[i]<<shift) | right[i]
+		dst[i] = uint64(left[i])<<shift | right[i]
 		i++
 	}
 }
@@ -328,7 +328,7 @@ func merge32(dst []uint32, left []uint16, right []uint64, shift int) {
 	}
 
 	for i < len(dst) {
-		dst[i] = uint32(left[i]<<shift) | uint32(right[i])
+		dst[i] = uint32(left[i])<<shift | uint32(right[i])
 		i++
 	}
 }

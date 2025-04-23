@@ -73,15 +73,21 @@ func (c *FloatDictionaryContainer[T]) Get(n int) T {
 }
 
 func (c *FloatDictionaryContainer[T]) AppendTo(sel []uint32, dst []T) []T {
+	it := c.Iterator()
 	if sel == nil {
-		for i := range c.Len() {
-			dst = append(dst, c.Get(i))
+		for {
+			src, n := it.NextChunk()
+			if n == 0 {
+				break
+			}
+			dst = append(dst, src[:n]...)
 		}
 	} else {
 		for _, v := range sel {
-			dst = append(dst, c.Get(int(v)))
+			dst = append(dst, it.Get(int(v)))
 		}
 	}
+	it.Close()
 	return dst
 }
 
@@ -294,8 +300,10 @@ func (c *FloatDictionaryContainer[T]) MatchInSet(_ any, _, _ *Bitset)    {}
 func (c *FloatDictionaryContainer[T]) MatchNotInSet(_ any, _, _ *Bitset) {}
 
 type FloatDictionaryFactory struct {
-	f64Pool sync.Pool
-	f32Pool sync.Pool
+	f64Pool   sync.Pool
+	f32Pool   sync.Pool
+	f64ItPool sync.Pool
+	f32ItPool sync.Pool
 }
 
 func newFloatDictionaryContainer[T types.Float]() FloatContainer[T] {
@@ -318,16 +326,100 @@ func putFloatDictionaryContainer[T types.Float](c FloatContainer[T]) {
 	}
 }
 
-var floatDictionaryFactory = FloatDictionaryFactory{
-	f64Pool: sync.Pool{
-		New: func() any { return new(FloatDictionaryContainer[float64]) },
-	},
-	f32Pool: sync.Pool{
-		New: func() any { return new(FloatDictionaryContainer[float32]) },
-	},
+func newFloatDictionaryIterator[T types.Float]() *FloatDictionaryIterator[T] {
+	switch any(T(0)).(type) {
+	case float64:
+		return floatDictionaryFactory.f64ItPool.Get().(*FloatDictionaryIterator[T])
+	case float32:
+		return floatDictionaryFactory.f32ItPool.Get().(*FloatDictionaryIterator[T])
+	default:
+		return nil
+	}
 }
 
-// TODO
+func putFloatDictionaryIterator[T types.Float](c *FloatDictionaryIterator[T]) {
+	switch any(T(0)).(type) {
+	case float64:
+		floatDictionaryFactory.f64ItPool.Put(c)
+	case float32:
+		floatDictionaryFactory.f32ItPool.Put(c)
+	}
+}
+
+var floatDictionaryFactory = FloatDictionaryFactory{
+	f64Pool:   sync.Pool{New: func() any { return new(FloatDictionaryContainer[float64]) }},
+	f32Pool:   sync.Pool{New: func() any { return new(FloatDictionaryContainer[float32]) }},
+	f64ItPool: sync.Pool{New: func() any { return new(FloatDictionaryIterator[float64]) }},
+	f32ItPool: sync.Pool{New: func() any { return new(FloatDictionaryIterator[float32]) }},
+}
+
 func (c *FloatDictionaryContainer[T]) Iterator() Iterator[T] {
-	return nil
+	return NewFloatDictionaryIterator(c.Dict, c.Codes)
+}
+
+type FloatDictionaryIterator[T types.Float] struct {
+	BaseIterator[T]
+	dict []T
+	code Iterator[uint16]
+}
+
+func NewFloatDictionaryIterator[T types.Float](dict FloatContainer[T], code IntegerContainer[uint16]) *FloatDictionaryIterator[T] {
+	it := newFloatDictionaryIterator[T]()
+	it.dict = dict.AppendTo(nil, arena.Alloc[T](dict.Len()))
+	it.code = code.Iterator()
+	it.base = -1
+	it.len = it.code.Len()
+	it.BaseIterator.fill = it.fill
+	return it
+}
+
+func (it *FloatDictionaryIterator[T]) Close() {
+	arena.Free(it.dict)
+	it.dict = nil
+	it.code.Close()
+	it.code = nil
+	it.base = 0
+	it.ofs = 0
+	it.len = 0
+	putFloatDictionaryIterator(it)
+}
+
+func (it *FloatDictionaryIterator[T]) fill(base int) int {
+	// load code chunk at base and translate
+	it.code.Seek(base)
+	codes, n := it.code.NextChunk()
+	if n == 0 {
+		it.ofs = it.len
+		it.base = -1
+		return 0
+	}
+
+	// translate codes
+	var i int
+	for range n / 16 {
+		it.chunk[i] = it.dict[codes[i]]
+		it.chunk[i+1] = it.dict[codes[i+1]]
+		it.chunk[i+2] = it.dict[codes[i+2]]
+		it.chunk[i+3] = it.dict[codes[i+3]]
+		it.chunk[i+4] = it.dict[codes[i+4]]
+		it.chunk[i+5] = it.dict[codes[i+5]]
+		it.chunk[i+6] = it.dict[codes[i+6]]
+		it.chunk[i+7] = it.dict[codes[i+7]]
+		it.chunk[i+8] = it.dict[codes[i+8]]
+		it.chunk[i+9] = it.dict[codes[i+9]]
+		it.chunk[i+10] = it.dict[codes[i+10]]
+		it.chunk[i+11] = it.dict[codes[i+11]]
+		it.chunk[i+12] = it.dict[codes[i+12]]
+		it.chunk[i+13] = it.dict[codes[i+13]]
+		it.chunk[i+14] = it.dict[codes[i+14]]
+		it.chunk[i+15] = it.dict[codes[i+15]]
+		i += 16
+	}
+	for i < n {
+		it.chunk[i] = it.dict[codes[i]]
+		i++
+	}
+
+	it.base = base
+	return n
 }

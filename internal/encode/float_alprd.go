@@ -32,6 +32,8 @@ func (c *FloatAlpRdContainer[T]) Close() {
 	c.Right.Close()
 	c.Left = nil
 	c.Right = nil
+	c.Shift = 0
+	c.typ = 0
 	putFloatAlpRdContainer(c)
 }
 
@@ -93,15 +95,21 @@ func (c *FloatAlpRdContainer[T]) Get(n int) T {
 }
 
 func (c *FloatAlpRdContainer[T]) AppendTo(sel []uint32, dst []T) []T {
+	it := c.Iterator()
 	if sel == nil {
-		for i := range c.Len() {
-			dst = append(dst, c.Get(i))
+		for {
+			src, n := it.NextChunk()
+			if n == 0 {
+				break
+			}
+			dst = append(dst, src[:n]...)
 		}
 	} else {
 		for _, v := range sel {
-			dst = append(dst, c.Get(int(v)))
+			dst = append(dst, it.Get(int(v)))
 		}
 	}
+	it.Close()
 	return dst
 }
 
@@ -130,7 +138,7 @@ func (c *FloatAlpRdContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int)
 	alp.SplitRD(vals, left, right, c.Shift)
 
 	// TODO
-	// - left: always use dict, analyze unique during split (build array)
+	// - left: always use dict when <=8 unique, analyze unique during split (build array)
 	// - right: always BP, aggregate min/max during split
 	// - skip int analyze and encode direct
 	// - fusion: right always bitpack to max width during split
@@ -244,154 +252,58 @@ var floatAlpRdFactory = FloatAlpRdFactory{
 	f32ItPool: sync.Pool{New: func() any { return new(FloatAlpRdIterator[float32]) }},
 }
 
+// ---------------------------------------
+// Iterator
+//
+
 func (c *FloatAlpRdContainer[T]) Iterator() Iterator[T] {
-	it := newFloatAlpRdIterator[T]()
-	it.leftIt = c.Left.Iterator()
-	it.rightIt = c.Right.Iterator()
-	it.shift = c.Shift
-	it.len = c.Len()
-	it.ofs = 0
-	return it
+	return NewFloatAlpRdIterator(c)
 }
 
 type FloatAlpRdIterator[T types.Float] struct {
-	vals    [CHUNK_SIZE]T
-	leftIt  Iterator[uint16]
-	rightIt Iterator[uint64]
-	shift   int
-	len     int
-	ofs     int
+	BaseIterator[T]
+	left  Iterator[uint16]
+	right Iterator[uint64]
+	shift int
+}
+
+func NewFloatAlpRdIterator[T types.Float](c *FloatAlpRdContainer[T]) *FloatAlpRdIterator[T] {
+	it := newFloatAlpRdIterator[T]()
+	it.left = c.Left.Iterator()
+	it.right = c.Right.Iterator()
+	it.shift = c.Shift
+	it.base = -1
+	it.len = c.Len()
+	it.BaseIterator.fill = it.fill
+	return it
 }
 
 func (it *FloatAlpRdIterator[T]) Close() {
-	it.leftIt.Close()
-	it.rightIt.Close()
-	it.leftIt = nil
-	it.rightIt = nil
+	it.left.Close()
+	it.right.Close()
+	it.left = nil
+	it.right = nil
 	it.shift = 0
-	it.len = 0
-	it.ofs = 0
+	it.BaseIterator.Close()
 	putFloatAlpRdIterator(it)
 }
 
-func (it *FloatAlpRdIterator[T]) Reset() {
-	it.ofs = 0
-	it.leftIt.Reset()
-	it.rightIt.Reset()
-}
+func (it *FloatAlpRdIterator[T]) fill(base int) int {
+	// load next source chunk at base and translate
+	it.left.Seek(base)
+	it.right.Seek(base)
 
-func (it *FloatAlpRdIterator[T]) Len() int {
-	return it.len
-}
-
-func (it *FloatAlpRdIterator[T]) Get(n int) T {
-	if it.Seek(n) {
-		val, _ := it.Next()
-		return val
-	}
-	return 0
-}
-
-func (it *FloatAlpRdIterator[T]) Next() (T, bool) {
-	if it.ofs >= it.len {
-		// EOF
-		return 0, false
-	}
-
-	// ofs % CHUNK_SIZE
-	i := it.ofs & CHUNK_MASK
-
-	// on first call or start of new chunk
-	if i == 0 {
-		// fmt.Printf("ALP-RD next load ofs=%d\n", it.ofs)
-
-		// load next source chunks
-		left, ln := it.leftIt.NextChunk()
-		right, rn := it.rightIt.NextChunk()
-
-		// sanity check, should not happen
-		if ln == 0 || rn == 0 {
-			// fmt.Printf("ALP-RD failed base seek left=%d right=%d\n", ln, rn)
-			it.ofs = it.len
-			return 0, false
-		}
-
-		// decode
-		alp.MergeRD(it.vals[:], left[:], right[:], it.shift)
-	}
-
-	// advance ofs for next call
-	it.ofs++
-
-	// fmt.Printf("ALP-RD next ofs=%d i=%d\n", it.ofs, i)
-
-	// return value
-	return it.vals[i], true
-}
-
-func (it *FloatAlpRdIterator[T]) NextChunk() (*[CHUNK_SIZE]T, int) {
-	// EOF
-	if it.ofs >= it.len {
-		return nil, 0
-	}
-	// fmt.Printf("ALP-RD next-chunk load ofs=%d\n", it.ofs)
-	left, ln := it.leftIt.NextChunk()
-	right, rn := it.rightIt.NextChunk()
-	if ln > 0 && rn > 0 {
-		alp.MergeRD(it.vals[:], left[:], right[:], it.shift)
-		it.ofs += rn
-	}
-	return &it.vals, rn
-}
-
-func (it *FloatAlpRdIterator[T]) SkipChunk() int {
-	it.leftIt.SkipChunk()
-	n := it.rightIt.SkipChunk()
-	it.ofs += n
-	return n
-}
-
-func (it *FloatAlpRdIterator[T]) Seek(n int) bool {
-	// bounds check
-	if n < 0 || n >= it.len {
+	left, _ := it.left.NextChunk()
+	right, n := it.right.NextChunk()
+	if n == 0 {
 		it.ofs = it.len
-		return false
+		it.base = -1
+		return 0
 	}
 
-	// calculate chunk start offsets for n and current offset
-	nc := chunkStart(n)
-	oc := chunkStart(it.ofs)
+	// merge ALP pieces
+	alp.MergeRD(it.chunk[:n], left[:n], right[:n], it.shift)
 
-	// fmt.Printf("ALP-RD seek n=%d ofs=%d nc=%d oc=%d\n", n, it.ofs, nc, oc)
-
-	// TODO: simplify load logic (keep oc as state and replace it.ofs & CHUNK_MASK == 0
-	// as load criteria in Next), this should make seek easier
-
-	// load when n is in another chunk
-	if nc != oc || it.ofs&CHUNK_MASK == 0 {
-		// seek base-it to new chunk start
-		// fmt.Printf("> ALP-RD: seeking bases nc=%d...\n", nc)
-		ls, rs := it.leftIt.Seek(nc), it.rightIt.Seek(nc)
-		if !ls || !rs {
-			// fmt.Printf("> ALP-RD: seek bases failed; left=%t righ=%t\n", ls, rs)
-			it.ofs = it.len
-			return false
-		}
-
-		// load next chunk when not seeking to start (re-use NextChunk method)
-		if n&CHUNK_MASK != 0 {
-			// fmt.Printf("> ALP-RD: try loading chunk from nc=%d\n", nc)
-			it.ofs = nc
-			it.NextChunk()
-		}
-	} else if n == 0 {
-		// edge case: reset base-it for n=0 because Next() loads again
-		// fmt.Printf("> ALP-RD: resetting bases\n")
-		it.leftIt.Reset()
-		it.rightIt.Reset()
-	}
-
-	// reset ofs to n, so call to Next() delivers value
-	it.ofs = n
-	return true
+	it.base = base
+	return n
 }

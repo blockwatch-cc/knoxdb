@@ -97,11 +97,7 @@ func (c *BitpackContainer[T]) Load(buf []byte) ([]byte, error) {
 }
 
 func (c *BitpackContainer[T]) Get(n int) T {
-	if c.it == nil {
-		c.it = c.Iterator()
-	}
-	return c.it.Get(n)
-	// return c.dec.DecodeValue(n)
+	return c.dec.DecodeValue(n)
 }
 
 func (c *BitpackContainer[T]) AppendTo(sel []uint32, dst []T) []T {
@@ -109,9 +105,11 @@ func (c *BitpackContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 		dst = dst[:c.N]
 		c.dec.Decode(dst)
 	} else {
+		it := c.Iterator()
 		for _, v := range sel {
-			dst = append(dst, c.dec.DecodeValue(int(v)))
+			dst = append(dst, it.Get(int(v)))
 		}
+		it.Close()
 	}
 	return dst
 }
@@ -394,116 +392,36 @@ var bitpackFactory = BitpackFactory{
 //
 
 func (c *BitpackContainer[T]) Iterator() Iterator[T] {
+	return NewBitpackIterator[T](c.dec)
+}
+
+func NewBitpackIterator[T types.Integer](dec *bitpack.Decoder[T]) *BitpackIterator[T] {
 	it := newBitpackIterator[T]()
-	it.dec = c.dec
-	it.len = c.Len()
-	clear(it.vals[:])
+	it.dec = dec
+	it.base = -1
+	it.len = dec.Len()
+	it.BaseIterator.fill = it.fill
 	return it
 }
 
 type BitpackIterator[T types.Integer] struct {
-	vals [CHUNK_SIZE]T
-	dec  *bitpack.Decoder[T]
-	len  int
-	ofs  int
+	BaseIterator[T]
+	dec *bitpack.Decoder[T]
 }
 
 func (it *BitpackIterator[T]) Close() {
-	it.len = 0
-	it.ofs = 0
+	it.dec = nil
+	it.BaseIterator.Close()
 	putBitpackIterator(it)
 }
 
-func (it *BitpackIterator[T]) Reset() {
-	// fmt.Printf("> BP reset\n")
-	it.ofs = 0
-}
-
-func (it *BitpackIterator[T]) Len() int {
-	return it.len
-}
-
-func (it *BitpackIterator[T]) Get(n int) T {
-	// TODO: faster decision, call seek in slow path only
-	if it.Seek(n) {
-		val, _ := it.Next()
-		return val
-	}
-	return it.dec.DecodeValue(n)
-	// return 0
-}
-
-func (it *BitpackIterator[T]) Next() (T, bool) {
-	if it.ofs >= it.len {
-		// EOF
-		return 0, false
-	}
-
-	// ofs % CHUNK_SIZE
-	i := it.ofs & CHUNK_MASK
-
-	// on first call or start of new chunk
-	if i == 0 {
-		// load next source chunks
-		n := it.dec.DecodeChunk(&it.vals, it.ofs)
-
-		// sanity check, should not happen
-		if n == 0 {
-			it.ofs = it.len
-			return 0, false
-		}
-	}
-
-	// advance ofs for next call
-	it.ofs++
-
-	// return value
-	return it.vals[i], true
-}
-
-func (it *BitpackIterator[T]) NextChunk() (*[CHUNK_SIZE]T, int) {
-	// EOF
-	if it.ofs >= it.len {
-		return nil, 0
-	}
-	n := it.dec.DecodeChunk(&it.vals, it.ofs)
-	if n > 0 {
-		it.ofs += n
-	}
-	// fmt.Printf("BP decoded %d vals, now at ofs %d/%d => %v\n", n, it.ofs, it.len, it.vals[:n])
-	return &it.vals, n
-}
-
-func (it *BitpackIterator[T]) SkipChunk() int {
-	n := min(CHUNK_SIZE, it.len-it.ofs)
-	it.ofs += n
-	return n
-}
-
-func (it *BitpackIterator[T]) Seek(n int) bool {
-	if n < 0 || n >= it.len {
+func (it *BitpackIterator[T]) fill(base int) int {
+	n := it.dec.DecodeChunk(&it.chunk, base)
+	if n == 0 {
 		it.ofs = it.len
-		return false
+		it.base = -1
+		return 0
 	}
-
-	// TODO:
-	// - improve logic flow, make no-load decision much faster
-	// - see ALP(RD) also
-
-	// calculate chunk start offsets for n and current offset
-	nc := chunkStart(n)
-	oc := chunkStart(it.ofs)
-
-	// fmt.Printf("BP seek n=%d ofs=%d nc=%d oc=%d\n", n, it.ofs, nc, oc)
-
-	// load when n is in another chunk or on first call
-	if nc != oc || it.ofs == 0 {
-		// fmt.Printf("> BP seek to nc=%d\n", nc)
-		it.ofs = nc
-		it.NextChunk()
-	}
-
-	// reset ofs to n, so call to Next() delivers value
-	it.ofs = n
-	return true
+	it.base = base
+	return n
 }

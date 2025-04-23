@@ -10,7 +10,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/num"
-	"blockwatch.cc/knoxdb/pkg/slicex"
 )
 
 // TIntegerConstant
@@ -40,11 +39,7 @@ func (c *ConstContainer[T]) Size() int {
 }
 
 func (c *ConstContainer[T]) Iterator() Iterator[T] {
-	it := &ConstIterator[T]{
-		len: c.N,
-	}
-	slicex.Fill(it.vals[:], c.Val)
-	return it
+	return NewConstIterator(c.Val, c.N)
 }
 
 func (c *ConstContainer[T]) Store(dst []byte) []byte {

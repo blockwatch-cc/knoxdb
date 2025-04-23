@@ -44,9 +44,7 @@ func (c *RawContainer[T]) Size() int {
 }
 
 func (c *RawContainer[T]) Iterator() Iterator[T] {
-	return &RawIterator[T]{
-		vals: c.Values,
-	}
+	return NewRawIterator(c.Values)
 }
 
 func (c *RawContainer[T]) Store(dst []byte) []byte {

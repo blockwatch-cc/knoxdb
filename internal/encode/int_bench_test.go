@@ -240,6 +240,49 @@ func BenchmarkIntCmp(b *testing.B) {
 	}
 }
 
+func BenchmarkIntIterator(b *testing.B) {
+	for _, c := range tests.BenchmarkSizes {
+		for _, scheme := range []IntegerContainerType{
+			TIntegerConstant,
+			TIntegerDelta,
+			TIntegerRunEnd,
+			TIntegerBitpacked,
+			TIntegerDictionary,
+			TIntegerSimple8,
+			TIntegerRaw,
+		} {
+			data := etests.GenForIntScheme[int64](int(scheme), c.N)
+			ctx := AnalyzeInt(data, true)
+			enc := NewInt[int64](scheme).Encode(ctx, data, MAX_CASCADE)
+			buf := enc.Store(make([]byte, 0, enc.Size()))
+			once := etests.ShowInfo
+			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
+				b.ReportAllocs()
+				b.SetBytes(int64(c.N * 8))
+				for b.Loop() {
+					enc2 := NewInt[int64](scheme)
+					_, err := enc2.Load(buf)
+					require.NoError(b, err)
+					if once {
+						b.Log(enc2.Info())
+						once = false
+					}
+					it := enc2.Iterator()
+					for {
+						_, n := it.NextChunk()
+						if n == 0 {
+							break
+						}
+					}
+					it.Close()
+					enc2.Close()
+				}
+				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+			})
+		}
+	}
+}
+
 // -----------------------------------------------
 // Microbenchmarks
 //

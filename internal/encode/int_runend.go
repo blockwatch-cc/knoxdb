@@ -5,7 +5,6 @@ package encode
 
 import (
 	"fmt"
-	"slices"
 	"sort"
 	"sync"
 
@@ -86,61 +85,77 @@ func (c *RunEndContainer[T]) Get(n int) T {
 	if c.it == nil {
 		c.it = c.Iterator()
 	}
-	// idx := sort.Search(c.Ends.Len(), func(i int) bool {
-	// 	return c.Ends.Get(i) >= uint32(n)
-	// })
-	// return c.Values.Get(idx)
 	return c.it.Get(n)
 }
 
 func (c *RunEndContainer[T]) AppendTo(sel []uint32, dst []T) []T {
+	it := c.Iterator()
 	if sel == nil {
-		l := uint32(c.Len())
-		var i uint32
-		var k int
-		dst = dst[:l]
-		for i < l {
-			end, val := c.Ends.Get(k), c.Values.Get(k)
-			for range (end - i) / 4 {
-				dst[i] = val
-				dst[i+1] = val
-				dst[i+2] = val
-				dst[i+3] = val
-				i += 4
+		for {
+			src, n := it.NextChunk()
+			if n == 0 {
+				break
 			}
-			for i <= end {
-				dst[i] = val
-				i++
-			}
-			k++
+			dst = append(dst, src[:n]...)
 		}
 	} else {
-		if slices.IsSorted(sel) {
-			idx, end, val := 0, c.Ends.Get(0), c.Values.Get(0)
-			for len(sel) > 0 {
-				// use current run while valid
-				if sel[0] <= end {
-					dst = append(dst, val)
-					sel = sel[1:]
-					continue
-				}
-				// find next run
-				for end < sel[0] {
-					idx++
-					end = c.Ends.Get(idx)
-				}
-				val = c.Values.Get(idx)
-			}
-		} else {
-			// use iterator for unsorted selection lists
-			it := c.Iterator()
-			for _, v := range sel {
-				dst = append(dst, it.Get(int(v)))
-			}
-			it.Close()
+		for _, v := range sel {
+			dst = append(dst, it.Get(int(v)))
 		}
 	}
+	it.Close()
 	return dst
+	// if sel == nil {
+	// 	l := uint32(c.Len())
+	// 	var i uint32
+	// 	var k int
+	// 	dst = dst[:l]
+
+	// 	// TODO: use iterators and get chunks of ends and values in an outer loop
+	// 	// instead of Get
+
+	// 	for i < l {
+	// 		end, val := c.Ends.Get(k), c.Values.Get(k)
+	// 		for range (end - i) / 4 {
+	// 			dst[i] = val
+	// 			dst[i+1] = val
+	// 			dst[i+2] = val
+	// 			dst[i+3] = val
+	// 			i += 4
+	// 		}
+	// 		for i <= end {
+	// 			dst[i] = val
+	// 			i++
+	// 		}
+	// 		k++
+	// 	}
+	// } else {
+	// 	if slices.IsSorted(sel) {
+	// 		idx, end, val := 0, c.Ends.Get(0), c.Values.Get(0)
+	// 		for len(sel) > 0 {
+	// 			// use current run while valid
+	// 			if sel[0] <= end {
+	// 				dst = append(dst, val)
+	// 				sel = sel[1:]
+	// 				continue
+	// 			}
+	// 			// find next run
+	// 			for end < sel[0] {
+	// 				idx++
+	// 				end = c.Ends.Get(idx)
+	// 			}
+	// 			val = c.Values.Get(idx)
+	// 		}
+	// 	} else {
+	// 		// use iterator for unsorted selection lists
+	// 		it := c.Iterator()
+	// 		for _, v := range sel {
+	// 			dst = append(dst, it.Get(int(v)))
+	// 		}
+	// 		it.Close()
+	// 	}
+	// }
+	// return dst
 }
 
 func (c *RunEndContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) IntegerContainer[T] {
@@ -282,14 +297,22 @@ func (c *RunEndContainer[T]) applyMatch(bits, vbits *Bitset) {
 }
 
 type RunEndFactory struct {
-	i64Pool sync.Pool
-	i32Pool sync.Pool
-	i16Pool sync.Pool
-	i8Pool  sync.Pool
-	u64Pool sync.Pool
-	u32Pool sync.Pool
-	u16Pool sync.Pool
-	u8Pool  sync.Pool
+	i64Pool   sync.Pool // container pools
+	i32Pool   sync.Pool
+	i16Pool   sync.Pool
+	i8Pool    sync.Pool
+	u64Pool   sync.Pool
+	u32Pool   sync.Pool
+	u16Pool   sync.Pool
+	u8Pool    sync.Pool
+	i64ItPool sync.Pool // iterator pools
+	i32ItPool sync.Pool
+	i16ItPool sync.Pool
+	i8ItPool  sync.Pool
+	u64ItPool sync.Pool
+	u32ItPool sync.Pool
+	u16ItPool sync.Pool
+	u8ItPool  sync.Pool
 }
 
 func newRunEndContainer[T types.Integer]() IntegerContainer[T] {
@@ -336,168 +359,126 @@ func putRunEndContainer[T types.Integer](c IntegerContainer[T]) {
 	}
 }
 
+func newRunEndIterator[T types.Integer]() *RunEndIterator[T] {
+	switch any(T(0)).(type) {
+	case int64:
+		return runEndFactory.i64ItPool.Get().(*RunEndIterator[T])
+	case int32:
+		return runEndFactory.i32ItPool.Get().(*RunEndIterator[T])
+	case int16:
+		return runEndFactory.i16ItPool.Get().(*RunEndIterator[T])
+	case int8:
+		return runEndFactory.i8ItPool.Get().(*RunEndIterator[T])
+	case uint64:
+		return runEndFactory.u64ItPool.Get().(*RunEndIterator[T])
+	case uint32:
+		return runEndFactory.u32ItPool.Get().(*RunEndIterator[T])
+	case uint16:
+		return runEndFactory.u16ItPool.Get().(*RunEndIterator[T])
+	case uint8:
+		return runEndFactory.u8ItPool.Get().(*RunEndIterator[T])
+	default:
+		return nil
+	}
+}
+
+func putRunEndIterator[T types.Integer](c *RunEndIterator[T]) {
+	switch any(T(0)).(type) {
+	case int64:
+		runEndFactory.i64ItPool.Put(c)
+	case int32:
+		runEndFactory.i32ItPool.Put(c)
+	case int16:
+		runEndFactory.i16ItPool.Put(c)
+	case int8:
+		runEndFactory.i8ItPool.Put(c)
+	case uint64:
+		runEndFactory.u64ItPool.Put(c)
+	case uint32:
+		runEndFactory.u32ItPool.Put(c)
+	case uint16:
+		runEndFactory.u16ItPool.Put(c)
+	case uint8:
+		runEndFactory.u8ItPool.Put(c)
+	}
+}
+
 var runEndFactory = RunEndFactory{
-	i64Pool: sync.Pool{
-		New: func() any { return new(RunEndContainer[int64]) },
-	},
-	i32Pool: sync.Pool{
-		New: func() any { return new(RunEndContainer[int32]) },
-	},
-	i16Pool: sync.Pool{
-		New: func() any { return new(RunEndContainer[int16]) },
-	},
-	i8Pool: sync.Pool{
-		New: func() any { return new(RunEndContainer[int8]) },
-	},
-	u64Pool: sync.Pool{
-		New: func() any { return new(RunEndContainer[uint64]) },
-	},
-	u32Pool: sync.Pool{
-		New: func() any { return new(RunEndContainer[uint32]) },
-	},
-	u16Pool: sync.Pool{
-		New: func() any { return new(RunEndContainer[uint16]) },
-	},
-	u8Pool: sync.Pool{
-		New: func() any { return new(RunEndContainer[uint8]) },
-	},
+	i64Pool:   sync.Pool{New: func() any { return new(RunEndContainer[int64]) }},
+	i32Pool:   sync.Pool{New: func() any { return new(RunEndContainer[int32]) }},
+	i16Pool:   sync.Pool{New: func() any { return new(RunEndContainer[int16]) }},
+	i8Pool:    sync.Pool{New: func() any { return new(RunEndContainer[int8]) }},
+	u64Pool:   sync.Pool{New: func() any { return new(RunEndContainer[uint64]) }},
+	u32Pool:   sync.Pool{New: func() any { return new(RunEndContainer[uint32]) }},
+	u16Pool:   sync.Pool{New: func() any { return new(RunEndContainer[uint16]) }},
+	u8Pool:    sync.Pool{New: func() any { return new(RunEndContainer[uint8]) }},
+	i64ItPool: sync.Pool{New: func() any { return new(RunEndIterator[int64]) }},
+	i32ItPool: sync.Pool{New: func() any { return new(RunEndIterator[int32]) }},
+	i16ItPool: sync.Pool{New: func() any { return new(RunEndIterator[int16]) }},
+	i8ItPool:  sync.Pool{New: func() any { return new(RunEndIterator[int8]) }},
+	u64ItPool: sync.Pool{New: func() any { return new(RunEndIterator[uint64]) }},
+	u32ItPool: sync.Pool{New: func() any { return new(RunEndIterator[uint32]) }},
+	u16ItPool: sync.Pool{New: func() any { return new(RunEndIterator[uint16]) }},
+	u8ItPool:  sync.Pool{New: func() any { return new(RunEndIterator[uint8]) }},
 }
 
 func (c *RunEndContainer[T]) Iterator() Iterator[T] {
-	return &RunEndIterator[T]{
-		vals: c.Values,
-		ends: c.Ends,
-		len:  c.Len(),
-	}
+	return NewRunEndIterator(c)
 }
 
 type RunEndIterator[T types.Integer] struct {
-	chunk [CHUNK_SIZE]T
-	vals  IntegerContainer[T]
-	ends  IntegerContainer[uint32]
-	ofs   int
-	len   int
+	BaseIterator[T]
+	valIt Iterator[T]
+	endIt Iterator[uint32]
+	// vals  *[CHUNK_SIZE]T
+	// ends  *[CHUNK_SIZE]uint32
+}
+
+func NewRunEndIterator[T types.Integer](c *RunEndContainer[T]) *RunEndIterator[T] {
+	it := newRunEndIterator[T]()
+	it.valIt = c.Values.Iterator()
+	it.endIt = c.Ends.Iterator()
+	it.base = -1
+	it.len = c.Len()
+	it.BaseIterator.fill = it.fill
+	return it
 }
 
 func (it *RunEndIterator[T]) Close() {
-	it.vals = nil
-	it.ends = nil
-	it.ofs = 0
-	it.len = 0
+	it.valIt.Close()
+	it.endIt.Close()
+	it.valIt = nil
+	it.endIt = nil
+	it.BaseIterator.Close()
+	putRunEndIterator(it)
 }
 
-func (it *RunEndIterator[T]) Reset() {
-	it.ofs = 0
-}
-
-func (it *RunEndIterator[T]) Len() int {
-	return it.len
-}
-
-func (it *RunEndIterator[T]) Get(n int) T {
-	if it.Seek(n) {
-		val, _ := it.Next()
-		return val
-	}
-	return 0
-}
-
-func (it *RunEndIterator[T]) Next() (T, bool) {
-	if it.ofs >= it.len {
-		// EOF
-		return 0, false
-	}
-
-	// ofs % CHUNK_SIZE
-	i := it.ofs & CHUNK_MASK
-
-	// on first call or start of new chunk
-	if i == 0 {
-		// fmt.Printf("REE next load ofs=%d\n", it.ofs)
-		// load next values
-		n := it.reload()
-
-		// EOF
-		if n == 0 {
-			it.ofs = it.len
-			return 0, false
-		}
-	}
-
-	// advance ofs for next call
-	it.ofs++
-
-	return it.chunk[i], true
-}
-
-func (it *RunEndIterator[T]) reload() int {
-	// find the REE pair at current offset
+func (it *RunEndIterator[T]) fill(base int) int {
+	// find which run contains base
+	nRuns := it.valIt.Len()
 	var k int
-	l := it.ends.Len()
-	if it.ofs > 0 {
-		k = sort.Search(l, func(i int) bool {
-			return it.ends.Get(i) >= uint32(it.ofs)
+	if base > 0 {
+		k = sort.Search(nRuns, func(i int) bool {
+			return it.endIt.Get(i) >= uint32(base)
 		})
-		if k == l {
+		if k == nRuns {
+			// not found, should not happen
 			return 0
 		}
 	}
 
-	// process REE pairs until EOF or chunk is full
+	// process REE pairs up until EOF or chunk is full
 	var n int
-	for n < CHUNK_SIZE && k < l {
-		end, val := it.ends.Get(k), it.vals.Get(k)
-		for range min(CHUNK_SIZE, int(end+1)-it.ofs) - n {
+	for n < CHUNK_SIZE && k < nRuns {
+		end, val := it.endIt.Get(k), it.valIt.Get(k)
+		for range min(CHUNK_SIZE, int(end+1)-base) - n {
 			// fmt.Printf("REE chunk[%d] = ree(%d) = %d\n", n, k, val)
 			it.chunk[n] = val
 			n++
 		}
 		k++
 	}
+	it.base = base
 
 	return n
-}
-
-func (it *RunEndIterator[T]) NextChunk() (*[CHUNK_SIZE]T, int) {
-	// EOF
-	if it.ofs >= it.len {
-		return nil, 0
-	}
-	// fmt.Printf("REE next-chunk load ofs=%d\n", it.ofs)
-	n := it.reload()
-	it.ofs += n
-	return &it.chunk, n
-}
-
-func (it *RunEndIterator[T]) SkipChunk() int {
-	n := min(CHUNK_SIZE, it.len-it.ofs)
-	it.ofs += n
-	return n
-}
-
-func (it *RunEndIterator[T]) Seek(n int) bool {
-	if n < 0 || n >= it.len {
-		it.ofs = it.len
-		return false
-	}
-
-	// calculate chunk start offsets for n and current offset
-	nc := chunkStart(n)
-	oc := chunkStart(it.ofs)
-
-	// fmt.Printf("REE seek n=%d ofs=%d nc=%d oc=%d\n", n, it.ofs, nc, oc)
-
-	// load when n is in another chunk or seek is first call
-	if nc != oc || it.ofs&CHUNK_MASK == 0 {
-		// load next chunk when not seeking to start (re-use NextChunk method)
-		if n&CHUNK_MASK != 0 {
-			// fmt.Printf("> REE: reload chunk from nc=%d ...\n", nc)
-			it.ofs = nc
-			it.NextChunk()
-		}
-	}
-
-	// reset ofs to n, so call to Next() delivers value
-	it.ofs = n
-	return true
 }

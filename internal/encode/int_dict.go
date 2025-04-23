@@ -75,15 +75,21 @@ func (c *DictionaryContainer[T]) Get(n int) T {
 }
 
 func (c *DictionaryContainer[T]) AppendTo(sel []uint32, dst []T) []T {
+	it := c.Iterator()
 	if sel == nil {
-		for i := range c.Len() {
-			dst = append(dst, c.Get(i))
+		for {
+			src, n := it.NextChunk()
+			if n == 0 {
+				break
+			}
+			dst = append(dst, src[:n]...)
 		}
 	} else {
 		for _, v := range sel {
-			dst = append(dst, c.Get(int(v)))
+			dst = append(dst, it.Get(int(v)))
 		}
 	}
+	it.Close()
 	return dst
 }
 
@@ -443,14 +449,22 @@ next:
 }
 
 type DictionaryFactory struct {
-	i64Pool sync.Pool
-	i32Pool sync.Pool
-	i16Pool sync.Pool
-	i8Pool  sync.Pool
-	u64Pool sync.Pool
-	u32Pool sync.Pool
-	u16Pool sync.Pool
-	u8Pool  sync.Pool
+	i64Pool   sync.Pool // container pools
+	i32Pool   sync.Pool
+	i16Pool   sync.Pool
+	i8Pool    sync.Pool
+	u64Pool   sync.Pool
+	u32Pool   sync.Pool
+	u16Pool   sync.Pool
+	u8Pool    sync.Pool
+	i64ItPool sync.Pool // iterator pools
+	i32ItPool sync.Pool
+	i16ItPool sync.Pool
+	i8ItPool  sync.Pool
+	u64ItPool sync.Pool
+	u32ItPool sync.Pool
+	u16ItPool sync.Pool
+	u8ItPool  sync.Pool
 }
 
 func newDictionaryContainer[T types.Integer]() IntegerContainer[T] {
@@ -497,34 +511,134 @@ func putDictionaryContainer[T types.Integer](c IntegerContainer[T]) {
 	}
 }
 
-var dictionaryFactory = DictionaryFactory{
-	i64Pool: sync.Pool{
-		New: func() any { return new(DictionaryContainer[int64]) },
-	},
-	i32Pool: sync.Pool{
-		New: func() any { return new(DictionaryContainer[int32]) },
-	},
-	i16Pool: sync.Pool{
-		New: func() any { return new(DictionaryContainer[int16]) },
-	},
-	i8Pool: sync.Pool{
-		New: func() any { return new(DictionaryContainer[int8]) },
-	},
-	u64Pool: sync.Pool{
-		New: func() any { return new(DictionaryContainer[uint64]) },
-	},
-	u32Pool: sync.Pool{
-		New: func() any { return new(DictionaryContainer[uint32]) },
-	},
-	u16Pool: sync.Pool{
-		New: func() any { return new(DictionaryContainer[uint16]) },
-	},
-	u8Pool: sync.Pool{
-		New: func() any { return new(DictionaryContainer[uint8]) },
-	},
+func newDictionaryIterator[T types.Integer]() *DictionaryIterator[T] {
+	switch any(T(0)).(type) {
+	case int64:
+		return dictionaryFactory.i64ItPool.Get().(*DictionaryIterator[T])
+	case int32:
+		return dictionaryFactory.i32ItPool.Get().(*DictionaryIterator[T])
+	case int16:
+		return dictionaryFactory.i16ItPool.Get().(*DictionaryIterator[T])
+	case int8:
+		return dictionaryFactory.i8ItPool.Get().(*DictionaryIterator[T])
+	case uint64:
+		return dictionaryFactory.u64ItPool.Get().(*DictionaryIterator[T])
+	case uint32:
+		return dictionaryFactory.u32ItPool.Get().(*DictionaryIterator[T])
+	case uint16:
+		return dictionaryFactory.u16ItPool.Get().(*DictionaryIterator[T])
+	case uint8:
+		return dictionaryFactory.u8ItPool.Get().(*DictionaryIterator[T])
+	default:
+		return nil
+	}
 }
 
-// TODO
+func putDictionaryIterator[T types.Integer](c *DictionaryIterator[T]) {
+	switch any(T(0)).(type) {
+	case int64:
+		dictionaryFactory.i64ItPool.Put(c)
+	case int32:
+		dictionaryFactory.i32ItPool.Put(c)
+	case int16:
+		dictionaryFactory.i16ItPool.Put(c)
+	case int8:
+		dictionaryFactory.i8ItPool.Put(c)
+	case uint64:
+		dictionaryFactory.u64ItPool.Put(c)
+	case uint32:
+		dictionaryFactory.u32ItPool.Put(c)
+	case uint16:
+		dictionaryFactory.u16ItPool.Put(c)
+	case uint8:
+		dictionaryFactory.u8ItPool.Put(c)
+	}
+}
+
+var dictionaryFactory = DictionaryFactory{
+	i64Pool:   sync.Pool{New: func() any { return new(DictionaryContainer[int64]) }},
+	i32Pool:   sync.Pool{New: func() any { return new(DictionaryContainer[int32]) }},
+	i16Pool:   sync.Pool{New: func() any { return new(DictionaryContainer[int16]) }},
+	i8Pool:    sync.Pool{New: func() any { return new(DictionaryContainer[int8]) }},
+	u64Pool:   sync.Pool{New: func() any { return new(DictionaryContainer[uint64]) }},
+	u32Pool:   sync.Pool{New: func() any { return new(DictionaryContainer[uint32]) }},
+	u16Pool:   sync.Pool{New: func() any { return new(DictionaryContainer[uint16]) }},
+	u8Pool:    sync.Pool{New: func() any { return new(DictionaryContainer[uint8]) }},
+	i64ItPool: sync.Pool{New: func() any { return new(DictionaryIterator[int64]) }},
+	i32ItPool: sync.Pool{New: func() any { return new(DictionaryIterator[int32]) }},
+	i16ItPool: sync.Pool{New: func() any { return new(DictionaryIterator[int16]) }},
+	i8ItPool:  sync.Pool{New: func() any { return new(DictionaryIterator[int8]) }},
+	u64ItPool: sync.Pool{New: func() any { return new(DictionaryIterator[uint64]) }},
+	u32ItPool: sync.Pool{New: func() any { return new(DictionaryIterator[uint32]) }},
+	u16ItPool: sync.Pool{New: func() any { return new(DictionaryIterator[uint16]) }},
+	u8ItPool:  sync.Pool{New: func() any { return new(DictionaryIterator[uint8]) }},
+}
+
 func (c *DictionaryContainer[T]) Iterator() Iterator[T] {
-	return nil
+	return NewDictionaryIterator(c.Dict, c.Codes)
+}
+
+type DictionaryIterator[T types.Integer] struct {
+	BaseIterator[T]
+	dict []T
+	code Iterator[uint16]
+}
+
+func NewDictionaryIterator[T types.Integer](dict IntegerContainer[T], code IntegerContainer[uint16]) *DictionaryIterator[T] {
+	it := newDictionaryIterator[T]()
+	it.dict = dict.AppendTo(nil, arena.Alloc[T](dict.Len()))
+	it.code = code.Iterator()
+	it.base = -1
+	it.len = it.code.Len()
+	it.BaseIterator.fill = it.fill
+	return it
+}
+
+func (it *DictionaryIterator[T]) Close() {
+	arena.Free(it.dict)
+	it.dict = nil
+	it.code.Close()
+	it.code = nil
+	it.BaseIterator.Close()
+	putDictionaryIterator(it)
+}
+
+func (it *DictionaryIterator[T]) fill(base int) int {
+	// load code chunk at base and translate
+	it.code.Seek(base)
+	codes, n := it.code.NextChunk()
+	if n == 0 {
+		it.ofs = it.len
+		it.base = -1
+		return 0
+	}
+
+	// translate codes
+	var i int
+	for range n / 16 {
+		it.chunk[i] = it.dict[codes[i]]
+		it.chunk[i+1] = it.dict[codes[i+1]]
+		it.chunk[i+2] = it.dict[codes[i+2]]
+		it.chunk[i+3] = it.dict[codes[i+3]]
+		it.chunk[i+4] = it.dict[codes[i+4]]
+		it.chunk[i+5] = it.dict[codes[i+5]]
+		it.chunk[i+6] = it.dict[codes[i+6]]
+		it.chunk[i+7] = it.dict[codes[i+7]]
+		it.chunk[i+8] = it.dict[codes[i+8]]
+		it.chunk[i+9] = it.dict[codes[i+9]]
+		it.chunk[i+10] = it.dict[codes[i+10]]
+		it.chunk[i+11] = it.dict[codes[i+11]]
+		it.chunk[i+12] = it.dict[codes[i+12]]
+		it.chunk[i+13] = it.dict[codes[i+13]]
+		it.chunk[i+14] = it.dict[codes[i+14]]
+		it.chunk[i+15] = it.dict[codes[i+15]]
+		i += 16
+	}
+	for i < n {
+		it.chunk[i] = it.dict[codes[i]]
+		i++
+	}
+
+	it.base = base
+	return n
 }

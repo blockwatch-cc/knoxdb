@@ -10,8 +10,10 @@ import (
 	"blockwatch.cc/knoxdb/internal/types"
 )
 
+const CHUNK_SIZE = 128 // keep in sync with main encode package
+
 type Iterator[T types.Integer] struct {
-	vals [128]T
+	vals [CHUNK_SIZE]T
 	src  []byte
 	minv T
 	ofs  int // next src read offset
@@ -88,7 +90,7 @@ func (it *Iterator[T]) Next() (T, bool) {
 	return it.vals[it.n-1], true
 }
 
-func (it *Iterator[T]) NextChunk() (*[128]T, int) {
+func (it *Iterator[T]) NextChunk() (*[CHUNK_SIZE]T, int) {
 	// EOF
 	if it.ofs >= len(it.src) {
 		return nil, 0

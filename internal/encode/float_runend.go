@@ -251,8 +251,10 @@ func (c *FloatRunEndContainer[T]) applyMatch(bits, vbits *Bitset) {
 }
 
 type FloatRunEndFactory struct {
-	f64Pool sync.Pool
-	f32Pool sync.Pool
+	f64Pool   sync.Pool
+	f32Pool   sync.Pool
+	f64ItPool sync.Pool
+	f32ItPool sync.Pool
 }
 
 func newFloatRunEndContainer[T types.Float]() FloatContainer[T] {
@@ -275,16 +277,92 @@ func putFloatRunEndContainer[T types.Float](c FloatContainer[T]) {
 	}
 }
 
-var floatRunEndFactory = FloatRunEndFactory{
-	f64Pool: sync.Pool{
-		New: func() any { return new(FloatRunEndContainer[float64]) },
-	},
-	f32Pool: sync.Pool{
-		New: func() any { return new(FloatRunEndContainer[float32]) },
-	},
+func newFloatRunEndIterator[T types.Float]() *FloatRunEndIterator[T] {
+	switch any(T(0)).(type) {
+	case float64:
+		return floatRunEndFactory.f64ItPool.Get().(*FloatRunEndIterator[T])
+	case float32:
+		return floatRunEndFactory.f32ItPool.Get().(*FloatRunEndIterator[T])
+	default:
+		return nil
+	}
 }
 
-// TODO
+func putFloatRunEndIterator[T types.Float](c *FloatRunEndIterator[T]) {
+	switch any(T(0)).(type) {
+	case float64:
+		floatRunEndFactory.f64ItPool.Put(c)
+	case float32:
+		floatRunEndFactory.f32ItPool.Put(c)
+	}
+}
+
+var floatRunEndFactory = FloatRunEndFactory{
+	f64Pool:   sync.Pool{New: func() any { return new(FloatRunEndContainer[float64]) }},
+	f32Pool:   sync.Pool{New: func() any { return new(FloatRunEndContainer[float32]) }},
+	f64ItPool: sync.Pool{New: func() any { return new(FloatRunEndIterator[float64]) }},
+	f32ItPool: sync.Pool{New: func() any { return new(FloatRunEndIterator[float32]) }},
+}
+
+// ---------------------------------------
+// Iterator
+//
+
 func (c *FloatRunEndContainer[T]) Iterator() Iterator[T] {
-	return nil
+	return NewFloatRunEndIterator(c)
+}
+
+type FloatRunEndIterator[T types.Float] struct {
+	BaseIterator[T]
+	valIt Iterator[T]
+	endIt Iterator[uint32]
+}
+
+func NewFloatRunEndIterator[T types.Float](c *FloatRunEndContainer[T]) *FloatRunEndIterator[T] {
+	it := newFloatRunEndIterator[T]()
+	it.valIt = c.Values.Iterator()
+	it.endIt = c.Ends.Iterator()
+	it.base = -1
+	it.len = c.Len()
+	it.BaseIterator.fill = it.fill
+	return it
+}
+
+func (it *FloatRunEndIterator[T]) Close() {
+	it.valIt.Close()
+	it.endIt.Close()
+	it.valIt = nil
+	it.endIt = nil
+	it.BaseIterator.Close()
+	putFloatRunEndIterator(it)
+}
+
+func (it *FloatRunEndIterator[T]) fill(base int) int {
+	// find which run contains base
+	nRuns := it.valIt.Len()
+	var k int
+	if base > 0 {
+		k = sort.Search(nRuns, func(i int) bool {
+			return it.endIt.Get(i) >= uint32(base)
+		})
+		if k == nRuns {
+			// not found, should not happen
+			return 0
+		}
+	}
+
+	// process REE pairs up until EOF or chunk is full
+	var n int
+	for n < CHUNK_SIZE && k < nRuns {
+		end, val := it.endIt.Get(k), it.valIt.Get(k)
+		for range min(CHUNK_SIZE, int(end+1)-base) - n {
+			// fmt.Printf("REE chunk[%d] = ree(%d) = %d\n", n, k, val)
+			it.chunk[n] = val
+			n++
+		}
+		k++
+	}
+	it.base = base
+
+	return n
 }
