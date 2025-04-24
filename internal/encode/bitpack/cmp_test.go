@@ -14,31 +14,31 @@ import (
 // Tests
 
 func TestCmpEqual(t *testing.T) {
-	bptest.CompareTest[uint64](t, Equal, types.FilterModeEqual, Encode)
+	bptest.CompareTest[uint64](t, Equal, types.FilterModeEqual, Encode, bptest.Decoder)
 }
 
 func TestCmpNotEqual(t *testing.T) {
-	bptest.CompareTest[uint64](t, NotEqual, types.FilterModeNotEqual, Encode)
+	bptest.CompareTest[uint64](t, NotEqual, types.FilterModeNotEqual, Encode, bptest.Decoder)
 }
 
 func TestCmpLess(t *testing.T) {
-	bptest.CompareTest[uint64](t, Less, types.FilterModeLt, Encode)
+	bptest.CompareTest[uint64](t, Less, types.FilterModeLt, Encode, bptest.Decoder)
 }
 
 func TestCmpLessEqual(t *testing.T) {
-	bptest.CompareTest[uint64](t, LessEqual, types.FilterModeLe, Encode)
+	bptest.CompareTest[uint64](t, LessEqual, types.FilterModeLe, Encode, bptest.Decoder)
 }
 
 func TestCmpGreater(t *testing.T) {
-	bptest.CompareTest[uint64](t, Greater, types.FilterModeGt, Encode)
+	bptest.CompareTest[uint64](t, Greater, types.FilterModeGt, Encode, bptest.Decoder)
 }
 
 func TestCmpGreaterEqual(t *testing.T) {
-	bptest.CompareTest[uint64](t, GreaterEqual, types.FilterModeGe, Encode)
+	bptest.CompareTest[uint64](t, GreaterEqual, types.FilterModeGe, Encode, bptest.Decoder)
 }
 
 func TestCmpBetween(t *testing.T) {
-	bptest.CompareTest2[uint64](t, Between, types.FilterModeRange, Encode)
+	bptest.CompareTest2[uint64](t, Between, types.FilterModeRange, Encode, bptest.Decoder)
 }
 
 // -------------------------------
