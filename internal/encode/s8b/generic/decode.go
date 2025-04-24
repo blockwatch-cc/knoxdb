@@ -12,7 +12,7 @@ import (
 )
 
 //go:nocheckptr
-func Decode[T types.Unsigned](dst []T, buf []byte, minv T) (int, error) {
+func Decode[T types.Integer](dst []T, buf []byte, minv T) (int, error) {
 	if len(buf) == 0 {
 		return 0, nil
 	}
@@ -165,17 +165,11 @@ func Seek(src []byte, v int) (int, int) {
 	return -1, -1
 }
 
+//go:nocheckptr
 func DecodeWord[T types.Integer](dst []T, buf []byte, minv T) int {
-	// ensure space
-	if len(buf) < 4 || len(dst) < 128 {
-		return 0
-	}
-
-	// pick selector based on input bit width
 	selector := unpackSelector[T](minv)
-
 	v := binary.LittleEndian.Uint64(buf)
-	sel := (v >> 60)
+	sel := v >> 60
 	selector[sel](v, unsafe.Pointer(&dst[0]), uint64(minv))
 	return maxNPerSelector[sel]
 }

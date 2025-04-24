@@ -18,23 +18,23 @@ import (
 )
 
 type EncodeFunc[T types.Integer] func([]byte, []T, T, T) ([]byte, error)
-type DecodeFunc[T types.Unsigned] func([]T, []byte, T) (int, error)
+type DecodeFunc[T types.Integer] func([]T, []byte, T) (int, error)
 type CompareFunc func([]byte, uint64, *bitset.Bitset)
 type CompareFunc2 func([]byte, uint64, uint64, *bitset.Bitset)
 
-type TestCase[T types.Unsigned] struct {
+type TestCase[T types.Integer] struct {
 	Name string
 	Data []T
 	Gen  func() []T
 	Err  bool
 }
 
-func MakeTests[T types.Unsigned]() []TestCase[T] {
+func MakeTests[T types.Integer]() []TestCase[T] {
 	width := unsafe.Sizeof(T(0))
 	tests := []TestCase[T]{
 		{Name: "nil", Data: nil},
 		{Name: "empty", Data: []T{}},
-		{Name: "mixed sizes", Data: []T{7, 6, 255, 4, 3, 2, 1}},
+		{Name: "mixed sizes", Data: []T{7, 6, 127, 4, 3, 2, 1}},
 		{Name: "240 ones", Gen: ones[T](240)},
 		{Name: "240 ones plus 5", Gen: func() []T {
 			in := ones[T](240)()
@@ -150,22 +150,25 @@ func MakeTests[T types.Unsigned]() []TestCase[T] {
 	return append(tests, combi)
 }
 
-func EncodeTest[T types.Unsigned](t *testing.T, enc EncodeFunc[T], dec DecodeFunc[T]) {
+func EncodeTest[T types.Integer](t *testing.T, enc EncodeFunc[T], dec DecodeFunc[T]) {
 	for _, c := range MakeTests[T]() {
 		t.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(t *testing.T) {
 			in := c.Data
 			if c.Gen != nil {
 				in = c.Gen()
 			}
-			var _, maxv T
+			var minv, maxv T
 			if len(in) > 0 {
-				_, maxv = slices.Min(in), slices.Max(in)
+				minv, maxv = slices.Min(in), slices.Max(in)
 			}
 			buf := make([]byte, len(in)*8)
 
-			// encode without min-FOR to be compatible with testcase data
-			// testing all selectors
-			buf, err := enc(buf, slices.Clone(in), 0, maxv)
+			// encode unsigned tests without min-FOR to be compatible with
+			// testcase data for testing all selectors
+			if !types.IsSigned[T]() {
+				minv = 0
+			}
+			buf, err := enc(buf, slices.Clone(in), minv, maxv)
 			if c.Err {
 				require.Error(t, err)
 				return
@@ -174,7 +177,7 @@ func EncodeTest[T types.Unsigned](t *testing.T, enc EncodeFunc[T], dec DecodeFun
 			}
 
 			dst := make([]T, len(in))
-			n, err := dec(dst, buf, 0)
+			n, err := dec(dst, buf, minv)
 			require.NoError(t, err)
 
 			if len(in) > 0 {
@@ -212,7 +215,7 @@ func MakeCompareCases[T types.Integer]() []CompareCase[T] {
 		// random tests
 		{"rnd", tests.GenRnd[T], false},
 		// custom tests
-		{"seq", func(n int) []T { return tests.GenSeq[T](n) }, false},
+		{"seq", func(n int) []T { return tests.GenSeq[T](n, 0) }, false},
 		{"256", func(n int) []T { return tests.GenRndBits[T](n, 8) }, false},
 		{"adj-bug", func(n int) []T {
 			vals := util.ConvertSlice[int, T]([]int{

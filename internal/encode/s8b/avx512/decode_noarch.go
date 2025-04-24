@@ -12,4 +12,5 @@ import (
 
 var (
 	DecodeUint64 = generic.Decode[uint64]
+	DecodeInt64  = generic.Decode[int64]
 )

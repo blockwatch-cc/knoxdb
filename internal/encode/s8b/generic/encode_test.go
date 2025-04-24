@@ -16,17 +16,27 @@ import (
 )
 
 func TestEncode(t *testing.T) {
-	stests.EncodeTest[uint64](t, Encode[uint64], Decode[uint64])
-	stests.EncodeTest[uint32](t, Encode[uint32], Decode[uint32])
-	stests.EncodeTest[uint16](t, Encode[uint16], Decode[uint16])
-	stests.EncodeTest[uint8](t, Encode[uint8], Decode[uint8])
+	stests.EncodeTest[uint64](t, Encode, Decode)
+	stests.EncodeTest[uint32](t, Encode, Decode)
+	stests.EncodeTest[uint16](t, Encode, Decode)
+	stests.EncodeTest[uint8](t, Encode, Decode)
+
+	stests.EncodeTest[int64](t, Encode, Decode)
+	stests.EncodeTest[int32](t, Encode, Decode)
+	stests.EncodeTest[int16](t, Encode, Decode)
+	stests.EncodeTest[int8](t, Encode, Decode)
 }
 
 func TestDecode(t *testing.T) {
-	stests.EncodeTest[uint64](t, Encode[uint64], Decode[uint64])
-	stests.EncodeTest[uint32](t, Encode[uint32], Decode[uint32])
-	stests.EncodeTest[uint16](t, Encode[uint16], Decode[uint16])
-	stests.EncodeTest[uint8](t, Encode[uint8], Decode[uint8])
+	stests.EncodeTest[uint64](t, Encode, Decode)
+	stests.EncodeTest[uint32](t, Encode, Decode)
+	stests.EncodeTest[uint16](t, Encode, Decode)
+	stests.EncodeTest[uint8](t, Encode, Decode)
+
+	stests.EncodeTest[int64](t, Encode, Decode)
+	stests.EncodeTest[int32](t, Encode, Decode)
+	stests.EncodeTest[int16](t, Encode, Decode)
+	stests.EncodeTest[int8](t, Encode, Decode)
 }
 
 func DecodeLegacyWrapper[T types.Unsigned](dst []T, buf []byte) (int, error) {
@@ -48,17 +58,17 @@ func DecodeLegacyWrapper[T types.Unsigned](dst []T, buf []byte) (int, error) {
 }
 
 func BenchmarkEncode(b *testing.B) {
-	stests.EncodeBenchmark[uint64](b, Encode[uint64])
-	stests.EncodeBenchmark[uint32](b, Encode[uint32])
-	stests.EncodeBenchmark[uint16](b, Encode[uint16])
-	stests.EncodeBenchmark[uint8](b, Encode[uint8])
+	stests.EncodeBenchmark[uint64](b, Encode)
+	stests.EncodeBenchmark[uint32](b, Encode)
+	stests.EncodeBenchmark[uint16](b, Encode)
+	stests.EncodeBenchmark[uint8](b, Encode)
 }
 
 func BenchmarkDecode(b *testing.B) {
-	stests.DecodeBenchmark[uint64](b, Encode[uint64], Decode[uint64])
-	stests.DecodeBenchmark[uint32](b, Encode[uint32], Decode[uint32])
-	stests.DecodeBenchmark[uint16](b, Encode[uint16], Decode[uint16])
-	stests.DecodeBenchmark[uint8](b, Encode[uint8], Decode[uint8])
+	stests.DecodeBenchmark[uint64](b, Encode, Decode)
+	stests.DecodeBenchmark[uint32](b, Encode, Decode)
+	stests.DecodeBenchmark[uint16](b, Encode, Decode)
+	stests.DecodeBenchmark[uint8](b, Encode, Decode)
 }
 
 func BenchmarkCount(b *testing.B) {
@@ -92,7 +102,7 @@ func TestZeroOrOnes(t *testing.T) {
 		{"Ones", tests.GenConst[uint64](128, 1)},
 		{"Dups", tests.GenDups[uint64](128, 16, -1)},
 		{"Runs", tests.GenRuns[uint64](128, 10, -1)},
-		{"Seq", tests.GenSeq[uint64](128)},
+		{"Seq", tests.GenSeq[uint64](128, 1)},
 	} {
 		for _, f := range []zeroOneVersion{
 			{"V9", zeroOrOne[uint64]},
@@ -128,7 +138,7 @@ func BenchmarkZeroOrOne(b *testing.B) {
 		{"Ones", tests.GenConst[uint64](128, 1)},
 		{"Dups", tests.GenDups[uint64](128, 16, -1)},
 		{"Runs", tests.GenRuns[uint64](128, 10, -1)},
-		{"Seq", tests.GenSeq[uint64](128)},
+		{"Seq", tests.GenSeq[uint64](128, 1)},
 	} {
 		minv := slices.Min(c.Data)
 		if i == 1 {

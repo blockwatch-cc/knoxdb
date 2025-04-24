@@ -108,6 +108,22 @@ func DecodeUint64(dst []uint64, src []byte, minv uint64) (int, error) {
 	return decodeUint64AVX2(dst, src, minv), nil
 }
 
+func DecodeInt64(dst []int64, src []byte, minv int64) (int, error) {
+	return DecodeUint64(util.ReinterpretSlice[int64, uint64](dst), src, uint64(minv))
+}
+
+func DecodeInt32(dst []int32, src []byte, minv int32) (int, error) {
+	return DecodeUint32(util.ReinterpretSlice[int32, uint32](dst), src, uint32(minv))
+}
+
+func DecodeInt16(dst []int16, src []byte, minv int16) (int, error) {
+	return DecodeUint16(util.ReinterpretSlice[int16, uint16](dst), src, uint16(minv))
+}
+
+func DecodeInt8(dst []int8, src []byte, minv int8) (int, error) {
+	return DecodeUint8(util.ReinterpretSlice[int8, uint8](dst), src, uint8(minv))
+}
+
 func CountValues(src []byte) int {
 	if len(src)&7 > 0 {
 		return -1

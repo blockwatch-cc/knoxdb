@@ -6,39 +6,27 @@ package tests
 import (
 	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
-func ones[T types.Unsigned](n int) func() []T {
+func ones[T types.Integer](n int) func() []T {
 	return func() []T {
 		return tests.GenConst[T](n, 1)
 	}
 }
 
-// func zeros[T types.Unsigned](n int) func() []T {
-// 	return func() []T {
-// 		return tests.GenConst[T](n, 0)
-// 	}
-// }
-
 // bits generates sequence of n numbers with max bits,
 // ensuring max bit is set for 50% of the values.
-func bits[T types.Unsigned](n, bits int) func() []T {
+func bits[T types.Integer](n, bits int) func() []T {
 	return func() []T {
-		out := make([]T, n)
-		maxVal := T(1<<uint8(bits) - 1)
+		out := tests.GenRndBits[T](n, bits)
 		for i := range out {
-			topBit := T((i & 1) << uint8(bits-1))
-			out[i] = T(util.RandInt64n(int64(maxVal))) | topBit
-			if out[i] > maxVal {
-				panic("max")
-			}
+			out[i] |= T((i & 1) << uint8(bits-1))
 		}
 		return out
 	}
 }
 
-func combine[T types.Unsigned](fns ...func() []T) func() []T {
+func combine[T types.Integer](fns ...func() []T) func() []T {
 	return func() []T {
 		var out []T
 		for _, fn := range fns {

@@ -23,6 +23,10 @@ func DecodeUint64(dst []uint64, src []byte, minv uint64) (int, error) {
 	return decodeUint64AVX512(dst, src, minv), nil
 }
 
+func DecodeInt64(dst []int64, src []byte, minv int64) (int, error) {
+	return decodeUint64AVX512(util.ReinterpretSlice[int64, uint64](dst), src, uint64(minv)), nil
+}
+
 func init() {
 	if util.UseAVX512_F {
 		initUint64AVX512()

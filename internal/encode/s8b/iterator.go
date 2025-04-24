@@ -10,16 +10,20 @@ import (
 	"blockwatch.cc/knoxdb/internal/types"
 )
 
-const CHUNK_SIZE = 128 // keep in sync with main encode package
+// keep in sync with main encode package
+const (
+	CHUNK_SIZE = 128 // must be pow2!
+)
 
 type Iterator[T types.Integer] struct {
-	vals [CHUNK_SIZE]T
-	src  []byte
-	minv T
-	ofs  int // next src read offset
-	len  int // total count of encoded values in src
-	cnt  int // count of valid values in vals
-	n    int // next value position in vals
+	chunk [CHUNK_SIZE]T
+	src   []byte // s8b encoded uint64 words
+	minv  T      // min-FOR value
+	base  int    // index of first value in chunk
+	len   int    // total count of encoded values in src
+	ofs   int    // next value index in vector
+	cnt   int    // count of valid values in chunk
+	read  int    // next src read offset
 }
 
 func NewIterator[T types.Integer](buf []byte, n int, minv T) *Iterator[T] {
@@ -27,6 +31,7 @@ func NewIterator[T types.Integer](buf []byte, n int, minv T) *Iterator[T] {
 		n = CountValues(buf)
 	}
 	it := newIterator[T]()
+	it.base = -1
 	it.src = buf
 	it.len = n
 	it.minv = minv
@@ -35,18 +40,17 @@ func NewIterator[T types.Integer](buf []byte, n int, minv T) *Iterator[T] {
 
 func (it *Iterator[T]) Close() {
 	it.src = nil
+	it.minv = 0
+	it.base = 0
 	it.ofs = 0
 	it.len = 0
-	it.minv = 0
 	it.cnt = 0
-	it.n = 0
+	it.read = 0
 	putIterator(it)
 }
 
 func (it *Iterator[T]) Reset() {
 	it.ofs = 0
-	it.cnt = 0
-	it.n = 0
 }
 
 func (it *Iterator[T]) Len() int {
@@ -54,101 +58,112 @@ func (it *Iterator[T]) Len() int {
 }
 
 func (it *Iterator[T]) Get(n int) T {
-	if it.Seek(n) {
-		val, _ := it.Next()
-		return val
+	if n < 0 || n >= it.len {
+		return 0
 	}
-	return 0
+	if uint(n-it.base) >= uint(it.cnt) {
+		it.fill(n)
+	}
+	return it.chunk[n-it.base]
 }
 
 func (it *Iterator[T]) Next() (T, bool) {
-	if it.n == it.cnt {
-		// EOF
-		if it.ofs >= len(it.src) {
-			return 0, false
-		}
+	// EOF
+	if it.ofs >= it.len {
+		return 0, false
+	}
 
-		// decode next encoded word
-		n := generic.DecodeWord(it.vals[:], it.src[it.ofs:], it.minv)
-
-		// sanity EOF check
-		if n == 0 {
-			it.ofs = len(it.src)
-			return 0, false
-		}
-
-		// update pointers
-		it.ofs += 8
-		it.cnt = n
-		it.n = 0
+	// refill on chunk boundary
+	if uint(it.ofs-it.base) >= uint(it.cnt) {
+		it.fill(it.ofs)
 	}
 
 	// advance n for next call
-	it.n++
+	i := it.ofs - it.base
+	it.ofs++
 
-	// return value
-	return it.vals[it.n-1], true
+	return it.chunk[i], true
 }
 
 func (it *Iterator[T]) NextChunk() (*[CHUNK_SIZE]T, int) {
 	// EOF
-	if it.ofs >= len(it.src) {
+	if it.ofs >= it.len {
 		return nil, 0
 	}
 
-	// TODO: update seek code before enabling this
-	// attempt to fill the chunk as much as possible without overflow
-	// it.n = 0
-	// for it.ofs < len(it.src) && it.n+maxNPerSelector[it.src[it.ofs+7]>>4] < 128 {
-	// 	n := generic.DecodeWord(it.vals[it.n:], it.src[it.ofs:])
-	// 	it.ofs += 8
-	// 	it.cnt += n
-	// 	it.n += n
-	// }
+	// refill from current end of chunk (note: base inits at -1)
+	n := it.fill(max(0, it.ofs))
+	it.ofs = it.base + n
 
-	// decode next encoded word
-	n := generic.DecodeWord(it.vals[:], it.src[it.ofs:], it.minv)
-	if n > 0 {
-		it.ofs += 8
-		it.cnt = n
-		it.n = n // stay compatible with Next()
-	}
-
-	return &it.vals, it.n
+	return &it.chunk, n
 }
 
 func (it *Iterator[T]) SkipChunk() int {
-	if it.ofs >= len(it.src) {
-		return 0
+	maxn := min(CHUNK_SIZE, it.len-it.ofs)
+	srcIdx := it.read + 7
+
+	// skip next 128 (or less) values at code word granularity
+	var n int
+	for srcIdx < len(it.src) {
+		sn := maxNPerSelector[it.src[srcIdx]>>4]
+		if sn+n > maxn {
+			break
+		}
+		n += sn
+		srcIdx += 8
 	}
-	it.ofs += 8
-	it.cnt = 0
-	it.n = 0
-	return maxNPerSelector[it.src[it.ofs-1]>>4]
+	it.ofs += n
+	return n
 }
 
 // seek to a given value position
 func (it *Iterator[T]) Seek(n int) bool {
+	// bounds check
 	if n < 0 || n >= it.len {
-		it.ofs = len(it.src)
-		it.n = 0
-		it.cnt = 0
+		it.ofs = it.len
 		return false
 	}
-	// TODO: identify matches in same code word and prevent expensive seek & decode
-	bn, cn := generic.Seek(it.src, n)
-	if bn < 0 {
-		it.ofs = len(it.src)
-		return false
+
+	// fill on seek to an unloaded chunk
+	if uint(n-it.base) >= uint(it.cnt) {
+		it.fill(n)
 	}
-	it.ofs = bn
-	it.n = 0
-	it.cnt = 0
-	if cn > 0 {
-		it.NextChunk()
-		it.n = cn
-	}
+
+	// reset ofs to n, so call to Next() delivers value
+	it.ofs = n
 	return true
+}
+
+func (it *Iterator[T]) fill(idx int) int {
+	// ideally we continue reading at start of next code word
+	srcIdx, srcPos := it.read, 0
+
+	// on seek however we may have to jump to a different codeword
+	if idx != it.base+it.cnt {
+		srcIdx, srcPos = generic.Seek(it.src, idx)
+	}
+
+	// attempt to fill chunk as much as possible without overflow,
+	// peek into next selector to count codewords
+	it.cnt = 0
+	for srcIdx+7 < len(it.src) && it.cnt+maxNPerSelector[it.src[srcIdx+7]>>4] <= CHUNK_SIZE {
+		n := generic.DecodeWord(it.chunk[it.cnt:], it.src[srcIdx:], it.minv)
+		// if n == 0 {
+		// 	panic(fmt.Errorf("decoding word %d %x sel=%d failed",
+		// 		srcIdx,
+		// 		binary.LittleEndian.Uint64(it.src[srcIdx:]),
+		// 		it.src[srcIdx+7]>>4,
+		// 	))
+		// }
+		srcIdx += 8
+		it.cnt += n
+	}
+
+	it.read = srcIdx
+	it.base = idx - srcPos // chunk starts at code word
+	it.ofs = idx           // for exact seeks
+
+	return it.cnt
 }
 
 type IteratorFactory struct {

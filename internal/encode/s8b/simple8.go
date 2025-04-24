@@ -22,21 +22,16 @@ var (
 	DecodeLegacyUint16 = generic.DecodeLegacyUint16
 	DecodeLegacyUint8  = generic.DecodeLegacyUint8
 
-	// Encoders
-	EncodeUint64 = generic.Encode[uint64]
-	EncodeInt64  = generic.Encode[int64]
-	EncodeUint32 = generic.Encode[uint32]
-	EncodeInt32  = generic.Encode[int32]
-	EncodeUint16 = generic.Encode[uint16]
-	EncodeInt16  = generic.Encode[int16]
-	EncodeUint8  = generic.Encode[uint8]
-	EncodeInt8   = generic.Encode[int8]
-
-	// Decoders
+	// Decoders (overwritten by AVX algos)
 	DecodeUint64 = generic.Decode[uint64]
 	DecodeUint32 = generic.Decode[uint32]
 	DecodeUint16 = generic.Decode[uint16]
 	DecodeUint8  = generic.Decode[uint8]
+
+	DecodeInt64 = generic.Decode[int64]
+	DecodeInt32 = generic.Decode[int32]
+	DecodeInt16 = generic.Decode[int16]
+	DecodeInt8  = generic.Decode[int8]
 
 	// Comparers
 	Equal        = generic.Equal
@@ -61,10 +56,42 @@ func init() {
 		DecodeUint32 = avx2.DecodeUint32
 		DecodeUint16 = avx2.DecodeUint16
 		DecodeUint8 = avx2.DecodeUint8
+		DecodeInt64 = avx2.DecodeInt64
+		DecodeInt32 = avx2.DecodeInt32
+		DecodeInt16 = avx2.DecodeInt16
+		DecodeInt8 = avx2.DecodeInt8
 		CountValues = avx2.CountValues
 	}
 	if util.UseAVX512_F {
 		DecodeUint64 = avx512.DecodeUint64
+		DecodeInt64 = avx512.DecodeInt64
+	}
+}
+
+func Encode[T types.Integer](dst []byte, src []T, minv, maxv T) ([]byte, error) {
+	return generic.Encode(dst, src, minv, maxv)
+}
+
+func Decode[T types.Integer](dst []T, buf []byte, minv T) (int, error) {
+	switch any(T(0)).(type) {
+	case uint64:
+		return DecodeUint64(util.ReinterpretSlice[T, uint64](dst), buf, uint64(minv))
+	case uint32:
+		return DecodeUint32(util.ReinterpretSlice[T, uint32](dst), buf, uint32(minv))
+	case uint16:
+		return DecodeUint16(util.ReinterpretSlice[T, uint16](dst), buf, uint16(minv))
+	case uint8:
+		return DecodeUint8(util.ReinterpretSlice[T, uint8](dst), buf, uint8(minv))
+	case int64:
+		return DecodeUint64(util.ReinterpretSlice[T, uint64](dst), buf, uint64(minv))
+	case int32:
+		return DecodeUint32(util.ReinterpretSlice[T, uint32](dst), buf, uint32(minv))
+	case int16:
+		return DecodeUint16(util.ReinterpretSlice[T, uint16](dst), buf, uint16(minv))
+	case int8:
+		return DecodeUint8(util.ReinterpretSlice[T, uint8](dst), buf, uint8(minv))
+	default:
+		return 0, nil
 	}
 }
 

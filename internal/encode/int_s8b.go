@@ -12,7 +12,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/num"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 // TIntegerSimple8
@@ -90,58 +89,30 @@ func (c *Simple8Container[T]) Get(n int) T {
 }
 
 func (c *Simple8Container[T]) AppendTo(sel []uint32, dst []T) []T {
-	it := c.Iterator()
 	if sel == nil {
-		// TODO: support FOR in s8b decoder/iterator
-		for {
-			vals, n := it.NextChunk()
-			if n == 0 {
-				break
-			}
-			for _, v := range vals[:n] {
-				dst = append(dst, v)
-			}
+		dst = dst[:c.N]
+		n, err := s8b.Decode(dst, c.Packed, c.For)
+		if err != nil {
+			// unlikely
+			panic(err)
 		}
+		dst = dst[:n]
 	} else {
+		it := c.Iterator()
 		for _, v := range sel {
 			dst = append(dst, it.Get(int(v)))
 		}
+		it.Close()
 	}
-	it.Close()
 	return dst
 }
 
 func (c *Simple8Container[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) IntegerContainer[T] {
 	sz := s8b.EstimateMaxSize(len(vals), ctx.Min, ctx.Max) * 8
 	buf := arena.AllocBytes(sz)[:sz]
-	var err error
-	switch any(T(0)).(type) {
-	case uint64:
-		v := util.ReinterpretSlice[T, uint64](vals)
-		buf, err = s8b.EncodeUint64(buf, v, uint64(ctx.Min), uint64(ctx.Max))
-	case uint32:
-		v := util.ReinterpretSlice[T, uint32](vals)
-		buf, err = s8b.EncodeUint32(buf, v, uint32(ctx.Min), uint32(ctx.Max))
-	case uint16:
-		v := util.ReinterpretSlice[T, uint16](vals)
-		buf, err = s8b.EncodeUint16(buf, v, uint16(ctx.Min), uint16(ctx.Max))
-	case uint8:
-		v := util.ReinterpretSlice[T, uint8](vals)
-		buf, err = s8b.EncodeUint8(buf, v, uint8(ctx.Min), uint8(ctx.Max))
-	case int64:
-		v := util.ReinterpretSlice[T, int64](vals)
-		buf, err = s8b.EncodeInt64(buf, v, int64(ctx.Min), int64(ctx.Max))
-	case int32:
-		v := util.ReinterpretSlice[T, int32](vals)
-		buf, err = s8b.EncodeInt32(buf, v, int32(ctx.Min), int32(ctx.Max))
-	case int16:
-		v := util.ReinterpretSlice[T, int16](vals)
-		buf, err = s8b.EncodeInt16(buf, v, int16(ctx.Min), int16(ctx.Max))
-	case int8:
-		v := util.ReinterpretSlice[T, int8](vals)
-		buf, err = s8b.EncodeInt8(buf, v, int8(ctx.Min), int8(ctx.Max))
-	}
+	buf, err := s8b.Encode(buf, vals, ctx.Min, ctx.Max)
 	if err != nil {
+		// unlikely
 		panic(err)
 	}
 	c.Packed = buf

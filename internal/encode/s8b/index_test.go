@@ -22,19 +22,19 @@ import (
 type IndexFunc[T uint16 | uint32] func([]byte, []T) Index
 
 func BenchmarkIndex16(b *testing.B) {
-	IndexBenchmark[uint16](b, EncodeUint16, MakeIndex[uint16])
+	IndexBenchmark[uint16](b, Encode[uint16], MakeIndex[uint16])
 }
 
 func BenchmarkIndex16Find(b *testing.B) {
-	IndexFindBenchmark[uint16](b, EncodeUint16, MakeIndex[uint16])
+	IndexFindBenchmark[uint16](b, Encode[uint16], MakeIndex[uint16])
 }
 
 func BenchmarkIndex32(b *testing.B) {
-	IndexBenchmark[uint32](b, EncodeUint32, MakeIndex[uint32])
+	IndexBenchmark[uint32](b, Encode[uint32], MakeIndex[uint32])
 }
 
 func BenchmarkIndex32Find(b *testing.B) {
-	IndexFindBenchmark[uint32](b, EncodeUint32, MakeIndex[uint32])
+	IndexFindBenchmark[uint32](b, Encode[uint32], MakeIndex[uint32])
 }
 
 func IndexBenchmark[T types.Unsigned, I uint16 | uint32](b *testing.B, enc stests.EncodeFunc[T], idx IndexFunc[I]) {
@@ -91,7 +91,7 @@ func CmpEqualUnpackedBenchmark[T types.Unsigned](b *testing.B) {
 		val := c.Data[len(c.Data)/2]
 		b.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(b *testing.B) {
 			b.SetBytes(int64(len(c.Data) * int(unsafe.Sizeof(T(0)))))
-			for range b.N {
+			for b.Loop() {
 				dst := make([]T, len(c.Data))
 				var n int64
 				switch any(T(0)).(type) {
@@ -118,6 +118,7 @@ func CmpEqualUnpackedBenchmark[T types.Unsigned](b *testing.B) {
 				}
 				bits.ResetCount(int(n))
 			}
+			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 		})
 	}
 }

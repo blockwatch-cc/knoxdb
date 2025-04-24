@@ -62,11 +62,12 @@ func IsSigned[T Number]() bool {
 func IsInteger[T Number]() bool {
 	switch any(T(0)).(type) {
 	case float64:
+		return false
 	case float32:
+		return false
 	default:
 		return true
 	}
-	return false
 }
 
 func Log2Range[T Integer](minv, maxv T) int {
