@@ -165,11 +165,38 @@ func Seek(src []byte, v int) (int, int) {
 	return -1, -1
 }
 
+type Decoder[T types.Integer] struct {
+	unpack *[16]unpackFunc
+	minv   T
+}
+
+func NewDecoder[T types.Integer](minv T) *Decoder[T] {
+	return &Decoder[T]{
+		minv:   minv,
+		unpack: unpackSelector[T](minv),
+	}
+}
+
 //go:nocheckptr
-func DecodeWord[T types.Integer](dst []T, buf []byte, minv T) int {
-	selector := unpackSelector[T](minv)
+func (d *Decoder[T]) DecodeWordPtr(dst unsafe.Pointer, l int, buf []byte) int {
 	v := binary.LittleEndian.Uint64(buf)
 	sel := v >> 60
-	selector[sel](v, unsafe.Pointer(&dst[0]), uint64(minv))
-	return maxNPerSelector[sel]
+	n := maxNPerSelector[sel]
+	if l < n {
+		return 0
+	}
+	d.unpack[sel](v, dst, uint64(d.minv))
+	return n
+}
+
+//go:nocheckptr
+func (d *Decoder[T]) DecodeWord(dst []T, buf []byte) int {
+	v := binary.LittleEndian.Uint64(buf)
+	sel := v >> 60
+	n := maxNPerSelector[sel]
+	if len(dst) < n {
+		return 0
+	}
+	d.unpack[sel](v, unsafe.Pointer(&dst[0]), uint64(d.minv))
+	return n
 }

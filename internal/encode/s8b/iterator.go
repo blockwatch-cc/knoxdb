@@ -5,6 +5,7 @@ package s8b
 
 import (
 	"sync"
+	"unsafe"
 
 	"blockwatch.cc/knoxdb/internal/encode/s8b/generic"
 	"blockwatch.cc/knoxdb/internal/types"
@@ -24,6 +25,7 @@ type Iterator[T types.Integer] struct {
 	ofs   int    // next value index in vector
 	cnt   int    // count of valid values in chunk
 	read  int    // next src read offset
+	dec   *generic.Decoder[T]
 }
 
 func NewIterator[T types.Integer](buf []byte, n int, minv T) *Iterator[T] {
@@ -35,6 +37,7 @@ func NewIterator[T types.Integer](buf []byte, n int, minv T) *Iterator[T] {
 	it.src = buf
 	it.len = n
 	it.minv = minv
+	it.dec = generic.NewDecoder(minv)
 	return it
 }
 
@@ -46,6 +49,7 @@ func (it *Iterator[T]) Close() {
 	it.len = 0
 	it.cnt = 0
 	it.read = 0
+	it.dec = nil
 	putIterator(it)
 }
 
@@ -145,16 +149,14 @@ func (it *Iterator[T]) fill(idx int) int {
 
 	// attempt to fill chunk as much as possible without overflow,
 	// peek into next selector to count codewords
+	p := unsafe.Pointer(&it.chunk[0])
+	w := int(unsafe.Sizeof(T(0)))
 	it.cnt = 0
-	for srcIdx+7 < len(it.src) && it.cnt+maxNPerSelector[it.src[srcIdx+7]>>4] <= CHUNK_SIZE {
-		n := generic.DecodeWord(it.chunk[it.cnt:], it.src[srcIdx:], it.minv)
-		// if n == 0 {
-		// 	panic(fmt.Errorf("decoding word %d %x sel=%d failed",
-		// 		srcIdx,
-		// 		binary.LittleEndian.Uint64(it.src[srcIdx:]),
-		// 		it.src[srcIdx+7]>>4,
-		// 	))
-		// }
+	for srcIdx < len(it.src) {
+		n := it.dec.DecodeWordPtr(unsafe.Add(p, it.cnt*w), CHUNK_SIZE-it.cnt, it.src[srcIdx:])
+		if n == 0 {
+			break
+		}
 		srcIdx += 8
 		it.cnt += n
 	}

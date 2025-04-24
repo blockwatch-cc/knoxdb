@@ -169,6 +169,7 @@ func TestSeek(t *testing.T) {
 			buf, err := Encode(make([]byte, len(in)*8), in, minv, maxv)
 			require.NoError(t, err)
 			dst := make([]uint64, 128)
+			dec := NewDecoder(minv)
 
 			for i, v := range in {
 				// t.Logf("Seek to %d, expecting %d", i, v)
@@ -179,7 +180,7 @@ func TestSeek(t *testing.T) {
 				require.Less(t, bpos, len(buf), "buf pos too large")
 				// t.Logf("> found buf[%d] sel=%d vals=%d code[%d]",
 				// 	bpos, buf[bpos+7]>>4, maxNPerSelector[buf[bpos+7]>>4], vpos)
-				n := DecodeWord(dst, buf[bpos:], minv)
+				n := dec.DecodeWord(dst, buf[bpos:])
 				require.LessOrEqual(t, vpos, n, "vpos behind word contents")
 				require.Equal(t, v, dst[vpos], "seek position mismatch")
 			}
