@@ -19,7 +19,7 @@ import (
 type EncodeFunc[T types.Integer] func([]byte, []T, T, T) ([]byte, int)
 type DecodeFunc[T types.Integer] func([]T, []byte, int, T) (int, error)
 type DecodeIndex[T types.Integer] func(index int) T
-type CompareFunc[T types.Integer] func([]byte, int, T, int, *bitset.Bitset) *bitset.Bitset
+type CompareFunc func([]byte, int, uint64, int, *bitset.Bitset) *bitset.Bitset
 type CompareFunc2 func([]byte, int, uint64, uint64, int, *bitset.Bitset) *bitset.Bitset
 
 type TestCase[T types.Integer] struct {
@@ -134,7 +134,7 @@ func MakeCompareCases[T types.Integer]() []CompareCase[T] {
 
 var CompareSizes = []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 23}
 
-func CompareTest[T types.Integer](t *testing.T, cmp CompareFunc[T], mode types.FilterMode, enc EncodeFunc[T]) {
+func CompareTest[T types.Integer](t *testing.T, cmp CompareFunc, mode types.FilterMode, enc EncodeFunc[T]) {
 	for _, sz := range CompareSizes {
 		for _, c := range MakeCompareCases[T]() {
 			for w := range 63 { // bit widths 1..63
@@ -150,7 +150,7 @@ func CompareTest[T types.Integer](t *testing.T, cmp CompareFunc[T], mode types.F
 
 					// value exists
 					val := src[sz/2]
-					cmp(buf, w, val, sz, bits)
+					cmp(buf, w, uint64(val), sz, bits)
 					ensureBits(t, buf, w, src, val, val, bits, mode)
 					bits.Zero()
 					require.Equal(t, 0, bits.Count(), "cleared")
@@ -158,7 +158,7 @@ func CompareTest[T types.Integer](t *testing.T, cmp CompareFunc[T], mode types.F
 					if w > 1 {
 						// value over bounds
 						over := maxv + 1
-						cmp(buf, w, over, sz, bits)
+						cmp(buf, w, uint64(over), sz, bits)
 						ensureBits(t, buf, w, src, over, over, bits, mode)
 						bits.Zero()
 						require.Equal(t, 0, bits.Count(), "cleared")
@@ -168,7 +168,7 @@ func CompareTest[T types.Integer](t *testing.T, cmp CompareFunc[T], mode types.F
 						if under > 0 {
 							under--
 						}
-						cmp(buf, w, under, sz, bits)
+						cmp(buf, w, uint64(under), sz, bits)
 						ensureBits(t, buf, w, src, under, under, bits, mode)
 						bits.Zero()
 						require.Equal(t, 0, bits.Count(), "cleared")
@@ -180,28 +180,28 @@ func CompareTest[T types.Integer](t *testing.T, cmp CompareFunc[T], mode types.F
 }
 
 // range mode specific test with 2 values
-func CompareTest2(t *testing.T, cmp CompareFunc2, mode types.FilterMode) {
+func CompareTest2[T types.Integer](t *testing.T, cmp CompareFunc2, mode types.FilterMode, enc EncodeFunc[T]) {
 	for _, sz := range CompareSizes {
-		for _, c := range MakeCompareCases[uint64]() {
+		for _, c := range MakeCompareCases[T]() {
 			for w := range 63 { // bit widths 1..63
 				w++
 				t.Run(fmt.Sprintf("%s/%d_bits/sz_%d", c.Name, w, sz), func(t *testing.T) {
 					src := c.Gen(sz, w)
-					minv, maxv := slices.Min(src), slices.Max(src)
+					minv, maxv := T(0), T(1<<w-1) // slices.Min(src), slices.Max(src)
 					buf := make([]byte, sz*8)
-					for i, v := range src {
-						pack(buf, i, w, v)
-					}
+					buf, log2 := enc(buf, src, minv, maxv)
+					require.Equal(t, w, log2, "bit width for generated data should be equal to compressed data bit width")
+
 					bits := bitset.NewBitset(sz)
 
 					// single value
 					val := src[sz/2]
-					cmp(buf, w, val, val, sz, bits)
+					cmp(buf, w, uint64(val), uint64(val), sz, bits)
 					ensureBits(t, buf, w, src, val, val, bits, mode)
 					bits.Zero()
 
 					// full range
-					cmp(buf, w, minv, maxv, sz, bits)
+					cmp(buf, w, uint64(minv), uint64(maxv), sz, bits)
 					ensureBits(t, buf, w, src, minv, maxv, bits, mode)
 					bits.Zero()
 
@@ -210,19 +210,19 @@ func CompareTest2(t *testing.T, cmp CompareFunc2, mode types.FilterMode) {
 					if from > to {
 						from, to = to, from
 					}
-					cmp(buf, w, from, to, sz, bits)
+					cmp(buf, w, uint64(from), uint64(to), sz, bits)
 					ensureBits(t, buf, w, src, from, to, bits, mode)
 					bits.Zero()
 
 					if w > 1 {
 						// out of bounds (over)
-						cmp(buf, w, maxv+1, maxv+1, sz, bits)
+						cmp(buf, w, uint64(maxv+1), uint64(maxv+1), sz, bits)
 						ensureBits(t, buf, w, src, maxv+1, maxv+1, bits, mode)
 						bits.Zero()
 
 						// out of bounds (under)
 						if minv > 2 {
-							cmp(buf, w, minv-1, minv-1, sz, bits)
+							cmp(buf, w, uint64(minv-1), uint64(minv-1), sz, bits)
 							ensureBits(t, buf, w, src, minv-1, minv-1, bits, mode)
 							bits.Zero()
 						}

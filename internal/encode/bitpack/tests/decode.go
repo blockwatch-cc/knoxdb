@@ -4,37 +4,22 @@
 package tests
 
 import (
-	"unsafe"
-
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
-var (
-	ShiftAmount = [8]int{3, 4, 0, 5, 0, 0, 0, 6}
-)
-
 func decoder[T types.Integer](buf []byte, log2 int) DecodeIndex[T] {
 	mask := uint64((1 << log2) - 1)
-	bits := int(unsafe.Sizeof(T(0)) * 8)
-	inBuff := util.FromByteSlice[T](buf)
-
+	bits := 64
+	inBuff := util.FromByteSlice[uint64](buf)
 	return func(index int) T {
 		idx := index * log2
-		codeword := idx >> ShiftAmount[bits>>3-1]
-
-		shift := idx & (1<<bits - 1)
-		if shift > bits {
-			shift = shift - (codeword * bits)
+		codeword := idx >> 6
+		shift := idx & 63
+		pack := inBuff[codeword] >> shift
+		if diff := bits - shift; diff < log2 && codeword+1 < len(inBuff) {
+			pack |= inBuff[codeword+1] << diff
 		}
-		pack := uint64(inBuff[codeword]) >> shift
-
-		if diff := bits - shift; diff < log2 {
-			pack |= uint64(inBuff[codeword+1]) << diff
-		}
-
-		pack &= mask
-
 		return T(pack & mask)
 	}
 }

@@ -137,36 +137,27 @@ func decode[T types.Integer](out []T, in []uint64, log2 int, minv T) (int, error
 	var lost int    // must shift right next in word instead of left
 
 	vmask := uint64((1 << log2) - 1) // Mask for b bits, e.g., b=3 -> 0b111
-	// rmask := uint64(1<<bits - 1)
-
 	for outIdx = 0; outIdx < len(out); outIdx++ {
 		// Ensure we have enough bits in pack
-		// fmt.Printf("offset => %d log2 => %d inDx => %d len(inBuff) => %d\n", offset, log2, inIdx, len(in))
-		// fmt.Println("(offset < log2 && inIdx < len(inBuff))", offset < log2 && inIdx < len(in))
 		for offset < log2 && inIdx < len(in) {
-			// fmt.Println("hey")
 			if lost > 0 {
 				pack |= uint64(in[inIdx]) >> (BitsSize - offset - lost) &^ (1<<offset - 1)
-				// fmt.Printf("pack(z) => %b\n", pack)
 				inIdx++
 				offset += lost
 				lost = 0
 				if offset < log2 {
 					pack |= uint64(in[inIdx]) << offset
-					// fmt.Printf("pack(x) => %b\n", pack)
 					lost = offset
 					offset += BitsSize - offset
 				}
 			} else {
 				pack |= uint64(in[inIdx]) << offset
-				// fmt.Printf("pack(c) => %b\n", pack)
 				lost = offset
 				inIdx += util.Bool2int(offset == 0)
 				offset += BitsSize - offset
 			}
 		}
 
-		// fmt.Printf("outIdx => %d out => %d\n", outIdx, out[outIdx])
 		// Extract b bits from pack
 		out[outIdx] = T(pack&vmask) + minv
 		pack >>= log2
