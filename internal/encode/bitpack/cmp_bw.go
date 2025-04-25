@@ -140,6 +140,9 @@ func cmp_bw(in []uint64, val1, val2 uint64, log2 int) uint64 {
 	return 0
 }
 func cmp_bp_0_bw(in *[0]uint64, val1, val2 uint64) uint64 {
+	if val1 == 0 {
+		return uint64(0xFFFFFFFF)
+	}
 	return 0
 }
 func cmp_bp_1_bw(in *[1]uint64, val1, val2 uint64) uint64 {
