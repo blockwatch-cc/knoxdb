@@ -38,8 +38,7 @@ func cmp_bp_{{$bitsize}}_{{$.OpName}}(in *[{{$bitsize}}]uint64, val uint64) uint
 				{{- if gt $offset 64 }}
 						{{- $nextInputIdx := inc $inputIdx 1 }}
 						{{- $nextShifter := dec 64 $shifter}}
-						b2u64((in[{{$inputIdx}}]>>{{$shifter}})&mask |
-						(in[{{$nextInputIdx}}]<<{{$nextShifter}})&mask {{$.Op}} val) << {{$outIdx}} |
+						b2u64((in[{{$inputIdx}}]>>{{$shifter}}|in[{{$nextInputIdx}}]<<{{$nextShifter}})&mask {{$.Op}} val) << {{$outIdx}} |
 						{{- $shifter = dec $bitsize $nextShifter }}
 						{{- $offset = $shifter }}
 						{{- $inputIdx = $nextInputIdx }}
