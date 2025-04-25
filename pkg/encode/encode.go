@@ -7,14 +7,14 @@ import (
 // export definitions to use by external tooling
 
 type (
-	IntegerContainerType = encode.IntegerContainerType
-	FloatContainerType   = encode.FloatContainerType
+	ContainerTypeInteger = encode.IntegerContainerType
+	ContainerTypeFloat   = encode.FloatContainerType
 
-	IntegerContextInt64 = encode.IntegerContext[int64]
-	FloatContextFloat64 = encode.FloatContext[float64]
+	ContextInt64   = encode.IntegerContext[int64]
+	ContextFloat64 = encode.FloatContext[float64]
 
-	IntegerContainerInt64   = encode.IntegerContainer[int64]
-	IntegerContainerFloat64 = encode.FloatContainer[float64]
+	ContainerInt64   = encode.IntegerContainer[int64]
+	ContainerFloat64 = encode.FloatContainer[float64]
 )
 
 const (
