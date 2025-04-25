@@ -19,7 +19,7 @@ import (
 type EncodeFunc[T types.Integer] func([]byte, []T, T, T) ([]byte, int)
 type DecodeFunc[T types.Integer] func([]T, []byte, int, T) (int, error)
 type DecodeIndex[T types.Integer] func(index int) T
-type DecodeIndexFunc[T types.Integer] func(buf []byte, log2 int) DecodeIndex[T]
+type DecodeIndexFunc[T types.Integer] func(buf []byte, log2 int, minv T) DecodeIndex[T]
 type CompareFunc func([]byte, int, uint64, int, *bitset.Bitset) *bitset.Bitset
 type CompareFunc2 func([]byte, int, uint64, uint64, int, *bitset.Bitset) *bitset.Bitset
 
@@ -121,15 +121,24 @@ type CompareCase[T types.Integer] struct {
 }
 
 func MakeCompareCases[T types.Integer]() []CompareCase[T] {
+	// manually setting minv and maxv because the Gen
+	// sometimes doesnt produce the full range for the bitwidth
+	minmax := func(n, w int, src []T) []T {
+		src[0], src[n-1] = T(0), T(1<<w-1)
+		return src
+	}
+
 	return []CompareCase[T]{
 		{"one", func(n, w int) []T {
 			x := 1
 			if w == 0 {
 				x = 0
 			}
-			return tests.GenConst(n, T(x))
+			return minmax(n, w, tests.GenConst(n, T(x)))
 		}},
-		{"rnd", tests.GenRndBits[T]},
+		{"rnd", func(n, w int) []T {
+			return minmax(n, w, tests.GenRndBits[T](n, w))
+		}},
 	}
 }
 
@@ -142,17 +151,17 @@ func CompareTest[T types.Integer](t *testing.T, cmp CompareFunc, mode types.Filt
 				w++
 				t.Run(fmt.Sprintf("%s/%d_bits/sz_%d", c.Name, w, sz), func(t *testing.T) {
 					src := c.Gen(sz, w)
-					minv, maxv := T(0), T(1<<w-1) // manually setting minv and maxv because the Gen sometimes doesnt produce the full range for the bitwidth
+					minv, maxv := slices.Min(src), slices.Max(src)
 					buf := make([]byte, sz*8)
-					buf, log2 := enc(buf, src, minv, maxv)
-					require.Equal(t, w, log2, "bit width for generated data should be equal to compressed data bit width")
+					buf, w = enc(buf, src, minv, maxv)
+					// require.Equal(t, w, log2, "bit width for generated data should be equal to compressed data bit width")
 
 					bits := bitset.NewBitset(sz)
 
 					// value exists
 					val := src[sz/2]
-					cmp(buf, w, uint64(val), sz, bits)
-					ensureBits(t, buf, w, src, val, val, bits, mode, dec)
+					cmp(buf, w, uint64(val)-uint64(minv), sz, bits)
+					ensureBits(t, buf, w, src, val, val, minv, bits, mode, dec)
 					bits.Zero()
 					require.Equal(t, 0, bits.Count(), "cleared")
 
@@ -160,7 +169,7 @@ func CompareTest[T types.Integer](t *testing.T, cmp CompareFunc, mode types.Filt
 						// value over bounds
 						over := maxv + 1
 						cmp(buf, w, uint64(over), sz, bits)
-						ensureBits(t, buf, w, src, over, over, bits, mode, dec)
+						ensureBits(t, buf, w, src, over, over, minv, bits, mode, dec)
 						bits.Zero()
 						require.Equal(t, 0, bits.Count(), "cleared")
 
@@ -170,7 +179,7 @@ func CompareTest[T types.Integer](t *testing.T, cmp CompareFunc, mode types.Filt
 							under--
 						}
 						cmp(buf, w, uint64(under), sz, bits)
-						ensureBits(t, buf, w, src, under, under, bits, mode, dec)
+						ensureBits(t, buf, w, src, under, under, minv, bits, mode, dec)
 						bits.Zero()
 						require.Equal(t, 0, bits.Count(), "cleared")
 					}
@@ -188,22 +197,22 @@ func CompareTest2[T types.Integer](t *testing.T, cmp CompareFunc2, mode types.Fi
 				w++
 				t.Run(fmt.Sprintf("%s/%d_bits/sz_%d", c.Name, w, sz), func(t *testing.T) {
 					src := c.Gen(sz, w)
-					minv, maxv := T(0), T(1<<w-1) // slices.Min(src), slices.Max(src)
+					minv, maxv := slices.Min(src), slices.Max(src)
 					buf := make([]byte, sz*8)
-					buf, log2 := enc(buf, src, minv, maxv)
-					require.Equal(t, w, log2, "bit width for generated data should be equal to compressed data bit width")
+					buf, w = enc(buf, src, minv, maxv)
+					// require.Equal(t, w, log2, "bit width for generated data should be equal to compressed data bit width")
 
 					bits := bitset.NewBitset(sz)
 
 					// single value
 					val := src[sz/2]
-					cmp(buf, w, uint64(val), uint64(val), sz, bits)
-					ensureBits(t, buf, w, src, val, val, bits, mode, dec)
+					cmp(buf, w, uint64(val)-uint64(minv), uint64(val)-uint64(minv), sz, bits)
+					ensureBits(t, buf, w, src, val, val, minv, bits, mode, dec)
 					bits.Zero()
 
 					// full range
-					cmp(buf, w, uint64(minv), uint64(maxv), sz, bits)
-					ensureBits(t, buf, w, src, minv, maxv, bits, mode, dec)
+					cmp(buf, w, uint64(minv)-uint64(minv), uint64(maxv)-uint64(minv), sz, bits)
+					ensureBits(t, buf, w, src, minv, maxv, minv, bits, mode, dec)
 					bits.Zero()
 
 					// partial range
@@ -211,20 +220,20 @@ func CompareTest2[T types.Integer](t *testing.T, cmp CompareFunc2, mode types.Fi
 					if from > to {
 						from, to = to, from
 					}
-					cmp(buf, w, uint64(from), uint64(to), sz, bits)
-					ensureBits(t, buf, w, src, from, to, bits, mode, dec)
+					cmp(buf, w, uint64(from)-uint64(minv), uint64(to)-uint64(minv), sz, bits)
+					ensureBits(t, buf, w, src, from, to, minv, bits, mode, dec)
 					bits.Zero()
 
 					if w > 1 {
 						// out of bounds (over)
 						cmp(buf, w, uint64(maxv+1), uint64(maxv+1), sz, bits)
-						ensureBits(t, buf, w, src, maxv+1, maxv+1, bits, mode, dec)
+						ensureBits(t, buf, w, src, maxv+1, maxv+1, minv, bits, mode, dec)
 						bits.Zero()
 
 						// out of bounds (under)
 						if minv > 2 {
 							cmp(buf, w, uint64(minv-1), uint64(minv-1), sz, bits)
-							ensureBits(t, buf, w, src, minv-1, minv-1, bits, mode, dec)
+							ensureBits(t, buf, w, src, minv-1, minv-1, minv, bits, mode, dec)
 							bits.Zero()
 						}
 					}
@@ -234,9 +243,9 @@ func CompareTest2[T types.Integer](t *testing.T, cmp CompareFunc2, mode types.Fi
 	}
 }
 
-func ensureBits[T types.Integer](t *testing.T, buf []byte, log2 int, vals []T, val, val2 T, bits *bitset.Bitset, mode types.FilterMode, decoder DecodeIndexFunc[T]) {
+func ensureBits[T types.Integer](t *testing.T, buf []byte, log2 int, vals []T, val, val2 T, minv T, bits *bitset.Bitset, mode types.FilterMode, decoder DecodeIndexFunc[T]) {
 	if !testing.Short() {
-		dec := decoder(buf, log2)
+		dec := decoder(buf, log2, minv)
 		for i, v := range vals {
 			t.Logf("Val %s=%x decoded %x", Chars.Get(i), v, dec(i))
 		}

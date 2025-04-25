@@ -8,24 +8,28 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
-func Decoder[T types.Integer](buf []byte, log2 int) DecodeIndex[T] {
+func Decoder[T types.Integer](buf []byte, log2 int, minv T) DecodeIndex[T] {
 	mask := uint64((1 << log2) - 1)
 	bits := 64
 	inBuff := util.FromByteSlice[uint64](buf)
+	inBuffLen := len(inBuff)
 	return func(index int) T {
 		idx := index * log2
 		codeword := idx >> 6
 		shift := idx & 63
-		pack := inBuff[codeword] >> shift
-		if diff := bits - shift; diff < log2 && codeword+1 < len(inBuff) {
-			pack |= inBuff[codeword+1] << diff
+		if inBuffLen < codeword {
+			pack := inBuff[codeword] >> shift
+			if diff := bits - shift; diff < log2 && codeword+1 < len(inBuff) {
+				pack |= inBuff[codeword+1] << diff
+			}
+			return T(pack&mask) + minv
 		}
-		return T(pack & mask)
+		return minv
 	}
 }
 
 // private unpack func used in tests, confirmed correct
-func Unpack[T types.Integer](buf []byte, log2 int) DecodeIndex[T] {
+func Unpack[T types.Integer](buf []byte, log2 int, minv T) DecodeIndex[T] {
 	mask := uint64((1 << log2) - 1)
 
 	return func(index int) T {
@@ -53,7 +57,7 @@ func Unpack[T types.Integer](buf []byte, log2 int) DecodeIndex[T] {
 			// patch top byte
 			val |= uint64(buf[pos]) << (64 - shift)
 
-			return T(val & mask)
+			return T(val&mask) + minv
 		} else {
 			// regular values
 			var val uint64
@@ -63,7 +67,7 @@ func Unpack[T types.Integer](buf []byte, log2 int) DecodeIndex[T] {
 			}
 
 			// shift and mask output
-			return T((val >> shift) & mask)
+			return T((val>>shift)&mask) + minv
 		}
 	}
 }

@@ -63,9 +63,9 @@ func encode[T types.Integer](buf []byte, vals []T, minv, maxv T) ([]byte, int) {
 }
 
 func decode[T types.Integer](dst []T, src []byte, log2 int, minv T) (int, error) {
-	dec := Unpack[T](src, log2)
+	dec := Unpack[T](src, log2, minv)
 	for i := range dst {
-		dst[i] = dec(i) + minv
+		dst[i] = dec(i)
 	}
 	return len(dst), nil
 }
