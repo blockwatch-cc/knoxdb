@@ -29,11 +29,11 @@ func LessEqual(buf []byte, log2 int, val uint64, n int, bits *Bitset) *Bitset {
 }
 
 func Greater(buf []byte, log2 int, val uint64, n int, bits *Bitset) *Bitset {
-	return compare_lt(buf, log2, val, n, bits, true)
+	return compare_le(buf, log2, val, n, bits, true)
 }
 
 func GreaterEqual(buf []byte, log2 int, val uint64, n int, bits *Bitset) *Bitset {
-	return compare_le(buf, log2, val, n, bits, true)
+	return compare_lt(buf, log2, val, n, bits, true)
 }
 
 func Between(buf []byte, log2 int, a, b uint64, n int, bits *Bitset) *Bitset {
@@ -99,7 +99,7 @@ func compare_lt(buf []byte, log2 int, val uint64, n int, bits *Bitset, neg bool)
 		k := n &^ 63
 		if neg {
 			for i := range rem {
-				if out[i] > val {
+				if out[i] >= val {
 					bits.Set(i + k)
 				}
 			}
@@ -137,7 +137,7 @@ func compare_le(buf []byte, log2 int, val uint64, n int, bits *Bitset, neg bool)
 		k := n &^ 63
 		if neg {
 			for i := range rem {
-				if out[i] >= val {
+				if out[i] > val {
 					bits.Set(i + k)
 				}
 			}
