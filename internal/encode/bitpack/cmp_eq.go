@@ -142,7 +142,7 @@ func cmp_eq(in []uint64, val uint64, log2 int) uint64 {
 func cmp_bp_0_eq(in *[0]uint64, val uint64) uint64 {
 
 	if val == 0 {
-		return uint64(0xFFFFFFFF)
+		return uint64(0xffffffffffffffff)
 	}
 	return 0
 

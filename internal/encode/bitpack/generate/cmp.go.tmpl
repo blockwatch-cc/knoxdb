@@ -60,19 +60,16 @@ func cmp_bp_{{$bitsize}}_{{$.OpName}}(in *[{{$bitsize}}]uint64, val uint64) uint
 	{{ else }}
 		{{ with (eq $.OpName "eq") }}
 			if val == 0 {
-				return uint64(0xFFFFFFFF)
+				return uint64(0xffffffffffffffff)
 			}
 			return 0
 		{{ end }}
 		{{ with (eq $.OpName "le") }}
-			if val >= 0 {
-				return uint64(0xFFFFFFFF) 
-			}
-			return 0
+			return uint64(0xffffffffffffffff)
 		{{ end }}
 		{{ with (eq $.OpName "lt") }}
 			if val > 0 {
-				return uint64(0xFFFFFFFF) 
+				return uint64(0xffffffffffffffff) 
 			}
 			return 0
 		{{ end }}

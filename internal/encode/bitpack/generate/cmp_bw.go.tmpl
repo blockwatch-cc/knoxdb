@@ -57,7 +57,7 @@ func cmp_bp_{{$bitsize}}_{{$.OpName}}(in *[{{$bitsize}}]uint64, val1, val2 uint6
 		{{- end}}
 	{{ else }}
 		if val1 == 0 {
-			return uint64(0xFFFFFFFF)
+			return uint64(0xffffffffffffffff)
 		}
 		return 0
 	{{- end }}

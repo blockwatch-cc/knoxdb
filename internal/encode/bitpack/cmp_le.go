@@ -141,10 +141,7 @@ func cmp_le(in []uint64, val uint64, log2 int) uint64 {
 }
 func cmp_bp_0_le(in *[0]uint64, val uint64) uint64 {
 
-	if val >= 0 {
-		return uint64(0xFFFFFFFF)
-	}
-	return 0
+	return uint64(0xffffffffffffffff)
 
 }
 func cmp_bp_1_le(in *[1]uint64, val uint64) uint64 {
