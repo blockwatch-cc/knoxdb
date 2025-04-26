@@ -13,6 +13,8 @@ import (
 	"blockwatch.cc/knoxdb/internal/types"
 )
 
+const RUN_END_THRESHOLD = 4
+
 // TIntegerRunEnd
 type RunEndContainer[T types.Integer] struct {
 	Values IntegerContainer[T]      // []T

@@ -150,7 +150,7 @@ func (c *IntegerContext[T]) buildUniqueArray(vals []T) int {
 
 func (c *IntegerContext[T]) EligibleSchemes() []IntegerContainerType {
 	// constant only
-	if c.Min == c.Max {
+	if c.NumRuns == 1 {
 		return []IntegerContainerType{TIntegerConstant}
 	}
 	// delta only with at least 3 values
@@ -165,11 +165,11 @@ func (c *IntegerContext[T]) EligibleSchemes() []IntegerContainerType {
 	if c.UseBits < c.PhyBits {
 		schemes = append(schemes, TIntegerBitpacked)
 	}
-	// simple 8 requires max 60bit values but is inefficient if many values are > 20bit
+	// simple8b supports max 60bit values but is inefficient if many values are > 20bit
 	if c.UseBits < c.PhyBits && c.UseBits <= 60 {
 		schemes = append(schemes, TIntegerSimple8)
 	}
-	// run-end requires avg run lengths >= 2
+	// run-end requires avg run lengths >= 4
 	if c.preferRunEnd() {
 		schemes = append(schemes, TIntegerRunEnd)
 	}
@@ -185,7 +185,7 @@ func (c *IntegerContext[T]) preferDict() bool {
 }
 
 func (c *IntegerContext[T]) preferRunEnd() bool {
-	return c.NumRuns*2 <= c.NumValues && c.runEndCosts() < c.bitPackCosts()
+	return c.NumRuns*RUN_END_THRESHOLD <= c.NumValues && c.runEndCosts() < c.bitPackCosts()
 }
 
 func (c *IntegerContext[T]) dictCosts() int {

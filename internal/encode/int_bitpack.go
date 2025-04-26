@@ -38,11 +38,11 @@ func (c *BitpackContainer[T]) Close() {
 		c.dec.Close()
 		c.dec = nil
 	}
-	if c.Packed != nil && c.free {
+	if c.free {
 		arena.Free(c.Packed)
+		c.free = false
 	}
 	c.Packed = nil
-	c.free = false
 	c.Log2 = 0
 	c.N = 0
 	c.For = 0
@@ -119,10 +119,9 @@ func (c *BitpackContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) 
 	c.For = ctx.Min
 
 	sz := bitpack.EstimateSize(ctx.UseBits, len(vals))
-	c.Packed = arena.AllocBytes(sz)[:sz]
-	_, c.Log2 = bitpack.Encode(c.Packed, vals, ctx.Min, ctx.Max)
+	c.Packed, c.Log2 = bitpack.Encode(arena.AllocBytes(sz)[:sz], vals, ctx.Min, ctx.Max)
 	c.dec = bitpack.NewDecoder(c.Packed, c.Log2, c.N, c.For)
-	c.free = true
+	c.free = sz > 0
 
 	return c
 }

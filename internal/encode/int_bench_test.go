@@ -82,15 +82,18 @@ func BenchmarkIntEncode(b *testing.B) {
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
 				b.ReportAllocs()
 				b.SetBytes(int64(c.N * 8))
+				var sz int
 				for b.Loop() {
 					enc := NewInt[int64](scheme).Encode(ctx, data, MAX_CASCADE)
 					if once {
 						b.Log(enc.Info())
 						once = false
 					}
+					sz += enc.Size()
 					enc.Close()
 				}
 				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+				b.ReportMetric(100*float64(sz)/float64(b.N*c.N*8), "c(%)")
 			})
 			ctx.Close()
 		}
@@ -113,6 +116,7 @@ func BenchmarkIntEncodeAndStore(b *testing.B) {
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
 				b.ReportAllocs()
 				b.SetBytes(int64(c.N * 8))
+				var sz int
 				for b.Loop() {
 					ctx := AnalyzeInt(data, scheme == TIntegerDictionary)
 					enc := NewInt[int16](scheme).Encode(ctx, data, MAX_CASCADE)
@@ -123,10 +127,12 @@ func BenchmarkIntEncodeAndStore(b *testing.B) {
 						b.Log(enc.Info())
 						once = false
 					}
+					sz += enc.Size()
 					enc.Close()
 					ctx.Close()
 				}
 				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+				b.ReportMetric(100*float64(sz)/float64(b.N*c.N*8), "c(%)")
 			})
 		}
 	}
