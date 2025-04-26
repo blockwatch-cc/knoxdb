@@ -6,7 +6,6 @@ package encode
 import (
 	"sync"
 
-	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/encode/alp"
 	"blockwatch.cc/knoxdb/internal/encode/analyze"
 	"blockwatch.cc/knoxdb/internal/encode/hashprobe"
@@ -16,16 +15,13 @@ import (
 )
 
 type FloatContext[T types.Float] struct {
-	Min        T                // vector minimum
-	Max        T                // vector maximum
-	PhyBits    int              // float bit width
-	NumUnique  int              // vector cardinality (hint, may not be precise)
-	NumRuns    int              // vector runs
-	NumValues  int              // vector length
-	Sample     []T              // data sample (optional)
-	SampleCtx  *FloatContext[T] // sample analysis
-	FreeSample bool             // hint whether sample may be reused
-	AlpEncoder *alp.Encoder[T]  // ALP encoder state
+	Min       T            // vector minimum
+	Max       T            // vector maximum
+	PhyBits   int          // float bit width
+	NumUnique int          // vector cardinality (hint, may not be precise)
+	NumRuns   int          // vector runs
+	NumValues int          // vector length
+	Alp       alp.Analysis // ALP analysis
 }
 
 func NewFloatContext[T types.Float](minv, maxv T, n int) *FloatContext[T] {
@@ -64,7 +60,11 @@ func AnalyzeFloat[T types.Float](vals []T, checkUnique, checkALP bool) *FloatCon
 		// let ALP estimate the best scheme, avoid ALP-in-ALP nesting
 		if checkALP {
 			// analyze full vector for compatibility, ALP will do its own sampling
-			c.AlpEncoder = alp.NewEncoder[T]().Analyze(vals)
+			if c.PhyBits == 64 {
+				c.Alp = alp.Analyze[T, int64](vals)
+			} else {
+				c.Alp = alp.Analyze[T, int32](vals)
+			}
 		}
 
 		// count unique only if requested, prefer ALP over float dict
@@ -101,14 +101,12 @@ func (c *FloatContext[T]) EligibleSchemes(lvl int) []FloatContainerType {
 		TFloatRaw,
 	}
 
-	// use ALP only when requested in analysis step (otherwise encoder is nil)
-	if c.AlpEncoder != nil {
-		switch c.AlpEncoder.State().Scheme {
-		case alp.AlpScheme:
-			schemes = append(schemes, TFloatAlp)
-		case alp.AlpRdScheme:
-			schemes = append(schemes, TFloatAlpRd)
-		}
+	// use ALP only when requested in analysis step (otherwise scheme is invalid)
+	switch c.Alp.Scheme {
+	case alp.ALP_SCHEME:
+		schemes = append(schemes, TFloatAlp)
+	case alp.ALP_RD_SCHEME:
+		schemes = append(schemes, TFloatAlpRd)
 	}
 
 	// run-end requires avg run lengths >= 2
@@ -133,7 +131,7 @@ func (c *FloatContext[T]) preferDict() bool {
 func (c *FloatContext[T]) preferRunEnd() bool {
 	rcost := c.runEndCosts()
 	bcost := c.bitPackCosts()
-	return c.NumRuns*2 <= c.NumValues && rcost < bcost
+	return c.NumRuns*RUN_END_THRESHOLD <= c.NumValues && rcost < bcost
 }
 
 func (c *FloatContext[T]) rawCosts() int {
@@ -153,27 +151,13 @@ func (c *FloatContext[T]) runEndCosts() int {
 }
 
 func (c *FloatContext[T]) Close() {
-	if c.SampleCtx != nil {
-		c.SampleCtx.Close()
-		c.SampleCtx = nil
-	}
-	if c.Sample != nil {
-		if c.FreeSample {
-			arena.Free(c.Sample)
-		}
-		c.FreeSample = false
-		c.Sample = nil
-	}
-	if c.AlpEncoder != nil {
-		c.AlpEncoder.Close()
-		c.AlpEncoder = nil
-	}
 	c.Min = 0
 	c.Max = 0
 	c.PhyBits = 0
 	c.NumUnique = 0
 	c.NumRuns = 0
 	c.NumValues = 0
+	c.Alp = alp.Analysis{}
 	putFloatContext(c)
 }
 

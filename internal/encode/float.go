@@ -124,26 +124,21 @@ func EstimateFloat[T types.Float](scheme FloatContainerType, ctx *FloatContext[T
 
 	case TFloatAlp, TFloatAlpRd:
 		// at this point we have an ALP analysis available
-		as := ctx.AlpEncoder.State()
-
 		// compare suggested ALP scheme with requested scheme
-		var ok bool
-		switch as.Scheme {
-		case alp.AlpScheme:
+		switch ctx.Alp.Scheme {
+		case alp.ALP_SCHEME:
 			// predict encoding size from best sample encoding rate
-			if scheme == TFloatAlp {
-				estSize, ok = 6+int(as.Top().Rate()*float64(ctx.rawCosts()-5)), true
+			if scheme != TFloatAlp {
+				return 1.0
 			}
-		case alp.AlpRdScheme:
-			// predict encoding size from best sample encoding rate
-			if scheme == TFloatAlpRd {
-				estSize, ok = 6+int(as.RD.Rate*float64(ctx.rawCosts()-5)), true
-			}
-		}
+			estSize = 6 + int(ctx.Alp.Rate*float64(ctx.rawCosts()-5))
 
-		// don't use this scheme on mismatch
-		if !ok {
-			return 10.0
+		case alp.ALP_RD_SCHEME:
+			// predict encoding size from best sample encoding rate
+			if scheme != TFloatAlpRd {
+				return 1.0
+			}
+			estSize = 6 + int(ctx.Alp.Rate*float64(ctx.rawCosts()-5))
 		}
 
 	case TFloatDictionary:

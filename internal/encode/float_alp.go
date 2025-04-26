@@ -5,6 +5,7 @@ package encode
 
 import (
 	"fmt"
+	"slices"
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/arena"
@@ -22,17 +23,17 @@ const (
 )
 
 // TFloatAlp
-type FloatAlpContainer[T types.Float] struct {
-	Values       IntegerContainer[int64]
+type FloatAlpContainer[T types.Float, E int64 | int32] struct {
+	Values       IntegerContainer[E]
 	Exception    FloatContainer[T]
 	Positions    IntegerContainer[uint32]
 	Exponent     uint8
 	Factor       uint8
 	hasException bool
-	dec          *alp.Decoder[T]
+	dec          *alp.Decoder[T, E]
 }
 
-func (c *FloatAlpContainer[T]) Info() string {
+func (c *FloatAlpContainer[T, E]) Info() string {
 	if c.hasException {
 		return fmt.Sprintf("ALP(%s)_[%d,%d]_[v=%s]_[ex=%s]_[pos=%s]",
 			TypeName[T](), c.Exponent, c.Factor,
@@ -42,7 +43,11 @@ func (c *FloatAlpContainer[T]) Info() string {
 		c.Exponent, c.Factor, c.Values.Info())
 }
 
-func (c *FloatAlpContainer[T]) Close() {
+func (c *FloatAlpContainer[T, E]) Close() {
+	if c.dec != nil {
+		c.dec.Close()
+		c.dec = nil
+	}
 	c.Values.Close()
 	c.Values = nil
 	if c.hasException {
@@ -52,22 +57,18 @@ func (c *FloatAlpContainer[T]) Close() {
 		c.Positions = nil
 		c.hasException = false
 	}
-	if c.dec != nil {
-		c.dec.Close()
-		c.dec = nil
-	}
-	putFloatAlpContainer(c)
+	putFloatAlpContainer[T](c)
 }
 
-func (c *FloatAlpContainer[T]) Type() FloatContainerType {
+func (c *FloatAlpContainer[T, E]) Type() FloatContainerType {
 	return TFloatAlp
 }
 
-func (c *FloatAlpContainer[T]) Len() int {
+func (c *FloatAlpContainer[T, E]) Len() int {
 	return c.Values.Len()
 }
 
-func (c *FloatAlpContainer[T]) Size() int {
+func (c *FloatAlpContainer[T, E]) Size() int {
 	v := 1 + 2 + c.Values.Size()
 	if c.hasException {
 		v += c.Exception.Size() + c.Positions.Size()
@@ -75,7 +76,7 @@ func (c *FloatAlpContainer[T]) Size() int {
 	return v
 }
 
-func (c *FloatAlpContainer[T]) Store(dst []byte) []byte {
+func (c *FloatAlpContainer[T, E]) Store(dst []byte) []byte {
 	dst = append(dst, byte(TFloatAlp))
 	dst = num.AppendUvarint(dst, uint64(c.Exponent))
 	dst = num.AppendUvarint(dst, uint64(c.Factor))
@@ -88,7 +89,7 @@ func (c *FloatAlpContainer[T]) Store(dst []byte) []byte {
 	return dst
 }
 
-func (c *FloatAlpContainer[T]) Load(buf []byte) ([]byte, error) {
+func (c *FloatAlpContainer[T, E]) Load(buf []byte) ([]byte, error) {
 	if buf[0] != byte(TFloatAlp) {
 		return buf, ErrInvalidType
 	}
@@ -103,7 +104,7 @@ func (c *FloatAlpContainer[T]) Load(buf []byte) ([]byte, error) {
 	buf = buf[n:]
 
 	// alloc and decode values child container
-	c.Values = NewInt[int64](IntegerContainerType(buf[0]))
+	c.Values = NewInt[E](IntegerContainerType(buf[0]))
 	var err error
 	buf, err = c.Values.Load(buf)
 	if err != nil {
@@ -132,12 +133,12 @@ func (c *FloatAlpContainer[T]) Load(buf []byte) ([]byte, error) {
 	return buf, nil
 }
 
-func (c *FloatAlpContainer[T]) Get(n int) T {
+func (c *FloatAlpContainer[T, E]) Get(n int) T {
 	c.initDecoder()
 	return c.dec.DecodeValue(c.Values.Get(n), n)
 }
 
-func (c *FloatAlpContainer[T]) AppendTo(sel []uint32, dst []T) []T {
+func (c *FloatAlpContainer[T, E]) AppendTo(sel []uint32, dst []T) []T {
 	it := c.Iterator()
 	if sel == nil {
 		for {
@@ -156,45 +157,34 @@ func (c *FloatAlpContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 	return dst
 }
 
-func (c *FloatAlpContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int) FloatContainer[T] {
-	enc := ctx.AlpEncoder
-	if enc == nil {
-		enc = alp.NewEncoder[T]()
-		defer enc.Close()
-	}
-	enc.Encode(vals)
-	s := enc.State()
+func (c *FloatAlpContainer[T, E]) Encode(ctx *FloatContext[T], vals []T, lvl int) FloatContainer[T] {
+	// encode using parames from analysis
+	enc := alp.NewEncoder[T, E]()
+	res := enc.Encode(vals, ctx.Alp.Exp)
+	c.Exponent = ctx.Alp.Exp.E
+	c.Factor = ctx.Alp.Exp.F
 
-	c.Exponent = s.Encoding.E
-	c.Factor = s.Encoding.F
-
-	// fmt.Printf("ALP [%d,%d] vals=%d ex=%d\n", c.Exponent, c.Factor, len(s.Integers), len(s.Exceptions))
-
-	// TODO
-	// - aggregate min/max on the fly, set in context -> bitpack width
-	// - encode integers as BP (no analysis needed)
-	// - encode exceptions as raw (no analysis needed)
-	// - encode ex positions as BP (no analysis needed: ex list is ordered: min/max = first/last)
-	// - kernel fusion? maybe on decode only
-
-	// encode child containers
-	c.Values = EncodeInt(nil, s.Integers, lvl-1)
-	if len(s.Exceptions) > 0 {
+	// encode child containers, skip analysis and use known values
+	vctx := NewIntegerContext(res.Min, res.Max, len(vals))
+	c.Values = EncodeInt(vctx, res.Encoded, lvl-1)
+	vctx.Close()
+	if n := len(res.PatchValues); n > 0 {
 		c.hasException = true
-		c.Exception = EncodeFloat(nil, s.Exceptions, lvl-1)
-		ectx := AnalyzeInt(s.Positions, false)
-		c.Positions = EncodeInt(ectx, s.Positions, lvl-1)
+		c.Exception = NewFloat[T](TFloatRaw).Encode(nil, slices.Clone(res.PatchValues), 1)
+		ectx := NewIntegerContext(0, res.PatchIndices[n-1], n)
+		c.Positions = EncodeInt(ectx, res.PatchIndices, lvl-1)
 		ectx.Close()
 	}
+	res.Close()
 
 	return c
 }
 
-func (c *FloatAlpContainer[T]) initDecoder() {
+func (c *FloatAlpContainer[T, E]) initDecoder() {
 	if c.dec != nil {
 		return
 	}
-	c.dec = alp.NewDecoder[T](c.Factor, c.Exponent)
+	c.dec = alp.NewDecoder[T, E](c.Factor, c.Exponent)
 	if c.hasException {
 		cnt := c.Exception.Len()
 		c.dec.WithExceptions(
@@ -204,37 +194,37 @@ func (c *FloatAlpContainer[T]) initDecoder() {
 	}
 }
 
-func (c *FloatAlpContainer[T]) MatchEqual(val T, bits, mask *Bitset) {
+func (c *FloatAlpContainer[T, E]) MatchEqual(val T, bits, mask *Bitset) {
 	matchIt(c.Iterator(), matchFn[T](types.FilterModeEqual), val, bits, mask)
 }
 
-func (c *FloatAlpContainer[T]) MatchNotEqual(val T, bits, mask *Bitset) {
+func (c *FloatAlpContainer[T, E]) MatchNotEqual(val T, bits, mask *Bitset) {
 	matchIt(c.Iterator(), matchFn[T](types.FilterModeNotEqual), val, bits, mask)
 }
 
-func (c *FloatAlpContainer[T]) MatchLess(val T, bits, mask *Bitset) {
+func (c *FloatAlpContainer[T, E]) MatchLess(val T, bits, mask *Bitset) {
 	matchIt(c.Iterator(), matchFn[T](types.FilterModeLt), val, bits, mask)
 }
 
-func (c *FloatAlpContainer[T]) MatchLessEqual(val T, bits, mask *Bitset) {
+func (c *FloatAlpContainer[T, E]) MatchLessEqual(val T, bits, mask *Bitset) {
 	matchIt(c.Iterator(), matchFn[T](types.FilterModeLe), val, bits, mask)
 }
 
-func (c *FloatAlpContainer[T]) MatchGreater(val T, bits, mask *Bitset) {
+func (c *FloatAlpContainer[T, E]) MatchGreater(val T, bits, mask *Bitset) {
 	matchIt(c.Iterator(), matchFn[T](types.FilterModeGt), val, bits, mask)
 }
 
-func (c *FloatAlpContainer[T]) MatchGreaterEqual(val T, bits, mask *Bitset) {
+func (c *FloatAlpContainer[T, E]) MatchGreaterEqual(val T, bits, mask *Bitset) {
 	matchIt(c.Iterator(), matchFn[T](types.FilterModeGe), val, bits, mask)
 }
 
-func (c *FloatAlpContainer[T]) MatchBetween(a, b T, bits, mask *Bitset) {
+func (c *FloatAlpContainer[T, E]) MatchBetween(a, b T, bits, mask *Bitset) {
 	matchRangeIt(c.Iterator(), matchFn[T](types.FilterModeRange), a, b, bits, mask)
 }
 
 // N.A.
-func (c *FloatAlpContainer[T]) MatchInSet(_ any, _, _ *Bitset)    {}
-func (c *FloatAlpContainer[T]) MatchNotInSet(_ any, _, _ *Bitset) {}
+func (c *FloatAlpContainer[T, E]) MatchInSet(_ any, _, _ *Bitset)    {}
+func (c *FloatAlpContainer[T, E]) MatchNotInSet(_ any, _, _ *Bitset) {}
 
 type FloatAlpFactory struct {
 	f64Pool   sync.Pool
@@ -263,18 +253,18 @@ func putFloatAlpContainer[T types.Float](c FloatContainer[T]) {
 	}
 }
 
-func newFloatAlpIterator[T types.Float]() *FloatAlpIterator[T] {
+func newFloatAlpIterator[T types.Float, E int64 | int32]() *FloatAlpIterator[T, E] {
 	switch any(T(0)).(type) {
 	case float64:
-		return floatAlpFactory.f64ItPool.Get().(*FloatAlpIterator[T])
+		return floatAlpFactory.f64ItPool.Get().(*FloatAlpIterator[T, E])
 	case float32:
-		return floatAlpFactory.f32ItPool.Get().(*FloatAlpIterator[T])
+		return floatAlpFactory.f32ItPool.Get().(*FloatAlpIterator[T, E])
 	default:
 		return nil
 	}
 }
 
-func putFloatAlpIterator[T types.Float](c *FloatAlpIterator[T]) {
+func putFloatAlpIterator[T types.Float, E int64 | int32](c *FloatAlpIterator[T, E]) {
 	switch any(T(0)).(type) {
 	case float64:
 		floatAlpFactory.f64ItPool.Put(c)
@@ -284,29 +274,29 @@ func putFloatAlpIterator[T types.Float](c *FloatAlpIterator[T]) {
 }
 
 var floatAlpFactory = FloatAlpFactory{
-	f64Pool:   sync.Pool{New: func() any { return new(FloatAlpContainer[float64]) }},
-	f32Pool:   sync.Pool{New: func() any { return new(FloatAlpContainer[float32]) }},
-	f64ItPool: sync.Pool{New: func() any { return new(FloatAlpIterator[float64]) }},
-	f32ItPool: sync.Pool{New: func() any { return new(FloatAlpIterator[float32]) }},
+	f64Pool:   sync.Pool{New: func() any { return new(FloatAlpContainer[float64, int64]) }},
+	f32Pool:   sync.Pool{New: func() any { return new(FloatAlpContainer[float32, int32]) }},
+	f64ItPool: sync.Pool{New: func() any { return new(FloatAlpIterator[float64, int64]) }},
+	f32ItPool: sync.Pool{New: func() any { return new(FloatAlpIterator[float32, int32]) }},
 }
 
 // ---------------------------------------
 // Iterator
 //
 
-func (c *FloatAlpContainer[T]) Iterator() Iterator[T] {
+func (c *FloatAlpContainer[T, E]) Iterator() Iterator[T] {
 	c.initDecoder()
 	return NewFloatAlpIterator(c)
 }
 
-type FloatAlpIterator[T types.Float] struct {
+type FloatAlpIterator[T types.Float, E int64 | int32] struct {
 	BaseIterator[T]
-	dec *alp.Decoder[T]
-	src Iterator[int64]
+	dec *alp.Decoder[T, E]
+	src Iterator[E]
 }
 
-func NewFloatAlpIterator[T types.Float](c *FloatAlpContainer[T]) *FloatAlpIterator[T] {
-	it := newFloatAlpIterator[T]()
+func NewFloatAlpIterator[T types.Float, E int64 | int32](c *FloatAlpContainer[T, E]) *FloatAlpIterator[T, E] {
+	it := newFloatAlpIterator[T, E]()
 	it.dec = c.dec
 	it.src = c.Values.Iterator()
 	it.base = -1
@@ -315,7 +305,7 @@ func NewFloatAlpIterator[T types.Float](c *FloatAlpContainer[T]) *FloatAlpIterat
 	return it
 }
 
-func (it *FloatAlpIterator[T]) Close() {
+func (it *FloatAlpIterator[T, E]) Close() {
 	it.dec = nil
 	it.src.Close()
 	it.src = nil
@@ -323,7 +313,7 @@ func (it *FloatAlpIterator[T]) Close() {
 	putFloatAlpIterator(it)
 }
 
-func (it *FloatAlpIterator[T]) fill(base int) int {
+func (it *FloatAlpIterator[T, E]) fill(base int) int {
 	// load next source chunk at base and translate
 	it.src.Seek(base)
 	src, n := it.src.NextChunk()

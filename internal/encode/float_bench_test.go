@@ -67,17 +67,20 @@ func BenchmarkFloatEncode(b *testing.B) {
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
 				b.ReportAllocs()
 				b.SetBytes(int64(c.N * 8))
+				var sz int
 				for b.Loop() {
-					ctx := AnalyzeFloat(data, scheme == TFloatDictionary, scheme == TFloatAlp)
+					ctx := AnalyzeFloat(data, scheme == TFloatDictionary, scheme == TFloatAlp || scheme == TFloatAlpRd)
 					enc := NewFloat[float64](scheme).Encode(ctx, data, MAX_CASCADE)
 					if once {
 						b.Log(enc.Info())
 						once = false
 					}
+					sz += enc.Size()
 					enc.Close()
 					ctx.Close()
 				}
 				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+				b.ReportMetric(100*float64(sz)/float64(b.N*c.N*8), "c(%)")
 			})
 		}
 	}
@@ -98,18 +101,21 @@ func BenchmarkFloatEncodeAndStore(b *testing.B) {
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
 				b.ReportAllocs()
 				b.SetBytes(int64(c.N * 8))
+				var sz int
 				for b.Loop() {
-					ctx := AnalyzeFloat(data, scheme == TFloatDictionary, scheme == TFloatAlp)
+					ctx := AnalyzeFloat(data, scheme == TFloatDictionary, scheme == TFloatAlp || scheme == TFloatAlpRd)
 					enc := NewFloat[float64](scheme).Encode(ctx, data, MAX_CASCADE)
 					_ = enc.Store(make([]byte, 0, enc.Size()))
 					if once {
 						b.Log(enc.Info())
 						once = false
 					}
+					sz += enc.Size()
 					enc.Close()
 					ctx.Close()
 				}
 				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+				b.ReportMetric(100*float64(sz)/float64(b.N*c.N*8), "c(%)")
 			})
 		}
 	}

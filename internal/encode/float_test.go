@@ -16,10 +16,10 @@ import (
 
 func TestAnalyzeFloat(t *testing.T) {
 	// runs
-	x := AnalyzeFloat([]float64{-1.044, -1.044, 5.245, 5.245, 1.50, 1.50}, true, true)
+	x := AnalyzeFloat([]float64{-1.044, -1.044, -1.044, -1.044, 5.245, 5.245, 5.245, 5.245, 1.50, 1.50, 1.50, 1.50}, true, true)
 	assert.InDelta(t, 3, x.NumUnique, 1.0, "num_unique")
 	assert.Equal(t, 3, x.NumRuns, "num_runs")
-	assert.Equal(t, 6, x.NumValues, "num_values")
+	assert.Equal(t, 12, x.NumValues, "num_values")
 	assert.Contains(t, x.EligibleSchemes(MAX_CASCADE), TFloatRunEnd, "eligible")
 	assert.Contains(t, x.EligibleSchemes(MAX_CASCADE), TFloatRaw, "eligible")
 	assert.Contains(t, x.EligibleSchemes(MAX_CASCADE), TFloatDictionary, "eligible")

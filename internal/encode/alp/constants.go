@@ -1,77 +1,48 @@
 // Copyright (c) 2025 Blockwatch Data Inc.
-// Author: abdul@blockwatch.cc
+// Author: alex@blockwatch.cc
 
 package alp
 
-import "blockwatch.cc/knoxdb/internal/types"
-
-const (
-	SAMPLING_EARLY_EXIT_THRESHOLD    = 2
-	ENCODING_UPPER_LIMIT             = 9223372036854774784
-	ENCODING_LOWER_LIMIT             = -9223372036854774784
-	DICTIONARY_ELEMENT_SIZE_BYTES    = 2
-	RD_EXCEPTION_POSITION_SIZE       = 16
-	RD_EXCEPTION_POSITION_SIZE_BYTES = RD_EXCEPTION_POSITION_SIZE / 8
-	EXCEPTION_POSITION_SIZE          = 16
-	EXCEPTION_POSITION_SIZE_BYTES    = EXCEPTION_POSITION_SIZE / 8
-	RD_EXCEPTION_SIZE                = 16
-	RD_EXCEPTION_SIZE_BYTES          = RD_EXCEPTION_SIZE / 8
+import (
+	"unsafe"
 )
 
-var (
-	FACT_ARR = []int64{
-		1,
-		10,
-		100,
-		1000,
-		10000,
-		100000,
-		1000000,
-		10000000,
-		100000000,
-		1000000000,
-		10000000000,
-		100000000000,
-		1000000000000,
-		10000000000000,
-		100000000000000,
-		1000000000000000,
-		10000000000000000,
-		100000000000000000,
-		1000000000000000000,
-	}
+const (
+	PATCH_POSITION_SIZE       = 16
+	PATCH_POSITION_SIZE_BYTES = PATCH_POSITION_SIZE / 8
+)
 
-	float32Const = constant{
-		// 22 bits per value * 32 values in the sampled vector
-		RD_SIZE_THRESHOLD_LIMIT: 22 * SAMPLES_PER_VECTOR,
-		MAGIC_NUMER:             12582912.0,
-		EXCEPTION_SIZE:          32,
-		EXCEPTION_SIZE_BYTES:    32 / 8,
+type Float interface {
+	float32 | float64
+}
+
+type Int interface {
+	int32 | int64
+}
+
+type Uint interface {
+	uint32 | uint64
+}
+
+type constant[T Float] struct {
+	WIDTH                   int
+	RD_SIZE_THRESHOLD_LIMIT int
+	MAGIC_NUMBER            T
+	PATCH_SIZE              int
+	MAX_EXPONENT            uint8
+	F10                     []T
+	IF10                    []T
+}
+
+var (
+	c32 = constant[float32]{
+		WIDTH:                   4,
+		RD_SIZE_THRESHOLD_LIMIT: 22 * SAMPLE_SIZE, // 22 bits per value * 32
+		MAGIC_NUMBER:            12582912.0,
+		PATCH_SIZE:              32,
 		MAX_EXPONENT:            10,
 
-		// -Inf: 11111111100000000000000000000000
-		// +Inf: 01111111100000000000000000000000
-		// -0.0: 10000000000000000000000000000000
-		NEGATIVE_ZERO:         0b10000000000000000000000000000000,
-		POSITIVE_INF:          0b11111111100000000000000000000000,
-		NEGATIVE_INF:          0b11111111100000000000000000000000,
-		SIGN_BIT_MASK:         0b01111111111111111111111111111111,
-		EXPONENTIAL_BITS_MASK: 0b01111111100000000000000000000000,
-
-		FRAC_ARR: []float64{
-			1.0,
-			0.1,
-			0.01,
-			0.001,
-			0.0001,
-			0.00001,
-			0.000001,
-			0.0000001,
-			0.00000001,
-			0.000000001,
-			0.0000000001,
-		},
-		EXP_ARR: []float64{
+		F10: []float32{
 			1.0,
 			10.0,
 			100.0,
@@ -82,27 +53,9 @@ var (
 			10000000.0,
 			100000000.0,
 			1000000000.0,
-			10000000000.0},
-	}
-
-	float64Const = constant{
-		// 48 bits per value * 32 values in the sampled vector
-		RD_SIZE_THRESHOLD_LIMIT: 48 * SAMPLES_PER_VECTOR,
-		MAGIC_NUMER:             0x0018000000000000,
-		EXCEPTION_SIZE:          64,
-		EXCEPTION_SIZE_BYTES:    64 / 8,
-		MAX_EXPONENT:            18,
-
-		// -Inf: 1111111111110000000000000000000000000000000000000000000000000000
-		// +Inf: 0111111111110000000000000000000000000000000000000000000000000000
-		// -0.0: 1000000000000000000000000000000000000000000000000000000000000000
-		NEGATIVE_ZERO:         0b1000000000000000000000000000000000000000000000000000000000000000,
-		POSITIVE_INF:          0b0111111111110000000000000000000000000000000000000000000000000000,
-		NEGATIVE_INF:          0b1111111111110000000000000000000000000000000000000000000000000000,
-		SIGN_BIT_MASK:         0b0111111111111111111111111111111111111111111111111111111111111111,
-		EXPONENTIAL_BITS_MASK: 0b01111111111100000000000000000000000000000000000000000000000000000,
-
-		FRAC_ARR: []float64{
+			10000000000.0, // 10^10
+		},
+		IF10: []float32{
 			1.0,
 			0.1,
 			0.01,
@@ -113,19 +66,18 @@ var (
 			0.0000001,
 			0.00000001,
 			0.000000001,
-			0.0000000001,
-			0.00000000001,
-			0.000000000001,
-			0.0000000000001,
-			0.00000000000001,
-			0.000000000000001,
-			0.0000000000000001,
-			0.00000000000000001,
-			0.000000000000000001,
-			0.0000000000000000001,
-			0.00000000000000000001,
+			0.0000000001, // 10^-10
 		},
-		EXP_ARR: []float64{
+	}
+
+	c64 = constant[float64]{
+		WIDTH:                   8,
+		RD_SIZE_THRESHOLD_LIMIT: 48 * SAMPLE_SIZE, // 48 bits per value * 32
+		MAGIC_NUMBER:            0x0018000000000000,
+		PATCH_SIZE:              64,
+		MAX_EXPONENT:            18,
+
+		F10: []float64{
 			1.0,
 			10.0,
 			100.0,
@@ -149,32 +101,50 @@ var (
 			100000000000000000000.0,
 			1000000000000000000000.0,
 			10000000000000000000000.0,
-			100000000000000000000000.0,
+			100000000000000000000000.0, // 10^10
+		},
+		IF10: []float64{
+			1.0,
+			0.1,
+			0.01,
+			0.001,
+			0.0001,
+			0.00001,
+			0.000001,
+			0.0000001,
+			0.00000001,
+			0.000000001,
+			0.0000000001,
+			0.00000000001,
+			0.000000000001,
+			0.0000000000001,
+			0.00000000000001,
+			0.000000000000001,
+			0.0000000000000001,
+			0.00000000000000001,
+			0.000000000000000001,
+			0.0000000000000000001,
+			0.00000000000000000001, // 10^-10
 		},
 	}
 )
 
-type constant struct {
-	RD_SIZE_THRESHOLD_LIMIT int
-	MAGIC_NUMER             float64
-	EXCEPTION_SIZE          int
-	EXCEPTION_SIZE_BYTES    int
-	MAX_EXPONENT            uint8
-	NEGATIVE_ZERO           uint64
-	POSITIVE_INF            uint64
-	NEGATIVE_INF            uint64
-	SIGN_BIT_MASK           uint64
-	EXPONENTIAL_BITS_MASK   uint64
-	FRAC_ARR                []float64
-	EXP_ARR                 []float64
-}
-
-func newConstant[T types.Float]() *constant {
+func getConstantPtr[T Float]() *constant[T] {
 	switch any(T(0)).(type) {
 	case float32:
-		return &float32Const
+		return (*constant[T])(unsafe.Pointer(&c32))
 	case float64:
-		return &float64Const
+		return (*constant[T])(unsafe.Pointer(&c64))
 	}
 	return nil
+}
+
+func getConstant[T Float]() constant[T] {
+	switch any(T(0)).(type) {
+	case float32:
+		return *(*constant[T])(unsafe.Pointer(&c32))
+	case float64:
+		return *(*constant[T])(unsafe.Pointer(&c64))
+	}
+	return constant[T]{}
 }

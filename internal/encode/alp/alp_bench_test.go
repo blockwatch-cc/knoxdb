@@ -1,192 +1,168 @@
 // Copyright (c) 2025 Blockwatch Data Inc.
-// Author: abdul@blockwatch.cc
+// Author: alex@blockwatch.cc
 
 package alp
 
 import (
+	"fmt"
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/tests"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 // -------------------------------------
-// ALP
+// ALP benchmarks
 //
 
-func BenchmarkAlp_CompressFloat64(b *testing.B) {
+func BenchmarkAnalyzeALP(b *testing.B) {
+	benchAnalyze[float64, int64](b)
+	benchAnalyze[float32, int32](b)
+}
+
+func benchAnalyze[T Float, E Int](b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
-		var exn, n, r int
-		src := tests.GenRndBits[float64](c.N, 24)
-		b.Run(c.Name, func(b *testing.B) {
+		src := tests.GenRndBits[T](c.N, 24)
+		b.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
-			b.SetBytes(int64(c.N * 8))
-			for range b.N {
-				enc := NewEncoder[float64]().Encode(src)
-				exn += len(enc.State().Exceptions)
-				n += c.N
-				r++
-				enc.Close()
+			b.SetBytes(int64(c.N * util.SizeOf[T]()))
+			for b.Loop() {
+				_ = Analyze[T, E](src)
 			}
-			b.ReportMetric(float64(exn)/float64(r), "ex/op")
-			b.ReportMetric(float64(exn*100)/float64(n), "%ex")
+			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 		})
 	}
 }
 
-func BenchmarkAlp_CompressFloat32(b *testing.B) {
+func BenchmarkEncodeALPFull(b *testing.B) {
+	benchEncode[float64, int64](b, true)
+	benchEncode[float32, int32](b, true)
+}
+
+func BenchmarkEncodeALPOnly(b *testing.B) {
+	benchEncode[float64, int64](b, false)
+	benchEncode[float32, int32](b, false)
+}
+
+func benchEncode[T Float, E Int](b *testing.B, withAnalysis bool) {
 	for _, c := range tests.BenchmarkSizes {
-		var exn, n, r int
-		src := tests.GenRndBits[float32](c.N, 12)
-		b.Run(c.Name, func(b *testing.B) {
+		var exn int
+		src := tests.GenRndBits[T](c.N, 24)
+		a := Analyze[T, E](src)
+		b.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
-			b.SetBytes(int64(c.N * 4))
-			for range b.N {
-				enc := NewEncoder[float32]().Encode(src)
-				exn += len(enc.State().Exceptions)
-				n += c.N
-				r++
-				enc.Close()
-				b.ReportMetric(float64(exn)/float64(r), "ex/op")
-				b.ReportMetric(float64(exn*100)/float64(n), "%ex")
+			b.SetBytes(int64(c.N * util.SizeOf[T]()))
+			for b.Loop() {
+				enc := NewEncoder[T, E]()
+				if withAnalysis {
+					a = Analyze[T, E](src)
+				}
+				res := enc.Encode(src, a.Exp)
+				exn += len(res.PatchValues)
+				res.Close()
 			}
+			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+			b.ReportMetric(float64(exn)/float64(b.N), "ex/op")
+			b.ReportMetric(float64(exn*100)/float64(c.N*b.N), "%ex")
 		})
 	}
 }
 
-func BenchmarkAlp_DecompressFloat64(b *testing.B) {
-	for _, c := range tests.BenchmarkSizes {
-		src := tests.GenRndBits[float64](c.N, 24)
-		enc := NewEncoder[float64]().Encode(src)
-		e := enc.State()
-		out := make([]float64, c.N)
-		dec := NewDecoder[float64](e.Encoding.F, e.Encoding.E).
-			WithExceptions(e.Exceptions, e.Positions)
-		b.Run(c.Name, func(b *testing.B) {
-			b.SetBytes(int64(c.N * 8))
-			for range b.N {
-				dec.Decode(out, e.Integers)
-			}
-		})
-	}
+func BenchmarkDecodeALP(b *testing.B) {
+	benchDecode[float64, int64](b)
+	benchDecode[float32, int32](b)
 }
 
-func BenchmarkAlp_DecompressFloat32(b *testing.B) {
+func benchDecode[T Float, E Int](b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
-		src := tests.GenRndBits[float32](c.N, 12)
-		enc := NewEncoder[float32]().Encode(src)
-		e := enc.State()
-		out := make([]float32, c.N)
-		dec := NewDecoder[float32](e.Encoding.F, e.Encoding.E).
-			WithExceptions(e.Exceptions, e.Positions)
-		b.Run(c.Name, func(b *testing.B) {
-			b.SetBytes(int64(c.N * 4))
+		src := tests.GenRndBits[T](c.N, 24)
+		enc := NewEncoder[T, E]()
+		a := Analyze[T, E](src)
+		res := enc.Encode(src, a.Exp)
+		out := make([]T, c.N)
+		dec := NewDecoder[T, E](a.Exp.F, a.Exp.E).
+			WithExceptions(res.PatchValues, res.PatchIndices)
+		b.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(b *testing.B) {
+			b.SetBytes(int64(c.N * enc.WIDTH))
 			for range b.N {
-				dec.Decode(out, e.Integers)
+				dec.Decode(out, res.Encoded)
 			}
+			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 		})
 	}
 }
 
 // -------------------------------------
-// ALP-RD
+// ALP-RD benchmarks
 //
 
-func BenchmarkAlpRD_EstimateFloat64(b *testing.B) {
+func BenchmarkAnalyzeALPRD(b *testing.B) {
+	benchAnalyzeRD[float64, uint64](b)
+	benchAnalyzeRD[float32, uint32](b)
+}
+
+func benchAnalyzeRD[T Float, U Uint](b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
-		src := tests.GenRndBits[float64](c.N, 49)
-		unique := make([]uint16, 1<<16)
-		sample := make([]float64, MaxSampleLen(c.N))
-		FirstLevelSample(sample, src)
-		b.Run(c.Name, func(b *testing.B) {
-			b.SetBytes(int64(c.N * 8))
-			for range b.N {
-				_ = EstimateRD(sample, unique)
+		src := tests.GenRndBits[T](c.N, 24)
+		b.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(b *testing.B) {
+			b.ResetTimer()
+			b.ReportAllocs()
+			b.SetBytes(int64(c.N * util.SizeOf[T]()))
+			for b.Loop() {
+				_ = AnalyzeRD[T, U](src)
 			}
+			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 		})
 	}
 }
 
-func BenchmarkAlpRD_EstimateFloat32(b *testing.B) {
+func BenchmarkEncodeALPRD(b *testing.B) {
+	benchEncodeRD[float64, uint64](b, false)
+	benchEncodeRD[float32, uint32](b, false)
+}
+
+func benchEncodeRD[T Float, U Uint](b *testing.B, withAnalysis bool) {
 	for _, c := range tests.BenchmarkSizes {
-		src := tests.GenRndBits[float32](c.N, 32)
-		unique := make([]uint16, 1<<16)
-		sample := make([]float32, MaxSampleLen(c.N))
-		FirstLevelSample(sample, src)
-		b.Run(c.Name, func(b *testing.B) {
-			b.SetBytes(int64(c.N * 4))
-			for range b.N {
-				_ = EstimateRD(sample, unique)
+		src := tests.GenRndBits[T](c.N, 24)
+		a := AnalyzeRD[T, U](src)
+		b.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(b *testing.B) {
+			b.ResetTimer()
+			b.ReportAllocs()
+			b.SetBytes(int64(c.N * util.SizeOf[T]()))
+			for b.Loop() {
+				enc := NewEncoderRD[T, U]()
+				if withAnalysis {
+					a = AnalyzeRD[T, U](src)
+				}
+				res := enc.Encode(src, a.Split)
+				res.Close()
 			}
+			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 		})
 	}
 }
 
-func BenchmarkAlpRD_SplitFloat64(b *testing.B) {
-	for _, c := range tests.BenchmarkSizes {
-		src := tests.GenRndBits[float64](c.N, 49)
-		unique := make([]uint16, max(c.N, 1<<16))
-		e := EstimateRD(FirstLevelSample(src, nil), unique)
-		left := make([]uint16, c.N)
-		right := make([]uint64, c.N)
-		b.Run(c.Name, func(b *testing.B) {
-			b.SetBytes(int64(c.N * 8))
-			for range b.N {
-				SplitRD(src, left, right, e.Shift)
-			}
-		})
-	}
+func BenchmarkDecodeALPRD(b *testing.B) {
+	benchDecodeRD[float64, uint64](b)
+	benchDecodeRD[float32, uint32](b)
 }
 
-func BenchmarkAlpRD_SplitFloat32(b *testing.B) {
+func benchDecodeRD[T Float, U Uint](b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
-		src := tests.GenRndBits[float32](c.N, 32)
-		unique := make([]uint16, max(c.N, 1<<16))
-		e := EstimateRD(FirstLevelSample(src, nil), unique)
-		left := make([]uint16, c.N)
-		right := make([]uint64, c.N)
-		b.Run(c.Name, func(b *testing.B) {
-			b.SetBytes(int64(c.N * 4))
+		src := tests.GenRndBits[T](c.N, 24)
+		enc := NewEncoderRD[T, U]()
+		a := AnalyzeRD[T, U](src)
+		res := enc.Encode(src, a.Split)
+		dst := make([]T, c.N)
+		dec := NewDecoderRD[T, U](a.Split)
+		b.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(b *testing.B) {
+			b.SetBytes(int64(c.N * util.SizeOf[T]()))
 			for range b.N {
-				SplitRD(src, left, right, e.Shift)
+				dec.Decode(dst, res.Left, res.Right)
 			}
-		})
-	}
-}
-
-func BenchmarkAlpRD_MergeFloat64(b *testing.B) {
-	for _, c := range tests.BenchmarkSizes {
-		src := tests.GenRndBits[float64](c.N, 49)
-		unique := make([]uint16, max(c.N, 1<<16))
-		e := EstimateRD(FirstLevelSample(src, nil), unique)
-		left := make([]uint16, c.N)
-		right := make([]uint64, c.N)
-		dst := make([]float64, c.N)
-		SplitRD(src, left, right, e.Shift)
-		b.Run(c.Name, func(b *testing.B) {
-			b.SetBytes(int64(c.N * 8))
-			for range b.N {
-				MergeRD(dst, left, right, e.Shift)
-			}
-		})
-	}
-}
-
-func BenchmarkAlpRD_MergeFloat32(b *testing.B) {
-	for _, c := range tests.BenchmarkSizes {
-		src := tests.GenRndBits[float32](c.N, 32)
-		unique := make([]uint16, max(c.N, 1<<16))
-		e := EstimateRD(FirstLevelSample(src, nil), unique)
-		left := make([]uint16, c.N)
-		right := make([]uint64, c.N)
-		dst := make([]float32, c.N)
-		SplitRD(src, left, right, e.Shift)
-		b.Run(c.Name, func(b *testing.B) {
-			b.SetBytes(int64(c.N * 4))
-			for range b.N {
-				MergeRD(dst, left, right, e.Shift)
-			}
+			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 		})
 	}
 }

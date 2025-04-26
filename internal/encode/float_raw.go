@@ -80,7 +80,7 @@ func (c *FloatRawContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 	return dst
 }
 
-func (c *FloatRawContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int) FloatContainer[T] {
+func (c *FloatRawContainer[T]) Encode(_ *FloatContext[T], vals []T, _ int) FloatContainer[T] {
 	c.Values = vals
 	c.typ = BlockType[T]()
 	return c
