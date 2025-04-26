@@ -4,6 +4,8 @@
 package bitpack
 
 import (
+	"unsafe"
+
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
@@ -11,63 +13,72 @@ import (
 // converted hence only unsigned numbers are supported here. A caller may also
 // want to perform pre-checks on the value's bit width to exclude obvious cases
 // that cannot match like equal 256 on a less than 8 bit packing.
+type cmpFunc func(unsafe.Pointer, uint64) uint64
+type cmpFunc2 func(unsafe.Pointer, uint64, uint64) uint64
+type scalarCmpFunc func(uint64, uint64) bool
 
-func Equal(buf []byte, log2 int, val uint64, n int, bits *Bitset) *Bitset {
-	return compare_eq(buf, log2, val, n, bits, false)
+func Equal(buf []byte, log2 int, val uint64, n int, bits *Bitset) {
+	compare(buf, log2, val, n, bits, cmp_eq, eq, false)
 }
 
-func NotEqual(buf []byte, log2 int, val uint64, n int, bits *Bitset) *Bitset {
-	return compare_eq(buf, log2, val, n, bits, true)
+func NotEqual(buf []byte, log2 int, val uint64, n int, bits *Bitset) {
+	compare(buf, log2, val, n, bits, cmp_eq, eq, true)
 }
 
-func Less(buf []byte, log2 int, val uint64, n int, bits *Bitset) *Bitset {
-	return compare_lt(buf, log2, val, n, bits, false)
+func Less(buf []byte, log2 int, val uint64, n int, bits *Bitset) {
+	compare(buf, log2, val, n, bits, cmp_lt, lt, false)
 }
 
-func LessEqual(buf []byte, log2 int, val uint64, n int, bits *Bitset) *Bitset {
-	return compare_le(buf, log2, val, n, bits, false)
+func LessEqual(buf []byte, log2 int, val uint64, n int, bits *Bitset) {
+	compare(buf, log2, val, n, bits, cmp_le, le, false)
 }
 
-func Greater(buf []byte, log2 int, val uint64, n int, bits *Bitset) *Bitset {
-	return compare_le(buf, log2, val, n, bits, true)
+func Greater(buf []byte, log2 int, val uint64, n int, bits *Bitset) {
+	compare(buf, log2, val, n, bits, cmp_le, le, true)
 }
 
-func GreaterEqual(buf []byte, log2 int, val uint64, n int, bits *Bitset) *Bitset {
-	return compare_lt(buf, log2, val, n, bits, true)
+func GreaterEqual(buf []byte, log2 int, val uint64, n int, bits *Bitset) {
+	compare(buf, log2, val, n, bits, cmp_lt, lt, true)
 }
 
-func Between(buf []byte, log2 int, a, b uint64, n int, bits *Bitset) *Bitset {
-	return compare_bw(buf, log2, a, b, n, bits)
+func Between(buf []byte, log2 int, a, b uint64, n int, bits *Bitset) {
+	compare2(buf, log2, a, b, n, bits, cmp_bw)
 }
 
-func compare_eq(buf []byte, log2 int, val uint64, n int, bits *Bitset, neg bool) *Bitset {
-	outBuff := util.FromByteSlice[uint64](bits.Bytes())
-	inBuff := util.FromByteSlice[uint64](buf)
+func compare(src []byte, log2 int, val uint64, n int, bits *Bitset, cmp [65]cmpFunc, scmp scalarCmpFunc, neg bool) {
+	var p unsafe.Pointer
+	if len(src) > 0 {
+		p = unsafe.Pointer(&src[0])
+	}
+	out := util.FromByteSlice[uint64](bits.Bytes())
 
 	if neg {
 		for i := range n / 64 {
-			outBuff[i] = ^cmp_eq(inBuff[i*log2:], val, log2)
+			out[i] = ^cmp[log2](p, val)
+			p = unsafe.Add(p, log2*8)
 		}
 	} else {
 		for i := range n / 64 {
-			outBuff[i] = cmp_eq(inBuff[i*log2:], val, log2)
+			out[i] = cmp[log2](p, val)
+			p = unsafe.Add(p, log2*8)
 		}
 	}
 
 	// tail
-	if rem := n % 64; rem != 0 {
+	if rem := n & 63; rem != 0 {
 		var out [64]uint64
-		decode(out[:rem], inBuff[n/64:], log2, 0)
+		in := util.FromByteSlice[uint64](src)
+		decode(out[:rem], in[n/64*log2:], log2, 0)
 		k := n &^ 63
 		if neg {
 			for i := range rem {
-				if out[i] != val {
+				if !scmp(out[i], val) {
 					bits.Set(i + k)
 				}
 			}
 		} else {
 			for i := range rem {
-				if out[i] == val {
+				if scmp(out[i], val) {
 					bits.Set(i + k)
 				}
 			}
@@ -75,97 +86,25 @@ func compare_eq(buf []byte, log2 int, val uint64, n int, bits *Bitset, neg bool)
 	}
 
 	bits.ResetCount(-1)
-	return bits
 }
 
-func compare_lt(buf []byte, log2 int, val uint64, n int, bits *Bitset, neg bool) *Bitset {
-	outBuff := util.FromByteSlice[uint64](bits.Bytes())
-	inBuff := util.FromByteSlice[uint64](buf)
-
-	if neg {
-		for i := range n / 64 {
-			outBuff[i] = ^cmp_lt(inBuff[i*log2:], val, log2)
-		}
-	} else {
-		for i := range n / 64 {
-			outBuff[i] = cmp_lt(inBuff[i*log2:], val, log2)
-		}
+func compare2(src []byte, log2 int, val1, val2 uint64, n int, bits *Bitset, cmp [65]cmpFunc2) {
+	var p unsafe.Pointer
+	if len(src) > 0 {
+		p = unsafe.Pointer(&src[0])
 	}
-
-	// tail
-	if rem := n % 64; rem != 0 {
-		var out [64]uint64
-		decode(out[:rem], inBuff[n/64:], log2, 0)
-		k := n &^ 63
-		if neg {
-			for i := range rem {
-				if out[i] >= val {
-					bits.Set(i + k)
-				}
-			}
-		} else {
-			for i := range rem {
-				if out[i] < val {
-					bits.Set(i + k)
-				}
-			}
-		}
-	}
-
-	bits.ResetCount(-1)
-	return bits
-}
-
-func compare_le(buf []byte, log2 int, val uint64, n int, bits *Bitset, neg bool) *Bitset {
-	outBuff := util.FromByteSlice[uint64](bits.Bytes())
-	inBuff := util.FromByteSlice[uint64](buf)
-
-	if neg {
-		for i := range n / 64 {
-			outBuff[i] = ^cmp_le(inBuff[i*log2:], val, log2)
-		}
-	} else {
-		for i := range n / 64 {
-			outBuff[i] = cmp_le(inBuff[i*log2:], val, log2)
-		}
-	}
-
-	// tail
-	if rem := n % 64; rem != 0 {
-		var out [64]uint64
-		decode(out[:rem], inBuff[n/64:], log2, 0)
-		k := n &^ 63
-		if neg {
-			for i := range rem {
-				if out[i] > val {
-					bits.Set(i + k)
-				}
-			}
-		} else {
-			for i := range rem {
-				if out[i] <= val {
-					bits.Set(i + k)
-				}
-			}
-		}
-	}
-
-	bits.ResetCount(-1)
-	return bits
-}
-
-func compare_bw(buf []byte, log2 int, val1, val2 uint64, n int, bits *Bitset) *Bitset {
-	outBuff := util.FromByteSlice[uint64](bits.Bytes())
-	inBuff := util.FromByteSlice[uint64](buf)
+	out := util.FromByteSlice[uint64](bits.Bytes())
 
 	for i := range n / 64 {
-		outBuff[i] = cmp_bw(inBuff[i*log2:], val1, val2, log2)
+		out[i] = cmp[log2](p, val1, val2)
+		p = unsafe.Add(p, log2*8)
 	}
 
 	// tail
-	if rem := n % 64; rem != 0 {
+	if rem := n & 63; rem != 0 {
 		var out [64]uint64
-		decode(out[:rem], inBuff[n/64:], log2, 0)
+		in := util.FromByteSlice[uint64](src)
+		decode(out[:rem], in[n/64*log2:], log2, 0)
 		k := n &^ 63
 		c2 := val2 - val1
 		for i := range rem {
@@ -176,5 +115,16 @@ func compare_bw(buf []byte, log2 int, val1, val2 uint64, n int, bits *Bitset) *B
 	}
 
 	bits.ResetCount(-1)
-	return bits
+}
+
+func eq(val, cmp uint64) bool {
+	return val == cmp
+}
+
+func lt(val, cmp uint64) bool {
+	return val < cmp
+}
+
+func le(val, cmp uint64) bool {
+	return val <= cmp
 }

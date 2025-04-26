@@ -1,6 +1,5 @@
 // Copyright (c) 2025 Blockwatch Data Inc.
 // Author: abdul@blockwatch.cc
-
 package bitpack
 
 import (

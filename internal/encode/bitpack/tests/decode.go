@@ -8,6 +8,10 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
+func EstimateSize(log2, n int) int {
+	return (log2*n + 63) &^ 63 / 8
+}
+
 func Decoder[T types.Integer](buf []byte, log2 int, minv T) DecodeIndex[T] {
 	mask := uint64((1 << log2) - 1)
 	bits := 64

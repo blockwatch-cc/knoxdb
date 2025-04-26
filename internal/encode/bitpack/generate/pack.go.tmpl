@@ -1,0 +1,173 @@
+// Copyright (c) 2025 Blockwatch Data Inc.
+// Code automatically generated - DO NOT EDIT.
+// Any manual changes will be lost.
+
+package {{.Package}}
+
+import (
+    "unsafe"
+)
+
+// Packer
+
+{{- $bitsRange := bitsFuncRange .Bits}}
+var pack_u{{$.Bits}} = [{{inc $.Bits 1}}]func(in *[64]uint{{$.Bits}}, p unsafe.Pointer, minv uint64){
+    {{- range $bitsize, $value := $bitsRange }}
+        {{- if mod $bitsize 8 -}}bp{{$.Bits}}_{{$bitsize}},{{- else }}
+        bp{{$.Bits}}_{{$bitsize}},{{- end -}}
+    {{- end}}
+    bp{{$.Bits}}_{{$.Bits}},
+}
+
+{{- range $bitsize, $value := $bitsRange}}
+func bp{{$.Bits}}_{{$bitsize}}(in *[64]uint{{$.Bits}}, p unsafe.Pointer, minv uint64) {
+    {{ if $bitsize}}out := (*[{{$bitsize}}]uint64)(p){{end}}
+    {{- $inputIdx := 0 }}
+    {{- $offset  := 0 }}
+    {{- $offsetShifter := 0 }}
+    {{- $shifter := 0 }}
+    {{- $shiftRight := false }}
+    {{- $bitsizeInnerRange := bitsFuncRange $bitsize}}
+    {{- range $vIdx, $vVal := $bitsizeInnerRange }}
+        {{- $bitVals := bitRange 64 $bitsize $offset}}
+        out[{{$vIdx}}] =
+            {{- range $bvIdx, $bvVal := $bitVals}}
+                {{- if lt $shifter 64 }}
+                    {{- if $shiftRight }}
+                        {{- $inputIdx = dec $inputIdx 1 }}
+                        (uint64(in[{{$inputIdx}}])-minv) >> {{$shifter}} |
+                        {{- $shifter = dec $bitsize $shifter }}
+                        {{- $offset = 0 }}
+                        {{- $inputIdx = inc $inputIdx 1 }}
+                        {{- $shiftRight = false }}
+                    {{- else }}
+                        {{- $nextShift := inc $shifter $bitsize }}
+                        {{- if $shifter }}
+                        (uint64(in[{{$inputIdx}}])-minv) << {{$shifter}}
+                        {{- else}}
+                        (uint64(in[{{$inputIdx}}])-minv)
+                        {{- end}}
+                        {{- if lt $nextShift 64 }} | {{- end}}
+                        {{- $shifter = $nextShift }}
+                        {{- $inputIdx = inc $inputIdx 1 }}
+                        {{- $offset = inc $offset $bitsize }}
+                    {{- end}}
+                {{- end }}
+            {{- end}}
+        {{- if eq $offset 64 }}
+            {{- $offset = 0 }}
+            {{- $shifter = 0 }}
+            {{ $shiftRight = false }}
+        {{- else }}
+            {{ $shiftRight = true }}
+            {{- $shifter = dec $shifter $bitsize }}
+            {{- $shifter = dec 64 $shifter}}
+        {{- end }}
+    {{- end -}}
+}
+{{ end }}
+
+func bp{{$.Bits}}_{{$.Bits}}(in *[64]uint{{$.Bits}}, p unsafe.Pointer, minv uint64) {
+    out := (*[64]uint{{$.Bits}})(p)
+    var i int
+    for range 4 {
+        out[i] = in[i] - uint{{$.Bits}}(minv)
+        out[i+1] = in[i+1] - uint{{$.Bits}}(minv)
+        out[i+2] = in[i+2] - uint{{$.Bits}}(minv)
+        out[i+3] = in[i+3] - uint{{$.Bits}}(minv)
+        out[i+4] = in[i+4] - uint{{$.Bits}}(minv)
+        out[i+5] = in[i+5] - uint{{$.Bits}}(minv)
+        out[i+6] = in[i+6] - uint{{$.Bits}}(minv)
+        out[i+7] = in[i+7] - uint{{$.Bits}}(minv)
+        out[i+8] = in[i+8] - uint{{$.Bits}}(minv)
+        out[i+9] = in[i+9] - uint{{$.Bits}}(minv)
+        out[i+10] = in[i+10] - uint{{$.Bits}}(minv)
+        out[i+11] = in[i+11] - uint{{$.Bits}}(minv)
+        out[i+12] = in[i+12] - uint{{$.Bits}}(minv)
+        out[i+13] = in[i+13] - uint{{$.Bits}}(minv)
+        out[i+14] = in[i+14] - uint{{$.Bits}}(minv)
+        out[i+15] = in[i+15] - uint{{$.Bits}}(minv)
+        i += 16
+    }
+}
+
+// Reader
+var unpack_u{{$.Bits}} =  [{{inc $.Bits 1}}]func(out *[64]uint{{$.Bits}}, p unsafe.Pointer, minv uint64){
+    {{- range $bitsize, $value := $bitsRange }}
+        br{{$.Bits}}_{{$bitsize}},
+    {{- end}}
+    br{{$.Bits}}_{{$.Bits}},
+}
+
+{{- range $bitsize, $value := $bitsRange}}
+func br{{$.Bits}}_{{$bitsize}}(out *[64]uint{{$.Bits}}, p unsafe.Pointer, minv uint64) {
+    {{- if gt $bitsize 0 }}
+        in := (*[{{$bitsize}}]uint64)(p)
+        mask := uint64((1 << {{$bitsize}}) - 1)
+        {{- $inputIdx := 0 }}
+        {{- $outIdx := 0 }}
+        {{- $offset  := 0 }}
+        {{- $shifter := 0 }}
+
+        {{- $bitsizeOuterRange := bitsFuncRange $bitsize }}
+        {{- range $v0Idx, $v0Val := $bitsizeOuterRange }}
+            {{- $bitsizeInnerRange := bitRange 64 $bitsize $offset}}
+            {{- range $vIdx, $vVal := $bitsizeInnerRange }}
+                {{- if and (lt $shifter 64) (lt $outIdx 64) }}
+                    {{- $offset = inc $offset $bitsize }}
+                    {{- if gt $offset 64 }}
+                            {{- $nextInputIdx := inc $inputIdx 1 }}
+                            {{- $nextShifter := dec 64 $shifter}}
+                            out[{{$outIdx}}] = uint{{$.Bits}}((in[{{$inputIdx}}]>>{{$shifter}}|in[{{$nextInputIdx}}]<<{{$nextShifter}})&mask + minv)
+                            {{- $shifter = dec $bitsize $nextShifter }}
+                            {{- $offset = $shifter }}
+                            {{- $inputIdx = $nextInputIdx }}
+                        {{- else }}
+                            {{- if $shifter }}
+                            out[{{$outIdx}}] = uint{{$.Bits}}((in[{{$inputIdx}}]>>{{$shifter}})&mask + minv)
+                            {{- else}}
+                            out[{{$outIdx}}] = uint{{$.Bits}}(in[{{$inputIdx}}]&mask + minv)
+                            {{- end}}
+                            {{- $shifter = inc $shifter $bitsize }}
+                        {{- end }}
+                        {{- $outIdx = inc $outIdx 1 }}
+                    {{- end }}
+
+                {{- end }}
+            {{- if eq $offset 64 }}
+                {{- $offset = 0 }}
+                {{- $shifter = 0 }}
+                {{- $inputIdx = inc $inputIdx 1 }}
+            {{- end}}
+        {{- end}}
+    {{ else }}
+        for i := range out {
+            out[i] = uint{{$.Bits}}(minv)
+        }
+    {{- end -}}
+}
+{{ end}}
+
+func br{{$.Bits}}_{{$.Bits}}(in *[64]uint{{$.Bits}}, p unsafe.Pointer, minv uint64) {
+    out := (*[64]uint{{$.Bits}})(p)
+    var i int
+    for range 4 {
+        out[i] = in[i] + uint{{$.Bits}}(minv)
+        out[i+1] = in[i+1] + uint{{$.Bits}}(minv)
+        out[i+2] = in[i+2] + uint{{$.Bits}}(minv)
+        out[i+3] = in[i+3] + uint{{$.Bits}}(minv)
+        out[i+4] = in[i+4] + uint{{$.Bits}}(minv)
+        out[i+5] = in[i+5] + uint{{$.Bits}}(minv)
+        out[i+6] = in[i+6] + uint{{$.Bits}}(minv)
+        out[i+7] = in[i+7] + uint{{$.Bits}}(minv)
+        out[i+8] = in[i+8] + uint{{$.Bits}}(minv)
+        out[i+9] = in[i+9] + uint{{$.Bits}}(minv)
+        out[i+10] = in[i+10] + uint{{$.Bits}}(minv)
+        out[i+11] = in[i+11] + uint{{$.Bits}}(minv)
+        out[i+12] = in[i+12] + uint{{$.Bits}}(minv)
+        out[i+13] = in[i+13] + uint{{$.Bits}}(minv)
+        out[i+14] = in[i+14] + uint{{$.Bits}}(minv)
+        out[i+15] = in[i+15] + uint{{$.Bits}}(minv)
+        i += 16
+    }
+}

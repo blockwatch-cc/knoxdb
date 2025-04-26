@@ -1,23 +1,22 @@
 // Copyright (c) 2025 Blockwatch Data Inc.
-// Author: abdul@blockwatch.cc
+// Author: abdul@blockwatch.cc,alex@blockwatch.cc
 
 package bitpack
 
 import (
 	"sync"
+	"unsafe"
 
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
-type DecodeFunc[T types.Integer] func(index int) T
-
 type Decoder[T types.Integer] struct {
-	src   []uint64
-	log2  int
-	len   int
-	vmask uint64 // value mask
-	minv  T
+	src  []uint64
+	log2 int
+	len  int
+	mask uint64
+	minv T
 }
 
 func NewDecoder[T types.Integer](buf []byte, log2, n int, minv T) *Decoder[T] {
@@ -25,16 +24,20 @@ func NewDecoder[T types.Integer](buf []byte, log2, n int, minv T) *Decoder[T] {
 	d.src = util.FromByteSlice[uint64](buf)
 	d.log2 = log2
 	d.len = n
-	d.vmask = uint64((1 << log2) - 1)
+	d.mask = uint64((1 << log2) - 1)
 	d.minv = minv
 	return d
+}
+
+func (d *Decoder[T]) Len() int {
+	return d.len
 }
 
 func (d *Decoder[T]) Close() {
 	d.src = nil
 	d.log2 = 0
 	d.len = 0
-	d.vmask = 0
+	d.mask = 0
 	d.minv = 0
 	putDecoder(d)
 }
@@ -61,11 +64,11 @@ func (d *Decoder[T]) DecodeValue(n int) T {
 
 	// mix bits when encoded data is split across code words
 	if diff := 64 - shift; diff < d.log2 && pos+1 < len(d.src) {
-		word |= uint64(d.src[pos+1]) << diff
+		word |= d.src[pos+1] << diff
 	}
 
 	// mask value and undo min-FOR
-	return T(word&d.vmask) + d.minv
+	return T(word&d.mask) + d.minv
 }
 
 // DecodeChunk unpacks up to chunk size (128) values starting at position
@@ -85,43 +88,43 @@ func (d *Decoder[T]) DecodeChunk(dst *[128]T, ofs int) int {
 	}
 
 	// calculate source code word group offsets for chunks size 128
-	group0 := d.src[k*d.log2 : (k+1)*d.log2]     // n words -> 64 values
-	group1 := d.src[(k+1)*d.log2 : (k+2)*d.log2] // n words -> 64 values
+	group0 := unsafe.Pointer(&d.src[k*d.log2])
+	group1 := unsafe.Pointer(&d.src[(k+1)*d.log2])
 
 	// call the correct kernel
 	switch any(T(0)).(type) {
 	case uint8:
 		d8 := util.ReinterpretSlice[T, uint8](dst[:])
-		bitread8(d8[:64], group0, d.log2, uint8(d.minv))
-		bitread8(d8[64:], group1, d.log2, uint8(d.minv))
+		unpack_u8[d.log2]((*[64]uint8)(d8[:64]), group0, uint64(d.minv))
+		unpack_u8[d.log2]((*[64]uint8)(d8[64:]), group1, uint64(d.minv))
 	case uint16:
 		d16 := util.ReinterpretSlice[T, uint16](dst[:])
-		bitread16(d16[:64], group0, d.log2, uint16(d.minv))
-		bitread16(d16[64:], group1, d.log2, uint16(d.minv))
+		unpack_u16[d.log2]((*[64]uint16)(d16[:64]), group0, uint64(d.minv))
+		unpack_u16[d.log2]((*[64]uint16)(d16[:64]), group1, uint64(d.minv))
 	case uint32:
 		d32 := util.ReinterpretSlice[T, uint32](dst[:])
-		bitread32(d32[:64], group0, d.log2, uint32(d.minv))
-		bitread32(d32[64:], group1, d.log2, uint32(d.minv))
+		unpack_u32[d.log2]((*[64]uint32)(d32[:64]), group0, uint64(d.minv))
+		unpack_u32[d.log2]((*[64]uint32)(d32[:64]), group1, uint64(d.minv))
 	case uint64:
 		d64 := util.ReinterpretSlice[T, uint64](dst[:])
-		bitread64(d64[:64], group0, d.log2, uint64(d.minv))
-		bitread64(d64[64:], group1, d.log2, uint64(d.minv))
+		unpack_u64[d.log2]((*[64]uint64)(d64[:64]), group0, uint64(d.minv))
+		unpack_u64[d.log2]((*[64]uint64)(d64[:64]), group1, uint64(d.minv))
 	case int8:
-		d8 := util.ReinterpretSlice[T, int8](dst[:])
-		bitread8(d8[:64], group0, d.log2, int8(d.minv))
-		bitread8(d8[64:], group1, d.log2, int8(d.minv))
+		d8 := util.ReinterpretSlice[T, uint8](dst[:])
+		unpack_u8[d.log2]((*[64]uint8)(d8[:64]), group0, uint64(d.minv))
+		unpack_u8[d.log2]((*[64]uint8)(d8[64:]), group1, uint64(d.minv))
 	case int16:
-		d16 := util.ReinterpretSlice[T, int16](dst[:])
-		bitread16(d16[:64], group0, d.log2, int16(d.minv))
-		bitread16(d16[64:], group1, d.log2, int16(d.minv))
+		d16 := util.ReinterpretSlice[T, uint16](dst[:])
+		unpack_u16[d.log2]((*[64]uint16)(d16[:64]), group0, uint64(d.minv))
+		unpack_u16[d.log2]((*[64]uint16)(d16[:64]), group1, uint64(d.minv))
 	case int32:
-		d32 := util.ReinterpretSlice[T, int32](dst[:])
-		bitread32(d32[:64], group0, d.log2, int32(d.minv))
-		bitread32(d32[64:], group1, d.log2, int32(d.minv))
+		d32 := util.ReinterpretSlice[T, uint32](dst[:])
+		unpack_u32[d.log2]((*[64]uint32)(d32[:64]), group0, uint64(d.minv))
+		unpack_u32[d.log2]((*[64]uint32)(d32[:64]), group1, uint64(d.minv))
 	case int64:
-		d64 := util.ReinterpretSlice[T, int64](dst[:])
-		bitread64(d64[:64], group0, d.log2, int64(d.minv))
-		bitread64(d64[64:], group1, d.log2, int64(d.minv))
+		d64 := util.ReinterpretSlice[T, uint64](dst[:])
+		unpack_u64[d.log2]((*[64]uint64)(d64[:64]), group0, uint64(d.minv))
+		unpack_u64[d.log2]((*[64]uint64)(d64[:64]), group1, uint64(d.minv))
 	}
 
 	return n
@@ -136,7 +139,8 @@ func decode[T types.Integer](out []T, in []uint64, log2 int, minv T) (int, error
 	var outIdx int  // Index into the output array
 	var lost int    // must shift right next in word instead of left
 
-	vmask := uint64((1 << log2) - 1) // Mask for b bits, e.g., b=3 -> 0b111
+	mask := uint64((1 << log2) - 1) // Mask for b bits, e.g., b=3 -> 0b111
+
 	for outIdx = 0; outIdx < len(out); outIdx++ {
 		// Ensure we have enough bits in pack
 		for offset < log2 && inIdx < len(in) {
@@ -159,7 +163,7 @@ func decode[T types.Integer](out []T, in []uint64, log2 int, minv T) (int, error
 		}
 
 		// Extract b bits from pack
-		out[outIdx] = T(pack&vmask) + minv
+		out[outIdx] = T(pack&mask) + minv
 		pack >>= log2
 		offset -= log2
 	}
@@ -167,176 +171,207 @@ func decode[T types.Integer](out []T, in []uint64, log2 int, minv T) (int, error
 	return outIdx, nil
 }
 
-func Decode[T types.Integer](out []T, in []byte, log2 int, minv T) (int, error) {
-	var outIdx int
-	var err error
+func Decode[T types.Integer](dst []T, src []byte, log2 int, minv T) (int, error) {
+	var (
+		n   int
+		err error
+	)
 	switch any(T(0)).(type) {
 	case uint8:
-		outIdx, err = Decode8(util.ReinterpretSlice[T, uint8](out), in, log2, uint8(minv))
+		n, err = Decode8(util.ReinterpretSlice[T, uint8](dst), src, log2, uint8(minv))
 	case uint16:
-		outIdx, err = Decode16(util.ReinterpretSlice[T, uint16](out), in, log2, uint16(minv))
+		n, err = Decode16(util.ReinterpretSlice[T, uint16](dst), src, log2, uint16(minv))
 	case uint32:
-		outIdx, err = Decode32(util.ReinterpretSlice[T, uint32](out), in, log2, uint32(minv))
+		n, err = Decode32(util.ReinterpretSlice[T, uint32](dst), src, log2, uint32(minv))
 	case uint64:
-		outIdx, err = Decode64(util.ReinterpretSlice[T, uint64](out), in, log2, uint64(minv))
+		n, err = Decode64(util.ReinterpretSlice[T, uint64](dst), src, log2, uint64(minv))
 	case int8:
-		outIdx, err = Decode8(util.ReinterpretSlice[T, int8](out), in, log2, int8(minv))
+		n, err = Decode8(util.ReinterpretSlice[T, int8](dst), src, log2, int8(minv))
 	case int16:
-		outIdx, err = Decode16(util.ReinterpretSlice[T, int16](out), in, log2, int16(minv))
+		n, err = Decode16(util.ReinterpretSlice[T, int16](dst), src, log2, int16(minv))
 	case int32:
-		outIdx, err = Decode32(util.ReinterpretSlice[T, int32](out), in, log2, int32(minv))
+		n, err = Decode32(util.ReinterpretSlice[T, int32](dst), src, log2, int32(minv))
 	case int64:
-		outIdx, err = Decode64(util.ReinterpretSlice[T, int64](out), in, log2, int64(minv))
-
+		n, err = Decode64(util.ReinterpretSlice[T, int64](dst), src, log2, int64(minv))
 	}
-	return outIdx, err
+	return n, err
 }
 
-func Decode8[T int8 | uint8](out []T, in []byte, log2 int, minv T) (int, error) {
-	inBuff := util.FromByteSlice[uint64](in)
-	var blockN int
-	if inBufflen := len(inBuff); inBufflen > 0 {
-		blockN = len(inBuff) / (log2 * BitReadingBlockSize)
-	}
+func Decode8[T int8 | uint8](dst []T, src []byte, log2 int, minv T) (int, error) {
+	in := util.FromByteSlice[uint64](src)
+	blockN := len(dst) / (4 * BlockSize)
 	if blockN == 0 {
 		// input less than block size, use generic decoder
-		n, err := decode(out, inBuff, log2, minv)
-		return n, err
+		return decode(dst, in, log2, minv)
 	}
 
-	var outpos int
-	groupSize := log2
+	outp := unsafe.Pointer(&dst[0])
+	var inp unsafe.Pointer
+	if len(src) > 0 {
+		inp = unsafe.Pointer(&src[0])
+	}
+	nBlockInBytes := log2 * 8
+	nBlockOutBytes := BlockSize
+
+	// 4x loop unrolled unpacking 4x64 uint8 values from 4xlog2 64bit codewords
 	for blockI := range blockN {
-		i := blockI * BitReadingBlockSize * groupSize
-		group1 := inBuff[i+0*groupSize : i+1*groupSize]
-		group2 := inBuff[i+1*groupSize : i+2*groupSize]
-		group3 := inBuff[i+2*groupSize : i+3*groupSize]
-		group4 := inBuff[i+3*groupSize : i+4*groupSize]
+		i := blockI * nBlockInBytes * 4
+		in1 := unsafe.Add(inp, i)
+		in2 := unsafe.Add(inp, i+1*nBlockInBytes)
+		in3 := unsafe.Add(inp, i+2*nBlockInBytes)
+		in4 := unsafe.Add(inp, i+3*nBlockInBytes)
+		o := blockI * nBlockOutBytes * 4
+		out1 := (*[BlockSize]uint8)(unsafe.Add(outp, o))
+		out2 := (*[BlockSize]uint8)(unsafe.Add(outp, o+1*nBlockOutBytes))
+		out3 := (*[BlockSize]uint8)(unsafe.Add(outp, o+2*nBlockOutBytes))
+		out4 := (*[BlockSize]uint8)(unsafe.Add(outp, o+3*nBlockOutBytes))
 
-		bitread8(out[outpos:], group1, log2, minv)
-		outpos += 64
-		bitread8(out[outpos:], group2, log2, minv)
-		outpos += 64
-		bitread8(out[outpos:], group3, log2, minv)
-		outpos += 64
-		bitread8(out[outpos:], group4, log2, minv)
-		outpos += 64
+		// unpack groups (4 x 64 packed inputs)
+		unpack_u8[log2](out1, in1, uint64(minv))
+		unpack_u8[log2](out2, in2, uint64(minv))
+		unpack_u8[log2](out3, in3, uint64(minv))
+		unpack_u8[log2](out4, in4, uint64(minv))
 	}
+	outpos := blockN * 4 * BlockSize
 
 	// tail loop
-	n, err := decode(out[outpos:], inBuff[blockN*(groupSize*BitReadingBlockSize):], log2, minv)
+	n, err := decode(dst[outpos:], in[blockN*log2*4:], log2, minv)
 
+	// return output values written
 	return outpos + n, err
 }
 
-func Decode16[T int16 | uint16](out []T, in []byte, log2 int, minv T) (int, error) {
-	inBuff := util.FromByteSlice[uint64](in)
-	var blockN int
-	if inBufflen := len(inBuff); inBufflen > 0 {
-		blockN = len(inBuff) / (log2 * BitReadingBlockSize)
-	}
+func Decode16[T int16 | uint16](dst []T, src []byte, log2 int, minv T) (int, error) {
+	in := util.FromByteSlice[uint64](src)
+	blockN := len(dst) / (4 * BlockSize)
 	if blockN == 0 {
 		// input less than block size, use generic decoder
-		n, err := decode(out, inBuff, log2, minv)
-		return n, err
+		return decode(dst, in, log2, minv)
 	}
 
-	var outpos int
-	groupSize := log2
+	outp := unsafe.Pointer(&dst[0])
+	var inp unsafe.Pointer
+	if len(src) > 0 {
+		inp = unsafe.Pointer(&src[0])
+	}
+	nBlockInBytes := log2 * 8
+	nBlockOutBytes := BlockSize * 2
+
+	// 4x loop unrolled unpacking 4x64 uint16 values from 4xlog2 64bit codewords
 	for blockI := range blockN {
-		i := blockI * BitReadingBlockSize * groupSize
-		group1 := inBuff[i+0*groupSize : i+1*groupSize]
-		group2 := inBuff[i+1*groupSize : i+2*groupSize]
-		group3 := inBuff[i+2*groupSize : i+3*groupSize]
-		group4 := inBuff[i+3*groupSize : i+4*groupSize]
+		i := blockI * nBlockInBytes * 4
+		in1 := unsafe.Add(inp, i)
+		in2 := unsafe.Add(inp, i+1*nBlockInBytes)
+		in3 := unsafe.Add(inp, i+2*nBlockInBytes)
+		in4 := unsafe.Add(inp, i+3*nBlockInBytes)
+		o := blockI * nBlockOutBytes * 4
+		out1 := (*[BlockSize]uint16)(unsafe.Add(outp, o))
+		out2 := (*[BlockSize]uint16)(unsafe.Add(outp, o+1*nBlockOutBytes))
+		out3 := (*[BlockSize]uint16)(unsafe.Add(outp, o+2*nBlockOutBytes))
+		out4 := (*[BlockSize]uint16)(unsafe.Add(outp, o+3*nBlockOutBytes))
 
-		bitread16(out[outpos:], group1, log2, minv)
-		outpos += 64
-		bitread16(out[outpos:], group2, log2, minv)
-		outpos += 64
-		bitread16(out[outpos:], group3, log2, minv)
-		outpos += 64
-		bitread16(out[outpos:], group4, log2, minv)
-		outpos += 64
+		// unpack groups (4 x 64 packed inputs)
+		unpack_u16[log2](out1, in1, uint64(minv))
+		unpack_u16[log2](out2, in2, uint64(minv))
+		unpack_u16[log2](out3, in3, uint64(minv))
+		unpack_u16[log2](out4, in4, uint64(minv))
 	}
+	outpos := blockN * 4 * BlockSize
 
 	// tail loop
-	n, err := decode(out[outpos:], inBuff[blockN*groupSize*BitReadingBlockSize:], log2, minv)
+	n, err := decode(dst[outpos:], in[blockN*log2*4:], log2, minv)
 
+	// return output values written
 	return outpos + n, err
 }
 
-func Decode32[T int32 | uint32](out []T, in []byte, log2 int, minv T) (int, error) {
-	inBuff := util.FromByteSlice[uint64](in)
-	var blockN int
-	if inBufflen := len(inBuff); inBufflen > 0 {
-		blockN = len(inBuff) / (log2 * BitReadingBlockSize)
-	}
+func Decode32[T int32 | uint32](dst []T, src []byte, log2 int, minv T) (int, error) {
+	in := util.FromByteSlice[uint64](src)
+	blockN := len(dst) / (4 * BlockSize)
 	if blockN == 0 {
 		// input less than block size, use generic decoder
-		n, err := decode(out, inBuff, log2, minv)
+		n, err := decode(dst, in, log2, minv)
 		return n, err
 	}
 
-	var outpos int
-	groupSize := log2
-	for blockI := range blockN {
-		i := blockI * BitReadingBlockSize * groupSize
-		group1 := inBuff[i+0*groupSize : i+1*groupSize]
-		group2 := inBuff[i+1*groupSize : i+2*groupSize]
-		group3 := inBuff[i+2*groupSize : i+3*groupSize]
-		group4 := inBuff[i+3*groupSize : i+4*groupSize]
-
-		bitread32(out[outpos:], group1, log2, minv)
-		outpos += 64
-		bitread32(out[outpos:], group2, log2, minv)
-		outpos += 64
-		bitread32(out[outpos:], group3, log2, minv)
-		outpos += 64
-		bitread32(out[outpos:], group4, log2, minv)
-		outpos += 64
+	outp := unsafe.Pointer(&dst[0])
+	var inp unsafe.Pointer
+	if len(src) > 0 {
+		inp = unsafe.Pointer(&src[0])
 	}
+	nBlockInBytes := log2 * 8
+	nBlockOutBytes := BlockSize * 4
+
+	// 4x loop unrolled unpacking 4x64 uint16 values from 4xlog2 64bit codewords
+	for blockI := range blockN {
+		i := blockI * nBlockInBytes * 4
+		in1 := unsafe.Add(inp, i)
+		in2 := unsafe.Add(inp, i+1*nBlockInBytes)
+		in3 := unsafe.Add(inp, i+2*nBlockInBytes)
+		in4 := unsafe.Add(inp, i+3*nBlockInBytes)
+		o := blockI * nBlockOutBytes * 4
+		out1 := (*[BlockSize]uint32)(unsafe.Add(outp, o))
+		out2 := (*[BlockSize]uint32)(unsafe.Add(outp, o+1*nBlockOutBytes))
+		out3 := (*[BlockSize]uint32)(unsafe.Add(outp, o+2*nBlockOutBytes))
+		out4 := (*[BlockSize]uint32)(unsafe.Add(outp, o+3*nBlockOutBytes))
+
+		// unpack groups (4 x 64 packed inputs)
+		unpack_u32[log2](out1, in1, uint64(minv))
+		unpack_u32[log2](out2, in2, uint64(minv))
+		unpack_u32[log2](out3, in3, uint64(minv))
+		unpack_u32[log2](out4, in4, uint64(minv))
+	}
+	outpos := blockN * 4 * BlockSize
 
 	// tail loop
-	n, err := decode(out[outpos:], inBuff[blockN*groupSize*BitReadingBlockSize:], log2, minv)
+	n, err := decode(dst[outpos:], in[blockN*log2*4:], log2, minv)
 
+	// return output values written
 	return outpos + n, err
 }
 
-func Decode64[T int64 | uint64](out []T, in []byte, log2 int, minv T) (int, error) {
-	inBuff := util.FromByteSlice[uint64](in)
-	var blockN int
-	if inBufflen := len(inBuff); inBufflen > 0 {
-		blockN = len(inBuff) / (log2 * BitReadingBlockSize)
-	}
+func Decode64[T int64 | uint64](dst []T, src []byte, log2 int, minv T) (int, error) {
+	in := util.FromByteSlice[uint64](src)
+	blockN := len(dst) / (4 * BlockSize)
 	if blockN == 0 {
 		// input less than block size, use generic decoder
-		n, err := decode(out, inBuff, log2, minv)
+		n, err := decode(dst, in, log2, minv)
 		return n, err
 	}
 
-	var outpos int
-	groupSize := log2
-	for blockI := range blockN {
-		i := blockI * BitReadingBlockSize * groupSize
-		group1 := inBuff[i+0*groupSize : i+1*groupSize]
-		group2 := inBuff[i+1*groupSize : i+2*groupSize]
-		group3 := inBuff[i+2*groupSize : i+3*groupSize]
-		group4 := inBuff[i+3*groupSize : i+4*groupSize]
-
-		bitread64(out[outpos:], group1, log2, minv)
-		outpos += 64
-		bitread64(out[outpos:], group2, log2, minv)
-		outpos += 64
-		bitread64(out[outpos:], group3, log2, minv)
-		outpos += 64
-		bitread64(out[outpos:], group4, log2, minv)
-		outpos += 64
+	outp := unsafe.Pointer(&dst[0])
+	var inp unsafe.Pointer
+	if len(src) > 0 {
+		inp = unsafe.Pointer(&src[0])
 	}
+	nBlockInBytes := log2 * 8
+	nBlockOutBytes := BlockSize * 8
+
+	// 4x loop unrolled unpacking 4x64 uint16 values from 4xlog2 64bit codewords
+	for blockI := range blockN {
+		i := blockI * nBlockInBytes * 4
+		in1 := unsafe.Add(inp, i)
+		in2 := unsafe.Add(inp, i+1*nBlockInBytes)
+		in3 := unsafe.Add(inp, i+2*nBlockInBytes)
+		in4 := unsafe.Add(inp, i+3*nBlockInBytes)
+		o := blockI * nBlockOutBytes * 4
+		out1 := (*[BlockSize]uint64)(unsafe.Add(outp, o))
+		out2 := (*[BlockSize]uint64)(unsafe.Add(outp, o+1*nBlockOutBytes))
+		out3 := (*[BlockSize]uint64)(unsafe.Add(outp, o+2*nBlockOutBytes))
+		out4 := (*[BlockSize]uint64)(unsafe.Add(outp, o+3*nBlockOutBytes))
+
+		// unpack groups (4 x 64 packed inputs)
+		unpack_u64[log2](out1, in1, uint64(minv))
+		unpack_u64[log2](out2, in2, uint64(minv))
+		unpack_u64[log2](out3, in3, uint64(minv))
+		unpack_u64[log2](out4, in4, uint64(minv))
+	}
+	outpos := blockN * 4 * BlockSize
 
 	// tail loop
-	n, err := decode(out[outpos:], inBuff[blockN*groupSize*BitReadingBlockSize:], log2, minv)
+	n, err := decode(dst[outpos:], in[blockN*log2*4:], log2, minv)
 
+	// return output values written
 	return outpos + n, err
 }
 

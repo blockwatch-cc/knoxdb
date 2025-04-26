@@ -19,14 +19,14 @@ func EncodeBenchmark[T types.Unsigned](b *testing.B, fn EncodeFunc[T]) {
 	for _, c := range tests.MakeBenchmarks[T]() {
 		minv, maxv := slices.Min(c.Data), slices.Max(c.Data)
 		buf := make([]byte, w*c.N*8)
-		var sz, n int
+		var sz int
 		b.Run(fmt.Sprintf("u%d/%s", w*8, c.Name), func(b *testing.B) {
 			b.SetBytes(int64(w * c.N))
-			for range b.N {
+			for b.Loop() {
 				buf, _ := fn(buf, c.Data, minv, maxv)
 				sz += len(buf)
-				n++
 			}
+			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 		})
 	}
 }
@@ -42,9 +42,10 @@ func DecodeBenchmark[T types.Unsigned](b *testing.B, enc EncodeFunc[T], dec Deco
 		dst := make([]T, c.N)
 		b.Run(fmt.Sprintf("u%d/%s", w*8, c.Name), func(b *testing.B) {
 			b.SetBytes(int64(w * c.N))
-			for range b.N {
+			for b.Loop() {
 				dec(dst, buf, log2, minv)
 			}
+			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 		})
 	}
 }
@@ -62,9 +63,10 @@ func CompareBenchmark[T types.Unsigned](b *testing.B, enc EncodeFunc[T], cmp Com
 
 		b.Run(fmt.Sprintf("u%d/%s", w*8, c.Name), func(b *testing.B) {
 			b.SetBytes(int64(w * c.N))
-			for range b.N {
+			for b.Loop() {
 				cmp(buf, log2, uint64(val), c.N, bits)
 			}
+			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 		})
 	}
 }
@@ -83,9 +85,10 @@ func CompareBenchmark2[T types.Unsigned](b *testing.B, enc EncodeFunc[T], cmp Co
 
 		b.Run(fmt.Sprintf("u%d/%s", w*8, c.Name), func(b *testing.B) {
 			b.SetBytes(int64(len(c.Data) * int(unsafe.Sizeof(T(0)))))
-			for range b.N {
+			for b.Loop() {
 				cmp(buf, log2, uint64(from), uint64(to), c.N, bits)
 			}
+			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 		})
 	}
 }

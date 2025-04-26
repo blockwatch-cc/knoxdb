@@ -299,6 +299,9 @@ func GenRnd[T types.Number](n int) []T {
 
 // creates n random values with bit width of up to w
 func GenRndBits[T types.Number](n, w int) []T {
+	if w == 0 {
+		return make([]T, n)
+	}
 	var res []T
 	switch any(T(0)).(type) {
 	case int64:

@@ -4,31 +4,32 @@
 
 package {{.Package}}
 
+import (
+    "unsafe"
+)
+
 // Compare {{.OpName}}
 
-func cmp_{{.OpName}}(in []uint64, val uint64, log2 int) uint64 {
-	{{- $bitsRange := bitsFuncRange 64 }}
-	switch log2 {
-		{{- range $bitsize, $value := $bitsRange}}
-			case {{$bitsize}}:
-				return cmp_bp_{{$bitsize}}_{{$.OpName}}((*[{{$bitsize}}]uint64)(in), val)
-		{{- end }}
-	}
-	return 0
+var cmp_{{.OpName}} = [65]cmpFunc{
+	{{- $bitsRange := bitsFuncRange 65 }}
+    {{- range $bitsize, $value := $bitsRange }}
+    	{{- if mod $bitsize 8 -}}cmp_{{$bitsize}}_{{$.OpName}},{{- else }}
+    	cmp_{{$bitsize}}_{{$.OpName}},{{- end -}}
+    {{- end}}
 }
 
-{{- range $bitsize, $value := $bitsRange}}
-func cmp_bp_{{$bitsize}}_{{$.OpName}}(in *[{{$bitsize}}]uint64, val uint64) uint64 {
+{{ range $bitsize, $value := $bitsRange}}
+func cmp_{{$bitsize}}_{{$.OpName}}(p unsafe.Pointer, val uint64) uint64 {
 	{{- if gt $bitsize 0 }}
+	in := (*[{{$bitsize}}]uint64)(p)
+	{{- if lt $bitsize 64}}
 	mask := uint64((1 << {{$bitsize}}) - 1)
-		
+	{{- end}}
 	{{- $inputIdx := 0 }}
 	{{- $outIdx := 0 }}
 	{{- $offset  := 0 }}
 	{{- $shifter := 0 }}
-
 	{{- $bitsizeOuterRange := bitsFuncRange $bitsize }}
-	
 	return (
 		{{- range $v0Idx, $v0Val := $bitsizeOuterRange }}
 		{{- $bitsizeInnerRange := bitRange 64 $bitsize $offset}}
@@ -38,17 +39,24 @@ func cmp_bp_{{$bitsize}}_{{$.OpName}}(in *[{{$bitsize}}]uint64, val uint64) uint
 				{{- if gt $offset 64 }}
 						{{- $nextInputIdx := inc $inputIdx 1 }}
 						{{- $nextShifter := dec 64 $shifter}}
-						b2u64((in[{{$inputIdx}}]>>{{$shifter}}|in[{{$nextInputIdx}}]<<{{$nextShifter}})&mask {{$.Op}} val) << {{$outIdx}} |
+						b2u64((in[{{$inputIdx}}]>>{{$shifter}}|in[{{$nextInputIdx}}]<<{{$nextShifter}})&mask {{$.Op}} val)
 						{{- $shifter = dec $bitsize $nextShifter }}
 						{{- $offset = $shifter }}
 						{{- $inputIdx = $nextInputIdx }}
+					{{- else if eq $bitsize 64 }}
+						b2u64(in[{{$inputIdx}}] {{$.Op}} val)
+						{{- $shifter = inc $shifter $bitsize }}
+					{{- else if eq $shifter 0 }}
+						b2u64(in[{{$inputIdx}}]&mask {{$.Op}} val)
+						{{- $shifter = inc $shifter $bitsize }}
 					{{- else }}
-						b2u64((in[{{$inputIdx}}]>>{{$shifter}})&mask {{$.Op}} val) << {{$outIdx}} {{- if lt $outIdx 63 }} |{{ else }}){{- end}}
+						b2u64(in[{{$inputIdx}}]>>{{$shifter}}&mask {{$.Op}} val)
 						{{- $shifter = inc $shifter $bitsize }}
 					{{- end }}
+					{{- if $outIdx }}<< {{$outIdx}}{{- end }}
+					{{- if lt $outIdx 63 }} |{{ else }}){{- end}}
 					{{- $outIdx = inc $outIdx 1 }}
 				{{- end }}
-
 			{{- end }}
 		{{- if eq $offset 64 }}
 			{{- $offset = 0 }}
@@ -57,22 +65,22 @@ func cmp_bp_{{$bitsize}}_{{$.OpName}}(in *[{{$bitsize}}]uint64, val uint64) uint
 		{{- end}}
 		{{- end}}
 	{{ else }}
-		{{ with (eq $.OpName "eq") }}
+		{{- with (eq $.OpName "eq") }}
 			if val == 0 {
 				return uint64(0xffffffffffffffff)
 			}
 			return 0
-		{{ end }}
-		{{ with (eq $.OpName "le") }}
+		{{- end }}
+		{{- with (eq $.OpName "le") }}
 			return uint64(0xffffffffffffffff)
-		{{ end }}
-		{{ with (eq $.OpName "lt") }}
+		{{- end }}
+		{{- with (eq $.OpName "lt") }}
 			if val > 0 {
 				return uint64(0xffffffffffffffff) 
 			}
 			return 0
-		{{ end }}
-	{{- end }}
+		{{- end }}
+	{{- end -}}
 }
-{{- end }}
+{{ end }}
 

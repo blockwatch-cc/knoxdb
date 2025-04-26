@@ -106,7 +106,7 @@ func run() error {
 }
 
 func pack(cwd string) error {
-	t, err := loadTemplate(filepath.Join(cwd, "generate", "generic.go.tmpl"))
+	t, err := loadTemplate(filepath.Join(cwd, "generate", "pack.go.tmpl"))
 	if err != nil {
 		return err
 	}
@@ -154,6 +154,7 @@ func loadTemplate(fname string) (*template.Template, error) {
 	funcMap := template.FuncMap{
 		"inc":           inc,
 		"dec":           dec,
+		"mod":           mod,
 		"bitsFuncRange": bitsFuncRange,
 		"bitRange":      bitRange,
 	}
@@ -170,6 +171,10 @@ func inc(v, y int) int {
 
 func dec(v, y int) int {
 	return v - y
+}
+
+func mod(x, y int) int {
+	return x % y
 }
 
 func bitsFuncRange(bits int) []int {

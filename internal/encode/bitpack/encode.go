@@ -1,220 +1,243 @@
 // Copyright (c) 2025 Blockwatch Data Inc.
-// Author: abdul@blockwatch.cc
+// Author: abdul@blockwatch.cc,alex@blockwatch.cc
 
 package bitpack
 
 import (
+	"unsafe"
+
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 const (
-	BitsSize            = 64
-	BitPackingBlockSize = 256
-	BitReadingBlockSize = 4
+	BitsSize  = 64 // we use 64bit code words
+	BlockSize = 64 // we pack 64 elements at once
 )
 
-func Encode[T types.Integer](buf []byte, vals []T, minv, maxv T) ([]byte, int) {
+func Encode[T types.Integer](dst []byte, src []T, minv, maxv T) ([]byte, int) {
 	var n, log2 int
 	switch any(T(0)).(type) {
 	case uint8:
-		n, log2 = Bitpack8(util.ReinterpretSlice[T, uint8](vals), buf, uint8(minv), uint8(maxv))
+		n, log2 = Bitpack8(dst, util.ReinterpretSlice[T, uint8](src), uint8(minv), uint8(maxv))
 	case uint16:
-		n, log2 = Bitpack16(util.ReinterpretSlice[T, uint16](vals), buf, uint16(minv), uint16(maxv))
+		n, log2 = Bitpack16(dst, util.ReinterpretSlice[T, uint16](src), uint16(minv), uint16(maxv))
 	case uint32:
-		n, log2 = Bitpack32(util.ReinterpretSlice[T, uint32](vals), buf, uint32(minv), uint32(maxv))
+		n, log2 = Bitpack32(dst, util.ReinterpretSlice[T, uint32](src), uint32(minv), uint32(maxv))
 	case uint64:
-		n, log2 = Bitpack64(util.ReinterpretSlice[T, uint64](vals), buf, uint64(minv), uint64(maxv))
+		n, log2 = Bitpack64(dst, util.ReinterpretSlice[T, uint64](src), uint64(minv), uint64(maxv))
 	case int8:
-		n, log2 = Bitpack8(util.ReinterpretSlice[T, int8](vals), buf, int8(minv), int8(maxv))
+		n, log2 = Bitpack8(dst, util.ReinterpretSlice[T, int8](src), int8(minv), int8(maxv))
 	case int16:
-		n, log2 = Bitpack16(util.ReinterpretSlice[T, int16](vals), buf, int16(minv), int16(maxv))
+		n, log2 = Bitpack16(dst, util.ReinterpretSlice[T, int16](src), int16(minv), int16(maxv))
 	case int32:
-		n, log2 = Bitpack32(util.ReinterpretSlice[T, int32](vals), buf, int32(minv), int32(maxv))
+		n, log2 = Bitpack32(dst, util.ReinterpretSlice[T, int32](src), int32(minv), int32(maxv))
 	case int64:
-		n, log2 = Bitpack64(util.ReinterpretSlice[T, int64](vals), buf, int64(minv), int64(maxv))
+		n, log2 = Bitpack64(dst, util.ReinterpretSlice[T, int64](src), int64(minv), int64(maxv))
 	}
-	return buf[:n], log2
+	return dst[:n], log2
 }
 
-func Bitpack8[T int8 | uint8](src []T, dst []byte, minv, maxv T) (int, int) {
-	in := src
+func Bitpack8[T int8 | uint8](dst []byte, src []T, minv, maxv T) (int, int) {
 	out := util.FromByteSlice[uint64](dst)
 	log2 := types.Log2Range(minv, maxv)
-	blockN := len(in) / BitPackingBlockSize
+	blockN := len(src) / (4 * BlockSize)
 	if blockN == 0 {
 		// input less than block size, use generic encoder
-		n := encode(out, in, log2, minv)
+		n := encode(out, src, log2, minv)
 		return n, log2
 	}
 
-	var outpos int
+	outp := unsafe.Pointer(&out[0])
+	inp := unsafe.Pointer(&src[0])
+	nBlockInBytes := BlockSize
+	nBlockOutBytes := log2 * 8
 
-	const groupSize = BitPackingBlockSize / 4
+	// 4x loop unrolled packing 4x64 uint8 values into 4xlog2 64bit codewords
 	for blockI := range blockN {
-		i := blockI * BitPackingBlockSize
-		group1 := in[i+0*groupSize : i+1*groupSize]
-		group2 := in[i+1*groupSize : i+2*groupSize]
-		group3 := in[i+2*groupSize : i+3*groupSize]
-		group4 := in[i+3*groupSize : i+4*groupSize]
-
-		// write groups (4 x 8 packed inputs)
-		bitpack8(minv, group1, out[outpos:], log2)
-		outpos += log2
-		bitpack8(minv, group2, out[outpos:], log2)
-		outpos += log2
-		bitpack8(minv, group3, out[outpos:], log2)
-		outpos += log2
-		bitpack8(minv, group4, out[outpos:], log2)
-		outpos += log2
-	}
-
-	// tail loop
-	n := encode(out[outpos:], in[blockN*BitPackingBlockSize:], log2, minv)
-
-	return outpos*8 + n, log2
-}
-
-func Bitpack16[T int16 | uint16](src []T, dst []byte, minv, maxv T) (int, int) {
-	in := src
-	out := util.FromByteSlice[uint64](dst)
-	log2 := types.Log2Range(minv, maxv)
-	blockN := len(in) / BitPackingBlockSize
-	if blockN == 0 {
-		// input less than block size, use generic encoder
-		n := encode(out, in, log2, minv)
-		return n, log2
-	}
-
-	var outpos int
-
-	const groupSize = BitPackingBlockSize / 4
-	for blockI := range blockN {
-		i := blockI * BitPackingBlockSize
-		group1 := in[i+0*groupSize : i+1*groupSize]
-		group2 := in[i+1*groupSize : i+2*groupSize]
-		group3 := in[i+2*groupSize : i+3*groupSize]
-		group4 := in[i+3*groupSize : i+4*groupSize]
-
-		// write groups (4 x 16 packed inputs)
-		bitpack16(minv, group1, out[outpos:], log2)
-		outpos += log2
-		bitpack16(minv, group2, out[outpos:], log2)
-		outpos += log2
-		bitpack16(minv, group3, out[outpos:], log2)
-		outpos += log2
-		bitpack16(minv, group4, out[outpos:], log2)
-		outpos += log2
-	}
-
-	// tail loop
-	n := encode(out[outpos:], in[blockN*BitPackingBlockSize:], log2, minv)
-
-	return outpos*8 + n, log2
-}
-
-func Bitpack32[T int32 | uint32](src []T, dst []byte, minv, maxv T) (int, int) {
-	in := src
-	out := util.FromByteSlice[uint64](dst)
-	log2 := types.Log2Range(minv, maxv)
-	blockN := len(in) / BitPackingBlockSize
-	if blockN == 0 {
-		// input less than block size, use generic encoder
-		n := encode(out, in, log2, minv)
-		return n, log2
-	}
-
-	var outpos int
-
-	const groupSize = BitPackingBlockSize / 4
-	for blockI := range blockN {
-		i := blockI * BitPackingBlockSize
-		group1 := in[i+0*groupSize : i+1*groupSize]
-		group2 := in[i+1*groupSize : i+2*groupSize]
-		group3 := in[i+2*groupSize : i+3*groupSize]
-		group4 := in[i+3*groupSize : i+4*groupSize]
-
-		// write groups (4 x 32 packed inputs)
-		bitpack32(minv, group1, out[outpos:], log2)
-		outpos += log2
-		bitpack32(minv, group2, out[outpos:], log2)
-		outpos += log2
-		bitpack32(minv, group3, out[outpos:], log2)
-		outpos += log2
-		bitpack32(minv, group4, out[outpos:], log2)
-		outpos += log2
-	}
-
-	// tail loop
-	n := encode(out[outpos:], in[blockN*BitPackingBlockSize:], log2, minv)
-
-	return outpos*8 + n, log2
-}
-
-func Bitpack64[T int64 | uint64](src []T, dst []byte, minv, maxv T) (int, int) {
-	in := src
-	out := util.FromByteSlice[uint64](dst)
-	log2 := types.Log2Range(minv, maxv)
-	blockN := len(in) / BitPackingBlockSize
-	if blockN == 0 {
-		// input less than block size, use generic encoder
-		n := encode(out, in, log2, minv)
-		return n, log2
-	}
-
-	var outpos int
-
-	const groupSize = BitPackingBlockSize / 4
-	for blockI := range blockN {
-		i := blockI * BitPackingBlockSize
-		group1 := in[i+0*groupSize : i+1*groupSize]
-		group2 := in[i+1*groupSize : i+2*groupSize]
-		group3 := in[i+2*groupSize : i+3*groupSize]
-		group4 := in[i+3*groupSize : i+4*groupSize]
+		i := blockI * nBlockInBytes * 4
+		in1 := (*[BlockSize]uint8)(unsafe.Add(inp, i))
+		in2 := (*[BlockSize]uint8)(unsafe.Add(inp, i+1*nBlockInBytes))
+		in3 := (*[BlockSize]uint8)(unsafe.Add(inp, i+2*nBlockInBytes))
+		in4 := (*[BlockSize]uint8)(unsafe.Add(inp, i+3*nBlockInBytes))
+		o := blockI * nBlockOutBytes * 4
+		out1 := unsafe.Add(outp, o)
+		out2 := unsafe.Add(outp, o+1*nBlockOutBytes)
+		out3 := unsafe.Add(outp, o+2*nBlockOutBytes)
+		out4 := unsafe.Add(outp, o+3*nBlockOutBytes)
 
 		// write groups (4 x 64 packed inputs)
-		bitpack64(minv, group1, out[outpos:], log2)
-		outpos += log2
-		bitpack64(minv, group2, out[outpos:], log2)
-		outpos += log2
-		bitpack64(minv, group3, out[outpos:], log2)
-		outpos += log2
-		bitpack64(minv, group4, out[outpos:], log2)
-		outpos += log2
+		pack_u8[log2](in1, out1, uint64(minv))
+		pack_u8[log2](in2, out2, uint64(minv))
+		pack_u8[log2](in3, out3, uint64(minv))
+		pack_u8[log2](in4, out4, uint64(minv))
 	}
+	outpos := blockN * 4 * log2
 
 	// tail loop
-	n := encode(out[outpos:], in[blockN*BitPackingBlockSize:], log2, minv)
+	n := encode(out[outpos:], src[blockN*BlockSize*4:], log2, minv)
 
+	// return output bytes written (64bit codewords)
 	return outpos*8 + n, log2
 }
 
-func encode[T types.Integer](buffer []uint64, vals []T, log2 int, minv T) int {
-	var pack uint64                 // Accumulator for packed bits
-	var offset int                  // Bit offset in the current 64-bit word
-	bufIdx := 0                     // Index into the output buffer
-	mask := uint64((1 << log2) - 1) // e.g., b=3 -> mask=0b111
+func Bitpack16[T int16 | uint16](dst []byte, src []T, minv, maxv T) (int, int) {
+	out := util.FromByteSlice[uint64](dst)
+	log2 := types.Log2Range(minv, maxv)
+	blockN := len(src) / (4 * BlockSize)
+	if blockN == 0 {
+		// input less than block size, use generic encoder
+		n := encode(out, src, log2, minv)
+		return n, log2
+	}
 
-	for i := 0; i < len(vals); i++ {
-		pack |= uint64((vals[i] - minv)) & mask << offset
+	outp := unsafe.Pointer(&out[0])
+	inp := unsafe.Pointer(&src[0])
+	nBlockInBytes := BlockSize * 2
+	nBlockOutBytes := log2 * 8
+
+	// 4x loop unrolled packing 4x64 uint16 values into 4xlog2 64bit code words
+	for blockI := range blockN {
+		i := blockI * nBlockInBytes * 4
+		in1 := (*[BlockSize]uint16)(unsafe.Add(inp, i))
+		in2 := (*[BlockSize]uint16)(unsafe.Add(inp, i+1*nBlockInBytes))
+		in3 := (*[BlockSize]uint16)(unsafe.Add(inp, i+2*nBlockInBytes))
+		in4 := (*[BlockSize]uint16)(unsafe.Add(inp, i+3*nBlockInBytes))
+		o := blockI * nBlockOutBytes * 4
+		out1 := unsafe.Add(outp, o)
+		out2 := unsafe.Add(outp, o+1*nBlockOutBytes)
+		out3 := unsafe.Add(outp, o+2*nBlockOutBytes)
+		out4 := unsafe.Add(outp, o+3*nBlockOutBytes)
+
+		// write groups (4 x 64 packed inputs)
+		pack_u16[log2](in1, out1, uint64(minv))
+		pack_u16[log2](in2, out2, uint64(minv))
+		pack_u16[log2](in3, out3, uint64(minv))
+		pack_u16[log2](in4, out4, uint64(minv))
+	}
+	outpos := blockN * 4 * log2
+
+	// tail loop
+	n := encode(out[outpos:], src[blockN*BlockSize*4:], log2, minv)
+
+	// return output bytes written (64bit codewords)
+	return outpos*8 + n, log2
+}
+
+func Bitpack32[T int32 | uint32](dst []byte, src []T, minv, maxv T) (int, int) {
+	out := util.FromByteSlice[uint64](dst)
+	log2 := types.Log2Range(minv, maxv)
+	blockN := len(src) / (4 * BlockSize)
+	if blockN == 0 {
+		// input less than block size, use generic encoder
+		n := encode(out, src, log2, minv)
+		return n, log2
+	}
+
+	outp := unsafe.Pointer(&out[0])
+	inp := unsafe.Pointer(&src[0])
+	nBlockInBytes := BlockSize * 4
+	nBlockOutBytes := log2 * 8
+
+	// 4x loop unrolled packing 4x64 uint32 values into 4xlog2 64bit codewords
+	for blockI := range blockN {
+		i := blockI * nBlockInBytes * 4
+		in1 := (*[BlockSize]uint32)(unsafe.Add(inp, i))
+		in2 := (*[BlockSize]uint32)(unsafe.Add(inp, i+1*nBlockInBytes))
+		in3 := (*[BlockSize]uint32)(unsafe.Add(inp, i+2*nBlockInBytes))
+		in4 := (*[BlockSize]uint32)(unsafe.Add(inp, i+3*nBlockInBytes))
+		o := blockI * nBlockOutBytes * 4
+		out1 := unsafe.Add(outp, o)
+		out2 := unsafe.Add(outp, o+1*nBlockOutBytes)
+		out3 := unsafe.Add(outp, o+2*nBlockOutBytes)
+		out4 := unsafe.Add(outp, o+3*nBlockOutBytes)
+
+		// write groups (4 x 64 packed inputs)
+		pack_u32[log2](in1, out1, uint64(minv))
+		pack_u32[log2](in2, out2, uint64(minv))
+		pack_u32[log2](in3, out3, uint64(minv))
+		pack_u32[log2](in4, out4, uint64(minv))
+	}
+	outpos := blockN * 4 * log2
+
+	// tail loop
+	n := encode(out[outpos:], src[blockN*BlockSize*4:], log2, minv)
+
+	// return output bytes written (64bit codewords)
+	return outpos*8 + n, log2
+}
+
+func Bitpack64[T int64 | uint64](dst []byte, src []T, minv, maxv T) (int, int) {
+	out := util.FromByteSlice[uint64](dst)
+	log2 := types.Log2Range(minv, maxv)
+	blockN := len(src) / (4 * BlockSize)
+	if blockN == 0 {
+		// input less than block size, use generic encoder
+		n := encode(out, src, log2, minv)
+		return n, log2
+	}
+
+	outp := unsafe.Pointer(&out[0])
+	inp := unsafe.Pointer(&src[0])
+	nBlockInBytes := BlockSize * 8
+	nBlockOutBytes := log2 * 8
+
+	// 4x loop unrolled packing 4x64 uint64 values into 4xlog2 64bit codewords
+	for blockI := range blockN {
+		i := blockI * nBlockInBytes * 4
+		in1 := (*[BlockSize]uint64)(unsafe.Add(inp, i))
+		in2 := (*[BlockSize]uint64)(unsafe.Add(inp, i+1*nBlockInBytes))
+		in3 := (*[BlockSize]uint64)(unsafe.Add(inp, i+2*nBlockInBytes))
+		in4 := (*[BlockSize]uint64)(unsafe.Add(inp, i+3*nBlockInBytes))
+		o := blockI * nBlockOutBytes * 4
+		out1 := unsafe.Add(outp, o)
+		out2 := unsafe.Add(outp, o+1*nBlockOutBytes)
+		out3 := unsafe.Add(outp, o+2*nBlockOutBytes)
+		out4 := unsafe.Add(outp, o+3*nBlockOutBytes)
+
+		// write groups (4 x 64 packed inputs)
+		pack_u64[log2](in1, out1, uint64(minv))
+		pack_u64[log2](in2, out2, uint64(minv))
+		pack_u64[log2](in3, out3, uint64(minv))
+		pack_u64[log2](in4, out4, uint64(minv))
+	}
+	outpos := blockN * 4 * log2
+
+	// tail loop
+	n := encode(out[outpos:], src[blockN*BlockSize*4:], log2, minv)
+
+	// return output bytes written (64bit codewords)
+	return outpos*8 + n, log2
+}
+
+func encode[T types.Integer](dst []uint64, src []T, log2 int, minv T) int {
+	var (
+		word   uint64                    // Accumulator for packed bits
+		offset int                       // Bit offset in the current 64-bit word
+		n      int                       // Index into the output buffer
+		mask   = uint64((1 << log2) - 1) // e.g., b=3 -> mask=0b111
+	)
+
+	for i := 0; i < len(src); i++ {
+		word |= uint64((src[i] - minv)) & mask << offset
 		offset += log2
 		if offset >= BitsSize { // If we've filled a 64-bit word
-			buffer[bufIdx] = uint64(pack) // Write to buffer
+			dst[n] = uint64(word) // Write to buffer
 
-			bufIdx++
+			n++
 			offset -= BitsSize // Reset offset
 			// Carry over any remaining bits if b > (64 - previous offset)
 			if offset > 0 {
-				pack = uint64((vals[i] - minv)) & mask >> (log2 - offset)
+				word = uint64((src[i] - minv)) & mask >> (log2 - offset)
 			} else {
-				pack = 0
+				word = 0
 			}
 		}
 	}
 
 	if offset > 0 { // Write any remaining bits
-		buffer[bufIdx] = uint64(pack)
-		bufIdx++
+		dst[n] = uint64(word)
+		n++
 	}
-	return bufIdx * BitsSize / 8
+	return n * BitsSize / 8
 }
