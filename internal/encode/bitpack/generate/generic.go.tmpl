@@ -72,47 +72,43 @@ func bitread{{$.Bits}}[T uint{{$.Bits}} | int{{$.Bits}}](out []T, in []uint64, l
 func br{{$.Bits}}_{{$bitsize}}[T uint{{$.Bits}} | int{{$.Bits}}](out *[64]T,  in *[{{$bitsize}}]uint64, minv uint64) {
 	{{- if gt $bitsize 0 }}
 		mask := uint64((1 << {{$bitsize}}) - 1)
-	{{- end}}
-	
-	{{- $inputIdx := 0 }}
-	{{- $offset  := 0 }}
-	{{- $offsetShifter := 0 }}
-	{{- $shifter := 0 }}
-	{{- $shiftRight := false }}
+		{{- $inputIdx := 0 }}
+		{{- $outIdx := 0 }}
+		{{- $offset  := 0 }}
+		{{- $shifter := 0 }}
 
-	{{- $bitsizeOuterRange := bitsFuncRange $bitsize }}
-	{{- range $v0Idx, $v0Val := $bitsizeOuterRange }}
-		{{- $bitsizeInnerRange := bitRange 64 $bitsize $offset}}
-		{{- range $vIdx, $vVal := $bitsizeInnerRange }}
-			{{- if lt $shifter 64 }}
-				{{- if $shiftRight }}
-					{{- $inputIdx = dec $inputIdx 1 }}
-					{{- $nextShift := dec $bitsize $shifter }}
-					out[{{$inputIdx}}] = out[{{$inputIdx}}] + T(((in[{{$v0Idx}}]<<{{$shifter}}))&mask)
-					{{- $offset = 0 }}
-					{{- $inputIdx = inc $inputIdx 1 }}
-					{{- $shiftRight = false }}
-					{{- $shifter = $nextShift }}
-				{{ else }}
-					{{- $nextShift := inc $shifter $bitsize }}
-					out[{{$inputIdx}}] = T((in[{{$v0Idx}}]>>{{$shifter}})&mask + minv)
-					{{- $shifter = $nextShift }}
-					{{- $inputIdx = inc $inputIdx 1 }}
+		{{- $bitsizeOuterRange := bitsFuncRange $bitsize }}
+		{{- range $v0Idx, $v0Val := $bitsizeOuterRange }}
+			{{- $bitsizeInnerRange := bitRange 64 $bitsize $offset}}
+			{{- range $vIdx, $vVal := $bitsizeInnerRange }}
+				{{- if and (lt $shifter 64) (lt $outIdx 64) }}
 					{{- $offset = inc $offset $bitsize }}
+					{{- if gt $offset 64 }}
+							{{- $nextInputIdx := inc $inputIdx 1 }}
+							{{- $nextShifter := dec 64 $shifter}}
+							out[{{$outIdx}}] = T((in[{{$inputIdx}}]>>{{$shifter}})&mask |
+							(in[{{$nextInputIdx}}]<<{{$nextShifter}})&mask + minv)
+							{{- $shifter = dec $bitsize $nextShifter }}
+							{{- $offset = $shifter }}
+							{{- $inputIdx = $nextInputIdx }}
+						{{- else }}
+							out[{{$outIdx}}] = T((in[{{$inputIdx}}]>>{{$shifter}})&mask + minv)
+							{{- $shifter = inc $shifter $bitsize }}
+						{{- end }}
+						{{- $outIdx = inc $outIdx 1 }}
+					{{- end }}
+
 				{{- end }}
+			{{- if eq $offset 64 }}
+				{{- $offset = 0 }}
+				{{- $shifter = 0 }}
+				{{- $inputIdx = inc $inputIdx 1 }}
 			{{- end}}
 		{{- end}}
-		{{- if eq $offset 64 }}
-
-			{{- $offset = 0 }}
-			{{- $shifter = 0 }}
-			{{ $shiftRight = false }}
-		{{- else }}
-			{{ $shiftRight = true }}
-			{{- $shifter = dec $shifter $bitsize }}
-			{{- $shifter = dec 64 $shifter}}
-		{{- end}}
-	
+	{{ else }}
+		for i := range out {
+			out[i] = T(minv)
+		}
 	{{- end}}
 }
 {{- end}}

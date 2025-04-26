@@ -4062,6 +4062,9 @@ func bitread32[T uint32 | int32](out []T, in []uint64, log2 int, minv T) {
 	}
 }
 func br32_0[T uint32 | int32](out *[64]T, in *[0]uint64, minv uint64) {
+	for i := range out {
+		out[i] = T(minv)
+	}
 }
 func br32_1[T uint32 | int32](out *[64]T, in *[1]uint64, minv uint64) {
 	mask := uint64((1 << 1) - 1)
@@ -4165,7 +4168,6 @@ func br32_2[T uint32 | int32](out *[64]T, in *[2]uint64, minv uint64) {
 	out[29] = T((in[0]>>58)&mask + minv)
 	out[30] = T((in[0]>>60)&mask + minv)
 	out[31] = T((in[0]>>62)&mask + minv)
-
 	out[32] = T((in[1]>>0)&mask + minv)
 	out[33] = T((in[1]>>2)&mask + minv)
 	out[34] = T((in[1]>>4)&mask + minv)
@@ -4223,10 +4225,8 @@ func br32_3[T uint32 | int32](out *[64]T, in *[3]uint64, minv uint64) {
 	out[18] = T((in[0]>>54)&mask + minv)
 	out[19] = T((in[0]>>57)&mask + minv)
 	out[20] = T((in[0]>>60)&mask + minv)
-	out[21] = T((in[0]>>63)&mask + minv)
-
-	out[21] = out[21] + T((in[1]<<1)&mask)
-
+	out[21] = T((in[0]>>63)&mask |
+		(in[1]<<1)&mask + minv)
 	out[22] = T((in[1]>>2)&mask + minv)
 	out[23] = T((in[1]>>5)&mask + minv)
 	out[24] = T((in[1]>>8)&mask + minv)
@@ -4247,10 +4247,8 @@ func br32_3[T uint32 | int32](out *[64]T, in *[3]uint64, minv uint64) {
 	out[39] = T((in[1]>>53)&mask + minv)
 	out[40] = T((in[1]>>56)&mask + minv)
 	out[41] = T((in[1]>>59)&mask + minv)
-	out[42] = T((in[1]>>62)&mask + minv)
-
-	out[42] = out[42] + T((in[2]<<2)&mask)
-
+	out[42] = T((in[1]>>62)&mask |
+		(in[2]<<2)&mask + minv)
 	out[43] = T((in[2]>>1)&mask + minv)
 	out[44] = T((in[2]>>4)&mask + minv)
 	out[45] = T((in[2]>>7)&mask + minv)
@@ -4292,7 +4290,6 @@ func br32_4[T uint32 | int32](out *[64]T, in *[4]uint64, minv uint64) {
 	out[13] = T((in[0]>>52)&mask + minv)
 	out[14] = T((in[0]>>56)&mask + minv)
 	out[15] = T((in[0]>>60)&mask + minv)
-
 	out[16] = T((in[1]>>0)&mask + minv)
 	out[17] = T((in[1]>>4)&mask + minv)
 	out[18] = T((in[1]>>8)&mask + minv)
@@ -4309,7 +4306,6 @@ func br32_4[T uint32 | int32](out *[64]T, in *[4]uint64, minv uint64) {
 	out[29] = T((in[1]>>52)&mask + minv)
 	out[30] = T((in[1]>>56)&mask + minv)
 	out[31] = T((in[1]>>60)&mask + minv)
-
 	out[32] = T((in[2]>>0)&mask + minv)
 	out[33] = T((in[2]>>4)&mask + minv)
 	out[34] = T((in[2]>>8)&mask + minv)
@@ -4326,7 +4322,6 @@ func br32_4[T uint32 | int32](out *[64]T, in *[4]uint64, minv uint64) {
 	out[45] = T((in[2]>>52)&mask + minv)
 	out[46] = T((in[2]>>56)&mask + minv)
 	out[47] = T((in[2]>>60)&mask + minv)
-
 	out[48] = T((in[3]>>0)&mask + minv)
 	out[49] = T((in[3]>>4)&mask + minv)
 	out[50] = T((in[3]>>8)&mask + minv)
@@ -4359,10 +4354,8 @@ func br32_5[T uint32 | int32](out *[64]T, in *[5]uint64, minv uint64) {
 	out[9] = T((in[0]>>45)&mask + minv)
 	out[10] = T((in[0]>>50)&mask + minv)
 	out[11] = T((in[0]>>55)&mask + minv)
-	out[12] = T((in[0]>>60)&mask + minv)
-
-	out[12] = out[12] + T((in[1]<<4)&mask)
-
+	out[12] = T((in[0]>>60)&mask |
+		(in[1]<<4)&mask + minv)
 	out[13] = T((in[1]>>1)&mask + minv)
 	out[14] = T((in[1]>>6)&mask + minv)
 	out[15] = T((in[1]>>11)&mask + minv)
@@ -4375,10 +4368,8 @@ func br32_5[T uint32 | int32](out *[64]T, in *[5]uint64, minv uint64) {
 	out[22] = T((in[1]>>46)&mask + minv)
 	out[23] = T((in[1]>>51)&mask + minv)
 	out[24] = T((in[1]>>56)&mask + minv)
-	out[25] = T((in[1]>>61)&mask + minv)
-
-	out[25] = out[25] + T((in[2]<<3)&mask)
-
+	out[25] = T((in[1]>>61)&mask |
+		(in[2]<<3)&mask + minv)
 	out[26] = T((in[2]>>2)&mask + minv)
 	out[27] = T((in[2]>>7)&mask + minv)
 	out[28] = T((in[2]>>12)&mask + minv)
@@ -4391,10 +4382,8 @@ func br32_5[T uint32 | int32](out *[64]T, in *[5]uint64, minv uint64) {
 	out[35] = T((in[2]>>47)&mask + minv)
 	out[36] = T((in[2]>>52)&mask + minv)
 	out[37] = T((in[2]>>57)&mask + minv)
-	out[38] = T((in[2]>>62)&mask + minv)
-
-	out[38] = out[38] + T((in[3]<<2)&mask)
-
+	out[38] = T((in[2]>>62)&mask |
+		(in[3]<<2)&mask + minv)
 	out[39] = T((in[3]>>3)&mask + minv)
 	out[40] = T((in[3]>>8)&mask + minv)
 	out[41] = T((in[3]>>13)&mask + minv)
@@ -4407,10 +4396,8 @@ func br32_5[T uint32 | int32](out *[64]T, in *[5]uint64, minv uint64) {
 	out[48] = T((in[3]>>48)&mask + minv)
 	out[49] = T((in[3]>>53)&mask + minv)
 	out[50] = T((in[3]>>58)&mask + minv)
-	out[51] = T((in[3]>>63)&mask + minv)
-
-	out[51] = out[51] + T((in[4]<<1)&mask)
-
+	out[51] = T((in[3]>>63)&mask |
+		(in[4]<<1)&mask + minv)
 	out[52] = T((in[4]>>4)&mask + minv)
 	out[53] = T((in[4]>>9)&mask + minv)
 	out[54] = T((in[4]>>14)&mask + minv)
@@ -4437,10 +4424,8 @@ func br32_6[T uint32 | int32](out *[64]T, in *[6]uint64, minv uint64) {
 	out[7] = T((in[0]>>42)&mask + minv)
 	out[8] = T((in[0]>>48)&mask + minv)
 	out[9] = T((in[0]>>54)&mask + minv)
-	out[10] = T((in[0]>>60)&mask + minv)
-
-	out[10] = out[10] + T((in[1]<<4)&mask)
-
+	out[10] = T((in[0]>>60)&mask |
+		(in[1]<<4)&mask + minv)
 	out[11] = T((in[1]>>2)&mask + minv)
 	out[12] = T((in[1]>>8)&mask + minv)
 	out[13] = T((in[1]>>14)&mask + minv)
@@ -4451,10 +4436,8 @@ func br32_6[T uint32 | int32](out *[64]T, in *[6]uint64, minv uint64) {
 	out[18] = T((in[1]>>44)&mask + minv)
 	out[19] = T((in[1]>>50)&mask + minv)
 	out[20] = T((in[1]>>56)&mask + minv)
-	out[21] = T((in[1]>>62)&mask + minv)
-
-	out[21] = out[21] + T((in[2]<<2)&mask)
-
+	out[21] = T((in[1]>>62)&mask |
+		(in[2]<<2)&mask + minv)
 	out[22] = T((in[2]>>4)&mask + minv)
 	out[23] = T((in[2]>>10)&mask + minv)
 	out[24] = T((in[2]>>16)&mask + minv)
@@ -4465,9 +4448,6 @@ func br32_6[T uint32 | int32](out *[64]T, in *[6]uint64, minv uint64) {
 	out[29] = T((in[2]>>46)&mask + minv)
 	out[30] = T((in[2]>>52)&mask + minv)
 	out[31] = T((in[2]>>58)&mask + minv)
-
-	out[31] = out[31] + T((in[3]<<6)&mask)
-
 	out[32] = T((in[3]>>0)&mask + minv)
 	out[33] = T((in[3]>>6)&mask + minv)
 	out[34] = T((in[3]>>12)&mask + minv)
@@ -4478,10 +4458,8 @@ func br32_6[T uint32 | int32](out *[64]T, in *[6]uint64, minv uint64) {
 	out[39] = T((in[3]>>42)&mask + minv)
 	out[40] = T((in[3]>>48)&mask + minv)
 	out[41] = T((in[3]>>54)&mask + minv)
-	out[42] = T((in[3]>>60)&mask + minv)
-
-	out[42] = out[42] + T((in[4]<<4)&mask)
-
+	out[42] = T((in[3]>>60)&mask |
+		(in[4]<<4)&mask + minv)
 	out[43] = T((in[4]>>2)&mask + minv)
 	out[44] = T((in[4]>>8)&mask + minv)
 	out[45] = T((in[4]>>14)&mask + minv)
@@ -4492,10 +4470,8 @@ func br32_6[T uint32 | int32](out *[64]T, in *[6]uint64, minv uint64) {
 	out[50] = T((in[4]>>44)&mask + minv)
 	out[51] = T((in[4]>>50)&mask + minv)
 	out[52] = T((in[4]>>56)&mask + minv)
-	out[53] = T((in[4]>>62)&mask + minv)
-
-	out[53] = out[53] + T((in[5]<<2)&mask)
-
+	out[53] = T((in[4]>>62)&mask |
+		(in[5]<<2)&mask + minv)
 	out[54] = T((in[5]>>4)&mask + minv)
 	out[55] = T((in[5]>>10)&mask + minv)
 	out[56] = T((in[5]>>16)&mask + minv)
@@ -4519,10 +4495,8 @@ func br32_7[T uint32 | int32](out *[64]T, in *[7]uint64, minv uint64) {
 	out[6] = T((in[0]>>42)&mask + minv)
 	out[7] = T((in[0]>>49)&mask + minv)
 	out[8] = T((in[0]>>56)&mask + minv)
-	out[9] = T((in[0]>>63)&mask + minv)
-
-	out[9] = out[9] + T((in[1]<<1)&mask)
-
+	out[9] = T((in[0]>>63)&mask |
+		(in[1]<<1)&mask + minv)
 	out[10] = T((in[1]>>6)&mask + minv)
 	out[11] = T((in[1]>>13)&mask + minv)
 	out[12] = T((in[1]>>20)&mask + minv)
@@ -4531,10 +4505,8 @@ func br32_7[T uint32 | int32](out *[64]T, in *[7]uint64, minv uint64) {
 	out[15] = T((in[1]>>41)&mask + minv)
 	out[16] = T((in[1]>>48)&mask + minv)
 	out[17] = T((in[1]>>55)&mask + minv)
-	out[18] = T((in[1]>>62)&mask + minv)
-
-	out[18] = out[18] + T((in[2]<<2)&mask)
-
+	out[18] = T((in[1]>>62)&mask |
+		(in[2]<<2)&mask + minv)
 	out[19] = T((in[2]>>5)&mask + minv)
 	out[20] = T((in[2]>>12)&mask + minv)
 	out[21] = T((in[2]>>19)&mask + minv)
@@ -4543,10 +4515,8 @@ func br32_7[T uint32 | int32](out *[64]T, in *[7]uint64, minv uint64) {
 	out[24] = T((in[2]>>40)&mask + minv)
 	out[25] = T((in[2]>>47)&mask + minv)
 	out[26] = T((in[2]>>54)&mask + minv)
-	out[27] = T((in[2]>>61)&mask + minv)
-
-	out[27] = out[27] + T((in[3]<<3)&mask)
-
+	out[27] = T((in[2]>>61)&mask |
+		(in[3]<<3)&mask + minv)
 	out[28] = T((in[3]>>4)&mask + minv)
 	out[29] = T((in[3]>>11)&mask + minv)
 	out[30] = T((in[3]>>18)&mask + minv)
@@ -4555,10 +4525,8 @@ func br32_7[T uint32 | int32](out *[64]T, in *[7]uint64, minv uint64) {
 	out[33] = T((in[3]>>39)&mask + minv)
 	out[34] = T((in[3]>>46)&mask + minv)
 	out[35] = T((in[3]>>53)&mask + minv)
-	out[36] = T((in[3]>>60)&mask + minv)
-
-	out[36] = out[36] + T((in[4]<<4)&mask)
-
+	out[36] = T((in[3]>>60)&mask |
+		(in[4]<<4)&mask + minv)
 	out[37] = T((in[4]>>3)&mask + minv)
 	out[38] = T((in[4]>>10)&mask + minv)
 	out[39] = T((in[4]>>17)&mask + minv)
@@ -4567,10 +4535,8 @@ func br32_7[T uint32 | int32](out *[64]T, in *[7]uint64, minv uint64) {
 	out[42] = T((in[4]>>38)&mask + minv)
 	out[43] = T((in[4]>>45)&mask + minv)
 	out[44] = T((in[4]>>52)&mask + minv)
-	out[45] = T((in[4]>>59)&mask + minv)
-
-	out[45] = out[45] + T((in[5]<<5)&mask)
-
+	out[45] = T((in[4]>>59)&mask |
+		(in[5]<<5)&mask + minv)
 	out[46] = T((in[5]>>2)&mask + minv)
 	out[47] = T((in[5]>>9)&mask + minv)
 	out[48] = T((in[5]>>16)&mask + minv)
@@ -4579,10 +4545,8 @@ func br32_7[T uint32 | int32](out *[64]T, in *[7]uint64, minv uint64) {
 	out[51] = T((in[5]>>37)&mask + minv)
 	out[52] = T((in[5]>>44)&mask + minv)
 	out[53] = T((in[5]>>51)&mask + minv)
-	out[54] = T((in[5]>>58)&mask + minv)
-
-	out[54] = out[54] + T((in[6]<<6)&mask)
-
+	out[54] = T((in[5]>>58)&mask |
+		(in[6]<<6)&mask + minv)
 	out[55] = T((in[6]>>1)&mask + minv)
 	out[56] = T((in[6]>>8)&mask + minv)
 	out[57] = T((in[6]>>15)&mask + minv)
@@ -4604,7 +4568,6 @@ func br32_8[T uint32 | int32](out *[64]T, in *[8]uint64, minv uint64) {
 	out[5] = T((in[0]>>40)&mask + minv)
 	out[6] = T((in[0]>>48)&mask + minv)
 	out[7] = T((in[0]>>56)&mask + minv)
-
 	out[8] = T((in[1]>>0)&mask + minv)
 	out[9] = T((in[1]>>8)&mask + minv)
 	out[10] = T((in[1]>>16)&mask + minv)
@@ -4613,7 +4576,6 @@ func br32_8[T uint32 | int32](out *[64]T, in *[8]uint64, minv uint64) {
 	out[13] = T((in[1]>>40)&mask + minv)
 	out[14] = T((in[1]>>48)&mask + minv)
 	out[15] = T((in[1]>>56)&mask + minv)
-
 	out[16] = T((in[2]>>0)&mask + minv)
 	out[17] = T((in[2]>>8)&mask + minv)
 	out[18] = T((in[2]>>16)&mask + minv)
@@ -4622,7 +4584,6 @@ func br32_8[T uint32 | int32](out *[64]T, in *[8]uint64, minv uint64) {
 	out[21] = T((in[2]>>40)&mask + minv)
 	out[22] = T((in[2]>>48)&mask + minv)
 	out[23] = T((in[2]>>56)&mask + minv)
-
 	out[24] = T((in[3]>>0)&mask + minv)
 	out[25] = T((in[3]>>8)&mask + minv)
 	out[26] = T((in[3]>>16)&mask + minv)
@@ -4631,7 +4592,6 @@ func br32_8[T uint32 | int32](out *[64]T, in *[8]uint64, minv uint64) {
 	out[29] = T((in[3]>>40)&mask + minv)
 	out[30] = T((in[3]>>48)&mask + minv)
 	out[31] = T((in[3]>>56)&mask + minv)
-
 	out[32] = T((in[4]>>0)&mask + minv)
 	out[33] = T((in[4]>>8)&mask + minv)
 	out[34] = T((in[4]>>16)&mask + minv)
@@ -4640,7 +4600,6 @@ func br32_8[T uint32 | int32](out *[64]T, in *[8]uint64, minv uint64) {
 	out[37] = T((in[4]>>40)&mask + minv)
 	out[38] = T((in[4]>>48)&mask + minv)
 	out[39] = T((in[4]>>56)&mask + minv)
-
 	out[40] = T((in[5]>>0)&mask + minv)
 	out[41] = T((in[5]>>8)&mask + minv)
 	out[42] = T((in[5]>>16)&mask + minv)
@@ -4649,7 +4608,6 @@ func br32_8[T uint32 | int32](out *[64]T, in *[8]uint64, minv uint64) {
 	out[45] = T((in[5]>>40)&mask + minv)
 	out[46] = T((in[5]>>48)&mask + minv)
 	out[47] = T((in[5]>>56)&mask + minv)
-
 	out[48] = T((in[6]>>0)&mask + minv)
 	out[49] = T((in[6]>>8)&mask + minv)
 	out[50] = T((in[6]>>16)&mask + minv)
@@ -4658,7 +4616,6 @@ func br32_8[T uint32 | int32](out *[64]T, in *[8]uint64, minv uint64) {
 	out[53] = T((in[6]>>40)&mask + minv)
 	out[54] = T((in[6]>>48)&mask + minv)
 	out[55] = T((in[6]>>56)&mask + minv)
-
 	out[56] = T((in[7]>>0)&mask + minv)
 	out[57] = T((in[7]>>8)&mask + minv)
 	out[58] = T((in[7]>>16)&mask + minv)
@@ -4678,80 +4635,64 @@ func br32_9[T uint32 | int32](out *[64]T, in *[9]uint64, minv uint64) {
 	out[4] = T((in[0]>>36)&mask + minv)
 	out[5] = T((in[0]>>45)&mask + minv)
 	out[6] = T((in[0]>>54)&mask + minv)
-	out[7] = T((in[0]>>63)&mask + minv)
-
-	out[7] = out[7] + T((in[1]<<1)&mask)
-
+	out[7] = T((in[0]>>63)&mask |
+		(in[1]<<1)&mask + minv)
 	out[8] = T((in[1]>>8)&mask + minv)
 	out[9] = T((in[1]>>17)&mask + minv)
 	out[10] = T((in[1]>>26)&mask + minv)
 	out[11] = T((in[1]>>35)&mask + minv)
 	out[12] = T((in[1]>>44)&mask + minv)
 	out[13] = T((in[1]>>53)&mask + minv)
-	out[14] = T((in[1]>>62)&mask + minv)
-
-	out[14] = out[14] + T((in[2]<<2)&mask)
-
+	out[14] = T((in[1]>>62)&mask |
+		(in[2]<<2)&mask + minv)
 	out[15] = T((in[2]>>7)&mask + minv)
 	out[16] = T((in[2]>>16)&mask + minv)
 	out[17] = T((in[2]>>25)&mask + minv)
 	out[18] = T((in[2]>>34)&mask + minv)
 	out[19] = T((in[2]>>43)&mask + minv)
 	out[20] = T((in[2]>>52)&mask + minv)
-	out[21] = T((in[2]>>61)&mask + minv)
-
-	out[21] = out[21] + T((in[3]<<3)&mask)
-
+	out[21] = T((in[2]>>61)&mask |
+		(in[3]<<3)&mask + minv)
 	out[22] = T((in[3]>>6)&mask + minv)
 	out[23] = T((in[3]>>15)&mask + minv)
 	out[24] = T((in[3]>>24)&mask + minv)
 	out[25] = T((in[3]>>33)&mask + minv)
 	out[26] = T((in[3]>>42)&mask + minv)
 	out[27] = T((in[3]>>51)&mask + minv)
-	out[28] = T((in[3]>>60)&mask + minv)
-
-	out[28] = out[28] + T((in[4]<<4)&mask)
-
+	out[28] = T((in[3]>>60)&mask |
+		(in[4]<<4)&mask + minv)
 	out[29] = T((in[4]>>5)&mask + minv)
 	out[30] = T((in[4]>>14)&mask + minv)
 	out[31] = T((in[4]>>23)&mask + minv)
 	out[32] = T((in[4]>>32)&mask + minv)
 	out[33] = T((in[4]>>41)&mask + minv)
 	out[34] = T((in[4]>>50)&mask + minv)
-	out[35] = T((in[4]>>59)&mask + minv)
-
-	out[35] = out[35] + T((in[5]<<5)&mask)
-
+	out[35] = T((in[4]>>59)&mask |
+		(in[5]<<5)&mask + minv)
 	out[36] = T((in[5]>>4)&mask + minv)
 	out[37] = T((in[5]>>13)&mask + minv)
 	out[38] = T((in[5]>>22)&mask + minv)
 	out[39] = T((in[5]>>31)&mask + minv)
 	out[40] = T((in[5]>>40)&mask + minv)
 	out[41] = T((in[5]>>49)&mask + minv)
-	out[42] = T((in[5]>>58)&mask + minv)
-
-	out[42] = out[42] + T((in[6]<<6)&mask)
-
+	out[42] = T((in[5]>>58)&mask |
+		(in[6]<<6)&mask + minv)
 	out[43] = T((in[6]>>3)&mask + minv)
 	out[44] = T((in[6]>>12)&mask + minv)
 	out[45] = T((in[6]>>21)&mask + minv)
 	out[46] = T((in[6]>>30)&mask + minv)
 	out[47] = T((in[6]>>39)&mask + minv)
 	out[48] = T((in[6]>>48)&mask + minv)
-	out[49] = T((in[6]>>57)&mask + minv)
-
-	out[49] = out[49] + T((in[7]<<7)&mask)
-
+	out[49] = T((in[6]>>57)&mask |
+		(in[7]<<7)&mask + minv)
 	out[50] = T((in[7]>>2)&mask + minv)
 	out[51] = T((in[7]>>11)&mask + minv)
 	out[52] = T((in[7]>>20)&mask + minv)
 	out[53] = T((in[7]>>29)&mask + minv)
 	out[54] = T((in[7]>>38)&mask + minv)
 	out[55] = T((in[7]>>47)&mask + minv)
-	out[56] = T((in[7]>>56)&mask + minv)
-
-	out[56] = out[56] + T((in[8]<<8)&mask)
-
+	out[56] = T((in[7]>>56)&mask |
+		(in[8]<<8)&mask + minv)
 	out[57] = T((in[8]>>1)&mask + minv)
 	out[58] = T((in[8]>>10)&mask + minv)
 	out[59] = T((in[8]>>19)&mask + minv)
@@ -4769,85 +4710,66 @@ func br32_10[T uint32 | int32](out *[64]T, in *[10]uint64, minv uint64) {
 	out[3] = T((in[0]>>30)&mask + minv)
 	out[4] = T((in[0]>>40)&mask + minv)
 	out[5] = T((in[0]>>50)&mask + minv)
-	out[6] = T((in[0]>>60)&mask + minv)
-
-	out[6] = out[6] + T((in[1]<<4)&mask)
-
+	out[6] = T((in[0]>>60)&mask |
+		(in[1]<<4)&mask + minv)
 	out[7] = T((in[1]>>6)&mask + minv)
 	out[8] = T((in[1]>>16)&mask + minv)
 	out[9] = T((in[1]>>26)&mask + minv)
 	out[10] = T((in[1]>>36)&mask + minv)
 	out[11] = T((in[1]>>46)&mask + minv)
-	out[12] = T((in[1]>>56)&mask + minv)
-
-	out[12] = out[12] + T((in[2]<<8)&mask)
-
+	out[12] = T((in[1]>>56)&mask |
+		(in[2]<<8)&mask + minv)
 	out[13] = T((in[2]>>2)&mask + minv)
 	out[14] = T((in[2]>>12)&mask + minv)
 	out[15] = T((in[2]>>22)&mask + minv)
 	out[16] = T((in[2]>>32)&mask + minv)
 	out[17] = T((in[2]>>42)&mask + minv)
 	out[18] = T((in[2]>>52)&mask + minv)
-	out[19] = T((in[2]>>62)&mask + minv)
-
-	out[19] = out[19] + T((in[3]<<2)&mask)
-
+	out[19] = T((in[2]>>62)&mask |
+		(in[3]<<2)&mask + minv)
 	out[20] = T((in[3]>>8)&mask + minv)
 	out[21] = T((in[3]>>18)&mask + minv)
 	out[22] = T((in[3]>>28)&mask + minv)
 	out[23] = T((in[3]>>38)&mask + minv)
 	out[24] = T((in[3]>>48)&mask + minv)
-	out[25] = T((in[3]>>58)&mask + minv)
-
-	out[25] = out[25] + T((in[4]<<6)&mask)
-
+	out[25] = T((in[3]>>58)&mask |
+		(in[4]<<6)&mask + minv)
 	out[26] = T((in[4]>>4)&mask + minv)
 	out[27] = T((in[4]>>14)&mask + minv)
 	out[28] = T((in[4]>>24)&mask + minv)
 	out[29] = T((in[4]>>34)&mask + minv)
 	out[30] = T((in[4]>>44)&mask + minv)
 	out[31] = T((in[4]>>54)&mask + minv)
-
-	out[31] = out[31] + T((in[5]<<10)&mask)
-
 	out[32] = T((in[5]>>0)&mask + minv)
 	out[33] = T((in[5]>>10)&mask + minv)
 	out[34] = T((in[5]>>20)&mask + minv)
 	out[35] = T((in[5]>>30)&mask + minv)
 	out[36] = T((in[5]>>40)&mask + minv)
 	out[37] = T((in[5]>>50)&mask + minv)
-	out[38] = T((in[5]>>60)&mask + minv)
-
-	out[38] = out[38] + T((in[6]<<4)&mask)
-
+	out[38] = T((in[5]>>60)&mask |
+		(in[6]<<4)&mask + minv)
 	out[39] = T((in[6]>>6)&mask + minv)
 	out[40] = T((in[6]>>16)&mask + minv)
 	out[41] = T((in[6]>>26)&mask + minv)
 	out[42] = T((in[6]>>36)&mask + minv)
 	out[43] = T((in[6]>>46)&mask + minv)
-	out[44] = T((in[6]>>56)&mask + minv)
-
-	out[44] = out[44] + T((in[7]<<8)&mask)
-
+	out[44] = T((in[6]>>56)&mask |
+		(in[7]<<8)&mask + minv)
 	out[45] = T((in[7]>>2)&mask + minv)
 	out[46] = T((in[7]>>12)&mask + minv)
 	out[47] = T((in[7]>>22)&mask + minv)
 	out[48] = T((in[7]>>32)&mask + minv)
 	out[49] = T((in[7]>>42)&mask + minv)
 	out[50] = T((in[7]>>52)&mask + minv)
-	out[51] = T((in[7]>>62)&mask + minv)
-
-	out[51] = out[51] + T((in[8]<<2)&mask)
-
+	out[51] = T((in[7]>>62)&mask |
+		(in[8]<<2)&mask + minv)
 	out[52] = T((in[8]>>8)&mask + minv)
 	out[53] = T((in[8]>>18)&mask + minv)
 	out[54] = T((in[8]>>28)&mask + minv)
 	out[55] = T((in[8]>>38)&mask + minv)
 	out[56] = T((in[8]>>48)&mask + minv)
-	out[57] = T((in[8]>>58)&mask + minv)
-
-	out[57] = out[57] + T((in[9]<<6)&mask)
-
+	out[57] = T((in[8]>>58)&mask |
+		(in[9]<<6)&mask + minv)
 	out[58] = T((in[9]>>4)&mask + minv)
 	out[59] = T((in[9]>>14)&mask + minv)
 	out[60] = T((in[9]>>24)&mask + minv)
@@ -4863,90 +4785,70 @@ func br32_11[T uint32 | int32](out *[64]T, in *[11]uint64, minv uint64) {
 	out[2] = T((in[0]>>22)&mask + minv)
 	out[3] = T((in[0]>>33)&mask + minv)
 	out[4] = T((in[0]>>44)&mask + minv)
-	out[5] = T((in[0]>>55)&mask + minv)
-
-	out[5] = out[5] + T((in[1]<<9)&mask)
-
+	out[5] = T((in[0]>>55)&mask |
+		(in[1]<<9)&mask + minv)
 	out[6] = T((in[1]>>2)&mask + minv)
 	out[7] = T((in[1]>>13)&mask + minv)
 	out[8] = T((in[1]>>24)&mask + minv)
 	out[9] = T((in[1]>>35)&mask + minv)
 	out[10] = T((in[1]>>46)&mask + minv)
-	out[11] = T((in[1]>>57)&mask + minv)
-
-	out[11] = out[11] + T((in[2]<<7)&mask)
-
+	out[11] = T((in[1]>>57)&mask |
+		(in[2]<<7)&mask + minv)
 	out[12] = T((in[2]>>4)&mask + minv)
 	out[13] = T((in[2]>>15)&mask + minv)
 	out[14] = T((in[2]>>26)&mask + minv)
 	out[15] = T((in[2]>>37)&mask + minv)
 	out[16] = T((in[2]>>48)&mask + minv)
-	out[17] = T((in[2]>>59)&mask + minv)
-
-	out[17] = out[17] + T((in[3]<<5)&mask)
-
+	out[17] = T((in[2]>>59)&mask |
+		(in[3]<<5)&mask + minv)
 	out[18] = T((in[3]>>6)&mask + minv)
 	out[19] = T((in[3]>>17)&mask + minv)
 	out[20] = T((in[3]>>28)&mask + minv)
 	out[21] = T((in[3]>>39)&mask + minv)
 	out[22] = T((in[3]>>50)&mask + minv)
-	out[23] = T((in[3]>>61)&mask + minv)
-
-	out[23] = out[23] + T((in[4]<<3)&mask)
-
+	out[23] = T((in[3]>>61)&mask |
+		(in[4]<<3)&mask + minv)
 	out[24] = T((in[4]>>8)&mask + minv)
 	out[25] = T((in[4]>>19)&mask + minv)
 	out[26] = T((in[4]>>30)&mask + minv)
 	out[27] = T((in[4]>>41)&mask + minv)
 	out[28] = T((in[4]>>52)&mask + minv)
-	out[29] = T((in[4]>>63)&mask + minv)
-
-	out[29] = out[29] + T((in[5]<<1)&mask)
-
+	out[29] = T((in[4]>>63)&mask |
+		(in[5]<<1)&mask + minv)
 	out[30] = T((in[5]>>10)&mask + minv)
 	out[31] = T((in[5]>>21)&mask + minv)
 	out[32] = T((in[5]>>32)&mask + minv)
 	out[33] = T((in[5]>>43)&mask + minv)
-	out[34] = T((in[5]>>54)&mask + minv)
-
-	out[34] = out[34] + T((in[6]<<10)&mask)
-
+	out[34] = T((in[5]>>54)&mask |
+		(in[6]<<10)&mask + minv)
 	out[35] = T((in[6]>>1)&mask + minv)
 	out[36] = T((in[6]>>12)&mask + minv)
 	out[37] = T((in[6]>>23)&mask + minv)
 	out[38] = T((in[6]>>34)&mask + minv)
 	out[39] = T((in[6]>>45)&mask + minv)
-	out[40] = T((in[6]>>56)&mask + minv)
-
-	out[40] = out[40] + T((in[7]<<8)&mask)
-
+	out[40] = T((in[6]>>56)&mask |
+		(in[7]<<8)&mask + minv)
 	out[41] = T((in[7]>>3)&mask + minv)
 	out[42] = T((in[7]>>14)&mask + minv)
 	out[43] = T((in[7]>>25)&mask + minv)
 	out[44] = T((in[7]>>36)&mask + minv)
 	out[45] = T((in[7]>>47)&mask + minv)
-	out[46] = T((in[7]>>58)&mask + minv)
-
-	out[46] = out[46] + T((in[8]<<6)&mask)
-
+	out[46] = T((in[7]>>58)&mask |
+		(in[8]<<6)&mask + minv)
 	out[47] = T((in[8]>>5)&mask + minv)
 	out[48] = T((in[8]>>16)&mask + minv)
 	out[49] = T((in[8]>>27)&mask + minv)
 	out[50] = T((in[8]>>38)&mask + minv)
 	out[51] = T((in[8]>>49)&mask + minv)
-	out[52] = T((in[8]>>60)&mask + minv)
-
-	out[52] = out[52] + T((in[9]<<4)&mask)
-
+	out[52] = T((in[8]>>60)&mask |
+		(in[9]<<4)&mask + minv)
 	out[53] = T((in[9]>>7)&mask + minv)
 	out[54] = T((in[9]>>18)&mask + minv)
 	out[55] = T((in[9]>>29)&mask + minv)
 	out[56] = T((in[9]>>40)&mask + minv)
 	out[57] = T((in[9]>>51)&mask + minv)
-	out[58] = T((in[9]>>62)&mask + minv)
-
-	out[58] = out[58] + T((in[10]<<2)&mask)
-
+	out[58] = T((in[9]>>62)&mask |
+		(in[10]<<2)&mask + minv)
 	out[59] = T((in[10]>>9)&mask + minv)
 	out[60] = T((in[10]>>20)&mask + minv)
 	out[61] = T((in[10]>>31)&mask + minv)
@@ -4961,93 +4863,68 @@ func br32_12[T uint32 | int32](out *[64]T, in *[12]uint64, minv uint64) {
 	out[2] = T((in[0]>>24)&mask + minv)
 	out[3] = T((in[0]>>36)&mask + minv)
 	out[4] = T((in[0]>>48)&mask + minv)
-	out[5] = T((in[0]>>60)&mask + minv)
-
-	out[5] = out[5] + T((in[1]<<4)&mask)
-
+	out[5] = T((in[0]>>60)&mask |
+		(in[1]<<4)&mask + minv)
 	out[6] = T((in[1]>>8)&mask + minv)
 	out[7] = T((in[1]>>20)&mask + minv)
 	out[8] = T((in[1]>>32)&mask + minv)
 	out[9] = T((in[1]>>44)&mask + minv)
-	out[10] = T((in[1]>>56)&mask + minv)
-
-	out[10] = out[10] + T((in[2]<<8)&mask)
-
+	out[10] = T((in[1]>>56)&mask |
+		(in[2]<<8)&mask + minv)
 	out[11] = T((in[2]>>4)&mask + minv)
 	out[12] = T((in[2]>>16)&mask + minv)
 	out[13] = T((in[2]>>28)&mask + minv)
 	out[14] = T((in[2]>>40)&mask + minv)
 	out[15] = T((in[2]>>52)&mask + minv)
-
-	out[15] = out[15] + T((in[3]<<12)&mask)
-
 	out[16] = T((in[3]>>0)&mask + minv)
 	out[17] = T((in[3]>>12)&mask + minv)
 	out[18] = T((in[3]>>24)&mask + minv)
 	out[19] = T((in[3]>>36)&mask + minv)
 	out[20] = T((in[3]>>48)&mask + minv)
-	out[21] = T((in[3]>>60)&mask + minv)
-
-	out[21] = out[21] + T((in[4]<<4)&mask)
-
+	out[21] = T((in[3]>>60)&mask |
+		(in[4]<<4)&mask + minv)
 	out[22] = T((in[4]>>8)&mask + minv)
 	out[23] = T((in[4]>>20)&mask + minv)
 	out[24] = T((in[4]>>32)&mask + minv)
 	out[25] = T((in[4]>>44)&mask + minv)
-	out[26] = T((in[4]>>56)&mask + minv)
-
-	out[26] = out[26] + T((in[5]<<8)&mask)
-
+	out[26] = T((in[4]>>56)&mask |
+		(in[5]<<8)&mask + minv)
 	out[27] = T((in[5]>>4)&mask + minv)
 	out[28] = T((in[5]>>16)&mask + minv)
 	out[29] = T((in[5]>>28)&mask + minv)
 	out[30] = T((in[5]>>40)&mask + minv)
 	out[31] = T((in[5]>>52)&mask + minv)
-
-	out[31] = out[31] + T((in[6]<<12)&mask)
-
 	out[32] = T((in[6]>>0)&mask + minv)
 	out[33] = T((in[6]>>12)&mask + minv)
 	out[34] = T((in[6]>>24)&mask + minv)
 	out[35] = T((in[6]>>36)&mask + minv)
 	out[36] = T((in[6]>>48)&mask + minv)
-	out[37] = T((in[6]>>60)&mask + minv)
-
-	out[37] = out[37] + T((in[7]<<4)&mask)
-
+	out[37] = T((in[6]>>60)&mask |
+		(in[7]<<4)&mask + minv)
 	out[38] = T((in[7]>>8)&mask + minv)
 	out[39] = T((in[7]>>20)&mask + minv)
 	out[40] = T((in[7]>>32)&mask + minv)
 	out[41] = T((in[7]>>44)&mask + minv)
-	out[42] = T((in[7]>>56)&mask + minv)
-
-	out[42] = out[42] + T((in[8]<<8)&mask)
-
+	out[42] = T((in[7]>>56)&mask |
+		(in[8]<<8)&mask + minv)
 	out[43] = T((in[8]>>4)&mask + minv)
 	out[44] = T((in[8]>>16)&mask + minv)
 	out[45] = T((in[8]>>28)&mask + minv)
 	out[46] = T((in[8]>>40)&mask + minv)
 	out[47] = T((in[8]>>52)&mask + minv)
-
-	out[47] = out[47] + T((in[9]<<12)&mask)
-
 	out[48] = T((in[9]>>0)&mask + minv)
 	out[49] = T((in[9]>>12)&mask + minv)
 	out[50] = T((in[9]>>24)&mask + minv)
 	out[51] = T((in[9]>>36)&mask + minv)
 	out[52] = T((in[9]>>48)&mask + minv)
-	out[53] = T((in[9]>>60)&mask + minv)
-
-	out[53] = out[53] + T((in[10]<<4)&mask)
-
+	out[53] = T((in[9]>>60)&mask |
+		(in[10]<<4)&mask + minv)
 	out[54] = T((in[10]>>8)&mask + minv)
 	out[55] = T((in[10]>>20)&mask + minv)
 	out[56] = T((in[10]>>32)&mask + minv)
 	out[57] = T((in[10]>>44)&mask + minv)
-	out[58] = T((in[10]>>56)&mask + minv)
-
-	out[58] = out[58] + T((in[11]<<8)&mask)
-
+	out[58] = T((in[10]>>56)&mask |
+		(in[11]<<8)&mask + minv)
 	out[59] = T((in[11]>>4)&mask + minv)
 	out[60] = T((in[11]>>16)&mask + minv)
 	out[61] = T((in[11]>>28)&mask + minv)
@@ -5061,98 +4938,74 @@ func br32_13[T uint32 | int32](out *[64]T, in *[13]uint64, minv uint64) {
 	out[1] = T((in[0]>>13)&mask + minv)
 	out[2] = T((in[0]>>26)&mask + minv)
 	out[3] = T((in[0]>>39)&mask + minv)
-	out[4] = T((in[0]>>52)&mask + minv)
-
-	out[4] = out[4] + T((in[1]<<12)&mask)
-
+	out[4] = T((in[0]>>52)&mask |
+		(in[1]<<12)&mask + minv)
 	out[5] = T((in[1]>>1)&mask + minv)
 	out[6] = T((in[1]>>14)&mask + minv)
 	out[7] = T((in[1]>>27)&mask + minv)
 	out[8] = T((in[1]>>40)&mask + minv)
-	out[9] = T((in[1]>>53)&mask + minv)
-
-	out[9] = out[9] + T((in[2]<<11)&mask)
-
+	out[9] = T((in[1]>>53)&mask |
+		(in[2]<<11)&mask + minv)
 	out[10] = T((in[2]>>2)&mask + minv)
 	out[11] = T((in[2]>>15)&mask + minv)
 	out[12] = T((in[2]>>28)&mask + minv)
 	out[13] = T((in[2]>>41)&mask + minv)
-	out[14] = T((in[2]>>54)&mask + minv)
-
-	out[14] = out[14] + T((in[3]<<10)&mask)
-
+	out[14] = T((in[2]>>54)&mask |
+		(in[3]<<10)&mask + minv)
 	out[15] = T((in[3]>>3)&mask + minv)
 	out[16] = T((in[3]>>16)&mask + minv)
 	out[17] = T((in[3]>>29)&mask + minv)
 	out[18] = T((in[3]>>42)&mask + minv)
-	out[19] = T((in[3]>>55)&mask + minv)
-
-	out[19] = out[19] + T((in[4]<<9)&mask)
-
+	out[19] = T((in[3]>>55)&mask |
+		(in[4]<<9)&mask + minv)
 	out[20] = T((in[4]>>4)&mask + minv)
 	out[21] = T((in[4]>>17)&mask + minv)
 	out[22] = T((in[4]>>30)&mask + minv)
 	out[23] = T((in[4]>>43)&mask + minv)
-	out[24] = T((in[4]>>56)&mask + minv)
-
-	out[24] = out[24] + T((in[5]<<8)&mask)
-
+	out[24] = T((in[4]>>56)&mask |
+		(in[5]<<8)&mask + minv)
 	out[25] = T((in[5]>>5)&mask + minv)
 	out[26] = T((in[5]>>18)&mask + minv)
 	out[27] = T((in[5]>>31)&mask + minv)
 	out[28] = T((in[5]>>44)&mask + minv)
-	out[29] = T((in[5]>>57)&mask + minv)
-
-	out[29] = out[29] + T((in[6]<<7)&mask)
-
+	out[29] = T((in[5]>>57)&mask |
+		(in[6]<<7)&mask + minv)
 	out[30] = T((in[6]>>6)&mask + minv)
 	out[31] = T((in[6]>>19)&mask + minv)
 	out[32] = T((in[6]>>32)&mask + minv)
 	out[33] = T((in[6]>>45)&mask + minv)
-	out[34] = T((in[6]>>58)&mask + minv)
-
-	out[34] = out[34] + T((in[7]<<6)&mask)
-
+	out[34] = T((in[6]>>58)&mask |
+		(in[7]<<6)&mask + minv)
 	out[35] = T((in[7]>>7)&mask + minv)
 	out[36] = T((in[7]>>20)&mask + minv)
 	out[37] = T((in[7]>>33)&mask + minv)
 	out[38] = T((in[7]>>46)&mask + minv)
-	out[39] = T((in[7]>>59)&mask + minv)
-
-	out[39] = out[39] + T((in[8]<<5)&mask)
-
+	out[39] = T((in[7]>>59)&mask |
+		(in[8]<<5)&mask + minv)
 	out[40] = T((in[8]>>8)&mask + minv)
 	out[41] = T((in[8]>>21)&mask + minv)
 	out[42] = T((in[8]>>34)&mask + minv)
 	out[43] = T((in[8]>>47)&mask + minv)
-	out[44] = T((in[8]>>60)&mask + minv)
-
-	out[44] = out[44] + T((in[9]<<4)&mask)
-
+	out[44] = T((in[8]>>60)&mask |
+		(in[9]<<4)&mask + minv)
 	out[45] = T((in[9]>>9)&mask + minv)
 	out[46] = T((in[9]>>22)&mask + minv)
 	out[47] = T((in[9]>>35)&mask + minv)
 	out[48] = T((in[9]>>48)&mask + minv)
-	out[49] = T((in[9]>>61)&mask + minv)
-
-	out[49] = out[49] + T((in[10]<<3)&mask)
-
+	out[49] = T((in[9]>>61)&mask |
+		(in[10]<<3)&mask + minv)
 	out[50] = T((in[10]>>10)&mask + minv)
 	out[51] = T((in[10]>>23)&mask + minv)
 	out[52] = T((in[10]>>36)&mask + minv)
 	out[53] = T((in[10]>>49)&mask + minv)
-	out[54] = T((in[10]>>62)&mask + minv)
-
-	out[54] = out[54] + T((in[11]<<2)&mask)
-
+	out[54] = T((in[10]>>62)&mask |
+		(in[11]<<2)&mask + minv)
 	out[55] = T((in[11]>>11)&mask + minv)
 	out[56] = T((in[11]>>24)&mask + minv)
 	out[57] = T((in[11]>>37)&mask + minv)
 	out[58] = T((in[11]>>50)&mask + minv)
-	out[59] = T((in[11]>>63)&mask + minv)
-
-	out[59] = out[59] + T((in[12]<<1)&mask)
-
+	out[59] = T((in[11]>>63)&mask |
+		(in[12]<<1)&mask + minv)
 	out[60] = T((in[12]>>12)&mask + minv)
 	out[61] = T((in[12]>>25)&mask + minv)
 	out[62] = T((in[12]>>38)&mask + minv)
@@ -5165,101 +5018,74 @@ func br32_14[T uint32 | int32](out *[64]T, in *[14]uint64, minv uint64) {
 	out[1] = T((in[0]>>14)&mask + minv)
 	out[2] = T((in[0]>>28)&mask + minv)
 	out[3] = T((in[0]>>42)&mask + minv)
-	out[4] = T((in[0]>>56)&mask + minv)
-
-	out[4] = out[4] + T((in[1]<<8)&mask)
-
+	out[4] = T((in[0]>>56)&mask |
+		(in[1]<<8)&mask + minv)
 	out[5] = T((in[1]>>6)&mask + minv)
 	out[6] = T((in[1]>>20)&mask + minv)
 	out[7] = T((in[1]>>34)&mask + minv)
 	out[8] = T((in[1]>>48)&mask + minv)
-	out[9] = T((in[1]>>62)&mask + minv)
-
-	out[9] = out[9] + T((in[2]<<2)&mask)
-
+	out[9] = T((in[1]>>62)&mask |
+		(in[2]<<2)&mask + minv)
 	out[10] = T((in[2]>>12)&mask + minv)
 	out[11] = T((in[2]>>26)&mask + minv)
 	out[12] = T((in[2]>>40)&mask + minv)
-	out[13] = T((in[2]>>54)&mask + minv)
-
-	out[13] = out[13] + T((in[3]<<10)&mask)
-
+	out[13] = T((in[2]>>54)&mask |
+		(in[3]<<10)&mask + minv)
 	out[14] = T((in[3]>>4)&mask + minv)
 	out[15] = T((in[3]>>18)&mask + minv)
 	out[16] = T((in[3]>>32)&mask + minv)
 	out[17] = T((in[3]>>46)&mask + minv)
-	out[18] = T((in[3]>>60)&mask + minv)
-
-	out[18] = out[18] + T((in[4]<<4)&mask)
-
+	out[18] = T((in[3]>>60)&mask |
+		(in[4]<<4)&mask + minv)
 	out[19] = T((in[4]>>10)&mask + minv)
 	out[20] = T((in[4]>>24)&mask + minv)
 	out[21] = T((in[4]>>38)&mask + minv)
-	out[22] = T((in[4]>>52)&mask + minv)
-
-	out[22] = out[22] + T((in[5]<<12)&mask)
-
+	out[22] = T((in[4]>>52)&mask |
+		(in[5]<<12)&mask + minv)
 	out[23] = T((in[5]>>2)&mask + minv)
 	out[24] = T((in[5]>>16)&mask + minv)
 	out[25] = T((in[5]>>30)&mask + minv)
 	out[26] = T((in[5]>>44)&mask + minv)
-	out[27] = T((in[5]>>58)&mask + minv)
-
-	out[27] = out[27] + T((in[6]<<6)&mask)
-
+	out[27] = T((in[5]>>58)&mask |
+		(in[6]<<6)&mask + minv)
 	out[28] = T((in[6]>>8)&mask + minv)
 	out[29] = T((in[6]>>22)&mask + minv)
 	out[30] = T((in[6]>>36)&mask + minv)
 	out[31] = T((in[6]>>50)&mask + minv)
-
-	out[31] = out[31] + T((in[7]<<14)&mask)
-
 	out[32] = T((in[7]>>0)&mask + minv)
 	out[33] = T((in[7]>>14)&mask + minv)
 	out[34] = T((in[7]>>28)&mask + minv)
 	out[35] = T((in[7]>>42)&mask + minv)
-	out[36] = T((in[7]>>56)&mask + minv)
-
-	out[36] = out[36] + T((in[8]<<8)&mask)
-
+	out[36] = T((in[7]>>56)&mask |
+		(in[8]<<8)&mask + minv)
 	out[37] = T((in[8]>>6)&mask + minv)
 	out[38] = T((in[8]>>20)&mask + minv)
 	out[39] = T((in[8]>>34)&mask + minv)
 	out[40] = T((in[8]>>48)&mask + minv)
-	out[41] = T((in[8]>>62)&mask + minv)
-
-	out[41] = out[41] + T((in[9]<<2)&mask)
-
+	out[41] = T((in[8]>>62)&mask |
+		(in[9]<<2)&mask + minv)
 	out[42] = T((in[9]>>12)&mask + minv)
 	out[43] = T((in[9]>>26)&mask + minv)
 	out[44] = T((in[9]>>40)&mask + minv)
-	out[45] = T((in[9]>>54)&mask + minv)
-
-	out[45] = out[45] + T((in[10]<<10)&mask)
-
+	out[45] = T((in[9]>>54)&mask |
+		(in[10]<<10)&mask + minv)
 	out[46] = T((in[10]>>4)&mask + minv)
 	out[47] = T((in[10]>>18)&mask + minv)
 	out[48] = T((in[10]>>32)&mask + minv)
 	out[49] = T((in[10]>>46)&mask + minv)
-	out[50] = T((in[10]>>60)&mask + minv)
-
-	out[50] = out[50] + T((in[11]<<4)&mask)
-
+	out[50] = T((in[10]>>60)&mask |
+		(in[11]<<4)&mask + minv)
 	out[51] = T((in[11]>>10)&mask + minv)
 	out[52] = T((in[11]>>24)&mask + minv)
 	out[53] = T((in[11]>>38)&mask + minv)
-	out[54] = T((in[11]>>52)&mask + minv)
-
-	out[54] = out[54] + T((in[12]<<12)&mask)
-
+	out[54] = T((in[11]>>52)&mask |
+		(in[12]<<12)&mask + minv)
 	out[55] = T((in[12]>>2)&mask + minv)
 	out[56] = T((in[12]>>16)&mask + minv)
 	out[57] = T((in[12]>>30)&mask + minv)
 	out[58] = T((in[12]>>44)&mask + minv)
-	out[59] = T((in[12]>>58)&mask + minv)
-
-	out[59] = out[59] + T((in[13]<<6)&mask)
-
+	out[59] = T((in[12]>>58)&mask |
+		(in[13]<<6)&mask + minv)
 	out[60] = T((in[13]>>8)&mask + minv)
 	out[61] = T((in[13]>>22)&mask + minv)
 	out[62] = T((in[13]>>36)&mask + minv)
@@ -5272,104 +5098,76 @@ func br32_15[T uint32 | int32](out *[64]T, in *[15]uint64, minv uint64) {
 	out[1] = T((in[0]>>15)&mask + minv)
 	out[2] = T((in[0]>>30)&mask + minv)
 	out[3] = T((in[0]>>45)&mask + minv)
-	out[4] = T((in[0]>>60)&mask + minv)
-
-	out[4] = out[4] + T((in[1]<<4)&mask)
-
+	out[4] = T((in[0]>>60)&mask |
+		(in[1]<<4)&mask + minv)
 	out[5] = T((in[1]>>11)&mask + minv)
 	out[6] = T((in[1]>>26)&mask + minv)
 	out[7] = T((in[1]>>41)&mask + minv)
-	out[8] = T((in[1]>>56)&mask + minv)
-
-	out[8] = out[8] + T((in[2]<<8)&mask)
-
+	out[8] = T((in[1]>>56)&mask |
+		(in[2]<<8)&mask + minv)
 	out[9] = T((in[2]>>7)&mask + minv)
 	out[10] = T((in[2]>>22)&mask + minv)
 	out[11] = T((in[2]>>37)&mask + minv)
-	out[12] = T((in[2]>>52)&mask + minv)
-
-	out[12] = out[12] + T((in[3]<<12)&mask)
-
+	out[12] = T((in[2]>>52)&mask |
+		(in[3]<<12)&mask + minv)
 	out[13] = T((in[3]>>3)&mask + minv)
 	out[14] = T((in[3]>>18)&mask + minv)
 	out[15] = T((in[3]>>33)&mask + minv)
 	out[16] = T((in[3]>>48)&mask + minv)
-	out[17] = T((in[3]>>63)&mask + minv)
-
-	out[17] = out[17] + T((in[4]<<1)&mask)
-
+	out[17] = T((in[3]>>63)&mask |
+		(in[4]<<1)&mask + minv)
 	out[18] = T((in[4]>>14)&mask + minv)
 	out[19] = T((in[4]>>29)&mask + minv)
 	out[20] = T((in[4]>>44)&mask + minv)
-	out[21] = T((in[4]>>59)&mask + minv)
-
-	out[21] = out[21] + T((in[5]<<5)&mask)
-
+	out[21] = T((in[4]>>59)&mask |
+		(in[5]<<5)&mask + minv)
 	out[22] = T((in[5]>>10)&mask + minv)
 	out[23] = T((in[5]>>25)&mask + minv)
 	out[24] = T((in[5]>>40)&mask + minv)
-	out[25] = T((in[5]>>55)&mask + minv)
-
-	out[25] = out[25] + T((in[6]<<9)&mask)
-
+	out[25] = T((in[5]>>55)&mask |
+		(in[6]<<9)&mask + minv)
 	out[26] = T((in[6]>>6)&mask + minv)
 	out[27] = T((in[6]>>21)&mask + minv)
 	out[28] = T((in[6]>>36)&mask + minv)
-	out[29] = T((in[6]>>51)&mask + minv)
-
-	out[29] = out[29] + T((in[7]<<13)&mask)
-
+	out[29] = T((in[6]>>51)&mask |
+		(in[7]<<13)&mask + minv)
 	out[30] = T((in[7]>>2)&mask + minv)
 	out[31] = T((in[7]>>17)&mask + minv)
 	out[32] = T((in[7]>>32)&mask + minv)
 	out[33] = T((in[7]>>47)&mask + minv)
-	out[34] = T((in[7]>>62)&mask + minv)
-
-	out[34] = out[34] + T((in[8]<<2)&mask)
-
+	out[34] = T((in[7]>>62)&mask |
+		(in[8]<<2)&mask + minv)
 	out[35] = T((in[8]>>13)&mask + minv)
 	out[36] = T((in[8]>>28)&mask + minv)
 	out[37] = T((in[8]>>43)&mask + minv)
-	out[38] = T((in[8]>>58)&mask + minv)
-
-	out[38] = out[38] + T((in[9]<<6)&mask)
-
+	out[38] = T((in[8]>>58)&mask |
+		(in[9]<<6)&mask + minv)
 	out[39] = T((in[9]>>9)&mask + minv)
 	out[40] = T((in[9]>>24)&mask + minv)
 	out[41] = T((in[9]>>39)&mask + minv)
-	out[42] = T((in[9]>>54)&mask + minv)
-
-	out[42] = out[42] + T((in[10]<<10)&mask)
-
+	out[42] = T((in[9]>>54)&mask |
+		(in[10]<<10)&mask + minv)
 	out[43] = T((in[10]>>5)&mask + minv)
 	out[44] = T((in[10]>>20)&mask + minv)
 	out[45] = T((in[10]>>35)&mask + minv)
-	out[46] = T((in[10]>>50)&mask + minv)
-
-	out[46] = out[46] + T((in[11]<<14)&mask)
-
+	out[46] = T((in[10]>>50)&mask |
+		(in[11]<<14)&mask + minv)
 	out[47] = T((in[11]>>1)&mask + minv)
 	out[48] = T((in[11]>>16)&mask + minv)
 	out[49] = T((in[11]>>31)&mask + minv)
 	out[50] = T((in[11]>>46)&mask + minv)
-	out[51] = T((in[11]>>61)&mask + minv)
-
-	out[51] = out[51] + T((in[12]<<3)&mask)
-
+	out[51] = T((in[11]>>61)&mask |
+		(in[12]<<3)&mask + minv)
 	out[52] = T((in[12]>>12)&mask + minv)
 	out[53] = T((in[12]>>27)&mask + minv)
 	out[54] = T((in[12]>>42)&mask + minv)
-	out[55] = T((in[12]>>57)&mask + minv)
-
-	out[55] = out[55] + T((in[13]<<7)&mask)
-
+	out[55] = T((in[12]>>57)&mask |
+		(in[13]<<7)&mask + minv)
 	out[56] = T((in[13]>>8)&mask + minv)
 	out[57] = T((in[13]>>23)&mask + minv)
 	out[58] = T((in[13]>>38)&mask + minv)
-	out[59] = T((in[13]>>53)&mask + minv)
-
-	out[59] = out[59] + T((in[14]<<11)&mask)
-
+	out[59] = T((in[13]>>53)&mask |
+		(in[14]<<11)&mask + minv)
 	out[60] = T((in[14]>>4)&mask + minv)
 	out[61] = T((in[14]>>19)&mask + minv)
 	out[62] = T((in[14]>>34)&mask + minv)
@@ -5382,77 +5180,62 @@ func br32_16[T uint32 | int32](out *[64]T, in *[16]uint64, minv uint64) {
 	out[1] = T((in[0]>>16)&mask + minv)
 	out[2] = T((in[0]>>32)&mask + minv)
 	out[3] = T((in[0]>>48)&mask + minv)
-
 	out[4] = T((in[1]>>0)&mask + minv)
 	out[5] = T((in[1]>>16)&mask + minv)
 	out[6] = T((in[1]>>32)&mask + minv)
 	out[7] = T((in[1]>>48)&mask + minv)
-
 	out[8] = T((in[2]>>0)&mask + minv)
 	out[9] = T((in[2]>>16)&mask + minv)
 	out[10] = T((in[2]>>32)&mask + minv)
 	out[11] = T((in[2]>>48)&mask + minv)
-
 	out[12] = T((in[3]>>0)&mask + minv)
 	out[13] = T((in[3]>>16)&mask + minv)
 	out[14] = T((in[3]>>32)&mask + minv)
 	out[15] = T((in[3]>>48)&mask + minv)
-
 	out[16] = T((in[4]>>0)&mask + minv)
 	out[17] = T((in[4]>>16)&mask + minv)
 	out[18] = T((in[4]>>32)&mask + minv)
 	out[19] = T((in[4]>>48)&mask + minv)
-
 	out[20] = T((in[5]>>0)&mask + minv)
 	out[21] = T((in[5]>>16)&mask + minv)
 	out[22] = T((in[5]>>32)&mask + minv)
 	out[23] = T((in[5]>>48)&mask + minv)
-
 	out[24] = T((in[6]>>0)&mask + minv)
 	out[25] = T((in[6]>>16)&mask + minv)
 	out[26] = T((in[6]>>32)&mask + minv)
 	out[27] = T((in[6]>>48)&mask + minv)
-
 	out[28] = T((in[7]>>0)&mask + minv)
 	out[29] = T((in[7]>>16)&mask + minv)
 	out[30] = T((in[7]>>32)&mask + minv)
 	out[31] = T((in[7]>>48)&mask + minv)
-
 	out[32] = T((in[8]>>0)&mask + minv)
 	out[33] = T((in[8]>>16)&mask + minv)
 	out[34] = T((in[8]>>32)&mask + minv)
 	out[35] = T((in[8]>>48)&mask + minv)
-
 	out[36] = T((in[9]>>0)&mask + minv)
 	out[37] = T((in[9]>>16)&mask + minv)
 	out[38] = T((in[9]>>32)&mask + minv)
 	out[39] = T((in[9]>>48)&mask + minv)
-
 	out[40] = T((in[10]>>0)&mask + minv)
 	out[41] = T((in[10]>>16)&mask + minv)
 	out[42] = T((in[10]>>32)&mask + minv)
 	out[43] = T((in[10]>>48)&mask + minv)
-
 	out[44] = T((in[11]>>0)&mask + minv)
 	out[45] = T((in[11]>>16)&mask + minv)
 	out[46] = T((in[11]>>32)&mask + minv)
 	out[47] = T((in[11]>>48)&mask + minv)
-
 	out[48] = T((in[12]>>0)&mask + minv)
 	out[49] = T((in[12]>>16)&mask + minv)
 	out[50] = T((in[12]>>32)&mask + minv)
 	out[51] = T((in[12]>>48)&mask + minv)
-
 	out[52] = T((in[13]>>0)&mask + minv)
 	out[53] = T((in[13]>>16)&mask + minv)
 	out[54] = T((in[13]>>32)&mask + minv)
 	out[55] = T((in[13]>>48)&mask + minv)
-
 	out[56] = T((in[14]>>0)&mask + minv)
 	out[57] = T((in[14]>>16)&mask + minv)
 	out[58] = T((in[14]>>32)&mask + minv)
 	out[59] = T((in[14]>>48)&mask + minv)
-
 	out[60] = T((in[15]>>0)&mask + minv)
 	out[61] = T((in[15]>>16)&mask + minv)
 	out[62] = T((in[15]>>32)&mask + minv)
@@ -5464,112 +5247,80 @@ func br32_17[T uint32 | int32](out *[64]T, in *[17]uint64, minv uint64) {
 	out[0] = T((in[0]>>0)&mask + minv)
 	out[1] = T((in[0]>>17)&mask + minv)
 	out[2] = T((in[0]>>34)&mask + minv)
-	out[3] = T((in[0]>>51)&mask + minv)
-
-	out[3] = out[3] + T((in[1]<<13)&mask)
-
+	out[3] = T((in[0]>>51)&mask |
+		(in[1]<<13)&mask + minv)
 	out[4] = T((in[1]>>4)&mask + minv)
 	out[5] = T((in[1]>>21)&mask + minv)
 	out[6] = T((in[1]>>38)&mask + minv)
-	out[7] = T((in[1]>>55)&mask + minv)
-
-	out[7] = out[7] + T((in[2]<<9)&mask)
-
+	out[7] = T((in[1]>>55)&mask |
+		(in[2]<<9)&mask + minv)
 	out[8] = T((in[2]>>8)&mask + minv)
 	out[9] = T((in[2]>>25)&mask + minv)
 	out[10] = T((in[2]>>42)&mask + minv)
-	out[11] = T((in[2]>>59)&mask + minv)
-
-	out[11] = out[11] + T((in[3]<<5)&mask)
-
+	out[11] = T((in[2]>>59)&mask |
+		(in[3]<<5)&mask + minv)
 	out[12] = T((in[3]>>12)&mask + minv)
 	out[13] = T((in[3]>>29)&mask + minv)
 	out[14] = T((in[3]>>46)&mask + minv)
-	out[15] = T((in[3]>>63)&mask + minv)
-
-	out[15] = out[15] + T((in[4]<<1)&mask)
-
+	out[15] = T((in[3]>>63)&mask |
+		(in[4]<<1)&mask + minv)
 	out[16] = T((in[4]>>16)&mask + minv)
 	out[17] = T((in[4]>>33)&mask + minv)
-	out[18] = T((in[4]>>50)&mask + minv)
-
-	out[18] = out[18] + T((in[5]<<14)&mask)
-
+	out[18] = T((in[4]>>50)&mask |
+		(in[5]<<14)&mask + minv)
 	out[19] = T((in[5]>>3)&mask + minv)
 	out[20] = T((in[5]>>20)&mask + minv)
 	out[21] = T((in[5]>>37)&mask + minv)
-	out[22] = T((in[5]>>54)&mask + minv)
-
-	out[22] = out[22] + T((in[6]<<10)&mask)
-
+	out[22] = T((in[5]>>54)&mask |
+		(in[6]<<10)&mask + minv)
 	out[23] = T((in[6]>>7)&mask + minv)
 	out[24] = T((in[6]>>24)&mask + minv)
 	out[25] = T((in[6]>>41)&mask + minv)
-	out[26] = T((in[6]>>58)&mask + minv)
-
-	out[26] = out[26] + T((in[7]<<6)&mask)
-
+	out[26] = T((in[6]>>58)&mask |
+		(in[7]<<6)&mask + minv)
 	out[27] = T((in[7]>>11)&mask + minv)
 	out[28] = T((in[7]>>28)&mask + minv)
 	out[29] = T((in[7]>>45)&mask + minv)
-	out[30] = T((in[7]>>62)&mask + minv)
-
-	out[30] = out[30] + T((in[8]<<2)&mask)
-
+	out[30] = T((in[7]>>62)&mask |
+		(in[8]<<2)&mask + minv)
 	out[31] = T((in[8]>>15)&mask + minv)
 	out[32] = T((in[8]>>32)&mask + minv)
-	out[33] = T((in[8]>>49)&mask + minv)
-
-	out[33] = out[33] + T((in[9]<<15)&mask)
-
+	out[33] = T((in[8]>>49)&mask |
+		(in[9]<<15)&mask + minv)
 	out[34] = T((in[9]>>2)&mask + minv)
 	out[35] = T((in[9]>>19)&mask + minv)
 	out[36] = T((in[9]>>36)&mask + minv)
-	out[37] = T((in[9]>>53)&mask + minv)
-
-	out[37] = out[37] + T((in[10]<<11)&mask)
-
+	out[37] = T((in[9]>>53)&mask |
+		(in[10]<<11)&mask + minv)
 	out[38] = T((in[10]>>6)&mask + minv)
 	out[39] = T((in[10]>>23)&mask + minv)
 	out[40] = T((in[10]>>40)&mask + minv)
-	out[41] = T((in[10]>>57)&mask + minv)
-
-	out[41] = out[41] + T((in[11]<<7)&mask)
-
+	out[41] = T((in[10]>>57)&mask |
+		(in[11]<<7)&mask + minv)
 	out[42] = T((in[11]>>10)&mask + minv)
 	out[43] = T((in[11]>>27)&mask + minv)
 	out[44] = T((in[11]>>44)&mask + minv)
-	out[45] = T((in[11]>>61)&mask + minv)
-
-	out[45] = out[45] + T((in[12]<<3)&mask)
-
+	out[45] = T((in[11]>>61)&mask |
+		(in[12]<<3)&mask + minv)
 	out[46] = T((in[12]>>14)&mask + minv)
 	out[47] = T((in[12]>>31)&mask + minv)
-	out[48] = T((in[12]>>48)&mask + minv)
-
-	out[48] = out[48] + T((in[13]<<16)&mask)
-
+	out[48] = T((in[12]>>48)&mask |
+		(in[13]<<16)&mask + minv)
 	out[49] = T((in[13]>>1)&mask + minv)
 	out[50] = T((in[13]>>18)&mask + minv)
 	out[51] = T((in[13]>>35)&mask + minv)
-	out[52] = T((in[13]>>52)&mask + minv)
-
-	out[52] = out[52] + T((in[14]<<12)&mask)
-
+	out[52] = T((in[13]>>52)&mask |
+		(in[14]<<12)&mask + minv)
 	out[53] = T((in[14]>>5)&mask + minv)
 	out[54] = T((in[14]>>22)&mask + minv)
 	out[55] = T((in[14]>>39)&mask + minv)
-	out[56] = T((in[14]>>56)&mask + minv)
-
-	out[56] = out[56] + T((in[15]<<8)&mask)
-
+	out[56] = T((in[14]>>56)&mask |
+		(in[15]<<8)&mask + minv)
 	out[57] = T((in[15]>>9)&mask + minv)
 	out[58] = T((in[15]>>26)&mask + minv)
 	out[59] = T((in[15]>>43)&mask + minv)
-	out[60] = T((in[15]>>60)&mask + minv)
-
-	out[60] = out[60] + T((in[16]<<4)&mask)
-
+	out[60] = T((in[15]>>60)&mask |
+		(in[16]<<4)&mask + minv)
 	out[61] = T((in[16]>>13)&mask + minv)
 	out[62] = T((in[16]>>30)&mask + minv)
 	out[63] = T((in[16]>>47)&mask + minv)
@@ -5580,115 +5331,80 @@ func br32_18[T uint32 | int32](out *[64]T, in *[18]uint64, minv uint64) {
 	out[0] = T((in[0]>>0)&mask + minv)
 	out[1] = T((in[0]>>18)&mask + minv)
 	out[2] = T((in[0]>>36)&mask + minv)
-	out[3] = T((in[0]>>54)&mask + minv)
-
-	out[3] = out[3] + T((in[1]<<10)&mask)
-
+	out[3] = T((in[0]>>54)&mask |
+		(in[1]<<10)&mask + minv)
 	out[4] = T((in[1]>>8)&mask + minv)
 	out[5] = T((in[1]>>26)&mask + minv)
 	out[6] = T((in[1]>>44)&mask + minv)
-	out[7] = T((in[1]>>62)&mask + minv)
-
-	out[7] = out[7] + T((in[2]<<2)&mask)
-
+	out[7] = T((in[1]>>62)&mask |
+		(in[2]<<2)&mask + minv)
 	out[8] = T((in[2]>>16)&mask + minv)
 	out[9] = T((in[2]>>34)&mask + minv)
-	out[10] = T((in[2]>>52)&mask + minv)
-
-	out[10] = out[10] + T((in[3]<<12)&mask)
-
+	out[10] = T((in[2]>>52)&mask |
+		(in[3]<<12)&mask + minv)
 	out[11] = T((in[3]>>6)&mask + minv)
 	out[12] = T((in[3]>>24)&mask + minv)
 	out[13] = T((in[3]>>42)&mask + minv)
-	out[14] = T((in[3]>>60)&mask + minv)
-
-	out[14] = out[14] + T((in[4]<<4)&mask)
-
+	out[14] = T((in[3]>>60)&mask |
+		(in[4]<<4)&mask + minv)
 	out[15] = T((in[4]>>14)&mask + minv)
 	out[16] = T((in[4]>>32)&mask + minv)
-	out[17] = T((in[4]>>50)&mask + minv)
-
-	out[17] = out[17] + T((in[5]<<14)&mask)
-
+	out[17] = T((in[4]>>50)&mask |
+		(in[5]<<14)&mask + minv)
 	out[18] = T((in[5]>>4)&mask + minv)
 	out[19] = T((in[5]>>22)&mask + minv)
 	out[20] = T((in[5]>>40)&mask + minv)
-	out[21] = T((in[5]>>58)&mask + minv)
-
-	out[21] = out[21] + T((in[6]<<6)&mask)
-
+	out[21] = T((in[5]>>58)&mask |
+		(in[6]<<6)&mask + minv)
 	out[22] = T((in[6]>>12)&mask + minv)
 	out[23] = T((in[6]>>30)&mask + minv)
-	out[24] = T((in[6]>>48)&mask + minv)
-
-	out[24] = out[24] + T((in[7]<<16)&mask)
-
+	out[24] = T((in[6]>>48)&mask |
+		(in[7]<<16)&mask + minv)
 	out[25] = T((in[7]>>2)&mask + minv)
 	out[26] = T((in[7]>>20)&mask + minv)
 	out[27] = T((in[7]>>38)&mask + minv)
-	out[28] = T((in[7]>>56)&mask + minv)
-
-	out[28] = out[28] + T((in[8]<<8)&mask)
-
+	out[28] = T((in[7]>>56)&mask |
+		(in[8]<<8)&mask + minv)
 	out[29] = T((in[8]>>10)&mask + minv)
 	out[30] = T((in[8]>>28)&mask + minv)
 	out[31] = T((in[8]>>46)&mask + minv)
-
-	out[31] = out[31] + T((in[9]<<18)&mask)
-
 	out[32] = T((in[9]>>0)&mask + minv)
 	out[33] = T((in[9]>>18)&mask + minv)
 	out[34] = T((in[9]>>36)&mask + minv)
-	out[35] = T((in[9]>>54)&mask + minv)
-
-	out[35] = out[35] + T((in[10]<<10)&mask)
-
+	out[35] = T((in[9]>>54)&mask |
+		(in[10]<<10)&mask + minv)
 	out[36] = T((in[10]>>8)&mask + minv)
 	out[37] = T((in[10]>>26)&mask + minv)
 	out[38] = T((in[10]>>44)&mask + minv)
-	out[39] = T((in[10]>>62)&mask + minv)
-
-	out[39] = out[39] + T((in[11]<<2)&mask)
-
+	out[39] = T((in[10]>>62)&mask |
+		(in[11]<<2)&mask + minv)
 	out[40] = T((in[11]>>16)&mask + minv)
 	out[41] = T((in[11]>>34)&mask + minv)
-	out[42] = T((in[11]>>52)&mask + minv)
-
-	out[42] = out[42] + T((in[12]<<12)&mask)
-
+	out[42] = T((in[11]>>52)&mask |
+		(in[12]<<12)&mask + minv)
 	out[43] = T((in[12]>>6)&mask + minv)
 	out[44] = T((in[12]>>24)&mask + minv)
 	out[45] = T((in[12]>>42)&mask + minv)
-	out[46] = T((in[12]>>60)&mask + minv)
-
-	out[46] = out[46] + T((in[13]<<4)&mask)
-
+	out[46] = T((in[12]>>60)&mask |
+		(in[13]<<4)&mask + minv)
 	out[47] = T((in[13]>>14)&mask + minv)
 	out[48] = T((in[13]>>32)&mask + minv)
-	out[49] = T((in[13]>>50)&mask + minv)
-
-	out[49] = out[49] + T((in[14]<<14)&mask)
-
+	out[49] = T((in[13]>>50)&mask |
+		(in[14]<<14)&mask + minv)
 	out[50] = T((in[14]>>4)&mask + minv)
 	out[51] = T((in[14]>>22)&mask + minv)
 	out[52] = T((in[14]>>40)&mask + minv)
-	out[53] = T((in[14]>>58)&mask + minv)
-
-	out[53] = out[53] + T((in[15]<<6)&mask)
-
+	out[53] = T((in[14]>>58)&mask |
+		(in[15]<<6)&mask + minv)
 	out[54] = T((in[15]>>12)&mask + minv)
 	out[55] = T((in[15]>>30)&mask + minv)
-	out[56] = T((in[15]>>48)&mask + minv)
-
-	out[56] = out[56] + T((in[16]<<16)&mask)
-
+	out[56] = T((in[15]>>48)&mask |
+		(in[16]<<16)&mask + minv)
 	out[57] = T((in[16]>>2)&mask + minv)
 	out[58] = T((in[16]>>20)&mask + minv)
 	out[59] = T((in[16]>>38)&mask + minv)
-	out[60] = T((in[16]>>56)&mask + minv)
-
-	out[60] = out[60] + T((in[17]<<8)&mask)
-
+	out[60] = T((in[16]>>56)&mask |
+		(in[17]<<8)&mask + minv)
 	out[61] = T((in[17]>>10)&mask + minv)
 	out[62] = T((in[17]>>28)&mask + minv)
 	out[63] = T((in[17]>>46)&mask + minv)
@@ -5699,118 +5415,82 @@ func br32_19[T uint32 | int32](out *[64]T, in *[19]uint64, minv uint64) {
 	out[0] = T((in[0]>>0)&mask + minv)
 	out[1] = T((in[0]>>19)&mask + minv)
 	out[2] = T((in[0]>>38)&mask + minv)
-	out[3] = T((in[0]>>57)&mask + minv)
-
-	out[3] = out[3] + T((in[1]<<7)&mask)
-
+	out[3] = T((in[0]>>57)&mask |
+		(in[1]<<7)&mask + minv)
 	out[4] = T((in[1]>>12)&mask + minv)
 	out[5] = T((in[1]>>31)&mask + minv)
-	out[6] = T((in[1]>>50)&mask + minv)
-
-	out[6] = out[6] + T((in[2]<<14)&mask)
-
+	out[6] = T((in[1]>>50)&mask |
+		(in[2]<<14)&mask + minv)
 	out[7] = T((in[2]>>5)&mask + minv)
 	out[8] = T((in[2]>>24)&mask + minv)
 	out[9] = T((in[2]>>43)&mask + minv)
-	out[10] = T((in[2]>>62)&mask + minv)
-
-	out[10] = out[10] + T((in[3]<<2)&mask)
-
+	out[10] = T((in[2]>>62)&mask |
+		(in[3]<<2)&mask + minv)
 	out[11] = T((in[3]>>17)&mask + minv)
 	out[12] = T((in[3]>>36)&mask + minv)
-	out[13] = T((in[3]>>55)&mask + minv)
-
-	out[13] = out[13] + T((in[4]<<9)&mask)
-
+	out[13] = T((in[3]>>55)&mask |
+		(in[4]<<9)&mask + minv)
 	out[14] = T((in[4]>>10)&mask + minv)
 	out[15] = T((in[4]>>29)&mask + minv)
-	out[16] = T((in[4]>>48)&mask + minv)
-
-	out[16] = out[16] + T((in[5]<<16)&mask)
-
+	out[16] = T((in[4]>>48)&mask |
+		(in[5]<<16)&mask + minv)
 	out[17] = T((in[5]>>3)&mask + minv)
 	out[18] = T((in[5]>>22)&mask + minv)
 	out[19] = T((in[5]>>41)&mask + minv)
-	out[20] = T((in[5]>>60)&mask + minv)
-
-	out[20] = out[20] + T((in[6]<<4)&mask)
-
+	out[20] = T((in[5]>>60)&mask |
+		(in[6]<<4)&mask + minv)
 	out[21] = T((in[6]>>15)&mask + minv)
 	out[22] = T((in[6]>>34)&mask + minv)
-	out[23] = T((in[6]>>53)&mask + minv)
-
-	out[23] = out[23] + T((in[7]<<11)&mask)
-
+	out[23] = T((in[6]>>53)&mask |
+		(in[7]<<11)&mask + minv)
 	out[24] = T((in[7]>>8)&mask + minv)
 	out[25] = T((in[7]>>27)&mask + minv)
-	out[26] = T((in[7]>>46)&mask + minv)
-
-	out[26] = out[26] + T((in[8]<<18)&mask)
-
+	out[26] = T((in[7]>>46)&mask |
+		(in[8]<<18)&mask + minv)
 	out[27] = T((in[8]>>1)&mask + minv)
 	out[28] = T((in[8]>>20)&mask + minv)
 	out[29] = T((in[8]>>39)&mask + minv)
-	out[30] = T((in[8]>>58)&mask + minv)
-
-	out[30] = out[30] + T((in[9]<<6)&mask)
-
+	out[30] = T((in[8]>>58)&mask |
+		(in[9]<<6)&mask + minv)
 	out[31] = T((in[9]>>13)&mask + minv)
 	out[32] = T((in[9]>>32)&mask + minv)
-	out[33] = T((in[9]>>51)&mask + minv)
-
-	out[33] = out[33] + T((in[10]<<13)&mask)
-
+	out[33] = T((in[9]>>51)&mask |
+		(in[10]<<13)&mask + minv)
 	out[34] = T((in[10]>>6)&mask + minv)
 	out[35] = T((in[10]>>25)&mask + minv)
 	out[36] = T((in[10]>>44)&mask + minv)
-	out[37] = T((in[10]>>63)&mask + minv)
-
-	out[37] = out[37] + T((in[11]<<1)&mask)
-
+	out[37] = T((in[10]>>63)&mask |
+		(in[11]<<1)&mask + minv)
 	out[38] = T((in[11]>>18)&mask + minv)
 	out[39] = T((in[11]>>37)&mask + minv)
-	out[40] = T((in[11]>>56)&mask + minv)
-
-	out[40] = out[40] + T((in[12]<<8)&mask)
-
+	out[40] = T((in[11]>>56)&mask |
+		(in[12]<<8)&mask + minv)
 	out[41] = T((in[12]>>11)&mask + minv)
 	out[42] = T((in[12]>>30)&mask + minv)
-	out[43] = T((in[12]>>49)&mask + minv)
-
-	out[43] = out[43] + T((in[13]<<15)&mask)
-
+	out[43] = T((in[12]>>49)&mask |
+		(in[13]<<15)&mask + minv)
 	out[44] = T((in[13]>>4)&mask + minv)
 	out[45] = T((in[13]>>23)&mask + minv)
 	out[46] = T((in[13]>>42)&mask + minv)
-	out[47] = T((in[13]>>61)&mask + minv)
-
-	out[47] = out[47] + T((in[14]<<3)&mask)
-
+	out[47] = T((in[13]>>61)&mask |
+		(in[14]<<3)&mask + minv)
 	out[48] = T((in[14]>>16)&mask + minv)
 	out[49] = T((in[14]>>35)&mask + minv)
-	out[50] = T((in[14]>>54)&mask + minv)
-
-	out[50] = out[50] + T((in[15]<<10)&mask)
-
+	out[50] = T((in[14]>>54)&mask |
+		(in[15]<<10)&mask + minv)
 	out[51] = T((in[15]>>9)&mask + minv)
 	out[52] = T((in[15]>>28)&mask + minv)
-	out[53] = T((in[15]>>47)&mask + minv)
-
-	out[53] = out[53] + T((in[16]<<17)&mask)
-
+	out[53] = T((in[15]>>47)&mask |
+		(in[16]<<17)&mask + minv)
 	out[54] = T((in[16]>>2)&mask + minv)
 	out[55] = T((in[16]>>21)&mask + minv)
 	out[56] = T((in[16]>>40)&mask + minv)
-	out[57] = T((in[16]>>59)&mask + minv)
-
-	out[57] = out[57] + T((in[17]<<5)&mask)
-
+	out[57] = T((in[16]>>59)&mask |
+		(in[17]<<5)&mask + minv)
 	out[58] = T((in[17]>>14)&mask + minv)
 	out[59] = T((in[17]>>33)&mask + minv)
-	out[60] = T((in[17]>>52)&mask + minv)
-
-	out[60] = out[60] + T((in[18]<<12)&mask)
-
+	out[60] = T((in[17]>>52)&mask |
+		(in[18]<<12)&mask + minv)
 	out[61] = T((in[18]>>7)&mask + minv)
 	out[62] = T((in[18]>>26)&mask + minv)
 	out[63] = T((in[18]>>45)&mask + minv)
@@ -5821,121 +5501,80 @@ func br32_20[T uint32 | int32](out *[64]T, in *[20]uint64, minv uint64) {
 	out[0] = T((in[0]>>0)&mask + minv)
 	out[1] = T((in[0]>>20)&mask + minv)
 	out[2] = T((in[0]>>40)&mask + minv)
-	out[3] = T((in[0]>>60)&mask + minv)
-
-	out[3] = out[3] + T((in[1]<<4)&mask)
-
+	out[3] = T((in[0]>>60)&mask |
+		(in[1]<<4)&mask + minv)
 	out[4] = T((in[1]>>16)&mask + minv)
 	out[5] = T((in[1]>>36)&mask + minv)
-	out[6] = T((in[1]>>56)&mask + minv)
-
-	out[6] = out[6] + T((in[2]<<8)&mask)
-
+	out[6] = T((in[1]>>56)&mask |
+		(in[2]<<8)&mask + minv)
 	out[7] = T((in[2]>>12)&mask + minv)
 	out[8] = T((in[2]>>32)&mask + minv)
-	out[9] = T((in[2]>>52)&mask + minv)
-
-	out[9] = out[9] + T((in[3]<<12)&mask)
-
+	out[9] = T((in[2]>>52)&mask |
+		(in[3]<<12)&mask + minv)
 	out[10] = T((in[3]>>8)&mask + minv)
 	out[11] = T((in[3]>>28)&mask + minv)
-	out[12] = T((in[3]>>48)&mask + minv)
-
-	out[12] = out[12] + T((in[4]<<16)&mask)
-
+	out[12] = T((in[3]>>48)&mask |
+		(in[4]<<16)&mask + minv)
 	out[13] = T((in[4]>>4)&mask + minv)
 	out[14] = T((in[4]>>24)&mask + minv)
 	out[15] = T((in[4]>>44)&mask + minv)
-
-	out[15] = out[15] + T((in[5]<<20)&mask)
-
 	out[16] = T((in[5]>>0)&mask + minv)
 	out[17] = T((in[5]>>20)&mask + minv)
 	out[18] = T((in[5]>>40)&mask + minv)
-	out[19] = T((in[5]>>60)&mask + minv)
-
-	out[19] = out[19] + T((in[6]<<4)&mask)
-
+	out[19] = T((in[5]>>60)&mask |
+		(in[6]<<4)&mask + minv)
 	out[20] = T((in[6]>>16)&mask + minv)
 	out[21] = T((in[6]>>36)&mask + minv)
-	out[22] = T((in[6]>>56)&mask + minv)
-
-	out[22] = out[22] + T((in[7]<<8)&mask)
-
+	out[22] = T((in[6]>>56)&mask |
+		(in[7]<<8)&mask + minv)
 	out[23] = T((in[7]>>12)&mask + minv)
 	out[24] = T((in[7]>>32)&mask + minv)
-	out[25] = T((in[7]>>52)&mask + minv)
-
-	out[25] = out[25] + T((in[8]<<12)&mask)
-
+	out[25] = T((in[7]>>52)&mask |
+		(in[8]<<12)&mask + minv)
 	out[26] = T((in[8]>>8)&mask + minv)
 	out[27] = T((in[8]>>28)&mask + minv)
-	out[28] = T((in[8]>>48)&mask + minv)
-
-	out[28] = out[28] + T((in[9]<<16)&mask)
-
+	out[28] = T((in[8]>>48)&mask |
+		(in[9]<<16)&mask + minv)
 	out[29] = T((in[9]>>4)&mask + minv)
 	out[30] = T((in[9]>>24)&mask + minv)
 	out[31] = T((in[9]>>44)&mask + minv)
-
-	out[31] = out[31] + T((in[10]<<20)&mask)
-
 	out[32] = T((in[10]>>0)&mask + minv)
 	out[33] = T((in[10]>>20)&mask + minv)
 	out[34] = T((in[10]>>40)&mask + minv)
-	out[35] = T((in[10]>>60)&mask + minv)
-
-	out[35] = out[35] + T((in[11]<<4)&mask)
-
+	out[35] = T((in[10]>>60)&mask |
+		(in[11]<<4)&mask + minv)
 	out[36] = T((in[11]>>16)&mask + minv)
 	out[37] = T((in[11]>>36)&mask + minv)
-	out[38] = T((in[11]>>56)&mask + minv)
-
-	out[38] = out[38] + T((in[12]<<8)&mask)
-
+	out[38] = T((in[11]>>56)&mask |
+		(in[12]<<8)&mask + minv)
 	out[39] = T((in[12]>>12)&mask + minv)
 	out[40] = T((in[12]>>32)&mask + minv)
-	out[41] = T((in[12]>>52)&mask + minv)
-
-	out[41] = out[41] + T((in[13]<<12)&mask)
-
+	out[41] = T((in[12]>>52)&mask |
+		(in[13]<<12)&mask + minv)
 	out[42] = T((in[13]>>8)&mask + minv)
 	out[43] = T((in[13]>>28)&mask + minv)
-	out[44] = T((in[13]>>48)&mask + minv)
-
-	out[44] = out[44] + T((in[14]<<16)&mask)
-
+	out[44] = T((in[13]>>48)&mask |
+		(in[14]<<16)&mask + minv)
 	out[45] = T((in[14]>>4)&mask + minv)
 	out[46] = T((in[14]>>24)&mask + minv)
 	out[47] = T((in[14]>>44)&mask + minv)
-
-	out[47] = out[47] + T((in[15]<<20)&mask)
-
 	out[48] = T((in[15]>>0)&mask + minv)
 	out[49] = T((in[15]>>20)&mask + minv)
 	out[50] = T((in[15]>>40)&mask + minv)
-	out[51] = T((in[15]>>60)&mask + minv)
-
-	out[51] = out[51] + T((in[16]<<4)&mask)
-
+	out[51] = T((in[15]>>60)&mask |
+		(in[16]<<4)&mask + minv)
 	out[52] = T((in[16]>>16)&mask + minv)
 	out[53] = T((in[16]>>36)&mask + minv)
-	out[54] = T((in[16]>>56)&mask + minv)
-
-	out[54] = out[54] + T((in[17]<<8)&mask)
-
+	out[54] = T((in[16]>>56)&mask |
+		(in[17]<<8)&mask + minv)
 	out[55] = T((in[17]>>12)&mask + minv)
 	out[56] = T((in[17]>>32)&mask + minv)
-	out[57] = T((in[17]>>52)&mask + minv)
-
-	out[57] = out[57] + T((in[18]<<12)&mask)
-
+	out[57] = T((in[17]>>52)&mask |
+		(in[18]<<12)&mask + minv)
 	out[58] = T((in[18]>>8)&mask + minv)
 	out[59] = T((in[18]>>28)&mask + minv)
-	out[60] = T((in[18]>>48)&mask + minv)
-
-	out[60] = out[60] + T((in[19]<<16)&mask)
-
+	out[60] = T((in[18]>>48)&mask |
+		(in[19]<<16)&mask + minv)
 	out[61] = T((in[19]>>4)&mask + minv)
 	out[62] = T((in[19]>>24)&mask + minv)
 	out[63] = T((in[19]>>44)&mask + minv)
@@ -5946,124 +5585,84 @@ func br32_21[T uint32 | int32](out *[64]T, in *[21]uint64, minv uint64) {
 	out[0] = T((in[0]>>0)&mask + minv)
 	out[1] = T((in[0]>>21)&mask + minv)
 	out[2] = T((in[0]>>42)&mask + minv)
-	out[3] = T((in[0]>>63)&mask + minv)
-
-	out[3] = out[3] + T((in[1]<<1)&mask)
-
+	out[3] = T((in[0]>>63)&mask |
+		(in[1]<<1)&mask + minv)
 	out[4] = T((in[1]>>20)&mask + minv)
 	out[5] = T((in[1]>>41)&mask + minv)
-	out[6] = T((in[1]>>62)&mask + minv)
-
-	out[6] = out[6] + T((in[2]<<2)&mask)
-
+	out[6] = T((in[1]>>62)&mask |
+		(in[2]<<2)&mask + minv)
 	out[7] = T((in[2]>>19)&mask + minv)
 	out[8] = T((in[2]>>40)&mask + minv)
-	out[9] = T((in[2]>>61)&mask + minv)
-
-	out[9] = out[9] + T((in[3]<<3)&mask)
-
+	out[9] = T((in[2]>>61)&mask |
+		(in[3]<<3)&mask + minv)
 	out[10] = T((in[3]>>18)&mask + minv)
 	out[11] = T((in[3]>>39)&mask + minv)
-	out[12] = T((in[3]>>60)&mask + minv)
-
-	out[12] = out[12] + T((in[4]<<4)&mask)
-
+	out[12] = T((in[3]>>60)&mask |
+		(in[4]<<4)&mask + minv)
 	out[13] = T((in[4]>>17)&mask + minv)
 	out[14] = T((in[4]>>38)&mask + minv)
-	out[15] = T((in[4]>>59)&mask + minv)
-
-	out[15] = out[15] + T((in[5]<<5)&mask)
-
+	out[15] = T((in[4]>>59)&mask |
+		(in[5]<<5)&mask + minv)
 	out[16] = T((in[5]>>16)&mask + minv)
 	out[17] = T((in[5]>>37)&mask + minv)
-	out[18] = T((in[5]>>58)&mask + minv)
-
-	out[18] = out[18] + T((in[6]<<6)&mask)
-
+	out[18] = T((in[5]>>58)&mask |
+		(in[6]<<6)&mask + minv)
 	out[19] = T((in[6]>>15)&mask + minv)
 	out[20] = T((in[6]>>36)&mask + minv)
-	out[21] = T((in[6]>>57)&mask + minv)
-
-	out[21] = out[21] + T((in[7]<<7)&mask)
-
+	out[21] = T((in[6]>>57)&mask |
+		(in[7]<<7)&mask + minv)
 	out[22] = T((in[7]>>14)&mask + minv)
 	out[23] = T((in[7]>>35)&mask + minv)
-	out[24] = T((in[7]>>56)&mask + minv)
-
-	out[24] = out[24] + T((in[8]<<8)&mask)
-
+	out[24] = T((in[7]>>56)&mask |
+		(in[8]<<8)&mask + minv)
 	out[25] = T((in[8]>>13)&mask + minv)
 	out[26] = T((in[8]>>34)&mask + minv)
-	out[27] = T((in[8]>>55)&mask + minv)
-
-	out[27] = out[27] + T((in[9]<<9)&mask)
-
+	out[27] = T((in[8]>>55)&mask |
+		(in[9]<<9)&mask + minv)
 	out[28] = T((in[9]>>12)&mask + minv)
 	out[29] = T((in[9]>>33)&mask + minv)
-	out[30] = T((in[9]>>54)&mask + minv)
-
-	out[30] = out[30] + T((in[10]<<10)&mask)
-
+	out[30] = T((in[9]>>54)&mask |
+		(in[10]<<10)&mask + minv)
 	out[31] = T((in[10]>>11)&mask + minv)
 	out[32] = T((in[10]>>32)&mask + minv)
-	out[33] = T((in[10]>>53)&mask + minv)
-
-	out[33] = out[33] + T((in[11]<<11)&mask)
-
+	out[33] = T((in[10]>>53)&mask |
+		(in[11]<<11)&mask + minv)
 	out[34] = T((in[11]>>10)&mask + minv)
 	out[35] = T((in[11]>>31)&mask + minv)
-	out[36] = T((in[11]>>52)&mask + minv)
-
-	out[36] = out[36] + T((in[12]<<12)&mask)
-
+	out[36] = T((in[11]>>52)&mask |
+		(in[12]<<12)&mask + minv)
 	out[37] = T((in[12]>>9)&mask + minv)
 	out[38] = T((in[12]>>30)&mask + minv)
-	out[39] = T((in[12]>>51)&mask + minv)
-
-	out[39] = out[39] + T((in[13]<<13)&mask)
-
+	out[39] = T((in[12]>>51)&mask |
+		(in[13]<<13)&mask + minv)
 	out[40] = T((in[13]>>8)&mask + minv)
 	out[41] = T((in[13]>>29)&mask + minv)
-	out[42] = T((in[13]>>50)&mask + minv)
-
-	out[42] = out[42] + T((in[14]<<14)&mask)
-
+	out[42] = T((in[13]>>50)&mask |
+		(in[14]<<14)&mask + minv)
 	out[43] = T((in[14]>>7)&mask + minv)
 	out[44] = T((in[14]>>28)&mask + minv)
-	out[45] = T((in[14]>>49)&mask + minv)
-
-	out[45] = out[45] + T((in[15]<<15)&mask)
-
+	out[45] = T((in[14]>>49)&mask |
+		(in[15]<<15)&mask + minv)
 	out[46] = T((in[15]>>6)&mask + minv)
 	out[47] = T((in[15]>>27)&mask + minv)
-	out[48] = T((in[15]>>48)&mask + minv)
-
-	out[48] = out[48] + T((in[16]<<16)&mask)
-
+	out[48] = T((in[15]>>48)&mask |
+		(in[16]<<16)&mask + minv)
 	out[49] = T((in[16]>>5)&mask + minv)
 	out[50] = T((in[16]>>26)&mask + minv)
-	out[51] = T((in[16]>>47)&mask + minv)
-
-	out[51] = out[51] + T((in[17]<<17)&mask)
-
+	out[51] = T((in[16]>>47)&mask |
+		(in[17]<<17)&mask + minv)
 	out[52] = T((in[17]>>4)&mask + minv)
 	out[53] = T((in[17]>>25)&mask + minv)
-	out[54] = T((in[17]>>46)&mask + minv)
-
-	out[54] = out[54] + T((in[18]<<18)&mask)
-
+	out[54] = T((in[17]>>46)&mask |
+		(in[18]<<18)&mask + minv)
 	out[55] = T((in[18]>>3)&mask + minv)
 	out[56] = T((in[18]>>24)&mask + minv)
-	out[57] = T((in[18]>>45)&mask + minv)
-
-	out[57] = out[57] + T((in[19]<<19)&mask)
-
+	out[57] = T((in[18]>>45)&mask |
+		(in[19]<<19)&mask + minv)
 	out[58] = T((in[19]>>2)&mask + minv)
 	out[59] = T((in[19]>>23)&mask + minv)
-	out[60] = T((in[19]>>44)&mask + minv)
-
-	out[60] = out[60] + T((in[20]<<20)&mask)
-
+	out[60] = T((in[19]>>44)&mask |
+		(in[20]<<20)&mask + minv)
 	out[61] = T((in[20]>>1)&mask + minv)
 	out[62] = T((in[20]>>22)&mask + minv)
 	out[63] = T((in[20]>>43)&mask + minv)
@@ -6073,129 +5672,86 @@ func br32_22[T uint32 | int32](out *[64]T, in *[22]uint64, minv uint64) {
 	mask := uint64((1 << 22) - 1)
 	out[0] = T((in[0]>>0)&mask + minv)
 	out[1] = T((in[0]>>22)&mask + minv)
-	out[2] = T((in[0]>>44)&mask + minv)
-
-	out[2] = out[2] + T((in[1]<<20)&mask)
-
+	out[2] = T((in[0]>>44)&mask |
+		(in[1]<<20)&mask + minv)
 	out[3] = T((in[1]>>2)&mask + minv)
 	out[4] = T((in[1]>>24)&mask + minv)
-	out[5] = T((in[1]>>46)&mask + minv)
-
-	out[5] = out[5] + T((in[2]<<18)&mask)
-
+	out[5] = T((in[1]>>46)&mask |
+		(in[2]<<18)&mask + minv)
 	out[6] = T((in[2]>>4)&mask + minv)
 	out[7] = T((in[2]>>26)&mask + minv)
-	out[8] = T((in[2]>>48)&mask + minv)
-
-	out[8] = out[8] + T((in[3]<<16)&mask)
-
+	out[8] = T((in[2]>>48)&mask |
+		(in[3]<<16)&mask + minv)
 	out[9] = T((in[3]>>6)&mask + minv)
 	out[10] = T((in[3]>>28)&mask + minv)
-	out[11] = T((in[3]>>50)&mask + minv)
-
-	out[11] = out[11] + T((in[4]<<14)&mask)
-
+	out[11] = T((in[3]>>50)&mask |
+		(in[4]<<14)&mask + minv)
 	out[12] = T((in[4]>>8)&mask + minv)
 	out[13] = T((in[4]>>30)&mask + minv)
-	out[14] = T((in[4]>>52)&mask + minv)
-
-	out[14] = out[14] + T((in[5]<<12)&mask)
-
+	out[14] = T((in[4]>>52)&mask |
+		(in[5]<<12)&mask + minv)
 	out[15] = T((in[5]>>10)&mask + minv)
 	out[16] = T((in[5]>>32)&mask + minv)
-	out[17] = T((in[5]>>54)&mask + minv)
-
-	out[17] = out[17] + T((in[6]<<10)&mask)
-
+	out[17] = T((in[5]>>54)&mask |
+		(in[6]<<10)&mask + minv)
 	out[18] = T((in[6]>>12)&mask + minv)
 	out[19] = T((in[6]>>34)&mask + minv)
-	out[20] = T((in[6]>>56)&mask + minv)
-
-	out[20] = out[20] + T((in[7]<<8)&mask)
-
+	out[20] = T((in[6]>>56)&mask |
+		(in[7]<<8)&mask + minv)
 	out[21] = T((in[7]>>14)&mask + minv)
 	out[22] = T((in[7]>>36)&mask + minv)
-	out[23] = T((in[7]>>58)&mask + minv)
-
-	out[23] = out[23] + T((in[8]<<6)&mask)
-
+	out[23] = T((in[7]>>58)&mask |
+		(in[8]<<6)&mask + minv)
 	out[24] = T((in[8]>>16)&mask + minv)
 	out[25] = T((in[8]>>38)&mask + minv)
-	out[26] = T((in[8]>>60)&mask + minv)
-
-	out[26] = out[26] + T((in[9]<<4)&mask)
-
+	out[26] = T((in[8]>>60)&mask |
+		(in[9]<<4)&mask + minv)
 	out[27] = T((in[9]>>18)&mask + minv)
 	out[28] = T((in[9]>>40)&mask + minv)
-	out[29] = T((in[9]>>62)&mask + minv)
-
-	out[29] = out[29] + T((in[10]<<2)&mask)
-
+	out[29] = T((in[9]>>62)&mask |
+		(in[10]<<2)&mask + minv)
 	out[30] = T((in[10]>>20)&mask + minv)
 	out[31] = T((in[10]>>42)&mask + minv)
-
-	out[31] = out[31] + T((in[11]<<22)&mask)
-
 	out[32] = T((in[11]>>0)&mask + minv)
 	out[33] = T((in[11]>>22)&mask + minv)
-	out[34] = T((in[11]>>44)&mask + minv)
-
-	out[34] = out[34] + T((in[12]<<20)&mask)
-
+	out[34] = T((in[11]>>44)&mask |
+		(in[12]<<20)&mask + minv)
 	out[35] = T((in[12]>>2)&mask + minv)
 	out[36] = T((in[12]>>24)&mask + minv)
-	out[37] = T((in[12]>>46)&mask + minv)
-
-	out[37] = out[37] + T((in[13]<<18)&mask)
-
+	out[37] = T((in[12]>>46)&mask |
+		(in[13]<<18)&mask + minv)
 	out[38] = T((in[13]>>4)&mask + minv)
 	out[39] = T((in[13]>>26)&mask + minv)
-	out[40] = T((in[13]>>48)&mask + minv)
-
-	out[40] = out[40] + T((in[14]<<16)&mask)
-
+	out[40] = T((in[13]>>48)&mask |
+		(in[14]<<16)&mask + minv)
 	out[41] = T((in[14]>>6)&mask + minv)
 	out[42] = T((in[14]>>28)&mask + minv)
-	out[43] = T((in[14]>>50)&mask + minv)
-
-	out[43] = out[43] + T((in[15]<<14)&mask)
-
+	out[43] = T((in[14]>>50)&mask |
+		(in[15]<<14)&mask + minv)
 	out[44] = T((in[15]>>8)&mask + minv)
 	out[45] = T((in[15]>>30)&mask + minv)
-	out[46] = T((in[15]>>52)&mask + minv)
-
-	out[46] = out[46] + T((in[16]<<12)&mask)
-
+	out[46] = T((in[15]>>52)&mask |
+		(in[16]<<12)&mask + minv)
 	out[47] = T((in[16]>>10)&mask + minv)
 	out[48] = T((in[16]>>32)&mask + minv)
-	out[49] = T((in[16]>>54)&mask + minv)
-
-	out[49] = out[49] + T((in[17]<<10)&mask)
-
+	out[49] = T((in[16]>>54)&mask |
+		(in[17]<<10)&mask + minv)
 	out[50] = T((in[17]>>12)&mask + minv)
 	out[51] = T((in[17]>>34)&mask + minv)
-	out[52] = T((in[17]>>56)&mask + minv)
-
-	out[52] = out[52] + T((in[18]<<8)&mask)
-
+	out[52] = T((in[17]>>56)&mask |
+		(in[18]<<8)&mask + minv)
 	out[53] = T((in[18]>>14)&mask + minv)
 	out[54] = T((in[18]>>36)&mask + minv)
-	out[55] = T((in[18]>>58)&mask + minv)
-
-	out[55] = out[55] + T((in[19]<<6)&mask)
-
+	out[55] = T((in[18]>>58)&mask |
+		(in[19]<<6)&mask + minv)
 	out[56] = T((in[19]>>16)&mask + minv)
 	out[57] = T((in[19]>>38)&mask + minv)
-	out[58] = T((in[19]>>60)&mask + minv)
-
-	out[58] = out[58] + T((in[20]<<4)&mask)
-
+	out[58] = T((in[19]>>60)&mask |
+		(in[20]<<4)&mask + minv)
 	out[59] = T((in[20]>>18)&mask + minv)
 	out[60] = T((in[20]>>40)&mask + minv)
-	out[61] = T((in[20]>>62)&mask + minv)
-
-	out[61] = out[61] + T((in[21]<<2)&mask)
-
+	out[61] = T((in[20]>>62)&mask |
+		(in[21]<<2)&mask + minv)
 	out[62] = T((in[21]>>20)&mask + minv)
 	out[63] = T((in[21]>>42)&mask + minv)
 
@@ -6204,132 +5760,88 @@ func br32_23[T uint32 | int32](out *[64]T, in *[23]uint64, minv uint64) {
 	mask := uint64((1 << 23) - 1)
 	out[0] = T((in[0]>>0)&mask + minv)
 	out[1] = T((in[0]>>23)&mask + minv)
-	out[2] = T((in[0]>>46)&mask + minv)
-
-	out[2] = out[2] + T((in[1]<<18)&mask)
-
+	out[2] = T((in[0]>>46)&mask |
+		(in[1]<<18)&mask + minv)
 	out[3] = T((in[1]>>5)&mask + minv)
 	out[4] = T((in[1]>>28)&mask + minv)
-	out[5] = T((in[1]>>51)&mask + minv)
-
-	out[5] = out[5] + T((in[2]<<13)&mask)
-
+	out[5] = T((in[1]>>51)&mask |
+		(in[2]<<13)&mask + minv)
 	out[6] = T((in[2]>>10)&mask + minv)
 	out[7] = T((in[2]>>33)&mask + minv)
-	out[8] = T((in[2]>>56)&mask + minv)
-
-	out[8] = out[8] + T((in[3]<<8)&mask)
-
+	out[8] = T((in[2]>>56)&mask |
+		(in[3]<<8)&mask + minv)
 	out[9] = T((in[3]>>15)&mask + minv)
 	out[10] = T((in[3]>>38)&mask + minv)
-	out[11] = T((in[3]>>61)&mask + minv)
-
-	out[11] = out[11] + T((in[4]<<3)&mask)
-
+	out[11] = T((in[3]>>61)&mask |
+		(in[4]<<3)&mask + minv)
 	out[12] = T((in[4]>>20)&mask + minv)
-	out[13] = T((in[4]>>43)&mask + minv)
-
-	out[13] = out[13] + T((in[5]<<21)&mask)
-
+	out[13] = T((in[4]>>43)&mask |
+		(in[5]<<21)&mask + minv)
 	out[14] = T((in[5]>>2)&mask + minv)
 	out[15] = T((in[5]>>25)&mask + minv)
-	out[16] = T((in[5]>>48)&mask + minv)
-
-	out[16] = out[16] + T((in[6]<<16)&mask)
-
+	out[16] = T((in[5]>>48)&mask |
+		(in[6]<<16)&mask + minv)
 	out[17] = T((in[6]>>7)&mask + minv)
 	out[18] = T((in[6]>>30)&mask + minv)
-	out[19] = T((in[6]>>53)&mask + minv)
-
-	out[19] = out[19] + T((in[7]<<11)&mask)
-
+	out[19] = T((in[6]>>53)&mask |
+		(in[7]<<11)&mask + minv)
 	out[20] = T((in[7]>>12)&mask + minv)
 	out[21] = T((in[7]>>35)&mask + minv)
-	out[22] = T((in[7]>>58)&mask + minv)
-
-	out[22] = out[22] + T((in[8]<<6)&mask)
-
+	out[22] = T((in[7]>>58)&mask |
+		(in[8]<<6)&mask + minv)
 	out[23] = T((in[8]>>17)&mask + minv)
 	out[24] = T((in[8]>>40)&mask + minv)
-	out[25] = T((in[8]>>63)&mask + minv)
-
-	out[25] = out[25] + T((in[9]<<1)&mask)
-
+	out[25] = T((in[8]>>63)&mask |
+		(in[9]<<1)&mask + minv)
 	out[26] = T((in[9]>>22)&mask + minv)
-	out[27] = T((in[9]>>45)&mask + minv)
-
-	out[27] = out[27] + T((in[10]<<19)&mask)
-
+	out[27] = T((in[9]>>45)&mask |
+		(in[10]<<19)&mask + minv)
 	out[28] = T((in[10]>>4)&mask + minv)
 	out[29] = T((in[10]>>27)&mask + minv)
-	out[30] = T((in[10]>>50)&mask + minv)
-
-	out[30] = out[30] + T((in[11]<<14)&mask)
-
+	out[30] = T((in[10]>>50)&mask |
+		(in[11]<<14)&mask + minv)
 	out[31] = T((in[11]>>9)&mask + minv)
 	out[32] = T((in[11]>>32)&mask + minv)
-	out[33] = T((in[11]>>55)&mask + minv)
-
-	out[33] = out[33] + T((in[12]<<9)&mask)
-
+	out[33] = T((in[11]>>55)&mask |
+		(in[12]<<9)&mask + minv)
 	out[34] = T((in[12]>>14)&mask + minv)
 	out[35] = T((in[12]>>37)&mask + minv)
-	out[36] = T((in[12]>>60)&mask + minv)
-
-	out[36] = out[36] + T((in[13]<<4)&mask)
-
+	out[36] = T((in[12]>>60)&mask |
+		(in[13]<<4)&mask + minv)
 	out[37] = T((in[13]>>19)&mask + minv)
-	out[38] = T((in[13]>>42)&mask + minv)
-
-	out[38] = out[38] + T((in[14]<<22)&mask)
-
+	out[38] = T((in[13]>>42)&mask |
+		(in[14]<<22)&mask + minv)
 	out[39] = T((in[14]>>1)&mask + minv)
 	out[40] = T((in[14]>>24)&mask + minv)
-	out[41] = T((in[14]>>47)&mask + minv)
-
-	out[41] = out[41] + T((in[15]<<17)&mask)
-
+	out[41] = T((in[14]>>47)&mask |
+		(in[15]<<17)&mask + minv)
 	out[42] = T((in[15]>>6)&mask + minv)
 	out[43] = T((in[15]>>29)&mask + minv)
-	out[44] = T((in[15]>>52)&mask + minv)
-
-	out[44] = out[44] + T((in[16]<<12)&mask)
-
+	out[44] = T((in[15]>>52)&mask |
+		(in[16]<<12)&mask + minv)
 	out[45] = T((in[16]>>11)&mask + minv)
 	out[46] = T((in[16]>>34)&mask + minv)
-	out[47] = T((in[16]>>57)&mask + minv)
-
-	out[47] = out[47] + T((in[17]<<7)&mask)
-
+	out[47] = T((in[16]>>57)&mask |
+		(in[17]<<7)&mask + minv)
 	out[48] = T((in[17]>>16)&mask + minv)
 	out[49] = T((in[17]>>39)&mask + minv)
-	out[50] = T((in[17]>>62)&mask + minv)
-
-	out[50] = out[50] + T((in[18]<<2)&mask)
-
+	out[50] = T((in[17]>>62)&mask |
+		(in[18]<<2)&mask + minv)
 	out[51] = T((in[18]>>21)&mask + minv)
-	out[52] = T((in[18]>>44)&mask + minv)
-
-	out[52] = out[52] + T((in[19]<<20)&mask)
-
+	out[52] = T((in[18]>>44)&mask |
+		(in[19]<<20)&mask + minv)
 	out[53] = T((in[19]>>3)&mask + minv)
 	out[54] = T((in[19]>>26)&mask + minv)
-	out[55] = T((in[19]>>49)&mask + minv)
-
-	out[55] = out[55] + T((in[20]<<15)&mask)
-
+	out[55] = T((in[19]>>49)&mask |
+		(in[20]<<15)&mask + minv)
 	out[56] = T((in[20]>>8)&mask + minv)
 	out[57] = T((in[20]>>31)&mask + minv)
-	out[58] = T((in[20]>>54)&mask + minv)
-
-	out[58] = out[58] + T((in[21]<<10)&mask)
-
+	out[58] = T((in[20]>>54)&mask |
+		(in[21]<<10)&mask + minv)
 	out[59] = T((in[21]>>13)&mask + minv)
 	out[60] = T((in[21]>>36)&mask + minv)
-	out[61] = T((in[21]>>59)&mask + minv)
-
-	out[61] = out[61] + T((in[22]<<5)&mask)
-
+	out[61] = T((in[21]>>59)&mask |
+		(in[22]<<5)&mask + minv)
 	out[62] = T((in[22]>>18)&mask + minv)
 	out[63] = T((in[22]>>41)&mask + minv)
 
@@ -6338,135 +5850,82 @@ func br32_24[T uint32 | int32](out *[64]T, in *[24]uint64, minv uint64) {
 	mask := uint64((1 << 24) - 1)
 	out[0] = T((in[0]>>0)&mask + minv)
 	out[1] = T((in[0]>>24)&mask + minv)
-	out[2] = T((in[0]>>48)&mask + minv)
-
-	out[2] = out[2] + T((in[1]<<16)&mask)
-
+	out[2] = T((in[0]>>48)&mask |
+		(in[1]<<16)&mask + minv)
 	out[3] = T((in[1]>>8)&mask + minv)
 	out[4] = T((in[1]>>32)&mask + minv)
-	out[5] = T((in[1]>>56)&mask + minv)
-
-	out[5] = out[5] + T((in[2]<<8)&mask)
-
+	out[5] = T((in[1]>>56)&mask |
+		(in[2]<<8)&mask + minv)
 	out[6] = T((in[2]>>16)&mask + minv)
 	out[7] = T((in[2]>>40)&mask + minv)
-
-	out[7] = out[7] + T((in[3]<<24)&mask)
-
 	out[8] = T((in[3]>>0)&mask + minv)
 	out[9] = T((in[3]>>24)&mask + minv)
-	out[10] = T((in[3]>>48)&mask + minv)
-
-	out[10] = out[10] + T((in[4]<<16)&mask)
-
+	out[10] = T((in[3]>>48)&mask |
+		(in[4]<<16)&mask + minv)
 	out[11] = T((in[4]>>8)&mask + minv)
 	out[12] = T((in[4]>>32)&mask + minv)
-	out[13] = T((in[4]>>56)&mask + minv)
-
-	out[13] = out[13] + T((in[5]<<8)&mask)
-
+	out[13] = T((in[4]>>56)&mask |
+		(in[5]<<8)&mask + minv)
 	out[14] = T((in[5]>>16)&mask + minv)
 	out[15] = T((in[5]>>40)&mask + minv)
-
-	out[15] = out[15] + T((in[6]<<24)&mask)
-
 	out[16] = T((in[6]>>0)&mask + minv)
 	out[17] = T((in[6]>>24)&mask + minv)
-	out[18] = T((in[6]>>48)&mask + minv)
-
-	out[18] = out[18] + T((in[7]<<16)&mask)
-
+	out[18] = T((in[6]>>48)&mask |
+		(in[7]<<16)&mask + minv)
 	out[19] = T((in[7]>>8)&mask + minv)
 	out[20] = T((in[7]>>32)&mask + minv)
-	out[21] = T((in[7]>>56)&mask + minv)
-
-	out[21] = out[21] + T((in[8]<<8)&mask)
-
+	out[21] = T((in[7]>>56)&mask |
+		(in[8]<<8)&mask + minv)
 	out[22] = T((in[8]>>16)&mask + minv)
 	out[23] = T((in[8]>>40)&mask + minv)
-
-	out[23] = out[23] + T((in[9]<<24)&mask)
-
 	out[24] = T((in[9]>>0)&mask + minv)
 	out[25] = T((in[9]>>24)&mask + minv)
-	out[26] = T((in[9]>>48)&mask + minv)
-
-	out[26] = out[26] + T((in[10]<<16)&mask)
-
+	out[26] = T((in[9]>>48)&mask |
+		(in[10]<<16)&mask + minv)
 	out[27] = T((in[10]>>8)&mask + minv)
 	out[28] = T((in[10]>>32)&mask + minv)
-	out[29] = T((in[10]>>56)&mask + minv)
-
-	out[29] = out[29] + T((in[11]<<8)&mask)
-
+	out[29] = T((in[10]>>56)&mask |
+		(in[11]<<8)&mask + minv)
 	out[30] = T((in[11]>>16)&mask + minv)
 	out[31] = T((in[11]>>40)&mask + minv)
-
-	out[31] = out[31] + T((in[12]<<24)&mask)
-
 	out[32] = T((in[12]>>0)&mask + minv)
 	out[33] = T((in[12]>>24)&mask + minv)
-	out[34] = T((in[12]>>48)&mask + minv)
-
-	out[34] = out[34] + T((in[13]<<16)&mask)
-
+	out[34] = T((in[12]>>48)&mask |
+		(in[13]<<16)&mask + minv)
 	out[35] = T((in[13]>>8)&mask + minv)
 	out[36] = T((in[13]>>32)&mask + minv)
-	out[37] = T((in[13]>>56)&mask + minv)
-
-	out[37] = out[37] + T((in[14]<<8)&mask)
-
+	out[37] = T((in[13]>>56)&mask |
+		(in[14]<<8)&mask + minv)
 	out[38] = T((in[14]>>16)&mask + minv)
 	out[39] = T((in[14]>>40)&mask + minv)
-
-	out[39] = out[39] + T((in[15]<<24)&mask)
-
 	out[40] = T((in[15]>>0)&mask + minv)
 	out[41] = T((in[15]>>24)&mask + minv)
-	out[42] = T((in[15]>>48)&mask + minv)
-
-	out[42] = out[42] + T((in[16]<<16)&mask)
-
+	out[42] = T((in[15]>>48)&mask |
+		(in[16]<<16)&mask + minv)
 	out[43] = T((in[16]>>8)&mask + minv)
 	out[44] = T((in[16]>>32)&mask + minv)
-	out[45] = T((in[16]>>56)&mask + minv)
-
-	out[45] = out[45] + T((in[17]<<8)&mask)
-
+	out[45] = T((in[16]>>56)&mask |
+		(in[17]<<8)&mask + minv)
 	out[46] = T((in[17]>>16)&mask + minv)
 	out[47] = T((in[17]>>40)&mask + minv)
-
-	out[47] = out[47] + T((in[18]<<24)&mask)
-
 	out[48] = T((in[18]>>0)&mask + minv)
 	out[49] = T((in[18]>>24)&mask + minv)
-	out[50] = T((in[18]>>48)&mask + minv)
-
-	out[50] = out[50] + T((in[19]<<16)&mask)
-
+	out[50] = T((in[18]>>48)&mask |
+		(in[19]<<16)&mask + minv)
 	out[51] = T((in[19]>>8)&mask + minv)
 	out[52] = T((in[19]>>32)&mask + minv)
-	out[53] = T((in[19]>>56)&mask + minv)
-
-	out[53] = out[53] + T((in[20]<<8)&mask)
-
+	out[53] = T((in[19]>>56)&mask |
+		(in[20]<<8)&mask + minv)
 	out[54] = T((in[20]>>16)&mask + minv)
 	out[55] = T((in[20]>>40)&mask + minv)
-
-	out[55] = out[55] + T((in[21]<<24)&mask)
-
 	out[56] = T((in[21]>>0)&mask + minv)
 	out[57] = T((in[21]>>24)&mask + minv)
-	out[58] = T((in[21]>>48)&mask + minv)
-
-	out[58] = out[58] + T((in[22]<<16)&mask)
-
+	out[58] = T((in[21]>>48)&mask |
+		(in[22]<<16)&mask + minv)
 	out[59] = T((in[22]>>8)&mask + minv)
 	out[60] = T((in[22]>>32)&mask + minv)
-	out[61] = T((in[22]>>56)&mask + minv)
-
-	out[61] = out[61] + T((in[23]<<8)&mask)
-
+	out[61] = T((in[22]>>56)&mask |
+		(in[23]<<8)&mask + minv)
 	out[62] = T((in[23]>>16)&mask + minv)
 	out[63] = T((in[23]>>40)&mask + minv)
 
@@ -6475,138 +5934,90 @@ func br32_25[T uint32 | int32](out *[64]T, in *[25]uint64, minv uint64) {
 	mask := uint64((1 << 25) - 1)
 	out[0] = T((in[0]>>0)&mask + minv)
 	out[1] = T((in[0]>>25)&mask + minv)
-	out[2] = T((in[0]>>50)&mask + minv)
-
-	out[2] = out[2] + T((in[1]<<14)&mask)
-
+	out[2] = T((in[0]>>50)&mask |
+		(in[1]<<14)&mask + minv)
 	out[3] = T((in[1]>>11)&mask + minv)
 	out[4] = T((in[1]>>36)&mask + minv)
-	out[5] = T((in[1]>>61)&mask + minv)
-
-	out[5] = out[5] + T((in[2]<<3)&mask)
-
+	out[5] = T((in[1]>>61)&mask |
+		(in[2]<<3)&mask + minv)
 	out[6] = T((in[2]>>22)&mask + minv)
-	out[7] = T((in[2]>>47)&mask + minv)
-
-	out[7] = out[7] + T((in[3]<<17)&mask)
-
+	out[7] = T((in[2]>>47)&mask |
+		(in[3]<<17)&mask + minv)
 	out[8] = T((in[3]>>8)&mask + minv)
 	out[9] = T((in[3]>>33)&mask + minv)
-	out[10] = T((in[3]>>58)&mask + minv)
-
-	out[10] = out[10] + T((in[4]<<6)&mask)
-
+	out[10] = T((in[3]>>58)&mask |
+		(in[4]<<6)&mask + minv)
 	out[11] = T((in[4]>>19)&mask + minv)
-	out[12] = T((in[4]>>44)&mask + minv)
-
-	out[12] = out[12] + T((in[5]<<20)&mask)
-
+	out[12] = T((in[4]>>44)&mask |
+		(in[5]<<20)&mask + minv)
 	out[13] = T((in[5]>>5)&mask + minv)
 	out[14] = T((in[5]>>30)&mask + minv)
-	out[15] = T((in[5]>>55)&mask + minv)
-
-	out[15] = out[15] + T((in[6]<<9)&mask)
-
+	out[15] = T((in[5]>>55)&mask |
+		(in[6]<<9)&mask + minv)
 	out[16] = T((in[6]>>16)&mask + minv)
-	out[17] = T((in[6]>>41)&mask + minv)
-
-	out[17] = out[17] + T((in[7]<<23)&mask)
-
+	out[17] = T((in[6]>>41)&mask |
+		(in[7]<<23)&mask + minv)
 	out[18] = T((in[7]>>2)&mask + minv)
 	out[19] = T((in[7]>>27)&mask + minv)
-	out[20] = T((in[7]>>52)&mask + minv)
-
-	out[20] = out[20] + T((in[8]<<12)&mask)
-
+	out[20] = T((in[7]>>52)&mask |
+		(in[8]<<12)&mask + minv)
 	out[21] = T((in[8]>>13)&mask + minv)
 	out[22] = T((in[8]>>38)&mask + minv)
-	out[23] = T((in[8]>>63)&mask + minv)
-
-	out[23] = out[23] + T((in[9]<<1)&mask)
-
+	out[23] = T((in[8]>>63)&mask |
+		(in[9]<<1)&mask + minv)
 	out[24] = T((in[9]>>24)&mask + minv)
-	out[25] = T((in[9]>>49)&mask + minv)
-
-	out[25] = out[25] + T((in[10]<<15)&mask)
-
+	out[25] = T((in[9]>>49)&mask |
+		(in[10]<<15)&mask + minv)
 	out[26] = T((in[10]>>10)&mask + minv)
 	out[27] = T((in[10]>>35)&mask + minv)
-	out[28] = T((in[10]>>60)&mask + minv)
-
-	out[28] = out[28] + T((in[11]<<4)&mask)
-
+	out[28] = T((in[10]>>60)&mask |
+		(in[11]<<4)&mask + minv)
 	out[29] = T((in[11]>>21)&mask + minv)
-	out[30] = T((in[11]>>46)&mask + minv)
-
-	out[30] = out[30] + T((in[12]<<18)&mask)
-
+	out[30] = T((in[11]>>46)&mask |
+		(in[12]<<18)&mask + minv)
 	out[31] = T((in[12]>>7)&mask + minv)
 	out[32] = T((in[12]>>32)&mask + minv)
-	out[33] = T((in[12]>>57)&mask + minv)
-
-	out[33] = out[33] + T((in[13]<<7)&mask)
-
+	out[33] = T((in[12]>>57)&mask |
+		(in[13]<<7)&mask + minv)
 	out[34] = T((in[13]>>18)&mask + minv)
-	out[35] = T((in[13]>>43)&mask + minv)
-
-	out[35] = out[35] + T((in[14]<<21)&mask)
-
+	out[35] = T((in[13]>>43)&mask |
+		(in[14]<<21)&mask + minv)
 	out[36] = T((in[14]>>4)&mask + minv)
 	out[37] = T((in[14]>>29)&mask + minv)
-	out[38] = T((in[14]>>54)&mask + minv)
-
-	out[38] = out[38] + T((in[15]<<10)&mask)
-
+	out[38] = T((in[14]>>54)&mask |
+		(in[15]<<10)&mask + minv)
 	out[39] = T((in[15]>>15)&mask + minv)
-	out[40] = T((in[15]>>40)&mask + minv)
-
-	out[40] = out[40] + T((in[16]<<24)&mask)
-
+	out[40] = T((in[15]>>40)&mask |
+		(in[16]<<24)&mask + minv)
 	out[41] = T((in[16]>>1)&mask + minv)
 	out[42] = T((in[16]>>26)&mask + minv)
-	out[43] = T((in[16]>>51)&mask + minv)
-
-	out[43] = out[43] + T((in[17]<<13)&mask)
-
+	out[43] = T((in[16]>>51)&mask |
+		(in[17]<<13)&mask + minv)
 	out[44] = T((in[17]>>12)&mask + minv)
 	out[45] = T((in[17]>>37)&mask + minv)
-	out[46] = T((in[17]>>62)&mask + minv)
-
-	out[46] = out[46] + T((in[18]<<2)&mask)
-
+	out[46] = T((in[17]>>62)&mask |
+		(in[18]<<2)&mask + minv)
 	out[47] = T((in[18]>>23)&mask + minv)
-	out[48] = T((in[18]>>48)&mask + minv)
-
-	out[48] = out[48] + T((in[19]<<16)&mask)
-
+	out[48] = T((in[18]>>48)&mask |
+		(in[19]<<16)&mask + minv)
 	out[49] = T((in[19]>>9)&mask + minv)
 	out[50] = T((in[19]>>34)&mask + minv)
-	out[51] = T((in[19]>>59)&mask + minv)
-
-	out[51] = out[51] + T((in[20]<<5)&mask)
-
+	out[51] = T((in[19]>>59)&mask |
+		(in[20]<<5)&mask + minv)
 	out[52] = T((in[20]>>20)&mask + minv)
-	out[53] = T((in[20]>>45)&mask + minv)
-
-	out[53] = out[53] + T((in[21]<<19)&mask)
-
+	out[53] = T((in[20]>>45)&mask |
+		(in[21]<<19)&mask + minv)
 	out[54] = T((in[21]>>6)&mask + minv)
 	out[55] = T((in[21]>>31)&mask + minv)
-	out[56] = T((in[21]>>56)&mask + minv)
-
-	out[56] = out[56] + T((in[22]<<8)&mask)
-
+	out[56] = T((in[21]>>56)&mask |
+		(in[22]<<8)&mask + minv)
 	out[57] = T((in[22]>>17)&mask + minv)
-	out[58] = T((in[22]>>42)&mask + minv)
-
-	out[58] = out[58] + T((in[23]<<22)&mask)
-
+	out[58] = T((in[22]>>42)&mask |
+		(in[23]<<22)&mask + minv)
 	out[59] = T((in[23]>>3)&mask + minv)
 	out[60] = T((in[23]>>28)&mask + minv)
-	out[61] = T((in[23]>>53)&mask + minv)
-
-	out[61] = out[61] + T((in[24]<<11)&mask)
-
+	out[61] = T((in[23]>>53)&mask |
+		(in[24]<<11)&mask + minv)
 	out[62] = T((in[24]>>14)&mask + minv)
 	out[63] = T((in[24]>>39)&mask + minv)
 
@@ -6615,141 +6026,90 @@ func br32_26[T uint32 | int32](out *[64]T, in *[26]uint64, minv uint64) {
 	mask := uint64((1 << 26) - 1)
 	out[0] = T((in[0]>>0)&mask + minv)
 	out[1] = T((in[0]>>26)&mask + minv)
-	out[2] = T((in[0]>>52)&mask + minv)
-
-	out[2] = out[2] + T((in[1]<<12)&mask)
-
+	out[2] = T((in[0]>>52)&mask |
+		(in[1]<<12)&mask + minv)
 	out[3] = T((in[1]>>14)&mask + minv)
-	out[4] = T((in[1]>>40)&mask + minv)
-
-	out[4] = out[4] + T((in[2]<<24)&mask)
-
+	out[4] = T((in[1]>>40)&mask |
+		(in[2]<<24)&mask + minv)
 	out[5] = T((in[2]>>2)&mask + minv)
 	out[6] = T((in[2]>>28)&mask + minv)
-	out[7] = T((in[2]>>54)&mask + minv)
-
-	out[7] = out[7] + T((in[3]<<10)&mask)
-
+	out[7] = T((in[2]>>54)&mask |
+		(in[3]<<10)&mask + minv)
 	out[8] = T((in[3]>>16)&mask + minv)
-	out[9] = T((in[3]>>42)&mask + minv)
-
-	out[9] = out[9] + T((in[4]<<22)&mask)
-
+	out[9] = T((in[3]>>42)&mask |
+		(in[4]<<22)&mask + minv)
 	out[10] = T((in[4]>>4)&mask + minv)
 	out[11] = T((in[4]>>30)&mask + minv)
-	out[12] = T((in[4]>>56)&mask + minv)
-
-	out[12] = out[12] + T((in[5]<<8)&mask)
-
+	out[12] = T((in[4]>>56)&mask |
+		(in[5]<<8)&mask + minv)
 	out[13] = T((in[5]>>18)&mask + minv)
-	out[14] = T((in[5]>>44)&mask + minv)
-
-	out[14] = out[14] + T((in[6]<<20)&mask)
-
+	out[14] = T((in[5]>>44)&mask |
+		(in[6]<<20)&mask + minv)
 	out[15] = T((in[6]>>6)&mask + minv)
 	out[16] = T((in[6]>>32)&mask + minv)
-	out[17] = T((in[6]>>58)&mask + minv)
-
-	out[17] = out[17] + T((in[7]<<6)&mask)
-
+	out[17] = T((in[6]>>58)&mask |
+		(in[7]<<6)&mask + minv)
 	out[18] = T((in[7]>>20)&mask + minv)
-	out[19] = T((in[7]>>46)&mask + minv)
-
-	out[19] = out[19] + T((in[8]<<18)&mask)
-
+	out[19] = T((in[7]>>46)&mask |
+		(in[8]<<18)&mask + minv)
 	out[20] = T((in[8]>>8)&mask + minv)
 	out[21] = T((in[8]>>34)&mask + minv)
-	out[22] = T((in[8]>>60)&mask + minv)
-
-	out[22] = out[22] + T((in[9]<<4)&mask)
-
+	out[22] = T((in[8]>>60)&mask |
+		(in[9]<<4)&mask + minv)
 	out[23] = T((in[9]>>22)&mask + minv)
-	out[24] = T((in[9]>>48)&mask + minv)
-
-	out[24] = out[24] + T((in[10]<<16)&mask)
-
+	out[24] = T((in[9]>>48)&mask |
+		(in[10]<<16)&mask + minv)
 	out[25] = T((in[10]>>10)&mask + minv)
 	out[26] = T((in[10]>>36)&mask + minv)
-	out[27] = T((in[10]>>62)&mask + minv)
-
-	out[27] = out[27] + T((in[11]<<2)&mask)
-
+	out[27] = T((in[10]>>62)&mask |
+		(in[11]<<2)&mask + minv)
 	out[28] = T((in[11]>>24)&mask + minv)
-	out[29] = T((in[11]>>50)&mask + minv)
-
-	out[29] = out[29] + T((in[12]<<14)&mask)
-
+	out[29] = T((in[11]>>50)&mask |
+		(in[12]<<14)&mask + minv)
 	out[30] = T((in[12]>>12)&mask + minv)
 	out[31] = T((in[12]>>38)&mask + minv)
-
-	out[31] = out[31] + T((in[13]<<26)&mask)
-
 	out[32] = T((in[13]>>0)&mask + minv)
 	out[33] = T((in[13]>>26)&mask + minv)
-	out[34] = T((in[13]>>52)&mask + minv)
-
-	out[34] = out[34] + T((in[14]<<12)&mask)
-
+	out[34] = T((in[13]>>52)&mask |
+		(in[14]<<12)&mask + minv)
 	out[35] = T((in[14]>>14)&mask + minv)
-	out[36] = T((in[14]>>40)&mask + minv)
-
-	out[36] = out[36] + T((in[15]<<24)&mask)
-
+	out[36] = T((in[14]>>40)&mask |
+		(in[15]<<24)&mask + minv)
 	out[37] = T((in[15]>>2)&mask + minv)
 	out[38] = T((in[15]>>28)&mask + minv)
-	out[39] = T((in[15]>>54)&mask + minv)
-
-	out[39] = out[39] + T((in[16]<<10)&mask)
-
+	out[39] = T((in[15]>>54)&mask |
+		(in[16]<<10)&mask + minv)
 	out[40] = T((in[16]>>16)&mask + minv)
-	out[41] = T((in[16]>>42)&mask + minv)
-
-	out[41] = out[41] + T((in[17]<<22)&mask)
-
+	out[41] = T((in[16]>>42)&mask |
+		(in[17]<<22)&mask + minv)
 	out[42] = T((in[17]>>4)&mask + minv)
 	out[43] = T((in[17]>>30)&mask + minv)
-	out[44] = T((in[17]>>56)&mask + minv)
-
-	out[44] = out[44] + T((in[18]<<8)&mask)
-
+	out[44] = T((in[17]>>56)&mask |
+		(in[18]<<8)&mask + minv)
 	out[45] = T((in[18]>>18)&mask + minv)
-	out[46] = T((in[18]>>44)&mask + minv)
-
-	out[46] = out[46] + T((in[19]<<20)&mask)
-
+	out[46] = T((in[18]>>44)&mask |
+		(in[19]<<20)&mask + minv)
 	out[47] = T((in[19]>>6)&mask + minv)
 	out[48] = T((in[19]>>32)&mask + minv)
-	out[49] = T((in[19]>>58)&mask + minv)
-
-	out[49] = out[49] + T((in[20]<<6)&mask)
-
+	out[49] = T((in[19]>>58)&mask |
+		(in[20]<<6)&mask + minv)
 	out[50] = T((in[20]>>20)&mask + minv)
-	out[51] = T((in[20]>>46)&mask + minv)
-
-	out[51] = out[51] + T((in[21]<<18)&mask)
-
+	out[51] = T((in[20]>>46)&mask |
+		(in[21]<<18)&mask + minv)
 	out[52] = T((in[21]>>8)&mask + minv)
 	out[53] = T((in[21]>>34)&mask + minv)
-	out[54] = T((in[21]>>60)&mask + minv)
-
-	out[54] = out[54] + T((in[22]<<4)&mask)
-
+	out[54] = T((in[21]>>60)&mask |
+		(in[22]<<4)&mask + minv)
 	out[55] = T((in[22]>>22)&mask + minv)
-	out[56] = T((in[22]>>48)&mask + minv)
-
-	out[56] = out[56] + T((in[23]<<16)&mask)
-
+	out[56] = T((in[22]>>48)&mask |
+		(in[23]<<16)&mask + minv)
 	out[57] = T((in[23]>>10)&mask + minv)
 	out[58] = T((in[23]>>36)&mask + minv)
-	out[59] = T((in[23]>>62)&mask + minv)
-
-	out[59] = out[59] + T((in[24]<<2)&mask)
-
+	out[59] = T((in[23]>>62)&mask |
+		(in[24]<<2)&mask + minv)
 	out[60] = T((in[24]>>24)&mask + minv)
-	out[61] = T((in[24]>>50)&mask + minv)
-
-	out[61] = out[61] + T((in[25]<<14)&mask)
-
+	out[61] = T((in[24]>>50)&mask |
+		(in[25]<<14)&mask + minv)
 	out[62] = T((in[25]>>12)&mask + minv)
 	out[63] = T((in[25]>>38)&mask + minv)
 
@@ -6758,144 +6118,92 @@ func br32_27[T uint32 | int32](out *[64]T, in *[27]uint64, minv uint64) {
 	mask := uint64((1 << 27) - 1)
 	out[0] = T((in[0]>>0)&mask + minv)
 	out[1] = T((in[0]>>27)&mask + minv)
-	out[2] = T((in[0]>>54)&mask + minv)
-
-	out[2] = out[2] + T((in[1]<<10)&mask)
-
+	out[2] = T((in[0]>>54)&mask |
+		(in[1]<<10)&mask + minv)
 	out[3] = T((in[1]>>17)&mask + minv)
-	out[4] = T((in[1]>>44)&mask + minv)
-
-	out[4] = out[4] + T((in[2]<<20)&mask)
-
+	out[4] = T((in[1]>>44)&mask |
+		(in[2]<<20)&mask + minv)
 	out[5] = T((in[2]>>7)&mask + minv)
 	out[6] = T((in[2]>>34)&mask + minv)
-	out[7] = T((in[2]>>61)&mask + minv)
-
-	out[7] = out[7] + T((in[3]<<3)&mask)
-
+	out[7] = T((in[2]>>61)&mask |
+		(in[3]<<3)&mask + minv)
 	out[8] = T((in[3]>>24)&mask + minv)
-	out[9] = T((in[3]>>51)&mask + minv)
-
-	out[9] = out[9] + T((in[4]<<13)&mask)
-
+	out[9] = T((in[3]>>51)&mask |
+		(in[4]<<13)&mask + minv)
 	out[10] = T((in[4]>>14)&mask + minv)
-	out[11] = T((in[4]>>41)&mask + minv)
-
-	out[11] = out[11] + T((in[5]<<23)&mask)
-
+	out[11] = T((in[4]>>41)&mask |
+		(in[5]<<23)&mask + minv)
 	out[12] = T((in[5]>>4)&mask + minv)
 	out[13] = T((in[5]>>31)&mask + minv)
-	out[14] = T((in[5]>>58)&mask + minv)
-
-	out[14] = out[14] + T((in[6]<<6)&mask)
-
+	out[14] = T((in[5]>>58)&mask |
+		(in[6]<<6)&mask + minv)
 	out[15] = T((in[6]>>21)&mask + minv)
-	out[16] = T((in[6]>>48)&mask + minv)
-
-	out[16] = out[16] + T((in[7]<<16)&mask)
-
+	out[16] = T((in[6]>>48)&mask |
+		(in[7]<<16)&mask + minv)
 	out[17] = T((in[7]>>11)&mask + minv)
-	out[18] = T((in[7]>>38)&mask + minv)
-
-	out[18] = out[18] + T((in[8]<<26)&mask)
-
+	out[18] = T((in[7]>>38)&mask |
+		(in[8]<<26)&mask + minv)
 	out[19] = T((in[8]>>1)&mask + minv)
 	out[20] = T((in[8]>>28)&mask + minv)
-	out[21] = T((in[8]>>55)&mask + minv)
-
-	out[21] = out[21] + T((in[9]<<9)&mask)
-
+	out[21] = T((in[8]>>55)&mask |
+		(in[9]<<9)&mask + minv)
 	out[22] = T((in[9]>>18)&mask + minv)
-	out[23] = T((in[9]>>45)&mask + minv)
-
-	out[23] = out[23] + T((in[10]<<19)&mask)
-
+	out[23] = T((in[9]>>45)&mask |
+		(in[10]<<19)&mask + minv)
 	out[24] = T((in[10]>>8)&mask + minv)
 	out[25] = T((in[10]>>35)&mask + minv)
-	out[26] = T((in[10]>>62)&mask + minv)
-
-	out[26] = out[26] + T((in[11]<<2)&mask)
-
+	out[26] = T((in[10]>>62)&mask |
+		(in[11]<<2)&mask + minv)
 	out[27] = T((in[11]>>25)&mask + minv)
-	out[28] = T((in[11]>>52)&mask + minv)
-
-	out[28] = out[28] + T((in[12]<<12)&mask)
-
+	out[28] = T((in[11]>>52)&mask |
+		(in[12]<<12)&mask + minv)
 	out[29] = T((in[12]>>15)&mask + minv)
-	out[30] = T((in[12]>>42)&mask + minv)
-
-	out[30] = out[30] + T((in[13]<<22)&mask)
-
+	out[30] = T((in[12]>>42)&mask |
+		(in[13]<<22)&mask + minv)
 	out[31] = T((in[13]>>5)&mask + minv)
 	out[32] = T((in[13]>>32)&mask + minv)
-	out[33] = T((in[13]>>59)&mask + minv)
-
-	out[33] = out[33] + T((in[14]<<5)&mask)
-
+	out[33] = T((in[13]>>59)&mask |
+		(in[14]<<5)&mask + minv)
 	out[34] = T((in[14]>>22)&mask + minv)
-	out[35] = T((in[14]>>49)&mask + minv)
-
-	out[35] = out[35] + T((in[15]<<15)&mask)
-
+	out[35] = T((in[14]>>49)&mask |
+		(in[15]<<15)&mask + minv)
 	out[36] = T((in[15]>>12)&mask + minv)
-	out[37] = T((in[15]>>39)&mask + minv)
-
-	out[37] = out[37] + T((in[16]<<25)&mask)
-
+	out[37] = T((in[15]>>39)&mask |
+		(in[16]<<25)&mask + minv)
 	out[38] = T((in[16]>>2)&mask + minv)
 	out[39] = T((in[16]>>29)&mask + minv)
-	out[40] = T((in[16]>>56)&mask + minv)
-
-	out[40] = out[40] + T((in[17]<<8)&mask)
-
+	out[40] = T((in[16]>>56)&mask |
+		(in[17]<<8)&mask + minv)
 	out[41] = T((in[17]>>19)&mask + minv)
-	out[42] = T((in[17]>>46)&mask + minv)
-
-	out[42] = out[42] + T((in[18]<<18)&mask)
-
+	out[42] = T((in[17]>>46)&mask |
+		(in[18]<<18)&mask + minv)
 	out[43] = T((in[18]>>9)&mask + minv)
 	out[44] = T((in[18]>>36)&mask + minv)
-	out[45] = T((in[18]>>63)&mask + minv)
-
-	out[45] = out[45] + T((in[19]<<1)&mask)
-
+	out[45] = T((in[18]>>63)&mask |
+		(in[19]<<1)&mask + minv)
 	out[46] = T((in[19]>>26)&mask + minv)
-	out[47] = T((in[19]>>53)&mask + minv)
-
-	out[47] = out[47] + T((in[20]<<11)&mask)
-
+	out[47] = T((in[19]>>53)&mask |
+		(in[20]<<11)&mask + minv)
 	out[48] = T((in[20]>>16)&mask + minv)
-	out[49] = T((in[20]>>43)&mask + minv)
-
-	out[49] = out[49] + T((in[21]<<21)&mask)
-
+	out[49] = T((in[20]>>43)&mask |
+		(in[21]<<21)&mask + minv)
 	out[50] = T((in[21]>>6)&mask + minv)
 	out[51] = T((in[21]>>33)&mask + minv)
-	out[52] = T((in[21]>>60)&mask + minv)
-
-	out[52] = out[52] + T((in[22]<<4)&mask)
-
+	out[52] = T((in[21]>>60)&mask |
+		(in[22]<<4)&mask + minv)
 	out[53] = T((in[22]>>23)&mask + minv)
-	out[54] = T((in[22]>>50)&mask + minv)
-
-	out[54] = out[54] + T((in[23]<<14)&mask)
-
+	out[54] = T((in[22]>>50)&mask |
+		(in[23]<<14)&mask + minv)
 	out[55] = T((in[23]>>13)&mask + minv)
-	out[56] = T((in[23]>>40)&mask + minv)
-
-	out[56] = out[56] + T((in[24]<<24)&mask)
-
+	out[56] = T((in[23]>>40)&mask |
+		(in[24]<<24)&mask + minv)
 	out[57] = T((in[24]>>3)&mask + minv)
 	out[58] = T((in[24]>>30)&mask + minv)
-	out[59] = T((in[24]>>57)&mask + minv)
-
-	out[59] = out[59] + T((in[25]<<7)&mask)
-
+	out[59] = T((in[24]>>57)&mask |
+		(in[25]<<7)&mask + minv)
 	out[60] = T((in[25]>>20)&mask + minv)
-	out[61] = T((in[25]>>47)&mask + minv)
-
-	out[61] = out[61] + T((in[26]<<17)&mask)
-
+	out[61] = T((in[25]>>47)&mask |
+		(in[26]<<17)&mask + minv)
 	out[62] = T((in[26]>>10)&mask + minv)
 	out[63] = T((in[26]>>37)&mask + minv)
 
@@ -6904,147 +6212,90 @@ func br32_28[T uint32 | int32](out *[64]T, in *[28]uint64, minv uint64) {
 	mask := uint64((1 << 28) - 1)
 	out[0] = T((in[0]>>0)&mask + minv)
 	out[1] = T((in[0]>>28)&mask + minv)
-	out[2] = T((in[0]>>56)&mask + minv)
-
-	out[2] = out[2] + T((in[1]<<8)&mask)
-
+	out[2] = T((in[0]>>56)&mask |
+		(in[1]<<8)&mask + minv)
 	out[3] = T((in[1]>>20)&mask + minv)
-	out[4] = T((in[1]>>48)&mask + minv)
-
-	out[4] = out[4] + T((in[2]<<16)&mask)
-
+	out[4] = T((in[1]>>48)&mask |
+		(in[2]<<16)&mask + minv)
 	out[5] = T((in[2]>>12)&mask + minv)
-	out[6] = T((in[2]>>40)&mask + minv)
-
-	out[6] = out[6] + T((in[3]<<24)&mask)
-
+	out[6] = T((in[2]>>40)&mask |
+		(in[3]<<24)&mask + minv)
 	out[7] = T((in[3]>>4)&mask + minv)
 	out[8] = T((in[3]>>32)&mask + minv)
-	out[9] = T((in[3]>>60)&mask + minv)
-
-	out[9] = out[9] + T((in[4]<<4)&mask)
-
+	out[9] = T((in[3]>>60)&mask |
+		(in[4]<<4)&mask + minv)
 	out[10] = T((in[4]>>24)&mask + minv)
-	out[11] = T((in[4]>>52)&mask + minv)
-
-	out[11] = out[11] + T((in[5]<<12)&mask)
-
+	out[11] = T((in[4]>>52)&mask |
+		(in[5]<<12)&mask + minv)
 	out[12] = T((in[5]>>16)&mask + minv)
-	out[13] = T((in[5]>>44)&mask + minv)
-
-	out[13] = out[13] + T((in[6]<<20)&mask)
-
+	out[13] = T((in[5]>>44)&mask |
+		(in[6]<<20)&mask + minv)
 	out[14] = T((in[6]>>8)&mask + minv)
 	out[15] = T((in[6]>>36)&mask + minv)
-
-	out[15] = out[15] + T((in[7]<<28)&mask)
-
 	out[16] = T((in[7]>>0)&mask + minv)
 	out[17] = T((in[7]>>28)&mask + minv)
-	out[18] = T((in[7]>>56)&mask + minv)
-
-	out[18] = out[18] + T((in[8]<<8)&mask)
-
+	out[18] = T((in[7]>>56)&mask |
+		(in[8]<<8)&mask + minv)
 	out[19] = T((in[8]>>20)&mask + minv)
-	out[20] = T((in[8]>>48)&mask + minv)
-
-	out[20] = out[20] + T((in[9]<<16)&mask)
-
+	out[20] = T((in[8]>>48)&mask |
+		(in[9]<<16)&mask + minv)
 	out[21] = T((in[9]>>12)&mask + minv)
-	out[22] = T((in[9]>>40)&mask + minv)
-
-	out[22] = out[22] + T((in[10]<<24)&mask)
-
+	out[22] = T((in[9]>>40)&mask |
+		(in[10]<<24)&mask + minv)
 	out[23] = T((in[10]>>4)&mask + minv)
 	out[24] = T((in[10]>>32)&mask + minv)
-	out[25] = T((in[10]>>60)&mask + minv)
-
-	out[25] = out[25] + T((in[11]<<4)&mask)
-
+	out[25] = T((in[10]>>60)&mask |
+		(in[11]<<4)&mask + minv)
 	out[26] = T((in[11]>>24)&mask + minv)
-	out[27] = T((in[11]>>52)&mask + minv)
-
-	out[27] = out[27] + T((in[12]<<12)&mask)
-
+	out[27] = T((in[11]>>52)&mask |
+		(in[12]<<12)&mask + minv)
 	out[28] = T((in[12]>>16)&mask + minv)
-	out[29] = T((in[12]>>44)&mask + minv)
-
-	out[29] = out[29] + T((in[13]<<20)&mask)
-
+	out[29] = T((in[12]>>44)&mask |
+		(in[13]<<20)&mask + minv)
 	out[30] = T((in[13]>>8)&mask + minv)
 	out[31] = T((in[13]>>36)&mask + minv)
-
-	out[31] = out[31] + T((in[14]<<28)&mask)
-
 	out[32] = T((in[14]>>0)&mask + minv)
 	out[33] = T((in[14]>>28)&mask + minv)
-	out[34] = T((in[14]>>56)&mask + minv)
-
-	out[34] = out[34] + T((in[15]<<8)&mask)
-
+	out[34] = T((in[14]>>56)&mask |
+		(in[15]<<8)&mask + minv)
 	out[35] = T((in[15]>>20)&mask + minv)
-	out[36] = T((in[15]>>48)&mask + minv)
-
-	out[36] = out[36] + T((in[16]<<16)&mask)
-
+	out[36] = T((in[15]>>48)&mask |
+		(in[16]<<16)&mask + minv)
 	out[37] = T((in[16]>>12)&mask + minv)
-	out[38] = T((in[16]>>40)&mask + minv)
-
-	out[38] = out[38] + T((in[17]<<24)&mask)
-
+	out[38] = T((in[16]>>40)&mask |
+		(in[17]<<24)&mask + minv)
 	out[39] = T((in[17]>>4)&mask + minv)
 	out[40] = T((in[17]>>32)&mask + minv)
-	out[41] = T((in[17]>>60)&mask + minv)
-
-	out[41] = out[41] + T((in[18]<<4)&mask)
-
+	out[41] = T((in[17]>>60)&mask |
+		(in[18]<<4)&mask + minv)
 	out[42] = T((in[18]>>24)&mask + minv)
-	out[43] = T((in[18]>>52)&mask + minv)
-
-	out[43] = out[43] + T((in[19]<<12)&mask)
-
+	out[43] = T((in[18]>>52)&mask |
+		(in[19]<<12)&mask + minv)
 	out[44] = T((in[19]>>16)&mask + minv)
-	out[45] = T((in[19]>>44)&mask + minv)
-
-	out[45] = out[45] + T((in[20]<<20)&mask)
-
+	out[45] = T((in[19]>>44)&mask |
+		(in[20]<<20)&mask + minv)
 	out[46] = T((in[20]>>8)&mask + minv)
 	out[47] = T((in[20]>>36)&mask + minv)
-
-	out[47] = out[47] + T((in[21]<<28)&mask)
-
 	out[48] = T((in[21]>>0)&mask + minv)
 	out[49] = T((in[21]>>28)&mask + minv)
-	out[50] = T((in[21]>>56)&mask + minv)
-
-	out[50] = out[50] + T((in[22]<<8)&mask)
-
+	out[50] = T((in[21]>>56)&mask |
+		(in[22]<<8)&mask + minv)
 	out[51] = T((in[22]>>20)&mask + minv)
-	out[52] = T((in[22]>>48)&mask + minv)
-
-	out[52] = out[52] + T((in[23]<<16)&mask)
-
+	out[52] = T((in[22]>>48)&mask |
+		(in[23]<<16)&mask + minv)
 	out[53] = T((in[23]>>12)&mask + minv)
-	out[54] = T((in[23]>>40)&mask + minv)
-
-	out[54] = out[54] + T((in[24]<<24)&mask)
-
+	out[54] = T((in[23]>>40)&mask |
+		(in[24]<<24)&mask + minv)
 	out[55] = T((in[24]>>4)&mask + minv)
 	out[56] = T((in[24]>>32)&mask + minv)
-	out[57] = T((in[24]>>60)&mask + minv)
-
-	out[57] = out[57] + T((in[25]<<4)&mask)
-
+	out[57] = T((in[24]>>60)&mask |
+		(in[25]<<4)&mask + minv)
 	out[58] = T((in[25]>>24)&mask + minv)
-	out[59] = T((in[25]>>52)&mask + minv)
-
-	out[59] = out[59] + T((in[26]<<12)&mask)
-
+	out[59] = T((in[25]>>52)&mask |
+		(in[26]<<12)&mask + minv)
 	out[60] = T((in[26]>>16)&mask + minv)
-	out[61] = T((in[26]>>44)&mask + minv)
-
-	out[61] = out[61] + T((in[27]<<20)&mask)
-
+	out[61] = T((in[26]>>44)&mask |
+		(in[27]<<20)&mask + minv)
 	out[62] = T((in[27]>>8)&mask + minv)
 	out[63] = T((in[27]>>36)&mask + minv)
 
@@ -7053,150 +6304,94 @@ func br32_29[T uint32 | int32](out *[64]T, in *[29]uint64, minv uint64) {
 	mask := uint64((1 << 29) - 1)
 	out[0] = T((in[0]>>0)&mask + minv)
 	out[1] = T((in[0]>>29)&mask + minv)
-	out[2] = T((in[0]>>58)&mask + minv)
-
-	out[2] = out[2] + T((in[1]<<6)&mask)
-
+	out[2] = T((in[0]>>58)&mask |
+		(in[1]<<6)&mask + minv)
 	out[3] = T((in[1]>>23)&mask + minv)
-	out[4] = T((in[1]>>52)&mask + minv)
-
-	out[4] = out[4] + T((in[2]<<12)&mask)
-
+	out[4] = T((in[1]>>52)&mask |
+		(in[2]<<12)&mask + minv)
 	out[5] = T((in[2]>>17)&mask + minv)
-	out[6] = T((in[2]>>46)&mask + minv)
-
-	out[6] = out[6] + T((in[3]<<18)&mask)
-
+	out[6] = T((in[2]>>46)&mask |
+		(in[3]<<18)&mask + minv)
 	out[7] = T((in[3]>>11)&mask + minv)
-	out[8] = T((in[3]>>40)&mask + minv)
-
-	out[8] = out[8] + T((in[4]<<24)&mask)
-
+	out[8] = T((in[3]>>40)&mask |
+		(in[4]<<24)&mask + minv)
 	out[9] = T((in[4]>>5)&mask + minv)
 	out[10] = T((in[4]>>34)&mask + minv)
-	out[11] = T((in[4]>>63)&mask + minv)
-
-	out[11] = out[11] + T((in[5]<<1)&mask)
-
+	out[11] = T((in[4]>>63)&mask |
+		(in[5]<<1)&mask + minv)
 	out[12] = T((in[5]>>28)&mask + minv)
-	out[13] = T((in[5]>>57)&mask + minv)
-
-	out[13] = out[13] + T((in[6]<<7)&mask)
-
+	out[13] = T((in[5]>>57)&mask |
+		(in[6]<<7)&mask + minv)
 	out[14] = T((in[6]>>22)&mask + minv)
-	out[15] = T((in[6]>>51)&mask + minv)
-
-	out[15] = out[15] + T((in[7]<<13)&mask)
-
+	out[15] = T((in[6]>>51)&mask |
+		(in[7]<<13)&mask + minv)
 	out[16] = T((in[7]>>16)&mask + minv)
-	out[17] = T((in[7]>>45)&mask + minv)
-
-	out[17] = out[17] + T((in[8]<<19)&mask)
-
+	out[17] = T((in[7]>>45)&mask |
+		(in[8]<<19)&mask + minv)
 	out[18] = T((in[8]>>10)&mask + minv)
-	out[19] = T((in[8]>>39)&mask + minv)
-
-	out[19] = out[19] + T((in[9]<<25)&mask)
-
+	out[19] = T((in[8]>>39)&mask |
+		(in[9]<<25)&mask + minv)
 	out[20] = T((in[9]>>4)&mask + minv)
 	out[21] = T((in[9]>>33)&mask + minv)
-	out[22] = T((in[9]>>62)&mask + minv)
-
-	out[22] = out[22] + T((in[10]<<2)&mask)
-
+	out[22] = T((in[9]>>62)&mask |
+		(in[10]<<2)&mask + minv)
 	out[23] = T((in[10]>>27)&mask + minv)
-	out[24] = T((in[10]>>56)&mask + minv)
-
-	out[24] = out[24] + T((in[11]<<8)&mask)
-
+	out[24] = T((in[10]>>56)&mask |
+		(in[11]<<8)&mask + minv)
 	out[25] = T((in[11]>>21)&mask + minv)
-	out[26] = T((in[11]>>50)&mask + minv)
-
-	out[26] = out[26] + T((in[12]<<14)&mask)
-
+	out[26] = T((in[11]>>50)&mask |
+		(in[12]<<14)&mask + minv)
 	out[27] = T((in[12]>>15)&mask + minv)
-	out[28] = T((in[12]>>44)&mask + minv)
-
-	out[28] = out[28] + T((in[13]<<20)&mask)
-
+	out[28] = T((in[12]>>44)&mask |
+		(in[13]<<20)&mask + minv)
 	out[29] = T((in[13]>>9)&mask + minv)
-	out[30] = T((in[13]>>38)&mask + minv)
-
-	out[30] = out[30] + T((in[14]<<26)&mask)
-
+	out[30] = T((in[13]>>38)&mask |
+		(in[14]<<26)&mask + minv)
 	out[31] = T((in[14]>>3)&mask + minv)
 	out[32] = T((in[14]>>32)&mask + minv)
-	out[33] = T((in[14]>>61)&mask + minv)
-
-	out[33] = out[33] + T((in[15]<<3)&mask)
-
+	out[33] = T((in[14]>>61)&mask |
+		(in[15]<<3)&mask + minv)
 	out[34] = T((in[15]>>26)&mask + minv)
-	out[35] = T((in[15]>>55)&mask + minv)
-
-	out[35] = out[35] + T((in[16]<<9)&mask)
-
+	out[35] = T((in[15]>>55)&mask |
+		(in[16]<<9)&mask + minv)
 	out[36] = T((in[16]>>20)&mask + minv)
-	out[37] = T((in[16]>>49)&mask + minv)
-
-	out[37] = out[37] + T((in[17]<<15)&mask)
-
+	out[37] = T((in[16]>>49)&mask |
+		(in[17]<<15)&mask + minv)
 	out[38] = T((in[17]>>14)&mask + minv)
-	out[39] = T((in[17]>>43)&mask + minv)
-
-	out[39] = out[39] + T((in[18]<<21)&mask)
-
+	out[39] = T((in[17]>>43)&mask |
+		(in[18]<<21)&mask + minv)
 	out[40] = T((in[18]>>8)&mask + minv)
-	out[41] = T((in[18]>>37)&mask + minv)
-
-	out[41] = out[41] + T((in[19]<<27)&mask)
-
+	out[41] = T((in[18]>>37)&mask |
+		(in[19]<<27)&mask + minv)
 	out[42] = T((in[19]>>2)&mask + minv)
 	out[43] = T((in[19]>>31)&mask + minv)
-	out[44] = T((in[19]>>60)&mask + minv)
-
-	out[44] = out[44] + T((in[20]<<4)&mask)
-
+	out[44] = T((in[19]>>60)&mask |
+		(in[20]<<4)&mask + minv)
 	out[45] = T((in[20]>>25)&mask + minv)
-	out[46] = T((in[20]>>54)&mask + minv)
-
-	out[46] = out[46] + T((in[21]<<10)&mask)
-
+	out[46] = T((in[20]>>54)&mask |
+		(in[21]<<10)&mask + minv)
 	out[47] = T((in[21]>>19)&mask + minv)
-	out[48] = T((in[21]>>48)&mask + minv)
-
-	out[48] = out[48] + T((in[22]<<16)&mask)
-
+	out[48] = T((in[21]>>48)&mask |
+		(in[22]<<16)&mask + minv)
 	out[49] = T((in[22]>>13)&mask + minv)
-	out[50] = T((in[22]>>42)&mask + minv)
-
-	out[50] = out[50] + T((in[23]<<22)&mask)
-
+	out[50] = T((in[22]>>42)&mask |
+		(in[23]<<22)&mask + minv)
 	out[51] = T((in[23]>>7)&mask + minv)
-	out[52] = T((in[23]>>36)&mask + minv)
-
-	out[52] = out[52] + T((in[24]<<28)&mask)
-
+	out[52] = T((in[23]>>36)&mask |
+		(in[24]<<28)&mask + minv)
 	out[53] = T((in[24]>>1)&mask + minv)
 	out[54] = T((in[24]>>30)&mask + minv)
-	out[55] = T((in[24]>>59)&mask + minv)
-
-	out[55] = out[55] + T((in[25]<<5)&mask)
-
+	out[55] = T((in[24]>>59)&mask |
+		(in[25]<<5)&mask + minv)
 	out[56] = T((in[25]>>24)&mask + minv)
-	out[57] = T((in[25]>>53)&mask + minv)
-
-	out[57] = out[57] + T((in[26]<<11)&mask)
-
+	out[57] = T((in[25]>>53)&mask |
+		(in[26]<<11)&mask + minv)
 	out[58] = T((in[26]>>18)&mask + minv)
-	out[59] = T((in[26]>>47)&mask + minv)
-
-	out[59] = out[59] + T((in[27]<<17)&mask)
-
+	out[59] = T((in[26]>>47)&mask |
+		(in[27]<<17)&mask + minv)
 	out[60] = T((in[27]>>12)&mask + minv)
-	out[61] = T((in[27]>>41)&mask + minv)
-
-	out[61] = out[61] + T((in[28]<<23)&mask)
-
+	out[61] = T((in[27]>>41)&mask |
+		(in[28]<<23)&mask + minv)
 	out[62] = T((in[28]>>6)&mask + minv)
 	out[63] = T((in[28]>>35)&mask + minv)
 
@@ -7205,153 +6400,94 @@ func br32_30[T uint32 | int32](out *[64]T, in *[30]uint64, minv uint64) {
 	mask := uint64((1 << 30) - 1)
 	out[0] = T((in[0]>>0)&mask + minv)
 	out[1] = T((in[0]>>30)&mask + minv)
-	out[2] = T((in[0]>>60)&mask + minv)
-
-	out[2] = out[2] + T((in[1]<<4)&mask)
-
+	out[2] = T((in[0]>>60)&mask |
+		(in[1]<<4)&mask + minv)
 	out[3] = T((in[1]>>26)&mask + minv)
-	out[4] = T((in[1]>>56)&mask + minv)
-
-	out[4] = out[4] + T((in[2]<<8)&mask)
-
+	out[4] = T((in[1]>>56)&mask |
+		(in[2]<<8)&mask + minv)
 	out[5] = T((in[2]>>22)&mask + minv)
-	out[6] = T((in[2]>>52)&mask + minv)
-
-	out[6] = out[6] + T((in[3]<<12)&mask)
-
+	out[6] = T((in[2]>>52)&mask |
+		(in[3]<<12)&mask + minv)
 	out[7] = T((in[3]>>18)&mask + minv)
-	out[8] = T((in[3]>>48)&mask + minv)
-
-	out[8] = out[8] + T((in[4]<<16)&mask)
-
+	out[8] = T((in[3]>>48)&mask |
+		(in[4]<<16)&mask + minv)
 	out[9] = T((in[4]>>14)&mask + minv)
-	out[10] = T((in[4]>>44)&mask + minv)
-
-	out[10] = out[10] + T((in[5]<<20)&mask)
-
+	out[10] = T((in[4]>>44)&mask |
+		(in[5]<<20)&mask + minv)
 	out[11] = T((in[5]>>10)&mask + minv)
-	out[12] = T((in[5]>>40)&mask + minv)
-
-	out[12] = out[12] + T((in[6]<<24)&mask)
-
+	out[12] = T((in[5]>>40)&mask |
+		(in[6]<<24)&mask + minv)
 	out[13] = T((in[6]>>6)&mask + minv)
-	out[14] = T((in[6]>>36)&mask + minv)
-
-	out[14] = out[14] + T((in[7]<<28)&mask)
-
+	out[14] = T((in[6]>>36)&mask |
+		(in[7]<<28)&mask + minv)
 	out[15] = T((in[7]>>2)&mask + minv)
 	out[16] = T((in[7]>>32)&mask + minv)
-	out[17] = T((in[7]>>62)&mask + minv)
-
-	out[17] = out[17] + T((in[8]<<2)&mask)
-
+	out[17] = T((in[7]>>62)&mask |
+		(in[8]<<2)&mask + minv)
 	out[18] = T((in[8]>>28)&mask + minv)
-	out[19] = T((in[8]>>58)&mask + minv)
-
-	out[19] = out[19] + T((in[9]<<6)&mask)
-
+	out[19] = T((in[8]>>58)&mask |
+		(in[9]<<6)&mask + minv)
 	out[20] = T((in[9]>>24)&mask + minv)
-	out[21] = T((in[9]>>54)&mask + minv)
-
-	out[21] = out[21] + T((in[10]<<10)&mask)
-
+	out[21] = T((in[9]>>54)&mask |
+		(in[10]<<10)&mask + minv)
 	out[22] = T((in[10]>>20)&mask + minv)
-	out[23] = T((in[10]>>50)&mask + minv)
-
-	out[23] = out[23] + T((in[11]<<14)&mask)
-
+	out[23] = T((in[10]>>50)&mask |
+		(in[11]<<14)&mask + minv)
 	out[24] = T((in[11]>>16)&mask + minv)
-	out[25] = T((in[11]>>46)&mask + minv)
-
-	out[25] = out[25] + T((in[12]<<18)&mask)
-
+	out[25] = T((in[11]>>46)&mask |
+		(in[12]<<18)&mask + minv)
 	out[26] = T((in[12]>>12)&mask + minv)
-	out[27] = T((in[12]>>42)&mask + minv)
-
-	out[27] = out[27] + T((in[13]<<22)&mask)
-
+	out[27] = T((in[12]>>42)&mask |
+		(in[13]<<22)&mask + minv)
 	out[28] = T((in[13]>>8)&mask + minv)
-	out[29] = T((in[13]>>38)&mask + minv)
-
-	out[29] = out[29] + T((in[14]<<26)&mask)
-
+	out[29] = T((in[13]>>38)&mask |
+		(in[14]<<26)&mask + minv)
 	out[30] = T((in[14]>>4)&mask + minv)
 	out[31] = T((in[14]>>34)&mask + minv)
-
-	out[31] = out[31] + T((in[15]<<30)&mask)
-
 	out[32] = T((in[15]>>0)&mask + minv)
 	out[33] = T((in[15]>>30)&mask + minv)
-	out[34] = T((in[15]>>60)&mask + minv)
-
-	out[34] = out[34] + T((in[16]<<4)&mask)
-
+	out[34] = T((in[15]>>60)&mask |
+		(in[16]<<4)&mask + minv)
 	out[35] = T((in[16]>>26)&mask + minv)
-	out[36] = T((in[16]>>56)&mask + minv)
-
-	out[36] = out[36] + T((in[17]<<8)&mask)
-
+	out[36] = T((in[16]>>56)&mask |
+		(in[17]<<8)&mask + minv)
 	out[37] = T((in[17]>>22)&mask + minv)
-	out[38] = T((in[17]>>52)&mask + minv)
-
-	out[38] = out[38] + T((in[18]<<12)&mask)
-
+	out[38] = T((in[17]>>52)&mask |
+		(in[18]<<12)&mask + minv)
 	out[39] = T((in[18]>>18)&mask + minv)
-	out[40] = T((in[18]>>48)&mask + minv)
-
-	out[40] = out[40] + T((in[19]<<16)&mask)
-
+	out[40] = T((in[18]>>48)&mask |
+		(in[19]<<16)&mask + minv)
 	out[41] = T((in[19]>>14)&mask + minv)
-	out[42] = T((in[19]>>44)&mask + minv)
-
-	out[42] = out[42] + T((in[20]<<20)&mask)
-
+	out[42] = T((in[19]>>44)&mask |
+		(in[20]<<20)&mask + minv)
 	out[43] = T((in[20]>>10)&mask + minv)
-	out[44] = T((in[20]>>40)&mask + minv)
-
-	out[44] = out[44] + T((in[21]<<24)&mask)
-
+	out[44] = T((in[20]>>40)&mask |
+		(in[21]<<24)&mask + minv)
 	out[45] = T((in[21]>>6)&mask + minv)
-	out[46] = T((in[21]>>36)&mask + minv)
-
-	out[46] = out[46] + T((in[22]<<28)&mask)
-
+	out[46] = T((in[21]>>36)&mask |
+		(in[22]<<28)&mask + minv)
 	out[47] = T((in[22]>>2)&mask + minv)
 	out[48] = T((in[22]>>32)&mask + minv)
-	out[49] = T((in[22]>>62)&mask + minv)
-
-	out[49] = out[49] + T((in[23]<<2)&mask)
-
+	out[49] = T((in[22]>>62)&mask |
+		(in[23]<<2)&mask + minv)
 	out[50] = T((in[23]>>28)&mask + minv)
-	out[51] = T((in[23]>>58)&mask + minv)
-
-	out[51] = out[51] + T((in[24]<<6)&mask)
-
+	out[51] = T((in[23]>>58)&mask |
+		(in[24]<<6)&mask + minv)
 	out[52] = T((in[24]>>24)&mask + minv)
-	out[53] = T((in[24]>>54)&mask + minv)
-
-	out[53] = out[53] + T((in[25]<<10)&mask)
-
+	out[53] = T((in[24]>>54)&mask |
+		(in[25]<<10)&mask + minv)
 	out[54] = T((in[25]>>20)&mask + minv)
-	out[55] = T((in[25]>>50)&mask + minv)
-
-	out[55] = out[55] + T((in[26]<<14)&mask)
-
+	out[55] = T((in[25]>>50)&mask |
+		(in[26]<<14)&mask + minv)
 	out[56] = T((in[26]>>16)&mask + minv)
-	out[57] = T((in[26]>>46)&mask + minv)
-
-	out[57] = out[57] + T((in[27]<<18)&mask)
-
+	out[57] = T((in[26]>>46)&mask |
+		(in[27]<<18)&mask + minv)
 	out[58] = T((in[27]>>12)&mask + minv)
-	out[59] = T((in[27]>>42)&mask + minv)
-
-	out[59] = out[59] + T((in[28]<<22)&mask)
-
+	out[59] = T((in[27]>>42)&mask |
+		(in[28]<<22)&mask + minv)
 	out[60] = T((in[28]>>8)&mask + minv)
-	out[61] = T((in[28]>>38)&mask + minv)
-
-	out[61] = out[61] + T((in[29]<<26)&mask)
-
+	out[61] = T((in[28]>>38)&mask |
+		(in[29]<<26)&mask + minv)
 	out[62] = T((in[29]>>4)&mask + minv)
 	out[63] = T((in[29]>>34)&mask + minv)
 
@@ -7360,156 +6496,96 @@ func br32_31[T uint32 | int32](out *[64]T, in *[31]uint64, minv uint64) {
 	mask := uint64((1 << 31) - 1)
 	out[0] = T((in[0]>>0)&mask + minv)
 	out[1] = T((in[0]>>31)&mask + minv)
-	out[2] = T((in[0]>>62)&mask + minv)
-
-	out[2] = out[2] + T((in[1]<<2)&mask)
-
+	out[2] = T((in[0]>>62)&mask |
+		(in[1]<<2)&mask + minv)
 	out[3] = T((in[1]>>29)&mask + minv)
-	out[4] = T((in[1]>>60)&mask + minv)
-
-	out[4] = out[4] + T((in[2]<<4)&mask)
-
+	out[4] = T((in[1]>>60)&mask |
+		(in[2]<<4)&mask + minv)
 	out[5] = T((in[2]>>27)&mask + minv)
-	out[6] = T((in[2]>>58)&mask + minv)
-
-	out[6] = out[6] + T((in[3]<<6)&mask)
-
+	out[6] = T((in[2]>>58)&mask |
+		(in[3]<<6)&mask + minv)
 	out[7] = T((in[3]>>25)&mask + minv)
-	out[8] = T((in[3]>>56)&mask + minv)
-
-	out[8] = out[8] + T((in[4]<<8)&mask)
-
+	out[8] = T((in[3]>>56)&mask |
+		(in[4]<<8)&mask + minv)
 	out[9] = T((in[4]>>23)&mask + minv)
-	out[10] = T((in[4]>>54)&mask + minv)
-
-	out[10] = out[10] + T((in[5]<<10)&mask)
-
+	out[10] = T((in[4]>>54)&mask |
+		(in[5]<<10)&mask + minv)
 	out[11] = T((in[5]>>21)&mask + minv)
-	out[12] = T((in[5]>>52)&mask + minv)
-
-	out[12] = out[12] + T((in[6]<<12)&mask)
-
+	out[12] = T((in[5]>>52)&mask |
+		(in[6]<<12)&mask + minv)
 	out[13] = T((in[6]>>19)&mask + minv)
-	out[14] = T((in[6]>>50)&mask + minv)
-
-	out[14] = out[14] + T((in[7]<<14)&mask)
-
+	out[14] = T((in[6]>>50)&mask |
+		(in[7]<<14)&mask + minv)
 	out[15] = T((in[7]>>17)&mask + minv)
-	out[16] = T((in[7]>>48)&mask + minv)
-
-	out[16] = out[16] + T((in[8]<<16)&mask)
-
+	out[16] = T((in[7]>>48)&mask |
+		(in[8]<<16)&mask + minv)
 	out[17] = T((in[8]>>15)&mask + minv)
-	out[18] = T((in[8]>>46)&mask + minv)
-
-	out[18] = out[18] + T((in[9]<<18)&mask)
-
+	out[18] = T((in[8]>>46)&mask |
+		(in[9]<<18)&mask + minv)
 	out[19] = T((in[9]>>13)&mask + minv)
-	out[20] = T((in[9]>>44)&mask + minv)
-
-	out[20] = out[20] + T((in[10]<<20)&mask)
-
+	out[20] = T((in[9]>>44)&mask |
+		(in[10]<<20)&mask + minv)
 	out[21] = T((in[10]>>11)&mask + minv)
-	out[22] = T((in[10]>>42)&mask + minv)
-
-	out[22] = out[22] + T((in[11]<<22)&mask)
-
+	out[22] = T((in[10]>>42)&mask |
+		(in[11]<<22)&mask + minv)
 	out[23] = T((in[11]>>9)&mask + minv)
-	out[24] = T((in[11]>>40)&mask + minv)
-
-	out[24] = out[24] + T((in[12]<<24)&mask)
-
+	out[24] = T((in[11]>>40)&mask |
+		(in[12]<<24)&mask + minv)
 	out[25] = T((in[12]>>7)&mask + minv)
-	out[26] = T((in[12]>>38)&mask + minv)
-
-	out[26] = out[26] + T((in[13]<<26)&mask)
-
+	out[26] = T((in[12]>>38)&mask |
+		(in[13]<<26)&mask + minv)
 	out[27] = T((in[13]>>5)&mask + minv)
-	out[28] = T((in[13]>>36)&mask + minv)
-
-	out[28] = out[28] + T((in[14]<<28)&mask)
-
+	out[28] = T((in[13]>>36)&mask |
+		(in[14]<<28)&mask + minv)
 	out[29] = T((in[14]>>3)&mask + minv)
-	out[30] = T((in[14]>>34)&mask + minv)
-
-	out[30] = out[30] + T((in[15]<<30)&mask)
-
+	out[30] = T((in[14]>>34)&mask |
+		(in[15]<<30)&mask + minv)
 	out[31] = T((in[15]>>1)&mask + minv)
 	out[32] = T((in[15]>>32)&mask + minv)
-	out[33] = T((in[15]>>63)&mask + minv)
-
-	out[33] = out[33] + T((in[16]<<1)&mask)
-
+	out[33] = T((in[15]>>63)&mask |
+		(in[16]<<1)&mask + minv)
 	out[34] = T((in[16]>>30)&mask + minv)
-	out[35] = T((in[16]>>61)&mask + minv)
-
-	out[35] = out[35] + T((in[17]<<3)&mask)
-
+	out[35] = T((in[16]>>61)&mask |
+		(in[17]<<3)&mask + minv)
 	out[36] = T((in[17]>>28)&mask + minv)
-	out[37] = T((in[17]>>59)&mask + minv)
-
-	out[37] = out[37] + T((in[18]<<5)&mask)
-
+	out[37] = T((in[17]>>59)&mask |
+		(in[18]<<5)&mask + minv)
 	out[38] = T((in[18]>>26)&mask + minv)
-	out[39] = T((in[18]>>57)&mask + minv)
-
-	out[39] = out[39] + T((in[19]<<7)&mask)
-
+	out[39] = T((in[18]>>57)&mask |
+		(in[19]<<7)&mask + minv)
 	out[40] = T((in[19]>>24)&mask + minv)
-	out[41] = T((in[19]>>55)&mask + minv)
-
-	out[41] = out[41] + T((in[20]<<9)&mask)
-
+	out[41] = T((in[19]>>55)&mask |
+		(in[20]<<9)&mask + minv)
 	out[42] = T((in[20]>>22)&mask + minv)
-	out[43] = T((in[20]>>53)&mask + minv)
-
-	out[43] = out[43] + T((in[21]<<11)&mask)
-
+	out[43] = T((in[20]>>53)&mask |
+		(in[21]<<11)&mask + minv)
 	out[44] = T((in[21]>>20)&mask + minv)
-	out[45] = T((in[21]>>51)&mask + minv)
-
-	out[45] = out[45] + T((in[22]<<13)&mask)
-
+	out[45] = T((in[21]>>51)&mask |
+		(in[22]<<13)&mask + minv)
 	out[46] = T((in[22]>>18)&mask + minv)
-	out[47] = T((in[22]>>49)&mask + minv)
-
-	out[47] = out[47] + T((in[23]<<15)&mask)
-
+	out[47] = T((in[22]>>49)&mask |
+		(in[23]<<15)&mask + minv)
 	out[48] = T((in[23]>>16)&mask + minv)
-	out[49] = T((in[23]>>47)&mask + minv)
-
-	out[49] = out[49] + T((in[24]<<17)&mask)
-
+	out[49] = T((in[23]>>47)&mask |
+		(in[24]<<17)&mask + minv)
 	out[50] = T((in[24]>>14)&mask + minv)
-	out[51] = T((in[24]>>45)&mask + minv)
-
-	out[51] = out[51] + T((in[25]<<19)&mask)
-
+	out[51] = T((in[24]>>45)&mask |
+		(in[25]<<19)&mask + minv)
 	out[52] = T((in[25]>>12)&mask + minv)
-	out[53] = T((in[25]>>43)&mask + minv)
-
-	out[53] = out[53] + T((in[26]<<21)&mask)
-
+	out[53] = T((in[25]>>43)&mask |
+		(in[26]<<21)&mask + minv)
 	out[54] = T((in[26]>>10)&mask + minv)
-	out[55] = T((in[26]>>41)&mask + minv)
-
-	out[55] = out[55] + T((in[27]<<23)&mask)
-
+	out[55] = T((in[26]>>41)&mask |
+		(in[27]<<23)&mask + minv)
 	out[56] = T((in[27]>>8)&mask + minv)
-	out[57] = T((in[27]>>39)&mask + minv)
-
-	out[57] = out[57] + T((in[28]<<25)&mask)
-
+	out[57] = T((in[27]>>39)&mask |
+		(in[28]<<25)&mask + minv)
 	out[58] = T((in[28]>>6)&mask + minv)
-	out[59] = T((in[28]>>37)&mask + minv)
-
-	out[59] = out[59] + T((in[29]<<27)&mask)
-
+	out[59] = T((in[28]>>37)&mask |
+		(in[29]<<27)&mask + minv)
 	out[60] = T((in[29]>>4)&mask + minv)
-	out[61] = T((in[29]>>35)&mask + minv)
-
-	out[61] = out[61] + T((in[30]<<29)&mask)
-
+	out[61] = T((in[29]>>35)&mask |
+		(in[30]<<29)&mask + minv)
 	out[62] = T((in[30]>>2)&mask + minv)
 	out[63] = T((in[30]>>33)&mask + minv)
 

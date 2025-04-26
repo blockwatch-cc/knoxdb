@@ -21,31 +21,31 @@ import (
 //
 
 func TestCmpEqual(t *testing.T) {
-	btests.CompareTest(t, Equal, types.FilterModeEqual)
+	btests.CompareTest[uint64](t, Equal, types.FilterModeEqual, Encode, btests.Unpack)
 }
 
 func TestCmpNotEqual(t *testing.T) {
-	btests.CompareTest(t, NotEqual, types.FilterModeNotEqual)
+	btests.CompareTest[uint64](t, NotEqual, types.FilterModeNotEqual, Encode, btests.Unpack)
 }
 
 func TestCmpLess(t *testing.T) {
-	btests.CompareTest(t, Less, types.FilterModeLt)
+	btests.CompareTest[uint64](t, Less, types.FilterModeLt, Encode, btests.Unpack)
 }
 
 func TestCmpLessEqual(t *testing.T) {
-	btests.CompareTest(t, LessEqual, types.FilterModeLe)
+	btests.CompareTest[uint64](t, LessEqual, types.FilterModeLe, Encode, btests.Unpack)
 }
 
 func TestCmpGreater(t *testing.T) {
-	btests.CompareTest(t, Greater, types.FilterModeGt)
+	btests.CompareTest[uint64](t, Greater, types.FilterModeGt, Encode, btests.Unpack)
 }
 
 func TestCmpGreaterEqual(t *testing.T) {
-	btests.CompareTest(t, GreaterEqual, types.FilterModeGe)
+	btests.CompareTest[uint64](t, GreaterEqual, types.FilterModeGe, Encode, btests.Unpack)
 }
 
 func TestCmpBetween(t *testing.T) {
-	btests.CompareTest2(t, Between, types.FilterModeRange)
+	btests.CompareTest2[uint64](t, Between, types.FilterModeRange, Encode, btests.Unpack)
 }
 
 // -------------------------------

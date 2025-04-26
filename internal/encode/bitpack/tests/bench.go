@@ -49,7 +49,7 @@ func DecodeBenchmark[T types.Unsigned](b *testing.B, enc EncodeFunc[T], dec Deco
 	}
 }
 
-func CompareBenchmark[T types.Unsigned](b *testing.B, enc EncodeFunc[T], cmp CompareFunc[T]) {
+func CompareBenchmark[T types.Unsigned](b *testing.B, enc EncodeFunc[T], cmp CompareFunc) {
 	if enc == nil {
 		enc = encode[T]
 	}
@@ -63,7 +63,7 @@ func CompareBenchmark[T types.Unsigned](b *testing.B, enc EncodeFunc[T], cmp Com
 		b.Run(fmt.Sprintf("u%d/%s", w*8, c.Name), func(b *testing.B) {
 			b.SetBytes(int64(w * c.N))
 			for range b.N {
-				cmp(buf, log2, T(val), c.N, bits)
+				cmp(buf, log2, uint64(val), c.N, bits)
 			}
 		})
 	}

@@ -602,6 +602,9 @@ func bitread8[T uint8 | int8](out []T, in []uint64, log2 int, minv T) {
 	}
 }
 func br8_0[T uint8 | int8](out *[64]T, in *[0]uint64, minv uint64) {
+	for i := range out {
+		out[i] = T(minv)
+	}
 }
 func br8_1[T uint8 | int8](out *[64]T, in *[1]uint64, minv uint64) {
 	mask := uint64((1 << 1) - 1)
@@ -705,7 +708,6 @@ func br8_2[T uint8 | int8](out *[64]T, in *[2]uint64, minv uint64) {
 	out[29] = T((in[0]>>58)&mask + minv)
 	out[30] = T((in[0]>>60)&mask + minv)
 	out[31] = T((in[0]>>62)&mask + minv)
-
 	out[32] = T((in[1]>>0)&mask + minv)
 	out[33] = T((in[1]>>2)&mask + minv)
 	out[34] = T((in[1]>>4)&mask + minv)
@@ -763,10 +765,8 @@ func br8_3[T uint8 | int8](out *[64]T, in *[3]uint64, minv uint64) {
 	out[18] = T((in[0]>>54)&mask + minv)
 	out[19] = T((in[0]>>57)&mask + minv)
 	out[20] = T((in[0]>>60)&mask + minv)
-	out[21] = T((in[0]>>63)&mask + minv)
-
-	out[21] = out[21] + T((in[1]<<1)&mask)
-
+	out[21] = T((in[0]>>63)&mask |
+		(in[1]<<1)&mask + minv)
 	out[22] = T((in[1]>>2)&mask + minv)
 	out[23] = T((in[1]>>5)&mask + minv)
 	out[24] = T((in[1]>>8)&mask + minv)
@@ -787,10 +787,8 @@ func br8_3[T uint8 | int8](out *[64]T, in *[3]uint64, minv uint64) {
 	out[39] = T((in[1]>>53)&mask + minv)
 	out[40] = T((in[1]>>56)&mask + minv)
 	out[41] = T((in[1]>>59)&mask + minv)
-	out[42] = T((in[1]>>62)&mask + minv)
-
-	out[42] = out[42] + T((in[2]<<2)&mask)
-
+	out[42] = T((in[1]>>62)&mask |
+		(in[2]<<2)&mask + minv)
 	out[43] = T((in[2]>>1)&mask + minv)
 	out[44] = T((in[2]>>4)&mask + minv)
 	out[45] = T((in[2]>>7)&mask + minv)
@@ -832,7 +830,6 @@ func br8_4[T uint8 | int8](out *[64]T, in *[4]uint64, minv uint64) {
 	out[13] = T((in[0]>>52)&mask + minv)
 	out[14] = T((in[0]>>56)&mask + minv)
 	out[15] = T((in[0]>>60)&mask + minv)
-
 	out[16] = T((in[1]>>0)&mask + minv)
 	out[17] = T((in[1]>>4)&mask + minv)
 	out[18] = T((in[1]>>8)&mask + minv)
@@ -849,7 +846,6 @@ func br8_4[T uint8 | int8](out *[64]T, in *[4]uint64, minv uint64) {
 	out[29] = T((in[1]>>52)&mask + minv)
 	out[30] = T((in[1]>>56)&mask + minv)
 	out[31] = T((in[1]>>60)&mask + minv)
-
 	out[32] = T((in[2]>>0)&mask + minv)
 	out[33] = T((in[2]>>4)&mask + minv)
 	out[34] = T((in[2]>>8)&mask + minv)
@@ -866,7 +862,6 @@ func br8_4[T uint8 | int8](out *[64]T, in *[4]uint64, minv uint64) {
 	out[45] = T((in[2]>>52)&mask + minv)
 	out[46] = T((in[2]>>56)&mask + minv)
 	out[47] = T((in[2]>>60)&mask + minv)
-
 	out[48] = T((in[3]>>0)&mask + minv)
 	out[49] = T((in[3]>>4)&mask + minv)
 	out[50] = T((in[3]>>8)&mask + minv)
@@ -899,10 +894,8 @@ func br8_5[T uint8 | int8](out *[64]T, in *[5]uint64, minv uint64) {
 	out[9] = T((in[0]>>45)&mask + minv)
 	out[10] = T((in[0]>>50)&mask + minv)
 	out[11] = T((in[0]>>55)&mask + minv)
-	out[12] = T((in[0]>>60)&mask + minv)
-
-	out[12] = out[12] + T((in[1]<<4)&mask)
-
+	out[12] = T((in[0]>>60)&mask |
+		(in[1]<<4)&mask + minv)
 	out[13] = T((in[1]>>1)&mask + minv)
 	out[14] = T((in[1]>>6)&mask + minv)
 	out[15] = T((in[1]>>11)&mask + minv)
@@ -915,10 +908,8 @@ func br8_5[T uint8 | int8](out *[64]T, in *[5]uint64, minv uint64) {
 	out[22] = T((in[1]>>46)&mask + minv)
 	out[23] = T((in[1]>>51)&mask + minv)
 	out[24] = T((in[1]>>56)&mask + minv)
-	out[25] = T((in[1]>>61)&mask + minv)
-
-	out[25] = out[25] + T((in[2]<<3)&mask)
-
+	out[25] = T((in[1]>>61)&mask |
+		(in[2]<<3)&mask + minv)
 	out[26] = T((in[2]>>2)&mask + minv)
 	out[27] = T((in[2]>>7)&mask + minv)
 	out[28] = T((in[2]>>12)&mask + minv)
@@ -931,10 +922,8 @@ func br8_5[T uint8 | int8](out *[64]T, in *[5]uint64, minv uint64) {
 	out[35] = T((in[2]>>47)&mask + minv)
 	out[36] = T((in[2]>>52)&mask + minv)
 	out[37] = T((in[2]>>57)&mask + minv)
-	out[38] = T((in[2]>>62)&mask + minv)
-
-	out[38] = out[38] + T((in[3]<<2)&mask)
-
+	out[38] = T((in[2]>>62)&mask |
+		(in[3]<<2)&mask + minv)
 	out[39] = T((in[3]>>3)&mask + minv)
 	out[40] = T((in[3]>>8)&mask + minv)
 	out[41] = T((in[3]>>13)&mask + minv)
@@ -947,10 +936,8 @@ func br8_5[T uint8 | int8](out *[64]T, in *[5]uint64, minv uint64) {
 	out[48] = T((in[3]>>48)&mask + minv)
 	out[49] = T((in[3]>>53)&mask + minv)
 	out[50] = T((in[3]>>58)&mask + minv)
-	out[51] = T((in[3]>>63)&mask + minv)
-
-	out[51] = out[51] + T((in[4]<<1)&mask)
-
+	out[51] = T((in[3]>>63)&mask |
+		(in[4]<<1)&mask + minv)
 	out[52] = T((in[4]>>4)&mask + minv)
 	out[53] = T((in[4]>>9)&mask + minv)
 	out[54] = T((in[4]>>14)&mask + minv)
@@ -977,10 +964,8 @@ func br8_6[T uint8 | int8](out *[64]T, in *[6]uint64, minv uint64) {
 	out[7] = T((in[0]>>42)&mask + minv)
 	out[8] = T((in[0]>>48)&mask + minv)
 	out[9] = T((in[0]>>54)&mask + minv)
-	out[10] = T((in[0]>>60)&mask + minv)
-
-	out[10] = out[10] + T((in[1]<<4)&mask)
-
+	out[10] = T((in[0]>>60)&mask |
+		(in[1]<<4)&mask + minv)
 	out[11] = T((in[1]>>2)&mask + minv)
 	out[12] = T((in[1]>>8)&mask + minv)
 	out[13] = T((in[1]>>14)&mask + minv)
@@ -991,10 +976,8 @@ func br8_6[T uint8 | int8](out *[64]T, in *[6]uint64, minv uint64) {
 	out[18] = T((in[1]>>44)&mask + minv)
 	out[19] = T((in[1]>>50)&mask + minv)
 	out[20] = T((in[1]>>56)&mask + minv)
-	out[21] = T((in[1]>>62)&mask + minv)
-
-	out[21] = out[21] + T((in[2]<<2)&mask)
-
+	out[21] = T((in[1]>>62)&mask |
+		(in[2]<<2)&mask + minv)
 	out[22] = T((in[2]>>4)&mask + minv)
 	out[23] = T((in[2]>>10)&mask + minv)
 	out[24] = T((in[2]>>16)&mask + minv)
@@ -1005,9 +988,6 @@ func br8_6[T uint8 | int8](out *[64]T, in *[6]uint64, minv uint64) {
 	out[29] = T((in[2]>>46)&mask + minv)
 	out[30] = T((in[2]>>52)&mask + minv)
 	out[31] = T((in[2]>>58)&mask + minv)
-
-	out[31] = out[31] + T((in[3]<<6)&mask)
-
 	out[32] = T((in[3]>>0)&mask + minv)
 	out[33] = T((in[3]>>6)&mask + minv)
 	out[34] = T((in[3]>>12)&mask + minv)
@@ -1018,10 +998,8 @@ func br8_6[T uint8 | int8](out *[64]T, in *[6]uint64, minv uint64) {
 	out[39] = T((in[3]>>42)&mask + minv)
 	out[40] = T((in[3]>>48)&mask + minv)
 	out[41] = T((in[3]>>54)&mask + minv)
-	out[42] = T((in[3]>>60)&mask + minv)
-
-	out[42] = out[42] + T((in[4]<<4)&mask)
-
+	out[42] = T((in[3]>>60)&mask |
+		(in[4]<<4)&mask + minv)
 	out[43] = T((in[4]>>2)&mask + minv)
 	out[44] = T((in[4]>>8)&mask + minv)
 	out[45] = T((in[4]>>14)&mask + minv)
@@ -1032,10 +1010,8 @@ func br8_6[T uint8 | int8](out *[64]T, in *[6]uint64, minv uint64) {
 	out[50] = T((in[4]>>44)&mask + minv)
 	out[51] = T((in[4]>>50)&mask + minv)
 	out[52] = T((in[4]>>56)&mask + minv)
-	out[53] = T((in[4]>>62)&mask + minv)
-
-	out[53] = out[53] + T((in[5]<<2)&mask)
-
+	out[53] = T((in[4]>>62)&mask |
+		(in[5]<<2)&mask + minv)
 	out[54] = T((in[5]>>4)&mask + minv)
 	out[55] = T((in[5]>>10)&mask + minv)
 	out[56] = T((in[5]>>16)&mask + minv)
@@ -1059,10 +1035,8 @@ func br8_7[T uint8 | int8](out *[64]T, in *[7]uint64, minv uint64) {
 	out[6] = T((in[0]>>42)&mask + minv)
 	out[7] = T((in[0]>>49)&mask + minv)
 	out[8] = T((in[0]>>56)&mask + minv)
-	out[9] = T((in[0]>>63)&mask + minv)
-
-	out[9] = out[9] + T((in[1]<<1)&mask)
-
+	out[9] = T((in[0]>>63)&mask |
+		(in[1]<<1)&mask + minv)
 	out[10] = T((in[1]>>6)&mask + minv)
 	out[11] = T((in[1]>>13)&mask + minv)
 	out[12] = T((in[1]>>20)&mask + minv)
@@ -1071,10 +1045,8 @@ func br8_7[T uint8 | int8](out *[64]T, in *[7]uint64, minv uint64) {
 	out[15] = T((in[1]>>41)&mask + minv)
 	out[16] = T((in[1]>>48)&mask + minv)
 	out[17] = T((in[1]>>55)&mask + minv)
-	out[18] = T((in[1]>>62)&mask + minv)
-
-	out[18] = out[18] + T((in[2]<<2)&mask)
-
+	out[18] = T((in[1]>>62)&mask |
+		(in[2]<<2)&mask + minv)
 	out[19] = T((in[2]>>5)&mask + minv)
 	out[20] = T((in[2]>>12)&mask + minv)
 	out[21] = T((in[2]>>19)&mask + minv)
@@ -1083,10 +1055,8 @@ func br8_7[T uint8 | int8](out *[64]T, in *[7]uint64, minv uint64) {
 	out[24] = T((in[2]>>40)&mask + minv)
 	out[25] = T((in[2]>>47)&mask + minv)
 	out[26] = T((in[2]>>54)&mask + minv)
-	out[27] = T((in[2]>>61)&mask + minv)
-
-	out[27] = out[27] + T((in[3]<<3)&mask)
-
+	out[27] = T((in[2]>>61)&mask |
+		(in[3]<<3)&mask + minv)
 	out[28] = T((in[3]>>4)&mask + minv)
 	out[29] = T((in[3]>>11)&mask + minv)
 	out[30] = T((in[3]>>18)&mask + minv)
@@ -1095,10 +1065,8 @@ func br8_7[T uint8 | int8](out *[64]T, in *[7]uint64, minv uint64) {
 	out[33] = T((in[3]>>39)&mask + minv)
 	out[34] = T((in[3]>>46)&mask + minv)
 	out[35] = T((in[3]>>53)&mask + minv)
-	out[36] = T((in[3]>>60)&mask + minv)
-
-	out[36] = out[36] + T((in[4]<<4)&mask)
-
+	out[36] = T((in[3]>>60)&mask |
+		(in[4]<<4)&mask + minv)
 	out[37] = T((in[4]>>3)&mask + minv)
 	out[38] = T((in[4]>>10)&mask + minv)
 	out[39] = T((in[4]>>17)&mask + minv)
@@ -1107,10 +1075,8 @@ func br8_7[T uint8 | int8](out *[64]T, in *[7]uint64, minv uint64) {
 	out[42] = T((in[4]>>38)&mask + minv)
 	out[43] = T((in[4]>>45)&mask + minv)
 	out[44] = T((in[4]>>52)&mask + minv)
-	out[45] = T((in[4]>>59)&mask + minv)
-
-	out[45] = out[45] + T((in[5]<<5)&mask)
-
+	out[45] = T((in[4]>>59)&mask |
+		(in[5]<<5)&mask + minv)
 	out[46] = T((in[5]>>2)&mask + minv)
 	out[47] = T((in[5]>>9)&mask + minv)
 	out[48] = T((in[5]>>16)&mask + minv)
@@ -1119,10 +1085,8 @@ func br8_7[T uint8 | int8](out *[64]T, in *[7]uint64, minv uint64) {
 	out[51] = T((in[5]>>37)&mask + minv)
 	out[52] = T((in[5]>>44)&mask + minv)
 	out[53] = T((in[5]>>51)&mask + minv)
-	out[54] = T((in[5]>>58)&mask + minv)
-
-	out[54] = out[54] + T((in[6]<<6)&mask)
-
+	out[54] = T((in[5]>>58)&mask |
+		(in[6]<<6)&mask + minv)
 	out[55] = T((in[6]>>1)&mask + minv)
 	out[56] = T((in[6]>>8)&mask + minv)
 	out[57] = T((in[6]>>15)&mask + minv)

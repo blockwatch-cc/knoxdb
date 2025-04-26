@@ -1,0 +1,65 @@
+// Copyright (c) 2025 Blockwatch Data Inc.
+// Code automatically generated - DO NOT EDIT.
+// Any manual changes will be lost.
+
+package {{.Package}}
+
+// Compare {{.OpName}}
+
+func cmp_{{.OpName}}(in []uint64, val1, val2 uint64, log2 int) uint64 {
+	{{- $bitsRange := bitsFuncRange 64 }}
+	switch log2 {
+		{{- range $bitsize, $value := $bitsRange}}
+			case {{$bitsize}}:
+				return cmp_bp_{{$bitsize}}_{{$.OpName}}((*[{{$bitsize}}]uint64)(in), val1, val2)
+		{{- end }}
+	}
+	return 0
+}
+
+{{- range $bitsize, $value := $bitsRange}}
+func cmp_bp_{{$bitsize}}_{{$.OpName}}(in *[{{$bitsize}}]uint64, val1, val2 uint64) uint64 {
+	{{- if gt $bitsize 0 }}
+	mask := uint64((1 << {{$bitsize}}) - 1)
+	c2 := val2 - val1
+	{{- $inputIdx := 0 }}
+	{{- $outIdx := 0 }}
+	{{- $offset  := 0 }}
+	{{- $shifter := 0 }}
+	{{- $bitsizeOuterRange := bitsFuncRange $bitsize }}
+	return (
+		{{- range $v0Idx, $v0Val := $bitsizeOuterRange }}
+		{{- $bitsizeInnerRange := bitRange 64 $bitsize $offset}}
+		{{- range $vIdx, $vVal := $bitsizeInnerRange }}
+			{{- if and (lt $shifter 64) (lt $outIdx 64) }}
+				{{- $offset = inc $offset $bitsize }}
+				{{- if gt $offset 64 }}
+						{{- $nextInputIdx := inc $inputIdx 1 }}
+						{{- $nextShifter := dec 64 $shifter}}
+						b2u64((in[{{$inputIdx}}]>>{{$shifter}}|in[{{$nextInputIdx}}]<<{{$nextShifter}})&mask-val1 {{$.Op}} c2) << {{$outIdx}} |
+						{{- $shifter = dec $bitsize $nextShifter }}
+						{{- $offset = $shifter }}
+						{{- $inputIdx = $nextInputIdx }}
+					{{- else }}
+						b2u64((in[{{$inputIdx}}]>>{{$shifter}})&mask-val1 {{$.Op}} c2) << {{$outIdx}} {{- if lt $outIdx 63 }} |{{ else }}){{- end}}
+						{{- $shifter = inc $shifter $bitsize }}
+					{{- end }}
+					{{- $outIdx = inc $outIdx 1 }}
+				{{- end }}
+
+			{{- end }}
+		{{- if eq $offset 64 }}
+			{{- $offset = 0 }}
+			{{- $shifter = 0 }}
+			{{- $inputIdx = inc $inputIdx 1 }}
+		{{- end}}
+		{{- end}}
+	{{ else }}
+		if val1 == 0 {
+			return uint64(0xffffffffffffffff)
+		}
+		return 0
+	{{- end }}
+}
+{{- end }}
+
