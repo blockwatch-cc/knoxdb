@@ -5,22 +5,17 @@
 
 package generic
 
-import (
-	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/util"
-)
-
 // cpu: 12th Gen Intel(R) Core(TM) i9-12900K
-// BenchmarkAnalyze/float64/dups_1k-24      2627 ns/op   3118.13 MB/s    0.3898 vals/ns
-// BenchmarkAnalyze/float64/dups_16k-24    41858 ns/op   3131.35 MB/s    0.3914 vals/ns
-// BenchmarkAnalyze/float64/dups_64k-24   167407 ns/op   3131.82 MB/s    0.3915 vals/ns
-// BenchmarkAnalyze/float64/runs_1k-24      2573 ns/op   3184.35 MB/s    0.3980 vals/ns
-// BenchmarkAnalyze/float64/runs_16k-24    42074 ns/op   3115.27 MB/s    0.3894 vals/ns
-// BenchmarkAnalyze/float64/runs_64k-24   168020 ns/op   3120.40 MB/s    0.3900 vals/ns
-// BenchmarkAnalyze/float64/seq_1k-24       2598 ns/op   3153.31 MB/s    0.3942 vals/ns
-// BenchmarkAnalyze/float64/seq_16k-24     41824 ns/op   3133.88 MB/s    0.3917 vals/ns
-// BenchmarkAnalyze/float64/seq_64k-24    167999 ns/op   3120.77 MB/s    0.3901 vals/ns
-func AnalyzeFloat[T types.Float](vals []T) (minv T, maxv T, numRuns int) {
+// BenchmarkAnalyze/float64/dups_1k-24      933.9 ns/op	  8771.47 MB/s    1.096 vals/ns
+// BenchmarkAnalyze/float64/dups_16k-24   14900 ns/op	  8796.96 MB/s    1.100 vals/ns
+// BenchmarkAnalyze/float64/dups_64k-24   68843 ns/op	  7615.75 MB/s    0.9520 vals/ns
+// BenchmarkAnalyze/float64/runs_1k-24      944.9 ns/op	  8669.83 MB/s    1.084 vals/ns
+// BenchmarkAnalyze/float64/runs_16k-24   14944 ns/op	  8770.75 MB/s    1.096 vals/ns
+// BenchmarkAnalyze/float64/runs_64k-24   59004 ns/op	  8885.59 MB/s    1.111 vals/ns
+// BenchmarkAnalyze/float64/seq_1k-24       993.2 ns/op	  8248.24 MB/s    1.031 vals/ns
+// BenchmarkAnalyze/float64/seq_16k-24    15850 ns/op	  8269.46 MB/s    1.034 vals/ns
+// BenchmarkAnalyze/float64/seq_64k-24    68632 ns/op	  7639.15 MB/s    0.9549 vals/ns
+func AnalyzeFloat[T float64 | float32](vals []T) (minv T, maxv T, numRuns int) {
 	if len(vals) == 0 {
 		return
 	}
@@ -31,10 +26,20 @@ func AnalyzeFloat[T types.Float](vals []T) (minv T, maxv T, numRuns int) {
 	for i := 1; i < len(vals); i++ {
 		v0 := vals[i-1]
 		v1 := vals[i]
-		minv = min(minv, v1)
-		maxv = max(maxv, v1)
-		numRuns += util.Bool2int(v0 != v1)
+		if v1 < minv {
+			minv = v1
+		} else if v1 > maxv {
+			maxv = v1
+		}
+		numRuns += b2i(v0 != v1)
 	}
 
 	return
+}
+
+func b2i(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }

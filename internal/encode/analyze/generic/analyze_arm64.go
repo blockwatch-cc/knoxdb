@@ -7,7 +7,6 @@ package generic
 
 import (
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 // BenchmarkAnalyze/float64/dups_64k-10     41259 ns/op    12707.20 MB/s  1.588 vals/ns
@@ -34,10 +33,10 @@ func AnalyzeFloat[T types.Float](vals []T) (minv T, maxv T, numRuns int) {
 		v4 := vals[i+3]
 		minv = min(minv, v1, v2, v3, v4)
 		maxv = max(maxv, v1, v2, v3, v4)
-		numRuns += util.Bool2int(v0 != v1) +
-			util.Bool2int(v1 != v2) +
-			util.Bool2int(v2 != v3) +
-			util.Bool2int(v3 != v4)
+		numRuns += b2i(v0 != v1) +
+			b2i(v1 != v2) +
+			b2i(v2 != v3) +
+			b2i(v3 != v4)
 		i += 4
 	}
 
@@ -47,8 +46,15 @@ func AnalyzeFloat[T types.Float](vals []T) (minv T, maxv T, numRuns int) {
 		v1 := vals[i]
 		minv = min(minv, v1)
 		maxv = max(maxv, v1)
-		numRuns += util.Bool2int(v0 != v1)
+		numRuns += b2i(v0 != v1)
 	}
 
 	return
+}
+
+func b2i(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
