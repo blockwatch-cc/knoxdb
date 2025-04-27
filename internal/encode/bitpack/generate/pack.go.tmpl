@@ -11,7 +11,7 @@ import (
 // Packer
 
 {{- $bitsRange := bitsFuncRange .Bits}}
-var pack_u{{$.Bits}} = [{{inc $.Bits 1}}]func(in *[64]uint{{$.Bits}}, p unsafe.Pointer, minv uint64){
+var pack_u{{$.Bits}} = [{{inc $.Bits 1}}]func(in *[64]uint{{$.Bits}}, p unsafe.Pointer, minv uint{{$.Bits}}){
     {{- range $bitsize, $value := $bitsRange }}
         {{- if mod $bitsize 8 -}}bp{{$.Bits}}_{{$bitsize}},{{- else }}
         bp{{$.Bits}}_{{$bitsize}},{{- end -}}
@@ -20,7 +20,7 @@ var pack_u{{$.Bits}} = [{{inc $.Bits 1}}]func(in *[64]uint{{$.Bits}}, p unsafe.P
 }
 
 {{- range $bitsize, $value := $bitsRange}}
-func bp{{$.Bits}}_{{$bitsize}}(in *[64]uint{{$.Bits}}, p unsafe.Pointer, minv uint64) {
+func bp{{$.Bits}}_{{$bitsize}}(in *[64]uint{{$.Bits}}, p unsafe.Pointer, minv uint{{$.Bits}}) {
     {{ if $bitsize}}out := (*[{{$bitsize}}]uint64)(p){{end}}
     {{- $inputIdx := 0 }}
     {{- $offset  := 0 }}
@@ -35,7 +35,7 @@ func bp{{$.Bits}}_{{$bitsize}}(in *[64]uint{{$.Bits}}, p unsafe.Pointer, minv ui
                 {{- if lt $shifter 64 }}
                     {{- if $shiftRight }}
                         {{- $inputIdx = dec $inputIdx 1 }}
-                        (uint64(in[{{$inputIdx}}])-minv) >> {{$shifter}} |
+                        uint64(in[{{$inputIdx}}]-minv) >> {{$shifter}} |
                         {{- $shifter = dec $bitsize $shifter }}
                         {{- $offset = 0 }}
                         {{- $inputIdx = inc $inputIdx 1 }}
@@ -43,9 +43,9 @@ func bp{{$.Bits}}_{{$bitsize}}(in *[64]uint{{$.Bits}}, p unsafe.Pointer, minv ui
                     {{- else }}
                         {{- $nextShift := inc $shifter $bitsize }}
                         {{- if $shifter }}
-                        (uint64(in[{{$inputIdx}}])-minv) << {{$shifter}}
+                        uint64(in[{{$inputIdx}}]-minv) << {{$shifter}}
                         {{- else}}
-                        (uint64(in[{{$inputIdx}}])-minv)
+                        uint64(in[{{$inputIdx}}]-minv)
                         {{- end}}
                         {{- if lt $nextShift 64 }} | {{- end}}
                         {{- $shifter = $nextShift }}
@@ -67,26 +67,26 @@ func bp{{$.Bits}}_{{$bitsize}}(in *[64]uint{{$.Bits}}, p unsafe.Pointer, minv ui
 }
 {{ end }}
 
-func bp{{$.Bits}}_{{$.Bits}}(in *[64]uint{{$.Bits}}, p unsafe.Pointer, minv uint64) {
+func bp{{$.Bits}}_{{$.Bits}}(in *[64]uint{{$.Bits}}, p unsafe.Pointer, minv uint{{$.Bits}}) {
     out := (*[64]uint{{$.Bits}})(p)
     var i int
     for range 4 {
-        out[i] = in[i] - uint{{$.Bits}}(minv)
-        out[i+1] = in[i+1] - uint{{$.Bits}}(minv)
-        out[i+2] = in[i+2] - uint{{$.Bits}}(minv)
-        out[i+3] = in[i+3] - uint{{$.Bits}}(minv)
-        out[i+4] = in[i+4] - uint{{$.Bits}}(minv)
-        out[i+5] = in[i+5] - uint{{$.Bits}}(minv)
-        out[i+6] = in[i+6] - uint{{$.Bits}}(minv)
-        out[i+7] = in[i+7] - uint{{$.Bits}}(minv)
-        out[i+8] = in[i+8] - uint{{$.Bits}}(minv)
-        out[i+9] = in[i+9] - uint{{$.Bits}}(minv)
-        out[i+10] = in[i+10] - uint{{$.Bits}}(minv)
-        out[i+11] = in[i+11] - uint{{$.Bits}}(minv)
-        out[i+12] = in[i+12] - uint{{$.Bits}}(minv)
-        out[i+13] = in[i+13] - uint{{$.Bits}}(minv)
-        out[i+14] = in[i+14] - uint{{$.Bits}}(minv)
-        out[i+15] = in[i+15] - uint{{$.Bits}}(minv)
+        out[i] = in[i] - minv
+        out[i+1] = in[i+1] - minv
+        out[i+2] = in[i+2] - minv
+        out[i+3] = in[i+3] - minv
+        out[i+4] = in[i+4] - minv
+        out[i+5] = in[i+5] - minv
+        out[i+6] = in[i+6] - minv
+        out[i+7] = in[i+7] - minv
+        out[i+8] = in[i+8] - minv
+        out[i+9] = in[i+9] - minv
+        out[i+10] = in[i+10] - minv
+        out[i+11] = in[i+11] - minv
+        out[i+12] = in[i+12] - minv
+        out[i+13] = in[i+13] - minv
+        out[i+14] = in[i+14] - minv
+        out[i+15] = in[i+15] - minv
         i += 16
     }
 }

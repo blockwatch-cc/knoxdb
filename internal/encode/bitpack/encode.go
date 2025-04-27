@@ -16,6 +16,9 @@ const (
 )
 
 func Encode[T types.Integer](dst []byte, src []T, minv, maxv T) ([]byte, int) {
+	if minv == maxv {
+		return dst[:0], 0
+	}
 	var n, log2 int
 	switch any(T(0)).(type) {
 	case uint8:
@@ -67,10 +70,10 @@ func Bitpack8[T int8 | uint8](dst []byte, src []T, minv, maxv T) (int, int) {
 		out4 := unsafe.Add(outp, o+3*nBlockOutBytes)
 
 		// write groups (4 x 64 packed inputs)
-		pack_u8[log2](in1, out1, uint64(minv))
-		pack_u8[log2](in2, out2, uint64(minv))
-		pack_u8[log2](in3, out3, uint64(minv))
-		pack_u8[log2](in4, out4, uint64(minv))
+		pack_u8[log2](in1, out1, uint8(minv))
+		pack_u8[log2](in2, out2, uint8(minv))
+		pack_u8[log2](in3, out3, uint8(minv))
+		pack_u8[log2](in4, out4, uint8(minv))
 	}
 	outpos := blockN * 4 * log2
 
@@ -110,10 +113,10 @@ func Bitpack16[T int16 | uint16](dst []byte, src []T, minv, maxv T) (int, int) {
 		out4 := unsafe.Add(outp, o+3*nBlockOutBytes)
 
 		// write groups (4 x 64 packed inputs)
-		pack_u16[log2](in1, out1, uint64(minv))
-		pack_u16[log2](in2, out2, uint64(minv))
-		pack_u16[log2](in3, out3, uint64(minv))
-		pack_u16[log2](in4, out4, uint64(minv))
+		pack_u16[log2](in1, out1, uint16(minv))
+		pack_u16[log2](in2, out2, uint16(minv))
+		pack_u16[log2](in3, out3, uint16(minv))
+		pack_u16[log2](in4, out4, uint16(minv))
 	}
 	outpos := blockN * 4 * log2
 
@@ -153,10 +156,10 @@ func Bitpack32[T int32 | uint32](dst []byte, src []T, minv, maxv T) (int, int) {
 		out4 := unsafe.Add(outp, o+3*nBlockOutBytes)
 
 		// write groups (4 x 64 packed inputs)
-		pack_u32[log2](in1, out1, uint64(minv))
-		pack_u32[log2](in2, out2, uint64(minv))
-		pack_u32[log2](in3, out3, uint64(minv))
-		pack_u32[log2](in4, out4, uint64(minv))
+		pack_u32[log2](in1, out1, uint32(minv))
+		pack_u32[log2](in2, out2, uint32(minv))
+		pack_u32[log2](in3, out3, uint32(minv))
+		pack_u32[log2](in4, out4, uint32(minv))
 	}
 	outpos := blockN * 4 * log2
 

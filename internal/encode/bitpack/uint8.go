@@ -9,576 +9,576 @@ import (
 )
 
 // Packer
-var pack_u8 = [9]func(in *[64]uint8, p unsafe.Pointer, minv uint64){
+var pack_u8 = [9]func(in *[64]uint8, p unsafe.Pointer, minv uint8){
 	bp8_0, bp8_1, bp8_2, bp8_3, bp8_4, bp8_5, bp8_6, bp8_7,
 	bp8_8,
 }
 
-func bp8_0(in *[64]uint8, p unsafe.Pointer, minv uint64) {
+func bp8_0(in *[64]uint8, p unsafe.Pointer, minv uint8) {
 }
 
-func bp8_1(in *[64]uint8, p unsafe.Pointer, minv uint64) {
+func bp8_1(in *[64]uint8, p unsafe.Pointer, minv uint8) {
 	out := (*[1]uint64)(p)
 	out[0] =
-		(uint64(in[0]) - minv) |
-			(uint64(in[1])-minv)<<1 |
-			(uint64(in[2])-minv)<<2 |
-			(uint64(in[3])-minv)<<3 |
-			(uint64(in[4])-minv)<<4 |
-			(uint64(in[5])-minv)<<5 |
-			(uint64(in[6])-minv)<<6 |
-			(uint64(in[7])-minv)<<7 |
-			(uint64(in[8])-minv)<<8 |
-			(uint64(in[9])-minv)<<9 |
-			(uint64(in[10])-minv)<<10 |
-			(uint64(in[11])-minv)<<11 |
-			(uint64(in[12])-minv)<<12 |
-			(uint64(in[13])-minv)<<13 |
-			(uint64(in[14])-minv)<<14 |
-			(uint64(in[15])-minv)<<15 |
-			(uint64(in[16])-minv)<<16 |
-			(uint64(in[17])-minv)<<17 |
-			(uint64(in[18])-minv)<<18 |
-			(uint64(in[19])-minv)<<19 |
-			(uint64(in[20])-minv)<<20 |
-			(uint64(in[21])-minv)<<21 |
-			(uint64(in[22])-minv)<<22 |
-			(uint64(in[23])-minv)<<23 |
-			(uint64(in[24])-minv)<<24 |
-			(uint64(in[25])-minv)<<25 |
-			(uint64(in[26])-minv)<<26 |
-			(uint64(in[27])-minv)<<27 |
-			(uint64(in[28])-minv)<<28 |
-			(uint64(in[29])-minv)<<29 |
-			(uint64(in[30])-minv)<<30 |
-			(uint64(in[31])-minv)<<31 |
-			(uint64(in[32])-minv)<<32 |
-			(uint64(in[33])-minv)<<33 |
-			(uint64(in[34])-minv)<<34 |
-			(uint64(in[35])-minv)<<35 |
-			(uint64(in[36])-minv)<<36 |
-			(uint64(in[37])-minv)<<37 |
-			(uint64(in[38])-minv)<<38 |
-			(uint64(in[39])-minv)<<39 |
-			(uint64(in[40])-minv)<<40 |
-			(uint64(in[41])-minv)<<41 |
-			(uint64(in[42])-minv)<<42 |
-			(uint64(in[43])-minv)<<43 |
-			(uint64(in[44])-minv)<<44 |
-			(uint64(in[45])-minv)<<45 |
-			(uint64(in[46])-minv)<<46 |
-			(uint64(in[47])-minv)<<47 |
-			(uint64(in[48])-minv)<<48 |
-			(uint64(in[49])-minv)<<49 |
-			(uint64(in[50])-minv)<<50 |
-			(uint64(in[51])-minv)<<51 |
-			(uint64(in[52])-minv)<<52 |
-			(uint64(in[53])-minv)<<53 |
-			(uint64(in[54])-minv)<<54 |
-			(uint64(in[55])-minv)<<55 |
-			(uint64(in[56])-minv)<<56 |
-			(uint64(in[57])-minv)<<57 |
-			(uint64(in[58])-minv)<<58 |
-			(uint64(in[59])-minv)<<59 |
-			(uint64(in[60])-minv)<<60 |
-			(uint64(in[61])-minv)<<61 |
-			(uint64(in[62])-minv)<<62 |
-			(uint64(in[63])-minv)<<63
+		uint64(in[0]-minv) |
+			uint64(in[1]-minv)<<1 |
+			uint64(in[2]-minv)<<2 |
+			uint64(in[3]-minv)<<3 |
+			uint64(in[4]-minv)<<4 |
+			uint64(in[5]-minv)<<5 |
+			uint64(in[6]-minv)<<6 |
+			uint64(in[7]-minv)<<7 |
+			uint64(in[8]-minv)<<8 |
+			uint64(in[9]-minv)<<9 |
+			uint64(in[10]-minv)<<10 |
+			uint64(in[11]-minv)<<11 |
+			uint64(in[12]-minv)<<12 |
+			uint64(in[13]-minv)<<13 |
+			uint64(in[14]-minv)<<14 |
+			uint64(in[15]-minv)<<15 |
+			uint64(in[16]-minv)<<16 |
+			uint64(in[17]-minv)<<17 |
+			uint64(in[18]-minv)<<18 |
+			uint64(in[19]-minv)<<19 |
+			uint64(in[20]-minv)<<20 |
+			uint64(in[21]-minv)<<21 |
+			uint64(in[22]-minv)<<22 |
+			uint64(in[23]-minv)<<23 |
+			uint64(in[24]-minv)<<24 |
+			uint64(in[25]-minv)<<25 |
+			uint64(in[26]-minv)<<26 |
+			uint64(in[27]-minv)<<27 |
+			uint64(in[28]-minv)<<28 |
+			uint64(in[29]-minv)<<29 |
+			uint64(in[30]-minv)<<30 |
+			uint64(in[31]-minv)<<31 |
+			uint64(in[32]-minv)<<32 |
+			uint64(in[33]-minv)<<33 |
+			uint64(in[34]-minv)<<34 |
+			uint64(in[35]-minv)<<35 |
+			uint64(in[36]-minv)<<36 |
+			uint64(in[37]-minv)<<37 |
+			uint64(in[38]-minv)<<38 |
+			uint64(in[39]-minv)<<39 |
+			uint64(in[40]-minv)<<40 |
+			uint64(in[41]-minv)<<41 |
+			uint64(in[42]-minv)<<42 |
+			uint64(in[43]-minv)<<43 |
+			uint64(in[44]-minv)<<44 |
+			uint64(in[45]-minv)<<45 |
+			uint64(in[46]-minv)<<46 |
+			uint64(in[47]-minv)<<47 |
+			uint64(in[48]-minv)<<48 |
+			uint64(in[49]-minv)<<49 |
+			uint64(in[50]-minv)<<50 |
+			uint64(in[51]-minv)<<51 |
+			uint64(in[52]-minv)<<52 |
+			uint64(in[53]-minv)<<53 |
+			uint64(in[54]-minv)<<54 |
+			uint64(in[55]-minv)<<55 |
+			uint64(in[56]-minv)<<56 |
+			uint64(in[57]-minv)<<57 |
+			uint64(in[58]-minv)<<58 |
+			uint64(in[59]-minv)<<59 |
+			uint64(in[60]-minv)<<60 |
+			uint64(in[61]-minv)<<61 |
+			uint64(in[62]-minv)<<62 |
+			uint64(in[63]-minv)<<63
 }
 
-func bp8_2(in *[64]uint8, p unsafe.Pointer, minv uint64) {
+func bp8_2(in *[64]uint8, p unsafe.Pointer, minv uint8) {
 	out := (*[2]uint64)(p)
 	out[0] =
-		(uint64(in[0]) - minv) |
-			(uint64(in[1])-minv)<<2 |
-			(uint64(in[2])-minv)<<4 |
-			(uint64(in[3])-minv)<<6 |
-			(uint64(in[4])-minv)<<8 |
-			(uint64(in[5])-minv)<<10 |
-			(uint64(in[6])-minv)<<12 |
-			(uint64(in[7])-minv)<<14 |
-			(uint64(in[8])-minv)<<16 |
-			(uint64(in[9])-minv)<<18 |
-			(uint64(in[10])-minv)<<20 |
-			(uint64(in[11])-minv)<<22 |
-			(uint64(in[12])-minv)<<24 |
-			(uint64(in[13])-minv)<<26 |
-			(uint64(in[14])-minv)<<28 |
-			(uint64(in[15])-minv)<<30 |
-			(uint64(in[16])-minv)<<32 |
-			(uint64(in[17])-minv)<<34 |
-			(uint64(in[18])-minv)<<36 |
-			(uint64(in[19])-minv)<<38 |
-			(uint64(in[20])-minv)<<40 |
-			(uint64(in[21])-minv)<<42 |
-			(uint64(in[22])-minv)<<44 |
-			(uint64(in[23])-minv)<<46 |
-			(uint64(in[24])-minv)<<48 |
-			(uint64(in[25])-minv)<<50 |
-			(uint64(in[26])-minv)<<52 |
-			(uint64(in[27])-minv)<<54 |
-			(uint64(in[28])-minv)<<56 |
-			(uint64(in[29])-minv)<<58 |
-			(uint64(in[30])-minv)<<60 |
-			(uint64(in[31])-minv)<<62
+		uint64(in[0]-minv) |
+			uint64(in[1]-minv)<<2 |
+			uint64(in[2]-minv)<<4 |
+			uint64(in[3]-minv)<<6 |
+			uint64(in[4]-minv)<<8 |
+			uint64(in[5]-minv)<<10 |
+			uint64(in[6]-minv)<<12 |
+			uint64(in[7]-minv)<<14 |
+			uint64(in[8]-minv)<<16 |
+			uint64(in[9]-minv)<<18 |
+			uint64(in[10]-minv)<<20 |
+			uint64(in[11]-minv)<<22 |
+			uint64(in[12]-minv)<<24 |
+			uint64(in[13]-minv)<<26 |
+			uint64(in[14]-minv)<<28 |
+			uint64(in[15]-minv)<<30 |
+			uint64(in[16]-minv)<<32 |
+			uint64(in[17]-minv)<<34 |
+			uint64(in[18]-minv)<<36 |
+			uint64(in[19]-minv)<<38 |
+			uint64(in[20]-minv)<<40 |
+			uint64(in[21]-minv)<<42 |
+			uint64(in[22]-minv)<<44 |
+			uint64(in[23]-minv)<<46 |
+			uint64(in[24]-minv)<<48 |
+			uint64(in[25]-minv)<<50 |
+			uint64(in[26]-minv)<<52 |
+			uint64(in[27]-minv)<<54 |
+			uint64(in[28]-minv)<<56 |
+			uint64(in[29]-minv)<<58 |
+			uint64(in[30]-minv)<<60 |
+			uint64(in[31]-minv)<<62
 
 	out[1] =
-		(uint64(in[32]) - minv) |
-			(uint64(in[33])-minv)<<2 |
-			(uint64(in[34])-minv)<<4 |
-			(uint64(in[35])-minv)<<6 |
-			(uint64(in[36])-minv)<<8 |
-			(uint64(in[37])-minv)<<10 |
-			(uint64(in[38])-minv)<<12 |
-			(uint64(in[39])-minv)<<14 |
-			(uint64(in[40])-minv)<<16 |
-			(uint64(in[41])-minv)<<18 |
-			(uint64(in[42])-minv)<<20 |
-			(uint64(in[43])-minv)<<22 |
-			(uint64(in[44])-minv)<<24 |
-			(uint64(in[45])-minv)<<26 |
-			(uint64(in[46])-minv)<<28 |
-			(uint64(in[47])-minv)<<30 |
-			(uint64(in[48])-minv)<<32 |
-			(uint64(in[49])-minv)<<34 |
-			(uint64(in[50])-minv)<<36 |
-			(uint64(in[51])-minv)<<38 |
-			(uint64(in[52])-minv)<<40 |
-			(uint64(in[53])-minv)<<42 |
-			(uint64(in[54])-minv)<<44 |
-			(uint64(in[55])-minv)<<46 |
-			(uint64(in[56])-minv)<<48 |
-			(uint64(in[57])-minv)<<50 |
-			(uint64(in[58])-minv)<<52 |
-			(uint64(in[59])-minv)<<54 |
-			(uint64(in[60])-minv)<<56 |
-			(uint64(in[61])-minv)<<58 |
-			(uint64(in[62])-minv)<<60 |
-			(uint64(in[63])-minv)<<62
+		uint64(in[32]-minv) |
+			uint64(in[33]-minv)<<2 |
+			uint64(in[34]-minv)<<4 |
+			uint64(in[35]-minv)<<6 |
+			uint64(in[36]-minv)<<8 |
+			uint64(in[37]-minv)<<10 |
+			uint64(in[38]-minv)<<12 |
+			uint64(in[39]-minv)<<14 |
+			uint64(in[40]-minv)<<16 |
+			uint64(in[41]-minv)<<18 |
+			uint64(in[42]-minv)<<20 |
+			uint64(in[43]-minv)<<22 |
+			uint64(in[44]-minv)<<24 |
+			uint64(in[45]-minv)<<26 |
+			uint64(in[46]-minv)<<28 |
+			uint64(in[47]-minv)<<30 |
+			uint64(in[48]-minv)<<32 |
+			uint64(in[49]-minv)<<34 |
+			uint64(in[50]-minv)<<36 |
+			uint64(in[51]-minv)<<38 |
+			uint64(in[52]-minv)<<40 |
+			uint64(in[53]-minv)<<42 |
+			uint64(in[54]-minv)<<44 |
+			uint64(in[55]-minv)<<46 |
+			uint64(in[56]-minv)<<48 |
+			uint64(in[57]-minv)<<50 |
+			uint64(in[58]-minv)<<52 |
+			uint64(in[59]-minv)<<54 |
+			uint64(in[60]-minv)<<56 |
+			uint64(in[61]-minv)<<58 |
+			uint64(in[62]-minv)<<60 |
+			uint64(in[63]-minv)<<62
 }
 
-func bp8_3(in *[64]uint8, p unsafe.Pointer, minv uint64) {
+func bp8_3(in *[64]uint8, p unsafe.Pointer, minv uint8) {
 	out := (*[3]uint64)(p)
 	out[0] =
-		(uint64(in[0]) - minv) |
-			(uint64(in[1])-minv)<<3 |
-			(uint64(in[2])-minv)<<6 |
-			(uint64(in[3])-minv)<<9 |
-			(uint64(in[4])-minv)<<12 |
-			(uint64(in[5])-minv)<<15 |
-			(uint64(in[6])-minv)<<18 |
-			(uint64(in[7])-minv)<<21 |
-			(uint64(in[8])-minv)<<24 |
-			(uint64(in[9])-minv)<<27 |
-			(uint64(in[10])-minv)<<30 |
-			(uint64(in[11])-minv)<<33 |
-			(uint64(in[12])-minv)<<36 |
-			(uint64(in[13])-minv)<<39 |
-			(uint64(in[14])-minv)<<42 |
-			(uint64(in[15])-minv)<<45 |
-			(uint64(in[16])-minv)<<48 |
-			(uint64(in[17])-minv)<<51 |
-			(uint64(in[18])-minv)<<54 |
-			(uint64(in[19])-minv)<<57 |
-			(uint64(in[20])-minv)<<60 |
-			(uint64(in[21])-minv)<<63
+		uint64(in[0]-minv) |
+			uint64(in[1]-minv)<<3 |
+			uint64(in[2]-minv)<<6 |
+			uint64(in[3]-minv)<<9 |
+			uint64(in[4]-minv)<<12 |
+			uint64(in[5]-minv)<<15 |
+			uint64(in[6]-minv)<<18 |
+			uint64(in[7]-minv)<<21 |
+			uint64(in[8]-minv)<<24 |
+			uint64(in[9]-minv)<<27 |
+			uint64(in[10]-minv)<<30 |
+			uint64(in[11]-minv)<<33 |
+			uint64(in[12]-minv)<<36 |
+			uint64(in[13]-minv)<<39 |
+			uint64(in[14]-minv)<<42 |
+			uint64(in[15]-minv)<<45 |
+			uint64(in[16]-minv)<<48 |
+			uint64(in[17]-minv)<<51 |
+			uint64(in[18]-minv)<<54 |
+			uint64(in[19]-minv)<<57 |
+			uint64(in[20]-minv)<<60 |
+			uint64(in[21]-minv)<<63
 
 	out[1] =
-		(uint64(in[21])-minv)>>1 |
-			(uint64(in[22])-minv)<<2 |
-			(uint64(in[23])-minv)<<5 |
-			(uint64(in[24])-minv)<<8 |
-			(uint64(in[25])-minv)<<11 |
-			(uint64(in[26])-minv)<<14 |
-			(uint64(in[27])-minv)<<17 |
-			(uint64(in[28])-minv)<<20 |
-			(uint64(in[29])-minv)<<23 |
-			(uint64(in[30])-minv)<<26 |
-			(uint64(in[31])-minv)<<29 |
-			(uint64(in[32])-minv)<<32 |
-			(uint64(in[33])-minv)<<35 |
-			(uint64(in[34])-minv)<<38 |
-			(uint64(in[35])-minv)<<41 |
-			(uint64(in[36])-minv)<<44 |
-			(uint64(in[37])-minv)<<47 |
-			(uint64(in[38])-minv)<<50 |
-			(uint64(in[39])-minv)<<53 |
-			(uint64(in[40])-minv)<<56 |
-			(uint64(in[41])-minv)<<59 |
-			(uint64(in[42])-minv)<<62
+		uint64(in[21]-minv)>>1 |
+			uint64(in[22]-minv)<<2 |
+			uint64(in[23]-minv)<<5 |
+			uint64(in[24]-minv)<<8 |
+			uint64(in[25]-minv)<<11 |
+			uint64(in[26]-minv)<<14 |
+			uint64(in[27]-minv)<<17 |
+			uint64(in[28]-minv)<<20 |
+			uint64(in[29]-minv)<<23 |
+			uint64(in[30]-minv)<<26 |
+			uint64(in[31]-minv)<<29 |
+			uint64(in[32]-minv)<<32 |
+			uint64(in[33]-minv)<<35 |
+			uint64(in[34]-minv)<<38 |
+			uint64(in[35]-minv)<<41 |
+			uint64(in[36]-minv)<<44 |
+			uint64(in[37]-minv)<<47 |
+			uint64(in[38]-minv)<<50 |
+			uint64(in[39]-minv)<<53 |
+			uint64(in[40]-minv)<<56 |
+			uint64(in[41]-minv)<<59 |
+			uint64(in[42]-minv)<<62
 
 	out[2] =
-		(uint64(in[42])-minv)>>2 |
-			(uint64(in[43])-minv)<<1 |
-			(uint64(in[44])-minv)<<4 |
-			(uint64(in[45])-minv)<<7 |
-			(uint64(in[46])-minv)<<10 |
-			(uint64(in[47])-minv)<<13 |
-			(uint64(in[48])-minv)<<16 |
-			(uint64(in[49])-minv)<<19 |
-			(uint64(in[50])-minv)<<22 |
-			(uint64(in[51])-minv)<<25 |
-			(uint64(in[52])-minv)<<28 |
-			(uint64(in[53])-minv)<<31 |
-			(uint64(in[54])-minv)<<34 |
-			(uint64(in[55])-minv)<<37 |
-			(uint64(in[56])-minv)<<40 |
-			(uint64(in[57])-minv)<<43 |
-			(uint64(in[58])-minv)<<46 |
-			(uint64(in[59])-minv)<<49 |
-			(uint64(in[60])-minv)<<52 |
-			(uint64(in[61])-minv)<<55 |
-			(uint64(in[62])-minv)<<58 |
-			(uint64(in[63])-minv)<<61
+		uint64(in[42]-minv)>>2 |
+			uint64(in[43]-minv)<<1 |
+			uint64(in[44]-minv)<<4 |
+			uint64(in[45]-minv)<<7 |
+			uint64(in[46]-minv)<<10 |
+			uint64(in[47]-minv)<<13 |
+			uint64(in[48]-minv)<<16 |
+			uint64(in[49]-minv)<<19 |
+			uint64(in[50]-minv)<<22 |
+			uint64(in[51]-minv)<<25 |
+			uint64(in[52]-minv)<<28 |
+			uint64(in[53]-minv)<<31 |
+			uint64(in[54]-minv)<<34 |
+			uint64(in[55]-minv)<<37 |
+			uint64(in[56]-minv)<<40 |
+			uint64(in[57]-minv)<<43 |
+			uint64(in[58]-minv)<<46 |
+			uint64(in[59]-minv)<<49 |
+			uint64(in[60]-minv)<<52 |
+			uint64(in[61]-minv)<<55 |
+			uint64(in[62]-minv)<<58 |
+			uint64(in[63]-minv)<<61
 }
 
-func bp8_4(in *[64]uint8, p unsafe.Pointer, minv uint64) {
+func bp8_4(in *[64]uint8, p unsafe.Pointer, minv uint8) {
 	out := (*[4]uint64)(p)
 	out[0] =
-		(uint64(in[0]) - minv) |
-			(uint64(in[1])-minv)<<4 |
-			(uint64(in[2])-minv)<<8 |
-			(uint64(in[3])-minv)<<12 |
-			(uint64(in[4])-minv)<<16 |
-			(uint64(in[5])-minv)<<20 |
-			(uint64(in[6])-minv)<<24 |
-			(uint64(in[7])-minv)<<28 |
-			(uint64(in[8])-minv)<<32 |
-			(uint64(in[9])-minv)<<36 |
-			(uint64(in[10])-minv)<<40 |
-			(uint64(in[11])-minv)<<44 |
-			(uint64(in[12])-minv)<<48 |
-			(uint64(in[13])-minv)<<52 |
-			(uint64(in[14])-minv)<<56 |
-			(uint64(in[15])-minv)<<60
+		uint64(in[0]-minv) |
+			uint64(in[1]-minv)<<4 |
+			uint64(in[2]-minv)<<8 |
+			uint64(in[3]-minv)<<12 |
+			uint64(in[4]-minv)<<16 |
+			uint64(in[5]-minv)<<20 |
+			uint64(in[6]-minv)<<24 |
+			uint64(in[7]-minv)<<28 |
+			uint64(in[8]-minv)<<32 |
+			uint64(in[9]-minv)<<36 |
+			uint64(in[10]-minv)<<40 |
+			uint64(in[11]-minv)<<44 |
+			uint64(in[12]-minv)<<48 |
+			uint64(in[13]-minv)<<52 |
+			uint64(in[14]-minv)<<56 |
+			uint64(in[15]-minv)<<60
 
 	out[1] =
-		(uint64(in[16]) - minv) |
-			(uint64(in[17])-minv)<<4 |
-			(uint64(in[18])-minv)<<8 |
-			(uint64(in[19])-minv)<<12 |
-			(uint64(in[20])-minv)<<16 |
-			(uint64(in[21])-minv)<<20 |
-			(uint64(in[22])-minv)<<24 |
-			(uint64(in[23])-minv)<<28 |
-			(uint64(in[24])-minv)<<32 |
-			(uint64(in[25])-minv)<<36 |
-			(uint64(in[26])-minv)<<40 |
-			(uint64(in[27])-minv)<<44 |
-			(uint64(in[28])-minv)<<48 |
-			(uint64(in[29])-minv)<<52 |
-			(uint64(in[30])-minv)<<56 |
-			(uint64(in[31])-minv)<<60
+		uint64(in[16]-minv) |
+			uint64(in[17]-minv)<<4 |
+			uint64(in[18]-minv)<<8 |
+			uint64(in[19]-minv)<<12 |
+			uint64(in[20]-minv)<<16 |
+			uint64(in[21]-minv)<<20 |
+			uint64(in[22]-minv)<<24 |
+			uint64(in[23]-minv)<<28 |
+			uint64(in[24]-minv)<<32 |
+			uint64(in[25]-minv)<<36 |
+			uint64(in[26]-minv)<<40 |
+			uint64(in[27]-minv)<<44 |
+			uint64(in[28]-minv)<<48 |
+			uint64(in[29]-minv)<<52 |
+			uint64(in[30]-minv)<<56 |
+			uint64(in[31]-minv)<<60
 
 	out[2] =
-		(uint64(in[32]) - minv) |
-			(uint64(in[33])-minv)<<4 |
-			(uint64(in[34])-minv)<<8 |
-			(uint64(in[35])-minv)<<12 |
-			(uint64(in[36])-minv)<<16 |
-			(uint64(in[37])-minv)<<20 |
-			(uint64(in[38])-minv)<<24 |
-			(uint64(in[39])-minv)<<28 |
-			(uint64(in[40])-minv)<<32 |
-			(uint64(in[41])-minv)<<36 |
-			(uint64(in[42])-minv)<<40 |
-			(uint64(in[43])-minv)<<44 |
-			(uint64(in[44])-minv)<<48 |
-			(uint64(in[45])-minv)<<52 |
-			(uint64(in[46])-minv)<<56 |
-			(uint64(in[47])-minv)<<60
+		uint64(in[32]-minv) |
+			uint64(in[33]-minv)<<4 |
+			uint64(in[34]-minv)<<8 |
+			uint64(in[35]-minv)<<12 |
+			uint64(in[36]-minv)<<16 |
+			uint64(in[37]-minv)<<20 |
+			uint64(in[38]-minv)<<24 |
+			uint64(in[39]-minv)<<28 |
+			uint64(in[40]-minv)<<32 |
+			uint64(in[41]-minv)<<36 |
+			uint64(in[42]-minv)<<40 |
+			uint64(in[43]-minv)<<44 |
+			uint64(in[44]-minv)<<48 |
+			uint64(in[45]-minv)<<52 |
+			uint64(in[46]-minv)<<56 |
+			uint64(in[47]-minv)<<60
 
 	out[3] =
-		(uint64(in[48]) - minv) |
-			(uint64(in[49])-minv)<<4 |
-			(uint64(in[50])-minv)<<8 |
-			(uint64(in[51])-minv)<<12 |
-			(uint64(in[52])-minv)<<16 |
-			(uint64(in[53])-minv)<<20 |
-			(uint64(in[54])-minv)<<24 |
-			(uint64(in[55])-minv)<<28 |
-			(uint64(in[56])-minv)<<32 |
-			(uint64(in[57])-minv)<<36 |
-			(uint64(in[58])-minv)<<40 |
-			(uint64(in[59])-minv)<<44 |
-			(uint64(in[60])-minv)<<48 |
-			(uint64(in[61])-minv)<<52 |
-			(uint64(in[62])-minv)<<56 |
-			(uint64(in[63])-minv)<<60
+		uint64(in[48]-minv) |
+			uint64(in[49]-minv)<<4 |
+			uint64(in[50]-minv)<<8 |
+			uint64(in[51]-minv)<<12 |
+			uint64(in[52]-minv)<<16 |
+			uint64(in[53]-minv)<<20 |
+			uint64(in[54]-minv)<<24 |
+			uint64(in[55]-minv)<<28 |
+			uint64(in[56]-minv)<<32 |
+			uint64(in[57]-minv)<<36 |
+			uint64(in[58]-minv)<<40 |
+			uint64(in[59]-minv)<<44 |
+			uint64(in[60]-minv)<<48 |
+			uint64(in[61]-minv)<<52 |
+			uint64(in[62]-minv)<<56 |
+			uint64(in[63]-minv)<<60
 }
 
-func bp8_5(in *[64]uint8, p unsafe.Pointer, minv uint64) {
+func bp8_5(in *[64]uint8, p unsafe.Pointer, minv uint8) {
 	out := (*[5]uint64)(p)
 	out[0] =
-		(uint64(in[0]) - minv) |
-			(uint64(in[1])-minv)<<5 |
-			(uint64(in[2])-minv)<<10 |
-			(uint64(in[3])-minv)<<15 |
-			(uint64(in[4])-minv)<<20 |
-			(uint64(in[5])-minv)<<25 |
-			(uint64(in[6])-minv)<<30 |
-			(uint64(in[7])-minv)<<35 |
-			(uint64(in[8])-minv)<<40 |
-			(uint64(in[9])-minv)<<45 |
-			(uint64(in[10])-minv)<<50 |
-			(uint64(in[11])-minv)<<55 |
-			(uint64(in[12])-minv)<<60
+		uint64(in[0]-minv) |
+			uint64(in[1]-minv)<<5 |
+			uint64(in[2]-minv)<<10 |
+			uint64(in[3]-minv)<<15 |
+			uint64(in[4]-minv)<<20 |
+			uint64(in[5]-minv)<<25 |
+			uint64(in[6]-minv)<<30 |
+			uint64(in[7]-minv)<<35 |
+			uint64(in[8]-minv)<<40 |
+			uint64(in[9]-minv)<<45 |
+			uint64(in[10]-minv)<<50 |
+			uint64(in[11]-minv)<<55 |
+			uint64(in[12]-minv)<<60
 
 	out[1] =
-		(uint64(in[12])-minv)>>4 |
-			(uint64(in[13])-minv)<<1 |
-			(uint64(in[14])-minv)<<6 |
-			(uint64(in[15])-minv)<<11 |
-			(uint64(in[16])-minv)<<16 |
-			(uint64(in[17])-minv)<<21 |
-			(uint64(in[18])-minv)<<26 |
-			(uint64(in[19])-minv)<<31 |
-			(uint64(in[20])-minv)<<36 |
-			(uint64(in[21])-minv)<<41 |
-			(uint64(in[22])-minv)<<46 |
-			(uint64(in[23])-minv)<<51 |
-			(uint64(in[24])-minv)<<56 |
-			(uint64(in[25])-minv)<<61
+		uint64(in[12]-minv)>>4 |
+			uint64(in[13]-minv)<<1 |
+			uint64(in[14]-minv)<<6 |
+			uint64(in[15]-minv)<<11 |
+			uint64(in[16]-minv)<<16 |
+			uint64(in[17]-minv)<<21 |
+			uint64(in[18]-minv)<<26 |
+			uint64(in[19]-minv)<<31 |
+			uint64(in[20]-minv)<<36 |
+			uint64(in[21]-minv)<<41 |
+			uint64(in[22]-minv)<<46 |
+			uint64(in[23]-minv)<<51 |
+			uint64(in[24]-minv)<<56 |
+			uint64(in[25]-minv)<<61
 
 	out[2] =
-		(uint64(in[25])-minv)>>3 |
-			(uint64(in[26])-minv)<<2 |
-			(uint64(in[27])-minv)<<7 |
-			(uint64(in[28])-minv)<<12 |
-			(uint64(in[29])-minv)<<17 |
-			(uint64(in[30])-minv)<<22 |
-			(uint64(in[31])-minv)<<27 |
-			(uint64(in[32])-minv)<<32 |
-			(uint64(in[33])-minv)<<37 |
-			(uint64(in[34])-minv)<<42 |
-			(uint64(in[35])-minv)<<47 |
-			(uint64(in[36])-minv)<<52 |
-			(uint64(in[37])-minv)<<57 |
-			(uint64(in[38])-minv)<<62
+		uint64(in[25]-minv)>>3 |
+			uint64(in[26]-minv)<<2 |
+			uint64(in[27]-minv)<<7 |
+			uint64(in[28]-minv)<<12 |
+			uint64(in[29]-minv)<<17 |
+			uint64(in[30]-minv)<<22 |
+			uint64(in[31]-minv)<<27 |
+			uint64(in[32]-minv)<<32 |
+			uint64(in[33]-minv)<<37 |
+			uint64(in[34]-minv)<<42 |
+			uint64(in[35]-minv)<<47 |
+			uint64(in[36]-minv)<<52 |
+			uint64(in[37]-minv)<<57 |
+			uint64(in[38]-minv)<<62
 
 	out[3] =
-		(uint64(in[38])-minv)>>2 |
-			(uint64(in[39])-minv)<<3 |
-			(uint64(in[40])-minv)<<8 |
-			(uint64(in[41])-minv)<<13 |
-			(uint64(in[42])-minv)<<18 |
-			(uint64(in[43])-minv)<<23 |
-			(uint64(in[44])-minv)<<28 |
-			(uint64(in[45])-minv)<<33 |
-			(uint64(in[46])-minv)<<38 |
-			(uint64(in[47])-minv)<<43 |
-			(uint64(in[48])-minv)<<48 |
-			(uint64(in[49])-minv)<<53 |
-			(uint64(in[50])-minv)<<58 |
-			(uint64(in[51])-minv)<<63
+		uint64(in[38]-minv)>>2 |
+			uint64(in[39]-minv)<<3 |
+			uint64(in[40]-minv)<<8 |
+			uint64(in[41]-minv)<<13 |
+			uint64(in[42]-minv)<<18 |
+			uint64(in[43]-minv)<<23 |
+			uint64(in[44]-minv)<<28 |
+			uint64(in[45]-minv)<<33 |
+			uint64(in[46]-minv)<<38 |
+			uint64(in[47]-minv)<<43 |
+			uint64(in[48]-minv)<<48 |
+			uint64(in[49]-minv)<<53 |
+			uint64(in[50]-minv)<<58 |
+			uint64(in[51]-minv)<<63
 
 	out[4] =
-		(uint64(in[51])-minv)>>1 |
-			(uint64(in[52])-minv)<<4 |
-			(uint64(in[53])-minv)<<9 |
-			(uint64(in[54])-minv)<<14 |
-			(uint64(in[55])-minv)<<19 |
-			(uint64(in[56])-minv)<<24 |
-			(uint64(in[57])-minv)<<29 |
-			(uint64(in[58])-minv)<<34 |
-			(uint64(in[59])-minv)<<39 |
-			(uint64(in[60])-minv)<<44 |
-			(uint64(in[61])-minv)<<49 |
-			(uint64(in[62])-minv)<<54 |
-			(uint64(in[63])-minv)<<59
+		uint64(in[51]-minv)>>1 |
+			uint64(in[52]-minv)<<4 |
+			uint64(in[53]-minv)<<9 |
+			uint64(in[54]-minv)<<14 |
+			uint64(in[55]-minv)<<19 |
+			uint64(in[56]-minv)<<24 |
+			uint64(in[57]-minv)<<29 |
+			uint64(in[58]-minv)<<34 |
+			uint64(in[59]-minv)<<39 |
+			uint64(in[60]-minv)<<44 |
+			uint64(in[61]-minv)<<49 |
+			uint64(in[62]-minv)<<54 |
+			uint64(in[63]-minv)<<59
 }
 
-func bp8_6(in *[64]uint8, p unsafe.Pointer, minv uint64) {
+func bp8_6(in *[64]uint8, p unsafe.Pointer, minv uint8) {
 	out := (*[6]uint64)(p)
 	out[0] =
-		(uint64(in[0]) - minv) |
-			(uint64(in[1])-minv)<<6 |
-			(uint64(in[2])-minv)<<12 |
-			(uint64(in[3])-minv)<<18 |
-			(uint64(in[4])-minv)<<24 |
-			(uint64(in[5])-minv)<<30 |
-			(uint64(in[6])-minv)<<36 |
-			(uint64(in[7])-minv)<<42 |
-			(uint64(in[8])-minv)<<48 |
-			(uint64(in[9])-minv)<<54 |
-			(uint64(in[10])-minv)<<60
+		uint64(in[0]-minv) |
+			uint64(in[1]-minv)<<6 |
+			uint64(in[2]-minv)<<12 |
+			uint64(in[3]-minv)<<18 |
+			uint64(in[4]-minv)<<24 |
+			uint64(in[5]-minv)<<30 |
+			uint64(in[6]-minv)<<36 |
+			uint64(in[7]-minv)<<42 |
+			uint64(in[8]-minv)<<48 |
+			uint64(in[9]-minv)<<54 |
+			uint64(in[10]-minv)<<60
 
 	out[1] =
-		(uint64(in[10])-minv)>>4 |
-			(uint64(in[11])-minv)<<2 |
-			(uint64(in[12])-minv)<<8 |
-			(uint64(in[13])-minv)<<14 |
-			(uint64(in[14])-minv)<<20 |
-			(uint64(in[15])-minv)<<26 |
-			(uint64(in[16])-minv)<<32 |
-			(uint64(in[17])-minv)<<38 |
-			(uint64(in[18])-minv)<<44 |
-			(uint64(in[19])-minv)<<50 |
-			(uint64(in[20])-minv)<<56 |
-			(uint64(in[21])-minv)<<62
+		uint64(in[10]-minv)>>4 |
+			uint64(in[11]-minv)<<2 |
+			uint64(in[12]-minv)<<8 |
+			uint64(in[13]-minv)<<14 |
+			uint64(in[14]-minv)<<20 |
+			uint64(in[15]-minv)<<26 |
+			uint64(in[16]-minv)<<32 |
+			uint64(in[17]-minv)<<38 |
+			uint64(in[18]-minv)<<44 |
+			uint64(in[19]-minv)<<50 |
+			uint64(in[20]-minv)<<56 |
+			uint64(in[21]-minv)<<62
 
 	out[2] =
-		(uint64(in[21])-minv)>>2 |
-			(uint64(in[22])-minv)<<4 |
-			(uint64(in[23])-minv)<<10 |
-			(uint64(in[24])-minv)<<16 |
-			(uint64(in[25])-minv)<<22 |
-			(uint64(in[26])-minv)<<28 |
-			(uint64(in[27])-minv)<<34 |
-			(uint64(in[28])-minv)<<40 |
-			(uint64(in[29])-minv)<<46 |
-			(uint64(in[30])-minv)<<52 |
-			(uint64(in[31])-minv)<<58
+		uint64(in[21]-minv)>>2 |
+			uint64(in[22]-minv)<<4 |
+			uint64(in[23]-minv)<<10 |
+			uint64(in[24]-minv)<<16 |
+			uint64(in[25]-minv)<<22 |
+			uint64(in[26]-minv)<<28 |
+			uint64(in[27]-minv)<<34 |
+			uint64(in[28]-minv)<<40 |
+			uint64(in[29]-minv)<<46 |
+			uint64(in[30]-minv)<<52 |
+			uint64(in[31]-minv)<<58
 
 	out[3] =
-		(uint64(in[31])-minv)>>6 |
-			(uint64(in[32]) - minv) |
-			(uint64(in[33])-minv)<<6 |
-			(uint64(in[34])-minv)<<12 |
-			(uint64(in[35])-minv)<<18 |
-			(uint64(in[36])-minv)<<24 |
-			(uint64(in[37])-minv)<<30 |
-			(uint64(in[38])-minv)<<36 |
-			(uint64(in[39])-minv)<<42 |
-			(uint64(in[40])-minv)<<48 |
-			(uint64(in[41])-minv)<<54 |
-			(uint64(in[42])-minv)<<60
+		uint64(in[31]-minv)>>6 |
+			uint64(in[32]-minv) |
+			uint64(in[33]-minv)<<6 |
+			uint64(in[34]-minv)<<12 |
+			uint64(in[35]-minv)<<18 |
+			uint64(in[36]-minv)<<24 |
+			uint64(in[37]-minv)<<30 |
+			uint64(in[38]-minv)<<36 |
+			uint64(in[39]-minv)<<42 |
+			uint64(in[40]-minv)<<48 |
+			uint64(in[41]-minv)<<54 |
+			uint64(in[42]-minv)<<60
 
 	out[4] =
-		(uint64(in[42])-minv)>>4 |
-			(uint64(in[43])-minv)<<2 |
-			(uint64(in[44])-minv)<<8 |
-			(uint64(in[45])-minv)<<14 |
-			(uint64(in[46])-minv)<<20 |
-			(uint64(in[47])-minv)<<26 |
-			(uint64(in[48])-minv)<<32 |
-			(uint64(in[49])-minv)<<38 |
-			(uint64(in[50])-minv)<<44 |
-			(uint64(in[51])-minv)<<50 |
-			(uint64(in[52])-minv)<<56 |
-			(uint64(in[53])-minv)<<62
+		uint64(in[42]-minv)>>4 |
+			uint64(in[43]-minv)<<2 |
+			uint64(in[44]-minv)<<8 |
+			uint64(in[45]-minv)<<14 |
+			uint64(in[46]-minv)<<20 |
+			uint64(in[47]-minv)<<26 |
+			uint64(in[48]-minv)<<32 |
+			uint64(in[49]-minv)<<38 |
+			uint64(in[50]-minv)<<44 |
+			uint64(in[51]-minv)<<50 |
+			uint64(in[52]-minv)<<56 |
+			uint64(in[53]-minv)<<62
 
 	out[5] =
-		(uint64(in[53])-minv)>>2 |
-			(uint64(in[54])-minv)<<4 |
-			(uint64(in[55])-minv)<<10 |
-			(uint64(in[56])-minv)<<16 |
-			(uint64(in[57])-minv)<<22 |
-			(uint64(in[58])-minv)<<28 |
-			(uint64(in[59])-minv)<<34 |
-			(uint64(in[60])-minv)<<40 |
-			(uint64(in[61])-minv)<<46 |
-			(uint64(in[62])-minv)<<52 |
-			(uint64(in[63])-minv)<<58
+		uint64(in[53]-minv)>>2 |
+			uint64(in[54]-minv)<<4 |
+			uint64(in[55]-minv)<<10 |
+			uint64(in[56]-minv)<<16 |
+			uint64(in[57]-minv)<<22 |
+			uint64(in[58]-minv)<<28 |
+			uint64(in[59]-minv)<<34 |
+			uint64(in[60]-minv)<<40 |
+			uint64(in[61]-minv)<<46 |
+			uint64(in[62]-minv)<<52 |
+			uint64(in[63]-minv)<<58
 }
 
-func bp8_7(in *[64]uint8, p unsafe.Pointer, minv uint64) {
+func bp8_7(in *[64]uint8, p unsafe.Pointer, minv uint8) {
 	out := (*[7]uint64)(p)
 	out[0] =
-		(uint64(in[0]) - minv) |
-			(uint64(in[1])-minv)<<7 |
-			(uint64(in[2])-minv)<<14 |
-			(uint64(in[3])-minv)<<21 |
-			(uint64(in[4])-minv)<<28 |
-			(uint64(in[5])-minv)<<35 |
-			(uint64(in[6])-minv)<<42 |
-			(uint64(in[7])-minv)<<49 |
-			(uint64(in[8])-minv)<<56 |
-			(uint64(in[9])-minv)<<63
+		uint64(in[0]-minv) |
+			uint64(in[1]-minv)<<7 |
+			uint64(in[2]-minv)<<14 |
+			uint64(in[3]-minv)<<21 |
+			uint64(in[4]-minv)<<28 |
+			uint64(in[5]-minv)<<35 |
+			uint64(in[6]-minv)<<42 |
+			uint64(in[7]-minv)<<49 |
+			uint64(in[8]-minv)<<56 |
+			uint64(in[9]-minv)<<63
 
 	out[1] =
-		(uint64(in[9])-minv)>>1 |
-			(uint64(in[10])-minv)<<6 |
-			(uint64(in[11])-minv)<<13 |
-			(uint64(in[12])-minv)<<20 |
-			(uint64(in[13])-minv)<<27 |
-			(uint64(in[14])-minv)<<34 |
-			(uint64(in[15])-minv)<<41 |
-			(uint64(in[16])-minv)<<48 |
-			(uint64(in[17])-minv)<<55 |
-			(uint64(in[18])-minv)<<62
+		uint64(in[9]-minv)>>1 |
+			uint64(in[10]-minv)<<6 |
+			uint64(in[11]-minv)<<13 |
+			uint64(in[12]-minv)<<20 |
+			uint64(in[13]-minv)<<27 |
+			uint64(in[14]-minv)<<34 |
+			uint64(in[15]-minv)<<41 |
+			uint64(in[16]-minv)<<48 |
+			uint64(in[17]-minv)<<55 |
+			uint64(in[18]-minv)<<62
 
 	out[2] =
-		(uint64(in[18])-minv)>>2 |
-			(uint64(in[19])-minv)<<5 |
-			(uint64(in[20])-minv)<<12 |
-			(uint64(in[21])-minv)<<19 |
-			(uint64(in[22])-minv)<<26 |
-			(uint64(in[23])-minv)<<33 |
-			(uint64(in[24])-minv)<<40 |
-			(uint64(in[25])-minv)<<47 |
-			(uint64(in[26])-minv)<<54 |
-			(uint64(in[27])-minv)<<61
+		uint64(in[18]-minv)>>2 |
+			uint64(in[19]-minv)<<5 |
+			uint64(in[20]-minv)<<12 |
+			uint64(in[21]-minv)<<19 |
+			uint64(in[22]-minv)<<26 |
+			uint64(in[23]-minv)<<33 |
+			uint64(in[24]-minv)<<40 |
+			uint64(in[25]-minv)<<47 |
+			uint64(in[26]-minv)<<54 |
+			uint64(in[27]-minv)<<61
 
 	out[3] =
-		(uint64(in[27])-minv)>>3 |
-			(uint64(in[28])-minv)<<4 |
-			(uint64(in[29])-minv)<<11 |
-			(uint64(in[30])-minv)<<18 |
-			(uint64(in[31])-minv)<<25 |
-			(uint64(in[32])-minv)<<32 |
-			(uint64(in[33])-minv)<<39 |
-			(uint64(in[34])-minv)<<46 |
-			(uint64(in[35])-minv)<<53 |
-			(uint64(in[36])-minv)<<60
+		uint64(in[27]-minv)>>3 |
+			uint64(in[28]-minv)<<4 |
+			uint64(in[29]-minv)<<11 |
+			uint64(in[30]-minv)<<18 |
+			uint64(in[31]-minv)<<25 |
+			uint64(in[32]-minv)<<32 |
+			uint64(in[33]-minv)<<39 |
+			uint64(in[34]-minv)<<46 |
+			uint64(in[35]-minv)<<53 |
+			uint64(in[36]-minv)<<60
 
 	out[4] =
-		(uint64(in[36])-minv)>>4 |
-			(uint64(in[37])-minv)<<3 |
-			(uint64(in[38])-minv)<<10 |
-			(uint64(in[39])-minv)<<17 |
-			(uint64(in[40])-minv)<<24 |
-			(uint64(in[41])-minv)<<31 |
-			(uint64(in[42])-minv)<<38 |
-			(uint64(in[43])-minv)<<45 |
-			(uint64(in[44])-minv)<<52 |
-			(uint64(in[45])-minv)<<59
+		uint64(in[36]-minv)>>4 |
+			uint64(in[37]-minv)<<3 |
+			uint64(in[38]-minv)<<10 |
+			uint64(in[39]-minv)<<17 |
+			uint64(in[40]-minv)<<24 |
+			uint64(in[41]-minv)<<31 |
+			uint64(in[42]-minv)<<38 |
+			uint64(in[43]-minv)<<45 |
+			uint64(in[44]-minv)<<52 |
+			uint64(in[45]-minv)<<59
 
 	out[5] =
-		(uint64(in[45])-minv)>>5 |
-			(uint64(in[46])-minv)<<2 |
-			(uint64(in[47])-minv)<<9 |
-			(uint64(in[48])-minv)<<16 |
-			(uint64(in[49])-minv)<<23 |
-			(uint64(in[50])-minv)<<30 |
-			(uint64(in[51])-minv)<<37 |
-			(uint64(in[52])-minv)<<44 |
-			(uint64(in[53])-minv)<<51 |
-			(uint64(in[54])-minv)<<58
+		uint64(in[45]-minv)>>5 |
+			uint64(in[46]-minv)<<2 |
+			uint64(in[47]-minv)<<9 |
+			uint64(in[48]-minv)<<16 |
+			uint64(in[49]-minv)<<23 |
+			uint64(in[50]-minv)<<30 |
+			uint64(in[51]-minv)<<37 |
+			uint64(in[52]-minv)<<44 |
+			uint64(in[53]-minv)<<51 |
+			uint64(in[54]-minv)<<58
 
 	out[6] =
-		(uint64(in[54])-minv)>>6 |
-			(uint64(in[55])-minv)<<1 |
-			(uint64(in[56])-minv)<<8 |
-			(uint64(in[57])-minv)<<15 |
-			(uint64(in[58])-minv)<<22 |
-			(uint64(in[59])-minv)<<29 |
-			(uint64(in[60])-minv)<<36 |
-			(uint64(in[61])-minv)<<43 |
-			(uint64(in[62])-minv)<<50 |
-			(uint64(in[63])-minv)<<57
+		uint64(in[54]-minv)>>6 |
+			uint64(in[55]-minv)<<1 |
+			uint64(in[56]-minv)<<8 |
+			uint64(in[57]-minv)<<15 |
+			uint64(in[58]-minv)<<22 |
+			uint64(in[59]-minv)<<29 |
+			uint64(in[60]-minv)<<36 |
+			uint64(in[61]-minv)<<43 |
+			uint64(in[62]-minv)<<50 |
+			uint64(in[63]-minv)<<57
 }
 
-func bp8_8(in *[64]uint8, p unsafe.Pointer, minv uint64) {
+func bp8_8(in *[64]uint8, p unsafe.Pointer, minv uint8) {
 	out := (*[64]uint8)(p)
 	var i int
 	for range 4 {
-		out[i] = in[i] - uint8(minv)
-		out[i+1] = in[i+1] - uint8(minv)
-		out[i+2] = in[i+2] - uint8(minv)
-		out[i+3] = in[i+3] - uint8(minv)
-		out[i+4] = in[i+4] - uint8(minv)
-		out[i+5] = in[i+5] - uint8(minv)
-		out[i+6] = in[i+6] - uint8(minv)
-		out[i+7] = in[i+7] - uint8(minv)
-		out[i+8] = in[i+8] - uint8(minv)
-		out[i+9] = in[i+9] - uint8(minv)
-		out[i+10] = in[i+10] - uint8(minv)
-		out[i+11] = in[i+11] - uint8(minv)
-		out[i+12] = in[i+12] - uint8(minv)
-		out[i+13] = in[i+13] - uint8(minv)
-		out[i+14] = in[i+14] - uint8(minv)
-		out[i+15] = in[i+15] - uint8(minv)
+		out[i] = in[i] - minv
+		out[i+1] = in[i+1] - minv
+		out[i+2] = in[i+2] - minv
+		out[i+3] = in[i+3] - minv
+		out[i+4] = in[i+4] - minv
+		out[i+5] = in[i+5] - minv
+		out[i+6] = in[i+6] - minv
+		out[i+7] = in[i+7] - minv
+		out[i+8] = in[i+8] - minv
+		out[i+9] = in[i+9] - minv
+		out[i+10] = in[i+10] - minv
+		out[i+11] = in[i+11] - minv
+		out[i+12] = in[i+12] - minv
+		out[i+13] = in[i+13] - minv
+		out[i+14] = in[i+14] - minv
+		out[i+15] = in[i+15] - minv
 		i += 16
 	}
 }

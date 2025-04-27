@@ -167,9 +167,12 @@ func testIntEncodeT[T types.Integer](t *testing.T) {
 		t.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(t *testing.T) {
 			x := AnalyzeInt(c.Data, true)
 			e := EncodeInt(x, c.Data, MAX_CASCADE)
-			require.Equal(t, len(c.Data), e.Len(), "T=%v x=%#v", e, x)
+			require.Equal(t, len(c.Data), e.Len(), "T=%s x=%#v", e, x)
+			dst := make([]T, len(c.Data))
+			e.AppendTo(nil, dst)
 			for i, v := range c.Data {
-				require.Equal(t, v, e.Get(i), "T=%v i=%d d=%x", e, i, c.Data)
+				require.Equal(t, v, e.Get(i), "T=%s i=%d minv=%d\nsrc=%x\ndec=%x",
+					e.Info(), i, x.Min, c.Data, dst)
 			}
 		})
 	}

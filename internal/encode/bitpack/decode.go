@@ -88,8 +88,15 @@ func (d *Decoder[T]) DecodeChunk(dst *[128]T, ofs int) int {
 	}
 
 	// calculate source code word group offsets for chunks size 128
-	group0 := unsafe.Pointer(&d.src[k*d.log2])
-	group1 := unsafe.Pointer(&d.src[(k+1)*d.log2])
+	var group0, group1 unsafe.Pointer
+	if d.log2 > 0 {
+		group0 = unsafe.Pointer(&d.src[k*d.log2])
+		group1 = unsafe.Pointer(&d.src[(k+1)*d.log2])
+	}
+
+	// fmt.Printf("BP: dec src1[%d:%d] src2[%d:%d] log2=%d ofs=%d k=%d\n ", k*d.log2, (k+1)*d.log2,
+	// 	(k+1)*d.log2, (k+2)*d.log2, d.log2, ofs, k,
+	// )
 
 	// call the correct kernel
 	switch any(T(0)).(type) {
@@ -100,15 +107,15 @@ func (d *Decoder[T]) DecodeChunk(dst *[128]T, ofs int) int {
 	case uint16:
 		d16 := util.ReinterpretSlice[T, uint16](dst[:])
 		unpack_u16[d.log2]((*[64]uint16)(d16[:64]), group0, uint64(d.minv))
-		unpack_u16[d.log2]((*[64]uint16)(d16[:64]), group1, uint64(d.minv))
+		unpack_u16[d.log2]((*[64]uint16)(d16[64:]), group1, uint64(d.minv))
 	case uint32:
 		d32 := util.ReinterpretSlice[T, uint32](dst[:])
 		unpack_u32[d.log2]((*[64]uint32)(d32[:64]), group0, uint64(d.minv))
-		unpack_u32[d.log2]((*[64]uint32)(d32[:64]), group1, uint64(d.minv))
+		unpack_u32[d.log2]((*[64]uint32)(d32[64:]), group1, uint64(d.minv))
 	case uint64:
 		d64 := util.ReinterpretSlice[T, uint64](dst[:])
 		unpack_u64[d.log2]((*[64]uint64)(d64[:64]), group0, uint64(d.minv))
-		unpack_u64[d.log2]((*[64]uint64)(d64[:64]), group1, uint64(d.minv))
+		unpack_u64[d.log2]((*[64]uint64)(d64[64:]), group1, uint64(d.minv))
 	case int8:
 		d8 := util.ReinterpretSlice[T, uint8](dst[:])
 		unpack_u8[d.log2]((*[64]uint8)(d8[:64]), group0, uint64(d.minv))
@@ -116,15 +123,15 @@ func (d *Decoder[T]) DecodeChunk(dst *[128]T, ofs int) int {
 	case int16:
 		d16 := util.ReinterpretSlice[T, uint16](dst[:])
 		unpack_u16[d.log2]((*[64]uint16)(d16[:64]), group0, uint64(d.minv))
-		unpack_u16[d.log2]((*[64]uint16)(d16[:64]), group1, uint64(d.minv))
+		unpack_u16[d.log2]((*[64]uint16)(d16[64:]), group1, uint64(d.minv))
 	case int32:
 		d32 := util.ReinterpretSlice[T, uint32](dst[:])
 		unpack_u32[d.log2]((*[64]uint32)(d32[:64]), group0, uint64(d.minv))
-		unpack_u32[d.log2]((*[64]uint32)(d32[:64]), group1, uint64(d.minv))
+		unpack_u32[d.log2]((*[64]uint32)(d32[64:]), group1, uint64(d.minv))
 	case int64:
 		d64 := util.ReinterpretSlice[T, uint64](dst[:])
 		unpack_u64[d.log2]((*[64]uint64)(d64[:64]), group0, uint64(d.minv))
-		unpack_u64[d.log2]((*[64]uint64)(d64[:64]), group1, uint64(d.minv))
+		unpack_u64[d.log2]((*[64]uint64)(d64[64:]), group1, uint64(d.minv))
 	}
 
 	return n
