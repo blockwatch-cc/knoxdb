@@ -125,15 +125,16 @@ func TestBytesCases2(t *testing.T, cases []BytesMatchTest, fn BytesMatchFunc2) {
 
 func BenchBytesCases(b *testing.B, fn BytesMatchFunc) {
 	b.Helper()
-	for _, n := range tests.BenchmarkSizes {
+	for _, c := range tests.BenchmarkSizes {
 		for _, m := range BenchmarkMasks {
-			a := RandBytes(n.N)
+			a := RandBytes(c.N)
 			bits, mask := MakeBitsAndMaskPoison(len(a), m.Pattern)
-			b.Run(n.Name+"/mask_"+m.Name, func(b *testing.B) {
-				b.SetBytes(int64(n.N * 8))
+			b.Run(c.Name+"/mask_"+m.Name, func(b *testing.B) {
+				b.SetBytes(int64(c.N * 8))
 				for range b.N {
 					fn(a, Uint64Bytes(math.MaxUint64>>1), bits, mask)
 				}
+				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 			})
 		}
 	}
@@ -141,15 +142,16 @@ func BenchBytesCases(b *testing.B, fn BytesMatchFunc) {
 
 func BenchBytesCases2(b *testing.B, fn BytesMatchFunc2) {
 	b.Helper()
-	for _, n := range tests.BenchmarkSizes {
+	for _, c := range tests.BenchmarkSizes {
 		for _, m := range BenchmarkMasks {
-			a := RandBytes(n.N)
+			a := RandBytes(c.N)
 			bits, mask := MakeBitsAndMaskPoison(len(a), m.Pattern)
-			b.Run(n.Name+"/mask_"+m.Name, func(b *testing.B) {
-				b.SetBytes(int64(n.N * 16))
+			b.Run(c.Name+"/mask_"+m.Name, func(b *testing.B) {
+				b.SetBytes(int64(c.N * 16))
 				for range b.N {
 					fn(a, Uint64Bytes(math.MaxUint64>>2), Uint64Bytes(math.MaxUint64>>1), bits, mask)
 				}
+				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 			})
 		}
 	}

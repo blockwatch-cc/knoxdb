@@ -239,15 +239,16 @@ func TestInt128Cases2(t *testing.T, cases []Int128MatchTest, fn Int128MatchFunc2
 
 func BenchInt128Cases(b *testing.B, fn Int128MatchFunc) {
 	b.Helper()
-	for _, n := range tests.BenchmarkSizes {
+	for _, c := range tests.BenchmarkSizes {
 		for _, m := range BenchmarkMasks {
-			a := num.Int128Optimize(RandInt128Slice(n.N))
+			a := num.Int128Optimize(RandInt128Slice(c.N))
 			bits, mask := MakeBitsAndMaskPoison(a.Len(), m.Pattern)
-			b.Run(n.Name+"/mask_"+m.Name, func(b *testing.B) {
-				b.SetBytes(int64(n.N * 16))
+			b.Run(c.Name+"/mask_"+m.Name, func(b *testing.B) {
+				b.SetBytes(int64(c.N * 16))
 				for range b.N {
 					fn(a, MaxInt128.Rsh(1), bits, mask)
 				}
+				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 			})
 		}
 	}
@@ -255,15 +256,16 @@ func BenchInt128Cases(b *testing.B, fn Int128MatchFunc) {
 
 func BenchInt128Cases2(b *testing.B, fn Int128MatchFunc2) {
 	b.Helper()
-	for _, n := range tests.BenchmarkSizes {
+	for _, c := range tests.BenchmarkSizes {
 		for _, m := range BenchmarkMasks {
-			a := num.Int128Optimize(RandInt128Slice(n.N))
+			a := num.Int128Optimize(RandInt128Slice(c.N))
 			bits, mask := MakeBitsAndMaskPoison(a.Len(), m.Pattern)
-			b.Run(n.Name+"/mask_"+m.Name, func(b *testing.B) {
-				b.SetBytes(int64(n.N * 16))
+			b.Run(c.Name+"/mask_"+m.Name, func(b *testing.B) {
+				b.SetBytes(int64(c.N * 16))
 				for range b.N {
 					fn(a, MaxInt128.Rsh(2), MaxInt128.Rsh(1), bits, mask)
 				}
+				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 			})
 		}
 	}

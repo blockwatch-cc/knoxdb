@@ -31,57 +31,61 @@ type (
 )
 
 func BenchCases[T types.Number](b *testing.B, fn CmpFunc[T]) {
-	for _, n := range tests.BenchmarkSizes {
-		a := tests.GenRnd[T](n.N)
-		bits := MakeBitsPoison(n.N)
-		b.Run(fmt.Sprintf("%T/%s", T(0), n.Name), func(b *testing.B) {
-			b.SetBytes(int64(n.N * int(unsafe.Sizeof(T(0)))))
+	for _, c := range tests.BenchmarkSizes {
+		a := tests.GenRnd[T](c.N)
+		bits := MakeBitsPoison(c.N)
+		b.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(b *testing.B) {
+			b.SetBytes(int64(c.N * int(unsafe.Sizeof(T(0)))))
 			for range b.N {
 				fn(a, 127, bits)
 			}
+			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 		})
 	}
 }
 
 func BenchCases2[T types.Number](b *testing.B, fn CmpFunc2[T]) {
-	for _, n := range tests.BenchmarkSizes {
-		a := tests.GenRnd[T](n.N)
-		bits := MakeBitsPoison(n.N)
-		b.Run(fmt.Sprintf("%T/%s", T(0), n.Name), func(b *testing.B) {
-			b.SetBytes(int64(n.N * int(unsafe.Sizeof(T(0)))))
+	for _, c := range tests.BenchmarkSizes {
+		a := tests.GenRnd[T](c.N)
+		bits := MakeBitsPoison(c.N)
+		b.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(b *testing.B) {
+			b.SetBytes(int64(c.N * int(unsafe.Sizeof(T(0)))))
 			for range b.N {
 				fn(a, 5, 127, bits)
 			}
+			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 		})
 	}
 }
 
 func BenchMaskCases[T types.Number](b *testing.B, fn CmpMaskFunc[T]) {
-	for _, n := range tests.BenchmarkSizes {
+	for _, c := range tests.BenchmarkSizes {
 		for _, m := range BenchmarkMasks {
-			a := tests.GenRnd[T](n.N)
-			bits, mask := MakeBitsAndMaskPoison(n.N, m.Pattern)
-			b.Run(fmt.Sprintf("%T/%s/mask_%s", T(0), n.Name, m.Name), func(b *testing.B) {
-				b.SetBytes(int64(n.N * int(unsafe.Sizeof(T(0)))))
+			a := tests.GenRnd[T](c.N)
+			bits, mask := MakeBitsAndMaskPoison(c.N, m.Pattern)
+			b.Run(fmt.Sprintf("%T/%s/mask_%s", T(0), c.Name, m.Name), func(b *testing.B) {
+				b.SetBytes(int64(c.N * int(unsafe.Sizeof(T(0)))))
 				for range b.N {
 					fn(a, 127, bits, mask)
 				}
+				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 			})
 		}
 	}
 }
 
 func BenchMaskCases2[T types.Number](b *testing.B, fn CmpMaskFunc2[T]) {
-	for _, n := range tests.BenchmarkSizes {
+	for _, c := range tests.BenchmarkSizes {
 		for _, m := range BenchmarkMasks {
-			a := tests.GenRnd[T](n.N)
-			bits, mask := MakeBitsAndMaskPoison(n.N, m.Pattern)
-			b.Run(fmt.Sprintf("%T/%s/mask_%s", T(0), n.Name, m.Name), func(b *testing.B) {
-				b.SetBytes(int64(n.N * int(unsafe.Sizeof(T(0)))))
+			a := tests.GenRnd[T](c.N)
+			bits, mask := MakeBitsAndMaskPoison(c.N, m.Pattern)
+			b.Run(fmt.Sprintf("%T/%s/mask_%s", T(0), c.Name, m.Name), func(b *testing.B) {
+				b.SetBytes(int64(c.N * int(unsafe.Sizeof(T(0)))))
 				for range b.N {
 					fn(a, 5, 127, bits, mask)
 				}
 			})
+			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 		}
 	}
 }
