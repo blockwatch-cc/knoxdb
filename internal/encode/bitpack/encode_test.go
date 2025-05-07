@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	bptest "blockwatch.cc/knoxdb/internal/encode/bitpack/tests"
-	"blockwatch.cc/knoxdb/internal/tests"
 )
 
 func TestEncode(t *testing.T) {
@@ -20,27 +19,31 @@ func TestEncode(t *testing.T) {
 	bptest.EncodeTest(t, Encode[uint64], Decode)
 }
 
-func BenchmarkEncodeConst(b *testing.B) {
-	val := tests.GenConst[uint32](1<<16, 21)
-	buf := make([]byte, 8*len(val))
-	b.ResetTimer()
-	b.ReportAllocs()
+// func BenchmarkEncode10(b *testing.B) {
+// 	n := 1 << 16
+// 	src := tests.GenRndBits[uint32](n, 10)
+// 	minv, maxv := slices.Min(src), slices.Max(src)
+// 	buf := make([]byte, EstimateSize(10, n))
+// 	b.SetBytes(int64(n * 4))
+// 	for b.Loop() {
+// 		Encode(buf, src, minv, maxv)
+// 	}
+// 	b.ReportMetric(float64(n*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+// }
 
-	for range b.N {
-		Encode(buf, val, 21, 42)
-	}
-}
-
-func BenchmarkEncodeRnd(b *testing.B) {
-	val := tests.GenRnd[uint32](1 << 16)
-	buf := make([]byte, 4*len(val))
-	b.ResetTimer()
-	b.ReportAllocs()
-
-	for range b.N {
-		Encode(buf, val, 21, 42)
-	}
-}
+// func BenchmarkDecode10(b *testing.B) {
+// 	n := 1 << 16
+// 	src := tests.GenRndBits[uint32](n, 10)
+// 	minv, maxv := slices.Min(src), slices.Max(src)
+// 	buf := make([]byte, EstimateSize(10, n))
+// 	dst := make([]uint32, n)
+// 	Encode(buf, src, minv, maxv)
+// 	b.SetBytes(int64(n * 4))
+// 	for b.Loop() {
+// 		Decode(dst, buf, 10, minv)
+// 	}
+// 	b.ReportMetric(float64(n*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+// }
 
 func BenchmarkEncode(b *testing.B) {
 	bptest.EncodeBenchmark(b, Encode[uint8])

@@ -144,6 +144,41 @@ func BenchmarkFloatEncodeBest(b *testing.B) {
 	}
 }
 
+// run as
+// GO_BENCH_PATH=path_to_alp_bench_files go test ./internal/encode/ -bench=File -cpu=1 -info
+func BenchmarkFloatEncodeFile(b *testing.B) {
+	tests.CheckFileBenchmarks(b)
+	for _, sz := range tests.BenchmarkSizes {
+		for _, c := range tests.MakeRawBenchmarks[float64](sz.N) {
+			once := etests.ShowInfo
+			b.Run(c.Name+"/"+sz.Name, func(b *testing.B) {
+				var sz, n int
+				for b.Loop() {
+					sz, n = 0, 0
+					for {
+						src, ok := c.Next()
+						if !ok {
+							break
+						}
+						enc := EncodeFloat(nil, src, MAX_CASCADE)
+						if once {
+							b.Log(enc.Info())
+							once = false
+						}
+						n += len(src)
+						sz += enc.Size()
+						enc.Close()
+					}
+					c.F.Rewind()
+				}
+				b.ReportMetric(float64(c.F.Size()*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+				b.ReportMetric(float64(sz*8)/float64(n), "bits/val")
+				b.SetBytes(int64(c.F.Size()))
+			})
+		}
+	}
+}
+
 func BenchmarkFloatEncodeLegacy(b *testing.B) {
 	for _, c := range tests.MakeBenchmarks[float64]() {
 		buf := bytes.NewBuffer(make([]byte, zip.Int64EncodedSize(len(c.Data))))
