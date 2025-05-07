@@ -28,3 +28,6 @@ playground/
 vendor/
 go.work*
 data/
+_*
+*.prof
+*.log
