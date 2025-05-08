@@ -162,7 +162,7 @@ func BenchmarkFloatEncodeFile(b *testing.B) {
 						}
 						enc := EncodeFloat(nil, src, MAX_CASCADE)
 						if once {
-							b.Log(enc.Info())
+							b.Logf("%s %d => %d", enc.Info(), len(src)*8, enc.Size())
 							once = false
 						}
 						n += len(src)

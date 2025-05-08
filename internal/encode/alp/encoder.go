@@ -103,5 +103,15 @@ func (e *Encoder[T, E]) Encode(src []T, exp Exponents) *Result[T, E] {
 	}
 	r.PatchIndices = r.PatchIndices[:numPatches]
 
+	// log2 := types.Log2Range(r.Min, r.Max)
+	// fmt.Printf("Encode [%d,%d] => minv=%d maxv=%d log2=%d ex=%d\n", exp.E, exp.F, r.Min, r.Max, log2, len(r.PatchValues))
+	// if log2 == 61 {
+	// 	for i, v := range r.Encoded {
+	// 		if v > E(1679397590) {
+	// 			fmt.Printf("WARN wide int %d: src=%v int=%v\n", i, src[i], v)
+	// 		}
+	// 	}
+	// }
+
 	return r
 }

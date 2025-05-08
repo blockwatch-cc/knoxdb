@@ -111,7 +111,7 @@ func (c *FloatAlpRdContainer[T, E]) Encode(ctx *FloatContext[T], vals []T, lvl i
 	enc := alp.NewEncoderRD[T, E]()
 	res := enc.Encode(vals, ctx.Alp.Split)
 
-	// Improvements
+	// Improvement ideas
 	// - left: always use dict when <=8 unique, analyze unique during split (build array)
 	// - right: always BP, aggregate min/max during split
 	// - skip int analyze and encode direct
@@ -126,8 +126,8 @@ func (c *FloatAlpRdContainer[T, E]) Encode(ctx *FloatContext[T], vals []T, lvl i
 	c.Left = NewInt[uint16](leftScheme).Encode(lctx, res.Left, lvl-1)
 	lctx.Close()
 
-	// right is always bitpacked
-	rctx := NewIntegerContext[E](0, 1<<ctx.Alp.Split-1, len(res.Right))
+	// right is always bitpacked, estimate width
+	rctx := AnalyzeInt(res.Right, false)
 	c.Right = NewInt[E](TIntegerBitpacked).Encode(rctx, res.Right, lvl-1)
 	rctx.Close()
 

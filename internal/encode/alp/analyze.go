@@ -11,6 +11,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
+	"blockwatch.cc/knoxdb/pkg/slicex"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
@@ -42,12 +43,21 @@ func (e Exponents) Key() uint16 {
 const RD_MAX_DICT_SIZE = 8
 
 // Note: keep these calculations in sync with integer container costs
-func dictCosts(n, w, c int) int {
-	return 1 + bitPackCosts(n, bits.Len(uint(c-1))) + bitPackCosts(c, w)
+func dictCosts(n, w, c, minv int) int {
+	return 1 + bitPackCosts(n, bits.Len(uint(c-1)), minv) + bitPackCosts(c, w, 0)
 }
 
-func bitPackCosts(n, w int) int {
-	return 2 + 2*num.MaxVarintLen32 + (n*w+7)/8
+func bitPackCosts(n, w, minv int) int {
+	return 2 + num.UvarintLen(minv) + num.UvarintLen(n) + (w*n+63)&^63/8
+}
+
+func countZeros[T types.Float](src []T) (n int) {
+	for _, v := range src {
+		if v == 0.0 {
+			n++
+		}
+	}
+	return
 }
 
 // Find the best combinations of Factor-Exponent from a sampled vector
@@ -56,23 +66,36 @@ func Analyze[T Float, E Int](src []T) Analysis {
 	// sample source vector to extract SAMPLE_SIZE (32) elements
 	var buf [SAMPLE_SIZE]T
 	sample := Sample(buf[:], src)
-	c := getConstantPtr[T]()
+
+	// zeros are bad for short vectors like ours, so we count and remove them
+	nonZeroSample := sample
+	nZero := countZeros(sample)
 
 	// find the best factor / exponent pair
 	var (
+		c        = getConstantPtr[T]()
 		bestExp  Exponents
 		bestSize = math.MaxInt
 		maxE     = types.MaxVal[E]()
-		maxEx    = len(sample) >> 2 // max 25% exceptions
+		maxEx    = (len(sample) - nZero) >> 2 // max 25% exceptions on non-zero values
 	)
 
-	// We try all combinations in search for the one which minimize the compression size
-	//
-	// TODO: try different strategies to reduce brute force search costs
-	// A: try even exponents only, jumping 2 pow-10 at a time
-	// B: coarse E search (known useful exponents 18, 16, 14, 12, 10, ..) then fine F search
-	// C: count trailing decimal zeros when encoding E, then choose F
-	for e := c.MAX_EXPONENT; e < 254; e -= 1 {
+	// Exclude zero values (0.0) from the sample to avoid picking bad exponents.
+	// Too many zeros make an all-exception case cheaper because only a few
+	// non-zero values are left for encoding exceptions.
+	if nZero > 0 {
+		maxE = 0
+		nonZeroSample = slicex.RemoveZeroFloats(sample)
+	}
+
+	// Search for an exponent/factor combination which minimizes compression size.
+	// Notable changes to vanilla ALP
+	// - we try even exponents only which saves 50% of the search cost
+	// - we break early when more than 25% non-zero values are exceptions
+	// - we encode/decode all values including NaN, Inf and out of bounds
+	//   since the check is more expensive than straight processing
+	// - we exclude zero values (0.0) since they skew costs
+	for e := c.MAX_EXPONENT; e < 254; e -= 2 {
 	floop:
 		for f := e; f < 254; f -= 1 {
 			var (
@@ -86,28 +109,26 @@ func Analyze[T Float, E Int](src []T) Analysis {
 			encE := c.F10[e]
 			decE := c.IF10[e]
 
-			// analyze probe (32 values)
-			for i, val := range sample {
+			// analyze probe (32 values minus zeros)
+			for i, val := range nonZeroSample {
 				enc := E(((val * encE * encF) + c.MAGIC_NUMBER) - c.MAGIC_NUMBER)
 				if val == T(enc)*decF*decE {
 					nNonEx++
 					maxv = max(maxv, enc)
 					minv = min(minv, enc)
 				} else if i-nNonEx > maxEx {
-					// early break & ignore combinations with more than 50% exceptions
+					// early break & ignore combinations with too many exceptions
 					continue floop
 				}
 			}
 
 			// evaluate performance
 			nBits := bits.Len64(uint64(maxv) - uint64(minv))
-			size := (len(sample) * nBits) + (len(sample)-nNonEx)*(c.PATCH_SIZE+PATCH_POSITION_SIZE)
+			size := (len(sample) * nBits) + (len(sample)-nZero-nNonEx)*(c.PATCH_SIZE+PATCH_POSITION_SIZE)
 
 			// keep better compressing versions
 			if size < bestSize {
 				bestSize = size
-				bestExp = Exponents{e, f}
-			} else if size == bestSize && e-f < bestExp.E-bestExp.F {
 				bestExp = Exponents{e, f}
 			}
 		}
@@ -147,10 +168,9 @@ func analyzeRD[T Float, U Uint](sample []T) Analysis {
 	)
 
 	for i := 1; i <= 16; i++ {
-		shift := w*8 - i
-		mask := U(1<<shift - 1)
-
 		var (
+			shift      int    = w*8 - i
+			mask       U      = 1<<shift - 1
 			lmin, lmax uint16 = math.MaxUint16, 0
 			rmin, rmax U      = types.MaxVal[U](), 0
 			lUnique    int
@@ -168,6 +188,7 @@ func analyzeRD[T Float, U Uint](sample []T) Analysis {
 			if unique[k] == 0 {
 				lUnique++
 				if lUnique >= RD_MAX_DICT_SIZE {
+					lUnique = sz
 					break
 				}
 				unique[k] = 1
@@ -178,16 +199,15 @@ func analyzeRD[T Float, U Uint](sample []T) Analysis {
 		// - left side may be dict compressed
 		// - right side will be bitpacked
 		lbits, rbits := bits.Len16(lmax-lmin), bits.Len64(uint64(rmax-rmin))
-		ldcost := dictCosts(sz, lbits, lUnique)
-		lbcost := bitPackCosts(sz, lbits)
+		ldcost := dictCosts(sz, lbits, lUnique, int(lmin))
+		lbcost := bitPackCosts(sz, lbits, int(lmin))
 
-		var maxSz int
+		maxSz := bitPackCosts(sz, rbits, int(rmin)) // bitpack only
 		if lUnique <= RD_MAX_DICT_SIZE && ldcost < lbcost {
 			maxSz += ldcost
 		} else {
 			maxSz += lbcost
 		}
-		maxSz += bitPackCosts(sz, rbits) // bitpack only
 
 		// compare against previous know best ratio and keep best containers
 		if maxSz <= bestSize {
