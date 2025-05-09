@@ -1242,10 +1242,10 @@ prep_big:
 // because there is no simple range check formula or instruction
 // for float32 vector data
 loop_big:
-	VMOVAPS		0(SI), Y1
-	VMOVAPS		32(SI), Y2
-	VMOVAPS		64(SI), Y3
-	VMOVAPS		96(SI), Y4
+	VMOVUPS		0(SI), Y1
+	VMOVUPS		32(SI), Y2
+	VMOVUPS		64(SI), Y3
+	VMOVUPS		96(SI), Y4
 	VCMPPS		$0x1d, Y0, Y1, Y12         // imm8 = $0x1d (GTE, nosignal)
 	VCMPPS		$0x1d, Y0, Y2, Y13
 	VCMPPS		$0x1d, Y0, Y3, Y14
@@ -1268,10 +1268,10 @@ loop_big:
 
 	VPMOVMSKB	Y1, DX              // move per byte MSBs into packed bitmask to r32 or r64
 
-	VMOVAPS		128(SI), Y5
-	VMOVAPS		160(SI), Y6
-	VMOVAPS		192(SI), Y7
-	VMOVAPS		224(SI), Y8
+	VMOVUPS		128(SI), Y5
+	VMOVUPS		160(SI), Y6
+	VMOVUPS		192(SI), Y7
+	VMOVUPS		224(SI), Y8
 	VCMPPS		$0x1d, Y0, Y5, Y12         // imm8 = $0x1d (GTE, nosignal)
 	VCMPPS		$0x1d, Y0, Y6, Y13
 	VCMPPS		$0x1d, Y0, Y7, Y14
@@ -1299,10 +1299,10 @@ loop_big:
 	POPCNTQ		AX, AX              // count 1 bits
 	ADDQ		AX, R9
 
-	VMOVAPS		256(SI), Y1
-	VMOVAPS		288(SI), Y2
-	VMOVAPS		320(SI), Y3
-	VMOVAPS		352(SI), Y4
+	VMOVUPS		256(SI), Y1
+	VMOVUPS		288(SI), Y2
+	VMOVUPS		320(SI), Y3
+	VMOVUPS		352(SI), Y4
 	VCMPPS		$0x1d, Y0, Y1, Y12         // imm8 = $0x1d (GTE, nosignal)
 	VCMPPS		$0x1d, Y0, Y2, Y13
 	VCMPPS		$0x1d, Y0, Y3, Y14
@@ -1325,10 +1325,10 @@ loop_big:
 
 	VPMOVMSKB	Y1, DX              // move per byte MSBs into packed bitmask to r32 or r64
 
-	VMOVAPS		384(SI), Y5
-	VMOVAPS		416(SI), Y6
-	VMOVAPS		448(SI), Y7
-	VMOVAPS		480(SI), Y8
+	VMOVUPS		384(SI), Y5
+	VMOVUPS		416(SI), Y6
+	VMOVUPS		448(SI), Y7
+	VMOVUPS		480(SI), Y8
 	VCMPPS		$0x1d, Y0, Y5, Y12         // imm8 = $0x1d (GTE, nosignal)
 	VCMPPS		$0x1d, Y0, Y6, Y13
 	VCMPPS		$0x1d, Y0, Y7, Y14
@@ -1368,10 +1368,10 @@ exit_big:
 prep_small:
 
 loop_small:
-	VMOVAPS		0(SI), Y1
-	VMOVAPS		32(SI), Y2
-	VMOVAPS		64(SI), Y3
-	VMOVAPS		96(SI), Y4
+	VMOVUPS		0(SI), Y1
+	VMOVUPS		32(SI), Y2
+	VMOVUPS		64(SI), Y3
+	VMOVUPS		96(SI), Y4
 	VCMPPS		$0x1d, Y0, Y1, Y12         // imm8 = $0x1d (GTE, nosignal)
 	VCMPPS		$0x1d, Y0, Y2, Y13
 	VCMPPS		$0x1d, Y0, Y3, Y14
