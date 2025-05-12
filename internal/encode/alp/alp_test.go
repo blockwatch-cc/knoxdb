@@ -9,6 +9,7 @@ import (
 	"testing"
 	"unsafe"
 
+	"blockwatch.cc/knoxdb/internal/encode/bitpack"
 	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/internal/types"
 	"github.com/stretchr/testify/assert"
@@ -110,6 +111,11 @@ func TestAlp(t *testing.T) {
 	AlpTest[float64, int64](t)
 }
 
+func TestFusedAlp(t *testing.T) {
+	AlpFusedTest[float32, int32](t)
+	AlpFusedTest[float64, int64](t)
+}
+
 func AlpTest[T Float, E Int](t *testing.T) {
 	for _, c := range MakeTestcases[T]() {
 		t.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(t *testing.T) {
@@ -122,6 +128,32 @@ func AlpTest[T Float, E Int](t *testing.T) {
 				WithExceptions(res.PatchValues, res.PatchIndices)
 			dst := make([]T, len(c.Data))
 			dec.Decode(dst, res.Encoded)
+			for i, v := range c.Data {
+				if math.IsNaN(float64(v)) {
+					assert.Equal(t, math.IsNaN(float64(v)), math.IsNaN(float64(dst[i])), "val %d: %v != %v", i, v, dst[i])
+				} else {
+					assert.Equal(t, v, dst[i], "val %d: %v != %v", i, v, dst[i])
+				}
+			}
+			res.Close()
+		})
+	}
+}
+
+func AlpFusedTest[T Float, E Int](t *testing.T) {
+	for _, c := range MakeTestcases[T]() {
+		t.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(t *testing.T) {
+			enc := NewEncoder[T, E]()
+			a := Analyze[T, E](c.Data)
+			res := enc.Encode(c.Data, a.Exp)
+			assert.Equal(t, len(c.Data), len(res.Encoded))
+			assert.Equal(t, c.NEx, len(res.PatchValues))
+			dec := NewDecoder[T, E](a.Exp.F, a.Exp.E).
+				WithExceptions(res.PatchValues, res.PatchIndices)
+			buf := make([]byte, len(c.Data)*16)
+			buf, _ = bitpack.Encode(buf, res.Encoded, res.Min, res.Max)
+			dst := make([]T, len(c.Data))
+			dec.DecodeFused(dst, buf, types.Log2Range(res.Min, res.Max), res.Min)
 			for i, v := range c.Data {
 				if math.IsNaN(float64(v)) {
 					assert.Equal(t, math.IsNaN(float64(v)), math.IsNaN(float64(dst[i])), "val %d: %v != %v", i, v, dst[i])

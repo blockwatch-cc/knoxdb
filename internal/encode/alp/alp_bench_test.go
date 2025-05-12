@@ -7,8 +7,11 @@ import (
 	"fmt"
 	"testing"
 
+	"blockwatch.cc/knoxdb/internal/encode/bitpack"
 	"blockwatch.cc/knoxdb/internal/tests"
+	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/util"
+	"github.com/stretchr/testify/require"
 )
 
 // -------------------------------------
@@ -75,9 +78,14 @@ func BenchmarkDecodeALP(b *testing.B) {
 	benchDecode[float32, int32](b)
 }
 
+func BenchmarkDecodeALPFused(b *testing.B) {
+	benchDecodeALPFused[float64, int64](b)
+	benchDecodeALPFused[float32, int32](b)
+}
+
 func benchDecode[T Float, E Int](b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
-		src := tests.GenRndBits[T](c.N, 24)
+		src := tests.GenRndBits[T](c.N, 10)
 		enc := NewEncoder[T, E]()
 		a := Analyze[T, E](src)
 		res := enc.Encode(src, a.Exp)
@@ -88,6 +96,37 @@ func benchDecode[T Float, E Int](b *testing.B) {
 			b.SetBytes(int64(c.N * enc.WIDTH))
 			for range b.N {
 				dec.Decode(out, res.Encoded)
+			}
+			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+		})
+	}
+}
+
+func benchDecodeALPFused[T Float, E Int](b *testing.B) {
+	for _, c := range tests.BenchmarkSizes {
+		src := tests.GenRndBits[T](c.N, 10)
+		enc := NewEncoder[T, E]()
+		a := Analyze[T, E](src)
+		res := enc.Encode(src, a.Exp)
+		out1 := make([]T, c.N)
+		out2 := make([]T, c.N)
+
+		log2 := types.Log2Range(res.Min, res.Max)
+		dst := make([]byte, c.N*8)
+		dst, _ = bitpack.Encode(dst, res.Encoded, res.Min, res.Max)
+		dec := NewDecoder[T, E](a.Exp.F, a.Exp.E).
+			WithExceptions(res.PatchValues, res.PatchIndices)
+		bitpack.Decode(res.Encoded, dst, log2, res.Min)
+		dec.Decode(out1, res.Encoded)
+		dec.DecodeFused(out2, dst, log2, res.Min)
+
+		require.Equal(b, src, out1, "src is not equal out1")
+		require.Equal(b, src, out2, "src is not equal out2")
+
+		b.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(b *testing.B) {
+			b.SetBytes(int64(c.N * enc.WIDTH))
+			for range b.N {
+				dec.DecodeFused(out2, dst, log2, res.Min)
 			}
 			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 		})

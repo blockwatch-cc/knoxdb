@@ -6,6 +6,8 @@ package alp
 import (
 	"slices"
 	"sync"
+
+	"blockwatch.cc/knoxdb/internal/encode/bitpack"
 )
 
 type Decoder[T Float, E Int] struct {
@@ -112,6 +114,23 @@ func (d *Decoder[T, E]) Decode(dst []T, src []E) {
 		dst[i] = T(src[i]) * d.f * d.e
 		i++
 	}
+
+	// patching patch_values
+	for i, expPos := range d.patch_indices {
+		dst[expPos] = d.patch_values[i]
+	}
+}
+
+// Scalar decoding of an ALP vector with bit-unpack fusion
+// dst[i] = T(unpack + minv) * f * e
+func (d *Decoder[T, E]) DecodeFused(dst []T, src []byte, log2 int, minv E) {
+	l := len(src)
+	if l == 0 {
+		return
+	}
+
+	// fusion kernel driver is defined either here or in bitpack package
+	bitpack.DecodeAlp(dst, src, log2, T(minv), d.f, d.e)
 
 	// patching patch_values
 	for i, expPos := range d.patch_indices {

@@ -382,6 +382,149 @@ func Decode64[T int64 | uint64](dst []T, src []byte, log2 int, minv T) (int, err
 	return outpos + n, err
 }
 
+func DecodeAlp[T types.Float](dst []T, src []byte, log2 int, minv, e, f T) (int, error) {
+	var (
+		n   int
+		err error
+	)
+	switch any(T(0)).(type) {
+	case float32:
+		n, err = Decodef32(util.ReinterpretSlice[T, float32](dst), src, log2, float32(minv), float32(e), float32(f))
+	case float64:
+		n, err = Decodef64(util.ReinterpretSlice[T, float64](dst), src, log2, float64(minv), float64(e), float64(f))
+	}
+	return n, err
+}
+
+func Decodef32[T float32](dst []T, src []byte, log2 int, minv, e, f T) (int, error) {
+	in := util.FromByteSlice[uint64](src)
+	blockN := len(dst) / (4 * BlockSize)
+	if blockN == 0 {
+		// input less than block size, use generic decoder
+		n, err := decodeFused(dst, in, log2, minv, e, f)
+		return n, err
+	}
+
+	outp := unsafe.Pointer(&dst[0])
+	var inp unsafe.Pointer
+	if len(src) > 0 {
+		inp = unsafe.Pointer(&src[0])
+	}
+	nBlockInBytes := log2 * 8
+	nBlockOutBytes := BlockSize * 4
+
+	// 4x loop unrolled unpacking 4x64 uint16 values from 4xlog2 64bit codewords
+	for blockI := range blockN {
+		i := blockI * nBlockInBytes * 4
+		in1 := unsafe.Add(inp, i)
+		in2 := unsafe.Add(inp, i+1*nBlockInBytes)
+		in3 := unsafe.Add(inp, i+2*nBlockInBytes)
+		in4 := unsafe.Add(inp, i+3*nBlockInBytes)
+		o := blockI * nBlockOutBytes * 4
+		out1 := (*[BlockSize]float32)(unsafe.Add(outp, o))
+		out2 := (*[BlockSize]float32)(unsafe.Add(outp, o+1*nBlockOutBytes))
+		out3 := (*[BlockSize]float32)(unsafe.Add(outp, o+2*nBlockOutBytes))
+		out4 := (*[BlockSize]float32)(unsafe.Add(outp, o+3*nBlockOutBytes))
+
+		// unpack groups (4 x 64 packed inputs)
+		unpack_f32[log2](out1, in1, uint64(minv), float32(e), float32(f))
+		unpack_f32[log2](out2, in2, uint64(minv), float32(e), float32(f))
+		unpack_f32[log2](out3, in3, uint64(minv), float32(e), float32(f))
+		unpack_f32[log2](out4, in4, uint64(minv), float32(e), float32(f))
+	}
+	outpos := blockN * 4 * BlockSize
+
+	// tail loop
+	n, err := decodeFused(dst[outpos:], in[blockN*log2*4:], log2, minv, e, f)
+
+	// return output values written
+	return outpos + n, err
+}
+
+func Decodef64[T float64](dst []T, src []byte, log2 int, minv, e, f T) (int, error) {
+	in := util.FromByteSlice[uint64](src)
+	blockN := len(dst) / (4 * BlockSize)
+	if blockN == 0 {
+		// input less than block size, use generic decoder
+		n, err := decodeFused(dst, in, log2, minv, e, f)
+		return n, err
+	}
+
+	outp := unsafe.Pointer(&dst[0])
+	var inp unsafe.Pointer
+	if len(src) > 0 {
+		inp = unsafe.Pointer(&src[0])
+	}
+	nBlockInBytes := log2 * 8
+	nBlockOutBytes := BlockSize * 8
+
+	// 4x loop unrolled unpacking 4x64 uint16 values from 4xlog2 64bit codewords
+	for blockI := range blockN {
+		i := blockI * nBlockInBytes * 4
+		in1 := unsafe.Add(inp, i)
+		in2 := unsafe.Add(inp, i+1*nBlockInBytes)
+		in3 := unsafe.Add(inp, i+2*nBlockInBytes)
+		in4 := unsafe.Add(inp, i+3*nBlockInBytes)
+		o := blockI * nBlockOutBytes * 4
+		out1 := (*[BlockSize]float64)(unsafe.Add(outp, o))
+		out2 := (*[BlockSize]float64)(unsafe.Add(outp, o+1*nBlockOutBytes))
+		out3 := (*[BlockSize]float64)(unsafe.Add(outp, o+2*nBlockOutBytes))
+		out4 := (*[BlockSize]float64)(unsafe.Add(outp, o+3*nBlockOutBytes))
+
+		// unpack groups (4 x 64 packed inputs)
+		unpack_f64[log2](out1, in1, uint64(minv), float64(e), float64(f))
+		unpack_f64[log2](out2, in2, uint64(minv), float64(e), float64(f))
+		unpack_f64[log2](out3, in3, uint64(minv), float64(e), float64(f))
+		unpack_f64[log2](out4, in4, uint64(minv), float64(e), float64(f))
+	}
+	outpos := blockN * 4 * BlockSize
+
+	// tail loop
+	n, err := decodeFused(dst[outpos:], in[blockN*log2*4:], log2, minv, e, f)
+
+	// return output values written
+	return outpos + n, err
+}
+
+func decodeFused[T types.Float](out []T, in []uint64, log2 int, minv, e, f T) (int, error) {
+	var pack uint64 // Current 64-bit word being unpacked
+	var offset int  // Bit offset within the current word
+	var inIdx int   // Index into the input byte slice
+	var outIdx int  // Index into the output array
+	var lost int    // must shift right next in word instead of left
+
+	mask := uint64((1 << log2) - 1) // Mask for b bits, e.g., b=3 -> 0b111
+
+	for outIdx = 0; outIdx < len(out); outIdx++ {
+		// Ensure we have enough bits in pack
+		for offset < log2 && inIdx < len(in) {
+			if lost > 0 {
+				pack |= uint64(in[inIdx]) >> (BitsSize - offset - lost) &^ (1<<offset - 1)
+				inIdx++
+				offset += lost
+				lost = 0
+				if offset < log2 {
+					pack |= uint64(in[inIdx]) << offset
+					lost = offset
+					offset += BitsSize - offset
+				}
+			} else {
+				pack |= uint64(in[inIdx]) << offset
+				lost = offset
+				inIdx += util.Bool2int(offset == 0)
+				offset += BitsSize - offset
+			}
+		}
+
+		// Extract b bits from pack
+		out[outIdx] = (T(pack&mask) + minv) * e * f
+		pack >>= log2
+		offset -= log2
+	}
+
+	return outIdx, nil
+}
+
 type decoderFactoryType struct {
 	i64Pool sync.Pool
 	i32Pool sync.Pool
