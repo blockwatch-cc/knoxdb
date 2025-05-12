@@ -49,7 +49,9 @@ func (c *Simple8Container[T]) Len() int {
 }
 
 func (c *Simple8Container[T]) Size() int {
-	return 1 + num.UvarintLen(uint64(c.For)) + num.UvarintLen(uint64(len(c.Packed))) +
+	return 1 + num.UvarintLen(uint64(c.For)) +
+		num.UvarintLen(uint64(c.N)) +
+		num.UvarintLen(uint64(len(c.Packed))) +
 		len(c.Packed)
 }
 
@@ -60,6 +62,7 @@ func (c *Simple8Container[T]) Iterator() Iterator[T] {
 func (c *Simple8Container[T]) Store(dst []byte) []byte {
 	dst = append(dst, byte(TIntegerSimple8))
 	dst = num.AppendUvarint(dst, uint64(c.For))
+	dst = num.AppendUvarint(dst, uint64(c.N))
 	dst = num.AppendUvarint(dst, uint64(len(c.Packed)))
 	dst = append(dst, c.Packed...)
 	return dst
@@ -71,13 +74,18 @@ func (c *Simple8Container[T]) Load(buf []byte) ([]byte, error) {
 	}
 	buf = buf[1:]
 	v, n := num.Uvarint(buf)
-	c.For = T(v)
 	buf = buf[n:]
+	c.For = T(v)
+
+	v, n = num.Uvarint(buf)
+	buf = buf[n:]
+	c.N = int(v)
+
 	v, n = num.Uvarint(buf)
 	buf = buf[n:]
 	c.Packed = buf[:int(v)]
 	c.free = false
-	c.N = s8b.CountValues(c.Packed)
+
 	return buf[int(v):], nil
 }
 
