@@ -12,29 +12,28 @@ import (
 	"blockwatch.cc/knoxdb/internal/encode/alp"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
-type ExceptionStatus byte
+type AlpFlags byte
 
 const (
-	NoException ExceptionStatus = iota
-	HasException
+	FlagException AlpFlags = 1 << iota
+	FlagSafeInt            // [-2^51, 2^51]
 )
 
 // TFloatAlp
 type FloatAlpContainer[T types.Float, E int64 | int32] struct {
-	Values       IntegerContainer[E]
-	Exception    FloatContainer[T]
-	Positions    IntegerContainer[uint32]
-	Exponent     uint8
-	Factor       uint8
-	hasException bool
-	dec          *alp.Decoder[T, E]
+	Values    IntegerContainer[E]
+	Exception FloatContainer[T]
+	Positions IntegerContainer[uint32]
+	Exponent  uint8
+	Factor    uint8
+	flags     AlpFlags
+	dec       *alp.Decoder[T, E]
 }
 
 func (c *FloatAlpContainer[T, E]) Info() string {
-	if c.hasException {
+	if c.flags&FlagException > 0 {
 		return fmt.Sprintf("ALP(%s)_[%d,%d]_[v=%s]_[ex=%s]_[pos=%s]",
 			TypeName[T](), c.Exponent, c.Factor,
 			c.Values.Info(), c.Exception.Info(), c.Positions.Info())
@@ -50,13 +49,13 @@ func (c *FloatAlpContainer[T, E]) Close() {
 	}
 	c.Values.Close()
 	c.Values = nil
-	if c.hasException {
+	if c.flags&FlagException > 0 {
 		c.Exception.Close()
 		c.Positions.Close()
 		c.Exception = nil
 		c.Positions = nil
-		c.hasException = false
 	}
+	c.flags = 0
 	putFloatAlpContainer[T](c)
 }
 
@@ -69,8 +68,8 @@ func (c *FloatAlpContainer[T, E]) Len() int {
 }
 
 func (c *FloatAlpContainer[T, E]) Size() int {
-	v := 1 + 2 + c.Values.Size()
-	if c.hasException {
+	v := 4 + c.Values.Size()
+	if c.flags&FlagException > 0 {
 		v += c.Exception.Size() + c.Positions.Size()
 	}
 	return v
@@ -81,8 +80,8 @@ func (c *FloatAlpContainer[T, E]) Store(dst []byte) []byte {
 	dst = num.AppendUvarint(dst, uint64(c.Exponent))
 	dst = num.AppendUvarint(dst, uint64(c.Factor))
 	dst = c.Values.Store(dst)
-	dst = append(dst, util.Bool2byte(c.hasException))
-	if c.hasException {
+	dst = append(dst, byte(c.flags))
+	if c.flags&FlagException > 0 {
 		dst = c.Exception.Store(dst)
 		dst = c.Positions.Store(dst)
 	}
@@ -111,10 +110,10 @@ func (c *FloatAlpContainer[T, E]) Load(buf []byte) ([]byte, error) {
 		return buf, err
 	}
 
-	// load exceptions
-	c.hasException = buf[0] == byte(HasException)
+	// load flags
+	c.flags = AlpFlags(buf[0])
 	buf = buf[1:]
-	if c.hasException {
+	if c.flags&FlagException > 0 {
 		// exception values
 		c.Exception = NewFloat[T](FloatContainerType(buf[0]))
 		buf, err = c.Exception.Load(buf)
@@ -139,21 +138,21 @@ func (c *FloatAlpContainer[T, E]) Get(n int) T {
 }
 
 func (c *FloatAlpContainer[T, E]) AppendTo(sel []uint32, dst []T) []T {
-	it := c.Iterator()
 	if sel == nil {
-		for {
-			src, n := it.NextChunk()
-			if n == 0 {
-				break
-			}
-			dst = append(dst, src[:n]...)
-		}
+		// faster to do serial unpack & decode
+		sz := c.Len()
+		dst = dst[:sz]
+		tmp := c.Values.AppendTo(nil, arena.Alloc[E](sz))
+		c.initDecoder()
+		c.dec.Decode(dst, tmp)
+		arena.Free(tmp)
 	} else {
+		it := c.Iterator()
 		for _, v := range sel {
 			dst = append(dst, it.Get(int(v)))
 		}
+		it.Close()
 	}
-	it.Close()
 	return dst
 }
 
@@ -169,11 +168,14 @@ func (c *FloatAlpContainer[T, E]) Encode(ctx *FloatContext[T], vals []T, lvl int
 	c.Values = EncodeInt(vctx, res.Encoded, lvl-1)
 	vctx.Close()
 	if n := len(res.PatchValues); n > 0 {
-		c.hasException = true
+		c.flags |= FlagException
 		c.Exception = NewFloat[T](TFloatRaw).Encode(nil, slices.Clone(res.PatchValues), 1)
 		ectx := NewIntegerContext(0, res.PatchIndices[n-1], n)
 		c.Positions = EncodeInt(ectx, res.PatchIndices, lvl-1)
 		ectx.Close()
+	}
+	if res.IsSafeInt {
+		c.flags |= FlagSafeInt
 	}
 	res.Close()
 
@@ -184,8 +186,8 @@ func (c *FloatAlpContainer[T, E]) initDecoder() {
 	if c.dec != nil {
 		return
 	}
-	c.dec = alp.NewDecoder[T, E](c.Factor, c.Exponent)
-	if c.hasException {
+	c.dec = alp.NewDecoder[T, E](c.Factor, c.Exponent).WithSafeInt(c.flags&FlagSafeInt > 0)
+	if c.flags&FlagException > 0 {
 		cnt := c.Exception.Len()
 		c.dec.WithExceptions(
 			c.Exception.AppendTo(nil, arena.Alloc[T](cnt)),

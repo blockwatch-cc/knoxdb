@@ -18,7 +18,7 @@ import (
 // ALP benchmarks
 //
 
-func BenchmarkAnalyzeALP(b *testing.B) {
+func BenchmarkAnalyze(b *testing.B) {
 	benchAnalyze[float64, int64](b)
 	benchAnalyze[float32, int32](b)
 }
@@ -38,12 +38,12 @@ func benchAnalyze[T Float, E Int](b *testing.B) {
 	}
 }
 
-func BenchmarkEncodeALPFull(b *testing.B) {
+func BenchmarkEncodeFull(b *testing.B) {
 	benchEncode[float64, int64](b, true)
 	benchEncode[float32, int32](b, true)
 }
 
-func BenchmarkEncodeALPOnly(b *testing.B) {
+func BenchmarkEncodeOnly(b *testing.B) {
 	benchEncode[float64, int64](b, false)
 	benchEncode[float32, int32](b, false)
 }
@@ -51,7 +51,7 @@ func BenchmarkEncodeALPOnly(b *testing.B) {
 func benchEncode[T Float, E Int](b *testing.B, withAnalysis bool) {
 	for _, c := range tests.BenchmarkSizes {
 		var exn int
-		src := tests.GenRndBits[T](c.N, 24)
+		src := tests.GenRndBits[T](c.N, util.SizeOf[T]()*3)
 		a := Analyze[T, E](src)
 		b.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(b *testing.B) {
 			b.ResetTimer()
@@ -73,7 +73,7 @@ func benchEncode[T Float, E Int](b *testing.B, withAnalysis bool) {
 	}
 }
 
-func BenchmarkDecodeALP(b *testing.B) {
+func BenchmarkDecode(b *testing.B) {
 	benchDecode[float64, int64](b)
 	benchDecode[float32, int32](b)
 }
@@ -85,16 +85,17 @@ func BenchmarkDecodeALPFused(b *testing.B) {
 
 func benchDecode[T Float, E Int](b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
-		src := tests.GenRndBits[T](c.N, 10)
+		src := tests.GenRndBits[T](c.N, util.SizeOf[T]()*3)
 		enc := NewEncoder[T, E]()
 		a := Analyze[T, E](src)
 		res := enc.Encode(src, a.Exp)
 		out := make([]T, c.N)
 		dec := NewDecoder[T, E](a.Exp.F, a.Exp.E).
-			WithExceptions(res.PatchValues, res.PatchIndices)
+			WithExceptions(res.PatchValues, res.PatchIndices).
+			WithSafeInt(res.IsSafeInt)
 		b.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(b *testing.B) {
 			b.SetBytes(int64(c.N * enc.WIDTH))
-			for range b.N {
+			for b.Loop() {
 				dec.Decode(out, res.Encoded)
 			}
 			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
@@ -137,7 +138,7 @@ func benchDecodeALPFused[T Float, E Int](b *testing.B) {
 // ALP-RD benchmarks
 //
 
-func BenchmarkAnalyzeALPRD(b *testing.B) {
+func BenchmarkAnalyzeRD(b *testing.B) {
 	benchAnalyzeRD[float64, uint64](b)
 	benchAnalyzeRD[float32, uint32](b)
 }
@@ -157,7 +158,7 @@ func benchAnalyzeRD[T Float, U Uint](b *testing.B) {
 	}
 }
 
-func BenchmarkEncodeALPRD(b *testing.B) {
+func BenchmarkEncodeRD(b *testing.B) {
 	benchEncodeRD[float64, uint64](b, false)
 	benchEncodeRD[float32, uint32](b, false)
 }
@@ -183,7 +184,7 @@ func benchEncodeRD[T Float, U Uint](b *testing.B, withAnalysis bool) {
 	}
 }
 
-func BenchmarkDecodeALPRD(b *testing.B) {
+func BenchmarkDecodeRD(b *testing.B) {
 	benchDecodeRD[float64, uint64](b)
 	benchDecodeRD[float32, uint32](b)
 }
@@ -198,7 +199,7 @@ func benchDecodeRD[T Float, U Uint](b *testing.B) {
 		dec := NewDecoderRD[T, U](a.Split)
 		b.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(b *testing.B) {
 			b.SetBytes(int64(c.N * util.SizeOf[T]()))
-			for range b.N {
+			for b.Loop() {
 				dec.Decode(dst, res.Left, res.Right)
 			}
 			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")

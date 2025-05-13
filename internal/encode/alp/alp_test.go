@@ -7,12 +7,13 @@ import (
 	"fmt"
 	"math"
 	"testing"
+	"testing/quick"
 	"unsafe"
 
 	"blockwatch.cc/knoxdb/internal/encode/bitpack"
 	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/internal/types"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type TestCase[T types.Float] struct {
@@ -122,17 +123,23 @@ func AlpTest[T Float, E Int](t *testing.T) {
 			enc := NewEncoder[T, E]()
 			a := Analyze[T, E](c.Data)
 			res := enc.Encode(c.Data, a.Exp)
-			assert.Equal(t, len(c.Data), len(res.Encoded))
-			assert.Equal(t, c.NEx, len(res.PatchValues))
+			require.Equal(t, len(c.Data), len(res.Encoded))
+			require.Equal(t, c.NEx, len(res.PatchValues))
 			dec := NewDecoder[T, E](a.Exp.F, a.Exp.E).
-				WithExceptions(res.PatchValues, res.PatchIndices)
+				WithExceptions(res.PatchValues, res.PatchIndices).
+				WithSafeInt(res.IsSafeInt)
 			dst := make([]T, len(c.Data))
 			dec.Decode(dst, res.Encoded)
 			for i, v := range c.Data {
 				if math.IsNaN(float64(v)) {
-					assert.Equal(t, math.IsNaN(float64(v)), math.IsNaN(float64(dst[i])), "val %d: %v != %v", i, v, dst[i])
+					require.Equal(t, math.IsNaN(float64(v)), math.IsNaN(float64(dst[i])), "val %d: %v != %v", i, v, dst[i])
 				} else {
-					assert.Equal(t, v, dst[i], "val %d: %v != %v", i, v, dst[i])
+					require.Equal(t, v, dst[i], "val %d int=%x exp=[%d,%d] want=%x have=%x", i,
+						res.Encoded[i],
+						a.Exp.E, a.Exp.F,
+						math.Float64bits(float64(v)),
+						math.Float64bits(float64(dst[i])),
+					)
 				}
 			}
 			res.Close()
@@ -146,8 +153,8 @@ func AlpFusedTest[T Float, E Int](t *testing.T) {
 			enc := NewEncoder[T, E]()
 			a := Analyze[T, E](c.Data)
 			res := enc.Encode(c.Data, a.Exp)
-			assert.Equal(t, len(c.Data), len(res.Encoded))
-			assert.Equal(t, c.NEx, len(res.PatchValues))
+			require.Equal(t, len(c.Data), len(res.Encoded))
+			require.Equal(t, c.NEx, len(res.PatchValues))
 			dec := NewDecoder[T, E](a.Exp.F, a.Exp.E).
 				WithExceptions(res.PatchValues, res.PatchIndices)
 			buf := make([]byte, len(c.Data)*16)
@@ -156,12 +163,70 @@ func AlpFusedTest[T Float, E Int](t *testing.T) {
 			dec.DecodeFused(dst, buf, types.Log2Range(res.Min, res.Max), res.Min)
 			for i, v := range c.Data {
 				if math.IsNaN(float64(v)) {
-					assert.Equal(t, math.IsNaN(float64(v)), math.IsNaN(float64(dst[i])), "val %d: %v != %v", i, v, dst[i])
+					require.Equal(t, math.IsNaN(float64(v)), math.IsNaN(float64(dst[i])), "val %d: %v != %v", i, v, dst[i])
 				} else {
-					assert.Equal(t, v, dst[i], "val %d: %v != %v", i, v, dst[i])
+					require.Equal(t, v, dst[i], "val %d: %v != %v", i, v, dst[i])
 				}
 			}
 			res.Close()
+		})
+	}
+}
+
+func TestAlpQuick(t *testing.T) {
+	AlpTestQuick[float32, int32](t)
+	AlpTestQuick[float64, int64](t)
+}
+
+func AlpTestQuick[T Float, E Int](t *testing.T) {
+	t.Run(fmt.Sprintf("%T", T(0)), func(t *testing.T) {
+		err := quick.Check(func(vals []T) bool {
+			enc := NewEncoder[T, E]()
+			a := Analyze[T, E](vals)
+			res := enc.Encode(vals, a.Exp)
+			require.Equal(t, len(vals), len(res.Encoded))
+			dec := NewDecoder[T, E](a.Exp.F, a.Exp.E).
+				WithExceptions(res.PatchValues, res.PatchIndices).
+				WithSafeInt(res.IsSafeInt)
+			dst := make([]T, len(vals))
+			dec.Decode(dst, res.Encoded)
+			for i, v := range vals {
+				if math.IsNaN(float64(v)) {
+					require.Equal(t, math.IsNaN(float64(v)), math.IsNaN(float64(dst[i])), "val %d: %v != %v", i, v, dst[i])
+				} else {
+					require.Equal(t, v, dst[i], "val %d: %v != %v", i, v, dst[i])
+				}
+			}
+			res.Close()
+			return true
+		}, nil)
+		require.NoError(t, err)
+	})
+}
+
+func TestFiles(t *testing.T) {
+	tests.EnsureDataFiles(t)
+	sz := 1024
+	enc := NewEncoder[float64, int64]()
+	dst := make([]float64, sz)
+	for _, c := range tests.MakeFileTests[float64](sz) {
+		t.Run(c.Name, func(t *testing.T) {
+			for {
+				src, ok := c.Next()
+				if !ok {
+					break
+				}
+				a := Analyze[float64, int64](src)
+				res := enc.Encode(src, a.Exp)
+				require.Equal(t, len(src), len(res.Encoded))
+				dec := NewDecoder[float64, int64](a.Exp.F, a.Exp.E).
+					WithExceptions(res.PatchValues, res.PatchIndices).
+					WithSafeInt(res.IsSafeInt)
+				dec.Decode(dst, res.Encoded)
+				require.Equal(t, src, dst[:len(src)])
+				dec.Close()
+				res.Close()
+			}
 		})
 	}
 }

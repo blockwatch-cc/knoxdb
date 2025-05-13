@@ -147,9 +147,9 @@ func BenchmarkFloatEncodeBest(b *testing.B) {
 // run as
 // GO_BENCH_PATH=path_to_alp_bench_files go test ./internal/encode/ -bench=File -cpu=1 -info
 func BenchmarkFloatEncodeFile(b *testing.B) {
-	tests.CheckFileBenchmarks(b)
+	tests.EnsureDataFiles(b)
 	for _, sz := range tests.BenchmarkSizes {
-		for _, c := range tests.MakeRawBenchmarks[float64](sz.N) {
+		for _, c := range tests.MakeFileBenchmarks[float64](sz.N) {
 			once := etests.ShowInfo
 			b.Run(c.Name+"/"+sz.Name, func(b *testing.B) {
 				var sz, n int
@@ -171,7 +171,7 @@ func BenchmarkFloatEncodeFile(b *testing.B) {
 					}
 					c.F.Rewind()
 				}
-				b.ReportMetric(float64(c.F.Size()*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+				b.ReportMetric(float64(c.F.Len()*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 				b.ReportMetric(float64(sz*8)/float64(n), "bits/val")
 				b.SetBytes(int64(c.F.Size()))
 			})
@@ -198,7 +198,7 @@ func BenchmarkFloatEncodeLegacy(b *testing.B) {
 	}
 }
 
-func BenchmarkFloatAppend(b *testing.B) {
+func BenchmarkFloatDecode(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		for _, scheme := range []FloatContainerType{
 			TFloatConstant,
@@ -230,6 +230,53 @@ func BenchmarkFloatAppend(b *testing.B) {
 					enc2.Close()
 				}
 				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+			})
+		}
+	}
+}
+
+// run as
+// GO_DATA_PATH=path_to_alp_bench_files go test ./internal/encode/ -bench=File -cpu=1 -info
+func BenchmarkFloatDecodeFile(b *testing.B) {
+	tests.EnsureDataFiles(b)
+	for _, sz := range tests.BenchmarkSizes {
+		for _, c := range tests.MakeFileBenchmarks[float64](sz.N) {
+			b.Run(c.Name+"/"+sz.Name, func(b *testing.B) {
+				// prepare data
+				once := etests.ShowInfo
+				bufs := make([][]byte, 0)
+				for {
+					src, ok := c.Next()
+					if !ok {
+						break
+					}
+					enc := EncodeFloat(nil, src, MAX_CASCADE)
+					if once {
+						b.Logf("%s %d => %d", enc.Info(), len(src)*8, enc.Size())
+						once = false
+					}
+					buf := make([]byte, 0, enc.Size())
+					bufs = append(bufs, enc.Store(buf))
+					enc.Close()
+				}
+				c.F.Rewind()
+				dst := make([]float64, sz.N)
+				b.ResetTimer()
+
+				// the actual benchmark
+				for b.Loop() {
+					for _, buf := range bufs {
+						dec, err := LoadFloat[float64](buf)
+						if err != nil {
+							b.Fatal(err)
+						}
+						dec.AppendTo(nil, dst)
+						dst = dst[:0]
+						dec.Close()
+					}
+				}
+				b.ReportMetric(float64(c.F.Len()*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+				b.SetBytes(int64(c.F.Size()))
 			})
 		}
 	}

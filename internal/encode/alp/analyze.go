@@ -66,6 +66,9 @@ func Analyze[T Float, E Int](src []T) Analysis {
 	// sample source vector to extract SAMPLE_SIZE (32) elements
 	var buf [SAMPLE_SIZE]T
 	sample := Sample(buf[:], src)
+	if len(sample) == 0 {
+		return Analysis{Scheme: ALP_SCHEME}
+	}
 
 	// zeros are bad for short vectors like ours, so we count and remove them
 	nonZeroSample := sample
@@ -81,8 +84,9 @@ func Analyze[T Float, E Int](src []T) Analysis {
 	)
 
 	// Exclude zero values (0.0) from the sample to avoid picking bad exponents.
-	// Too many zeros make an all-exception case cheaper because only a few
-	// non-zero values are left for encoding exceptions.
+	// Too many zeros make an all-exception case cheaper since only a few
+	// non-zero values are left for encoding exceptions. For correct min-FOR
+	// bit width estimation we start minv at zero.
 	if nZero > 0 {
 		maxE = 0
 		nonZeroSample = slicex.RemoveZeroFloats(sample)
@@ -111,7 +115,7 @@ func Analyze[T Float, E Int](src []T) Analysis {
 
 			// analyze probe (32 values minus zeros)
 			for i, val := range nonZeroSample {
-				enc := E(((val * encE * encF) + c.MAGIC_NUMBER) - c.MAGIC_NUMBER)
+				enc := E((val*encE*encF + c.MAGIC_NUMBER) - c.MAGIC_NUMBER)
 				if val == T(enc)*decF*decE {
 					nNonEx++
 					maxv = max(maxv, enc)

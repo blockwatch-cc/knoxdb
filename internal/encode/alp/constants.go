@@ -30,6 +30,7 @@ type constant[T Float] struct {
 	MAGIC_NUMBER            T
 	PATCH_SIZE              int
 	MAX_EXPONENT            uint8
+	MAX_SAFE_INT            int64
 	F10                     []T
 	IF10                    []T
 }
@@ -41,6 +42,7 @@ var (
 		MAGIC_NUMBER:            12582912.0,
 		PATCH_SIZE:              32,
 		MAX_EXPONENT:            10,
+		MAX_SAFE_INT:            1 << 23,
 
 		F10: []float32{
 			1.0,
@@ -76,6 +78,7 @@ var (
 		MAGIC_NUMBER:            0x0018000000000000,
 		PATCH_SIZE:              64,
 		MAX_EXPONENT:            18,
+		MAX_SAFE_INT:            1 << 51,
 
 		F10: []float64{
 			1.0,

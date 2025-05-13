@@ -48,6 +48,7 @@ type Result[T Float, E Int] struct {
 	Encoded      []E
 	PatchValues  []T
 	PatchIndices []uint32
+	IsSafeInt    bool
 }
 
 func NewResult[T Float, E Int](sz int) *Result[T, E] {
@@ -102,16 +103,7 @@ func (e *Encoder[T, E]) Encode(src []T, exp Exponents) *Result[T, E] {
 		r.PatchValues = append(r.PatchValues, src[pos])
 	}
 	r.PatchIndices = r.PatchIndices[:numPatches]
-
-	// log2 := types.Log2Range(r.Min, r.Max)
-	// fmt.Printf("Encode [%d,%d] => minv=%d maxv=%d log2=%d ex=%d\n", exp.E, exp.F, r.Min, r.Max, log2, len(r.PatchValues))
-	// if log2 == 61 {
-	// 	for i, v := range r.Encoded {
-	// 		if v > E(1679397590) {
-	// 			fmt.Printf("WARN wide int %d: src=%v int=%v\n", i, src[i], v)
-	// 		}
-	// 	}
-	// }
+	r.IsSafeInt = r.Min > -E(e.MAX_SAFE_INT) && r.Max < E(e.MAX_SAFE_INT)
 
 	return r
 }
