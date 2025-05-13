@@ -6,13 +6,14 @@ package util
 import (
 	"log"
 	"os"
+	"runtime"
 	"strconv"
 
 	"golang.org/x/sys/cpu"
 )
 
 var (
-	IsAMD64              bool
+	UseAVX               bool // AVX available
 	UseAVX2              bool // AVX-2 available
 	UseAVX512_F          bool // AVX-512 Foundation Instructions
 	UseAVX512_DQ         bool // AVX-512 Doubleword & Quadword Instrs
@@ -43,32 +44,35 @@ func EnableAVX() {
 	if !cpu.Initialized {
 		return
 	}
-	IsAMD64 = cpu.X86.HasAVX || cpu.X86.HasAVX2
 
-	if !env("NOAVX2") {
-		UseAVX2 = cpu.X86.HasAVX2
-	}
+	if !env("NOAVX") {
+		UseAVX = cpu.X86.HasAVX
 
-	if !env("NOAVX512") {
-		UseAVX512_F = cpu.X86.HasAVX512F
-		UseAVX512_DQ = cpu.X86.HasAVX512DQ
-		UseAVX512_IFMA = cpu.X86.HasAVX512IFMA
-		UseAVX512_PF = cpu.X86.HasAVX512PF
-		UseAVX512_ER = cpu.X86.HasAVX512ER
-		UseAVX512_CD = cpu.X86.HasAVX512CD
-		UseAVX512_BW = cpu.X86.HasAVX512BW
-		UseAVX512_VL = cpu.X86.HasAVX512VL
-		UseAVX512_VBMI = cpu.X86.HasAVX512VBMI
-		UseAVX512_BITALG = cpu.X86.HasAVX512BITALG
-		UseAVX512_VPOPCNTDQ = cpu.X86.HasAVX512VPOPCNTDQ
-		UseAVX512_4VNNIW = cpu.X86.HasAVX5124VNNIW
-		UseAVX512_4FMAPS = cpu.X86.HasAVX5124FMAPS
-		UseAVX512_BF16 = cpu.X86.HasAVX512BF16
-		UseAVX512_VPCLMULQDQ = cpu.X86.HasAVX512VPCLMULQDQ
-		UseAVX512_VNNI = cpu.X86.HasAVX512VNNI
-		UseAVX512_GFNI = cpu.X86.HasAVX512GFNI
-		UseAVX512_VAES = cpu.X86.HasAVX512VAES
-		UseAVX512_VBMI2 = cpu.X86.HasAVX512VBMI2
+		if !env("NOAVX2") {
+			UseAVX2 = cpu.X86.HasAVX2
+		}
+
+		if !env("NOAVX512") {
+			UseAVX512_F = cpu.X86.HasAVX512F
+			UseAVX512_DQ = cpu.X86.HasAVX512DQ
+			UseAVX512_IFMA = cpu.X86.HasAVX512IFMA
+			UseAVX512_PF = cpu.X86.HasAVX512PF
+			UseAVX512_ER = cpu.X86.HasAVX512ER
+			UseAVX512_CD = cpu.X86.HasAVX512CD
+			UseAVX512_BW = cpu.X86.HasAVX512BW
+			UseAVX512_VL = cpu.X86.HasAVX512VL
+			UseAVX512_VBMI = cpu.X86.HasAVX512VBMI
+			UseAVX512_BITALG = cpu.X86.HasAVX512BITALG
+			UseAVX512_VPOPCNTDQ = cpu.X86.HasAVX512VPOPCNTDQ
+			UseAVX512_4VNNIW = cpu.X86.HasAVX5124VNNIW
+			UseAVX512_4FMAPS = cpu.X86.HasAVX5124FMAPS
+			UseAVX512_BF16 = cpu.X86.HasAVX512BF16
+			UseAVX512_VPCLMULQDQ = cpu.X86.HasAVX512VPCLMULQDQ
+			UseAVX512_VNNI = cpu.X86.HasAVX512VNNI
+			UseAVX512_GFNI = cpu.X86.HasAVX512GFNI
+			UseAVX512_VAES = cpu.X86.HasAVX512VAES
+			UseAVX512_VBMI2 = cpu.X86.HasAVX512VBMI2
+		}
 	}
 }
 
@@ -82,6 +86,12 @@ func env(s string) bool {
 		return ok
 	}
 	return false
+}
+
+func DisableAVX() {
+	UseAVX = false
+	DisableAVX2()
+	DisableAVX512()
 }
 
 func DisableAVX2() {
@@ -110,30 +120,30 @@ func DisableAVX512() {
 	UseAVX512_VBMI2 = false
 }
 
-func LogCPUFeatures(l *log.Logger) {
-	if IsAMD64 {
-		l.Printf("No AMD64 CPU detected")
-	} else {
-		l.Printf("AMD64 CPU detected")
-		l.Printf(" AVX2 %t", UseAVX2)
-		l.Printf(" AVX512-F %t", UseAVX512_F)
-		l.Printf(" AVX512-DQ %t", UseAVX512_DQ)
-		l.Printf(" AVX512-IFMA %t", UseAVX512_IFMA)
-		l.Printf(" AVX512-PF %t", UseAVX512_PF)
-		l.Printf(" AVX512-ER %t", UseAVX512_ER)
-		l.Printf(" AVX512-CD %t", UseAVX512_CD)
-		l.Printf(" AVX512-BW %t", UseAVX512_BW)
-		l.Printf(" AVX512-VL %t", UseAVX512_VL)
-		l.Printf(" AVX512-VBMI %t", UseAVX512_VBMI)
-		l.Printf(" AVX512-BITALG %t", UseAVX512_BITALG)
-		l.Printf(" AVX512-VPOPCNTDQ %t", UseAVX512_VPOPCNTDQ)
-		l.Printf(" AVX512-4VNNIW %t", UseAVX512_4VNNIW)
-		l.Printf(" AVX512-4FMAPS %t", UseAVX512_4FMAPS)
-		l.Printf(" AVX512-BF16 %t", UseAVX512_BF16)
-		l.Printf(" AVX512-VPCLMULQDQ %t", UseAVX512_VPCLMULQDQ)
-		l.Printf(" AVX512-VNNI %t", UseAVX512_VNNI)
-		l.Printf(" AVX512-GFNI %t", UseAVX512_GFNI)
-		l.Printf(" AVX512-VAES %t", UseAVX512_VAES)
-		l.Printf(" AVX512-VBMI2 %t", UseAVX512_VBMI2)
+func CPUInfo(l *log.Logger) {
+	if l == nil {
+		l = log.Default()
 	}
+	l.Printf("CPU %s", runtime.GOARCH)
+	l.Printf(" AVX %t", UseAVX)
+	l.Printf(" AVX2 %t", UseAVX2)
+	l.Printf(" AVX512-F %t", UseAVX512_F)
+	l.Printf(" AVX512-DQ %t", UseAVX512_DQ)
+	l.Printf(" AVX512-IFMA %t", UseAVX512_IFMA)
+	l.Printf(" AVX512-PF %t", UseAVX512_PF)
+	l.Printf(" AVX512-ER %t", UseAVX512_ER)
+	l.Printf(" AVX512-CD %t", UseAVX512_CD)
+	l.Printf(" AVX512-BW %t", UseAVX512_BW)
+	l.Printf(" AVX512-VL %t", UseAVX512_VL)
+	l.Printf(" AVX512-VBMI %t", UseAVX512_VBMI)
+	l.Printf(" AVX512-BITALG %t", UseAVX512_BITALG)
+	l.Printf(" AVX512-VPOPCNTDQ %t", UseAVX512_VPOPCNTDQ)
+	l.Printf(" AVX512-4VNNIW %t", UseAVX512_4VNNIW)
+	l.Printf(" AVX512-4FMAPS %t", UseAVX512_4FMAPS)
+	l.Printf(" AVX512-BF16 %t", UseAVX512_BF16)
+	l.Printf(" AVX512-VPCLMULQDQ %t", UseAVX512_VPCLMULQDQ)
+	l.Printf(" AVX512-VNNI %t", UseAVX512_VNNI)
+	l.Printf(" AVX512-GFNI %t", UseAVX512_GFNI)
+	l.Printf(" AVX512-VAES %t", UseAVX512_VAES)
+	l.Printf(" AVX512-VBMI2 %t", UseAVX512_VBMI2)
 }
