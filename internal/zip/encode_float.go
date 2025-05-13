@@ -42,23 +42,25 @@ func FloatEncodedSize(n int) int {
 
 func EncodeFloat32(src []float32, w io.Writer) (int, error) {
 	dst := arena.AllocFloat64(len(src))[:len(src)]
-	defer arena.Free(dst)
 	for i, v := range src {
 		dst[i] = float64(v)
 	}
-	return EncodeFloat64(dst, w)
+	n, err := EncodeFloat64(dst, w)
+	arena.Free(dst)
+	return n, err
 }
 
 // EncodeFloat64 encodes src directly into a writer returning number of bytes
 // written and any error encountered. The compression scheme is Facebook's Gorilla.
 func EncodeFloat64(src []float64, w io.Writer) (int, error) {
 	// the original algorithm writes directly to a target []byte
-	// slice and we don't want to change this. we allocate a slice
-	// and write it to the io.Writer at the very end
-	b := arena.AllocBytes(FloatEncodedSize(len(src)))
-	defer arena.Free(b)
+	// and we don't want to change this. We allocate a temp buffer
+	// and write it to the io.Writer at the end. The buffer is
+	// pre-sized to fit an upper limit to avoid growing its length
+	// in the hot paths.
+	sz := FloatEncodedSize(len(src))
+	b := arena.AllocBytes(sz)[:sz]
 
-	b = b[:1]
 	b[0] = floatCompressedGorilla << 4
 
 	var first float64
@@ -74,7 +76,6 @@ func EncodeFloat64(src []float64, w io.Writer) (int, error) {
 		src = src[1:]
 	}
 
-	b = b[:9]
 	n := uint64(8 + 64) // Number of bits written.
 	prev := math.Float64bits(first)
 
@@ -109,9 +110,6 @@ func EncodeFloat64(src []float64, w io.Writer) (int, error) {
 
 			// First the current bit of the current byte is set to indicate we're
 			// writing a delta value to the stream.
-			for n>>3 >= uint64(len(b)) { // Keep growing b until we can fit all bits in.
-				b = append(b, byte(0))
-			}
 
 			// n&7 - current bit in current byte.
 			// n>>3 - the current byte.
@@ -131,19 +129,12 @@ func EncodeFloat64(src []float64, w io.Writer) (int, error) {
 			}
 
 			// At least 2 further bits will be required.
-			if (n+2)>>3 >= uint64(len(b)) {
-				b = append(b, byte(0))
-			}
-
 			if prevLeading != ^uint64(0) && leading >= prevLeading && trailing >= prevTrailing {
 				n++ // Write a zero bit.
 
 				// Write the l least significant bits of vDelta to b, most significant
 				// bit first.
 				l := 64 - prevLeading - prevTrailing
-				for (n+l)>>3 >= uint64(len(b)) { // Keep growing b until we can fit all bits in.
-					b = append(b, byte(0))
-				}
 
 				// Full value to write.
 				v := (vDelta >> prevTrailing) << (64 - l) // l least signifciant bits of v.
@@ -166,11 +157,6 @@ func EncodeFloat64(src []float64, w io.Writer) (int, error) {
 				}
 
 				vv := v << written // Move written bits out of the way.
-
-				// TODO(edd): Optimise this. It's unlikely we actually have 8 bytes to write.
-				if (n>>3)+8 >= uint64(len(b)) {
-					b = append(b, 0, 0, 0, 0, 0, 0, 0, 0)
-				}
 				binary.BigEndian.PutUint64(b[n>>3:], vv)
 				n += (l - written)
 			} else {
@@ -181,9 +167,6 @@ func EncodeFloat64(src []float64, w io.Writer) (int, error) {
 				n++
 
 				// Write 5 bits of leading.
-				if (n+5)>>3 >= uint64(len(b)) {
-					b = append(b, byte(0))
-				}
 
 				// Enough room to write the 5 bits in the current byte?
 				var m = n & 7
@@ -216,10 +199,6 @@ func EncodeFloat64(src []float64, w io.Writer) (int, error) {
 				// adjust it back to 64 on unpacking.
 				sigbits := 64 - leading - trailing
 
-				if (n+6)>>3 >= uint64(len(b)) {
-					b = append(b, byte(0))
-				}
-
 				m = n & 7
 				l = uint64(6)
 				v = sigbits << 58 // Move 6 LSB of sigbits to MSB
@@ -248,9 +227,6 @@ func EncodeFloat64(src []float64, w io.Writer) (int, error) {
 				m = n & 7
 				l = sigbits
 				v = (vDelta >> trailing) << (64 - l) // Move l LSB into MSB
-				for (n+l)>>3 >= uint64(len(b)) {     // Keep growing b until we can fit all bits in.
-					b = append(b, byte(0))
-				}
 
 				var written uint64
 				if m > 0 { // In this case the current byte is not full.
@@ -270,10 +246,6 @@ func EncodeFloat64(src []float64, w io.Writer) (int, error) {
 
 				// Shift remaining bits and write out in one go.
 				vv := v << written // Remove bits written in previous byte.
-				// TODO(edd): Optimise this.
-				if (n>>3)+8 >= uint64(len(b)) {
-					b = append(b, 0, 0, 0, 0, 0, 0, 0, 0)
-				}
 
 				binary.BigEndian.PutUint64(b[n>>3:], vv)
 				n += (l - written)
@@ -283,6 +255,7 @@ func EncodeFloat64(src []float64, w io.Writer) (int, error) {
 	}
 
 	if math.IsNaN(sum) {
+		arena.Free(b)
 		return 0, fmt.Errorf("compress: unsupported float value: NaN")
 	}
 
@@ -292,5 +265,7 @@ func EncodeFloat64(src []float64, w io.Writer) (int, error) {
 	}
 
 	// write out to writer
-	return w.Write(b[:length])
+	m, err := w.Write(b[:length])
+	arena.Free(b)
+	return m, err
 }
