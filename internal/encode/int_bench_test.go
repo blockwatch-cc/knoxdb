@@ -93,6 +93,7 @@ func BenchmarkIntEncode(b *testing.B) {
 					enc.Close()
 				}
 				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+				b.ReportMetric(float64(sz*8/b.N/c.N), "bits/val")
 				b.ReportMetric(100*float64(sz)/float64(b.N*c.N*8), "c(%)")
 			})
 			ctx.Close()
@@ -111,7 +112,7 @@ func BenchmarkIntEncodeAndStore(b *testing.B) {
 			TIntegerSimple8,
 			TIntegerRaw,
 		} {
-			data := etests.GenForIntScheme[int16](int(scheme), c.N)
+			data := etests.GenForIntScheme[int64](int(scheme), c.N)
 			once := etests.ShowInfo
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
 				b.ReportAllocs()
@@ -119,7 +120,7 @@ func BenchmarkIntEncodeAndStore(b *testing.B) {
 				var sz int
 				for b.Loop() {
 					ctx := AnalyzeInt(data, scheme == TIntegerDictionary)
-					enc := NewInt[int16](scheme).Encode(ctx, data, MAX_CASCADE)
+					enc := NewInt[int64](scheme).Encode(ctx, data, MAX_CASCADE)
 					sz := enc.Size()
 					buf := enc.Store(make([]byte, 0, enc.Size()))
 					require.LessOrEqual(b, len(buf), sz)
@@ -132,6 +133,7 @@ func BenchmarkIntEncodeAndStore(b *testing.B) {
 					ctx.Close()
 				}
 				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+				b.ReportMetric(float64(sz*8/b.N/c.N), "bits/val")
 				b.ReportMetric(100*float64(sz)/float64(b.N*c.N*8), "c(%)")
 			})
 		}
@@ -155,9 +157,46 @@ func BenchmarkIntEncodeBest(b *testing.B) {
 				enc.Close()
 			}
 			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
-			b.ReportMetric(float64(sz/b.N), "c(B)")
+			b.ReportMetric(float64(sz*8/b.N/c.N), "bits/val")
 			b.ReportMetric(100*float64(sz)/float64(b.N*c.N*8), "c(%)")
 		})
+	}
+}
+
+func BenchmarkIntDecode(b *testing.B) {
+	for _, c := range tests.BenchmarkSizes {
+		for _, scheme := range []IntegerContainerType{
+			TIntegerConstant,
+			TIntegerDelta,
+			TIntegerRunEnd,
+			TIntegerBitpacked,
+			TIntegerDictionary,
+			TIntegerSimple8,
+			TIntegerRaw,
+		} {
+			data := etests.GenForIntScheme[int64](int(scheme), c.N)
+			ctx := AnalyzeInt(data, scheme == TIntegerDictionary)
+			enc := NewInt[int64](scheme).Encode(ctx, data, MAX_CASCADE)
+			buf := enc.Store(make([]byte, 0, enc.Size()))
+			dst := make([]int64, 0, c.N)
+			once := etests.ShowInfo
+			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
+				b.SetBytes(int64(c.N * 8))
+				for b.Loop() {
+					enc2 := NewInt[int64](scheme)
+					_, err := enc2.Load(buf)
+					require.NoError(b, err)
+					dst = enc2.AppendTo(nil, dst)
+					dst = dst[:0]
+					if once {
+						b.Log(enc2.Info())
+						once = false
+					}
+					enc2.Close()
+				}
+				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+			})
+		}
 	}
 }
 
@@ -198,7 +237,6 @@ func BenchmarkIntAppend(b *testing.B) {
 			dst := make([]int64, 0, c.N)
 			once := etests.ShowInfo
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
-				b.ReportAllocs()
 				b.SetBytes(int64(c.N * 8))
 				for b.Loop() {
 					enc2 := NewInt[int64](scheme)
@@ -235,7 +273,6 @@ func BenchmarkIntCmp(b *testing.B) {
 			bits := bitset.NewBitset(c.N)
 			b.Log(enc.Info())
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
-				b.ReportAllocs()
 				b.SetBytes(int64(c.N * 8))
 				for b.Loop() {
 					enc.MatchEqual(data[0], bits, nil)

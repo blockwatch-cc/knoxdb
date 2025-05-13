@@ -10,19 +10,20 @@ import (
 )
 
 func GenForIntScheme[T types.Integer](scheme, n int) []T {
+	sz := util.SizeOf[T]()
 	switch scheme {
 	case 0: // TIntegerConstant,
 		return tests.GenConst[T](n, 42)
 	case 1: // TIntegerDelta,
 		return tests.GenSeq[T](n, 0)
 	case 2: // TIntegerRunEnd,
-		return tests.GenRuns[T](n, min(n, 5), -1)
+		return tests.GenRuns[T](n, min(n, 5), sz*2)
 	case 3: // TIntegerBitpacked,
-		return tests.GenRnd[T](n)
+		return tests.GenRndBits[T](n, sz*2)
 	case 4: // TIntegerDictionary,
-		return tests.GenDups[T](n, n/10, -1)
+		return tests.GenDups[T](n, n/10, sz*2)
 	case 5: // TIntegerSimple8,
-		return tests.GenRnd[T](n)
+		return tests.GenRndBits[T](n, sz*2)
 	case 6: // TIntegerRaw,
 		return tests.GenRnd[T](n)
 	default:

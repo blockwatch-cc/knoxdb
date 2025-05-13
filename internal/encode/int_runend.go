@@ -93,6 +93,7 @@ func (c *RunEndContainer[T]) Get(n int) T {
 func (c *RunEndContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 	it := c.Iterator()
 	if sel == nil {
+		// TODO: fast algo for REE
 		for {
 			src, n := it.NextChunk()
 			if n == 0 {
@@ -432,8 +433,6 @@ type RunEndIterator[T types.Integer] struct {
 	BaseIterator[T]
 	valIt Iterator[T]
 	endIt Iterator[uint32]
-	// vals  *[CHUNK_SIZE]T
-	// ends  *[CHUNK_SIZE]uint32
 }
 
 func NewRunEndIterator[T types.Integer](c *RunEndContainer[T]) *RunEndIterator[T] {
@@ -460,6 +459,8 @@ func (it *RunEndIterator[T]) fill(base int) int {
 	nRuns := it.valIt.Len()
 	var k int
 	if base > 0 {
+		// FIXME: improve linear walk, remember current pos
+		// binary search jumps which leads to unnecessary end chunk decoding
 		k = sort.Search(nRuns, func(i int) bool {
 			return it.endIt.Get(i) >= uint32(base)
 		})
@@ -474,7 +475,6 @@ func (it *RunEndIterator[T]) fill(base int) int {
 	for n < CHUNK_SIZE && k < nRuns {
 		end, val := it.endIt.Get(k), it.valIt.Get(k)
 		for range min(CHUNK_SIZE, int(end+1)-base) - n {
-			// fmt.Printf("REE chunk[%d] = ree(%d) = %d\n", n, k, val)
 			it.chunk[n] = val
 			n++
 		}
