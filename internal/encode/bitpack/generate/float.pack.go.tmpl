@@ -35,15 +35,15 @@ func br_f{{$.Bits}}_{{$bitsize}}(out *[64]float{{$.Bits}}, p unsafe.Pointer, min
                     {{- if gt $offset 64 }}
                             {{- $nextInputIdx := inc $inputIdx 1 }}
                             {{- $nextShifter := dec 64 $shifter}}
-                            out[{{$outIdx}}] = float{{$.Bits}}(uint{{$.Bits}}((in[{{$inputIdx}}]>>{{$shifter}}|in[{{$nextInputIdx}}]<<{{$nextShifter}})&mask + minv)) * f * e
+                            out[{{$outIdx}}] = float{{$.Bits}}((in[{{$inputIdx}}]>>{{$shifter}}|in[{{$nextInputIdx}}]<<{{$nextShifter}})&mask + minv) * f * e
                             {{- $shifter = dec $bitsize $nextShifter }}
                             {{- $offset = $shifter }}
                             {{- $inputIdx = $nextInputIdx }}
                         {{- else }}
                             {{- if $shifter }}
-                            out[{{$outIdx}}] = float{{$.Bits}}(uint{{$.Bits}}((in[{{$inputIdx}}]>>{{$shifter}})&mask + minv)) * f * e
+                            out[{{$outIdx}}] = float{{$.Bits}}(in[{{$inputIdx}}]>>{{$shifter}}&mask + minv) * f * e
                             {{- else}}
-                            out[{{$outIdx}}] = float{{$.Bits}}(uint{{$.Bits}}(in[{{$inputIdx}}]&mask + minv)) * f * e
+                            out[{{$outIdx}}] = float{{$.Bits}}(in[{{$inputIdx}}]&mask + minv) * f * e
                             {{- end}}
                             {{- $shifter = inc $shifter $bitsize }}
                         {{- end }}
@@ -69,22 +69,22 @@ func br_f{{$.Bits}}(out *[64]float{{$.Bits}}, p unsafe.Pointer, minv uint64, f, 
     in := (*[64]uint64)(p)
     var i int
     for range 4 {
-        out[i] = float{{$.Bits}}(uint{{$.Bits}}(in[i] + minv)) * f * e
-        out[i+1] = float{{$.Bits}}(uint{{$.Bits}}(in[i+1] + minv)) * f * e
-        out[i+2] = float{{$.Bits}}(uint{{$.Bits}}(in[i+2] + minv)) * f * e
-        out[i+3] = float{{$.Bits}}(uint{{$.Bits}}(in[i+3] + minv)) * f * e
-        out[i+4] = float{{$.Bits}}(uint{{$.Bits}}(in[i+4] + minv)) * f * e
-        out[i+5] = float{{$.Bits}}(uint{{$.Bits}}(in[i+5] + minv)) * f * e
-        out[i+6] = float{{$.Bits}}(uint{{$.Bits}}(in[i+6] + minv)) * f * e
-        out[i+7] = float{{$.Bits}}(uint{{$.Bits}}(in[i+7] + minv)) * f * e
-        out[i+8] = float{{$.Bits}}(uint{{$.Bits}}(in[i+8] + minv)) * f * e
-        out[i+9] = float{{$.Bits}}(uint{{$.Bits}}(in[i+9] + minv)) * f * e
-        out[i+10] = float{{$.Bits}}(uint{{$.Bits}}(in[i+10] + minv)) * f * e
-        out[i+11] = float{{$.Bits}}(uint{{$.Bits}}(in[i+11] + minv)) * f * e
-        out[i+12] = float{{$.Bits}}(uint{{$.Bits}}(in[i+12] + minv)) * f * e
-        out[i+13] = float{{$.Bits}}(uint{{$.Bits}}(in[i+13] + minv)) * f * e
-        out[i+14] = float{{$.Bits}}(uint{{$.Bits}}(in[i+14] + minv)) * f * e
-        out[i+15] = float{{$.Bits}}(uint{{$.Bits}}(in[i+15] + minv)) * f * e
+        out[i] = float{{$.Bits}}(in[i] + minv) * f * e
+        out[i+1] = float{{$.Bits}}(in[i+1] + minv) * f * e
+        out[i+2] = float{{$.Bits}}(in[i+2] + minv) * f * e
+        out[i+3] = float{{$.Bits}}(in[i+3] + minv) * f * e
+        out[i+4] = float{{$.Bits}}(in[i+4] + minv) * f * e
+        out[i+5] = float{{$.Bits}}(in[i+5] + minv) * f * e
+        out[i+6] = float{{$.Bits}}(in[i+6] + minv) * f * e
+        out[i+7] = float{{$.Bits}}(in[i+7] + minv) * f * e
+        out[i+8] = float{{$.Bits}}(in[i+8] + minv) * f * e
+        out[i+9] = float{{$.Bits}}(in[i+9] + minv) * f * e
+        out[i+10] = float{{$.Bits}}(in[i+10] + minv) * f * e
+        out[i+11] = float{{$.Bits}}(in[i+11] + minv) * f * e
+        out[i+12] = float{{$.Bits}}(in[i+12] + minv) * f * e
+        out[i+13] = float{{$.Bits}}(in[i+13] + minv) * f * e
+        out[i+14] = float{{$.Bits}}(in[i+14] + minv) * f * e
+        out[i+15] = float{{$.Bits}}(in[i+15] + minv) * f * e
         i += 16
     }
 }
