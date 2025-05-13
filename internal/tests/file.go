@@ -39,9 +39,12 @@ func (t *Test[T]) Next() ([]T, bool) {
 
 var GO_DATA_PATH = os.Getenv("GO_DATA_PATH")
 
-func EnsureDataFiles(b testing.TB) {
+func EnsureDataFiles(tb testing.TB) {
 	if GO_DATA_PATH == "" {
-		b.Skip("no benchmark files, set GO_DATA_PATH env")
+		tb.Skip("no benchmark files, set GO_DATA_PATH env")
+	}
+	if testing.Short() {
+		tb.Skip()
 	}
 }
 

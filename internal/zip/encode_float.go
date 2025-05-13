@@ -28,7 +28,7 @@ const (
 )
 
 var (
-	errFloatBatchDecodeShortBuffer = fmt.Errorf("compress: FloatArrayDecodeAll short buffer")
+	errFloatBatchDecodeShortBuffer = fmt.Errorf("zip: Gorilla short buffer")
 )
 
 // upper bound

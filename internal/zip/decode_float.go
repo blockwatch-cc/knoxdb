@@ -10,9 +10,9 @@ import (
 	"encoding/binary"
 	"io"
 	"math/bits"
-	"unsafe"
 
 	"blockwatch.cc/knoxdb/internal/arena"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 // bitMask contains a lookup table where the index is the number of bits
@@ -121,7 +121,7 @@ func decodeFloat64(dst []float64, b []byte) (int, error) {
 	// which results in unnecessary moves between Xn registers before moving
 	// the value into the float64 slice. This change increased performance from
 	// 320 MB/s to 340 MB/s on an Intel(R) Core(TM) i7-6920HQ CPU @ 2.90GHz
-	buf := *(*[]uint64)(unsafe.Pointer(&dst))
+	buf := util.ReinterpretSlice[float64, uint64](dst)
 	buf = append(buf, val)
 
 	b = b[8:]
