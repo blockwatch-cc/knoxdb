@@ -382,27 +382,26 @@ func Decode64[T int64 | uint64](dst []T, src []byte, log2 int, minv T) (int, err
 	return outpos + n, err
 }
 
-func DecodeAlp[T types.Float](dst []T, src []byte, log2 int, minv, e, f T) (int, error) {
+func DecodeAlp[T types.Float](dst []T, src []byte, log2 int, minv, f, e T) (int, error) {
 	var (
 		n   int
 		err error
 	)
 	switch any(T(0)).(type) {
 	case float32:
-		n, err = Decodef32(util.ReinterpretSlice[T, float32](dst), src, log2, float32(minv), float32(e), float32(f))
+		n, err = Decodef32(util.ReinterpretSlice[T, float32](dst), src, log2, float32(minv), float32(f), float32(e))
 	case float64:
-		n, err = Decodef64(util.ReinterpretSlice[T, float64](dst), src, log2, float64(minv), float64(e), float64(f))
+		n, err = Decodef64(util.ReinterpretSlice[T, float64](dst), src, log2, float64(minv), float64(f), float64(e))
 	}
 	return n, err
 }
 
-func Decodef32[T float32](dst []T, src []byte, log2 int, minv, e, f T) (int, error) {
+func Decodef32[T float32](dst []T, src []byte, log2 int, minv, f, e T) (int, error) {
 	in := util.FromByteSlice[uint64](src)
 	blockN := len(dst) / (4 * BlockSize)
 	if blockN == 0 {
 		// input less than block size, use generic decoder
-		n, err := decodeFused(dst, in, log2, minv, e, f)
-		return n, err
+		return decodeFused(dst, in, log2, minv, f, e)
 	}
 
 	outp := unsafe.Pointer(&dst[0])
@@ -427,27 +426,26 @@ func Decodef32[T float32](dst []T, src []byte, log2 int, minv, e, f T) (int, err
 		out4 := (*[BlockSize]float32)(unsafe.Add(outp, o+3*nBlockOutBytes))
 
 		// unpack groups (4 x 64 packed inputs)
-		unpack_f32[log2](out1, in1, uint64(minv), float32(e), float32(f))
-		unpack_f32[log2](out2, in2, uint64(minv), float32(e), float32(f))
-		unpack_f32[log2](out3, in3, uint64(minv), float32(e), float32(f))
-		unpack_f32[log2](out4, in4, uint64(minv), float32(e), float32(f))
+		unpack_f32[log2](out1, in1, uint64(minv), float32(f), float32(e))
+		unpack_f32[log2](out2, in2, uint64(minv), float32(f), float32(e))
+		unpack_f32[log2](out3, in3, uint64(minv), float32(f), float32(e))
+		unpack_f32[log2](out4, in4, uint64(minv), float32(f), float32(e))
 	}
 	outpos := blockN * 4 * BlockSize
 
 	// tail loop
-	n, err := decodeFused(dst[outpos:], in[blockN*log2*4:], log2, minv, e, f)
+	n, err := decodeFused(dst[outpos:], in[blockN*log2*4:], log2, minv, f, e)
 
 	// return output values written
 	return outpos + n, err
 }
 
-func Decodef64[T float64](dst []T, src []byte, log2 int, minv, e, f T) (int, error) {
+func Decodef64[T float64](dst []T, src []byte, log2 int, minv, f, e T) (int, error) {
 	in := util.FromByteSlice[uint64](src)
 	blockN := len(dst) / (4 * BlockSize)
 	if blockN == 0 {
 		// input less than block size, use generic decoder
-		n, err := decodeFused(dst, in, log2, minv, e, f)
-		return n, err
+		return decodeFused(dst, in, log2, minv, f, e)
 	}
 
 	outp := unsafe.Pointer(&dst[0])
@@ -472,21 +470,21 @@ func Decodef64[T float64](dst []T, src []byte, log2 int, minv, e, f T) (int, err
 		out4 := (*[BlockSize]float64)(unsafe.Add(outp, o+3*nBlockOutBytes))
 
 		// unpack groups (4 x 64 packed inputs)
-		unpack_f64[log2](out1, in1, uint64(minv), float64(e), float64(f))
-		unpack_f64[log2](out2, in2, uint64(minv), float64(e), float64(f))
-		unpack_f64[log2](out3, in3, uint64(minv), float64(e), float64(f))
-		unpack_f64[log2](out4, in4, uint64(minv), float64(e), float64(f))
+		unpack_f64[log2](out1, in1, uint64(minv), float64(f), float64(e))
+		unpack_f64[log2](out2, in2, uint64(minv), float64(f), float64(e))
+		unpack_f64[log2](out3, in3, uint64(minv), float64(f), float64(e))
+		unpack_f64[log2](out4, in4, uint64(minv), float64(f), float64(e))
 	}
 	outpos := blockN * 4 * BlockSize
 
 	// tail loop
-	n, err := decodeFused(dst[outpos:], in[blockN*log2*4:], log2, minv, e, f)
+	n, err := decodeFused(dst[outpos:], in[blockN*log2*4:], log2, minv, f, e)
 
 	// return output values written
 	return outpos + n, err
 }
 
-func decodeFused[T types.Float](out []T, in []uint64, log2 int, minv, e, f T) (int, error) {
+func decodeFused[T types.Float](out []T, in []uint64, log2 int, minv, f, e T) (int, error) {
 	var pack uint64 // Current 64-bit word being unpacked
 	var offset int  // Bit offset within the current word
 	var inIdx int   // Index into the input byte slice
@@ -517,7 +515,7 @@ func decodeFused[T types.Float](out []T, in []uint64, log2 int, minv, e, f T) (i
 		}
 
 		// Extract b bits from pack
-		out[outIdx] = (T(pack&mask) + minv) * e * f
+		out[outIdx] = (T(pack&mask) + minv) * f * e
 		pack >>= log2
 		offset -= log2
 	}
