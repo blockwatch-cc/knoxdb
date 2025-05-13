@@ -4,12 +4,6 @@
 package tests
 
 import (
-	"os"
-	"path/filepath"
-	"runtime"
-	"strings"
-	"testing"
-
 	"blockwatch.cc/knoxdb/internal/types"
 )
 
@@ -28,7 +22,7 @@ type Benchmark[T types.Number] struct {
 	Name string
 	Data []T
 	N    int
-	F    *RawFile[T]
+	F    *File[T]
 }
 
 func (b *Benchmark[T]) Next() ([]T, bool) {
@@ -89,42 +83,3 @@ var BenchmarkPatterns = []BenchmarkPattern{
 // w = 16, c < 8192
 // w = 32, c < ≈32768 (33920)
 // w = 63, c < ≈48000 (48792)
-
-// ----------------------------------------
-// File based benchmarks
-// ----------------------------------------
-
-var GO_BENCH_PATH = os.Getenv("GO_BENCH_PATH")
-
-func CheckFileBenchmarks(b *testing.B) {
-	if GO_BENCH_PATH == "" {
-		b.Skip("no benchmark files, set GO_BENCH_PATH env")
-	}
-}
-
-func MakeRawBenchmarks[T types.Number](n int) []Benchmark[T] {
-	if GO_BENCH_PATH == "" {
-		return nil
-	}
-	files, err := filepath.Glob(filepath.Join(GO_BENCH_PATH, "*.bin"))
-	if err != nil {
-		panic(err)
-	}
-	bench := make([]Benchmark[T], len(files))
-	for i, name := range files {
-		f, err := OpenRawFile[T](name)
-		if err != nil {
-			panic(err)
-		}
-		bench[i].Name = strings.TrimSuffix(filepath.Base(name), filepath.Ext(name))
-		bench[i].Data = make([]T, 0, n)
-		bench[i].N = n
-		bench[i].F = f
-	}
-	runtime.AddCleanup(&bench, func(_ *RawFile[T]) {
-		for _, b := range bench {
-			b.F.Close()
-		}
-	}, nil)
-	return bench
-}
