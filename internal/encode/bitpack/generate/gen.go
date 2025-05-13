@@ -28,27 +28,14 @@ type CompareData struct {
 	Template string
 }
 
+type PackData struct {
+	Templ         string
+	BitsData      []Data
+	OutFilePrefix string
+}
+
 var (
 	Package string = "bitpack"
-
-	bitsData = []Data{
-		{
-			Package: Package,
-			Bits:    8,
-		},
-		{
-			Package: Package,
-			Bits:    16,
-		},
-		{
-			Package: Package,
-			Bits:    32,
-		},
-		{
-			Package: Package,
-			Bits:    64,
-		},
-	}
 
 	opsData = []CompareData{
 		{
@@ -74,6 +61,45 @@ var (
 			OpName:   "bw",
 			Op:       "<=",
 			Template: "cmp_bw.go.tmpl",
+		},
+	}
+
+	packData = []PackData{
+		{
+			Templ: "pack.go.tmpl",
+			BitsData: []Data{
+				{
+					Package: Package,
+					Bits:    8,
+				},
+				{
+					Package: Package,
+					Bits:    16,
+				},
+				{
+					Package: Package,
+					Bits:    32,
+				},
+				{
+					Package: Package,
+					Bits:    64,
+				},
+			},
+			OutFilePrefix: "uint",
+		},
+		{
+			Templ: "float.pack.go.tmpl",
+			BitsData: []Data{
+				{
+					Package: Package,
+					Bits:    32,
+				},
+				{
+					Package: Package,
+					Bits:    64,
+				},
+			},
+			OutFilePrefix: "float",
 		},
 	}
 
@@ -106,26 +132,30 @@ func run() error {
 }
 
 func pack(cwd string) error {
-	t, err := loadTemplate(filepath.Join(cwd, "generate", "pack.go.tmpl"))
-	if err != nil {
-		return err
-	}
 
-	for _, bitData := range bitsData {
-		buffer := new(bytes.Buffer)
-		err := t.Execute(buffer, bitData)
+	for _, pd := range packData {
+		t, err := loadTemplate(filepath.Join(cwd, "generate", pd.Templ))
 		if err != nil {
 			return err
 		}
 
-		res, err := format.Source(buffer.Bytes())
-		if err != nil {
-			return err
-		}
+		for _, bitData := range pd.BitsData {
+			buffer := new(bytes.Buffer)
+			err := t.Execute(buffer, bitData)
+			if err != nil {
+				return err
+			}
 
-		fname := fmt.Sprintf("uint%d.go", bitData.Bits)
-		os.WriteFile(filepath.Join(cwd, fname), res, PERM)
+			res, err := format.Source(buffer.Bytes())
+			if err != nil {
+				return err
+			}
+
+			fname := fmt.Sprintf("%s%d.go", pd.OutFilePrefix, bitData.Bits)
+			os.WriteFile(filepath.Join(cwd, fname), res, PERM)
+		}
 	}
+
 	return nil
 }
 
