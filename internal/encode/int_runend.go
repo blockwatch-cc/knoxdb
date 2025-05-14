@@ -91,74 +91,60 @@ func (c *RunEndContainer[T]) Get(n int) T {
 }
 
 func (c *RunEndContainer[T]) AppendTo(sel []uint32, dst []T) []T {
-	it := c.Iterator()
 	if sel == nil {
-		// TODO: fast algo for REE
-		for {
-			src, n := it.NextChunk()
-			if n == 0 {
-				break
+		var (
+			sz   = c.Ends.Len()
+			vals = c.Values.AppendTo(nil, arena.Alloc[T](sz))
+			ends = c.Ends.AppendTo(nil, arena.Alloc[uint32](sz))
+			i    uint32
+		)
+		dst = dst[:ends[sz-1]+1]
+
+		for k, end := range ends {
+			val := vals[k]
+			for range (end - i) / 16 {
+				_ = dst[i+15]
+				dst[i] = val
+				dst[i+1] = val
+				dst[i+2] = val
+				dst[i+3] = val
+				dst[i+4] = val
+				dst[i+5] = val
+				dst[i+6] = val
+				dst[i+7] = val
+				dst[i+8] = val
+				dst[i+9] = val
+				dst[i+10] = val
+				dst[i+11] = val
+				dst[i+12] = val
+				dst[i+13] = val
+				dst[i+14] = val
+				dst[i+15] = val
+				i += 16
 			}
-			dst = append(dst, src[:n]...)
+			for range (end - i) / 4 {
+				_ = dst[i+3]
+				dst[i] = val
+				dst[i+1] = val
+				dst[i+2] = val
+				dst[i+3] = val
+				i += 4
+			}
+			for i <= end {
+				dst[i] = val
+				i++
+			}
 		}
+		arena.Free(ends)
+		arena.Free(vals)
 	} else {
+		it := c.Iterator()
 		for _, v := range sel {
 			dst = append(dst, it.Get(int(v)))
 		}
+		it.Close()
 	}
-	it.Close()
 	return dst
-	// if sel == nil {
-	// 	l := uint32(c.Len())
-	// 	var i uint32
-	// 	var k int
-	// 	dst = dst[:l]
-
-	// 	// TODO: use iterators and get chunks of ends and values in an outer loop
-	// 	// instead of Get
-
-	// 	for i < l {
-	// 		end, val := c.Ends.Get(k), c.Values.Get(k)
-	// 		for range (end - i) / 4 {
-	// 			dst[i] = val
-	// 			dst[i+1] = val
-	// 			dst[i+2] = val
-	// 			dst[i+3] = val
-	// 			i += 4
-	// 		}
-	// 		for i <= end {
-	// 			dst[i] = val
-	// 			i++
-	// 		}
-	// 		k++
-	// 	}
-	// } else {
-	// 	if slices.IsSorted(sel) {
-	// 		idx, end, val := 0, c.Ends.Get(0), c.Values.Get(0)
-	// 		for len(sel) > 0 {
-	// 			// use current run while valid
-	// 			if sel[0] <= end {
-	// 				dst = append(dst, val)
-	// 				sel = sel[1:]
-	// 				continue
-	// 			}
-	// 			// find next run
-	// 			for end < sel[0] {
-	// 				idx++
-	// 				end = c.Ends.Get(idx)
-	// 			}
-	// 			val = c.Values.Get(idx)
-	// 		}
-	// 	} else {
-	// 		// use iterator for unsorted selection lists
-	// 		it := c.Iterator()
-	// 		for _, v := range sel {
-	// 			dst = append(dst, it.Get(int(v)))
-	// 		}
-	// 		it.Close()
-	// 	}
-	// }
-	// return dst
 }
 
 func (c *RunEndContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) IntegerContainer[T] {
@@ -431,8 +417,9 @@ func (c *RunEndContainer[T]) Iterator() Iterator[T] {
 
 type RunEndIterator[T types.Integer] struct {
 	BaseIterator[T]
-	valIt Iterator[T]
-	endIt Iterator[uint32]
+	valIt  Iterator[T]
+	endIt  Iterator[uint32]
+	window [2]uint32
 }
 
 func NewRunEndIterator[T types.Integer](c *RunEndContainer[T]) *RunEndIterator[T] {
@@ -459,7 +446,6 @@ func (it *RunEndIterator[T]) fill(base int) int {
 	nRuns := it.valIt.Len()
 	var k int
 	if base > 0 {
-		// FIXME: improve linear walk, remember current pos
 		// binary search jumps which leads to unnecessary end chunk decoding
 		k = sort.Search(nRuns, func(i int) bool {
 			return it.endIt.Get(i) >= uint32(base)

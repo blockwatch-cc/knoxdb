@@ -82,13 +82,38 @@ func (c *FloatRunEndContainer[T]) Get(n int) T {
 
 func (c *FloatRunEndContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 	if sel == nil {
-		l := uint32(c.Len())
-		var i uint32
-		var k int
-		dst = dst[:l]
-		for i < l {
-			end, val := c.Ends.Get(k), c.Values.Get(k)
+		var (
+			sz   = c.Ends.Len()
+			vals = c.Values.AppendTo(nil, arena.Alloc[T](sz))
+			ends = c.Ends.AppendTo(nil, arena.Alloc[uint32](sz))
+			i    uint32
+		)
+		dst = dst[:ends[sz-1]+1]
+
+		for k, end := range ends {
+			val := vals[k]
+			for range (end - i) / 16 {
+				_ = dst[i+15]
+				dst[i] = val
+				dst[i+1] = val
+				dst[i+2] = val
+				dst[i+3] = val
+				dst[i+4] = val
+				dst[i+5] = val
+				dst[i+6] = val
+				dst[i+7] = val
+				dst[i+8] = val
+				dst[i+9] = val
+				dst[i+10] = val
+				dst[i+11] = val
+				dst[i+12] = val
+				dst[i+13] = val
+				dst[i+14] = val
+				dst[i+15] = val
+				i += 16
+			}
 			for range (end - i) / 4 {
+				_ = dst[i+3]
 				dst[i] = val
 				dst[i+1] = val
 				dst[i+2] = val
@@ -101,9 +126,13 @@ func (c *FloatRunEndContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 			}
 			k++
 		}
+		arena.Free(ends)
+		arena.Free(vals)
 	} else {
 		if slices.IsSorted(sel) {
-			idx, end, val := 0, c.Ends.Get(0), c.Values.Get(0)
+			vit := c.Values.Iterator()
+			eit := c.Ends.Iterator()
+			idx, end, val := 0, eit.Get(0), vit.Get(0)
 			for len(sel) > 0 {
 				// use current run while valid
 				if sel[0] <= end {
@@ -114,15 +143,19 @@ func (c *FloatRunEndContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 				// find next run
 				for end < sel[0] {
 					idx++
-					end = c.Ends.Get(idx)
+					end = eit.Get(idx)
 				}
-				val = c.Values.Get(idx)
+				val = vit.Get(idx)
 			}
+			vit.Close()
+			eit.Close()
 		} else {
 			// fallback to slower get for unsorted selection lists
+			it := c.Iterator()
 			for _, v := range sel {
-				dst = append(dst, c.Get(int(v)))
+				dst = append(dst, it.Get(int(v)))
 			}
+			it.Close()
 		}
 	}
 	return dst
