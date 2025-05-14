@@ -5,6 +5,7 @@ package encode
 
 import (
 	"fmt"
+	"math"
 	"slices"
 	"sync"
 
@@ -17,14 +18,14 @@ import (
 type AlpFlags byte
 
 const (
-	FlagException AlpFlags = 1 << iota
-	FlagSafeInt            // [-2^51, 2^51]
+	FlagPatched AlpFlags = 1 << iota
+	FlagSafeInt          // [-2^51, 2^51]
 )
 
 // TFloatAlp
 type FloatAlpContainer[T types.Float, E int64 | int32] struct {
 	Values    IntegerContainer[E]
-	Exception FloatContainer[T]
+	Patches   FloatContainer[T]
 	Positions IntegerContainer[uint32]
 	Exponent  uint8
 	Factor    uint8
@@ -33,10 +34,10 @@ type FloatAlpContainer[T types.Float, E int64 | int32] struct {
 }
 
 func (c *FloatAlpContainer[T, E]) Info() string {
-	if c.flags&FlagException > 0 {
+	if c.flags&FlagPatched > 0 {
 		return fmt.Sprintf("ALP(%s)_[%d,%d]_[v=%s]_[ex=%s]_[pos=%s]",
 			TypeName[T](), c.Exponent, c.Factor,
-			c.Values.Info(), c.Exception.Info(), c.Positions.Info())
+			c.Values.Info(), c.Patches.Info(), c.Positions.Info())
 	}
 	return fmt.Sprintf("ALP(%s)_[%d,%d]_[v=%s]_[noex]", TypeName[T](),
 		c.Exponent, c.Factor, c.Values.Info())
@@ -49,10 +50,10 @@ func (c *FloatAlpContainer[T, E]) Close() {
 	}
 	c.Values.Close()
 	c.Values = nil
-	if c.flags&FlagException > 0 {
-		c.Exception.Close()
+	if c.flags&FlagPatched > 0 {
+		c.Patches.Close()
 		c.Positions.Close()
-		c.Exception = nil
+		c.Patches = nil
 		c.Positions = nil
 	}
 	c.flags = 0
@@ -69,8 +70,8 @@ func (c *FloatAlpContainer[T, E]) Len() int {
 
 func (c *FloatAlpContainer[T, E]) Size() int {
 	v := 4 + c.Values.Size()
-	if c.flags&FlagException > 0 {
-		v += c.Exception.Size() + c.Positions.Size()
+	if c.flags&FlagPatched > 0 {
+		v += c.Patches.Size() + c.Positions.Size()
 	}
 	return v
 }
@@ -81,8 +82,8 @@ func (c *FloatAlpContainer[T, E]) Store(dst []byte) []byte {
 	dst = num.AppendUvarint(dst, uint64(c.Factor))
 	dst = c.Values.Store(dst)
 	dst = append(dst, byte(c.flags))
-	if c.flags&FlagException > 0 {
-		dst = c.Exception.Store(dst)
+	if c.flags&FlagPatched > 0 {
+		dst = c.Patches.Store(dst)
 		dst = c.Positions.Store(dst)
 	}
 	return dst
@@ -113,15 +114,15 @@ func (c *FloatAlpContainer[T, E]) Load(buf []byte) ([]byte, error) {
 	// load flags
 	c.flags = AlpFlags(buf[0])
 	buf = buf[1:]
-	if c.flags&FlagException > 0 {
-		// exception values
-		c.Exception = NewFloat[T](FloatContainerType(buf[0]))
-		buf, err = c.Exception.Load(buf)
+	if c.flags&FlagPatched > 0 {
+		// patch values
+		c.Patches = NewFloat[T](FloatContainerType(buf[0]))
+		buf, err = c.Patches.Load(buf)
 		if err != nil {
 			return buf, err
 		}
 
-		// exception positions
+		// patch positions
 		c.Positions = NewInt[uint32](IntegerContainerType(buf[0]))
 		buf, err = c.Positions.Load(buf)
 		if err != nil {
@@ -168,8 +169,8 @@ func (c *FloatAlpContainer[T, E]) Encode(ctx *FloatContext[T], vals []T, lvl int
 	c.Values = EncodeInt(vctx, res.Encoded, lvl-1)
 	vctx.Close()
 	if n := len(res.PatchValues); n > 0 {
-		c.flags |= FlagException
-		c.Exception = NewFloat[T](TFloatRaw).Encode(nil, slices.Clone(res.PatchValues), 1)
+		c.flags |= FlagPatched
+		c.Patches = NewFloat[T](TFloatRaw).Encode(nil, slices.Clone(res.PatchValues), 1)
 		ectx := NewIntegerContext(0, res.PatchIndices[n-1], n)
 		c.Positions = EncodeInt(ectx, res.PatchIndices, lvl-1)
 		ectx.Close()
@@ -187,41 +188,271 @@ func (c *FloatAlpContainer[T, E]) initDecoder() {
 		return
 	}
 	c.dec = alp.NewDecoder[T, E](c.Factor, c.Exponent).WithSafeInt(c.flags&FlagSafeInt > 0)
-	if c.flags&FlagException > 0 {
-		cnt := c.Exception.Len()
-		c.dec.WithExceptions(
-			c.Exception.AppendTo(nil, arena.Alloc[T](cnt)),
+	if c.flags&FlagPatched > 0 {
+		cnt := c.Patches.Len()
+		c.dec.WithPatches(
+			c.Patches.AppendTo(nil, arena.Alloc[T](cnt)),
 			c.Positions.AppendTo(nil, arena.Alloc[uint32](cnt)),
 		)
 	}
 }
 
 func (c *FloatAlpContainer[T, E]) MatchEqual(val T, bits, mask *Bitset) {
-	matchIt(c.Iterator(), matchFn[T](types.FilterModeEqual), val, bits, mask)
+	// Golang has no totalOrder semantics for Nan values. Any Nan comparison
+	// returns false, so we must explicitly check for NaN when requested.
+	// NaN is never encoded as regular float and may only be part of patches.
+	isNaN := val != val // math.IsNaN(float64(val))
+	if !isNaN {
+		// try translate val into ALP domain
+		enc := alp.NewEncoder[T, E]()
+		av, ok := enc.EncodeSingle(val, alp.Exponents{E: c.Exponent, F: c.Factor})
+
+		// on success, match against encoded int values
+		if ok {
+			c.Values.MatchEqual(av, bits, mask)
+		}
+	}
+
+	// merge _all_ patches by flipping bits, note values contain
+	// vector min as replacement and value match above may have
+	// matched it but the true patched value is not equal
+	if c.flags&FlagPatched > 0 {
+		// load decoded patch data
+		c.initDecoder()
+		vals, pos := c.dec.Patches()
+
+		// if av == min we must revert bits on all patch positions
+		// we know by checking of any patch position is already set
+		if bits.IsSet(int(pos[0])) {
+			for _, p := range pos {
+				bits.Clear(int(p))
+			}
+			return
+		}
+
+		// otherwise, find all potential matches in patch list
+		if isNaN {
+			for i, p := range pos {
+				if math.IsNaN(float64(vals[i])) {
+					bits.Set(int(p))
+				}
+			}
+		} else {
+			for i, p := range pos {
+				if vals[i] == val {
+					bits.Set(int(p))
+				}
+			}
+		}
+	}
 }
 
 func (c *FloatAlpContainer[T, E]) MatchNotEqual(val T, bits, mask *Bitset) {
-	matchIt(c.Iterator(), matchFn[T](types.FilterModeNotEqual), val, bits, mask)
+	c.MatchEqual(val, bits, mask)
+	bits.Neg()
 }
 
 func (c *FloatAlpContainer[T, E]) MatchLess(val T, bits, mask *Bitset) {
-	matchIt(c.Iterator(), matchFn[T](types.FilterModeLt), val, bits, mask)
+	// Golang has no totalOrder semantics for Nan values. Any Nan comparison
+	// returns false, so no value can be less than NaN.
+	f64 := float64(val)
+	if math.IsNaN(f64) || math.IsInf(f64, -1) {
+		return
+	}
+
+	// match integers first. likely includes min val which is used as
+	// replacement for all patched values. we need to undo these
+	// matches below when creating the union(values, patches)
+	enc := alp.NewEncoder[T, E]()
+	exp := alp.Exponents{E: c.Exponent, F: c.Factor}
+	av, ok := enc.EncodeSingle(val, exp)
+	if ok {
+		// match successful encoded value
+		c.Values.MatchLess(av, bits, mask)
+	} else {
+		// match using the next smaller integer, use LE
+		c.Values.MatchLessEqual(enc.EncodeBelow(val, exp), bits, mask)
+	}
+
+	// merge _all_ patches by flipping bits, note values contain
+	// vector min as replacement and value match above may have
+	// matched it but the true patched value is not less
+	if c.flags&FlagPatched > 0 {
+		c.initDecoder()
+		vals, pos := c.dec.Patches()
+		for i, p := range pos {
+			if vals[i] < val {
+				bits.Set(int(p))
+			} else {
+				bits.Clear(int(p))
+			}
+		}
+	}
 }
 
 func (c *FloatAlpContainer[T, E]) MatchLessEqual(val T, bits, mask *Bitset) {
-	matchIt(c.Iterator(), matchFn[T](types.FilterModeLe), val, bits, mask)
+	// Golang has no totalOrder semantics for Nan values. Any Nan comparison
+	// returns false, so no value can be less or equal to NaN.
+	f64 := float64(val)
+	if math.IsNaN(f64) {
+		return
+	}
+	if math.IsInf(f64, 1) {
+		bits.One()
+		return
+	}
+
+	// match integers first. likely includes min val which is used as
+	// replacement for all patched values. we need to undo these
+	// matches below when creating the union(values, patches)
+	enc := alp.NewEncoder[T, E]()
+	exp := alp.Exponents{E: c.Exponent, F: c.Factor}
+	av, ok := enc.EncodeSingle(val, exp)
+	if ok {
+		// match successful encoded value
+		c.Values.MatchLessEqual(av, bits, mask)
+	} else {
+		// match using the next smaller integer
+		c.Values.MatchLessEqual(enc.EncodeBelow(val, exp), bits, mask)
+	}
+
+	// merge _all_ patches by flipping bits, note values contain
+	// vector min as replacement and value match above may have
+	// matched it but the true patched value is not less
+	if c.flags&FlagPatched > 0 {
+		c.initDecoder()
+		vals, pos := c.dec.Patches()
+		// NaN cannot match here
+		for i, p := range pos {
+			if vals[i] <= val {
+				bits.Set(int(p))
+			} else {
+				bits.Clear(int(p))
+			}
+		}
+	}
 }
 
 func (c *FloatAlpContainer[T, E]) MatchGreater(val T, bits, mask *Bitset) {
-	matchIt(c.Iterator(), matchFn[T](types.FilterModeGt), val, bits, mask)
+	// Golang has no totalOrder semantics for Nan values. Any Nan comparison
+	// returns false, so no value can be greater than NaN.
+	f64 := float64(val)
+	if math.IsNaN(f64) || math.IsInf(f64, 1) {
+		return
+	}
+
+	// match integers first. likely includes min val which is used as
+	// replacement for all patched values. we need to undo these
+	// matches below when creating the union(values, patches)
+	enc := alp.NewEncoder[T, E]()
+	exp := alp.Exponents{E: c.Exponent, F: c.Factor}
+	av, ok := enc.EncodeSingle(val, exp)
+	if ok {
+		// match successful encoded value
+		c.Values.MatchGreater(av, bits, mask)
+	} else {
+		// match using the next larger integer, use GE
+		c.Values.MatchGreaterEqual(enc.EncodeAbove(val, exp), bits, mask)
+	}
+
+	// merge _all_ patches by flipping bits, note values contain
+	// vector min as replacement and value match above may have
+	// matched it but the true patched value is not greater
+	if c.flags&FlagPatched > 0 {
+		c.initDecoder()
+		vals, pos := c.dec.Patches()
+		for i, p := range pos {
+			if vals[i] > val {
+				bits.Set(int(p))
+			} else {
+				bits.Clear(int(p))
+			}
+		}
+	}
 }
 
 func (c *FloatAlpContainer[T, E]) MatchGreaterEqual(val T, bits, mask *Bitset) {
-	matchIt(c.Iterator(), matchFn[T](types.FilterModeGe), val, bits, mask)
+	// Golang has no totalOrder semantics for Nan values. Any Nan comparison
+	// returns false, so no value can be greater or equal to NaN.
+	f64 := float64(val)
+	if math.IsNaN(f64) {
+		return
+	}
+	if math.IsInf(f64, -1) {
+		bits.One()
+		return
+	}
+
+	// match integers first. likely includes min val which is used as
+	// replacement for all patched values. we need to undo these
+	// matches below when creating the union(values, patches)
+	enc := alp.NewEncoder[T, E]()
+	exp := alp.Exponents{E: c.Exponent, F: c.Factor}
+	av, ok := enc.EncodeSingle(val, exp)
+	if ok {
+		// match successful encoded value
+		c.Values.MatchGreaterEqual(av, bits, mask)
+	} else {
+		// match using the next larger integer
+		c.Values.MatchGreaterEqual(enc.EncodeAbove(val, exp), bits, mask)
+	}
+
+	// merge _all_ patches by flipping bits, note values contain
+	// vector min as replacement and value match above may have
+	// matched it but the true patched value is not less
+	if c.flags&FlagPatched > 0 {
+		c.initDecoder()
+		vals, pos := c.dec.Patches()
+		// NaN cannot match here
+		for i, p := range pos {
+			if vals[i] >= val {
+				bits.Set(int(p))
+			} else {
+				bits.Clear(int(p))
+			}
+		}
+	}
 }
 
 func (c *FloatAlpContainer[T, E]) MatchBetween(a, b T, bits, mask *Bitset) {
-	matchRangeIt(c.Iterator(), matchFn[T](types.FilterModeRange), a, b, bits, mask)
+	// Golang has no totalOrder semantics for Nan values. Any Nan comparison
+	// returns false, so no value can be inside a range with NaN as border.
+	if math.IsNaN(float64(a)) || math.IsNaN(float64(b)) {
+		return
+	}
+
+	// match integers first. likely includes min val which is used as
+	// replacement for all patched values. we need to undo these
+	// matches below when creating the union(values, patches)
+	enc := alp.NewEncoder[T, E]()
+	exp := alp.Exponents{E: c.Exponent, F: c.Factor}
+	av, ok := enc.EncodeSingle(a, exp)
+	if !ok {
+		av = enc.EncodeAbove(a, exp)
+	}
+	bv, ok := enc.EncodeSingle(b, exp)
+	if !ok {
+		bv = enc.EncodeBelow(b, exp)
+	}
+
+	// match integer range
+	c.Values.MatchBetween(av, bv, bits, mask)
+
+	// merge _all_ patches by flipping bits, note values contain
+	// vector min as replacement and value match above may have
+	// matched it but the true patched value is not less
+	if c.flags&FlagPatched > 0 {
+		c.initDecoder()
+		vals, pos := c.dec.Patches()
+		// NaN cannot match here
+		for i, p := range pos {
+			if vals[i] >= a && vals[i] <= b {
+				bits.Set(int(p))
+			} else {
+				bits.Clear(int(p))
+			}
+		}
+	}
 }
 
 // N.A.

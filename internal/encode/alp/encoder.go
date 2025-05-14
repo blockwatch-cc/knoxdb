@@ -4,6 +4,8 @@
 package alp
 
 import (
+	"math"
+
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/types"
 )
@@ -81,7 +83,7 @@ func (e *Encoder[T, E]) Encode(src []T, exp Exponents) *Result[T, E] {
 	encF := e.IF10[exp.F]
 	decE := e.IF10[exp.E]
 	decF := e.F10[exp.F]
-	magic := e.MAGIC_NUMBER
+	magic := e.SWEET
 
 	// encode values
 	for i, val := range src {
@@ -106,4 +108,18 @@ func (e *Encoder[T, E]) Encode(src []T, exp Exponents) *Result[T, E] {
 	r.IsSafeInt = r.Min > -E(e.MAX_SAFE_INT) && r.Max < E(e.MAX_SAFE_INT)
 
 	return r
+}
+
+func (e *Encoder[T, E]) EncodeSingle(val T, exp Exponents) (E, bool) {
+	enc := E((val*e.F10[exp.E]*e.IF10[exp.F] + e.SWEET) - e.SWEET)
+	dec := T(enc) * e.F10[exp.F] * e.IF10[exp.E]
+	return enc, val == dec
+}
+
+func (e *Encoder[T, E]) EncodeAbove(val T, exp Exponents) E {
+	return E(math.Ceil(float64((val*e.F10[exp.E]*e.IF10[exp.F] + e.SWEET) - e.SWEET)))
+}
+
+func (e *Encoder[T, E]) EncodeBelow(val T, exp Exponents) E {
+	return E(math.Floor(float64((val*e.F10[exp.E]*e.IF10[exp.F] + e.SWEET) - e.SWEET)))
 }

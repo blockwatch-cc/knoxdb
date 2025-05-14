@@ -25,24 +25,24 @@ type Uint interface {
 }
 
 type constant[T Float] struct {
-	WIDTH                   int
-	RD_SIZE_THRESHOLD_LIMIT int
-	MAGIC_NUMBER            T
-	PATCH_SIZE              int
-	MAX_EXPONENT            uint8
-	MAX_SAFE_INT            int64
-	F10                     []T
-	IF10                    []T
+	WIDTH        int
+	RD_LIMIT     int
+	SWEET        T
+	PATCH_SIZE   int
+	MAX_EXPONENT uint8
+	MAX_SAFE_INT int64
+	F10          []T
+	IF10         []T
 }
 
 var (
 	c32 = constant[float32]{
-		WIDTH:                   4,
-		RD_SIZE_THRESHOLD_LIMIT: 22 * SAMPLE_SIZE, // 22 bits per value * 32
-		MAGIC_NUMBER:            12582912.0,
-		PATCH_SIZE:              32,
-		MAX_EXPONENT:            10,
-		MAX_SAFE_INT:            1 << 23,
+		WIDTH:        4,
+		RD_LIMIT:     22 * SAMPLE_SIZE, // 22 bits per value * 32
+		SWEET:        1<<23 + 1<<22,    // 12582912.0
+		PATCH_SIZE:   32,
+		MAX_EXPONENT: 10,
+		MAX_SAFE_INT: 1 << 23,
 
 		F10: []float32{
 			1.0,
@@ -73,12 +73,12 @@ var (
 	}
 
 	c64 = constant[float64]{
-		WIDTH:                   8,
-		RD_SIZE_THRESHOLD_LIMIT: 48 * SAMPLE_SIZE, // 48 bits per value * 32
-		MAGIC_NUMBER:            0x0018000000000000,
-		PATCH_SIZE:              64,
-		MAX_EXPONENT:            18,
-		MAX_SAFE_INT:            1 << 51,
+		WIDTH:        8,
+		RD_LIMIT:     48 * SAMPLE_SIZE, // 48 bits per value * 32
+		SWEET:        1<<52 + 1<<51,    // 0x0018000000000000
+		PATCH_SIZE:   64,
+		MAX_EXPONENT: 18,
+		MAX_SAFE_INT: 1 << 51,
 
 		F10: []float64{
 			1.0,

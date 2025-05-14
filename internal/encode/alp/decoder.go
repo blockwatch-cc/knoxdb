@@ -78,13 +78,17 @@ func (d *Decoder[T, E]) WithSafeInt(isSafe bool) *Decoder[T, E] {
 	return d
 }
 
-func (d *Decoder[T, E]) WithExceptions(values []T, pos []uint32) *Decoder[T, E] {
-	d.patch_values = values
+func (d *Decoder[T, E]) WithPatches(vals []T, pos []uint32) *Decoder[T, E] {
+	d.patch_values = vals
 	d.patch_indices = pos
 	return d
 }
 
-func (d *Decoder[T, E]) DecodeValue(v E, i int) T {
+func (d *Decoder[T, E]) Patches() (vals []T, pos []uint32) {
+	return d.patch_values, d.patch_indices
+}
+
+func (d *Decoder[T, E]) DecodeValue(val E, pos int) T {
 	if d.patch_values != nil {
 		// lazy init patch map on first access
 		if d.patch_map == nil {
@@ -93,15 +97,15 @@ func (d *Decoder[T, E]) DecodeValue(v E, i int) T {
 				d.patch_map[d.patch_indices[i]] = v
 			}
 		}
-		if e, ok := d.patch_map[uint32(i)]; ok {
+		if e, ok := d.patch_map[uint32(pos)]; ok {
 			return e
 		}
 	}
-	return d.decode(v)
+	return d.decode(val)
 }
 
-func (d *Decoder[T, E]) decode(v E) T {
-	return T(v) * d.f * d.e
+func (d *Decoder[T, E]) decode(val E) T {
+	return T(val) * d.f * d.e
 }
 
 // Decodes an ALP vector from provided integers. src and dst must have same length.

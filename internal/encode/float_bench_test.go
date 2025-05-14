@@ -196,7 +196,6 @@ func BenchmarkFloatDecode(b *testing.B) {
 			dst := make([]float64, 0, c.N)
 			once := etests.ShowInfo
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
-				b.ReportAllocs()
 				b.SetBytes(int64(c.N * 8))
 				for b.Loop() {
 					enc2 := NewFloat[float64](scheme)
@@ -313,12 +312,15 @@ func BenchmarkFloatCmp(b *testing.B) {
 			ctx := AnalyzeFloat(data, true, true)
 			enc := NewFloat[float64](scheme).Encode(ctx, data, MAX_CASCADE)
 			bits := bitset.NewBitset(c.N)
-
+			// da, db := data[0], data[0]
+			// if len(data) > 1 {
+			// 	db = data[1]
+			// }
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
-				b.ReportAllocs()
 				b.SetBytes(int64(c.N * 8))
 				for b.Loop() {
 					enc.MatchEqual(data[0], bits, nil)
+					// enc.MatchBetween(da, db, bits, nil)
 				}
 				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 			})

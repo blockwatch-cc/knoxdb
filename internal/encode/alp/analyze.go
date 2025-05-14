@@ -115,7 +115,7 @@ func Analyze[T Float, E Int](src []T) Analysis {
 
 			// analyze probe (32 values minus zeros)
 			for i, val := range nonZeroSample {
-				enc := E((val*encE*encF + c.MAGIC_NUMBER) - c.MAGIC_NUMBER)
+				enc := E((val*encE*encF + c.SWEET) - c.SWEET)
 				if val == T(enc)*decF*decE {
 					nNonEx++
 					maxv = max(maxv, enc)
@@ -139,7 +139,7 @@ func Analyze[T Float, E Int](src []T) Analysis {
 	}
 
 	// switch to RD scheme if we were not able to achieve compression
-	if bestSize >= c.RD_SIZE_THRESHOLD_LIMIT {
+	if bestSize >= c.RD_LIMIT {
 		switch any(T(0)).(type) {
 		case float64:
 			return analyzeRD[T, uint64](sample)
