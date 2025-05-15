@@ -568,12 +568,9 @@ TEXT ·cmp_i32_bw_x5(SB), NOSPLIT, $0-64
 	MOVQ	bits_base+32(FP), DI
 	XORQ	R9, R9
 
-    MOVQ            $1, AX
-	VPBROADCASTD 	AX, Z13                  // 1 into AVX512 reg
 	VPBROADCASTD 	a+24(FP), Z12            // load val a into AVX512 reg
 	VPBROADCASTD 	b+28(FP), Z0             // load val b into AVX512 reg
 	VPSUBD			Z12, Z0, Z0              // compute diff
-	VPADDD			Z13, Z0, Z0
 
 	TESTQ	BX, BX
 	JLE		done
@@ -592,23 +589,23 @@ prep_big:
 loop_big:
 	VMOVDQU32  	(SI), Z1 
 	VPSUBD		Z12, Z1, Z1
-	VPCMPUD	    $1, Z0, Z1, K1    // $1 means compare less than
+	VPCMPUD	    $2, Z0, Z1, K1    // $2 means compare less equal
     
 	VMOVDQU32  	64(SI), Z2
 	VPSUBD		Z12, Z2, Z2
-	VPCMPUD	    $1, Z0, Z2, K2
+	VPCMPUD	    $2, Z0, Z2, K2
     KSHIFTLQ    $16, K2, K2
     KORQ        K1, K2, K1
 
 	VMOVDQU32  	128(SI), Z3
 	VPSUBD		Z12, Z3, Z3
-	VPCMPUD	    $1, Z0, Z3, K3
+	VPCMPUD	    $2, Z0, Z3, K3
     KSHIFTLQ    $32, K3, K3
     KORQ        K1, K3, K1
 
 	VMOVDQU32  	192(SI), Z4
 	VPSUBD		Z12, Z4, Z4
-	VPCMPUD	    $1, Z0, Z4, K4
+	VPCMPUD	    $2, Z0, Z4, K4
     KSHIFTLQ    $48, K4, K4
     KORQ        K1, K4, K1
 
@@ -636,7 +633,7 @@ loop_small:
 
 	VMOVDQU32   (SI), K2, Z1 
 	VPSUBD		Z12, Z1, K2, Z1
-	VPCMPUD	    $1, Z0, Z1, K2, K1
+	VPCMPUD	    $2, Z0, Z1, K2, K1
 	KMOVB		K1, (DI)    // write the lower 8 bits to the output slice
     KMOVB		K1, AX
 	POPCNTQ		AX, AX      // count 1 bits

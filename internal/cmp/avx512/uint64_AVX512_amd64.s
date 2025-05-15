@@ -658,12 +658,9 @@ TEXT ·cmp_u64_bw_x5(SB), NOSPLIT, $0-72
 	MOVQ	bits_base+40(FP), DI
 	XORQ	R9, R9
 
-    MOVQ            $1, AX
-	VPBROADCASTQ 	AX, Z13                  // 1 into AVX512 reg
 	VBROADCASTSD 	a+24(FP), Z12            // load val a into AVX512 reg
 	VBROADCASTSD 	b+32(FP), Z0             // load val b into AVX512 reg
 	VPSUBQ			Z12, Z0, Z0              // compute diff
-	VPADDQ			Z13, Z0, Z0
 
 	TESTQ	BX, BX
 	JLE		done
@@ -682,47 +679,47 @@ prep_big:
 loop_big:
 	VMOVDQU64  	(SI), Z1 
 	VPSUBQ		Z12, Z1, Z1
-	VPCMPUQ	    $1, Z0, Z1, K1    // $5 means compare not less (or greater equal)
+	VPCMPUQ	    $2, Z0, Z1, K1    // $2 means compare not less equal
     
 	VMOVDQU64  	64(SI), Z2
 	VPSUBQ		Z12, Z2, Z2
-	VPCMPUQ	    $1, Z0, Z2, K2
+	VPCMPUQ	    $2, Z0, Z2, K2
     KSHIFTLQ    $8, K2, K2
     KORQ        K1, K2, K1
 
 	VMOVDQU64  	128(SI), Z3
 	VPSUBQ		Z12, Z3, Z3
-	VPCMPUQ	    $1, Z0, Z3, K3
+	VPCMPUQ	    $2, Z0, Z3, K3
     KSHIFTLQ    $16, K3, K3
     KORQ        K1, K3, K1
 
 	VMOVDQU64  	192(SI), Z4
 	VPSUBQ		Z12, Z4, Z4
-	VPCMPUQ	    $1, Z0, Z4, K4
+	VPCMPUQ	    $2, Z0, Z4, K4
     KSHIFTLQ    $24, K4, K4
     KORQ        K1, K4, K1
 
 	VMOVDQU64  	256(SI), Z5 
 	VPSUBQ		Z12, Z5, Z5
-	VPCMPUQ	    $1, Z0, Z5, K5
+	VPCMPUQ	    $2, Z0, Z5, K5
     KSHIFTLQ    $32, K5, K5
     KORQ        K1, K5, K1
 
 	VMOVDQU64  	320(SI), Z6
 	VPSUBQ		Z12, Z6, Z6
-    VPCMPUQ	    $1, Z0, Z6, K6
+    VPCMPUQ	    $2, Z0, Z6, K6
     KSHIFTLQ    $40, K6, K6
     KORQ        K1, K6, K1
 
 	VMOVDQU64  	384(SI), Z7
 	VPSUBQ		Z12, Z7, Z7
-	VPCMPUQ	    $1, Z0, Z7, K7
+	VPCMPUQ	    $2, Z0, Z7, K7
     KSHIFTLQ    $48, K7, K7
     KORQ        K1, K7, K1
 
 	VMOVDQU64  	448(SI), Z8
 	VPSUBQ		Z12, Z8, Z8
-	VPCMPUQ	    $1, Z0, Z8, K2
+	VPCMPUQ	    $2, Z0, Z8, K2
     KSHIFTLQ    $56, K2, K2
     KORQ        K1, K2, K1
 
@@ -749,7 +746,7 @@ loop_small:
 
 	VMOVDQU64  	(SI), K2, Z1 
 	VPSUBQ		Z12, Z1, K2, Z1
-	VPCMPUQ	    $1, Z0, Z1, K2, K1
+	VPCMPUQ	    $2, Z0, Z1, K2, K1
 	KMOVB		K1, (DI)    // write the lower 8 bits to the output slice
     KMOVB		K1, AX
 	POPCNTQ		AX, AX      // count 1 bits

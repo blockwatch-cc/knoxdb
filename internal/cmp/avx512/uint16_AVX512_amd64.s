@@ -520,12 +520,9 @@ TEXT ·cmp_u16_bw_x5(SB), NOSPLIT, $0-64
 	MOVQ	bits_base+32(FP), DI
 	XORQ	R9, R9
 
-    MOVQ            $1, AX
-	VPBROADCASTW 	AX, Z13                  // 1 into AVX512 reg
 	VPBROADCASTW 	a+24(FP), Z12            // load val a into AVX512 reg
 	VPBROADCASTW 	b+26(FP), Z0             // load val b into AVX512 reg
 	VPSUBW			Z12, Z0, Z0              // compute diff
-	VPADDW			Z13, Z0, Z0
 
 	TESTQ	BX, BX
 	JLE		done
@@ -544,11 +541,11 @@ prep_big:
 loop_big:
 	VMOVDQU16  	(SI), Z1 
 	VPSUBW		Z12, Z1, Z1
-	VPCMPUW	    $1, Z0, Z1, K1    // $1 means compare less than
+	VPCMPUW	    $2, Z0, Z1, K1    // $2 means compare less equal
     
 	VMOVDQU16  	64(SI), Z2
 	VPSUBW		Z12, Z2, Z2
-	VPCMPUW	    $1, Z0, Z2, K2
+	VPCMPUW	    $2, Z0, Z2, K2
     KSHIFTLQ    $32, K2, K2
     KORQ        K1, K2, K1
 
@@ -576,7 +573,7 @@ loop_small:
 
 	VMOVDQU16  	(SI), K2, Z1 
 	VPSUBW		Z12, Z1, K2, Z1
-	VPCMPUW	    $1, Z0, Z1, K2, K1
+	VPCMPUW	    $2, Z0, Z1, K2, K1
 	KMOVB		K1, (DI)    // write the lower 8 bits to the output slice
     KMOVB		K1, AX
 	POPCNTQ		AX, AX      // count 1 bits
