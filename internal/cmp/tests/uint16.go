@@ -111,6 +111,10 @@ var (
 	u16_bw_res_2         = []byte{0xcc, 0xcc, 0xcc, 0xcc}
 	u16_bw_mat_2a uint16 = math.MaxUint8
 	u16_bw_mat_2b uint16 = math.MaxUint16
+
+	u16_bw_res_3         = []byte{0xff, 0xff, 0xff, 0xff}
+	u16_bw_mat_3a uint16 = 0
+	u16_bw_mat_3b uint16 = math.MaxUint16
 )
 
 // Parameters:
@@ -336,4 +340,5 @@ var Uint16BetweenCases = []MatchTest[uint16]{
 	mku16("ext256", u16_s2, u16_bw_mat_2a, u16_bw_mat_2b, u16_bw_res_2, 256),
 	mku16("ext32", u16_s2, u16_bw_mat_2a, u16_bw_mat_2b, u16_bw_res_2, 32),
 	mku16("ext31", u16_s2, u16_bw_mat_2a, u16_bw_mat_2b, u16_bw_res_2, 31),
+	mku16("full", u16_s2, u16_bw_mat_3a, u16_bw_mat_3b, u16_bw_res_3, 32),
 }

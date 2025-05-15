@@ -151,6 +151,10 @@ var (
 	i32_bw_res_3        = []byte{0x50, 0x50, 0x50, 0x50}
 	i32_bw_mat_3a int32 = math.MaxInt16
 	i32_bw_mat_3b int32 = math.MaxInt32
+
+	i32_bw_res_4        = []byte{0xff, 0xff, 0xff, 0xff}
+	i32_bw_mat_4a int32 = math.MinInt32
+	i32_bw_mat_4b int32 = math.MaxInt32
 )
 
 // Parameters:
@@ -383,4 +387,5 @@ var Int32BetweenCases = []MatchTest[int32]{
 	mkI32("ext128", i32_s3, i32_bw_mat_3a, i32_bw_mat_3b, i32_bw_res_3, 128),
 	mkI32("ext32", i32_s3, i32_bw_mat_3a, i32_bw_mat_3b, i32_bw_res_3, 32),
 	mkI32("ext31", i32_s3, i32_bw_mat_3a, i32_bw_mat_3b, i32_bw_res_3, 31),
+	mkI32("full", i32_s3, i32_bw_mat_4a, i32_bw_mat_4b, i32_bw_res_4, 32),
 }

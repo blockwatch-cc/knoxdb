@@ -110,6 +110,10 @@ var (
 	u64_bw_res_2         = []byte{0xcc, 0xcc, 0xcc, 0xcc}
 	u64_bw_mat_2a uint64 = math.MaxUint32
 	u64_bw_mat_2b uint64 = math.MaxUint64
+
+	u64_bw_res_3         = []byte{0xff, 0xff, 0xff, 0xff}
+	u64_bw_mat_3a uint64 = 0
+	u64_bw_mat_3b uint64 = math.MaxUint64
 )
 
 // creates an uint64 test case from the given slice
@@ -308,4 +312,5 @@ var Uint64BetweenCases = []MatchTest[uint64]{
 	mkU64("ext64", u64_s2, u64_bw_mat_2a, u64_bw_mat_2b, u64_bw_res_2, 64),
 	mkU64("ext32", u64_s2, u64_bw_mat_2a, u64_bw_mat_2b, u64_bw_res_2, 32),
 	mkU64("ext31", u64_s2, u64_bw_mat_2a, u64_bw_mat_2b, u64_bw_res_2, 31),
+	mkU64("full", u64_s2, u64_bw_mat_3a, u64_bw_mat_3b, u64_bw_res_3, 32),
 }

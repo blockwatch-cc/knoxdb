@@ -151,6 +151,10 @@ var (
 	i8_bw_res_3       = []byte{0x50, 0x50, 0x50, 0x50}
 	i8_bw_mat_3a int8 = math.MaxInt8 / 2
 	i8_bw_mat_3b int8 = math.MaxInt8
+
+	i8_bw_res_4       = []byte{0xff, 0xff, 0xff, 0xff}
+	i8_bw_mat_4a int8 = math.MinInt8
+	i8_bw_mat_4b int8 = math.MaxInt8
 )
 
 // Parameters:
@@ -411,4 +415,5 @@ var Int8BetweenCases = []MatchTest[int8]{
 	mkI8("ext512", i8_s3, i8_bw_mat_3a, i8_bw_mat_3b, i8_bw_res_3, 512),
 	mkI8("ext32", i8_s3, i8_bw_mat_3a, i8_bw_mat_3b, i8_bw_res_3, 32),
 	mkI8("ext31", i8_s3, i8_bw_mat_3a, i8_bw_mat_3b, i8_bw_res_3, 31),
+	mkI8("full", i8_s3, i8_bw_mat_4a, i8_bw_mat_4b, i8_bw_res_4, 32),
 }

@@ -151,6 +151,10 @@ var (
 	i16_bw_res_3        = []byte{0x50, 0x50, 0x50, 0x50}
 	i16_bw_mat_3a int16 = math.MaxInt8
 	i16_bw_mat_3b int16 = math.MaxInt16
+
+	i16_bw_res_4        = []byte{0xff, 0xff, 0xff, 0xff}
+	i16_bw_mat_4a int16 = math.MinInt16
+	i16_bw_mat_4b int16 = math.MaxInt16
 )
 
 // creates an uint16 test case from the given slice
@@ -398,4 +402,5 @@ var Int16BetweenCases = []MatchTest[int16]{
 	mkI16("ext256", i16_s3, i16_bw_mat_3a, i16_bw_mat_3b, i16_bw_res_3, 256),
 	mkI16("ext32", i16_s3, i16_bw_mat_3a, i16_bw_mat_3b, i16_bw_res_3, 32),
 	mkI16("ext31", i16_s3, i16_bw_mat_3a, i16_bw_mat_3b, i16_bw_res_3, 31),
+	mkI16("full", i16_s3, i16_bw_mat_4a, i16_bw_mat_4b, i16_bw_res_4, 32),
 }

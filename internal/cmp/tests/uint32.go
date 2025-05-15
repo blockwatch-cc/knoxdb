@@ -111,6 +111,10 @@ var (
 	u32_bw_res_2          = []byte{0xcc, 0xcc, 0xcc, 0xcc}
 	u32_bw_mat_2a  uint32 = math.MaxUint16
 	u32_bw_mat_2ab uint32 = math.MaxUint32
+
+	u32_bw_res_3         = []byte{0xff, 0xff, 0xff, 0xff}
+	u32_bw_mat_3a uint32 = 0
+	u32_bw_mat_3b uint32 = math.MaxUint32
 )
 
 // Parameters:
@@ -322,4 +326,5 @@ var Uint32BetweenCases = []MatchTest[uint32]{
 	mkU32("ext64", u32_s2, u32_bw_mat_2a, u32_bw_mat_2ab, u32_bw_res_2, 128),
 	mkU32("ext32", u32_s2, u32_bw_mat_2a, u32_bw_mat_2ab, u32_bw_res_2, 32),
 	mkU32("ext31", u32_s2, u32_bw_mat_2a, u32_bw_mat_2ab, u32_bw_res_2, 31),
+	mkU32("full", u32_s2, u32_bw_mat_3a, u32_bw_mat_3b, u32_bw_res_3, 32),
 }

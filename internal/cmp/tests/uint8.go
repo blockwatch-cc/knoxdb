@@ -110,6 +110,10 @@ var (
 	u8_bw_res_2        = []byte{0xcc, 0xcc, 0xcc, 0xcc}
 	u8_bw_mat_2a uint8 = math.MaxInt8
 	u8_bw_mat_2b uint8 = math.MaxUint8
+
+	u8_bw_res_3        = []byte{0xff, 0xff, 0xff, 0xff}
+	u8_bw_mat_3a uint8 = 0
+	u8_bw_mat_3b uint8 = math.MaxUint8
 )
 
 // creates an uint8 test case from the given slice
@@ -350,4 +354,5 @@ var Uint8BetweenCases = []MatchTest[uint8]{
 	mkU8("ext512", u8_s2, u8_bw_mat_2a, u8_bw_mat_2b, u8_bw_res_2, 512),
 	mkU8("ext32", u8_s2, u8_bw_mat_2a, u8_bw_mat_2b, u8_bw_res_2, 32),
 	mkU8("ext31", u8_s2, u8_bw_mat_2a, u8_bw_mat_2b, u8_bw_res_2, 31),
+	mkU8("full", u8_s2, u8_bw_mat_3a, u8_bw_mat_3b, u8_bw_res_3, 32),
 }

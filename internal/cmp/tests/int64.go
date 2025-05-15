@@ -151,6 +151,10 @@ var (
 	i64_bw_res_3        = []byte{0x50, 0x50, 0x50, 0x50}
 	i64_bw_mat_3a int64 = math.MaxInt32
 	i64_bw_mat_3b int64 = math.MaxInt64
+
+	i64_bw_res_4        = []byte{0xff, 0xff, 0xff, 0xff}
+	i64_bw_mat_4a int64 = math.MinInt64
+	i64_bw_mat_4b int64 = math.MaxInt64
 )
 
 // Parameters:
@@ -369,4 +373,5 @@ var Int64BetweenCases = []MatchTest[int64]{
 	mkI64("ext64", i64_s3, i64_bw_mat_3a, i64_bw_mat_3b, i64_bw_res_3, 64),
 	mkI64("ext32", i64_s3, i64_bw_mat_3a, i64_bw_mat_3b, i64_bw_res_3, 32),
 	mkI64("ext31", i64_s3, i64_bw_mat_3a, i64_bw_mat_3b, i64_bw_res_3, 31),
+	mkI64("full", i64_s3, i64_bw_mat_4a, i64_bw_mat_4b, i64_bw_res_4, 32),
 }
