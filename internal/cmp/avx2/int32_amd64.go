@@ -35,5 +35,12 @@ var (
 	Int32LessEqual    = cmp_i32_le_x2
 	Int32Greater      = cmp_i32_gt_x2
 	Int32GreaterEqual = cmp_i32_ge_x2
-	Int32Between      = cmp_i32_bw_x2
 )
+
+func Int32Between(src []int32, a, b int32, bits []byte) int64 {
+	// handle full range separate because [b - a + 1 = 0]
+	if uint32(b-a) == 1<<32-1 {
+		return fillBits(bits, len(src))
+	}
+	return cmp_i32_bw_x2(src, a, b, bits)
+}

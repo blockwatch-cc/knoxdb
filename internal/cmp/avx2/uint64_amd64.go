@@ -35,5 +35,12 @@ var (
 	Uint64LessEqual    = cmp_u64_le_x2
 	Uint64Greater      = cmp_u64_gt_x2
 	Uint64GreaterEqual = cmp_u64_ge_x2
-	Uint64Between      = cmp_u64_bw_x2
 )
+
+func Uint64Between(src []uint64, a, b uint64, bits []byte) int64 {
+	// handle full range separate because [b - a + 1 = 0]
+	if b-a == 1<<64-1 {
+		return fillBits(bits, len(src))
+	}
+	return cmp_u64_bw_x2(src, a, b, bits)
+}

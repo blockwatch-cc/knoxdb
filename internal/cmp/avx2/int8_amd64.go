@@ -35,5 +35,12 @@ var (
 	Int8LessEqual    = cmp_i8_le_x2
 	Int8Greater      = cmp_i8_gt_x2
 	Int8GreaterEqual = cmp_i8_ge_x2
-	Int8Between      = cmp_i8_bw_x2
 )
+
+func Int8Between(src []int8, a, b int8, bits []byte) int64 {
+	// handle full range separate because [b - a + 1 = 0]
+	if uint8(b-a) == 255 {
+		return fillBits(bits, len(src))
+	}
+	return cmp_i8_bw_x2(src, a, b, bits)
+}

@@ -35,5 +35,12 @@ var (
 	Uint16LessEqual    = cmp_u16_le_x2
 	Uint16Greater      = cmp_u16_gt_x2
 	Uint16GreaterEqual = cmp_u16_ge_x2
-	Uint16Between      = cmp_u16_bw_x2
 )
+
+func Uint16Between(src []uint16, a, b uint16, bits []byte) int64 {
+	// handle full range separate because [b - a + 1 = 0]
+	if b-a == 1<<16-1 {
+		return fillBits(bits, len(src))
+	}
+	return cmp_u16_bw_x2(src, a, b, bits)
+}

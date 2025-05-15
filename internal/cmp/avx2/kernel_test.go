@@ -12,7 +12,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/cmp/tests"
 )
 
-func TestMatchEqualAVX2(t *testing.T) {
+func TestEqual(t *testing.T) {
 	tests.TestCases(t, tests.Uint64EqualCases, Uint64Equal)
 	tests.TestCases(t, tests.Uint32EqualCases, Uint32Equal)
 	tests.TestCases(t, tests.Uint16EqualCases, Uint16Equal)
@@ -25,7 +25,7 @@ func TestMatchEqualAVX2(t *testing.T) {
 	tests.TestCases(t, tests.Float32EqualCases, Float32Equal)
 }
 
-func TestMatchNotEqualAVX2(t *testing.T) {
+func TestNotEqual(t *testing.T) {
 	tests.TestCases(t, tests.Uint64NotEqualCases, Uint64NotEqual)
 	tests.TestCases(t, tests.Uint32NotEqualCases, Uint32NotEqual)
 	tests.TestCases(t, tests.Uint16NotEqualCases, Uint16NotEqual)
@@ -38,7 +38,7 @@ func TestMatchNotEqualAVX2(t *testing.T) {
 	tests.TestCases(t, tests.Float32NotEqualCases, Float32NotEqual)
 }
 
-func TestMatchLessAVX2(t *testing.T) {
+func TestLess(t *testing.T) {
 	tests.TestCases(t, tests.Uint64LessCases, Uint64Less)
 	tests.TestCases(t, tests.Uint32LessCases, Uint32Less)
 	tests.TestCases(t, tests.Uint16LessCases, Uint16Less)
@@ -51,7 +51,7 @@ func TestMatchLessAVX2(t *testing.T) {
 	tests.TestCases(t, tests.Float32LessCases, Float32Less)
 }
 
-func TestMatchLessEqualAVX2(t *testing.T) {
+func TestLessEqual(t *testing.T) {
 	tests.TestCases(t, tests.Uint64LessEqualCases, Uint64LessEqual)
 	tests.TestCases(t, tests.Uint32LessEqualCases, Uint32LessEqual)
 	tests.TestCases(t, tests.Uint16LessEqualCases, Uint16LessEqual)
@@ -64,7 +64,7 @@ func TestMatchLessEqualAVX2(t *testing.T) {
 	tests.TestCases(t, tests.Float32LessEqualCases, Float32LessEqual)
 }
 
-func TestMatchGreaterAVX2(t *testing.T) {
+func TestGreater(t *testing.T) {
 	tests.TestCases(t, tests.Uint64GreaterCases, Uint64Greater)
 	tests.TestCases(t, tests.Uint32GreaterCases, Uint32Greater)
 	tests.TestCases(t, tests.Uint16GreaterCases, Uint16Greater)
@@ -77,7 +77,7 @@ func TestMatchGreaterAVX2(t *testing.T) {
 	tests.TestCases(t, tests.Float32GreaterCases, Float32Greater)
 }
 
-func TestMatchGreaterEqualAVX2(t *testing.T) {
+func TestGreaterEqual(t *testing.T) {
 	tests.TestCases(t, tests.Uint64GreaterEqualCases, Uint64GreaterEqual)
 	tests.TestCases(t, tests.Uint32GreaterEqualCases, Uint32GreaterEqual)
 	tests.TestCases(t, tests.Uint16GreaterEqualCases, Uint16GreaterEqual)
@@ -90,7 +90,7 @@ func TestMatchGreaterEqualAVX2(t *testing.T) {
 	tests.TestCases(t, tests.Float32GreaterEqualCases, Float32GreaterEqual)
 }
 
-func TestMatchBetweenAVX2(t *testing.T) {
+func TestBetween(t *testing.T) {
 	tests.TestCases2(t, tests.Uint64BetweenCases, Uint64Between)
 	tests.TestCases2(t, tests.Uint32BetweenCases, Uint32Between)
 	tests.TestCases2(t, tests.Uint16BetweenCases, Uint16Between)
@@ -107,7 +107,7 @@ func TestMatchBetweenAVX2(t *testing.T) {
 // Benchmarks
 //
 
-func BenchmarkMatchEqualAVX2(b *testing.B) {
+func BenchmarkEqual(b *testing.B) {
 	tests.BenchCases(b, Uint64Equal)
 	tests.BenchCases(b, Uint32Equal)
 	tests.BenchCases(b, Uint16Equal)
@@ -120,7 +120,7 @@ func BenchmarkMatchEqualAVX2(b *testing.B) {
 	tests.BenchCases(b, Float32Equal)
 }
 
-func BenchmarkMatchNotEqualAVX2(b *testing.B) {
+func BenchmarkNotEqual(b *testing.B) {
 	tests.BenchCases(b, Uint64NotEqual)
 	tests.BenchCases(b, Uint32NotEqual)
 	tests.BenchCases(b, Uint16NotEqual)
@@ -133,7 +133,7 @@ func BenchmarkMatchNotEqualAVX2(b *testing.B) {
 	tests.BenchCases(b, Float32NotEqual)
 }
 
-func BenchmarkMatchLessAVX2(b *testing.B) {
+func BenchmarkLess(b *testing.B) {
 	tests.BenchCases(b, Uint64Less)
 	tests.BenchCases(b, Uint32Less)
 	tests.BenchCases(b, Uint16Less)
@@ -146,7 +146,7 @@ func BenchmarkMatchLessAVX2(b *testing.B) {
 	tests.BenchCases(b, Float32Less)
 }
 
-func BenchmarkMatchLessEqualAVX2(b *testing.B) {
+func BenchmarkLessEqual(b *testing.B) {
 	tests.BenchCases(b, Uint64LessEqual)
 	tests.BenchCases(b, Uint32LessEqual)
 	tests.BenchCases(b, Uint16LessEqual)
@@ -159,7 +159,7 @@ func BenchmarkMatchLessEqualAVX2(b *testing.B) {
 	tests.BenchCases(b, Float32LessEqual)
 }
 
-func BenchmarkMatchGreaterAVX2(b *testing.B) {
+func BenchmarkGreater(b *testing.B) {
 	tests.BenchCases(b, Uint64Greater)
 	tests.BenchCases(b, Uint32Greater)
 	tests.BenchCases(b, Uint16Greater)
@@ -172,7 +172,7 @@ func BenchmarkMatchGreaterAVX2(b *testing.B) {
 	tests.BenchCases(b, Float32Greater)
 }
 
-func BenchmarkMatchGreaterEqualAVX2(b *testing.B) {
+func BenchmarkGreaterEqual(b *testing.B) {
 	tests.BenchCases(b, Uint64GreaterEqual)
 	tests.BenchCases(b, Uint32GreaterEqual)
 	tests.BenchCases(b, Uint16GreaterEqual)
@@ -185,7 +185,7 @@ func BenchmarkMatchGreaterEqualAVX2(b *testing.B) {
 	tests.BenchCases(b, Float32GreaterEqual)
 }
 
-func BenchmarkMatchBetweenAVX2(b *testing.B) {
+func BenchmarkBetween(b *testing.B) {
 	tests.BenchCases2(b, Uint64Between)
 	tests.BenchCases2(b, Uint32Between)
 	tests.BenchCases2(b, Uint16Between)
