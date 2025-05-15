@@ -4,7 +4,6 @@
 package encode
 
 import (
-	"bytes"
 	"fmt"
 	"slices"
 	"testing"
@@ -17,7 +16,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
-	"blockwatch.cc/knoxdb/internal/zip"
 	"github.com/stretchr/testify/require"
 )
 
@@ -197,25 +195,6 @@ func BenchmarkIntDecode(b *testing.B) {
 				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 			})
 		}
-	}
-}
-
-func BenchmarkIntEncodeLegacy(b *testing.B) {
-	for _, c := range tests.MakeBenchmarks[uint64]() {
-		buf := bytes.NewBuffer(make([]byte, zip.Int64EncodedSize(len(c.Data))))
-		b.Run(c.Name, func(b *testing.B) {
-			b.ReportAllocs()
-			b.SetBytes(int64(len(c.Data) * 8))
-			var sz int
-			for b.Loop() {
-				n, _ := zip.EncodeUint64(c.Data, buf)
-				sz += n
-				buf.Reset()
-			}
-			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
-			b.ReportMetric(float64(sz/b.N), "c(B)")
-			b.ReportMetric(100*float64(sz)/float64(b.N*c.N*8), "c(%)")
-		})
 	}
 }
 

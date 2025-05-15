@@ -288,13 +288,17 @@ func BenchmarkEncodeTime(b *testing.B) {
 		slices.Sort(c.Data)
 		b.Run(c.Name, func(b *testing.B) {
 			b.ReportAllocs()
-			b.ResetTimer()
 			b.SetBytes(int64(c.N * 8))
+			var sz int
 			for range b.N {
-				_, err := EncodeTime(c.Data, buf)
+				n, err := EncodeTime(c.Data, buf)
 				require.NoError(b, err)
 				buf.Reset()
+				sz += n
 			}
+			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+			b.ReportMetric(float64(sz*8/b.N/c.N), "bits/val")
+			b.ReportMetric(100*float64(sz)/float64(b.N*c.N*util.SizeOf[int64]()), "c(%)")
 		})
 	}
 }
@@ -322,11 +326,10 @@ func BenchmarkDecodeUncompressedTime(b *testing.B) {
 		dst := make([]int64, c.N)
 		b.Run(c.Name, func(b *testing.B) {
 			b.SetBytes(int64(c.N * 8))
-			b.ReportAllocs()
-			b.ResetTimer()
 			for range b.N {
 				_, _ = DecodeTime(dst, buf.Bytes())
 			}
+			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 		})
 	}
 }
@@ -354,11 +357,10 @@ func BenchmarkReadUncompressedTime(b *testing.B) {
 		dst := make([]int64, c.N)
 		b.Run(c.Name, func(b *testing.B) {
 			b.SetBytes(int64(c.N * 8))
-			b.ReportAllocs()
-			b.ResetTimer()
 			for range b.N {
 				_, _, _ = ReadTime(dst, bytes.NewBuffer(buf.Bytes()))
 			}
+			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 		})
 	}
 }
@@ -375,11 +377,10 @@ func BenchmarkDecodePackedTime(b *testing.B) {
 		dst := make([]int64, c.N)
 		b.Run(c.Name, func(b *testing.B) {
 			b.SetBytes(int64(c.N * 8))
-			b.ReportAllocs()
-			b.ResetTimer()
 			for range b.N {
 				_, _ = DecodeTime(dst, buf.Bytes())
 			}
+			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 		})
 	}
 }
@@ -396,10 +397,10 @@ func BenchmarkReadPackedTime(b *testing.B) {
 		dst := make([]int64, c.N)
 		b.Run(c.Name, func(b *testing.B) {
 			b.SetBytes(int64(c.N * 8))
-			b.ReportAllocs()
 			for range b.N {
 				_, _, _ = ReadTime(dst, bytes.NewBuffer(buf.Bytes()))
 			}
+			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 		})
 	}
 }
@@ -418,11 +419,10 @@ func BenchmarkDecodeRLETime(b *testing.B) {
 		dst := make([]int64, c.N)
 		b.Run(c.Name, func(b *testing.B) {
 			b.SetBytes(int64(c.N * 8))
-			b.ReportAllocs()
-			b.ResetTimer()
 			for range b.N {
 				_, _ = DecodeTime(dst, buf.Bytes())
 			}
+			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 		})
 	}
 }
@@ -441,11 +441,10 @@ func BenchmarkReadRLETime(b *testing.B) {
 		dst := make([]int64, c.N)
 		b.Run(c.Name, func(b *testing.B) {
 			b.SetBytes(int64(c.N * 8))
-			b.ReportAllocs()
-			b.ResetTimer()
 			for range b.N {
 				_, _, _ = ReadTime(dst, bytes.NewBuffer(buf.Bytes()))
 			}
+			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 		})
 	}
 }

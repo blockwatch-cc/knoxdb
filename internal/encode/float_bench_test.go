@@ -4,13 +4,11 @@
 package encode
 
 import (
-	"bytes"
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/bitset"
 	etests "blockwatch.cc/knoxdb/internal/encode/tests"
 	"blockwatch.cc/knoxdb/internal/tests"
-	"blockwatch.cc/knoxdb/internal/zip"
 	"github.com/stretchr/testify/require"
 )
 
@@ -259,42 +257,6 @@ func BenchmarkFloatDecodeFile(b *testing.B) {
 				b.SetBytes(int64(c.F.Size()))
 			})
 		}
-	}
-}
-
-func BenchmarkFloatEncodeLegacy(b *testing.B) {
-	for _, c := range tests.MakeBenchmarks[float64]() {
-		buf := bytes.NewBuffer(nil)
-		b.Run(c.Name, func(b *testing.B) {
-			b.SetBytes(int64(len(c.Data) * 8))
-			var sz int
-			for b.Loop() {
-				n, err := zip.EncodeFloat64(c.Data, buf)
-				require.NoError(b, err)
-				sz += n
-				buf.Reset()
-			}
-			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
-			b.ReportMetric(float64(sz/b.N), "c(B)")
-			b.ReportMetric(100*float64(sz)/float64(b.N*c.N*8), "c(%)")
-		})
-	}
-}
-
-func BenchmarkFloatDecodeLegacy(b *testing.B) {
-	for _, c := range tests.MakeBenchmarks[float64]() {
-		buf := bytes.NewBuffer(nil)
-		dst := make([]float64, c.N)
-		_, err := zip.EncodeFloat64(c.Data, buf)
-		require.NoError(b, err)
-		b.Run(c.Name, func(b *testing.B) {
-			b.SetBytes(int64(len(c.Data) * 8))
-			for b.Loop() {
-				_, err = zip.DecodeFloat64(dst, buf.Bytes())
-				require.NoError(b, err)
-			}
-			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
-		})
 	}
 }
 
