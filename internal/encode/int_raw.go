@@ -5,6 +5,7 @@ package encode
 
 import (
 	"fmt"
+	"slices"
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/arena"
@@ -85,7 +86,7 @@ func (c *RawContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 }
 
 func (c *RawContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) IntegerContainer[T] {
-	c.Values = vals
+	c.Values = slices.Clone(vals)
 	c.sz = util.SizeOf[T]()
 	c.typ = BlockType[T]()
 	return c

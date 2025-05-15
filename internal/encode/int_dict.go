@@ -109,16 +109,12 @@ func (c *DictionaryContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl in
 	vctx := AnalyzeInt(dict, false)
 	c.Dict = EncodeInt(vctx, dict, lvl-1)
 	vctx.Close()
-	if c.Dict.Type() != TIntegerRaw {
-		arena.Free(dict)
-	}
+	arena.Free(dict)
 
 	cctx := AnalyzeInt(codes, false)
 	c.Codes = EncodeInt(cctx, codes, lvl-1)
 	cctx.Close()
-	if c.Codes.Type() != TIntegerRaw {
-		arena.Free(codes)
-	}
+	arena.Free(codes)
 
 	return c
 }

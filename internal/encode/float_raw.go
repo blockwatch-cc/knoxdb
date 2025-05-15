@@ -5,6 +5,7 @@ package encode
 
 import (
 	"fmt"
+	"slices"
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/arena"
@@ -81,7 +82,7 @@ func (c *FloatRawContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 }
 
 func (c *FloatRawContainer[T]) Encode(_ *FloatContext[T], vals []T, _ int) FloatContainer[T] {
-	c.Values = vals
+	c.Values = slices.Clone(vals)
 	c.typ = BlockType[T]()
 	return c
 }
