@@ -6,7 +6,6 @@ package encode
 import (
 	"fmt"
 	"math"
-	"slices"
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/arena"
@@ -80,8 +79,8 @@ func (c *FloatAlpContainer[T, E]) Store(dst []byte) []byte {
 	dst = append(dst, byte(TFloatAlp))
 	dst = num.AppendUvarint(dst, uint64(c.Exponent))
 	dst = num.AppendUvarint(dst, uint64(c.Factor))
-	dst = c.Values.Store(dst)
 	dst = append(dst, byte(c.flags))
+	dst = c.Values.Store(dst)
 	if c.flags&FlagPatched > 0 {
 		dst = c.Patches.Store(dst)
 		dst = c.Positions.Store(dst)
@@ -103,6 +102,10 @@ func (c *FloatAlpContainer[T, E]) Load(buf []byte) ([]byte, error) {
 	c.Factor = uint8(v)
 	buf = buf[n:]
 
+	// load flags
+	c.flags = AlpFlags(buf[0])
+	buf = buf[1:]
+
 	// alloc and decode values child container
 	c.Values = NewInt[E](IntegerContainerType(buf[0]))
 	var err error
@@ -111,9 +114,6 @@ func (c *FloatAlpContainer[T, E]) Load(buf []byte) ([]byte, error) {
 		return buf, err
 	}
 
-	// load flags
-	c.flags = AlpFlags(buf[0])
-	buf = buf[1:]
 	if c.flags&FlagPatched > 0 {
 		// patch values
 		c.Patches = NewFloat[T](FloatContainerType(buf[0]))
@@ -142,9 +142,9 @@ func (c *FloatAlpContainer[T, E]) AppendTo(sel []uint32, dst []T) []T {
 	if sel == nil {
 		// faster to do serial unpack & decode
 		sz := c.Len()
-		dst = dst[:sz]
 		tmp := c.Values.AppendTo(nil, arena.Alloc[E](sz))
 		c.initDecoder()
+		dst = dst[:sz]
 		c.dec.Decode(dst, tmp)
 		arena.Free(tmp)
 	} else {
@@ -170,7 +170,7 @@ func (c *FloatAlpContainer[T, E]) Encode(ctx *FloatContext[T], vals []T, lvl int
 	vctx.Close()
 	if n := len(res.PatchValues); n > 0 {
 		c.flags |= FlagPatched
-		c.Patches = NewFloat[T](TFloatRaw).Encode(nil, slices.Clone(res.PatchValues), 1)
+		c.Patches = NewFloat[T](TFloatRaw).Encode(nil, res.PatchValues, 1)
 		ectx := NewIntegerContext(0, res.PatchIndices[n-1], n)
 		c.Positions = EncodeInt(ectx, res.PatchIndices, lvl-1)
 		ectx.Close()

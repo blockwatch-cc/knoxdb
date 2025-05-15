@@ -98,8 +98,7 @@ func (c *Simple8Container[T]) Get(n int) T {
 
 func (c *Simple8Container[T]) AppendTo(sel []uint32, dst []T) []T {
 	if sel == nil {
-		dst = dst[:c.N]
-		n, err := s8b.Decode(dst, c.Packed, c.For)
+		n, err := s8b.Decode(dst[:c.N], c.Packed, c.For)
 		if err != nil {
 			// unlikely
 			panic(err)

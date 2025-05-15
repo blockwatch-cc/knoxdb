@@ -136,8 +136,8 @@ func (d *Decoder[T, E]) Decode(dst []T, src []E) {
 	}
 
 	// patching patch_values
-	for i, expPos := range d.patch_indices {
-		dst[expPos] = d.patch_values[i]
+	for i, pos := range d.patch_indices {
+		dst[pos] = d.patch_values[i]
 	}
 }
 
@@ -153,8 +153,8 @@ func (d *Decoder[T, E]) DecodeFused(dst []T, src []byte, log2 int, minv E) {
 	bitpack.DecodeAlp(dst, src, log2, T(minv), d.f, d.e)
 
 	// patching patch_values
-	for i, expPos := range d.patch_indices {
-		dst[expPos] = d.patch_values[i]
+	for i, pos := range d.patch_indices {
+		dst[pos] = d.patch_values[i]
 	}
 }
 
