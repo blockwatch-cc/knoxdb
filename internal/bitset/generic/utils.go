@@ -14,7 +14,7 @@ func bitFieldLen(n int) int {
 }
 
 func bytemask(size int) byte {
-	return byte(0xff >> (7 - uint(size-1)&0x7) & 0xff)
+	return byte(0xff >> (7 - (size-1)&7))
 }
 
 func roundUpPow2(n int, pow2 int) int {
