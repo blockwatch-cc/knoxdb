@@ -11,7 +11,7 @@ var (
 	Uint8LessEqual    = cmp_le[uint8]
 	Uint8Greater      = cmp_gt[uint8]
 	Uint8GreaterEqual = cmp_ge[uint8]
-	Uint8Between      = cmp_bu[uint8]
+	Uint8Between      = cmp_bw[uint8, uint8]
 
 	// uint16
 	Uint16Equal        = cmp_eq[uint16]
@@ -20,7 +20,7 @@ var (
 	Uint16LessEqual    = cmp_le[uint16]
 	Uint16Greater      = cmp_gt[uint16]
 	Uint16GreaterEqual = cmp_ge[uint16]
-	Uint16Between      = cmp_bu[uint16]
+	Uint16Between      = cmp_bw[uint16, uint16]
 
 	// uint32
 	Uint32Equal        = cmp_eq[uint32]
@@ -29,7 +29,7 @@ var (
 	Uint32LessEqual    = cmp_le[uint32]
 	Uint32Greater      = cmp_gt[uint32]
 	Uint32GreaterEqual = cmp_ge[uint32]
-	Uint32Between      = cmp_bu[uint32]
+	Uint32Between      = cmp_bw[uint32, uint32]
 
 	// uint64
 	Uint64Equal        = cmp_eq[uint64]
@@ -38,7 +38,7 @@ var (
 	Uint64LessEqual    = cmp_le[uint64]
 	Uint64Greater      = cmp_gt[uint64]
 	Uint64GreaterEqual = cmp_ge[uint64]
-	Uint64Between      = cmp_bu[uint64]
+	Uint64Between      = cmp_bw[uint64, uint64]
 
 	// int8
 	Int8Equal        = cmp_eq[int8]
@@ -47,7 +47,7 @@ var (
 	Int8LessEqual    = cmp_le[int8]
 	Int8Greater      = cmp_gt[int8]
 	Int8GreaterEqual = cmp_ge[int8]
-	Int8Between      = cmp_bs[int8]
+	Int8Between      = cmp_bw[int8, uint8]
 
 	// int16
 	Int16Equal        = cmp_eq[int16]
@@ -56,7 +56,7 @@ var (
 	Int16LessEqual    = cmp_le[int16]
 	Int16Greater      = cmp_gt[int16]
 	Int16GreaterEqual = cmp_ge[int16]
-	Int16Between      = cmp_bs[int16]
+	Int16Between      = cmp_bw[int16, uint16]
 
 	// int32
 	Int32Equal        = cmp_eq[int32]
@@ -65,7 +65,7 @@ var (
 	Int32LessEqual    = cmp_le[int32]
 	Int32Greater      = cmp_gt[int32]
 	Int32GreaterEqual = cmp_ge[int32]
-	Int32Between      = cmp_bs[int32]
+	Int32Between      = cmp_bw[int32, uint32]
 
 	// int64
 	Int64Equal        = cmp_eq[int64]
@@ -74,7 +74,7 @@ var (
 	Int64LessEqual    = cmp_le[int64]
 	Int64Greater      = cmp_gt[int64]
 	Int64GreaterEqual = cmp_ge[int64]
-	Int64Between      = cmp_bs[int64]
+	Int64Between      = cmp_bw[int64, uint64]
 
 	// float32
 	Float32Equal        = cmp_eq_f[float32]
