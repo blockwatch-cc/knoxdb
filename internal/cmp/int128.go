@@ -38,9 +38,9 @@ func cmp_i128_eq(src num.Int128Stride, val num.Int128, res, mask []byte) int64 {
 		}
 
 		// tail
-		if src.Len()%8 > 0 {
+		if src.Len()&7 > 0 {
 			for i, l := n*8, src.Len(); i < l; i++ {
-				bit := byte(0x1) << uint(i&0x7)
+				bit := byte(1) << (i & 7)
 				if (mask[n] & bit) == 0 {
 					continue
 				}
@@ -71,10 +71,10 @@ func cmp_i128_eq(src num.Int128Stride, val num.Int128, res, mask []byte) int64 {
 		}
 
 		// tail
-		if src.Len()%8 > 0 {
+		if src.Len()&7 > 0 {
 			for i, l := n*8, src.Len(); i < l; i++ {
 				if src.X0[i] == int64(val[0]) && src.X1[i] == val[1] {
-					res[n] |= 0x1 << i
+					res[n] |= 1 << (i & 7)
 					cnt++
 				}
 			}
@@ -111,9 +111,9 @@ func cmp_i128_ne(src num.Int128Stride, val num.Int128, res, mask []byte) int64 {
 		}
 
 		// tail
-		if src.Len()%8 > 0 {
+		if src.Len()&7 > 0 {
 			for i, l := n*8, src.Len(); i < l; i++ {
-				bit := byte(0x1) << uint(i&0x7)
+				bit := byte(1) << (i & 7)
 				if (mask[n] & bit) == 0 {
 					continue
 				}
@@ -144,10 +144,10 @@ func cmp_i128_ne(src num.Int128Stride, val num.Int128, res, mask []byte) int64 {
 		}
 
 		// tail
-		if src.Len()%8 > 0 {
+		if src.Len()&7 > 0 {
 			for i, l := n*8, src.Len(); i < l; i++ {
 				if src.X0[i] != int64(val[0]) || src.X1[i] != val[1] {
-					res[n] |= 0x1 << i
+					res[n] |= 1 << (i & 7)
 					cnt++
 				}
 			}
@@ -184,9 +184,9 @@ func cmp_i128_lt(src num.Int128Stride, val num.Int128, res, mask []byte) int64 {
 		}
 
 		// tail
-		if src.Len()%8 > 0 {
+		if src.Len()&7 > 0 {
 			for i, l := n*8, src.Len(); i < l; i++ {
-				bit := byte(0x1) << uint(i&0x7)
+				bit := byte(1) << (i & 7)
 				if (mask[n] & bit) == 0 {
 					continue
 				}
@@ -217,10 +217,10 @@ func cmp_i128_lt(src num.Int128Stride, val num.Int128, res, mask []byte) int64 {
 		}
 
 		// tail
-		if src.Len()%8 > 0 {
+		if src.Len()&7 > 0 {
 			for i, l := n*8, src.Len(); i < l; i++ {
 				if src.X0[i] < int64(val[0]) || (src.X0[i] == int64(val[0]) && src.X1[i] < val[1]) {
-					res[n] |= 0x1 << i
+					res[n] |= 1 << (i & 7)
 					cnt++
 				}
 			}
@@ -257,9 +257,9 @@ func cmp_i128_le(src num.Int128Stride, val num.Int128, res, mask []byte) int64 {
 		}
 
 		// tail
-		if src.Len()%8 > 0 {
+		if src.Len()&7 > 0 {
 			for i, l := n*8, src.Len(); i < l; i++ {
-				bit := byte(0x1) << uint(i&0x7)
+				bit := byte(1) << (i & 7)
 				if (mask[n] & bit) == 0 {
 					continue
 				}
@@ -290,10 +290,10 @@ func cmp_i128_le(src num.Int128Stride, val num.Int128, res, mask []byte) int64 {
 		}
 
 		// tail
-		if src.Len()%8 > 0 {
+		if src.Len()&7 > 0 {
 			for i, l := n*8, src.Len(); i < l; i++ {
 				if src.X0[i] < int64(val[0]) || (src.X0[i] == int64(val[0]) && src.X1[i] <= val[1]) {
-					res[n] |= 0x1 << i
+					res[n] |= 1 << (i & 7)
 					cnt++
 				}
 			}
@@ -330,9 +330,9 @@ func cmp_i128_gt(src num.Int128Stride, val num.Int128, res, mask []byte) int64 {
 		}
 
 		// tail
-		if src.Len()%8 > 0 {
+		if src.Len()&7 > 0 {
 			for i, l := n*8, src.Len(); i < l; i++ {
-				bit := byte(0x1) << uint(i&0x7)
+				bit := byte(1) << (i & 7)
 				if (mask[n] & bit) == 0 {
 					continue
 				}
@@ -363,10 +363,10 @@ func cmp_i128_gt(src num.Int128Stride, val num.Int128, res, mask []byte) int64 {
 		}
 
 		// tail
-		if src.Len()%8 > 0 {
+		if src.Len()&7 > 0 {
 			for i, l := n*8, src.Len(); i < l; i++ {
 				if src.X0[i] > int64(val[0]) || (src.X0[i] == int64(val[0]) && src.X1[i] > val[1]) {
-					res[n] |= 0x1 << i
+					res[n] |= 1 << (i & 7)
 					cnt++
 				}
 			}
@@ -403,9 +403,9 @@ func cmp_i128_ge(src num.Int128Stride, val num.Int128, res, mask []byte) int64 {
 		}
 
 		// tail
-		if src.Len()%8 > 0 {
+		if src.Len()&7 > 0 {
 			for i, l := n*8, src.Len(); i < l; i++ {
-				bit := byte(0x1) << uint(i&0x7)
+				bit := byte(1) << (i & 7)
 				if (mask[n] & bit) == 0 {
 					continue
 				}
@@ -436,10 +436,10 @@ func cmp_i128_ge(src num.Int128Stride, val num.Int128, res, mask []byte) int64 {
 		}
 
 		// tail
-		if src.Len()%8 > 0 {
+		if src.Len()&7 > 0 {
 			for i, l := n*8, src.Len(); i < l; i++ {
 				if src.X0[i] > int64(val[0]) || (src.X0[i] == int64(val[0]) && src.X1[i] >= val[1]) {
-					res[n] |= 0x1 << i
+					res[n] |= 1 << (i & 7)
 					cnt++
 				}
 			}
@@ -452,7 +452,7 @@ func cmp_i128_bw(src num.Int128Stride, a, b num.Int128, bits, mask []byte) int64
 	var cnt int64
 	if mask != nil {
 		for i := range src.X0 {
-			bit := byte(0x1) << uint(i&0x7)
+			bit := byte(1) << (i & 7)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
@@ -466,7 +466,7 @@ func cmp_i128_bw(src num.Int128Stride, a, b num.Int128, bits, mask []byte) int64
 		for i := range src.X0 {
 			v := num.Int128{uint64(src.X0[i]), src.X1[i]}
 			if a.Le(v) && b.Ge(v) {
-				bits[i>>3] |= byte(0x1) << uint(i&0x7)
+				bits[i>>3] |= byte(1) << (i & 7)
 				cnt++
 			}
 		}

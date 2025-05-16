@@ -40,7 +40,7 @@ func cmp_i256_eq(src num.Int256Stride, val num.Int256, res, mask []byte) int64 {
 		// tail
 		if src.Len()%8 > 0 {
 			for i, l := n*8, src.Len(); i < l; i++ {
-				bit := byte(0x1) << uint(i&0x7)
+				bit := byte(1) << (i & 7)
 				if (mask[n] & bit) == 0 {
 					continue
 				}
@@ -74,7 +74,7 @@ func cmp_i256_eq(src num.Int256Stride, val num.Int256, res, mask []byte) int64 {
 		if src.Len()%8 > 0 {
 			for i, l := n*8, src.Len(); i < l; i++ {
 				if src.X0[i] == int64(val[0]) && src.X1[i] == val[1] && src.X2[i] == val[2] && src.X3[i] == val[3] {
-					res[n] |= 0x1 << i
+					res[n] |= 1 << (i & 7)
 					cnt++
 				}
 			}
@@ -113,7 +113,7 @@ func cmp_i256_ne(src num.Int256Stride, val num.Int256, res, mask []byte) int64 {
 		// tail
 		if src.Len()%8 > 0 {
 			for i, l := n*8, src.Len(); i < l; i++ {
-				bit := byte(0x1) << uint(i&0x7)
+				bit := byte(1) << (i & 7)
 				if (mask[n] & bit) == 0 {
 					continue
 				}
@@ -147,7 +147,7 @@ func cmp_i256_ne(src num.Int256Stride, val num.Int256, res, mask []byte) int64 {
 		if src.Len()%8 > 0 {
 			for i, l := n*8, src.Len(); i < l; i++ {
 				if src.X0[i] != int64(val[0]) || src.X1[i] != val[1] || src.X2[i] != val[2] || src.X3[i] != val[3] {
-					res[n] |= 0x1 << i
+					res[n] |= 1 << (i & 7)
 					cnt++
 				}
 			}
@@ -160,7 +160,7 @@ func cmp_i256_lt(src num.Int256Stride, val num.Int256, bits, mask []byte) int64 
 	var cnt int64
 	if mask != nil {
 		for i := range src.X0 {
-			bit := byte(0x1) << uint(i&0x7)
+			bit := byte(1) << (i & 7)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
@@ -175,7 +175,7 @@ func cmp_i256_lt(src num.Int256Stride, val num.Int256, bits, mask []byte) int64 
 			if src.Elem(i).Ge(val) {
 				continue
 			}
-			bits[i>>3] |= byte(0x1) << uint(i&0x7)
+			bits[i>>3] |= byte(1) << (i & 7)
 			cnt++
 		}
 	}
@@ -186,7 +186,7 @@ func cmp_i256_le(src num.Int256Stride, val num.Int256, bits, mask []byte) int64 
 	var cnt int64
 	if mask != nil {
 		for i := range src.X0 {
-			bit := byte(0x1) << uint(i&0x7)
+			bit := byte(1) << (i & 7)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
@@ -201,7 +201,7 @@ func cmp_i256_le(src num.Int256Stride, val num.Int256, bits, mask []byte) int64 
 			if src.Elem(i).Gt(val) {
 				continue
 			}
-			bits[i>>3] |= byte(0x1) << uint(i&0x7)
+			bits[i>>3] |= byte(1) << (i & 7)
 			cnt++
 		}
 	}
@@ -212,7 +212,7 @@ func cmp_i256_gt(src num.Int256Stride, val num.Int256, bits, mask []byte) int64 
 	var cnt int64
 	if mask != nil {
 		for i := range src.X0 {
-			bit := byte(0x1) << uint(i&0x7)
+			bit := byte(1) << (i & 7)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
@@ -227,7 +227,7 @@ func cmp_i256_gt(src num.Int256Stride, val num.Int256, bits, mask []byte) int64 
 			if src.Elem(i).Le(val) {
 				continue
 			}
-			bits[i>>3] |= byte(0x1) << uint(i&0x7)
+			bits[i>>3] |= byte(1) << (i & 7)
 			cnt++
 		}
 	}
@@ -238,7 +238,7 @@ func cmp_i256_ge(src num.Int256Stride, val num.Int256, bits, mask []byte) int64 
 	var cnt int64
 	if mask != nil {
 		for i := range src.X0 {
-			bit := byte(0x1) << uint(i&0x7)
+			bit := byte(1) << (i & 7)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
@@ -253,7 +253,7 @@ func cmp_i256_ge(src num.Int256Stride, val num.Int256, bits, mask []byte) int64 
 			if src.Elem(i).Lt(val) {
 				continue
 			}
-			bits[i>>3] |= byte(0x1) << uint(i&0x7)
+			bits[i>>3] |= byte(1) << (i & 7)
 			cnt++
 		}
 	}
@@ -265,7 +265,7 @@ func cmp_i256_bw(src num.Int256Stride, a, b num.Int256, bits, mask []byte) int64
 	var cnt int64
 	if mask != nil {
 		for i := range src.X0 {
-			bit := byte(0x1) << uint(i&0x7)
+			bit := byte(1) << (i & 7)
 			if (mask[i>>3] & bit) == 0 {
 				continue
 			}
@@ -280,7 +280,7 @@ func cmp_i256_bw(src num.Int256Stride, a, b num.Int256, bits, mask []byte) int64
 			if src.Elem(i).Sub(a).Uint256().Ge(diff) {
 				continue
 			}
-			bits[i>>3] |= byte(0x1) << uint(i&0x7)
+			bits[i>>3] |= byte(1) << (i & 7)
 			cnt++
 		}
 	}
