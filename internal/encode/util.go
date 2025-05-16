@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"math/bits"
 
+	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/pkg/num"
 )
 
 var (
@@ -15,8 +17,16 @@ var (
 )
 
 type (
+	Bitset = bitset.Bitset
+
 	NumberMatchFunc[T types.Number]      func(src []T, val T, bits []byte) int64
 	NumberRangeMatchFunc[T types.Number] func(src []T, from, to T, bits []byte) int64
+
+	I128MatchFunc      func(src num.Int128Stride, val num.Int128, bits, mask []byte) int64
+	I128RangeMatchFunc func(src num.Int128Stride, a, b num.Int128, bits, mask []byte) int64
+
+	I256MatchFunc      func(src num.Int256Stride, val num.Int256, bits, mask []byte) int64
+	I256RangeMatchFunc func(src num.Int256Stride, a, b num.Int256, bits, mask []byte) int64
 )
 
 func BlockType[T types.Number]() types.BlockType {

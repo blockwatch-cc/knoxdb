@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 
-	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/util"
@@ -16,8 +15,6 @@ import (
 var (
 	ErrInvalidType = errors.New("invalid container type")
 )
-
-type Bitset = bitset.Bitset
 
 type IntegerContainerType byte
 
@@ -29,11 +26,13 @@ const (
 	TIntegerDictionary
 	TIntegerSimple8
 	TIntegerRaw
+	TInteger128
+	TInteger256
 )
 
 var (
-	iTypeNames    = "const_delta_run_bp_dict_s8_raw"
-	iTypeNamesOfs = []int{0, 6, 12, 16, 19, 24, 27, 31}
+	iTypeNames    = "const_delta_run_bp_dict_s8_raw_i128_i256"
+	iTypeNamesOfs = []int{0, 6, 12, 16, 19, 24, 27, 31, 36, 41}
 )
 
 func (t IntegerContainerType) String() string {
@@ -82,7 +81,7 @@ func NewInt[T types.Integer](scheme IntegerContainerType) IntegerContainer[T] {
 	case TIntegerRaw:
 		return newRawContainer[T]()
 	default:
-		panic(fmt.Errorf("invalid scheme %d", scheme))
+		panic(fmt.Errorf("invalid integer scheme %d", scheme))
 	}
 }
 
@@ -119,7 +118,8 @@ func EncodeInt[T types.Integer](ctx *IntegerContext[T], v []T, lvl int) IntegerC
 func EstimateInt[T types.Integer](scheme IntegerContainerType, ctx *IntegerContext[T], v []T, lvl int) float64 {
 	// estimate cheap encodings
 	var (
-		rawSize int = 1 + num.MaxVarintLen32 + len(v)*util.SizeOf[T]()
+		sz      int = util.SizeOf[T]()
+		rawSize int = 1 + num.UvarintLen(len(v)) + len(v)*sz
 		estSize int
 		ok      bool
 	)
@@ -134,7 +134,8 @@ func EstimateInt[T types.Integer](scheme IntegerContainerType, ctx *IntegerConte
 		estSize, ok = rawSize, true
 	case TIntegerDictionary:
 		// upper bound for dict encoding using bit-packing as child base
-		estSize, ok = ctx.dictCosts(), true
+		// penalize dict at lower levels
+		estSize, ok = ctx.dictCosts()+100*(MAX_CASCADE-lvl), true
 	case TIntegerRunEnd:
 		// upper bound for run end encoding using bit-packing as child base
 		estSize, ok = ctx.runEndCosts(), true
@@ -150,7 +151,7 @@ func EstimateInt[T types.Integer](scheme IntegerContainerType, ctx *IntegerConte
 	}
 
 	// adjust raw size to sample len
-	rawSize = 1 + num.MaxVarintLen32 + len(ctx.Sample)*util.SizeOf[T]()
+	rawSize = 1 + num.UvarintLen(len(ctx.Sample)) + len(ctx.Sample)*sz
 
 	// trail encode the sample as simple8
 	enc := NewInt[T](scheme).Encode(ctx.SampleCtx, ctx.Sample, lvl)

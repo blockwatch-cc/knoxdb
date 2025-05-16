@@ -41,7 +41,7 @@ func (c *RawContainer[T]) Len() int {
 }
 
 func (c *RawContainer[T]) Size() int {
-	return 1 + num.UvarintLen(uint64(c.sz*len(c.Values))) + c.sz*len(c.Values)
+	return 1 + num.UvarintLen(len(c.Values)) + c.sz*len(c.Values)
 }
 
 func (c *RawContainer[T]) Iterator() Iterator[T] {
@@ -50,7 +50,7 @@ func (c *RawContainer[T]) Iterator() Iterator[T] {
 
 func (c *RawContainer[T]) Store(dst []byte) []byte {
 	dst = append(dst, byte(TIntegerRaw))
-	dst = num.AppendUvarint(dst, uint64(c.sz*len(c.Values)))
+	dst = num.AppendUvarint(dst, uint64(len(c.Values)))
 	// if cpu.IsBigEndian {
 	//  // TODO: flip byte order
 	// }
@@ -64,10 +64,11 @@ func (c *RawContainer[T]) Load(buf []byte) ([]byte, error) {
 	buf = buf[1:]
 	v, n := num.Uvarint(buf)
 	buf = buf[n:]
-	c.Values = util.FromByteSlice[T](buf[:int(v)])
 	c.sz = util.SizeOf[T]()
 	c.typ = BlockType[T]()
-	return buf[int(v):], nil
+	n = int(v) * c.sz
+	c.Values = util.FromByteSlice[T](buf[:n])
+	return buf[n:], nil
 }
 
 func (c *RawContainer[T]) Get(n int) T {

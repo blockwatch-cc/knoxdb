@@ -57,7 +57,7 @@ func (c *DictionaryContainer[T]) Load(buf []byte) ([]byte, error) {
 	}
 	buf = buf[1:]
 
-	// alloc and decode values child container
+	// alloc and decode dict child container
 	c.Dict = NewInt[T](IntegerContainerType(buf[0]))
 	var err error
 	buf, err = c.Dict.Load(buf)
@@ -65,7 +65,7 @@ func (c *DictionaryContainer[T]) Load(buf []byte) ([]byte, error) {
 		return buf, err
 	}
 
-	// alloc and decode ends child container
+	// alloc and decode codes child container
 	c.Codes = NewInt[uint16](IntegerContainerType(buf[0]))
 	return c.Codes.Load(buf)
 }
@@ -117,10 +117,6 @@ func (c *DictionaryContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl in
 	arena.Free(codes)
 
 	return c
-}
-
-func (c *DictionaryContainer[T]) DecodeChunk(dst *[CHUNK_SIZE]T, ofs int) {
-	// decode code chunk, then lookup loop
 }
 
 func dictEncodeArray[T types.Integer](ctx *IntegerContext[T], vals []T) ([]T, []uint16) {

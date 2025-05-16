@@ -165,10 +165,16 @@ func (c *IntegerContext[T]) EligibleSchemes() []IntegerContainerType {
 	if c.UseBits < c.PhyBits {
 		schemes = append(schemes, TIntegerBitpacked)
 	}
+
+	// FIXME: disabled s8 because s8b.Iterator decodes partial chunks which breaks
+	// container iterators plus s8b is much slower than bitpack although it often
+	// compresses better
+	//
 	// simple8b supports max 60bit values but is inefficient if many values are > 20bit
-	if c.UseBits < c.PhyBits && c.UseBits <= 60 {
-		schemes = append(schemes, TIntegerSimple8)
-	}
+	// if c.UseBits < c.PhyBits && c.UseBits <= 60 {
+	// 	schemes = append(schemes, TIntegerSimple8)
+	// }
+
 	// run-end requires avg run lengths >= 4
 	if c.preferRunEnd() {
 		schemes = append(schemes, TIntegerRunEnd)
@@ -201,11 +207,11 @@ func (c *IntegerContext[T]) runEndCosts() int {
 }
 
 func dictCosts(n, w, c int) int {
-	return 1 + bitPackCosts(n, bits.Len(uint(c-1))) + bitPackCosts(c, w)
+	return 1 + bitPackCosts(c, w) + bitPackCosts(n, bits.Len(uint(c-1)))
 }
 
 func bitPackCosts(n, w int) int {
-	return 2 + 2*num.MaxVarintLen32 + (n*w+7)/8
+	return 2 + num.MaxVarintLen32 + num.UvarintLen(n) + (n*w+63)&^63/8
 }
 
 func runEndCosts(n, r, w int) int {

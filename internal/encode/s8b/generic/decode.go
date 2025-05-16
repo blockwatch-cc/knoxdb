@@ -183,6 +183,11 @@ func (d *Decoder[T]) DecodeWordPtr(dst unsafe.Pointer, l int, buf []byte) int {
 	sel := v >> 60
 	n := maxNPerSelector[sel]
 	if l < n {
+		// TODO: partial word decode is unsupported and slow
+		// tmp := make([]T, n)
+		// d.unpack[sel](v, unsafe.Pointer(&tmp[0]), uint64(d.minv))
+		// copy(unsafe.Slice((*T)(dst), l), tmp)
+		// return l
 		return 0
 	}
 	d.unpack[sel](v, dst, uint64(d.minv))

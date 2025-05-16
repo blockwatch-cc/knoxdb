@@ -119,9 +119,8 @@ func BenchmarkIntEncodeAndStore(b *testing.B) {
 				for b.Loop() {
 					ctx := AnalyzeInt(data, scheme == TIntegerDictionary)
 					enc := NewInt[int64](scheme).Encode(ctx, data, MAX_CASCADE)
-					sz := enc.Size()
 					buf := enc.Store(make([]byte, 0, enc.Size()))
-					require.LessOrEqual(b, len(buf), sz)
+					require.LessOrEqual(b, len(buf), enc.Size())
 					if once {
 						b.Log(enc.Info())
 						once = false

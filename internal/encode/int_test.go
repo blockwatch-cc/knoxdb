@@ -45,25 +45,25 @@ func TestAnalyzeInt(t *testing.T) {
 	// assert.Contains(t, x.EligibleSchemes(), TIntegerRunEnd, "missing eligible scheme")
 	assert.Contains(t, x.EligibleSchemes(), TIntegerBitpacked, "missing eligible scheme")
 	assert.Contains(t, x.EligibleSchemes(), TIntegerRaw, "missing eligible scheme")
-	assert.Contains(t, x.EligibleSchemes(), TIntegerSimple8, "missing eligible scheme")
+	// assert.Contains(t, x.EligibleSchemes(), TIntegerSimple8, "missing eligible scheme")
 
 	// dict-friendly
 	x = AnalyzeInt([]int64{
 		0, 42, 100, 42, 100, 42, 100, 42, 100, 42, 100, 42, 100, 42, 100, 42, 100,
-		42, 100, 42, 100, 42, 100, 42, 100, 42, 100, 42, 100, 42, 100, 42, 100}, true)
+		42, 100, 42, 100, 42, 100, 42, 100, 42, 100, 42, 100, 42}, true)
 	assert.Equal(t, int64(0), x.Min, "min")
 	assert.Equal(t, int64(100), x.Max, "max")
 	assert.Equal(t, int64(0), x.Delta, "delta")
 	assert.Equal(t, 64, x.PhyBits, "phybits")
 	assert.Equal(t, 7, x.UseBits, "usebits")
 	assert.InDelta(t, 3, x.NumUnique, 1.0, "num_unique")
-	assert.Equal(t, 33, x.NumRuns, "num_runs")
-	assert.Equal(t, 33, x.NumValues, "num_values")
+	assert.Equal(t, 30, x.NumRuns, "num_runs")
+	assert.Equal(t, 30, x.NumValues, "num_values")
 	assert.NotContains(t, x.EligibleSchemes(), TIntegerRunEnd, "not eligible")
 	assert.Contains(t, x.EligibleSchemes(), TIntegerBitpacked, "missing eligible scheme")
 	assert.Contains(t, x.EligibleSchemes(), TIntegerRaw, "missing eligible scheme")
 	assert.Contains(t, x.EligibleSchemes(), TIntegerDictionary, "missing eligible scheme")
-	assert.Contains(t, x.EligibleSchemes(), TIntegerSimple8, "missing eligible scheme")
+	// assert.Contains(t, x.EligibleSchemes(), TIntegerSimple8, "missing eligible scheme")
 }
 
 func TestIntEncodeConst(t *testing.T) {
