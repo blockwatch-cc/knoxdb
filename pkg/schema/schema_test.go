@@ -1238,11 +1238,11 @@ func TestSchemaMapTo(t *testing.T) {
 
 	// active fields
 	s1 := NewSchema().WithName("test1").
-		WithField(Field{name: "field2", typ: types.FieldTypeString}).
+		WithField(Field{name: "field3", typ: types.FieldTypeUint64}).
 		WithField(Field{name: "field1", typ: types.FieldTypeInt64}).
 		Finalize()
 
-	// internal field is hidden
+	// inactive fields are hidden
 	mapping, err := s.MapTo(s1)
 	require.NoError(t, err)
 	require.Equal(t, []int{-1, 0}, mapping)
@@ -1257,7 +1257,7 @@ func TestSchemaMapTo(t *testing.T) {
 
 	mapping, err = s.MapTo(s2)
 	require.NoError(t, err)
-	require.Equal(t, []int{-1, -1, -1, 0}, mapping)
+	require.Equal(t, []int{1, -1, -1, 0}, mapping)
 }
 
 func TestSchemaDeleteField(t *testing.T) {

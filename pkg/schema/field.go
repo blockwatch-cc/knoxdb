@@ -25,7 +25,7 @@ type Field struct {
 	compress types.FieldCompression // data compression from struct tag
 	index    types.IndexType        // index type: none, hash, int, bloom
 	fixed    uint16                 // 0..65535 fixed size array/bytes/string length
-	scale    uint8                  // 0..255 fixed point scale, bloom error probability 1/x (1..4)
+	scale    uint8                  // 0..255 fixed point scale, time scale, bloom error probability 1/x (1..4)
 
 	// encoder values for INSERT, UPDATE, QUERY
 	isArray  bool             // field is a fixed size array
@@ -407,7 +407,7 @@ func (f *Field) Encode(w io.Writer, val any, layout binary.ByteOrder) (err error
 	case OpCodeDateTime:
 		tv, ok := val.(time.Time)
 		if ok {
-			err = EncodeInt(w, OpCodeUint64, tv.UnixNano(), layout)
+			err = EncodeInt(w, OpCodeUint64, TimeScale(f.scale).ToUnix(tv), layout)
 		}
 
 	case OpCodeFloat32:

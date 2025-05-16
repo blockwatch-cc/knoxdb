@@ -193,7 +193,7 @@ func (c Condition) Compile(s *schema.Schema) (*FilterTreeNode, error) {
 		if s.HasEnums() {
 			enum, _ = s.Enums().Lookup(c.Name)
 		}
-		caster := schema.NewCaster(typ, enum)
+		caster := schema.NewCaster(typ, field.Scale(), enum)
 
 		// init matcher impl from value(s)
 		var (

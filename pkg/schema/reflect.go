@@ -293,6 +293,7 @@ func (f *Field) ParseType(r reflect.StructField) error {
 		switch r.Type.String() {
 		case "time.Time":
 			typ = types.FieldTypeDatetime
+			scale = TIME_SCALE_NANO.AsUint()
 		case "num.Decimal32":
 			typ = types.FieldTypeDecimal32
 			scale = num.MaxDecimal32Precision
@@ -452,21 +453,29 @@ func (f *Field) ParseTag(tag string) error {
 				return fmt.Errorf("missing value for fixed tag")
 			}
 		case "scale":
-			switch f.typ {
-			case types.FieldTypeDecimal32, types.FieldTypeDecimal64, types.FieldTypeDecimal128, types.FieldTypeDecimal256:
 			// only compatible with:
 			// - decimal types
+			// - datetime
+			switch f.typ {
+			case types.FieldTypeDecimal32, types.FieldTypeDecimal64,
+				types.FieldTypeDecimal128, types.FieldTypeDecimal256:
+				if ok {
+					sc, err := parseInt(val, "scale", 0, int(maxScale))
+					if err != nil {
+						return err
+					}
+					scale = uint8(sc)
+				} else {
+					return fmt.Errorf("missing value for scale tag")
+				}
+			case types.FieldTypeDatetime:
+				s, ok := ParseTimeScale(val)
+				if !ok {
+					return fmt.Errorf("invalid time scale value %q", val)
+				}
+				scale = s.AsUint()
 			default:
 				return fmt.Errorf("scale tag unsupported on type %s", f.typ)
-			}
-			if ok {
-				sc, err := parseInt(val, "scale", 0, int(maxScale))
-				if err != nil {
-					return err
-				}
-				scale = uint8(sc)
-			} else {
-				return fmt.Errorf("missing value for scale tag")
 			}
 		case "enum":
 			switch f.typ {

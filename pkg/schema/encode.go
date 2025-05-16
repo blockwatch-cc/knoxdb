@@ -319,7 +319,7 @@ func writeField(buf *bytes.Buffer, code OpCode, field *Field, ptr unsafe.Pointer
 	case OpCodeDateTime:
 		tm := *(*time.Time)(ptr)
 		var b [8]byte
-		LE.PutUint64(b[:], uint64(tm.UnixNano()))
+		LE.PutUint64(b[:], uint64(TimeScale(field.scale).ToUnix(tm)))
 		_, err = buf.Write(b[:])
 
 	case OpCodeInt256:

@@ -231,7 +231,7 @@ func (d *Decoder) Read(r io.Reader, val any) error {
 
 		case OpCodeDateTime:
 			ts := int64(LE.Uint64(d.buf.Next(8)))
-			*(*time.Time)(ptr) = time.Unix(0, ts).UTC()
+			*(*time.Time)(ptr) = TimeScale(field.scale).FromUnix(ts)
 
 		case OpCodeInt128:
 			*(*num.Int128)(ptr) = num.Int128FromBytes(d.buf.Next(16))
@@ -434,7 +434,7 @@ func readField(code OpCode, field *Field, ptr unsafe.Pointer, buf []byte, enums 
 
 	case OpCodeDateTime:
 		ts := int64(LE.Uint64(buf))
-		*(*time.Time)(ptr) = time.Unix(0, ts).UTC()
+		*(*time.Time)(ptr) = TimeScale(field.scale).FromUnix(ts)
 		buf = buf[8:]
 
 	case OpCodeInt128:

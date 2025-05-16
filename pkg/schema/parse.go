@@ -24,7 +24,7 @@ type ValueParser interface {
 func NewParser(typ types.FieldType, scale uint8, enum *EnumDictionary) ValueParser {
 	switch typ {
 	case types.FieldTypeDatetime:
-		return TimeParser{}
+		return TimeParser{scale: TimeScale(scale)}
 	case types.FieldTypeBoolean:
 		return BoolParser{}
 	case types.FieldTypeString:
@@ -317,14 +317,16 @@ func (_ BytesParser) ParseSlice(s string) (any, error) {
 }
 
 // time parser
-type TimeParser struct{}
+type TimeParser struct {
+	scale TimeScale
+}
 
-func (_ TimeParser) ParseValue(s string) (any, error) {
+func (p TimeParser) ParseValue(s string) (any, error) {
 	tm, err := util.ParseTime(s)
 	if err != nil {
 		return nil, err
 	}
-	return tm.Time().UnixNano(), nil
+	return p.scale.ToUnix(tm.Time()), nil
 }
 
 func (p TimeParser) ParseSlice(s string) (any, error) {
@@ -335,7 +337,7 @@ func (p TimeParser) ParseSlice(s string) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		slice[i] = tm.Time().UnixNano()
+		slice[i] = p.scale.ToUnix(tm.Time())
 	}
 	return slice, nil
 }

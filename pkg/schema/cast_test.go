@@ -229,7 +229,7 @@ func TestCastNewCaster(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			caster := NewCaster(tt.fieldType, nil)
+			caster := NewCaster(tt.fieldType, 0, nil)
 			assert.IsType(t, tt.expected, caster)
 		})
 	}
@@ -533,7 +533,7 @@ func (c CustomBinaryMarshaler) MarshalBinary() ([]byte, error) {
 // TestCastBytesCaster tests the BytesCaster to ensure it correctly casts various
 // input types to []byte and handles edge cases and errors appropriately.
 func TestCastBytesCaster(t *testing.T) {
-	caster := NewCaster(types.FieldTypeBytes, nil)
+	caster := NewCaster(types.FieldTypeBytes, 0, nil)
 
 	t.Run("CastValue", func(t *testing.T) {
 		tests := []struct {
@@ -660,7 +660,7 @@ func TestCastI128Caster(t *testing.T) {
 // TestCastI256Caster tests the I256Caster to ensure it correctly casts various
 // input types to num.Int256 and handles edge cases and errors appropriately.
 func TestCastI256Caster(t *testing.T) {
-	caster := NewCaster(types.FieldTypeInt256, nil)
+	caster := NewCaster(types.FieldTypeInt256, 0, nil)
 
 	t.Run("CastValue", func(t *testing.T) {
 		tests := []struct {

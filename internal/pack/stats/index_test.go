@@ -77,7 +77,7 @@ func makeFilter(name string, mode query.FilterMode, val, val2 any) *query.Filter
 		panic(fmt.Errorf("missing field %s in schema %s", name, TestSchema))
 	}
 	m := query.NewFactory(field.Type()).New(mode)
-	c := schema.NewCaster(field.Type(), nil)
+	c := schema.NewCaster(field.Type(), field.Scale(), nil)
 	var err error
 	switch mode {
 	case query.FilterModeRange:

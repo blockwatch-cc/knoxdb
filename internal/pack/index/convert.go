@@ -50,7 +50,7 @@ func (c *RelinkConverter) QueryNode(node *query.FilterTreeNode) *query.FilterTre
 			},
 		}
 	} else {
-		val, err := schema.NewCaster(types.FieldTypeUint64, nil).CastValue(flt.Value)
+		val, err := schema.NewCaster(types.FieldTypeUint64, 0, nil).CastValue(flt.Value)
 		if err != nil {
 			panic(fmt.Errorf("cast index query value %T to u64: %v", flt.Value, err))
 		}

@@ -127,7 +127,7 @@ func (v View) Get(i int) (val any, ok bool) {
 	}
 	switch field.typ {
 	case types.FieldTypeDatetime:
-		val, ok = time.Unix(0, int64(LE.Uint64(v.buf[x:y]))).UTC(), true
+		val, ok = TimeScale(field.scale).FromUnix(int64(LE.Uint64(v.buf[x:y]))), true
 	case types.FieldTypeInt64:
 		val, ok = int64(LE.Uint64(v.buf[x:y])), true
 	case types.FieldTypeUint64:
@@ -230,7 +230,7 @@ func (v View) Append(val any, i int) any {
 		if val == nil {
 			val = make([]time.Time, 0)
 		}
-		val = append(val.([]time.Time), time.Unix(0, int64(LE.Uint64(v.buf[x:y]))).UTC())
+		val = append(val.([]time.Time), TimeScale(field.scale).FromUnix(int64(LE.Uint64(v.buf[x:y]))))
 	case types.FieldTypeInt64:
 		if val == nil {
 			val = make([]int64, 0)
@@ -361,7 +361,7 @@ func (v View) Set(i int, val any) {
 		// unsupported, may alter length
 	case types.FieldTypeDatetime:
 		if tm, ok := val.(time.Time); ok {
-			LE.PutUint64(v.buf[x:y], uint64(tm.UnixNano()))
+			LE.PutUint64(v.buf[x:y], uint64(TimeScale(field.scale).ToUnix(tm)))
 		}
 	case types.FieldTypeInt64:
 		if i64, ok := val.(int64); ok {

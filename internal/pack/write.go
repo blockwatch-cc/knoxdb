@@ -203,7 +203,7 @@ func (p *Package) SetValue(col, row int, val any) error {
 		if v.IsZero() {
 			b.Int64().Set(row, 0)
 		} else {
-			b.Int64().Set(row, v.UnixNano())
+			b.Int64().Set(row, schema.TimeScale(f.Scale()).ToUnix(v))
 		}
 	case bool:
 		if v {
@@ -310,11 +310,13 @@ func (p *Package) SetWire(row int, buf []byte) {
 			continue
 		}
 		switch field.Type {
-		case types.FieldTypeUint64, types.FieldTypeInt64, types.FieldTypeDatetime, types.FieldTypeFloat64, types.FieldTypeDecimal64:
+		case types.FieldTypeUint64, types.FieldTypeInt64, types.FieldTypeDatetime,
+			types.FieldTypeFloat64, types.FieldTypeDecimal64:
 			b.Uint64().Set(row, *(*uint64)(unsafe.Pointer(&buf[0])))
 			buf = buf[8:]
 
-		case types.FieldTypeUint32, types.FieldTypeInt32, types.FieldTypeFloat32, types.FieldTypeDecimal32:
+		case types.FieldTypeUint32, types.FieldTypeInt32,
+			types.FieldTypeFloat32, types.FieldTypeDecimal32:
 			b.Uint32().Set(row, *(*uint32)(unsafe.Pointer(&buf[0])))
 			buf = buf[4:]
 

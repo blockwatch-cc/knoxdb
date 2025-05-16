@@ -186,7 +186,7 @@ func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, maps []
 			*(*uint8)(fptr) = b.Uint8().Get(row)
 
 		case types.FieldTypeDatetime:
-			(*(*time.Time)(fptr)) = time.Unix(0, b.Int64().Get(row)).UTC()
+			(*(*time.Time)(fptr)) = schema.TimeScale(field.Scale).FromUnix(b.Int64().Get(row))
 
 		case types.FieldTypeBoolean:
 			*(*bool)(fptr) = b.Bool().IsSet(row)
@@ -324,7 +324,7 @@ func (p *Package) ReadCol(col int) any {
 		res := make([]time.Time, p.nRows)
 		for i, v := range b.Int64().Slice() {
 			if v > 0 {
-				res[i] = time.Unix(0, v).UTC()
+				res[i] = schema.TimeScale(f.Scale()).FromUnix(v)
 			} else {
 				res[i] = zeroTime
 			}
@@ -437,7 +437,8 @@ func (p *Package) Bool(col, row int) bool {
 
 func (p *Package) Time(col, row int) time.Time {
 	if ts := p.blocks[col].Int64().Get(row); ts > 0 {
-		return time.Unix(0, ts).UTC()
+		f, _ := p.schema.FieldByIndex(col)
+		return schema.TimeScale(f.Scale()).FromUnix(ts)
 	} else {
 		return zeroTime
 	}
@@ -452,22 +453,22 @@ func (p *Package) Int128(col, row int) num.Int128 {
 }
 
 func (p *Package) Decimal256(col, row int) num.Decimal256 {
-	f, _ := p.schema.FieldById(uint16(col))
+	f, _ := p.schema.FieldByIndex(col)
 	return num.NewDecimal256(p.blocks[col].Int256().Elem(row), f.Scale())
 }
 
 func (p *Package) Decimal128(col, row int) num.Decimal128 {
-	f, _ := p.schema.FieldById(uint16(col))
+	f, _ := p.schema.FieldByIndex(col)
 	return num.NewDecimal128(p.blocks[col].Int128().Elem(row), f.Scale())
 }
 
 func (p *Package) Decimal64(col, row int) num.Decimal64 {
-	f, _ := p.schema.FieldById(uint16(col))
+	f, _ := p.schema.FieldByIndex(col)
 	return num.NewDecimal64(p.blocks[col].Int64().Get(row), f.Scale())
 }
 
 func (p *Package) Decimal32(col, row int) num.Decimal32 {
-	f, _ := p.schema.FieldById(uint16(col))
+	f, _ := p.schema.FieldByIndex(col)
 	return num.NewDecimal32(p.blocks[col].Int32().Get(row), f.Scale())
 }
 

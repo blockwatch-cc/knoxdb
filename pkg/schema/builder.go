@@ -144,7 +144,7 @@ func (b *Builder) Write(i int, val any) error {
 	case types.FieldTypeDatetime:
 		switch tm := val.(type) {
 		case time.Time:
-			b.layout.PutUint64(b.buf[x:y], uint64(tm.UnixNano()))
+			b.layout.PutUint64(b.buf[x:y], uint64(TimeScale(field.scale).ToUnix(tm)))
 		case int64:
 			b.layout.PutUint64(b.buf[x:y], uint64(tm))
 		default:

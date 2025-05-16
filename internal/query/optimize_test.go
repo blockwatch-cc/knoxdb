@@ -304,7 +304,7 @@ func makeNode(field schema.Field, mode FilterMode, value any) *FilterTreeNode {
 		Matcher: newFactory(blockType).New(mode),
 	}
 
-	caster := schema.NewCaster(field.Type(), nil)
+	caster := schema.NewCaster(field.Type(), field.Scale(), nil)
 
 	// Handle different modes appropriately
 	switch mode {

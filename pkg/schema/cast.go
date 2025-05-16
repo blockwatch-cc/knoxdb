@@ -37,10 +37,10 @@ func castError(val any, kind string) error {
 	return fmt.Errorf("cast: unexpected value type %T for %s condition", val, kind)
 }
 
-func NewCaster(typ types.FieldType, enum *EnumDictionary) ValueCaster {
+func NewCaster(typ types.FieldType, scale uint8, enum *EnumDictionary) ValueCaster {
 	switch typ {
 	case types.FieldTypeDatetime:
-		return TimeCaster{}
+		return TimeCaster{scale: TimeScale(scale)}
 	case types.FieldTypeBoolean:
 		return BoolCaster{}
 	case types.FieldTypeString:
@@ -778,14 +778,16 @@ func (c FloatCaster[T]) CastSlice(val any) (res any, err error) {
 }
 
 // time caster
-type TimeCaster struct{}
+type TimeCaster struct {
+	scale TimeScale
+}
 
 func (c TimeCaster) CastValue(val any) (res any, err error) {
 	v, ok := val.(time.Time)
 	if !ok {
 		err = castError(val, "time")
 	} else {
-		res = v.UnixNano()
+		res = c.scale.ToUnix(v)
 	}
 	return
 }
@@ -797,7 +799,7 @@ func (c TimeCaster) CastSlice(val any) (res any, err error) {
 	} else {
 		r := make([]int64, len(v))
 		for i := range v {
-			r[i] = v[i].UnixNano()
+			r[i] = c.scale.ToUnix(v[i])
 		}
 		res = r
 	}
