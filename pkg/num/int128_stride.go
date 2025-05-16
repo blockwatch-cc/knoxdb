@@ -3,6 +3,8 @@
 
 package num
 
+import "iter"
+
 // represents a Int128 slice in two strides for higher and lower qword
 // used for vector match algorithms
 type Int128Stride struct {
@@ -106,11 +108,11 @@ func (s Int128Stride) MinMax() (Int128, Int128) {
 		s0 := s.Elem(0)
 		s1 := s.Elem(1)
 		if s0.Lt(s1) {
-			max = s0
-			min = s1
-		} else {
 			max = s1
 			min = s0
+		} else {
+			max = s0
+			min = s1
 		}
 
 		for i := 2; i < l; i++ {
@@ -173,8 +175,18 @@ func (s *Int128Stride) Insert(k int, vs Int128Stride) {
 	*s = s2
 }
 
-func (s *Int128Stride) ForEach(fn func(Int128)) {
+func (s Int128Stride) ForEach(fn func(Int128)) {
 	for i, l := 0, len(s.X0); i < l; i++ {
 		fn(Int128{uint64(s.X0[i]), s.X1[i]})
+	}
+}
+
+func (s Int128Stride) Iterator() iter.Seq2[int, Int128] {
+	return func(fn func(int, Int128) bool) {
+		for i := 0; i < len(s.X0); i++ {
+			if !fn(i, s.Elem(i)) {
+				return
+			}
+		}
 	}
 }

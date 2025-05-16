@@ -30,6 +30,14 @@ func (x Int256) Mul(y Int256) Int256 {
 	return res
 }
 
+func (x Int256) Mul64(y int64) (z Int256) {
+	return x.Mul(Int256FromInt64(y))
+}
+
+func (x Int256) Div64(y int64) Int256 {
+	return x.Div(Int256FromInt64(y))
+}
+
 // FIXME: IEEE 754-2008 roundTiesToEven
 //
 // Div interprets n and d as two's complement signed integers,

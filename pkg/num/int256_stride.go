@@ -6,6 +6,8 @@
 
 package num
 
+import "iter"
+
 // represents a Int256 slice in four strides fom highest to lowest qword
 // used for vector match algorithms
 type Int256Stride struct {
@@ -119,11 +121,11 @@ func (s Int256Stride) MinMax() (Int256, Int256) {
 		s0 := s.Elem(0)
 		s1 := s.Elem(1)
 		if s0.Lt(s1) {
-			max = s0
-			min = s1
-		} else {
 			max = s1
 			min = s0
+		} else {
+			max = s0
+			min = s1
 		}
 
 		for i := 2; i < l; i++ {
@@ -197,5 +199,15 @@ func (s *Int256Stride) Insert(k int, vs Int256Stride) {
 func (s *Int256Stride) ForEach(fn func(Int256)) {
 	for i, l := 0, len(s.X0); i < l; i++ {
 		fn(Int256{uint64(s.X0[i]), s.X1[i], s.X2[i], s.X3[i]})
+	}
+}
+
+func (s Int256Stride) Iterator() iter.Seq2[int, Int256] {
+	return func(fn func(int, Int256) bool) {
+		for i := 0; i < len(s.X0); i++ {
+			if !fn(i, Int256{uint64(s.X0[i]), s.X1[i], s.X2[i], s.X3[i]}) {
+				return
+			}
+		}
 	}
 }
