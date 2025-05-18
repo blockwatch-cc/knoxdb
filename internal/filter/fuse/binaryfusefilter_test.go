@@ -6,7 +6,7 @@ import (
 	"testing"
 	"unsafe"
 
-	"github.com/cespare/xxhash/v2"
+	"blockwatch.cc/knoxdb/internal/hash/xxhash"
 	"github.com/stretchr/testify/assert"
 )
 
