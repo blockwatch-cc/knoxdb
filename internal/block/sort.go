@@ -33,7 +33,7 @@ func (b *Block) Cmp(i, j int) int {
 		return b.Float32().Cmp(i, j)
 	case BlockBool:
 		bits := b.Bool()
-		bi, bj := bits.IsSet(i), bits.IsSet(j)
+		bi, bj := bits.Contains(i), bits.Contains(j)
 		switch {
 		case bi == bj:
 			return 0

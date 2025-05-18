@@ -62,7 +62,7 @@ type Segment struct {
 
 func newSegment(s *schema.Schema, id uint32, maxsz int) *Segment {
 	return &Segment{
-		xact: xroar.NewBitmap(),
+		xact: xroar.New(),
 		data: pack.New().
 			WithSchema(s).
 			WithMaxRows(maxsz).
@@ -250,7 +250,7 @@ func (s *Segment) SetXmax(rid, xid uint64) {
 
 func (s *Segment) CommitTx(xid uint64) {
 	// drop from active set (xid may not exist)
-	s.xact.Remove(xid)
+	s.xact.Unset(xid)
 }
 
 func (s *Segment) AbortTx(xid uint64) {
@@ -274,7 +274,7 @@ func (s *Segment) AbortTx(xid uint64) {
 	for i, v := range xmaxs {
 		if v == xid {
 			xmaxs[i] = 0
-			dels.Clear(i)
+			dels.Unset(i)
 			dirty = true
 		}
 	}
@@ -287,7 +287,7 @@ func (s *Segment) AbortTx(xid uint64) {
 	s.nAbort += uint32(s.tomb.AbortTx(xid))
 
 	// drop from active set
-	s.xact.Remove(xid)
+	s.xact.Unset(xid)
 }
 
 func (s *Segment) AbortActiveTx() int {
@@ -311,7 +311,7 @@ func (s *Segment) AbortActiveTx() int {
 	for i, v := range xmaxs {
 		if s.xact.Contains(v) {
 			xmaxs[i] = 0
-			dels.Clear(i)
+			dels.Unset(i)
 			dirty = true
 		}
 	}
@@ -324,7 +324,7 @@ func (s *Segment) AbortActiveTx() int {
 	s.nAbort += uint32(s.tomb.AbortActiveTx(s.xact))
 
 	// clear xact
-	n := s.xact.GetCardinality()
+	n := s.xact.Count()
 	s.xact.Reset()
 	return n
 }
@@ -426,7 +426,7 @@ func (s *Segment) Store(ctx context.Context, bucket store.Bucket) error {
 
 func loadSegment(ctx context.Context, s *schema.Schema, bucket store.Bucket, id uint32, maxsz int) (*Segment, error) {
 	seg := &Segment{
-		xact: xroar.NewBitmap(),
+		xact: xroar.New(),
 		data: pack.New().
 			WithSchema(s).
 			WithMaxRows(maxsz).
@@ -481,7 +481,7 @@ func loadSegment(ctx context.Context, s *schema.Schema, bucket store.Bucket, id 
 	xkey := pack.EncodeBlockKey(id, JournalXactKey)
 	buf := bucket.Get(xkey)
 	if buf != nil {
-		seg.xact = xroar.FromBufferWithCopy(buf)
+		seg.xact = xroar.NewFromBufferWithCopy(buf)
 	}
 
 	// load tomb
@@ -538,13 +538,13 @@ func (s *Segment) Match(node *query.FilterTreeNode, snap *types.Snapshot, bits *
 		// remove deleted records (xmax[n] > 0) and records from aborted
 		// transactions (xmin[n] == 0)
 		for i, l := 0, s.data.Len(); i < l; i++ {
-			if !bits.IsSet(i) {
+			if !bits.Contains(i) {
 				continue
 			}
 			if s.data.Xmax(i) == 0 && s.data.Xmin(i) > 0 {
 				continue
 			}
-			bits.Clear(i)
+			bits.Unset(i)
 		}
 
 	default:
@@ -552,20 +552,20 @@ func (s *Segment) Match(node *query.FilterTreeNode, snap *types.Snapshot, bits *
 		// - xmin[n] < snap.xmax
 		// - xmin[n] NIN snap.xact
 		for i, l := 0, s.data.Len(); i < l; i++ {
-			if !bits.IsSet(i) {
+			if !bits.Contains(i) {
 				continue
 			}
 
 			// remove deleted records, i.e. xmax is set and visible
 			if xmax := s.data.Xmax(i); xmax > 0 && snap.IsVisible(xmax) {
-				bits.Clear(i)
+				bits.Unset(i)
 				continue
 			}
 
 			// remove inserted records when xmin is not visible
 			// (includes records from aborted transactions i.e. xmin = 0)
 			if !snap.IsVisible(s.data.Xmin(i)) {
-				bits.Clear(i)
+				bits.Unset(i)
 			}
 		}
 	}

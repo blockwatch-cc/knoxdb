@@ -241,7 +241,7 @@ func (c *CompositeHashConverter) ConvertPack(pkg *pack.Package, mode pack.WriteM
 			case block.BlockInt8, block.BlockUint8:
 				hasher.Write([]byte{b.Uint8().Get(i)})
 			case block.BlockBool:
-				if b.Bool().IsSet(i) {
+				if b.Bool().Contains(i) {
 					hasher.Write([]byte{1})
 				} else {
 					hasher.Write([]byte{0})

@@ -347,7 +347,7 @@ type CompareFunc2[T types.Number] func(T, T, *Bitset, *Bitset)
 type CompareFunc3[T types.Number] func(any, *Bitset, *Bitset)
 
 func testCompareFunc[T types.Number](t *testing.T, cmp CompareFunc[T], src []T, mode types.FilterMode) {
-	bits := bitset.NewBitset(len(src))
+	bits := bitset.New(len(src))
 	minv, maxv := slices.Min(src), slices.Max(src)
 
 	// single value
@@ -377,7 +377,7 @@ func testCompareFunc[T types.Number](t *testing.T, cmp CompareFunc[T], src []T, 
 }
 
 func testCompareFunc2[T types.Number](t *testing.T, cmp CompareFunc2[T], src []T, mode types.FilterMode) {
-	bits := bitset.NewBitset(len(src))
+	bits := bitset.New(len(src))
 	minv, maxv := slices.Min(src), slices.Max(src)
 
 	// single value
@@ -420,10 +420,10 @@ func testCompareFunc2[T types.Number](t *testing.T, cmp CompareFunc2[T], src []T
 }
 
 func testCompareFunc3[T types.Number](t *testing.T, cmp CompareFunc3[T], src []T, mode types.FilterMode) {
-	bits := bitset.NewBitset(len(src))
+	bits := bitset.New(len(src))
 
 	// construct set
-	set := xroar.NewBitmap()
+	set := xroar.New()
 	for range 10 {
 		set.Set(uint64(src[util.RandIntn(len(src))]))
 	}

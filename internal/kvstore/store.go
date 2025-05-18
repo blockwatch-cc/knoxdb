@@ -37,7 +37,7 @@ type KVStore struct {
 	schema     *schema.Schema      // store schema
 	storeId    uint64              // tagged hash
 	opts       engine.StoreOptions // copy of config options
-	db         store.DB            // lower-level KV store (e.g. boltdb or badger)
+	db         store.DB            // lower-level KV store (e.g. boltdb)
 	key        []byte              // name of store's data bucket in the db
 	state      engine.ObjectState  // volatile state
 	isZeroCopy bool                // storage reads are zero copy (copy to safe references)

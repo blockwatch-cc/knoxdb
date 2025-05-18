@@ -100,7 +100,7 @@ func (p *Package) ReadValue(col, row int, typ types.FieldType, scale uint8) any 
 			return zeroTime
 		}
 	case types.FieldTypeBoolean:
-		return b.Bool().IsSet(row)
+		return b.Bool().Contains(row)
 	case types.FieldTypeBytes:
 		return b.Bytes().Elem(row)
 	case types.FieldTypeString:

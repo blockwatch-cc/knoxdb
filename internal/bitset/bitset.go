@@ -7,10 +7,10 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"io"
-	"math/bits"
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/arena"
+	"golang.org/x/exp/constraints"
 )
 
 var bitsetPool = sync.Pool{
@@ -24,9 +24,9 @@ type Bitset struct {
 	noclose bool
 }
 
-// NewBitset allocates a new Bitset with a custom size and default capacity similar
+// New allocates a new Bitset with a custom size and default capacity similar
 // to the next power of 2. Call Close() to return the bitset after use.
-func NewBitset(size int) *Bitset {
+func New(size int) *Bitset {
 	sz := bitFieldLen(size)
 	s := bitsetPool.Get().(*Bitset)
 	s.buf = arena.AllocBytes(sz)[:sz]
@@ -36,8 +36,8 @@ func NewBitset(size int) *Bitset {
 	return s
 }
 
-// FromBuffer references a pre-allocated byte slice.
-func FromBuffer(buf []byte, sz int) *Bitset {
+// NewFromBuffer references a pre-allocated byte slice.
+func NewFromBuffer(buf []byte, sz int) *Bitset {
 	if sz == 0 {
 		sz = len(buf) << 3
 	}
@@ -53,6 +53,209 @@ func FromBuffer(buf []byte, sz int) *Bitset {
 	return s
 }
 
+// NewFromBuffer creates a new bitset and sets indexed positions.
+func NewFromIndexes[T constraints.Integer](idxs []T) *Bitset {
+	if len(idxs) == 0 {
+		return New(0)
+	}
+	s := New(int(idxs[len(idxs)-1]) + 1)
+	for _, i := range idxs {
+		s.setbit(int(i))
+	}
+	s.cnt = len(idxs)
+	return s
+}
+
+// Clear clears the bitset contents and sets its size to zero.
+func (s *Bitset) Clear() *Bitset {
+	if len(s.buf) > 0 && s.cnt != 0 {
+		clear(s.buf)
+	}
+	s.size = 0
+	s.cnt = 0
+	s.buf = s.buf[:0]
+	return s
+}
+
+// Close resets size to zero and returns the internal buffer back to
+// the allocator. For efficiency the contents is not cleared and should be
+// on allocation. Using the bitset after calling Close is illegal.
+func (s *Bitset) Close() {
+	if s == nil {
+		return
+	}
+	if !s.noclose {
+		arena.Free(s.buf)
+		s.noclose = false
+	}
+	s.buf = nil
+	s.cnt = 0
+	s.size = 0
+	bitsetPool.Put(s)
+}
+
+func (s *Bitset) Set(i int) *Bitset {
+	if i < 0 || i >= s.size {
+		return s
+	}
+	s.buf[i>>3] |= bitmask[i&7]
+	s.cnt = -1
+	return s
+}
+
+func (s *Bitset) Unset(i int) *Bitset {
+	if i < 0 || i >= s.size {
+		return s
+	}
+	mask := bitmask[i&7]
+	if s.cnt > 0 && s.buf[i>>3]&mask > 0 {
+		s.cnt--
+	}
+	s.buf[i>>3] &^= mask
+	return s
+}
+
+func (s *Bitset) SetFromBytes(buf []byte, size int, reverse bool) *Bitset {
+	l := bitFieldLen(size)
+	if cap(s.buf) < l {
+		if !s.noclose {
+			arena.Free(s.buf)
+			s.noclose = false
+		}
+		s.buf = arena.AllocBytes(l)[:l]
+	} else if s.size > size && s.cnt >= 0 {
+		s.cnt = -1
+		clear(s.buf[size>>3:])
+	}
+	s.size = size
+	s.buf = s.buf[:l]
+	copy(s.buf, buf)
+	if reverse {
+		for i, v := range s.buf {
+			s.buf[i] = reverseLut256[v]
+		}
+	}
+	s.cnt = -1
+	// ensure the last byte is masked
+	if size&7 > 0 {
+		s.buf[l-1] &= bytemask(size)
+	}
+	return s
+}
+
+func (s *Bitset) SetRange(start, end int) *Bitset {
+	if start > s.size {
+		return s
+	}
+	// sanitize bounds
+	start = max(0, start)
+	end = min(s.size-1, end)
+	x, y := start>>3, end>>3
+
+	// short range within same byte
+	if x == y {
+		var b byte
+		for i := start & 7; i <= end&7; i++ {
+			b |= 1 << i
+		}
+		s.buf[x] |= b
+		s.cnt = -1
+		return s
+	}
+
+	// long range across bytes
+
+	// write start byte
+	if start&7 > 0 {
+		// mask start byte
+		s.buf[x] |= 255 << (start & 7)
+		x++
+	}
+
+	// write end byte
+	if end&7 != 7 {
+		// mask end byte
+		s.buf[y] |= 2<<(end&7) - 1
+		y--
+	}
+
+	// write intermediate bytes if any
+	for i := x; i <= y; i++ {
+		s.buf[i] = 0xff
+	}
+
+	// reset count
+	s.cnt = -1
+
+	return s
+}
+
+func (s *Bitset) SetIndexes(idxs []int) *Bitset {
+	for _, i := range idxs {
+		s.setbit(i)
+	}
+	s.cnt = -1
+	return s
+}
+
+func (s *Bitset) Contains(i int) bool {
+	if i < 0 || i >= s.size {
+		return false
+	}
+	return (s.buf[i>>3] & bitmask[i&7]) > 0
+}
+
+func (s *Bitset) ContainsRange(start, end int) bool {
+	if start >= s.size {
+		return false
+	}
+	x, y := start/8, min(end/8, len(s.buf)-1)
+
+	// short range within same byte
+	if x == y {
+		return s.buf[x]&bytemask(start)&bytemask(end) > 0
+	}
+
+	// long range across bytes
+
+	// check masked start byte
+	if start&7 > 0 {
+		if s.buf[x]&255<<(start&7) > 0 {
+			return true
+		}
+		x++
+	}
+
+	// check masked end byte
+	if end&7 != 7 {
+		if s.buf[y]&(2<<(end&7)-1) > 0 {
+			return true
+		}
+		y--
+	}
+
+	// handle two byte range with masks
+	if x >= y {
+		return false
+	}
+
+	// check intermediate bytes
+	for x+7 < y {
+		if binary.LittleEndian.Uint64(s.buf[x:]) > 0 {
+			return true
+		}
+		x += 8
+	}
+	for x <= y {
+		if s.buf[x] > 0 {
+			return true
+		}
+		x++
+	}
+
+	return false
+}
+
 func (s *Bitset) Count() int {
 	if s.cnt < 0 {
 		s.cnt = int(bitsetPopCount(s.buf, s.size))
@@ -61,7 +264,7 @@ func (s *Bitset) Count() int {
 }
 
 // MinMax returns the indices of the first and last bit set or -1 when no bits are set.
-func (s Bitset) MinMax() (int, int) {
+func (s *Bitset) MinMax() (int, int) {
 	if s.None() {
 		return -1, -1
 	}
@@ -98,13 +301,8 @@ func (s *Bitset) Any() bool {
 	return !s.None()
 }
 
-func (s *Bitset) ReadFrom(r io.Reader) (int64, error) {
-	n, err := io.ReadFull(r, s.buf)
-	return int64(n), err
-}
-
 func (s *Bitset) Clone() *Bitset {
-	clone := NewBitset(s.size)
+	clone := New(s.size)
 	copy(clone.buf, s.buf)
 	clone.cnt = s.cnt
 	return clone
@@ -136,7 +334,7 @@ func (s *Bitset) Copy(b *Bitset) *Bitset {
 // Content remains unchanged on grow, when shrinking trailing bits are clipped.
 func (s *Bitset) Resize(size int) *Bitset {
 	if s == nil {
-		return NewBitset(size)
+		return New(size)
 	}
 	if size < 0 {
 		return s
@@ -174,35 +372,6 @@ func (s *Bitset) Resize(size int) *Bitset {
 func (s *Bitset) Grow(size int) *Bitset {
 	return s.Resize(s.size + size)
 }
-
-// Reset clears the bitset contents and sets its size to zero.
-func (s *Bitset) Reset() *Bitset {
-	if len(s.buf) > 0 && s.cnt != 0 {
-		clear(s.buf)
-	}
-	s.size = 0
-	s.cnt = 0
-	s.buf = s.buf[:0]
-	return s
-}
-
-// Close resets size to zero and returns the internal buffer back to
-// the allocator. For efficiency the contents is not cleared and should be
-// on allocation. Using the bitset after calling Close is illegal.
-func (s *Bitset) Close() {
-	if s == nil {
-		return
-	}
-	if !s.noclose {
-		arena.Free(s.buf)
-		s.noclose = false
-	}
-	s.buf = nil
-	s.cnt = 0
-	s.size = 0
-	bitsetPool.Put(s)
-}
-
 func (s *Bitset) And(r *Bitset) *Bitset {
 	if s.size == r.size && s.size > 0 {
 		if s.cnt == 0 {
@@ -355,162 +524,6 @@ func (s *Bitset) Fill(b byte) *Bitset {
 	return s
 }
 
-func (s *Bitset) Set(i int) *Bitset {
-	if i < 0 || i >= s.size {
-		return s
-	}
-	s.buf[i>>3] |= bitmask[i&7]
-	s.cnt = -1
-	return s
-}
-
-func (s *Bitset) SetFromBytes(buf []byte, size int, reverse bool) *Bitset {
-	l := bitFieldLen(size)
-	if cap(s.buf) < l {
-		if !s.noclose {
-			arena.Free(s.buf)
-			s.noclose = false
-		}
-		s.buf = arena.AllocBytes(l)[:l]
-	} else if s.size > size && s.cnt >= 0 {
-		s.cnt = -1
-		clear(s.buf[size>>3:])
-	}
-	s.size = size
-	s.buf = s.buf[:l]
-	copy(s.buf, buf)
-	if reverse {
-		for i, v := range s.buf {
-			s.buf[i] = reverseLut256[v]
-		}
-	}
-	s.cnt = -1
-	// ensure the last byte is masked
-	if size&7 > 0 {
-		s.buf[l-1] &= bytemask(size)
-	}
-	return s
-}
-
-func (s *Bitset) SetRange(start, end int) *Bitset {
-	x, y := start/8, min(end/8, len(s.buf)-1)
-
-	// short range within same byte
-	if x == y {
-		var b byte
-		for i := start & 7; i <= end&7; i++ {
-			b |= 1 << i
-		}
-		s.buf[x] |= b
-		s.cnt = -1
-		return s
-	}
-
-	// long range across bytes
-
-	// write start byte
-	if start&7 > 0 {
-		// mask start byte
-		s.buf[x] |= 255 << (start & 7)
-		x++
-	}
-
-	// write end byte
-	if end&7 != 7 {
-		// mask end byte
-		s.buf[y] |= 2<<(end&7) - 1
-		y--
-	}
-
-	// write intermediate bytes if any
-	for i := x; i <= y; i++ {
-		s.buf[i] = 0xff
-	}
-
-	// reset count
-	s.cnt = -1
-
-	return s
-}
-
-func (s *Bitset) setbit(i int) {
-	s.buf[i>>3] |= bitmask[i&7]
-}
-
-func (s *Bitset) Clear(i int) *Bitset {
-	if i < 0 || i >= s.size {
-		return s
-	}
-	mask := bitmask[i&7]
-	if s.cnt > 0 && s.buf[i>>3]&mask > 0 {
-		s.cnt--
-	}
-	s.buf[i>>3] &^= mask
-	return s
-}
-
-func (s *Bitset) clearbit(i int) {
-	s.buf[i>>3] &^= bitmask[i&7]
-}
-
-func (s *Bitset) IsSet(i int) bool {
-	if i < 0 || i >= s.size {
-		return false
-	}
-	return (s.buf[i>>3] & bitmask[i&7]) > 0
-}
-
-func (s *Bitset) ContainsRange(start, end int) bool {
-	if start >= s.size {
-		return false
-	}
-	x, y := start/8, min(end/8, len(s.buf)-1)
-
-	// short range within same byte
-	if x == y {
-		return s.buf[x]&bytemask(start)&bytemask(end) > 0
-	}
-
-	// long range across bytes
-
-	// check masked start byte
-	if start&7 > 0 {
-		if s.buf[x]&255<<(start&7) > 0 {
-			return true
-		}
-		x++
-	}
-
-	// check masked end byte
-	if end&7 != 7 {
-		if s.buf[y]&(2<<(end&7)-1) > 0 {
-			return true
-		}
-		y--
-	}
-
-	// handle two byte range with masks
-	if x >= y {
-		return false
-	}
-
-	// check intermediate bytes
-	for x+7 < y {
-		if binary.LittleEndian.Uint64(s.buf[x:]) > 0 {
-			return true
-		}
-		x += 8
-	}
-	for x <= y {
-		if s.buf[x] > 0 {
-			return true
-		}
-		x++
-	}
-
-	return false
-}
-
 // Append grows bitset by 1 and sets the trailing bit to val
 func (s *Bitset) Append(val bool) *Bitset {
 	s.Grow(1)
@@ -543,7 +556,7 @@ func (s *Bitset) AppendFrom(src *Bitset, srcPos, srcLen int) *Bitset {
 	} else {
 		// slow path
 		for i := 0; i < srcLen; i++ {
-			if !src.IsSet(srcPos + i) {
+			if !src.Contains(srcPos + i) {
 				continue
 			}
 			s.setbit(end + i)
@@ -605,19 +618,19 @@ func (s *Bitset) ResetCount(n int) {
 	s.cnt = n
 }
 
-func (s Bitset) Len() int {
+func (s *Bitset) Len() int {
 	return s.size
 }
 
-func (s Bitset) Cap() int {
+func (s *Bitset) Cap() int {
 	return cap(s.buf) * 8
 }
 
-func (s Bitset) HeapSize() int {
+func (s *Bitset) HeapSize() int {
 	return cap(s.buf) + 24 + 16 + 1
 }
 
-func (s Bitset) EncodedSize() int {
+func (s *Bitset) EncodedSize() int {
 	sz := s.size / 8
 	if s.size&7 > 0 {
 		sz++
@@ -625,117 +638,12 @@ func (s Bitset) EncodedSize() int {
 	return sz
 }
 
-// Iterate returns multiple next bits set starting at the specified index
-// and up to cap(buf). Use this method when low memory is a priority.
-// Iterate returns a zero length slice when no more set bits are found.
-//
-//	buf := make([]int, 256) // alloc once and reuse
-//	n := int(0)
-//	n, buffer = bitmap.Iterate(n, buf)
-//	for ; len(buf) > 0; n, buf = bitmap.Iterate(n, buf) {
-//	 for k := range buf {
-//	  do something with buf[k]
-//	 }
-//	 n += 1
-//	}
-//
-// It is possible to retrieve all set bits as follow:
-//
-//	indices := make([]int, bitmap.Count())
-//	bitmap.Iterate(0, indices)
-//
-// However, a faster method is [Bitset.Indexes] with a pre-allocated result.
-func (s *Bitset) Iterate(i int, buf []int) (int, []int) {
-	capacity := cap(buf)
-	result := buf[:capacity]
-
-	x := i >> 3
-	if x >= len(s.buf) || capacity == 0 {
-		return 0, result[:0]
-	}
-
-	// process first (partial) word
-	word := s.buf[x] >> (i & 7)
-
-	size := 0
-	for word != 0 {
-		result[size] = i + bits.TrailingZeros8(word)
-
-		size++
-		if size == capacity {
-			return result[size-1], result[:size]
-		}
-
-		// clear the rightmost set bit
-		word &= word - 1
-	}
-
-	// process the following full words
-	// x < len(b.set), no out-of-bounds panic in following slice expression
-	x++
-	for idx, word := range s.buf[x:] {
-		for word != 0 {
-			result[size] = (x+idx)<<3 + bits.TrailingZeros8(word)
-
-			size++
-			if size == capacity {
-				return result[size-1], result[:size]
-			}
-
-			// clear the rightmost set bit
-			word &= word - 1
-		}
-	}
-
-	if size > 0 {
-		return result[size-1], result[:size]
-	}
-	return 0, result[:0]
+func (s *Bitset) ReadFrom(r io.Reader) (int64, error) {
+	n, err := io.ReadFull(r, s.buf)
+	return int64(n), err
 }
 
-// Indexes returns a slice positions as uint32 for one bits in the bitset.
-func (s Bitset) Indexes(result []uint32) []uint32 {
-	cnt := s.cnt
-	switch {
-	case cnt == 0:
-		return result[:0]
-	case cnt < 0:
-		cnt = s.size
-	}
-	// ensure slice dimension is multiple of 8, we need this for our
-	// index lookup algo which always writes multiples of 8 entries
-	cnt = roundUpPow2(cnt, 8)
-	if result == nil || cap(result) < cnt {
-		result = make([]uint32, cnt)
-	} else {
-		result = result[:cnt]
-	}
-	n := bitsetIndexes(s.buf, s.size, result)
-	return result[:n]
-}
-
-// Slice returns a boolean slice containing all values
-func (s Bitset) Slice() []bool {
-	res := make([]bool, s.size)
-	for i, l := 0, s.size-s.size&7; i < l; i += 8 {
-		b := s.buf[i>>3]
-		res[i] = b&0x01 > 0
-		res[i+1] = b&0x02 > 0
-		res[i+2] = b&0x04 > 0
-		res[i+3] = b&0x08 > 0
-		res[i+4] = b&0x10 > 0
-		res[i+5] = b&0x20 > 0
-		res[i+6] = b&0x40 > 0
-		res[i+7] = b&0x80 > 0
-	}
-	// tail
-	for i := s.size & ^0x7; i < s.size; i++ {
-		res[i] = s.buf[i>>3]&bitmask[i&7] > 0
-	}
-	return res
-}
-
-func (s Bitset) SubSlice(start, n int) []bool {
+func (s *Bitset) SubSlice(start, n int) []bool {
 	if start >= s.size {
 		return nil
 	}
@@ -772,7 +680,7 @@ func (s Bitset) SubSlice(start, n int) []bool {
 	return res
 }
 
-func (s Bitset) MarshalBinary() ([]byte, error) {
+func (s *Bitset) MarshalBinary() ([]byte, error) {
 	return s.Bytes(), nil
 }
 
@@ -784,7 +692,7 @@ func (s *Bitset) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
-func (s Bitset) MarshalText() ([]byte, error) {
+func (s *Bitset) MarshalText() ([]byte, error) {
 	return []byte(s.String()), nil
 }
 
@@ -800,4 +708,12 @@ func (s *Bitset) UnmarshalText(data []byte) error {
 	s.cnt = -1
 	s.size = len(buf) * 8
 	return nil
+}
+
+func (s *Bitset) setbit(i int) {
+	s.buf[i>>3] |= bitmask[i&7]
+}
+
+func (s *Bitset) clearbit(i int) {
+	s.buf[i>>3] &^= bitmask[i&7]
 }

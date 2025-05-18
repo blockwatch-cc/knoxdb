@@ -424,7 +424,7 @@ next:
 		// handle following matches (if any), on second match, create bitset and
 		// insert first code match
 		if cset == nil {
-			cset = xroar.NewBitmap()
+			cset = xroar.New()
 			cset.Set(uint64(firstCode))
 		}
 

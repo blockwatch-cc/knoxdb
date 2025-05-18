@@ -209,7 +209,7 @@ func (p *Package) SetValue(col, row int, val any) error {
 		if v {
 			b.Bool().Set(row)
 		} else {
-			b.Bool().Clear(row)
+			b.Bool().Unset(row)
 		}
 	case string:
 		b.Bytes().Set(row, util.UnsafeGetBytes(v))
@@ -332,7 +332,7 @@ func (p *Package) SetWire(row int, buf []byte) {
 			if *(*bool)(unsafe.Pointer(&buf[0])) {
 				b.Bool().Set(row)
 			} else {
-				b.Bool().Clear(row)
+				b.Bool().Unset(row)
 			}
 			buf = buf[1:]
 

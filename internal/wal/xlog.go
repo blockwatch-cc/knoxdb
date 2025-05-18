@@ -56,7 +56,7 @@ func NewCommitFrame(id int64) *CommitFrame {
 	return &CommitFrame{
 		offset: id * CommitFrameSize,
 		xmin:   uint64(id) << CommitFrameShift,
-		bits:   bitset.NewBitset(CommitFramePayloadSize << 3),
+		bits:   bitset.New(CommitFramePayloadSize << 3),
 		log:    log.Disabled,
 	}
 }
@@ -84,7 +84,7 @@ func (f *CommitFrame) Xmax() uint64 {
 }
 
 func (f *CommitFrame) IsCommitted(xid uint64) bool {
-	return f.bits.IsSet(int(xid - f.xmin))
+	return f.bits.Contains(int(xid - f.xmin))
 }
 
 func (f *CommitFrame) Append(xid uint64, lsn LSN) {

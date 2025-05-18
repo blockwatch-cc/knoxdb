@@ -357,7 +357,7 @@ func (m numEqualMatcher[T]) MatchRangeVectors(mins, maxs *block.Block, bits, mas
 	le, ge := f.New(FilterModeLe), f.New(FilterModeGe)
 	le.WithValue(m.val)
 	ge.WithValue(m.val)
-	minBits := bitset.NewBitset(mins.Len())
+	minBits := bitset.New(mins.Len())
 	le.MatchVector(mins, minBits, mask)
 	if mask != nil {
 		minBits.And(mask)
@@ -580,7 +580,7 @@ func (m numRangeMatcher[T]) MatchRangeVectors(mins, maxs *block.Block, bits, mas
 	le, ge := f.New(FilterModeLe), f.New(FilterModeGe)
 	le.WithValue(m.to)
 	ge.WithValue(m.from)
-	minBits := bitset.NewBitset(mins.Len())
+	minBits := bitset.New(mins.Len())
 	le.MatchVector(mins, minBits, mask)
 	if mask != nil {
 		minBits.And(mask)
@@ -600,11 +600,11 @@ type numInSetMatcher[T Number] struct {
 
 func (m *numInSetMatcher[T]) Weight() int { return 1 }
 
-func (m *numInSetMatcher[T]) Len() int { return m.set.GetCardinality() }
+func (m *numInSetMatcher[T]) Len() int { return m.set.Count() }
 
 func (m *numInSetMatcher[T]) Value() any {
 	// FIXME: support bitmap in optimizer
-	card := m.set.GetCardinality()
+	card := m.set.Count()
 	it := m.set.NewIterator()
 	vals := make([]T, card)
 	for i := 0; i < card; i++ {
@@ -622,7 +622,7 @@ func (m *numInSetMatcher[T]) WithValue(val any) {
 }
 
 func (m *numInSetMatcher[T]) WithSlice(slice any) {
-	m.set = xroar.NewBitmap()
+	m.set = xroar.New()
 	for _, v := range slice.([]T) {
 		m.set.Set(uint64(v))
 	}
@@ -631,7 +631,7 @@ func (m *numInSetMatcher[T]) WithSlice(slice any) {
 
 func (m *numInSetMatcher[T]) WithSet(set *xroar.Bitmap) {
 	m.set = set
-	card := set.GetCardinality()
+	card := set.Count()
 	it := m.set.NewIterator()
 	m.hashes = make([]filter.HashValue, card)
 	for i := range card {
@@ -672,7 +672,7 @@ func (m numInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitse
 	if mask != nil {
 		// skip masked values
 		for i, v := range acc.Slice() {
-			if !mask.IsSet(i) {
+			if !mask.Contains(i) {
 				continue
 			}
 			if m.set.Contains(uint64(v)) {
@@ -706,7 +706,7 @@ func (m numInSetMatcher[T]) MatchRangeVectors(mins, maxs *block.Block, bits, mas
 	maxx := maxAcc.Slice()
 	if mask != nil {
 		for i := range len(minx) {
-			if !mask.IsSet(i) {
+			if !mask.Contains(i) {
 				continue
 			}
 			minU64, maxU64 := uint64(minx[i]), uint64(maxx[i])
@@ -740,11 +740,11 @@ type numNotInSetMatcher[T Number] struct {
 
 func (m *numNotInSetMatcher[T]) Weight() int { return 1 }
 
-func (m *numNotInSetMatcher[T]) Len() int { return m.set.GetCardinality() }
+func (m *numNotInSetMatcher[T]) Len() int { return m.set.Count() }
 
 func (m *numNotInSetMatcher[T]) Value() any {
 	// FIXME: support bitmap in optimizer
-	card := m.set.GetCardinality()
+	card := m.set.Count()
 	it := m.set.NewIterator()
 	vals := make([]T, card)
 	for i := 0; i < card; i++ {
@@ -762,7 +762,7 @@ func (m *numNotInSetMatcher[T]) WithValue(val any) {
 }
 
 func (m *numNotInSetMatcher[T]) WithSlice(slice any) {
-	m.set = xroar.NewBitmap()
+	m.set = xroar.New()
 	for _, v := range slice.([]T) {
 		m.set.Set(uint64(v))
 	}
@@ -798,7 +798,7 @@ func (m numNotInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bi
 	if mask != nil {
 		// skip masked values
 		for i, v := range acc.Slice() {
-			if !mask.IsSet(i) {
+			if !mask.Contains(i) {
 				continue
 			}
 			if !m.set.Contains(uint64(v)) {

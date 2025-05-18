@@ -202,7 +202,7 @@ func (b *Block) FirstLast() (any, any) {
 	case BlockBool:
 		bits := b.Bool()
 		if l := bits.Len(); l > 0 {
-			return bits.IsSet(0), bits.IsSet(l - 1)
+			return bits.Contains(0), bits.Contains(l - 1)
 		}
 		return false, false
 	default:

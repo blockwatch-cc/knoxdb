@@ -18,7 +18,7 @@ var (
 
 func BenchmarkBitsetSet(b *testing.B) {
 	for _, n := range sizes {
-		bits := NewBitset(n.L)
+		bits := New(n.L)
 		b.Run(n.Name, func(b *testing.B) {
 			for i := range b.N {
 				bits.Set(i % n.L)
@@ -30,7 +30,7 @@ func BenchmarkBitsetSet(b *testing.B) {
 func BenchmarkBitsetSetRange(b *testing.B) {
 	for _, n := range sizes {
 		for _, r := range ranges {
-			bits := NewBitset(n.L)
+			bits := New(n.L)
 			b.Run(n.Name+"_"+r.Name, func(b *testing.B) {
 				for i := range b.N {
 					var a, b int
@@ -52,7 +52,7 @@ func BenchmarkBitsetIndexes(b *testing.B) {
 			buf := fillBitsetRand(nil, n.L, d.D)
 			cnt := popcount(buf)
 			slice := make([]uint32, cnt, n.L)
-			bits := FromBuffer(buf, n.L)
+			bits := NewFromBuffer(buf, n.L)
 			b.Run(n.Name+"/"+d.Name, func(b *testing.B) {
 				b.SetBytes(int64(bits.Len()))
 				b.ResetTimer()
@@ -69,7 +69,7 @@ func BenchmarkBitsetIterate(b *testing.B) {
 	for _, n := range sizes {
 		for _, d := range densities {
 			buf := fillBitsetRand(nil, n.L, d.D)
-			bits := FromBuffer(buf, n.L)
+			bits := NewFromBuffer(buf, n.L)
 
 			buffer := make([]int, 256)
 			b.Run(n.Name+"/"+d.Name, func(b *testing.B) {

@@ -286,43 +286,43 @@ func i256EnsureBits(t *testing.T, vals num.Int256Stride, val, val2 num.Int256, b
 	switch mode {
 	case types.FilterModeEqual:
 		for i, v := range vals.Iterator() {
-			require.Equal(t, v == val, bits.IsSet(i), "bit=%d val=%v %s %v min=%v max=%v",
+			require.Equal(t, v == val, bits.Contains(i), "bit=%d val=%v %s %v min=%v max=%v",
 				i, v, mode, val, minv, maxv)
 		}
 
 	case types.FilterModeNotEqual:
 		for i, v := range vals.Iterator() {
-			require.Equal(t, v != val, bits.IsSet(i), "bit=%d val=%v %s %v min=%v max=%v",
+			require.Equal(t, v != val, bits.Contains(i), "bit=%d val=%v %s %v min=%v max=%v",
 				i, v, mode, val, minv, maxv)
 		}
 
 	case types.FilterModeLt:
 		for i, v := range vals.Iterator() {
-			require.Equal(t, v.Lt(val), bits.IsSet(i), "bit=%d val=%v %s %v min=%v max=%v",
+			require.Equal(t, v.Lt(val), bits.Contains(i), "bit=%d val=%v %s %v min=%v max=%v",
 				i, v, mode, val, minv, maxv)
 		}
 
 	case types.FilterModeLe:
 		for i, v := range vals.Iterator() {
-			require.Equal(t, v.Le(val), bits.IsSet(i), "bit=%d val=%v %s %v min=%v max=%v",
+			require.Equal(t, v.Le(val), bits.Contains(i), "bit=%d val=%v %s %v min=%v max=%v",
 				i, v, mode, val, minv, maxv)
 		}
 
 	case types.FilterModeGt:
 		for i, v := range vals.Iterator() {
-			require.Equal(t, v.Gt(val), bits.IsSet(i), "bit=%d val=%v %s %v min=%v max=%v",
+			require.Equal(t, v.Gt(val), bits.Contains(i), "bit=%d val=%v %s %v min=%v max=%v",
 				i, v, mode, val, minv, maxv)
 		}
 
 	case types.FilterModeGe:
 		for i, v := range vals.Iterator() {
-			require.Equal(t, v.Ge(val), bits.IsSet(i), "bit=%d val=%v %s %v min=%v max=%v",
+			require.Equal(t, v.Ge(val), bits.Contains(i), "bit=%d val=%v %s %v min=%v max=%v",
 				i, v, mode, val, minv, maxv)
 		}
 
 	case types.FilterModeRange:
 		for i, v := range vals.Iterator() {
-			require.Equal(t, v.Ge(val) && v.Le(val2), bits.IsSet(i), "bit=%d val=%v %s [%v,%v] min=%v max=%v",
+			require.Equal(t, v.Ge(val) && v.Le(val2), bits.Contains(i), "bit=%d val=%v %s [%v,%v] min=%v max=%v",
 				i, v, mode, val, val2, minv, maxv)
 		}
 	}
@@ -332,7 +332,7 @@ type i256CompareFunc func(num.Int256, *Bitset, *Bitset)
 type i256CompareFunc2 func(num.Int256, num.Int256, *Bitset, *Bitset)
 
 func i256TestCompare(t *testing.T, cmp i256CompareFunc, src num.Int256Stride, mode types.FilterMode) {
-	bits := bitset.NewBitset(src.Len())
+	bits := bitset.New(src.Len())
 	minv, maxv := src.MinMax()
 
 	// single value
@@ -362,7 +362,7 @@ func i256TestCompare(t *testing.T, cmp i256CompareFunc, src num.Int256Stride, mo
 }
 
 func i256TestCompare2(t *testing.T, cmp i256CompareFunc2, src num.Int256Stride, mode types.FilterMode) {
-	bits := bitset.NewBitset(src.Len())
+	bits := bitset.New(src.Len())
 	minv, maxv := src.MinMax()
 
 	// single value
@@ -493,35 +493,11 @@ func BenchmarkInt256Decode(b *testing.B) {
 	}
 }
 
-func BenchmarkInt256Append(b *testing.B) {
-	for _, c := range tests.BenchmarkSizes {
-		data := GenInt256Data(c.N)
-		enc := NewInt256().Encode(data)
-		buf := enc.Store(make([]byte, 0, enc.Size()))
-		dst := num.MakeInt256Stride(c.N)
-		once := etests.ShowInfo
-		b.Run(c.Name, func(b *testing.B) {
-			b.SetBytes(int64(c.N * 32))
-			for b.Loop() {
-				enc2, err := LoadInt256(buf)
-				require.NoError(b, err)
-				dst = enc2.AppendTo(nil, dst)
-				if once {
-					b.Log(enc2.Info())
-					once = false
-				}
-				enc2.Close()
-			}
-			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
-		})
-	}
-}
-
 func BenchmarkInt256Cmp(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		data := GenInt256Data(c.N)
 		enc := NewInt256().Encode(data)
-		bits := bitset.NewBitset(c.N)
+		bits := bitset.New(c.N)
 		b.Log(enc.Info())
 		b.Run(c.Name, func(b *testing.B) {
 			b.SetBytes(int64(c.N * 32))

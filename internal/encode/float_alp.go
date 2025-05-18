@@ -223,9 +223,9 @@ func (c *FloatAlpContainer[T, E]) MatchEqual(val T, bits, mask *Bitset) {
 
 		// if av == min we must revert bits on all patch positions
 		// we know by checking of any patch position is already set
-		if bits.IsSet(int(pos[0])) {
+		if bits.Contains(int(pos[0])) {
 			for _, p := range pos {
-				bits.Clear(int(p))
+				bits.Unset(int(p))
 			}
 			return
 		}
@@ -284,7 +284,7 @@ func (c *FloatAlpContainer[T, E]) MatchLess(val T, bits, mask *Bitset) {
 			if vals[i] < val {
 				bits.Set(int(p))
 			} else {
-				bits.Clear(int(p))
+				bits.Unset(int(p))
 			}
 		}
 	}
@@ -327,7 +327,7 @@ func (c *FloatAlpContainer[T, E]) MatchLessEqual(val T, bits, mask *Bitset) {
 			if vals[i] <= val {
 				bits.Set(int(p))
 			} else {
-				bits.Clear(int(p))
+				bits.Unset(int(p))
 			}
 		}
 	}
@@ -365,7 +365,7 @@ func (c *FloatAlpContainer[T, E]) MatchGreater(val T, bits, mask *Bitset) {
 			if vals[i] > val {
 				bits.Set(int(p))
 			} else {
-				bits.Clear(int(p))
+				bits.Unset(int(p))
 			}
 		}
 	}
@@ -408,7 +408,7 @@ func (c *FloatAlpContainer[T, E]) MatchGreaterEqual(val T, bits, mask *Bitset) {
 			if vals[i] >= val {
 				bits.Set(int(p))
 			} else {
-				bits.Clear(int(p))
+				bits.Unset(int(p))
 			}
 		}
 	}
@@ -449,7 +449,7 @@ func (c *FloatAlpContainer[T, E]) MatchBetween(a, b T, bits, mask *Bitset) {
 			if vals[i] >= a && vals[i] <= b {
 				bits.Set(int(p))
 			} else {
-				bits.Clear(int(p))
+				bits.Unset(int(p))
 			}
 		}
 	}

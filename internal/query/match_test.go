@@ -152,7 +152,7 @@ func TestMatchVector(t *testing.T) {
 			v := makeRandomValue(typ)
 			b := makeRandomBlock(typ, matchBlockSize)
 			m.WithValue(v)
-			set := bitset.NewBitset(matchBlockSize)
+			set := bitset.New(matchBlockSize)
 			m.MatchVector(b, set, nil)
 			require.NotNil(t, set)
 			require.Equal(t, matchBlockSize, set.Len())
@@ -230,11 +230,11 @@ func TestMatchSet(t *testing.T) {
 			case BlockFloat32, BlockFloat64, BlockBytes, BlockInt128, BlockInt256:
 				return
 			}
-			set := xroar.NewBitmap()
+			set := xroar.New()
 			assert.False(t, m.MatchFilter(set), "set-empty")
 			set.Set(1)
 			assert.True(t, m.MatchFilter(set), "set-in: %v in %v", gen.MakeValue(1), slice)
-			set.Remove(1)
+			set.Unset(1)
 			set.Set(10)
 			assert.False(t, m.MatchFilter(set), "set-notin")
 		})
@@ -262,11 +262,11 @@ func TestMatchRegexp(t *testing.T) {
 	b := block.New(BlockBytes, 2)
 	b.Bytes().Append(hello)
 	b.Bytes().Append(world)
-	set := bitset.NewBitset(2)
+	set := bitset.New(2)
 	m.MatchVector(b, set, nil)
 	require.NotNil(t, set)
 	require.Equal(t, 1, set.Count())
-	require.True(t, set.IsSet(0))
+	require.True(t, set.Contains(0))
 
 	// using compiled regexp value
 	m.WithValue(re)
@@ -277,7 +277,7 @@ func TestMatchRegexp(t *testing.T) {
 	m.MatchVector(b, set, nil)
 	require.NotNil(t, set)
 	require.Equal(t, 1, set.Count())
-	require.True(t, set.IsSet(0))
+	require.True(t, set.Contains(0))
 }
 
 func TestMatchBool(t *testing.T) {

@@ -238,7 +238,7 @@ func Decode(typ BlockType, buf []byte) (*Block, error) {
 	b.cap = 0
 
 	switch b.typ {
-	case BlockInt64:
+	case BlockInt64, BlockTime:
 		c, err := encode.LoadInt[int64](buf)
 		if err != nil {
 			return nil, err
@@ -302,29 +302,21 @@ func Decode(typ BlockType, buf []byte) (*Block, error) {
 		b.ptr = unsafe.Pointer(&c)
 		b.len, b.cap = c.Len(), c.Len()
 
-	// case BlockTime:
-	// 	c, err := encode.LoadTime[int64](buf)
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-	// 	b.ptr = unsafe.Pointer(&c)
-	// 	b.len, b.cap = c.Len(), c.Len()
+	case BlockFloat64:
+		c, err := encode.LoadFloat[float64](buf)
+		if err != nil {
+			return nil, err
+		}
+		b.ptr = unsafe.Pointer(&c)
+		b.len, b.cap = c.Len(), c.Len()
 
-	// case BlockFloat64:
-	// 	c, err := encode.LoadFloat[float64](buf)
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-	// 	b.ptr = unsafe.Pointer(&c)
-	// 	b.len, b.cap = c.Len(), c.Len()
-
-	// case BlockFloat32:
-	// 	c, err := encode.LoadFloat[float32](buf)
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-	// 	b.ptr = unsafe.Pointer(&c)
-	// 	b.len, b.cap = c.Len(), c.Len()
+	case BlockFloat32:
+		c, err := encode.LoadFloat[float32](buf)
+		if err != nil {
+			return nil, err
+		}
+		b.ptr = unsafe.Pointer(&c)
+		b.len, b.cap = c.Len(), c.Len()
 
 	// case BlockBytes:
 	// 	// can re-allocate a new dedup kind
@@ -336,17 +328,29 @@ func Decode(typ BlockType, buf []byte) (*Block, error) {
 	// 	b.ptr = unsafe.Pointer(&arr)
 	// 	b.len = arr.Len()
 
-	// case BlockBool:
-	// 	err = zip.DecodeBitset((*bitset.Bitset)(b.ptr), buf)
-	// 	b.len = (*bitset.Bitset)(b.ptr).Len()
+	case BlockBool:
+		c, err := encode.LoadBitmap(buf)
+		if err != nil {
+			return nil, err
+		}
+		b.ptr = unsafe.Pointer(&c)
+		b.len, b.cap = c.Len(), c.Len()
 
-	// case BlockInt128:
-	// 	err = zip.DecodeInt128((*num.Int128Stride)(b.ptr), buf)
-	// 	b.len = (*num.Int128Stride)(b.ptr).Len()
+	case BlockInt128:
+		c, err := encode.LoadInt128(buf)
+		if err != nil {
+			return nil, err
+		}
+		b.ptr = unsafe.Pointer(&c)
+		b.len, b.cap = c.Len(), c.Len()
 
-	// case BlockInt256:
-	// 	err = zip.DecodeInt256((*num.Int256Stride)(b.ptr), buf)
-	// 	b.len = (*num.Int256Stride)(b.ptr).Len()
+	case BlockInt256:
+		c, err := encode.LoadInt256(buf)
+		if err != nil {
+			return nil, err
+		}
+		b.ptr = unsafe.Pointer(&c)
+		b.len, b.cap = c.Len(), c.Len()
 
 	default:
 		return nil, fmt.Errorf("block: unsupported data type %s (%[1]d)", b.typ)

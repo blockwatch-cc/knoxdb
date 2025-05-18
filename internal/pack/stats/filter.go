@@ -226,18 +226,18 @@ func EstimateCardinality(b *block.Block, precision int) int {
 		return min(l, int(flt.Cardinality()))
 
 	case block.BlockInt16, block.BlockUint16:
-		bits := xroar.NewBitmapWith(l)
+		bits := xroar.NewWithSize(l)
 		for _, v := range b.Uint16().Slice() {
 			bits.Set(uint64(v))
 		}
-		return bits.GetCardinality()
+		return bits.Count()
 
 	case block.BlockInt8, block.BlockUint8:
-		bits := xroar.NewBitmapWith(l)
+		bits := xroar.NewWithSize(l)
 		for _, v := range b.Uint8().Slice() {
 			bits.Set(uint64(v))
 		}
-		return bits.GetCardinality()
+		return bits.Count()
 
 	case block.BlockInt256:
 		flt := llb.NewFilterWithPrecision(uint32(precision))
@@ -337,7 +337,7 @@ func BuildBitsFilter(b *block.Block, cardinality int) *xroar.Bitmap {
 		return nil
 	}
 
-	flt := xroar.NewBitmapWith(cardinality)
+	flt := xroar.NewWithSize(cardinality)
 
 	switch b.Type() {
 	case block.BlockInt64, block.BlockTime, block.BlockUint64:

@@ -195,9 +195,7 @@ func DropIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti en
 	require.NoError(t, commit())
 	ok, err = store.Exists(io.Driver, dbpath)
 	require.NoError(t, err, "access error")
-	if io.Driver != "badger" {
-		require.False(t, ok, "db not deleted")
-	}
+	require.False(t, ok, "db not deleted")
 }
 
 func TruncateIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {

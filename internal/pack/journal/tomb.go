@@ -86,7 +86,7 @@ func (t *Tomb) Append(pk, xid, rid uint64, isUpd bool) {
 	var idx int
 	stone := Tombstone{pk: pk, rid: rid, xid: xid, upd: isUpd}
 	if t.keys == nil {
-		t.keys = xroar.NewBitmap()
+		t.keys = xroar.New()
 		t.stones = make([]Tombstone, 1, t.maxsz)
 	} else {
 		// insert in place, keep duplicates (equal pk/rid, different xid)
@@ -264,7 +264,7 @@ func (t *Tomb) UnmarshalBinary(buf []byte) error {
 	}
 
 	if len(t.stones) > 0 {
-		t.keys = xroar.NewBitmap()
+		t.keys = xroar.New()
 	}
 
 	// read diffs

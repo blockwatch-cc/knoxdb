@@ -326,7 +326,7 @@ func (j *Journal) Query(node *query.FilterTreeNode, snap *types.Snapshot) *Resul
 
 	// alloc result and match bitset
 	res := NewResult()
-	bits := bitset.NewBitset(j.maxsz)
+	bits := bitset.New(j.maxsz)
 
 	// scratch space for bitset indexes
 	hits := arena.AllocUint32(j.maxsz)

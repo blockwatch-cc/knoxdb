@@ -151,56 +151,56 @@ func EnsureBits[T types.Number](t *testing.T, vals []T, val, val2 T, bits *bitse
 	switch mode {
 	case types.FilterModeEqual:
 		for i, v := range vals {
-			require.Equal(t, v == val, bits.IsSet(i), "bit=%d val=%v %s %v min=%v max=%v",
+			require.Equal(t, v == val, bits.Contains(i), "bit=%d val=%v %s %v min=%v max=%v",
 				i, v, mode, val, minv, maxv)
 		}
 
 	case types.FilterModeNotEqual:
 		for i, v := range vals {
-			require.Equal(t, v != val, bits.IsSet(i), "bit=%d val=%v %s %v min=%v max=%v",
+			require.Equal(t, v != val, bits.Contains(i), "bit=%d val=%v %s %v min=%v max=%v",
 				i, v, mode, val, minv, maxv)
 		}
 
 	case types.FilterModeLt:
 		for i, v := range vals {
-			require.Equal(t, v < val, bits.IsSet(i), "bit=%d val=%v %s %v min=%v max=%v",
+			require.Equal(t, v < val, bits.Contains(i), "bit=%d val=%v %s %v min=%v max=%v",
 				i, v, mode, val, minv, maxv)
 		}
 
 	case types.FilterModeLe:
 		for i, v := range vals {
-			require.Equal(t, v <= val, bits.IsSet(i), "bit=%d val=%v %s %v min=%v max=%v",
+			require.Equal(t, v <= val, bits.Contains(i), "bit=%d val=%v %s %v min=%v max=%v",
 				i, v, mode, val, minv, maxv)
 		}
 
 	case types.FilterModeGt:
 		for i, v := range vals {
-			require.Equal(t, v > val, bits.IsSet(i), "bit=%d val=%v %s %v min=%v max=%v",
+			require.Equal(t, v > val, bits.Contains(i), "bit=%d val=%v %s %v min=%v max=%v",
 				i, v, mode, val, minv, maxv)
 		}
 
 	case types.FilterModeGe:
 		for i, v := range vals {
-			require.Equal(t, v >= val, bits.IsSet(i), "bit=%d val=%v %s %v min=%v max=%v",
+			require.Equal(t, v >= val, bits.Contains(i), "bit=%d val=%v %s %v min=%v max=%v",
 				i, v, mode, val, minv, maxv)
 		}
 
 	case types.FilterModeRange:
 		for i, v := range vals {
-			require.Equal(t, v >= val && v <= val2, bits.IsSet(i), "bit=%d val=%v %s [%v,%v] min=%v max=%v",
+			require.Equal(t, v >= val && v <= val2, bits.Contains(i), "bit=%d val=%v %s [%v,%v] min=%v max=%v",
 				i, v, mode, val, val2, minv, maxv)
 		}
 
 	case types.FilterModeIn:
 		for i, v := range vals {
-			require.Equal(t, set.Contains(uint64(v)), bits.IsSet(i), "bit=%d min=%v max=%v val=%v %s %v",
-				i, minv, maxv, v, mode, set.ToArray())
+			require.Equal(t, set.Contains(uint64(v)), bits.Contains(i), "bit=%d min=%v max=%v val=%v %s %v",
+				i, minv, maxv, v, mode, set.ToArray(nil))
 		}
 
 	case types.FilterModeNotIn:
 		for i, v := range vals {
-			require.Equal(t, !set.Contains(uint64(v)), bits.IsSet(i), "bit=%d min=%v max=%v val=%v %s %v",
-				i, minv, maxv, v, mode, set.ToArray())
+			require.Equal(t, !set.Contains(uint64(v)), bits.Contains(i), "bit=%d min=%v max=%v val=%v %s %v",
+				i, minv, maxv, v, mode, set.ToArray(nil))
 		}
 	}
 }

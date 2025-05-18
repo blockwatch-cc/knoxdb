@@ -273,7 +273,7 @@ func BenchmarkFloatCmp(b *testing.B) {
 			data := etests.GenForFloatScheme[float64](int(scheme), c.N)
 			ctx := AnalyzeFloat(data, true, true)
 			enc := NewFloat[float64](scheme).Encode(ctx, data, MAX_CASCADE)
-			bits := bitset.NewBitset(c.N)
+			bits := bitset.New(c.N)
 			// da, db := data[0], data[0]
 			// if len(data) > 1 {
 			// 	db = data[1]

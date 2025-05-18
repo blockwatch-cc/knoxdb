@@ -131,13 +131,13 @@ func (it *Iterator) next() bool {
 
 			// find the next snode
 			it.sx++
-			if !it.smatch.IsSet(it.sx) {
+			if !it.smatch.Contains(it.sx) {
 				continue
 			}
 			it.snode = it.idx.snodes[it.sx]
 
 			// TODO: we could rewind the iterator if we did not clear bits here
-			it.smatch.Clear(it.sx)
+			it.smatch.Unset(it.sx)
 
 			// query snode statistics pack and filters
 			if err := it.snode.Query(it); err != nil {
@@ -168,13 +168,13 @@ func (it *Iterator) prev() bool {
 
 			// find the next snode
 			it.sx--
-			if !it.smatch.IsSet(it.sx) {
+			if !it.smatch.Contains(it.sx) {
 				continue
 			}
 			it.snode = it.idx.snodes[it.sx]
 
 			// TODO: we could rewind the iterator if we did not clear bits here
-			it.smatch.Clear(it.sx)
+			it.smatch.Unset(it.sx)
 
 			// query snode statistics pack and filters
 			if err := it.snode.Query(it); err != nil {

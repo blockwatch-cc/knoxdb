@@ -32,7 +32,7 @@ func NewSnapshot(xid, xmin, xmax uint64) *Snapshot {
 	s.Xact = nil
 	s.Safe = true
 	if sz := int(xid - xmin); sz > bits.UintSize {
-		s.Xact = bitset.NewBitset(sz)
+		s.Xact = bitset.New(sz)
 	}
 	return s
 }
@@ -84,7 +84,7 @@ func (s *Snapshot) IsVisible(xid uint64) bool {
 	if s.Xact == nil {
 		return s.Xaci&(1<<(xid-s.Xmin)) == 0
 	} else {
-		return !s.Xact.IsSet(int(xid - s.Xmin))
+		return !s.Xact.Contains(int(xid - s.Xmin))
 	}
 }
 
@@ -95,6 +95,6 @@ func (s *Snapshot) IsConflict(xid uint64) bool {
 	if s.Xact == nil {
 		return s.Xaci&(1<<(xid-s.Xmin)) > 0
 	} else {
-		return s.Xact.IsSet(int(xid - s.Xmin))
+		return s.Xact.Contains(int(xid - s.Xmin))
 	}
 }

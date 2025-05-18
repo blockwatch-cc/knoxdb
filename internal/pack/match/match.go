@@ -19,7 +19,7 @@ import (
 // vectorized checks with custom assembly-optimized routines.
 func MatchFilter(f *query.Filter, pkg *pack.Package, bits, mask *bitset.Bitset) *bitset.Bitset {
 	if bits == nil {
-		bits = bitset.NewBitset(pkg.Len())
+		bits = bitset.New(pkg.Len())
 	}
 	f.Matcher.MatchVector(pkg.Block(int(f.Index)), bits, mask)
 	return bits
@@ -46,7 +46,7 @@ func MatchTree(n *query.FilterTreeNode, pkg *pack.Package, r stats.Reader, bits 
 func MatchTreeAnd(n *query.FilterTreeNode, pkg *pack.Package, r stats.Reader, bits *bitset.Bitset) *bitset.Bitset {
 	// start with a full bitset
 	if bits == nil {
-		bits = bitset.NewBitset(pkg.Len())
+		bits = bitset.New(pkg.Len())
 	}
 	bits.One()
 
@@ -132,7 +132,7 @@ func MatchTreeAnd(n *query.FilterTreeNode, pkg *pack.Package, r stats.Reader, bi
 func MatchTreeOr(n *query.FilterTreeNode, pkg *pack.Package, r stats.Reader, bits *bitset.Bitset) *bitset.Bitset {
 	// start with an empty bitset
 	if bits == nil {
-		bits = bitset.NewBitset(pkg.Len())
+		bits = bitset.New(pkg.Len())
 	} else {
 		bits.Zero()
 	}

@@ -133,6 +133,7 @@ func (p *Package) LoadFromDisk(ctx context.Context, bucket store.Bucket, fids []
 		}
 		n += len(buf)
 
+		// TODO: alloc is part of new containers, no longer required here
 		// alloc block (use actual storage size, arena will round up to power of 2)
 		if p.blocks[i] == nil {
 			sz := nRows
@@ -151,12 +152,22 @@ func (p *Package) LoadFromDisk(ctx context.Context, bucket store.Bucket, fids []
 		if comp > 0 {
 			// decode block data with optional decompressor
 			dec := NewDecompressor(bytes.NewBuffer(buf), comp)
+
+			// TODO: readall and decode (deprecate ReadFrom)
 			_, err = p.blocks[i].ReadFrom(dec)
 			err2 := dec.Close()
 			if err == nil {
 				err = err2
 			}
+
+			// TODO: BufferManager: at this point we hold a copy of the decompressed
+			// data referenced by a container and we can release any page locks
+
 		} else {
+			// TODO: BufferManager: here we reference data in pages and must hold
+			// the lock until the block is released (move page lock release into
+			// block.DeRef)
+
 			// fast-path, decode from buffer
 			err = p.blocks[i].Decode(buf)
 		}
@@ -195,6 +206,7 @@ func (p *Package) StoreToDisk(ctx context.Context, bucket store.Bucket) (int, er
 		return 0, store.ErrNoBucket
 	}
 
+	// TODO: re-use encoder analysis data here
 	// analyze
 	p.WithAnalysis()
 
@@ -225,6 +237,8 @@ func (p *Package) StoreToDisk(ctx context.Context, bucket store.Bucket) (int, er
 		if err2 != nil {
 			return 0, err2
 		}
+
+		// TODO: cluster keys on block id (so that pages contain data from the same column)
 
 		// generate storage key for this block
 		bkey := EncodeBlockKey(p.key, f.Id)

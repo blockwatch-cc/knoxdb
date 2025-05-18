@@ -9,6 +9,7 @@ import (
 	"encoding/binary"
 	"slices"
 	"testing"
+	"testing/quick"
 
 	"blockwatch.cc/knoxdb/internal/bitset/tests"
 	"blockwatch.cc/knoxdb/pkg/util"
@@ -44,7 +45,7 @@ func checkCleanTail(t *testing.T, buf []byte) {
 func TestBitsetNew(t *testing.T) {
 	for _, c := range popCases {
 		t.Run(c.Name, func(t *testing.T) {
-			bits := NewBitset(c.Size)
+			bits := New(c.Size)
 			assert.Len(t, bits.Bytes(), len(c.Source), "length")
 			assert.Equal(t, c.Size, bits.Len(), "size")
 			assert.Equal(t, 0, bits.Count(), "count")
@@ -59,7 +60,7 @@ func TestBitsetNew(t *testing.T) {
 func TestBitsetFromBytes(t *testing.T) {
 	for _, c := range popCases {
 		t.Run(c.Name, func(t *testing.T) {
-			bits := FromBuffer(c.Source, c.Size)
+			bits := NewFromBuffer(c.Source, c.Size)
 			assert.Len(t, bits.Bytes(), len(c.Source), "length")
 			assert.Equal(t, c.Size, bits.Len(), "size")
 			assert.Equal(t, c.Count, bits.Count(), "count")
@@ -71,7 +72,7 @@ func TestBitsetFromBytes(t *testing.T) {
 func TestBitsetOne(t *testing.T) {
 	for _, sz := range bitsetSizes {
 		t.Run(f("sz_%d", sz), func(t *testing.T) {
-			bits := NewBitset(sz)
+			bits := New(sz)
 			bits.One()
 			assert.Len(t, bits.Bytes(), bitFieldLen(sz), "length")
 			assert.Equal(t, sz, bits.Len(), "size")
@@ -89,7 +90,7 @@ func TestBitsetOne(t *testing.T) {
 func TestBitsetZero(t *testing.T) {
 	for _, c := range popCases {
 		t.Run(c.Name, func(t *testing.T) {
-			bits := FromBuffer(c.Source, c.Size)
+			bits := NewFromBuffer(c.Source, c.Size)
 			bits.Zero()
 			assert.Len(t, bits.Bytes(), len(c.Source), "length")
 			assert.Equal(t, c.Size, bits.Len(), "size")
@@ -107,7 +108,7 @@ func TestBitsetResize(t *testing.T) {
 	for _, sz := range bitsetSizes {
 		for _, sznew := range bitsetSizes {
 			t.Run(f("%d_to_%d", sz, sznew), func(t *testing.T) {
-				bits := NewBitset(sz)
+				bits := New(sz)
 				bits.One()
 				bits.Resize(sznew)
 
@@ -132,7 +133,7 @@ func TestBitsetResize(t *testing.T) {
 	// clear/reset bitset to zero
 	for _, sz := range bitsetSizes {
 		t.Run(f("%d_resize_0", sz), func(t *testing.T) {
-			bits := NewBitset(sz)
+			bits := New(sz)
 			bits.One()
 			bits.Resize(0)
 
@@ -145,7 +146,7 @@ func TestBitsetResize(t *testing.T) {
 	// grow + 1
 	for _, sz := range bitsetSizes {
 		t.Run(f("%d_resize+1", sz), func(t *testing.T) {
-			bits := NewBitset(sz)
+			bits := New(sz)
 			bits.One()
 			bits.Resize(bits.Len() + 1)
 			bits.Set(bits.Len() - 1)
@@ -164,7 +165,7 @@ func TestBitsetFill(t *testing.T) {
 		for _, pt := range bitsetPatterns {
 			t.Run(f("%d_%x", sz, pt), func(t *testing.T) {
 				cmp := fillBitset(nil, sz, pt)
-				bits := NewBitset(sz)
+				bits := New(sz)
 				bits.Fill(pt)
 
 				assert.Len(t, bits.Bytes(), bitFieldLen(sz), "length")
@@ -179,14 +180,14 @@ func TestBitsetFill(t *testing.T) {
 func TestBitsetSet(t *testing.T) {
 	for _, sz := range bitsetSizes {
 		t.Run(f("%d", sz), func(t *testing.T) {
-			bits := NewBitset(sz)
+			bits := New(sz)
 			cmp := fillBitset(nil, sz, 0)
 
 			// set first bit
 			bits.Set(0)
 			cmp[0] |= 0x01
 			assert.Equal(t, 1, bits.Count(), "count")
-			assert.True(t, bits.IsSet(0), "isset(0)")
+			assert.True(t, bits.Contains(0), "isset(0)")
 			assert.True(t, bits.Any(), "any")
 			assert.False(t, bits.All(), "all")
 			assert.False(t, bits.None(), "none")
@@ -196,7 +197,7 @@ func TestBitsetSet(t *testing.T) {
 			bits.Set(sz - 1)
 			cmp[(sz-1)>>3] |= 1 << uint((sz-1)&0x7)
 			assert.Equal(t, 2, bits.Count(), "count")
-			assert.True(t, bits.IsSet(sz-1), "isset(sz-1)")
+			assert.True(t, bits.Contains(sz-1), "isset(sz-1)")
 			assert.True(t, bits.Any(), "any")
 			assert.False(t, bits.All(), "all")
 			assert.False(t, bits.None(), "none")
@@ -205,12 +206,12 @@ func TestBitsetSet(t *testing.T) {
 			// set invalid bit
 			bits.Set(-1)
 			assert.Equal(t, 2, bits.Count(), "count")
-			assert.False(t, bits.IsSet(-1), "isset(sz-1)")
+			assert.False(t, bits.Contains(-1), "isset(sz-1)")
 			assert.Equal(t, cmp, bits.Bytes(), "bytes")
 
 			bits.Set(sz)
 			assert.Equal(t, 2, bits.Count(), "count")
-			assert.False(t, bits.IsSet(sz), "isset(sz)")
+			assert.False(t, bits.Contains(sz), "isset(sz)")
 			assert.Equal(t, cmp, bits.Bytes(), "bytes")
 
 			checkCleanTail(t, bits.Bytes())
@@ -221,51 +222,55 @@ func TestBitsetSet(t *testing.T) {
 func TestBitsetSetRange(t *testing.T) {
 	for _, sz := range bitsetSizes {
 		t.Run(f("%d", sz), func(t *testing.T) {
-			bits := NewBitset(sz)
-			start := util.RandIntn(sz)
-			end := util.RandIntn(sz)
-			if start > end {
-				start, end = end, start
-			}
-			// t.Logf("SetRange(%d, %d)", start, end)
-			bits.SetRange(start, end)
-			for i := range sz {
-				assert.Equal(t, i >= start && i <= end, bits.IsSet(i), "isset(%d) in %x", i, bits.Bytes())
-			}
+			err := quick.Check(func(rg [2]uint8) bool {
+				bits := New(sz)
+				start := int(rg[0])
+				end := int(rg[1])
+				if start > end {
+					start, end = end, start
+				}
+				// t.Logf("SetRange(%d, %d)", start, end)
+				bits.SetRange(start, end)
+				for i := range sz {
+					require.Equal(t, i >= start && i <= end, bits.Contains(i), "isset(%d) in %x", i, bits.Bytes())
+				}
+				return true
+			}, nil)
+			require.NoError(t, err)
 		})
 	}
 }
 
-func TestBitsetClear(t *testing.T) {
+func TestBitsetUnset(t *testing.T) {
 	for _, sz := range bitsetSizes {
 		t.Run(f("%d", sz), func(t *testing.T) {
-			bits := NewBitset(sz)
+			bits := New(sz)
 			bits.One()
 			cmp := fillBitset(nil, sz, 0xff)
 
 			// clear first bit
-			bits.Clear(0)
+			bits.Unset(0)
 			cmp[0] &= 0xfe
 			assert.Equal(t, popcount(cmp), bits.Count(), "popcount")
-			assert.False(t, bits.IsSet(0), "isset(0)")
+			assert.False(t, bits.Contains(0), "isset(0)")
 			assert.Equal(t, cmp, bits.Bytes(), "bytes")
 
 			// clear last bit
-			bits.Clear(sz - 1)
+			bits.Unset(sz - 1)
 			cmp[(sz-1)>>3] &^= 1 << uint((sz-1)&0x7)
 			assert.Equal(t, popcount(cmp), bits.Count(), "popcount")
-			assert.False(t, bits.IsSet(sz-1), "isset(sz-1)")
+			assert.False(t, bits.Contains(sz-1), "isset(sz-1)")
 			assert.Equal(t, cmp, bits.Bytes(), "bytes")
 
 			// clear invalid bit
-			bits.Clear(-1)
+			bits.Unset(-1)
 			assert.Equal(t, popcount(cmp), bits.Count(), "popcount")
-			assert.False(t, bits.IsSet(-1), "isset(-1)")
+			assert.False(t, bits.Contains(-1), "isset(-1)")
 			assert.Equal(t, cmp, bits.Bytes(), "bytes")
 
-			bits.Clear(sz)
+			bits.Unset(sz)
 			assert.Equal(t, popcount(cmp), bits.Count(), "count")
-			assert.False(t, bits.IsSet(sz), "isset(sz)")
+			assert.False(t, bits.Contains(sz), "isset(sz)")
 			assert.Equal(t, cmp, bits.Bytes(), "bytes")
 		})
 	}
@@ -278,7 +283,7 @@ func TestBitsetSlice(t *testing.T) {
 				slice := b.Slice()
 				require.Len(t, slice, sz, "length")
 				for k, v := range slice {
-					assert.Equal(t, b.IsSet(k), v, "bit %d in %x", k, b.Bytes())
+					assert.Equal(t, b.Contains(k), v, "bit %d in %x", k, b.Bytes())
 				}
 			}
 		})
@@ -294,7 +299,7 @@ func TestBitsetSubSlice(t *testing.T) {
 				slice := b.SubSlice(start, n)
 				require.Len(t, slice, n, "length")
 				for k, v := range slice {
-					assert.Equal(t, b.IsSet(start+k), v, "bit %d in %x", start+k, b.Bytes())
+					assert.Equal(t, b.Contains(start+k), v, "bit %d in %x", start+k, b.Bytes())
 				}
 			}
 		})
@@ -307,7 +312,7 @@ func TestBitsetAppend(t *testing.T) {
 		for _, pat := range bitsetPatterns {
 			t.Run(f("%d_%x", sz, pat), func(t *testing.T) {
 				for _, src := range randBitsets(sz) {
-					dst := NewBitset(sz)
+					dst := New(sz)
 					dst.Fill(pat)
 					srcPos := int(util.RandInt32n(int32(src.Len())))
 					srcLen := int(util.RandInt32n(int32(src.Len() - srcPos)))
@@ -356,7 +361,7 @@ func TestBitsetDelete(t *testing.T) {
 		for _, pat := range bitsetPatterns {
 			t.Run(f("%d_%x", sz, pat), func(t *testing.T) {
 				for _, src := range randBitsets(sz) {
-					dst := NewBitset(sz)
+					dst := New(sz)
 					dst.Fill(pat)
 					cmp := dst.Slice()
 					delPos := int(util.RandInt32n(int32(src.Len())))
@@ -375,7 +380,7 @@ func TestBitsetDelete(t *testing.T) {
 					require.Equal(t, dst.Count(), popcount(dst.Bytes()), "popcount")
 
 					for i, v := range cmp {
-						assert.Equal(t, dst.IsSet(i), v, "bit %d in %x", i, dst.Bytes())
+						assert.Equal(t, dst.Contains(i), v, "bit %d in %x", i, dst.Bytes())
 					}
 
 					checkCleanTail(t, dst.Bytes())
@@ -402,7 +407,7 @@ func randBits(n int) []byte {
 func randBitsets(sz int) []*Bitset {
 	res := make([]*Bitset, 100)
 	for i := range res {
-		res[i] = NewBitset(sz).SetFromBytes(randBits(sz), sz, false)
+		res[i] = New(sz).SetFromBytes(randBits(sz), sz, false)
 	}
 	return res
 }

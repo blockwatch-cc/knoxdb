@@ -91,7 +91,7 @@ func benchDecode[T Float, E Int](b *testing.B) {
 		res := enc.Encode(src, a.Exp)
 		out := make([]T, c.N)
 		dec := NewDecoder[T, E](a.Exp.F, a.Exp.E).
-			WithExceptions(res.PatchValues, res.PatchIndices).
+			WithPatches(res.PatchValues, res.PatchIndices).
 			WithSafeInt(res.IsSafeInt)
 		dst, log2 := bitpack.Encode(make([]byte, c.N*8), res.Encoded, res.Min, res.Max)
 		b.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(b *testing.B) {
@@ -118,7 +118,7 @@ func benchDecodeFused[T Float, E Int](b *testing.B) {
 		dst := make([]byte, c.N*8)
 		dst, _ = bitpack.Encode(dst, res.Encoded, res.Min, res.Max)
 		dec := NewDecoder[T, E](a.Exp.F, a.Exp.E).
-			WithExceptions(res.PatchValues, res.PatchIndices)
+			WithPatches(res.PatchValues, res.PatchIndices)
 		bitpack.Decode(res.Encoded, dst, log2, res.Min)
 		dec.Decode(out1, res.Encoded)
 		dec.DecodeFused(out2, dst, log2, res.Min)

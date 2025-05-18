@@ -27,7 +27,7 @@ func (b *Block) Hash() *Block {
 		bits := b.Bool()
 		u64 := h.Uint64().Slice()
 		for i := 0; i < l; i++ {
-			if bits.IsSet(i) {
+			if bits.Contains(i) {
 				u64[i] = one
 			} else {
 				u64[i] = zero

@@ -52,7 +52,7 @@ func CompareBenchmark[T types.Unsigned](b *testing.B, enc EncodeFunc[T], cmp Com
 		minv, maxv := slices.Min(c.Data), slices.Max(c.Data)
 		buf, err := enc(make([]byte, 8*len(c.Data)), c.Data, minv, maxv)
 		require.NoError(b, err)
-		bits := bitset.NewBitset(len(c.Data))
+		bits := bitset.New(len(c.Data))
 		val := c.Data[len(c.Data)/2]
 
 		b.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(b *testing.B) {
@@ -70,7 +70,7 @@ func CompareBenchmark2[T types.Unsigned](b *testing.B, enc EncodeFunc[T], cmp Co
 		minv, maxv := slices.Min(c.Data), slices.Max(c.Data)
 		buf, err := enc(make([]byte, 8*len(c.Data)), c.Data, minv, maxv)
 		require.NoError(b, err)
-		bits := bitset.NewBitset(len(c.Data))
+		bits := bitset.New(len(c.Data))
 		val := c.Data[len(c.Data)/2]
 		from, to := max(val/2, minv+1), min(val*2, maxv-1)
 

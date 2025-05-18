@@ -20,13 +20,13 @@ type Bitmap struct {
 
 func New() Bitmap {
 	return Bitmap{
-		Bitmap: xroar.NewBitmap(),
+		Bitmap: xroar.New(),
 	}
 }
 
 func NewFromBytes(src []byte) Bitmap {
 	return Bitmap{
-		Bitmap: xroar.FromBufferWithCopy(src),
+		Bitmap: xroar.NewFromBufferWithCopy(src),
 	}
 }
 
@@ -37,7 +37,7 @@ func NewFromArray(src []uint64) Bitmap {
 
 func NewFromSortedArray(src []uint64) Bitmap {
 	return Bitmap{
-		Bitmap: xroar.FromSortedList(src),
+		Bitmap: xroar.NewFromSortedList(src),
 	}
 }
 
@@ -59,7 +59,7 @@ func (b Bitmap) Count() int {
 	if b.Bitmap == nil {
 		return 0
 	}
-	return b.Bitmap.GetCardinality()
+	return b.Bitmap.Count()
 }
 
 func (b Bitmap) Size() int {
@@ -73,8 +73,8 @@ func (b Bitmap) Set(x uint64) bool {
 	return b.Bitmap.Set(x)
 }
 
-func (b Bitmap) Remove(x uint64) bool {
-	return b.Bitmap.Remove(x)
+func (b Bitmap) Unset(x uint64) bool {
+	return b.Bitmap.Unset(x)
 }
 
 func (b Bitmap) Contains(x uint64) bool {
@@ -86,15 +86,15 @@ func (b Bitmap) Bytes() []byte {
 }
 
 func (b *Bitmap) CloneFromBytes(src []byte) {
-	b.Bitmap = xroar.FromBufferWithCopy(src)
+	b.Bitmap = xroar.NewFromBufferWithCopy(src)
 }
 
 func (b *Bitmap) CloneFrom(a Bitmap) {
 	b.Bitmap = a.Bitmap.Clone()
 }
 
-func (b *Bitmap) ToArray() []uint64 {
-	return b.Bitmap.ToArray()
+func (b *Bitmap) ToArray(dst []uint64) []uint64 {
+	return b.Bitmap.ToArray(dst)
 }
 
 func (b Bitmap) MarshalBinary() ([]byte, error) {
@@ -113,7 +113,7 @@ func (b *Bitmap) UnmarshalBinary(src []byte) error {
 	if err != nil {
 		return err
 	}
-	b.Bitmap = xroar.FromBuffer(dst)
+	b.Bitmap = xroar.NewFromBuffer(dst)
 	return nil
 }
 
@@ -130,7 +130,7 @@ func (b *Bitmap) UnmarshalText(src []byte) error {
 	if err != nil {
 		return err
 	}
-	b.Bitmap = xroar.FromBuffer(dst)
+	b.Bitmap = xroar.NewFromBuffer(dst)
 	return nil
 }
 

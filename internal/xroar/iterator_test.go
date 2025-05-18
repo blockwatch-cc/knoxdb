@@ -26,7 +26,7 @@ import (
 
 func TestIteratorBasic(t *testing.T) {
 	n := uint64(1e5)
-	bm := NewBitmap()
+	bm := New()
 	for i := uint64(1); i <= n; i++ {
 		bm.Set(i)
 	}
@@ -42,7 +42,7 @@ func TestIteratorBasic(t *testing.T) {
 
 func TestIteratorRanges(t *testing.T) {
 	n := uint64(1e5)
-	bm := NewBitmap()
+	bm := New()
 	for i := uint64(1); i <= n; i++ {
 		bm.Set(i)
 	}
@@ -60,7 +60,7 @@ func TestIteratorRanges(t *testing.T) {
 
 func TestIteratorRandom(t *testing.T) {
 	n := uint64(1e6)
-	bm := NewBitmap()
+	bm := New()
 	mp := make(map[uint64]struct{})
 	var arr []uint64
 	for i := uint64(1); i <= n; i++ {
@@ -89,13 +89,13 @@ func TestIteratorRandom(t *testing.T) {
 }
 
 func TestIteratorWithRemoveKeys(t *testing.T) {
-	b := NewBitmap()
+	b := New()
 	N := uint64(1e6)
 	for i := uint64(0); i < N; i++ {
 		b.Set(i)
 	}
 
-	b.RemoveRange(0, N)
+	b.UnsetRange(0, N)
 	it := b.NewIterator()
 
 	cnt := 0
@@ -106,7 +106,7 @@ func TestIteratorWithRemoveKeys(t *testing.T) {
 }
 
 func BenchmarkIterator(b *testing.B) {
-	bm := NewBitmap()
+	bm := New()
 	for i := 0; i < int(1e5); i++ {
 		bm.Set(uint64(i))
 	}

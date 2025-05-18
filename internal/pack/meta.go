@@ -26,7 +26,7 @@ func (p *Package) RowId(row int) uint64 { return p.blocks[p.rx+ridOffs].Uint64()
 func (p *Package) RefId(row int) uint64 { return p.blocks[p.rx+refOffs].Uint64().Get(row) }
 func (p *Package) Xmin(row int) uint64  { return p.blocks[p.rx+xminOffs].Uint64().Get(row) }
 func (p *Package) Xmax(row int) uint64  { return p.blocks[p.rx+xmaxOffs].Uint64().Get(row) }
-func (p *Package) IsDel(row int) bool   { return p.blocks[p.rx+delOffs].Bool().IsSet(row) }
+func (p *Package) IsDel(row int) bool   { return p.blocks[p.rx+delOffs].Bool().Contains(row) }
 
 func (p *Package) RowIds() *block.Block { return p.blocks[p.rx+ridOffs] }
 func (p *Package) RefIds() *block.Block { return p.blocks[p.rx+refOffs] }
@@ -65,6 +65,6 @@ func (p *Package) SetMeta(row int, m *schema.Meta) {
 	if m.Xmax > 0 {
 		p.blocks[p.rx+delOffs].Bool().Set(row)
 	} else {
-		p.blocks[p.rx+delOffs].Bool().Clear(row)
+		p.blocks[p.rx+delOffs].Bool().Unset(row)
 	}
 }

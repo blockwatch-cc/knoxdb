@@ -159,7 +159,7 @@ func (c *DeltaContainer[T]) MatchNotEqual(val T, bits, _ *Bitset) {
 	bits.One()
 	if c.Delta == 1 || val%c.Delta == 0 {
 		if n := int(val / c.Delta); n < c.N {
-			bits.Clear(n)
+			bits.Unset(n)
 		}
 	}
 }

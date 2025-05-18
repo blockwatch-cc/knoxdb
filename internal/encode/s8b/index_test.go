@@ -87,7 +87,7 @@ func CmpEqualUnpackedBenchmark[T types.Unsigned](b *testing.B) {
 		minv, maxv := slices.Min(c.Data), slices.Max(c.Data)
 		buf, err := generic.Encode[T](make([]byte, 8*len(c.Data)), c.Data, minv, maxv)
 		require.NoError(b, err)
-		bits := bitset.NewBitset(len(c.Data))
+		bits := bitset.New(len(c.Data))
 		val := c.Data[len(c.Data)/2]
 		b.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(b *testing.B) {
 			b.SetBytes(int64(len(c.Data) * int(unsafe.Sizeof(T(0)))))

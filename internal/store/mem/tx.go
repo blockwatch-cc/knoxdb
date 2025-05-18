@@ -51,12 +51,12 @@ func (tx *transaction) nextBucketID() ([bucketIdLen]byte, error) {
 	nextId := len(tx.db.bucketIds) + 1
 
 	// find a gap in bucket id map
-	ids := bitset.NewBitset(1 << bucketIdLen).One()
+	ids := bitset.New(1 << bucketIdLen).One()
 	defer ids.Close()
 	for _, v := range tx.db.bucketIds {
 		var buf [8]byte
 		copy(buf[8-bucketIdLen:], v[:])
-		ids.Clear(int(binary.BigEndian.Uint64(buf[:])))
+		ids.Unset(int(binary.BigEndian.Uint64(buf[:])))
 	}
 	// use the first missing id
 	if ids.Count() > 0 {

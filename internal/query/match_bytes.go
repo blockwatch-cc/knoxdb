@@ -100,7 +100,7 @@ func (m bytesEqualMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask
 	le, ge := f.New(FilterModeLe), f.New(FilterModeGe)
 	le.WithValue(m.val)
 	ge.WithValue(m.val)
-	minBits := bitset.NewBitset(mins.Len())
+	minBits := bitset.New(mins.Len())
 	le.MatchVector(mins, minBits, mask)
 	if mask != nil {
 		minBits.And(mask)
@@ -285,7 +285,7 @@ func (m bytesRangeMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask
 	le, ge := f.New(FilterModeLe), f.New(FilterModeGe)
 	le.WithValue(m.to)
 	ge.WithValue(m.from)
-	minBits := bitset.NewBitset(mins.Len())
+	minBits := bitset.New(mins.Len())
 	le.MatchVector(mins, minBits, mask)
 	if mask != nil {
 		minBits.And(mask)
@@ -440,7 +440,7 @@ func (m bytesInSetMatcher) matchBlockHashMapWithMask(b *block.Block, bits, mask 
 	arr := b.Bytes()
 	for i := range arr.Len() {
 		// skip masked values
-		if !mask.IsSet(i) {
+		if !mask.Contains(i) {
 			continue
 		}
 		if m.matchHashMap(arr.Elem(i)) {
@@ -461,7 +461,7 @@ func (m bytesInSetMatcher) matchBlockSliceWithMask(b *block.Block, bits, mask *b
 	arr := b.Bytes()
 	for i := range arr.Len() {
 		// skip masked values
-		if !mask.IsSet(i) {
+		if !mask.Contains(i) {
 			continue
 		}
 		if m.slice.Contains(arr.Elem(i)) {
@@ -526,7 +526,7 @@ func (m bytesNotInSetMatcher) matchBlockHashMapWithMask(b *block.Block, bits, ma
 	arr := b.Bytes()
 	for i := range arr.Len() {
 		// skip masked values
-		if !mask.IsSet(i) {
+		if !mask.Contains(i) {
 			continue
 		}
 		if !m.matchHashMap(arr.Elem(i)) {
@@ -547,7 +547,7 @@ func (m bytesNotInSetMatcher) matchBlockSliceWithMask(b *block.Block, bits, mask
 	arr := b.Bytes()
 	for i := range arr.Len() {
 		// skip masked values
-		if !mask.IsSet(i) {
+		if !mask.Contains(i) {
 			continue
 		}
 		if !m.slice.Contains(arr.Elem(i)) {
@@ -611,7 +611,7 @@ func (m bytesRegexpMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitse
 		arr := b.Bytes()
 		for i := range arr.Len() {
 			// skip masked values
-			if !mask.IsSet(i) {
+			if !mask.Contains(i) {
 				continue
 			}
 			if m.re.Match(arr.Elem(i)) {

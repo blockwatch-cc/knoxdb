@@ -1,3 +1,6 @@
+// Copyright (c) 2021-2025 Blockwatch Data Inc.
+// Author: alex@blockwatch.cc
+
 /*
  * Copyright 2021 Dgraph Labs, Inc. and Contributors
  *
@@ -19,15 +22,15 @@ package xroar
 import (
 	"fmt"
 	"math"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/filter"
 	"github.com/pkg/errors"
+	"golang.org/x/exp/constraints"
 )
-
-// var empty = make([]uint16, 16<<20)
 
 const mask = uint64(0xFFFFFFFFFFFF0000)
 
@@ -45,12 +48,39 @@ type Bitmap struct {
 	memMoved int
 }
 
-// FromBuffer returns a pointer to bitmap corresponding to the given buffer. This bitmap shouldn't
+func New() *Bitmap {
+	return NewWithSize(2)
+}
+
+func NewWithSize(numKeys int) *Bitmap {
+	if numKeys < 2 {
+		panic("Must contain at least two keys.")
+	}
+	ra := &Bitmap{
+		// Each key must also keep an offset. So, we need to double the number
+		// of uint64s allocated. Plus, we need to make space for the first 2
+		// uint64s to store the number of keys and node size.
+		data: make([]uint16, 4*(2*numKeys+2)),
+	}
+	ra.keys = toUint64Slice(ra.data)
+	ra.keys.setNodeSize(len(ra.data))
+
+	// Always generate a container for key = 0x00. Otherwise, node gets confused
+	// about whether a zero key is a new key or not.
+	offset := ra.newContainer(minContainerSize)
+	// First two are for num keys. index=2 -> 0 key. index=3 -> offset.
+	ra.keys.setAt(indexNodeStart+1, offset)
+	ra.keys.setNumKeys(1)
+
+	return ra
+}
+
+// NewFromBuffer returns a pointer to bitmap corresponding to the given buffer. This bitmap shouldn't
 // be modified because it might corrupt the given buffer.
-func FromBuffer(data []byte) *Bitmap {
+func NewFromBuffer(data []byte) *Bitmap {
 	assert(len(data)%2 == 0)
 	if len(data) < 8 {
-		return NewBitmap()
+		return New()
 	}
 	du := toUint16Slice(data)
 	x := toUint64Slice(du[:4])[indexNodeSize]
@@ -61,12 +91,12 @@ func FromBuffer(data []byte) *Bitmap {
 	}
 }
 
-// FromBufferWithCopy creates a copy of the given buffer and returns a bitmap based on the copied
+// NewFromBufferWithCopy creates a copy of the given buffer and returns a bitmap based on the copied
 // buffer. This bitmap is safe for both read and write operations.
-func FromBufferWithCopy(src []byte) *Bitmap {
+func NewFromBufferWithCopy(src []byte) *Bitmap {
 	assert(len(src)%2 == 0)
 	if len(src) < 8 {
-		return NewBitmap()
+		return New()
 	}
 	src16 := toUint16Slice(src)
 	dst16 := make([]uint16, len(src16))
@@ -77,6 +107,71 @@ func FromBufferWithCopy(src []byte) *Bitmap {
 		data: dst16,
 		keys: toUint64Slice(dst16[:x]),
 	}
+}
+
+func NewFromSortedList[T constraints.Integer](vals []T) *Bitmap {
+	arr := make([]uint16, 0)
+	var hi, lastHi, off uint64
+
+	ra := New()
+
+	if len(vals) == 0 {
+		return ra
+	}
+
+	// Set the keys beforehand so that we don't need to move a lot of memory because of adding keys.
+	var numKeys int
+	for _, x := range vals {
+		hi = uint64(x) & mask
+		if hi != 0 && hi != lastHi {
+			numKeys++
+		}
+		lastHi = hi
+	}
+	ra.initSpaceForKeys(numKeys)
+
+	finalize := func(l []uint16, key uint64) {
+		if len(l) == 0 {
+			return
+		}
+		if len(l) <= 2048 {
+			// 4 uint16s for the header, and extra 4 uint16s so that adding more elements using
+			// Set operation doesn't fail.
+			sz := uint16(8 + len(l))
+			off = ra.newContainer(sz)
+			c := ra.getContainer(off)
+			c[indexSize] = sz
+			c[indexType] = typeArray
+			setCardinality(c, len(l))
+			for i := 0; i < len(l); i++ {
+				c[int(startIdx)+i] = l[i]
+			}
+
+		} else {
+			off = ra.newContainer(maxContainerSize)
+			c := ra.getContainer(off)
+			c[indexSize] = maxContainerSize
+			c[indexType] = typeBitmap
+			for _, v := range l {
+				bitmap(c).add(v)
+			}
+		}
+		ra.setKey(key, off)
+	}
+
+	lastHi = 0
+	for _, x := range vals {
+		hi = uint64(x) & mask
+		// Finalize the last container before proceeding ahead
+		if hi != 0 && hi != lastHi {
+			finalize(arr, lastHi)
+			arr = arr[:0]
+		}
+		arr = append(arr, uint16(x))
+		lastHi = hi
+	}
+	finalize(arr, lastHi)
+	return ra
 }
 
 func (ra *Bitmap) Size() int {
@@ -102,31 +197,347 @@ func (ra *Bitmap) ToBufferWithCopy() []byte {
 	return buf
 }
 
-func NewBitmap() *Bitmap {
-	return NewBitmapWith(2)
+func (ra *Bitmap) Clone() *Bitmap {
+	return NewFromBuffer(slices.Clone(ra.ToBuffer()))
 }
 
-func NewBitmapWith(numKeys int) *Bitmap {
-	if numKeys < 2 {
-		panic("Must contain at least two keys.")
-	}
-	ra := &Bitmap{
-		// Each key must also keep an offset. So, we need to double the number
-		// of uint64s allocated. Plus, we need to make space for the first 2
-		// uint64s to store the number of keys and node size.
-		data: make([]uint16, 4*(2*numKeys+2)),
-	}
+// Capacity returns the underlying arrays uint16 capacity.
+// used to reduce amount of reallocations.
+func (ra *Bitmap) Capacity() int {
+	return cap(ra.data)
+}
+
+func (ra *Bitmap) Reset() {
+	clear(ra.data)
+
+	// reset ra.data to size enough for one container and corresponding key.
+	// NewBitmap allocs 24 extra bytes here
+	ra.data = ra.data[:24+minContainerSize]
 	ra.keys = toUint64Slice(ra.data)
 	ra.keys.setNodeSize(len(ra.data))
 
-	// Always generate a container for key = 0x00. Otherwise, node gets confused
-	// about whether a zero key is a new key or not.
 	offset := ra.newContainer(minContainerSize)
-	// First two are for num keys. index=2 -> 0 key. index=3 -> offset.
 	ra.keys.setAt(indexNodeStart+1, offset)
 	ra.keys.setNumKeys(1)
+}
 
-	return ra
+func (ra *Bitmap) IsEmpty() bool {
+	if ra == nil {
+		return true
+	}
+	N := ra.keys.numKeys()
+	for i := 0; i < N; i++ {
+		offset := ra.keys.val(i)
+		cont := ra.getContainer(offset)
+		if c := getCardinality(cont); c > 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func (ra *Bitmap) Set(x uint64) bool {
+	key := x & mask
+	offset, has := ra.keys.getValue(key)
+	if !has {
+		// We need to add a container.
+		o := ra.newContainer(minContainerSize)
+		// offset might have been updated by setKey.
+		offset = ra.setKey(key, o)
+	}
+	c := ra.getContainer(offset)
+	if c[indexType] == typeArray {
+		p := array(c)
+		if p.isFull() {
+			ra.expandContainer(offset)
+			// offsets might have changed. Safer to re-run Set.
+			return ra.Set(x)
+		}
+	}
+
+	switch c[indexType] {
+	case typeArray:
+		p := array(c)
+		return p.add(uint16(x))
+	case typeBitmap:
+		b := bitmap(c)
+		return b.add(uint16(x))
+	}
+	panic("we shouldn't reach here")
+}
+
+func (ra *Bitmap) Unset(x uint64) bool {
+	if ra == nil {
+		return false
+	}
+	key := x & mask
+	offset, has := ra.keys.getValue(key)
+	if !has {
+		return false
+	}
+	c := ra.getContainer(offset)
+	switch c[indexType] {
+	case typeArray:
+		p := array(c)
+		return p.remove(uint16(x))
+	case typeBitmap:
+		b := bitmap(c)
+		return b.remove(uint16(x))
+	}
+	return true
+}
+
+// TODO: Potentially this can be optimized.
+func (ra *Bitmap) SetMany(vals []uint64) {
+	for _, k := range vals {
+		ra.Set(k)
+	}
+}
+
+func (ra *Bitmap) Contains(x uint64) bool {
+	if ra == nil {
+		return false
+	}
+	key := x & mask
+	offset, has := ra.keys.getValue(key)
+	if !has {
+		return false
+	}
+	y := uint16(x)
+
+	c := ra.getContainer(offset)
+	switch c[indexType] {
+	case typeArray:
+		p := array(c)
+		return p.has(y)
+	case typeBitmap:
+		b := bitmap(c)
+		return b.has(y)
+	}
+	return false
+}
+
+func (ra *Bitmap) ContainsHash(key filter.HashValue) bool {
+	return ra.Contains(key.Uint64())
+}
+
+func (ra *Bitmap) ContainsAny(keys []filter.HashValue) bool {
+	for _, v := range keys {
+		if ra.Contains(v.Uint64()) {
+			return true
+		}
+	}
+	return false
+}
+
+// returns true if any bit is set within range (boundaries inclusive)
+func (ra *Bitmap) ContainsRange(lo, hi uint64) bool {
+	if lo > hi {
+		panic("lo should not be more than hi")
+	}
+
+	if ra.IsEmpty() {
+		return false
+	}
+
+	if lo == hi {
+		return ra.Contains(lo)
+	}
+
+	// hi < first value
+	if hi < ra.keys.key(0) {
+		return false
+	}
+
+	// lo > last value
+	if lo > ra.keys.key(ra.keys.numKeys()-1)+^mask {
+		return false
+	}
+
+	// visit all containers starting at first container
+	// that may contain a value >= lo
+	for idx := ra.keys.search(lo & mask); idx < ra.keys.numKeys(); idx++ {
+		// stop when container range is beyond hi value
+		if ra.keys.key(idx) > hi {
+			break
+		}
+
+		// get container value range (translate to u64)
+		key := ra.keys.key(idx)
+		c := ra.getContainer(ra.keys.val(idx))
+
+		// check if the lower container boundary is inside range
+		var minVal, maxVal uint64
+		switch c[indexType] {
+		case typeArray:
+			minVal = key + uint64(array(c).minimum())
+			maxVal = key + uint64(array(c).maximum())
+		case typeBitmap:
+			minVal = key + uint64(bitmap(c).minimum())
+			maxVal = key + uint64(bitmap(c).maximum())
+		}
+
+		// stop when all container values are outside range
+		if minVal > hi || maxVal < lo {
+			break
+		}
+
+		// smallest value is in range
+		if minVal >= lo && minVal <= hi {
+			return true
+		}
+
+		// largest value is in range
+		if maxVal >= lo && maxVal <= hi {
+			return true
+		}
+
+		// inner range (lo,hi) may be contained in container; this check
+		// is more expensive because we have to look at individual values
+		// in a bitmap which depends on container type
+		if lo > minVal && hi < maxVal {
+			switch c[indexType] {
+			case typeArray:
+				t := array(c)
+
+				// full arrays always match
+				if t.isFull() {
+					return true
+				}
+
+				// find smallest container value >= lo
+				idx := t.find(uint16(lo))
+				if idx == getCardinality(c) {
+					// should not happen, the outside check above should catch this case
+					break
+				}
+
+				// some value lo <= v <= hi exists
+				if key+uint64(dataAt(c, idx)) <= hi {
+					return true
+				}
+
+			case typeBitmap:
+				t := bitmap(c)
+				if t.isFull() {
+					return true
+				}
+				for i := lo + 1; i < hi; i++ {
+					if t.has(uint16(i)) {
+						return true
+					}
+				}
+			}
+
+			// no intersection exists
+			break
+		}
+	}
+
+	// no intersection found
+	return false
+}
+
+// UnsetRange removes [lo, hi) from the bitmap.
+func (ra *Bitmap) UnsetRange(lo, hi uint64) {
+	if lo > hi {
+		panic("lo should not be more than hi")
+	}
+	if lo == hi {
+		return
+	}
+
+	k1 := lo & mask
+	k2 := hi & mask
+
+	defer ra.Cleanup()
+
+	//  Complete range lie in a single container
+	if k1 == k2 {
+		if off, has := ra.keys.getValue(k1); has {
+			c := ra.getContainer(off)
+			removeRangeContainer(c, uint16(lo), uint16(hi)-1)
+		}
+		return
+	}
+
+	// Remove all the containers in range [k1+1, k2-1].
+	n := ra.keys.numKeys()
+	st := ra.keys.search(k1)
+	key := ra.keys.key(st)
+	if key == k1 {
+		st++
+	}
+
+	for i := st; i < n; i++ {
+		key := ra.keys.key(i)
+		if key >= k2 {
+			break
+		}
+		if off, has := ra.keys.getValue(key); has {
+			zeroOutContainer(ra.getContainer(off))
+		}
+	}
+
+	// Remove elements >= lo in k1's container
+	if off, has := ra.keys.getValue(k1); has {
+		c := ra.getContainer(off)
+		if uint16(lo) == 0 {
+			zeroOutContainer(c)
+		} else {
+			removeRangeContainer(c, uint16(lo), math.MaxUint16)
+		}
+	}
+
+	if uint16(hi) == 0 {
+		return
+	}
+
+	// Remove all elements < hi in k2's container
+	if off, has := ra.keys.getValue(k2); has {
+		c := ra.getContainer(off)
+		removeRangeContainer(c, 0, uint16(hi)-1)
+	}
+}
+
+func (ra *Bitmap) Count() int {
+	if ra == nil {
+		return 0
+	}
+	N := ra.keys.numKeys()
+	var sz int
+	for i := 0; i < N; i++ {
+		offset := ra.keys.val(i)
+		c := ra.getContainer(offset)
+		sz += getCardinality(c)
+	}
+	return sz
+}
+
+// Select returns the element at the xth index. (0-indexed)
+func (ra *Bitmap) Select(x uint64) (uint64, error) {
+	if x >= uint64(ra.Count()) {
+		return 0, errors.Errorf("index %d is not less than the cardinality: %d",
+			x, ra.Count())
+	}
+	n := ra.keys.numKeys()
+	for i := 0; i < n; i++ {
+		off := ra.keys.val(i)
+		con := ra.getContainer(off)
+		c := uint64(getCardinality(con))
+		assert(c != uint64(invalidCardinality))
+		if x < c {
+			key := ra.keys.key(i)
+			switch con[indexType] {
+			case typeArray:
+				return key | uint64(array(con).all()[x]), nil
+			case typeBitmap:
+				return key | uint64(bitmap(con).selectAt(int(x))), nil
+			}
+		}
+		x -= c
+	}
+	panic("should not reach here")
 }
 
 func (ra *Bitmap) initSpaceForKeys(n int) {
@@ -353,7 +764,7 @@ func (ra *Bitmap) copyAt(offset uint64, src []uint16) {
 	ra.data[offset] = targetSz
 }
 
-func (ra Bitmap) getContainer(offset uint64) []uint16 {
+func (ra *Bitmap) getContainer(offset uint64) []uint16 {
 	data := ra.data[offset:]
 	if len(data) == 0 {
 		panic(fmt.Sprintf("No container found at offset: %d\n", offset))
@@ -362,422 +773,14 @@ func (ra Bitmap) getContainer(offset uint64) []uint16 {
 	return data[:sz]
 }
 
-func (ra *Bitmap) Clone() *Bitmap {
-	abuf := ra.ToBuffer()
-	bbuf := make([]byte, len(abuf))
-	copy(bbuf, abuf)
-	return FromBuffer(bbuf)
-}
-
-func (ra *Bitmap) IsEmpty() bool {
-	if ra == nil {
-		return true
-	}
-	N := ra.keys.numKeys()
-	for i := 0; i < N; i++ {
-		offset := ra.keys.val(i)
-		cont := ra.getContainer(offset)
-		if c := getCardinality(cont); c > 0 {
-			return false
-		}
-	}
-	return true
-}
-
-func (ra *Bitmap) Set(x uint64) bool {
-	key := x & mask
-	offset, has := ra.keys.getValue(key)
-	if !has {
-		// We need to add a container.
-		o := ra.newContainer(minContainerSize)
-		// offset might have been updated by setKey.
-		offset = ra.setKey(key, o)
-	}
-	c := ra.getContainer(offset)
-	if c[indexType] == typeArray {
-		p := array(c)
-		if p.isFull() {
-			ra.expandContainer(offset)
-			// offsets might have changed. Safer to re-run Set.
-			return ra.Set(x)
-		}
-	}
-
-	switch c[indexType] {
-	case typeArray:
-		p := array(c)
-		return p.add(uint16(x))
-	case typeBitmap:
-		b := bitmap(c)
-		return b.add(uint16(x))
-	}
-	panic("we shouldn't reach here")
-}
-
-func FromSortedList(vals []uint64) *Bitmap {
-	arr := make([]uint16, 0)
-	var hi, lastHi, off uint64
-
-	ra := NewBitmap()
-
-	if len(vals) == 0 {
-		return ra
-	}
-
-	// Set the keys beforehand so that we don't need to move a lot of memory because of adding keys.
-	var numKeys int
-	for _, x := range vals {
-		hi = x & mask
-		if hi != 0 && hi != lastHi {
-			numKeys++
-		}
-		lastHi = hi
-	}
-	ra.initSpaceForKeys(numKeys)
-
-	finalize := func(l []uint16, key uint64) {
-		if len(l) == 0 {
-			return
-		}
-		if len(l) <= 2048 {
-			// 4 uint16s for the header, and extra 4 uint16s so that adding more elements using
-			// Set operation doesn't fail.
-			sz := uint16(8 + len(l))
-			off = ra.newContainer(sz)
-			c := ra.getContainer(off)
-			c[indexSize] = sz
-			c[indexType] = typeArray
-			setCardinality(c, len(l))
-			for i := 0; i < len(l); i++ {
-				c[int(startIdx)+i] = l[i]
-			}
-
-		} else {
-			off = ra.newContainer(maxContainerSize)
-			c := ra.getContainer(off)
-			c[indexSize] = maxContainerSize
-			c[indexType] = typeBitmap
-			for _, v := range l {
-				bitmap(c).add(v)
-			}
-		}
-		ra.setKey(key, off)
-	}
-
-	lastHi = 0
-	for _, x := range vals {
-		hi = x & mask
-		// Finalize the last container before proceeding ahead
-		if hi != 0 && hi != lastHi {
-			finalize(arr, lastHi)
-			arr = arr[:0]
-		}
-		arr = append(arr, uint16(x))
-		lastHi = hi
-	}
-	finalize(arr, lastHi)
-	return ra
-}
-
-// TODO: Potentially this can be optimized.
-func (ra *Bitmap) SetMany(vals []uint64) {
-	for _, k := range vals {
-		ra.Set(k)
-	}
-}
-
-// Select returns the element at the xth index. (0-indexed)
-func (ra *Bitmap) Select(x uint64) (uint64, error) {
-	if x >= uint64(ra.GetCardinality()) {
-		return 0, errors.Errorf("index %d is not less than the cardinality: %d",
-			x, ra.GetCardinality())
-	}
-	n := ra.keys.numKeys()
-	for i := 0; i < n; i++ {
-		off := ra.keys.val(i)
-		con := ra.getContainer(off)
-		c := uint64(getCardinality(con))
-		assert(c != uint64(invalidCardinality))
-		if x < c {
-			key := ra.keys.key(i)
-			switch con[indexType] {
-			case typeArray:
-				return key | uint64(array(con).all()[x]), nil
-			case typeBitmap:
-				return key | uint64(bitmap(con).selectAt(int(x))), nil
-			}
-		}
-		x -= c
-	}
-	panic("should not reach here")
-}
-
-func (ra *Bitmap) Contains(x uint64) bool {
-	if ra == nil {
-		return false
-	}
-	key := x & mask
-	offset, has := ra.keys.getValue(key)
-	if !has {
-		return false
-	}
-	y := uint16(x)
-
-	c := ra.getContainer(offset)
-	switch c[indexType] {
-	case typeArray:
-		p := array(c)
-		return p.has(y)
-	case typeBitmap:
-		b := bitmap(c)
-		return b.has(y)
-	}
-	return false
-}
-
-func (ra *Bitmap) ContainsHash(key filter.HashValue) bool {
-	return ra.Contains(key.Uint64())
-}
-
-func (ra *Bitmap) ContainsAny(keys []filter.HashValue) bool {
-	for _, v := range keys {
-		if ra.Contains(v.Uint64()) {
-			return true
-		}
-	}
-	return false
-}
-
-func (ra *Bitmap) Remove(x uint64) bool {
-	if ra == nil {
-		return false
-	}
-	key := x & mask
-	offset, has := ra.keys.getValue(key)
-	if !has {
-		return false
-	}
-	c := ra.getContainer(offset)
-	switch c[indexType] {
-	case typeArray:
-		p := array(c)
-		return p.remove(uint16(x))
-	case typeBitmap:
-		b := bitmap(c)
-		return b.remove(uint16(x))
-	}
-	return true
-}
-
-// returns true if any bit is set within range (boundaries inclusive)
-func (ra *Bitmap) ContainsRange(lo, hi uint64) bool {
-	if lo > hi {
-		panic("lo should not be more than hi")
-	}
-
-	if ra.IsEmpty() {
-		return false
-	}
-
-	if lo == hi {
-		return ra.Contains(lo)
-	}
-
-	// hi < first value
-	if hi < ra.keys.key(0) {
-		return false
-	}
-
-	// lo > last value
-	if lo > ra.keys.key(ra.keys.numKeys()-1)+^mask {
-		return false
-	}
-
-	// visit all containers starting at first container
-	// that may contain a value >= lo
-	for idx := ra.keys.search(lo & mask); idx < ra.keys.numKeys(); idx++ {
-		// stop when container range is beyond hi value
-		if ra.keys.key(idx) > hi {
-			break
-		}
-
-		// get container value range (translate to u64)
-		key := ra.keys.key(idx)
-		c := ra.getContainer(ra.keys.val(idx))
-
-		// check if the lower container boundary is inside range
-		var minVal, maxVal uint64
-		switch c[indexType] {
-		case typeArray:
-			minVal = key + uint64(array(c).minimum())
-			maxVal = key + uint64(array(c).maximum())
-		case typeBitmap:
-			minVal = key + uint64(bitmap(c).minimum())
-			maxVal = key + uint64(bitmap(c).maximum())
-		}
-
-		// stop when all container values are outside range
-		if minVal > hi || maxVal < lo {
-			break
-		}
-
-		// smallest value is in range
-		if minVal >= lo && minVal <= hi {
-			return true
-		}
-
-		// largest value is in range
-		if maxVal >= lo && maxVal <= hi {
-			return true
-		}
-
-		// inner range (lo,hi) may be contained in container; this check
-		// is more expensive because we have to look at individual values
-		// in a bitmap which depends on container type
-		if lo > minVal && hi < maxVal {
-			switch c[indexType] {
-			case typeArray:
-				t := array(c)
-
-				// full arrays always match
-				if t.isFull() {
-					return true
-				}
-
-				// find smallest container value >= lo
-				idx := t.find(uint16(lo))
-				if idx == getCardinality(c) {
-					// should not happen, the outside check above should catch this case
-					break
-				}
-
-				// some value lo <= v <= hi exists
-				if key+uint64(dataAt(c, idx)) <= hi {
-					return true
-				}
-
-			case typeBitmap:
-				t := bitmap(c)
-				if t.isFull() {
-					return true
-				}
-				for i := lo + 1; i < hi; i++ {
-					if t.has(uint16(i)) {
-						return true
-					}
-				}
-			}
-
-			// no intersection exists
-			break
-		}
-	}
-
-	// no intersection found
-	return false
-}
-
-// Remove range removes [lo, hi) from the bitmap.
-func (ra *Bitmap) RemoveRange(lo, hi uint64) {
-	if lo > hi {
-		panic("lo should not be more than hi")
-	}
-	if lo == hi {
-		return
-	}
-
-	k1 := lo & mask
-	k2 := hi & mask
-
-	defer ra.Cleanup()
-
-	//  Complete range lie in a single container
-	if k1 == k2 {
-		if off, has := ra.keys.getValue(k1); has {
-			c := ra.getContainer(off)
-			removeRangeContainer(c, uint16(lo), uint16(hi)-1)
-		}
-		return
-	}
-
-	// Remove all the containers in range [k1+1, k2-1].
-	n := ra.keys.numKeys()
-	st := ra.keys.search(k1)
-	key := ra.keys.key(st)
-	if key == k1 {
-		st++
-	}
-
-	for i := st; i < n; i++ {
-		key := ra.keys.key(i)
-		if key >= k2 {
-			break
-		}
-		if off, has := ra.keys.getValue(key); has {
-			zeroOutContainer(ra.getContainer(off))
-		}
-	}
-
-	// Remove elements >= lo in k1's container
-	if off, has := ra.keys.getValue(k1); has {
-		c := ra.getContainer(off)
-		if uint16(lo) == 0 {
-			zeroOutContainer(c)
-		} else {
-			removeRangeContainer(c, uint16(lo), math.MaxUint16)
-		}
-	}
-
-	if uint16(hi) == 0 {
-		return
-	}
-
-	// Remove all elements < hi in k2's container
-	if off, has := ra.keys.getValue(k2); has {
-		c := ra.getContainer(off)
-		removeRangeContainer(c, 0, uint16(hi)-1)
-	}
-}
-
-// Capacity returns the underlying arrays uint16 capacity.
-// used to reduce amount of reallocations.
-func (ra *Bitmap) Capacity() int {
-	return cap(ra.data)
-}
-
-func (ra *Bitmap) Reset() {
-	clear(ra.data)
-
-	// reset ra.data to size enough for one container and corresponding key.
-	// NewBitmap allocs 24 extra bytes here
-	ra.data = ra.data[:24+minContainerSize]
-	ra.keys = toUint64Slice(ra.data)
-	ra.keys.setNodeSize(len(ra.data))
-
-	offset := ra.newContainer(minContainerSize)
-	ra.keys.setAt(indexNodeStart+1, offset)
-	ra.keys.setNumKeys(1)
-}
-
-func (ra *Bitmap) GetCardinality() int {
-	if ra == nil {
-		return 0
-	}
-	N := ra.keys.numKeys()
-	var sz int
-	for i := 0; i < N; i++ {
-		offset := ra.keys.val(i)
-		c := ra.getContainer(offset)
-		sz += getCardinality(c)
-	}
-	return sz
-}
-
-func (ra *Bitmap) ToArray() []uint64 {
+func (ra *Bitmap) ToArray(res []uint64) []uint64 {
 	if ra == nil {
 		return nil
 	}
-	res := make([]uint64, 0, ra.GetCardinality())
+	if res == nil {
+		res = make([]uint64, 0, ra.Count())
+	}
+	res = res[:0]
 	N := ra.keys.numKeys()
 	for i := 0; i < N; i++ {
 		key := ra.keys.key(i)
@@ -964,7 +967,7 @@ func And(a, b *Bitmap) *Bitmap {
 	ai, an := 0, a.keys.numKeys()
 	bi, bn := 0, b.keys.numKeys()
 
-	res := NewBitmap()
+	res := New()
 	for ai < an && bi < bn {
 		ak := a.keys.key(ai)
 		bk := b.keys.key(bi)
@@ -1086,7 +1089,7 @@ func Or(a, b *Bitmap) *Bitmap {
 	bi, bn := 0, b.keys.numKeys()
 
 	buf := make([]uint16, maxContainerSize)
-	res := NewBitmap()
+	res := New()
 	for ai < an && bi < bn {
 		ak := a.keys.key(ai)
 		ac := a.getContainer(a.keys.val(ai))
@@ -1136,38 +1139,38 @@ func Or(a, b *Bitmap) *Bitmap {
 	return res
 }
 
-func (ra *Bitmap) Rank(x uint64) int {
-	key := x & mask
-	offset, has := ra.keys.getValue(key)
-	if !has {
-		return -1
-	}
-	c := ra.getContainer(offset)
-	y := uint16(x)
+// func (ra *Bitmap) Rank(x uint64) int {
+// 	key := x & mask
+// 	offset, has := ra.keys.getValue(key)
+// 	if !has {
+// 		return -1
+// 	}
+// 	c := ra.getContainer(offset)
+// 	y := uint16(x)
 
-	// Find the rank within the container
-	var rank int
-	switch c[indexType] {
-	case typeArray:
-		rank = array(c).rank(y)
-	case typeBitmap:
-		rank = bitmap(c).rank(y)
-	}
-	if rank < 0 {
-		return -1
-	}
+// 	// Find the rank within the container
+// 	var rank int
+// 	switch c[indexType] {
+// 	case typeArray:
+// 		rank = array(c).rank(y)
+// 	case typeBitmap:
+// 		rank = bitmap(c).rank(y)
+// 	}
+// 	if rank < 0 {
+// 		return -1
+// 	}
 
-	// Add up cardinalities of all the containers on the left of container containing x.
-	n := ra.keys.numKeys()
-	for i := 0; i < n; i++ {
-		if ra.keys.key(i) == key {
-			break
-		}
-		cont := ra.getContainer(ra.keys.val(i))
-		rank += getCardinality(cont)
-	}
-	return rank
-}
+// 	// Add up cardinalities of all the containers on the left of container containing x.
+// 	n := ra.keys.numKeys()
+// 	for i := 0; i < n; i++ {
+// 		if ra.keys.key(i) == key {
+// 			break
+// 		}
+// 		cont := ra.getContainer(ra.keys.val(i))
+// 		rank += getCardinality(cont)
+// 	}
+// 	return rank
+// }
 
 func (ra *Bitmap) Cleanup() {
 	type interval struct {
@@ -1245,7 +1248,7 @@ func (ra *Bitmap) Cleanup() {
 
 func FastAnd(bitmaps ...*Bitmap) *Bitmap {
 	if len(bitmaps) == 0 {
-		return NewBitmap()
+		return New()
 	}
 	b := bitmaps[0]
 	for _, bm := range bitmaps[1:] {
@@ -1292,7 +1295,7 @@ func FastParOr(numGo int, bitmaps ...*Bitmap) *Bitmap {
 // doing an OR over the bitmaps iteratively.
 func FastOr(bitmaps ...*Bitmap) *Bitmap {
 	if len(bitmaps) == 0 {
-		return NewBitmap()
+		return New()
 	}
 	if len(bitmaps) == 1 {
 		return bitmaps[0]
@@ -1316,7 +1319,7 @@ func FastOr(bitmaps ...*Bitmap) *Bitmap {
 	// We use the above information to pre-generate the destination Bitmap and
 	// allocate container sizes based on the calculated cardinalities.
 	// var sz int
-	dst := NewBitmap()
+	dst := New()
 	// First create the keys. We do this as a separate step, because keys are
 	// the left most portion of the data array. Adding space there requires
 	// moving a lot of pieces.
@@ -1367,112 +1370,4 @@ func FastOr(bitmaps ...*Bitmap) *Bitmap {
 	}
 
 	return dst
-}
-
-// Split splits the bitmap based on maxSz and the externalSize function. It splits the bitmap
-// such that size of each split bitmap + external size corresponding to its elements approximately
-// equal to maxSz (it can be greater than maxSz sometimes). The splits are returned in sorted order.
-// externalSize is a function that should return the external size corresponding to elements in
-// range [start, end]. External size is used to calculate the split boundaries.
-func (bm *Bitmap) Split(externalSize func(start, end uint64) uint64, maxSz uint64) []*Bitmap {
-	splitFurther := func(b *Bitmap) []*Bitmap {
-		itr := b.NewIterator()
-		newBm := NewBitmap()
-		var sz uint64
-		var bms []*Bitmap
-		for id, ok := itr.Next(); ok; id, ok = itr.Next() {
-			sz += externalSize(id, id)
-			newBm.Set(id)
-			if sz >= maxSz {
-				bms = append(bms, newBm)
-				newBm = NewBitmap()
-				sz = 0
-			}
-		}
-
-		if !newBm.IsEmpty() {
-			bms = append(bms, newBm)
-		}
-		return bms
-	}
-
-	create := func(keyToOffset map[uint64]uint64, totalSz uint64) []*Bitmap {
-		var keys []uint64
-		for key := range keyToOffset {
-			keys = append(keys, key)
-		}
-		sort.Slice(keys, func(i, j int) bool {
-			return keys[i] < keys[j]
-		})
-
-		newBm := NewBitmap()
-
-		// First set all the keys.
-		var containerSz uint64
-		for _, key := range keys {
-			newBm.setKey(key, 0)
-
-			// Calculate the size of the containers.
-			cont := bm.getContainer(keyToOffset[key])
-			containerSz += uint64(len(cont))
-		}
-		// Allocate enough space to hold all the containers.
-		beforeSize := len(newBm.data)
-		newBm.fastExpand(containerSz)
-		newBm.data = newBm.data[:beforeSize]
-
-		// Now, we can populate the containers. For that, we first expand the
-		// bitmap. Calculate the total size we need to allocate all these containers.
-		for _, key := range keys {
-			cont := bm.getContainer(keyToOffset[key])
-			off := newBm.newContainer(uint16(len(cont)))
-			copy(newBm.data[off:], cont)
-
-			newBm.setKey(key, off)
-		}
-
-		if newBm.GetCardinality() == 0 {
-			return nil
-		}
-
-		if totalSz > maxSz {
-			return splitFurther(newBm)
-		}
-
-		return []*Bitmap{newBm}
-	}
-
-	var splits []*Bitmap
-
-	containerMap := make(map[uint64]uint64)
-	var totalSz uint64 // size of containers plus the external size of the container
-
-	for i := 0; i < bm.keys.numKeys(); i++ {
-		key := bm.keys.key(i)
-		off := bm.keys.val(i)
-		cont := bm.getContainer(off)
-
-		start, end := key, addUint64(key, 1<<16-1)
-		sz := externalSize(start, end) + 2*uint64(cont[indexSize]) // Converting to bytes.
-
-		// We can probably append more containers in the same bucket.
-		if totalSz+sz < maxSz || len(containerMap) == 0 {
-			// Include this container in the container map.
-			containerMap[key] = off
-			totalSz += sz
-			continue
-		}
-
-		// We have reached the maxSz limit. Hence, create a split.
-		splits = append(splits, create(containerMap, totalSz)...)
-
-		containerMap = make(map[uint64]uint64)
-		containerMap[key] = off
-		totalSz = sz
-	}
-	if len(containerMap) > 0 {
-		splits = append(splits, create(containerMap, totalSz)...)
-	}
-
-	return splits
 }

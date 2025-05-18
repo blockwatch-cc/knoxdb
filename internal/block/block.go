@@ -99,7 +99,9 @@ func New(typ BlockType, sz int) *Block {
 		i256.X3 = arena.AllocUint64(sz)
 		b.ptr = unsafe.Pointer(&i256)
 	case BlockBool:
-		b.ptr = unsafe.Pointer(bitset.NewBitset(sz).Resize(0))
+		// TODO: this can also become a managed buffer here, but accessor type
+		// does not fit
+		b.ptr = unsafe.Pointer(bitset.New(sz).Resize(0))
 	case BlockBytes:
 		arr := dedup.NewByteArray(sz)
 		b.ptr = unsafe.Pointer(&arr)
@@ -445,7 +447,7 @@ func (b *Block) Clear() {
 	case BlockBytes:
 		(*(*dedup.ByteArray)(b.ptr)).Clear()
 	case BlockBool:
-		(*bitset.Bitset)(b.ptr).Reset()
+		(*bitset.Bitset)(b.ptr).Clear()
 	case BlockInt128:
 		i128 := (*num.Int128Stride)(b.ptr)
 		i128.X0 = i128.X0[:0]

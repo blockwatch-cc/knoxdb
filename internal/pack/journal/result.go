@@ -68,8 +68,8 @@ type Result struct {
 
 func NewResult() *Result {
 	return &Result{
-		pks:  xroar.NewBitmap(),
-		del:  xroar.NewBitmap(),
+		pks:  xroar.New(),
+		del:  xroar.New(),
 		segs: make([]*Segment, 0),
 		keys: make(pkAddrs, 0),
 	}
@@ -88,12 +88,12 @@ func (r *Result) IsEmpty() bool {
 }
 
 func (r *Result) Len() int {
-	return r.pks.GetCardinality()
+	return r.pks.Count()
 }
 
 func (r *Result) SetDeleted(pk uint64) {
 	if r.del == nil {
-		r.del = xroar.NewBitmap()
+		r.del = xroar.New()
 	}
 	r.del.Set(pk)
 	r.pks.Set(pk)
@@ -191,7 +191,7 @@ func (r *Result) GetMeta(i int) *schema.Meta {
 }
 
 func (r *Result) UnsetMatch(pk uint64) {
-	r.pks.Remove(pk)
+	r.pks.Unset(pk)
 }
 
 func (r *Result) ForEach(fn func(*pack.Package, int) error) error {

@@ -16,7 +16,7 @@ import (
 type DatabaseOptions struct {
 	Path            string           // local filesystem
 	Namespace       string           // unique db identifier
-	Driver          string           // bolt, badger, mem, ...
+	Driver          string           // bolt, mem, ...
 	PageSize        int              // boltdb
 	PageFill        float64          // boltdb
 	CacheSize       int              // in bytes
@@ -136,7 +136,7 @@ func (o *DatabaseOptions) UnmarshalBinary(buf []byte) error {
 
 type TableOptions struct {
 	Engine          TableKind  // pack, lsm, parquet, csv, remote
-	Driver          string     // bolt, badger, mem, ...
+	Driver          string     // bolt, mem, ...
 	PackSize        int        // pack engine
 	JournalSize     int        // pack engine
 	JournalSegments int        // pack engine
@@ -179,7 +179,7 @@ func (o *TableOptions) UnmarshalBinary(buf []byte) error {
 }
 
 type StoreOptions struct {
-	Driver     string     // bolt, badger, mem, ...
+	Driver     string     // bolt, mem, ...
 	PageSize   int        // boltdb
 	PageFill   float64    // boltdb
 	ReadOnly   bool       // read-only tx only
@@ -216,7 +216,7 @@ func (o *StoreOptions) UnmarshalBinary(buf []byte) error {
 
 type IndexOptions struct {
 	Engine      IndexKind       // pack, lsm
-	Driver      string          // bolt, badger, mem, ...
+	Driver      string          // bolt, mem, ...
 	Type        types.IndexType // hash, int, composite, bloom, bfuse, bits
 	PackSize    int             // pack engine
 	JournalSize int             // pack engine

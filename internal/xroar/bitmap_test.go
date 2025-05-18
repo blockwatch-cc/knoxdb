@@ -31,7 +31,7 @@ func TestModify(t *testing.T) {
 }
 
 func TestContainer(t *testing.T) {
-	ra := NewBitmap()
+	ra := New()
 
 	// We're creating a container of size 64 words. 4 of these would be used for
 	// the header. So, the data can only live in 60 words.
@@ -80,7 +80,7 @@ func TestContainer(t *testing.T) {
 }
 
 func TestKey(t *testing.T) {
-	ra := NewBitmap()
+	ra := New()
 	for i := 1; i <= 10; i++ {
 		ra.Set(uint64(i))
 	}
@@ -121,14 +121,14 @@ func TestKey(t *testing.T) {
 }
 
 func TestEdgeCase(t *testing.T) {
-	ra := NewBitmap()
+	ra := New()
 
 	require.True(t, ra.Set(65536))
 	require.True(t, ra.Contains(65536))
 }
 
 func TestBulkAdd(t *testing.T) {
-	ra := NewBitmap()
+	ra := New()
 	m := make(map[uint64]struct{})
 	max := int64(64 << 16)
 	start := time.Now()
@@ -187,7 +187,7 @@ func TestBulkAdd(t *testing.T) {
 		// require.Truef(t, ra.Set(x), "Unable to set x: %d %#x\n", x, x)
 	}
 	// t.Logf("Card: %d\n", len(m))
-	require.Equalf(t, len(m), ra.GetCardinality(), "Bitmap:\n%s\n", ra)
+	require.Equalf(t, len(m), ra.Count(), "Bitmap:\n%s\n", ra)
 	for x := range m {
 		require.True(t, ra.Contains(x))
 	}
@@ -203,15 +203,15 @@ func TestBulkAdd(t *testing.T) {
 	dup := make([]uint16, len(ra.data))
 	copy(dup, ra.data)
 
-	ra2 := FromBuffer(toByteSlice(dup))
-	require.Equal(t, len(m), ra2.GetCardinality())
+	ra2 := NewFromBuffer(toByteSlice(dup))
+	require.Equal(t, len(m), ra2.Count())
 	for x := range m {
 		require.True(t, ra2.Contains(x))
 	}
 }
 
 func TestBitmapUint64Max(t *testing.T) {
-	bm := NewBitmap()
+	bm := New()
 
 	edges := []uint64{0, math.MaxUint8, math.MaxUint16, math.MaxUint32, math.MaxUint64}
 	for _, e := range edges {
@@ -223,22 +223,22 @@ func TestBitmapUint64Max(t *testing.T) {
 }
 
 func TestBitmapZero(t *testing.T) {
-	bm1 := NewBitmap()
+	bm1 := New()
 	bm1.Set(1)
-	uids := bm1.ToArray()
+	uids := bm1.ToArray(nil)
 	require.Equal(t, 1, len(uids))
 	for _, u := range uids {
 		require.Equal(t, uint64(1), u)
 	}
 
-	bm2 := NewBitmap()
+	bm2 := New()
 	bm2.Set(2)
 
 	bm3 := Or(bm1, bm2)
 	require.False(t, bm3.Contains(0))
 	require.True(t, bm3.Contains(1))
 	require.True(t, bm3.Contains(2))
-	require.Equal(t, 2, bm3.GetCardinality())
+	require.Equal(t, 2, bm3.Count())
 }
 
 func TestBitmapOps(t *testing.T) {
@@ -250,7 +250,7 @@ func TestBitmapOps(t *testing.T) {
 
 	for _, f := range F {
 		// t.Logf("Using N: %d M: %d F: %d\n", N, M, f)
-		small, big := NewBitmap(), NewBitmap()
+		small, big := New(), New()
 		occ := make(map[uint64]int)
 		smallMap := make(map[uint64]struct{})
 		bigMap := make(map[uint64]struct{})
@@ -276,15 +276,15 @@ func TestBitmapOps(t *testing.T) {
 			occ[smallx] |= 0x01 // binary 0001
 			occ[bigx] |= 0x02   // binary 0010
 		}
-		require.Equal(t, len(smallMap), small.GetCardinality())
-		require.Equal(t, len(bigMap), big.GetCardinality())
+		require.Equal(t, len(smallMap), small.Count())
+		require.Equal(t, len(bigMap), big.Count())
 
 		bitOr := Or(small, big)
 		bitAnd := And(small, big)
 
 		// t.Logf("Sizes. small: %d big: %d, bitOr: %d bitAnd: %d\n",
-		// small.GetCardinality(), big.GetCardinality(),
-		// bitOr.GetCardinality(), bitAnd.GetCardinality())
+		// small.Count(), big.Count(),
+		// bitOr.Count(), bitAnd.Count())
 
 		cntOr, cntAnd := 0, 0
 		for x, freq := range occ {
@@ -318,9 +318,9 @@ func TestBitmapOps(t *testing.T) {
 				require.Failf(t, "Failed", "Value of freq can't exceed 0x03. Found: %#x\n", freq)
 			}
 		}
-		if cntAnd != bitAnd.GetCardinality() {
-			uids := bitAnd.ToArray()
-			// t.Logf("Len Uids: %d Card: %d cntAnd: %d. Occ: %d\n", len(uids), bitAnd.GetCardinality(), cntAnd, len(occ))
+		if cntAnd != bitAnd.Count() {
+			uids := bitAnd.ToArray(nil)
+			// t.Logf("Len Uids: %d Card: %d cntAnd: %d. Occ: %d\n", len(uids), bitAnd.Count(), cntAnd, len(occ))
 
 			uidMap := make(map[uint64]struct{})
 			for _, u := range uids {
@@ -334,8 +334,8 @@ func TestBitmapOps(t *testing.T) {
 			// }
 			require.FailNow(t, "Cardinality isn't matching")
 		}
-		require.Equal(t, cntOr, bitOr.GetCardinality())
-		require.Equal(t, cntAnd, bitAnd.GetCardinality())
+		require.Equal(t, cntOr, bitOr.Count())
+		require.Equal(t, cntAnd, bitAnd.Count())
 	}
 }
 
@@ -355,7 +355,7 @@ func TestBitmapOps(t *testing.T) {
 // }
 
 func TestSetGet(t *testing.T) {
-	bm := NewBitmap()
+	bm := New()
 	N := int(1e6)
 	for i := 0; i < N; i++ {
 		bm.Set(uint64(i))
@@ -372,10 +372,10 @@ func TestSetSorted(t *testing.T) {
 		for i := 0; i < n; i++ {
 			arr = append(arr, uint64(i))
 		}
-		r := FromSortedList(arr)
-		require.Equal(t, len(arr), r.GetCardinality())
+		r := NewFromSortedList(arr)
+		require.Equal(t, len(arr), r.Count())
 
-		rarr := r.ToArray()
+		rarr := r.ToArray(nil)
 		for i := 0; i < n; i++ {
 			require.Equal(t, uint64(i), rarr[i])
 		}
@@ -388,8 +388,8 @@ func TestSetSorted(t *testing.T) {
 }
 
 func TestAnd(t *testing.T) {
-	a := NewBitmap()
-	b := NewBitmap()
+	a := New()
+	b := New()
 
 	N := int(1e7)
 	for i := 0; i < N; i++ {
@@ -399,33 +399,33 @@ func TestAnd(t *testing.T) {
 			b.Set(uint64(i))
 		}
 	}
-	require.Equal(t, N/2, a.GetCardinality())
-	require.Equal(t, N/2, b.GetCardinality())
+	require.Equal(t, N/2, a.Count())
+	require.Equal(t, N/2, b.Count())
 	res := And(a, b)
-	require.Equal(t, 0, res.GetCardinality())
+	require.Equal(t, 0, res.Count())
 	a.And(b)
-	require.Equal(t, 0, a.GetCardinality())
+	require.Equal(t, 0, a.Count())
 }
 
 func TestAnd2(t *testing.T) {
-	a := NewBitmap()
+	a := New()
 	n := int(1e7)
 
 	for i := 0; i < n; i++ {
 		a.Set(uint64(i))
 	}
-	require.Equal(t, n, a.GetCardinality())
-	a.RemoveRange(0, uint64(n/2))
+	require.Equal(t, n, a.Count())
+	a.UnsetRange(0, uint64(n/2))
 
 	for i := 0; i < n; i++ {
 		a.Set(uint64(i))
 	}
-	require.Equal(t, n, a.GetCardinality())
+	require.Equal(t, n, a.Count())
 }
 
 func TestAndNot(t *testing.T) {
-	a := NewBitmap()
-	b := NewBitmap()
+	a := New()
+	b := New()
 
 	N := int(1e7)
 	for i := 0; i < N; i++ {
@@ -434,25 +434,25 @@ func TestAndNot(t *testing.T) {
 			b.Set(uint64(i))
 		}
 	}
-	require.Equal(t, N, a.GetCardinality())
-	require.Equal(t, N/2, b.GetCardinality())
+	require.Equal(t, N, a.Count())
+	require.Equal(t, N/2, b.Count())
 
 	a.AndNot(b)
-	require.Equal(t, N/2, a.GetCardinality())
+	require.Equal(t, N/2, a.Count())
 
 	// Test for case when array container will be generated.
-	a = NewBitmap()
-	b = NewBitmap()
+	a = New()
+	b = New()
 
 	a.SetMany([]uint64{1, 2, 3, 4})
 	b.SetMany([]uint64{3, 4, 5, 6})
 
 	a.AndNot(b)
-	require.Equal(t, []uint64{1, 2}, a.ToArray())
+	require.Equal(t, []uint64{1, 2}, a.ToArray(nil))
 
 	// Test for case when bitmap container will be generated.
-	a = NewBitmap()
-	b = NewBitmap()
+	a = New()
+	b = New()
 	for i := 0; i < 10000; i++ {
 		a.Set(uint64(i))
 		if i < 7000 {
@@ -460,7 +460,7 @@ func TestAndNot(t *testing.T) {
 		}
 	}
 	a.AndNot(b)
-	require.Equal(t, 3000, a.GetCardinality())
+	require.Equal(t, 3000, a.Count())
 	for i := 0; i < 10000; i++ {
 		if i < 7000 {
 			require.False(t, a.Contains(uint64(i)))
@@ -471,8 +471,8 @@ func TestAndNot(t *testing.T) {
 }
 
 func TestAndNot2(t *testing.T) {
-	a := NewBitmap()
-	b := NewBitmap()
+	a := New()
+	b := New()
 	n := int(1e6)
 
 	for i := 0; i < n/2; i++ {
@@ -481,15 +481,15 @@ func TestAndNot2(t *testing.T) {
 	for i := n / 2; i < n; i++ {
 		b.Set(uint64(i))
 	}
-	require.Equal(t, n/2, a.GetCardinality())
+	require.Equal(t, n/2, a.Count())
 	a.AndNot(b)
-	require.Equal(t, n/2, a.GetCardinality())
+	require.Equal(t, n/2, a.Count())
 
 }
 
 func TestOr(t *testing.T) {
-	a := NewBitmap()
-	b := NewBitmap()
+	a := New()
+	b := New()
 
 	N := int(1e7)
 	for i := 0; i < N; i++ {
@@ -499,49 +499,49 @@ func TestOr(t *testing.T) {
 			b.Set(uint64(i))
 		}
 	}
-	require.Equal(t, N/2, a.GetCardinality())
-	require.Equal(t, N/2, b.GetCardinality())
+	require.Equal(t, N/2, a.Count())
+	require.Equal(t, N/2, b.Count())
 	res := Or(a, b)
-	require.Equal(t, N, res.GetCardinality())
+	require.Equal(t, N, res.Count())
 	a.or(b, 0)
-	require.Equal(t, N, a.GetCardinality())
+	require.Equal(t, N, a.Count())
 }
 
 func TestCardinality(t *testing.T) {
-	a := NewBitmap()
+	a := New()
 	n := 1 << 20
 	for i := 0; i < n; i++ {
 		a.Set(uint64(i))
 	}
-	require.Equal(t, n, a.GetCardinality())
+	require.Equal(t, n, a.Count())
 }
 
-func TestRemove(t *testing.T) {
-	a := NewBitmap()
+func TestUnset(t *testing.T) {
+	a := New()
 	N := int(1e7)
 	for i := 0; i < N; i++ {
 		a.Set(uint64(i))
 	}
-	require.Equal(t, N, a.GetCardinality())
+	require.Equal(t, N, a.Count())
 	for i := 0; i < N/2; i++ {
-		require.True(t, a.Remove(uint64(i)))
+		require.True(t, a.Unset(uint64(i)))
 	}
-	require.Equal(t, N/2, a.GetCardinality())
+	require.Equal(t, N/2, a.Count())
 
-	// Remove elelemts which doesn't exist should be no-op
+	// Unset elelemts which doesn't exist should be no-op
 	for i := 0; i < N/2; i++ {
-		require.False(t, a.Remove(uint64(i)))
+		require.False(t, a.Unset(uint64(i)))
 	}
-	require.Equal(t, N/2, a.GetCardinality())
+	require.Equal(t, N/2, a.Count())
 
 	for i := 0; i < N/2; i++ {
-		require.True(t, a.Remove(uint64(i+N/2)))
+		require.True(t, a.Unset(uint64(i+N/2)))
 	}
-	require.Equal(t, 0, a.GetCardinality())
+	require.Equal(t, 0, a.Count())
 }
 
-func TestContainerRemoveRange(t *testing.T) {
-	ra := NewBitmap()
+func TestContainerUnsetRange(t *testing.T) {
+	ra := New()
 
 	type cases struct {
 		lo       uint16
@@ -597,51 +597,51 @@ func TestContainerRemoveRange(t *testing.T) {
 	}
 }
 
-func TestRemoveRange(t *testing.T) {
-	a := NewBitmap()
+func TestUnsetRange(t *testing.T) {
+	a := New()
 	N := int(1e7)
 	for i := 0; i < N; i++ {
 		a.Set(uint64(i))
 	}
-	a.RemoveRange(0, 0)
-	require.Equal(t, N, a.GetCardinality())
+	a.UnsetRange(0, 0)
+	require.Equal(t, N, a.Count())
 
-	require.Equal(t, N, a.GetCardinality())
-	a.RemoveRange(uint64(N/4), uint64(N/2))
-	require.Equal(t, 3*N/4, a.GetCardinality())
+	require.Equal(t, N, a.Count())
+	a.UnsetRange(uint64(N/4), uint64(N/2))
+	require.Equal(t, 3*N/4, a.Count())
 
-	a.RemoveRange(0, uint64(N/2))
-	require.Equal(t, N/2, a.GetCardinality())
+	a.UnsetRange(0, uint64(N/2))
+	require.Equal(t, N/2, a.Count())
 
-	a.RemoveRange(uint64(N/2), uint64(N))
-	require.Equal(t, 0, a.GetCardinality())
+	a.UnsetRange(uint64(N/2), uint64(N))
+	require.Equal(t, 0, a.Count())
 	a.Set(uint64(N / 4))
 	a.Set(uint64(N / 2))
 	a.Set(uint64(3 * N / 4))
-	require.Equal(t, 3, a.GetCardinality())
+	require.Equal(t, 3, a.Count())
 
 	var arr []uint64
 	for i := 0; i < 123; i++ {
 		arr = append(arr, uint64(i))
 	}
-	b := FromSortedList(arr)
-	b.RemoveRange(50, math.MaxUint64)
-	require.Equal(t, 50, b.GetCardinality())
+	b := NewFromSortedList(arr)
+	b.UnsetRange(50, math.MaxUint64)
+	require.Equal(t, 50, b.Count())
 }
 
-func TestRemoveRange2(t *testing.T) {
+func TestUnsetRange2(t *testing.T) {
 	// High from the last container should not be removed.
-	a := NewBitmap()
+	a := New()
 	for i := 1; i < 10; i++ {
 		a.Set(uint64(i * (1 << 16)))
 		a.Set(uint64(i*(1<<16)) - 1)
 	}
-	a.RemoveRange(1<<16, (4<<16)-1)
+	a.UnsetRange(1<<16, (4<<16)-1)
 	require.True(t, a.Contains((4<<16)-1))
 }
 
 func TestSelect(t *testing.T) {
-	a := NewBitmap()
+	a := New()
 	N := int(1e4)
 	for i := 0; i < N; i++ {
 		a.Set(uint64(i))
@@ -654,15 +654,15 @@ func TestSelect(t *testing.T) {
 }
 
 func TestClone(t *testing.T) {
-	a := NewBitmap()
+	a := New()
 	N := int(1e5)
 
 	for i := 0; i < N; i++ {
 		a.Set(uint64(util.RandInt64n(math.MaxInt64)))
 	}
 	b := a.Clone()
-	require.Equal(t, a.GetCardinality(), b.GetCardinality())
-	require.Equal(t, a.ToArray(), b.ToArray())
+	require.Equal(t, a.Count(), b.Count())
+	require.Equal(t, a.ToArray(nil), b.ToArray(nil))
 }
 
 func TestContainerFull(t *testing.T) {
@@ -691,7 +691,7 @@ func TestContainerFull(t *testing.T) {
 }
 
 func TestExtremes(t *testing.T) {
-	a := NewBitmap()
+	a := New()
 	require.Equal(t, uint64(0), a.Minimum())
 	require.Equal(t, uint64(0), a.Maximum())
 
@@ -703,11 +703,11 @@ func TestExtremes(t *testing.T) {
 	require.Equal(t, uint64(1), a.Minimum())
 	require.Equal(t, uint64(100000), a.Maximum())
 
-	a.Remove(100000)
+	a.Unset(100000)
 	require.Equal(t, uint64(1), a.Minimum())
 	require.Equal(t, uint64(1), a.Maximum())
 
-	a.Remove(1)
+	a.Unset(1)
 	require.Equal(t, uint64(0), a.Minimum())
 	require.Equal(t, uint64(0), a.Maximum())
 
@@ -715,8 +715,8 @@ func TestExtremes(t *testing.T) {
 	require.Equal(t, uint64(100000), a.Minimum())
 	require.Equal(t, uint64(100000), a.Maximum())
 
-	a.Remove(100000)
-	a = NewBitmap()
+	a.Unset(100000)
+	a = New()
 	for i := 0; i <= maxContainerSize; i++ {
 		a.Set(uint64(i))
 	}
@@ -725,7 +725,7 @@ func TestExtremes(t *testing.T) {
 }
 
 func TestCleanup(t *testing.T) {
-	a := NewBitmap()
+	a := New()
 	n := 10
 
 	for i := 0; i < n; i++ {
@@ -734,54 +734,54 @@ func TestCleanup(t *testing.T) {
 	abuf := a.ToBufferWithCopy()
 
 	require.Equal(t, 10, a.keys.numKeys())
-	a.RemoveRange(1<<16, 2*(1<<16))
+	a.UnsetRange(1<<16, 2*(1<<16))
 	require.Equal(t, 9, a.keys.numKeys())
 
-	a.RemoveRange(6*(1<<16), 8*(1<<16))
+	a.UnsetRange(6*(1<<16), 8*(1<<16))
 	require.Equal(t, 7, a.keys.numKeys())
 
-	a = FromBufferWithCopy(abuf)
+	a = NewFromBufferWithCopy(abuf)
 	require.Equal(t, 10, a.keys.numKeys())
-	a.Remove(6 * (1 << 16))
-	a.RemoveRange(7*(1<<16), 9*(1<<16))
+	a.Unset(6 * (1 << 16))
+	a.UnsetRange(7*(1<<16), 9*(1<<16))
 	require.Equal(t, 7, a.keys.numKeys())
 
 	n = int(1e6)
-	b := NewBitmap()
+	b := New()
 	for i := 0; i < n; i++ {
 		b.Set(uint64(i))
 	}
-	b.RemoveRange(0, uint64(n/2))
-	require.Equal(t, n/2, b.GetCardinality())
+	b.UnsetRange(0, uint64(n/2))
+	require.Equal(t, n/2, b.Count())
 	buf := b.ToBuffer()
-	b = FromBuffer(buf)
-	require.Equal(t, n/2, b.GetCardinality())
+	b = NewFromBuffer(buf)
+	require.Equal(t, n/2, b.Count())
 }
 
 func TestCleanup2(t *testing.T) {
-	a := NewBitmap()
+	a := New()
 	n := 10
 	for i := 0; i < n; i++ {
 		a.Set(uint64(i * (1 << 16)))
 	}
-	require.Equal(t, n, a.GetCardinality())
+	require.Equal(t, n, a.Count())
 	require.Equal(t, n, a.keys.numKeys())
 
 	for i := 0; i < n; i++ {
 		if i%2 == 1 {
-			a.Remove(uint64(i * (1 << 16)))
+			a.Unset(uint64(i * (1 << 16)))
 		}
 	}
-	require.Equal(t, n/2, a.GetCardinality())
+	require.Equal(t, n/2, a.Count())
 	require.Equal(t, n, a.keys.numKeys())
 
 	a.Cleanup()
-	require.Equal(t, n/2, a.GetCardinality())
+	require.Equal(t, n/2, a.Count())
 	require.Equal(t, n/2, a.keys.numKeys())
 }
 
 func TestCleanupSplit(t *testing.T) {
-	a := NewBitmap()
+	a := New()
 	n := int(1e8)
 
 	for i := 0; i < n; i++ {
@@ -789,23 +789,23 @@ func TestCleanupSplit(t *testing.T) {
 	}
 
 	split := func() {
-		n := a.GetCardinality()
+		n := a.Count()
 		mid, err := a.Select(uint64(n / 2))
 		require.NoError(t, err)
 
 		b := a.Clone()
-		a.RemoveRange(0, mid)
-		b.RemoveRange(mid, math.MaxUint64)
+		a.UnsetRange(0, mid)
+		b.UnsetRange(mid, math.MaxUint64)
 
-		require.Equal(t, n, a.GetCardinality()+b.GetCardinality())
+		require.Equal(t, n, a.Count()+b.Count())
 	}
-	for a.GetCardinality() > 1 {
+	for a.Count() > 1 {
 		split()
 	}
 }
 
 func TestIsEmpty(t *testing.T) {
-	a := NewBitmap()
+	a := New()
 	require.True(t, a.IsEmpty())
 
 	n := int(1e6)
@@ -813,76 +813,44 @@ func TestIsEmpty(t *testing.T) {
 		a.Set(uint64(i))
 	}
 	require.False(t, a.IsEmpty())
-	a.RemoveRange(0, math.MaxUint64)
+	a.UnsetRange(0, math.MaxUint64)
 	require.True(t, a.IsEmpty())
 }
 
-func TestRank(t *testing.T) {
-	a := NewBitmap()
-	n := int(1e6)
-	for i := uint64(0); i < uint64(n); i++ {
-		a.Set(i)
-	}
-	for i := 0; i < n; i++ {
-		require.Equal(t, i, a.Rank(uint64(i)))
-	}
-	require.Equal(t, -1, a.Rank(uint64(n)))
+// func TestRank(t *testing.T) {
+// 	a := New()
+// 	n := int(1e6)
+// 	for i := uint64(0); i < uint64(n); i++ {
+// 		a.Set(i)
+// 	}
+// 	for i := 0; i < n; i++ {
+// 		require.Equal(t, i, a.Rank(uint64(i)))
+// 	}
+// 	require.Equal(t, -1, a.Rank(uint64(n)))
 
-	// Check ranks after removing an element.
-	a.Remove(100)
-	for i := 0; i < n; i++ {
-		switch {
-		case i < 100:
-			require.Equal(t, i, a.Rank(uint64(i)))
-		case i == 100:
-			require.Equal(t, -1, a.Rank(uint64(i)))
-		default:
-			require.Equal(t, i-1, a.Rank(uint64(i)))
-		}
-	}
+// 	// Check ranks after removing an element.
+// 	a.Unset(100)
+// 	for i := 0; i < n; i++ {
+// 		switch {
+// 		case i < 100:
+// 			require.Equal(t, i, a.Rank(uint64(i)))
+// 		case i == 100:
+// 			require.Equal(t, -1, a.Rank(uint64(i)))
+// 		default:
+// 			require.Equal(t, i-1, a.Rank(uint64(i)))
+// 		}
+// 	}
 
-	// Check ranks after removing a range of elements.
-	a.RemoveRange(0, uint64(1e4))
-	for i := 0; i < n; i++ {
-		if i < 1e4 {
-			require.Equal(t, -1, a.Rank(uint64(n)))
-		} else {
-			require.Equal(t, i-1e4, a.Rank(uint64(i)))
-		}
-	}
-}
-
-func TestSplit(t *testing.T) {
-	run := func(n int) {
-		r := NewBitmap()
-		for i := 1; i <= n; i++ {
-			r.Set(uint64(i))
-		}
-		f := func(start, end uint64) uint64 { return 0 }
-
-		// Split the bitmaps.
-		bms := r.Split(f, 1<<10)
-		var csum int
-		for _, bm := range bms {
-			csum += bm.GetCardinality()
-		}
-		require.Equal(t, n, csum)
-
-		id := uint64(1)
-		for _, bm := range bms {
-			itr := bm.NewIterator()
-			for cur, ok := itr.Next(); ok; cur, ok = itr.Next() {
-				require.Equal(t, id, cur)
-				id++
-			}
-		}
-	}
-
-	run(2)
-	run(11)
-	run(1e3)
-	run(1e6)
-}
+// 	// Check ranks after removing a range of elements.
+// 	a.UnsetRange(0, uint64(1e4))
+// 	for i := 0; i < n; i++ {
+// 		if i < 1e4 {
+// 			require.Equal(t, -1, a.Rank(uint64(n)))
+// 		} else {
+// 			require.Equal(t, i-1e4, a.Rank(uint64(i)))
+// 		}
+// 	}
+// }
 
 func TestContainsRange(t *testing.T) {
 	type TestRange struct {
@@ -979,7 +947,7 @@ func TestContainsRange(t *testing.T) {
 
 	for i, v := range tests {
 		for _, r := range v.Ranges {
-			if want, got := r.Match, FromSortedList(v.Slice).ContainsRange(r.From, r.To); want != got {
+			if want, got := r.Match, NewFromSortedList(v.Slice).ContainsRange(r.From, r.To); want != got {
 				t.Errorf("case %d/%s want=%t got=%t", i, r.Name, want, got)
 			}
 		}
@@ -991,7 +959,7 @@ func BenchmarkContainsRange(b *testing.B) {
 		b.Run(fmt.Sprintf("%d", n), func(b *testing.B) {
 			nums := util.RandUints[uint64](n)
 			slices.Sort(nums)
-			a := FromSortedList(nums)
+			a := NewFromSortedList(nums)
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				min, max := util.RandUint64(), util.RandUint64()

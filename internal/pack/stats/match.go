@@ -114,7 +114,7 @@ func matchVector(n *query.FilterTreeNode, pkg *pack.Package, b map[int]store.Buc
 // vectorized using custom assembly routines.
 func matchFilterVector(f *query.Filter, pkg *pack.Package, bits, mask *bitset.Bitset, b map[int]store.Bucket) (int, *bitset.Bitset) {
 	if bits == nil {
-		bits = bitset.NewBitset(pkg.Len())
+		bits = bitset.New(pkg.Len())
 	}
 
 	// translate filter field index into statistics pack index for min&max columns
@@ -169,7 +169,7 @@ func matchFilterVector(f *query.Filter, pkg *pack.Package, bits, mask *bitset.Bi
 				buf := b[STATS_BITS_KEY].Get(bkey)
 				if len(buf) > 0 {
 					n += len(buf)
-					flt = xroar.FromBuffer(buf)
+					flt = xroar.NewFromBuffer(buf)
 				}
 			}
 
@@ -180,7 +180,7 @@ func matchFilterVector(f *query.Filter, pkg *pack.Package, bits, mask *bitset.Bi
 
 			// reset match bit when bloom check is negative
 			if !f.Matcher.MatchFilter(flt) {
-				bits.Clear(v)
+				bits.Unset(v)
 			}
 		}
 	}
@@ -205,7 +205,7 @@ func filterType(f *query.Filter, pkg *pack.Package, id int) types.IndexType {
 func matchVectorAnd(n *query.FilterTreeNode, pkg *pack.Package, b map[int]store.Bucket, bits *bitset.Bitset) (int, *bitset.Bitset) {
 	// start with a full bitset
 	if bits == nil {
-		bits = bitset.NewBitset(pkg.Len())
+		bits = bitset.New(pkg.Len())
 	}
 	bits.One()
 
@@ -247,7 +247,7 @@ func matchVectorAnd(n *query.FilterTreeNode, pkg *pack.Package, b map[int]store.
 func matchVectorOr(n *query.FilterTreeNode, pkg *pack.Package, b map[int]store.Bucket, bits *bitset.Bitset) (int, *bitset.Bitset) {
 	// start with an empty bitset
 	if bits == nil {
-		bits = bitset.NewBitset(pkg.Len())
+		bits = bitset.New(pkg.Len())
 	} else {
 		bits.Zero()
 	}

@@ -21,7 +21,6 @@ import (
 	"testing"
 
 	"blockwatch.cc/knoxdb/pkg/util"
-	"github.com/RoaringBitmap/roaring/roaring64"
 )
 
 // go test -bench BenchmarkMemoryUsage -run -
@@ -32,7 +31,7 @@ func BenchmarkMemoryUsage(b *testing.B) {
 	incr := uint64(1 << 16)
 	max := uint64(1<<32 - 1)
 	for x := 0; x < 10; x++ {
-		rb := NewBitmap()
+		rb := New()
 
 		var i uint64
 		for i = 0; i <= max-incr; i += incr {
@@ -52,14 +51,14 @@ func BenchmarkMemoryUsage(b *testing.B) {
 // go test -bench BenchmarkIntersection -run -
 func BenchmarkIntersectionRoaring(b *testing.B) {
 	b.StopTimer()
-	s1 := NewBitmap()
+	s1 := New()
 	sz := int64(150000)
 	initsize := 65000
 	for i := 0; i < initsize; i++ {
 		s1.Set(uint64(util.RandInt64n(sz)))
 	}
 
-	s2 := NewBitmap()
+	s2 := New()
 	sz = int64(100000000)
 	initsize = 65000
 	for i := 0; i < initsize; i++ {
@@ -70,18 +69,15 @@ func BenchmarkIntersectionRoaring(b *testing.B) {
 	card := 0
 	for j := 0; j < b.N; j++ {
 		s3 := And(s1, s2)
-		card += s3.GetCardinality()
+		card += s3.Count()
 	}
 	b.Logf("card: %d\n", card)
 }
 
-// go test -bench BenchmarkSet -run -
-func BenchmarkSetRoaring(b *testing.B) {
-	b.StopTimer()
+func BenchmarkSet(b *testing.B) {
 	sz := uint64(1000000)
-	s := NewBitmap()
-	b.StartTimer()
-	for i := 0; i < b.N; i++ {
+	s := New()
+	for b.Loop() {
 		s.Set(util.RandUint64n(sz))
 	}
 }
@@ -89,7 +85,7 @@ func BenchmarkSetRoaring(b *testing.B) {
 func BenchmarkMerge10K(b *testing.B) {
 	var bitmaps []*Bitmap
 	for i := 0; i < 10000; i++ {
-		bm := NewBitmap()
+		bm := New()
 		for j := 0; j < 1000; j++ {
 			x := util.RandUint64() % 1e8 // 10M.
 			bm.Set(x)
@@ -110,14 +106,14 @@ func BenchmarkMerge10K(b *testing.B) {
 	out := FastOr(bitmaps...)
 	b.Logf("Out: %s\n", out)
 	out2 := second()
-	if out2.GetCardinality() != out.GetCardinality() {
+	if out2.Count() != out.Count() {
 		panic("Don't match")
 	}
 	out3 := FastParOr(8, bitmaps...)
-	if out3.GetCardinality() != out.GetCardinality() {
+	if out3.Count() != out.Count() {
 		panic("Don't match")
 	}
-	b.Logf("card2: %d card3: %d", out2.GetCardinality(), out3.GetCardinality())
+	b.Logf("card2: %d card3: %d", out2.Count(), out3.Count())
 
 	b.Run("fastor", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
@@ -137,8 +133,8 @@ func BenchmarkMerge10K(b *testing.B) {
 	})
 }
 
-func BenchmarkRemoveRange(b *testing.B) {
-	bm := NewBitmap()
+func BenchmarkUnsetRange(b *testing.B) {
+	bm := New()
 	N := uint64(1e5)
 	for i := uint64(0); i < N; i++ {
 		bm.Set(i)
@@ -152,40 +148,7 @@ func BenchmarkRemoveRange(b *testing.B) {
 			bm2 := bm.Clone()
 			b.StartTimer()
 			for i := uint64(0); i < cnt; i++ {
-				bm2.RemoveRange(i*sz, (i+1)*sz)
-			}
-		}
-	}
-	b.Run("N/2", func(b *testing.B) {
-		bench(b, 2)
-	})
-	b.Run("N/4", func(b *testing.B) {
-		bench(b, 4)
-	})
-	b.Run("N/16", func(b *testing.B) {
-		bench(b, 16)
-	})
-	b.Run("N/256", func(b *testing.B) {
-		bench(b, 256)
-	})
-}
-
-func BenchmarkRemoveRangeRoaring64(b *testing.B) {
-	bm := roaring64.NewBitmap()
-	N := uint64(1e5)
-	for i := uint64(0); i < N; i++ {
-		bm.Add(i)
-	}
-
-	bench := func(b *testing.B, factor uint64) {
-		sz := N / factor
-		cnt := N / sz
-		for j := 0; j < b.N; j++ {
-			b.StopTimer()
-			bm2 := bm.Clone()
-			b.StartTimer()
-			for i := uint64(0); i < cnt; i++ {
-				bm2.RemoveRange(i*sz, (i+1)*sz)
+				bm2.UnsetRange(i*sz, (i+1)*sz)
 			}
 		}
 	}
@@ -204,25 +167,10 @@ func BenchmarkRemoveRangeRoaring64(b *testing.B) {
 }
 
 func BenchmarkSelectSroar(b *testing.B) {
-	bm := NewBitmap()
+	bm := New()
 	N := uint64(1e5)
 	for i := uint64(0); i < N; i++ {
 		bm.Set(i)
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		for j := uint64(0); j < N; j++ {
-			bm.Select(j)
-		}
-	}
-}
-
-func BenchmarkSelectRoaring64(b *testing.B) {
-	bm := roaring64.NewBitmap()
-	N := uint64(1e5)
-	for i := uint64(0); i < N; i++ {
-		bm.Add(i)
 	}
 
 	b.ResetTimer()

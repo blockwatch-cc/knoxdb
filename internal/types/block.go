@@ -710,7 +710,7 @@ func (t BlockType) Range(set any) (minv any, maxv any, isContinuous bool) {
 	if bs, ok := set.(*xroar.Bitmap); ok {
 		minU64 := bs.Minimum()
 		maxU64 := bs.Maximum()
-		isContinuous = maxU64-minU64+1 == uint64(bs.GetCardinality())
+		isContinuous = maxU64-minU64+1 == uint64(bs.Count())
 		minv, _ = t.Cast(minU64)
 		maxv, _ = t.Cast(maxU64)
 		return

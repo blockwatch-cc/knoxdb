@@ -155,7 +155,7 @@ func CompareTest[T types.Integer](t *testing.T, cmp CompareFunc, mode types.Filt
 						require.Equal(t, w, log2, "bit width for generated data should be equal to compressed data bit width")
 					}
 					require.Equal(t, len(buf), EstimateSize(log2, sz), "encoded buffer length unexpected")
-					bits := bitset.NewBitset(sz)
+					bits := bitset.New(sz)
 
 					// value exists
 					val := src[sz/2]
@@ -205,7 +205,7 @@ func CompareTest2[T types.Integer](t *testing.T, cmp CompareFunc2, mode types.Fi
 					}
 					require.Equal(t, len(buf), EstimateSize(log2, sz), "encoded buffer length unexpected")
 
-					bits := bitset.NewBitset(sz)
+					bits := bitset.New(sz)
 
 					// single value
 					val := src[sz/2]
@@ -261,37 +261,37 @@ func ensureBits[T types.Integer](t *testing.T, buf []byte, log2 int, vals []T, v
 	switch mode {
 	case types.FilterModeEqual:
 		for i, v := range vals {
-			require.Equal(t, v == val, bits.IsSet(i), "bit=%d val=%d c=%d", i, v, val)
+			require.Equal(t, v == val, bits.Contains(i), "bit=%d val=%d c=%d", i, v, val)
 		}
 
 	case types.FilterModeNotEqual:
 		for i, v := range vals {
-			require.Equal(t, v != val, bits.IsSet(i), "bit=%d val=%d c=%d", i, v, val)
+			require.Equal(t, v != val, bits.Contains(i), "bit=%d val=%d c=%d", i, v, val)
 		}
 
 	case types.FilterModeLt:
 		for i, v := range vals {
-			require.Equal(t, v < val, bits.IsSet(i), "bit=%d val=%d c=%d", i, v, val)
+			require.Equal(t, v < val, bits.Contains(i), "bit=%d val=%d c=%d", i, v, val)
 		}
 
 	case types.FilterModeLe:
 		for i, v := range vals {
-			require.Equal(t, v <= val, bits.IsSet(i), "bit=%d val=%d c=%d", i, v, val)
+			require.Equal(t, v <= val, bits.Contains(i), "bit=%d val=%d c=%d", i, v, val)
 		}
 
 	case types.FilterModeGt:
 		for i, v := range vals {
-			require.Equal(t, v > val, bits.IsSet(i), "bit=%d val=%d c=%d", i, v, val)
+			require.Equal(t, v > val, bits.Contains(i), "bit=%d val=%d c=%d", i, v, val)
 		}
 
 	case types.FilterModeGe:
 		for i, v := range vals {
-			require.Equal(t, v >= val, bits.IsSet(i), "bit=%d val=%d c=%d", i, v, val)
+			require.Equal(t, v >= val, bits.Contains(i), "bit=%d val=%d c=%d", i, v, val)
 		}
 
 	case types.FilterModeRange:
 		for i, v := range vals {
-			require.Equal(t, v >= val && v <= val2, bits.IsSet(i), "bit=%d val=%d a=%d b=%d", i, v, val, val2)
+			require.Equal(t, v >= val && v <= val2, bits.Contains(i), "bit=%d val=%d a=%d b=%d", i, v, val, val2)
 		}
 	}
 }

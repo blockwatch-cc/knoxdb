@@ -84,7 +84,7 @@ func (t *Table) NewReader() engine.TableReader {
 		},
 		reqFields: []uint16{uint16(rx), uint16(rx + 2), uint16(rx + 3)},
 		hits:      arena.AllocUint32(t.opts.PackSize),
-		bits:      bitset.NewBitset(t.opts.PackSize),
+		bits:      bitset.New(t.opts.PackSize),
 		useCache:  true,
 	}
 }

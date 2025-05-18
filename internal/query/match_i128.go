@@ -83,7 +83,7 @@ func (m i128EqualMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask 
 	le, ge := f.New(FilterModeLe), f.New(FilterModeGe)
 	le.WithValue(m.val)
 	ge.WithValue(m.val)
-	minBits := bitset.NewBitset(mins.Len())
+	minBits := bitset.New(mins.Len())
 	le.MatchVector(mins, minBits, mask)
 	if mask != nil {
 		minBits.And(mask)
@@ -242,7 +242,7 @@ func (m i128RangeMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask 
 	le, ge := f.New(FilterModeLe), f.New(FilterModeGe)
 	le.WithValue(m.to)
 	ge.WithValue(m.from)
-	minBits := bitset.NewBitset(mins.Len())
+	minBits := bitset.New(mins.Len())
 	le.MatchVector(mins, minBits, mask)
 	if mask != nil {
 		minBits.And(mask)
@@ -295,7 +295,7 @@ func (m i128InSetMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset)
 	if mask != nil {
 		// skip masked values
 		for i, l := 0, stride.Len(); i < l; i++ {
-			if !mask.IsSet(i) {
+			if !mask.Contains(i) {
 				continue
 			}
 			if num.Int128Contains(m.slice, stride.Elem(i)) {
@@ -359,7 +359,7 @@ func (m i128NotInSetMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bits
 	if mask != nil {
 		// skip masked values
 		for i, l := 0, stride.Len(); i < l; i++ {
-			if !mask.IsSet(i) {
+			if !mask.Contains(i) {
 				continue
 			}
 			if !num.Int128Contains(m.slice, stride.Elem(i)) {

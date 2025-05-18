@@ -197,43 +197,6 @@ func BenchmarkIntDecode(b *testing.B) {
 	}
 }
 
-func BenchmarkIntAppend(b *testing.B) {
-	for _, c := range tests.BenchmarkSizes {
-		for _, scheme := range []IntegerContainerType{
-			TIntegerConstant,
-			TIntegerDelta,
-			TIntegerRunEnd,
-			TIntegerBitpacked,
-			TIntegerDictionary,
-			TIntegerSimple8,
-			TIntegerRaw,
-		} {
-			data := etests.GenForIntScheme[int64](int(scheme), c.N)
-			ctx := AnalyzeInt(data, true)
-			enc := NewInt[int64](scheme).Encode(ctx, data, MAX_CASCADE)
-			buf := enc.Store(make([]byte, 0, enc.Size()))
-			dst := make([]int64, 0, c.N)
-			once := etests.ShowInfo
-			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
-				b.SetBytes(int64(c.N * 8))
-				for b.Loop() {
-					enc2 := NewInt[int64](scheme)
-					_, err := enc2.Load(buf)
-					require.NoError(b, err)
-					dst = enc2.AppendTo(nil, dst)
-					dst = dst[:0]
-					if once {
-						b.Log(enc2.Info())
-						once = false
-					}
-					enc2.Close()
-				}
-				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
-			})
-		}
-	}
-}
-
 func BenchmarkIntCmp(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		for _, scheme := range []IntegerContainerType{
@@ -248,7 +211,7 @@ func BenchmarkIntCmp(b *testing.B) {
 			data := etests.GenForIntScheme[uint64](int(scheme), c.N)
 			ctx := AnalyzeInt(data, true)
 			enc := NewInt[uint64](scheme).Encode(ctx, data, MAX_CASCADE)
-			bits := bitset.NewBitset(c.N)
+			bits := bitset.New(c.N)
 			b.Log(enc.Info())
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
 				b.SetBytes(int64(c.N * 8))
@@ -361,7 +324,7 @@ func BenchmarkUniqueBitset(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(c.N * 2))
 			for range b.N {
-				u := bitset.NewBitset(int(maxx) - int(minx) + 1)
+				u := bitset.New(int(maxx) - int(minx) + 1)
 				for _, v := range data {
 					u.Set(int(v) - int(minx))
 				}
@@ -381,11 +344,11 @@ func BenchmarkUniqueRoaring(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(c.N * 2))
 			for range b.N {
-				u := xroar.NewBitmap()
+				u := xroar.New()
 				for _, v := range data {
 					u.Set(uint64(v) - uint64(minx))
 				}
-				card = u.GetCardinality()
+				card = u.Count()
 			}
 		})
 		_ = card

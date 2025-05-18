@@ -62,7 +62,7 @@ func (m floatInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bit
 	if mask != nil {
 		// skip masked values
 		for i, v := range acc.Slice() {
-			if !mask.IsSet(i) {
+			if !mask.Contains(i) {
 				continue
 			}
 			if m.slice.Contains(v) {
@@ -132,7 +132,7 @@ func (m floatNotInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.
 	if mask != nil {
 		// skip masked values
 		for i, v := range acc.Slice() {
-			if !mask.IsSet(i) {
+			if !mask.Contains(i) {
 				continue
 			}
 			if !m.slice.Contains(v) {

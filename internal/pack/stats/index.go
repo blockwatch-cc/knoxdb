@@ -666,8 +666,8 @@ func (idx *Index) Get(key uint32) (*Record, bool) {
 	it := &Iterator{
 		ctx:    context.Background(),
 		idx:    idx,
-		smatch: bitset.NewBitset(0),
-		vmatch: bitset.NewBitset(0),
+		smatch: bitset.New(0),
+		vmatch: bitset.New(0),
 		snode:  node,
 		match:  []uint32{uint32(pos)},
 	}
@@ -720,8 +720,8 @@ func (idx *Index) FindPk(ctx context.Context, pk uint64) (*Iterator, bool) {
 			idx:    idx,
 			flt:    flt,
 			use:    0,
-			vmatch: bitset.NewBitset(STATS_PACK_SIZE),
-			smatch: bitset.NewBitset(slen),
+			vmatch: bitset.New(STATS_PACK_SIZE),
+			smatch: bitset.New(slen),
 			match:  make([]uint32, 0),
 			sx:     slen - 2, // start at last spack (it will +1)
 			n:      -1,       // start at first offset (it will +1)
@@ -759,7 +759,7 @@ func (idx *Index) Query(ctx context.Context, flt *query.FilterTreeNode, dir type
 	view := schema.NewView(idx.schema)
 	maxInodes := len(idx.inodes) - 1
 	slen := len(idx.snodes)
-	nodeBits := bitset.NewBitset(slen + 1)
+	nodeBits := bitset.New(slen + 1)
 
 	// start matching root
 	if maxInodes > 0 {
@@ -773,12 +773,12 @@ func (idx *Index) Query(ctx context.Context, flt *query.FilterTreeNode, dir type
 
 	for n := 0; n < maxInodes; n++ {
 		// skip this branch if unset
-		if !nodeBits.IsSet(n) {
+		if !nodeBits.Contains(n) {
 			continue
 		}
 
 		// mark this node as processed
-		nodeBits.Clear(n)
+		nodeBits.Unset(n)
 
 		// check children
 		for _, m := range []int{leftChildIndex(n), rightChildIndex(n)} {
@@ -858,7 +858,7 @@ func (idx *Index) Query(ctx context.Context, flt *query.FilterTreeNode, dir type
 		flt:     flt,
 		use:     use,
 		smatch:  nodeBits,
-		vmatch:  bitset.NewBitset(STATS_PACK_SIZE),
+		vmatch:  bitset.New(STATS_PACK_SIZE),
 		match:   arena.AllocUint32(STATS_PACK_SIZE),
 		sx:      -1, // start at first bit (it will +1)
 		n:       -1, // start at first offset (it will +1)

@@ -126,7 +126,7 @@ func AlpTest[T Float, E Int](t *testing.T) {
 			require.Equal(t, len(c.Data), len(res.Encoded))
 			require.Equal(t, c.NEx, len(res.PatchValues))
 			dec := NewDecoder[T, E](a.Exp.F, a.Exp.E).
-				WithExceptions(res.PatchValues, res.PatchIndices).
+				WithPatches(res.PatchValues, res.PatchIndices).
 				WithSafeInt(res.IsSafeInt)
 			dst := make([]T, len(c.Data))
 			dec.Decode(dst, res.Encoded)
@@ -156,7 +156,7 @@ func AlpFusedTest[T Float, E Int](t *testing.T) {
 			require.Equal(t, len(c.Data), len(res.Encoded))
 			require.Equal(t, c.NEx, len(res.PatchValues))
 			dec := NewDecoder[T, E](a.Exp.F, a.Exp.E).
-				WithExceptions(res.PatchValues, res.PatchIndices)
+				WithPatches(res.PatchValues, res.PatchIndices)
 			buf := make([]byte, len(c.Data)*16)
 			buf, _ = bitpack.Encode(buf, res.Encoded, res.Min, res.Max)
 			dst := make([]T, len(c.Data))
@@ -186,7 +186,7 @@ func AlpTestQuick[T Float, E Int](t *testing.T) {
 			res := enc.Encode(vals, a.Exp)
 			require.Equal(t, len(vals), len(res.Encoded))
 			dec := NewDecoder[T, E](a.Exp.F, a.Exp.E).
-				WithExceptions(res.PatchValues, res.PatchIndices).
+				WithPatches(res.PatchValues, res.PatchIndices).
 				WithSafeInt(res.IsSafeInt)
 			dst := make([]T, len(vals))
 			dec.Decode(dst, res.Encoded)
@@ -220,7 +220,7 @@ func TestFiles(t *testing.T) {
 				res := enc.Encode(src, a.Exp)
 				require.Equal(t, len(src), len(res.Encoded))
 				dec := NewDecoder[float64, int64](a.Exp.F, a.Exp.E).
-					WithExceptions(res.PatchValues, res.PatchIndices).
+					WithPatches(res.PatchValues, res.PatchIndices).
 					WithSafeInt(res.IsSafeInt)
 				dec.Decode(dst, res.Encoded)
 				require.Equal(t, src, dst[:len(src)])

@@ -241,7 +241,7 @@ func BenchmarkAddManyBytesGo(b *testing.B) {
 func BenchmarkAddManyUint32Go(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		for _, s := range bloomSizes {
-			data := tests.GenSeq[uint32](c.N)
+			data := tests.GenSeq[uint32](c.N, 1)
 			f := NewFilter(s.M)
 			b.Run(fmt.Sprintf("%s/%s", c.Name, s.Name), func(b *testing.B) {
 				b.SetBytes(4 * int64(c.N))
@@ -256,7 +256,7 @@ func BenchmarkAddManyUint32Go(b *testing.B) {
 func BenchmarkAddManyUint64Go(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		for _, s := range bloomSizes {
-			data := tests.GenSeq[uint64](c.N)
+			data := tests.GenSeq[uint64](c.N, 1)
 			f := NewFilter(s.M)
 			b.Run(fmt.Sprintf("%s/%s", c.Name, s.Name), func(b *testing.B) {
 				b.SetBytes(8 * int64(c.N))

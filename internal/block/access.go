@@ -239,7 +239,7 @@ func (b *Block) Get(row int) any {
 	case types.BlockFloat32:
 		return b.Float32().Get(row)
 	case types.BlockBool:
-		return b.Bool().IsSet(row)
+		return b.Bool().Contains(row)
 	case types.BlockBytes:
 		return b.Bytes().Elem(row)
 	case types.BlockInt128:
@@ -277,7 +277,7 @@ func (b *Block) Set(row int, val any) {
 		if val.(bool) {
 			b.Bool().Set(row)
 		} else {
-			b.Bool().Clear(row)
+			b.Bool().Unset(row)
 		}
 	case types.BlockBytes:
 		b.Bytes().Set(row, val.([]byte))

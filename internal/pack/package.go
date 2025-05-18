@@ -152,7 +152,7 @@ func (p *Package) Clone(sz int) *Package {
 	return clone
 }
 
-// Copy creates a copy of pack referencing all data vectors.
+// Copy creates a shallow copy of pack referencing all data vectors.
 func (p *Package) Copy() *Package {
 	cp := New().
 		WithKey(p.key).
