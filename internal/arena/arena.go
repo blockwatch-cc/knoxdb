@@ -108,30 +108,33 @@ func Alloc[T Number | []byte](sz int) []T {
 }
 
 func Free[T Number | []byte](val []T) {
+	if val == nil {
+		return
+	}
 	var t T
 	switch any(t).(type) {
 	case int64:
-		_arena.Free(allocTypeInt64, val)
+		_arena.Free(allocTypeInt64, val[:0], cap(val))
 	case int32:
-		_arena.Free(allocTypeInt32, val)
+		_arena.Free(allocTypeInt32, val[:0], cap(val))
 	case int16:
-		_arena.Free(allocTypeInt16, val)
+		_arena.Free(allocTypeInt16, val[:0], cap(val))
 	case int8:
-		_arena.Free(allocTypeInt8, val)
+		_arena.Free(allocTypeInt8, val[:0], cap(val))
 	case uint64:
-		_arena.Free(allocTypeUint64, val)
+		_arena.Free(allocTypeUint64, val[:0], cap(val))
 	case uint32:
-		_arena.Free(allocTypeUint32, val)
+		_arena.Free(allocTypeUint32, val[:0], cap(val))
 	case uint16:
-		_arena.Free(allocTypeUint16, val)
+		_arena.Free(allocTypeUint16, val[:0], cap(val))
 	case uint8: // == byte
-		_arena.Free(allocTypeUint8, val)
+		_arena.Free(allocTypeUint8, val[:0], cap(val))
 	case float32:
-		_arena.Free(allocTypeFloat32, val)
+		_arena.Free(allocTypeFloat32, val[:0], cap(val))
 	case float64:
-		_arena.Free(allocTypeFloat64, val)
+		_arena.Free(allocTypeFloat64, val[:0], cap(val))
 	case []byte: // slice of bytes
-		_arena.Free(allocTypeBytesSlice, val)
+		_arena.Free(allocTypeBytesSlice, val[:0], cap(val))
 	}
 }
 
@@ -170,9 +173,6 @@ func (a *arena) Alloc(typ int, sz int) any {
 	return a.alloc[typ].Alloc(sz)
 }
 
-func (a *arena) Free(typ int, val any) {
-	if val == nil {
-		return
-	}
-	a.alloc[typ].Free(val)
+func (a *arena) Free(typ int, val any, sz int) {
+	a.alloc[typ].Free(val, sz)
 }

@@ -10,7 +10,7 @@ import (
 
 type Allocator interface {
 	Alloc(int) any
-	Free(any)
+	Free(any, int)
 }
 
 // 1k (10) .. 128k (17) .. 32M (25) = 16 sync.Pools
@@ -46,20 +46,12 @@ func (a *allocator[T]) Alloc(sz int) any {
 	return a.pools[idx].Get()
 }
 
-func (a *allocator[T]) Free(val any) {
-	slice, ok := val.([]T)
-	if !ok {
-		return
-	}
-	sz := cap(slice)
-
+func (a *allocator[T]) Free(val any, sz int) {
 	// don't recycle out of bounds or non-power of 2 slices
 	class := 63 - bits.LeadingZeros(uint(sz))
 	if class < minAllocClass || class > maxAllocClass || bits.OnesCount(uint(sz)) > 1 {
 		return
 	}
 	idx := class - minAllocClass
-
-	// nolint:staticcheck
-	a.pools[idx].Put(slice[:0])
+	a.pools[idx].Put(val)
 }
