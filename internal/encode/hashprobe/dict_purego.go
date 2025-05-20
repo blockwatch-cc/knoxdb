@@ -5,11 +5,12 @@ package hashprobe
 
 import (
 	"blockwatch.cc/knoxdb/internal/arena"
+	"blockwatch.cc/knoxdb/internal/cpu"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 func BuildDict[T Integer](vals []T, numUnique int) ([]T, []uint16) {
-	if util.UseAVX2 {
+	if cpu.UseAVX2 {
 		return buildDictAVX2(vals, numUnique)
 	}
 	return buildDictGeneric(vals, numUnique)

@@ -7,6 +7,7 @@ import (
 	"unsafe"
 
 	"blockwatch.cc/knoxdb/internal/arena"
+	"blockwatch.cc/knoxdb/internal/cpu"
 	etests "blockwatch.cc/knoxdb/internal/encode/tests"
 	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/pkg/util"
@@ -23,7 +24,7 @@ func TestDictGeneric(t *testing.T) {
 }
 
 func TestDictAVX2(t *testing.T) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		t.Skip()
 	}
 	DictTest[uint64](t, buildDictAVX2)
@@ -69,7 +70,7 @@ func DictTest[T Integer](t *testing.T, fn buildFunc[T]) {
 			for i, v := range codes {
 				require.Equal(t, c.Data[i], dict[v], "bad code")
 			}
-			if util.UseAVX2 {
+			if cpu.UseAVX2 {
 				dictGen, codesGen := buildDictGeneric[T](c.Data, card)
 				require.Equal(t, dictGen, dict, "dict mismatch")
 				require.Equal(t, codesGen, codes, "codes mismatch")
@@ -97,7 +98,7 @@ func BenchmarkDictGeneric(b *testing.B) {
 }
 
 func BenchmarkDictAVX2(b *testing.B) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		b.Skip()
 	}
 	DictBenchmark[uint64](b, buildDictAVX2)

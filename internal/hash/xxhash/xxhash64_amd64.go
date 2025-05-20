@@ -6,9 +6,7 @@
 
 package xxhash
 
-import (
-	"blockwatch.cc/knoxdb/pkg/util"
-)
+import "blockwatch.cc/knoxdb/internal/cpu"
 
 // ------------------------
 // xxhash64
@@ -16,10 +14,10 @@ import (
 
 func init() {
 	switch {
-	case util.UseAVX512_DQ:
+	case cpu.UseAVX512_DQ:
 		Vec64u32 = x64_u32_avx512
 		Vec64u64 = x64_u64_avx512
-	case util.UseAVX2:
+	case cpu.UseAVX2:
 		Vec64u32 = x64_u32_avx2
 		Vec64u64 = x64_u64_avx2
 	}

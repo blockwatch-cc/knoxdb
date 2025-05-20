@@ -125,22 +125,22 @@ func (a *NativeByteArray) InsertFrom(index int, src ByteArray) ByteArray {
 	return a
 }
 
-func (a *NativeByteArray) Copy(src ByteArray, dstPos, srcPos, n int) ByteArray {
-	ss := src.Subslice(srcPos, srcPos+n)
-	diff := heapSize(ss)
-	for j, v := range ss {
-		diff -= int64(len(a.bufs[dstPos+j]))
-		// always allocate new slice to avoid sharing memory
-		buf := make([]byte, len(v))
-		copy(buf, v)
-		a.bufs[dstPos+j] = buf
-	}
-	atomic.AddInt64(&a.size, diff)
-	if src.IsOptimized() {
-		recycle(ss)
-	}
-	return a
-}
+// func (a *NativeByteArray) Copy(src ByteArray, dstPos, srcPos, n int) ByteArray {
+// 	ss := src.Subslice(srcPos, srcPos+n)
+// 	diff := heapSize(ss)
+// 	for j, v := range ss {
+// 		diff -= int64(len(a.bufs[dstPos+j]))
+// 		// always allocate new slice to avoid sharing memory
+// 		buf := make([]byte, len(v))
+// 		copy(buf, v)
+// 		a.bufs[dstPos+j] = buf
+// 	}
+// 	atomic.AddInt64(&a.size, diff)
+// 	if src.IsOptimized() {
+// 		recycle(ss)
+// 	}
+// 	return a
+// }
 
 func (a *NativeByteArray) Delete(index, n int) ByteArray {
 	// avoid mem leaks

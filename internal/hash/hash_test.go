@@ -31,7 +31,7 @@ func BenchmarkHash(b *testing.B) {
 		return WyHash(buf, 0)
 	})
 	HashBench(b, "aeshash", func(buf []byte) uint64 {
-		return AesHash(buf, 0)
+		return MemHash(buf, 0)
 	})
 }
 

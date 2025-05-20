@@ -9,11 +9,11 @@ package cmp
 import (
 	"blockwatch.cc/knoxdb/internal/cmp/avx2"
 	"blockwatch.cc/knoxdb/internal/cmp/avx512"
-	"blockwatch.cc/knoxdb/pkg/util"
+	"blockwatch.cc/knoxdb/internal/cpu"
 )
 
 func init() {
-	if util.UseAVX2 {
+	if cpu.UseAVX2 {
 		// uint8
 		Uint8Equal = avx2.Uint8Equal
 		Uint8NotEqual = avx2.Uint8NotEqual
@@ -131,7 +131,7 @@ func init() {
 		Int256Between = avx2.Int256Between
 	}
 
-	if util.UseAVX512_F {
+	if cpu.UseAVX512_F {
 		// uint16
 		Uint16Equal = avx512.Uint16Equal
 		Uint16NotEqual = avx512.Uint16NotEqual
@@ -205,7 +205,7 @@ func init() {
 		Float64Between = avx512.Float64Between
 	}
 
-	if util.UseAVX512_BW {
+	if cpu.UseAVX512_BW {
 		// uint8
 		Uint8Equal = avx512.Uint8Equal
 		Uint8NotEqual = avx512.Uint8NotEqual

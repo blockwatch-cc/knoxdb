@@ -4,6 +4,7 @@
 package zip
 
 import (
+	"blockwatch.cc/knoxdb/internal/cpu"
 	"blockwatch.cc/knoxdb/internal/zip/avx2"
 	"blockwatch.cc/knoxdb/internal/zip/generic"
 	"blockwatch.cc/knoxdb/pkg/util"
@@ -53,7 +54,7 @@ var (
 )
 
 func init() {
-	if util.UseAVX2 {
+	if cpu.UseAVX2 {
 		// not implemented yet
 		// zzDeltaEncodeUint64 = avx2.ZzDeltaEncodeUint64
 		// zzDeltaEncodeUint32 = avx2.ZzDeltaEncodeUint32

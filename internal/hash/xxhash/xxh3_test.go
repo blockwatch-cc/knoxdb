@@ -7,7 +7,6 @@ import (
 	"encoding/binary"
 	"testing"
 
-	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -69,7 +68,7 @@ func TestXXH3Uint32Generic(t *testing.T) {
 
 func BenchmarkXXH3Uint32Generic(b *testing.B) {
 	for _, n := range hashBenchmarkSizes {
-		a := util.RandUints[uint32](n.l)
+		a := RandUints[uint32](n.l)
 		res := make([]uint64, n.l)
 		b.Run(n.name, func(b *testing.B) {
 			b.SetBytes(4 * int64(n.l))
@@ -121,7 +120,7 @@ func TestXXH3Uint64Generic(t *testing.T) {
 
 func BenchmarkXXH3Uint64Generic(b *testing.B) {
 	for _, n := range hashBenchmarkSizes {
-		a := util.RandUints[uint64](n.l)
+		a := RandUints[uint64](n.l)
 		res := make([]uint64, n.l)
 		b.Run(n.name, func(b *testing.B) {
 			b.SetBytes(8 * int64(n.l))

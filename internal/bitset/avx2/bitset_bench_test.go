@@ -11,7 +11,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/bitset/generic"
 	"blockwatch.cc/knoxdb/internal/bitset/tests"
-	"blockwatch.cc/knoxdb/pkg/util"
+	"blockwatch.cc/knoxdb/internal/cpu"
 )
 
 var (
@@ -20,7 +20,7 @@ var (
 )
 
 func BenchmarkBitsetIndexesAVX2(b *testing.B) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		b.SkipNow()
 	}
 	for _, n := range benchmarkSizes {
@@ -39,7 +39,7 @@ func BenchmarkBitsetIndexesAVX2(b *testing.B) {
 }
 
 func BenchmarkBitsetPopCountAVX2(b *testing.B) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		b.SkipNow()
 	}
 	for _, n := range benchmarkSizes {
@@ -55,7 +55,7 @@ func BenchmarkBitsetPopCountAVX2(b *testing.B) {
 }
 
 func BenchmarkBitsetAndAVX2(b *testing.B) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		b.SkipNow()
 	}
 	for _, n := range benchmarkSizes {
@@ -72,7 +72,7 @@ func BenchmarkBitsetAndAVX2(b *testing.B) {
 }
 
 func BenchmarkBitsetAndAVX2Flag(b *testing.B) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		b.SkipNow()
 	}
 	for _, n := range benchmarkSizes {
@@ -89,7 +89,7 @@ func BenchmarkBitsetAndAVX2Flag(b *testing.B) {
 }
 
 func BenchmarkBitsetAndNotAVX2(b *testing.B) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		b.SkipNow()
 	}
 	for _, n := range benchmarkSizes {
@@ -106,7 +106,7 @@ func BenchmarkBitsetAndNotAVX2(b *testing.B) {
 }
 
 func BenchmarkBitsetOrAVX2(b *testing.B) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		b.SkipNow()
 	}
 	for _, n := range benchmarkSizes {
@@ -123,7 +123,7 @@ func BenchmarkBitsetOrAVX2(b *testing.B) {
 }
 
 func BenchmarkBitsetOrAVX2Flag(b *testing.B) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		b.SkipNow()
 	}
 	for _, n := range benchmarkSizes {
@@ -140,7 +140,7 @@ func BenchmarkBitsetOrAVX2Flag(b *testing.B) {
 }
 
 func BenchmarkBitsetXorAVX2(b *testing.B) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		b.SkipNow()
 	}
 	for _, n := range benchmarkSizes {
@@ -157,7 +157,7 @@ func BenchmarkBitsetXorAVX2(b *testing.B) {
 }
 
 func BenchmarkBitsetNotAVX2(b *testing.B) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		b.SkipNow()
 	}
 	for _, n := range benchmarkSizes {

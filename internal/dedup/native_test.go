@@ -437,42 +437,42 @@ func TestNativeWriteTo(t *testing.T) {
 	})
 }
 
-func TestNativeCopy(t *testing.T) {
-	testCases := []struct {
-		Name         string
-		SrcByteArray ByteArray
-		DstByteArray ByteArray
-		DstPos       int
-		SrcPos       int
-		N            int
-		Expected     ByteArray
-	}{
-		{
-			Name:         "empty copy",
-			SrcByteArray: newNativeByteArrayFromBytes([][]byte{[]byte("a"), []byte("b"), []byte("c"), []byte("d"), []byte("e")}),
-			DstByteArray: newNativeByteArrayFromBytes([][]byte{[]byte("f"), []byte("g"), []byte("h"), []byte("i"), []byte("j")}),
-			SrcPos:       4,
-			DstPos:       4,
-			N:            0,
-			Expected:     newNativeByteArrayFromBytes([][]byte{[]byte("a"), []byte("b"), []byte("c"), []byte("d"), []byte("e")}),
-		},
-		{
-			Name:         "bounded",
-			SrcByteArray: newNativeByteArrayFromBytes([][]byte{[]byte("a"), []byte("b"), []byte("c"), []byte("d"), []byte("e")}),
-			DstByteArray: newNativeByteArrayFromBytes([][]byte{[]byte("f"), []byte("g"), []byte("h"), []byte("i"), []byte("j")}),
-			SrcPos:       0,
-			DstPos:       3,
-			N:            2,
-			Expected:     newNativeByteArrayFromBytes([][]byte{[]byte("i"), []byte("j"), []byte("c"), []byte("d"), []byte("e")}),
-		},
-	}
-	for _, testCase := range testCases {
-		t.Run(testCase.Name, func(t *testing.T) {
-			b := testCase.SrcByteArray.Copy(testCase.DstByteArray, testCase.SrcPos, testCase.DstPos, testCase.N)
-			require.Equal(t, testCase.Expected.Slice(), b.Slice())
-		})
-	}
-}
+// func TestNativeCopy(t *testing.T) {
+// 	testCases := []struct {
+// 		Name         string
+// 		SrcByteArray ByteArray
+// 		DstByteArray ByteArray
+// 		DstPos       int
+// 		SrcPos       int
+// 		N            int
+// 		Expected     ByteArray
+// 	}{
+// 		{
+// 			Name:         "empty copy",
+// 			SrcByteArray: newNativeByteArrayFromBytes([][]byte{[]byte("a"), []byte("b"), []byte("c"), []byte("d"), []byte("e")}),
+// 			DstByteArray: newNativeByteArrayFromBytes([][]byte{[]byte("f"), []byte("g"), []byte("h"), []byte("i"), []byte("j")}),
+// 			SrcPos:       4,
+// 			DstPos:       4,
+// 			N:            0,
+// 			Expected:     newNativeByteArrayFromBytes([][]byte{[]byte("a"), []byte("b"), []byte("c"), []byte("d"), []byte("e")}),
+// 		},
+// 		{
+// 			Name:         "bounded",
+// 			SrcByteArray: newNativeByteArrayFromBytes([][]byte{[]byte("a"), []byte("b"), []byte("c"), []byte("d"), []byte("e")}),
+// 			DstByteArray: newNativeByteArrayFromBytes([][]byte{[]byte("f"), []byte("g"), []byte("h"), []byte("i"), []byte("j")}),
+// 			SrcPos:       0,
+// 			DstPos:       3,
+// 			N:            2,
+// 			Expected:     newNativeByteArrayFromBytes([][]byte{[]byte("i"), []byte("j"), []byte("c"), []byte("d"), []byte("e")}),
+// 		},
+// 	}
+// 	for _, testCase := range testCases {
+// 		t.Run(testCase.Name, func(t *testing.T) {
+// 			b := testCase.SrcByteArray.Copy(testCase.DstByteArray, testCase.SrcPos, testCase.DstPos, testCase.N)
+// 			require.Equal(t, testCase.Expected.Slice(), b.Slice())
+// 		})
+// 	}
+// }
 
 func TestNativeDelete(t *testing.T) {
 	testCases := []struct {

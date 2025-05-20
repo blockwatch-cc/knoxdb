@@ -19,13 +19,13 @@ type ByteArray interface {
 	Append(...[]byte) ByteArray
 	AppendZeroCopy(...[]byte) ByteArray
 	AppendFrom(ByteArray) ByteArray
-	Insert(int, ...[]byte) ByteArray
-	InsertFrom(int, ByteArray) ByteArray
-	Copy(ByteArray, int, int, int) ByteArray // src, dstPos, srcPos, len (ReplaceFrom)
-	Delete(int, int) ByteArray               // index, len
-	Grow(int) ByteArray                      // len
-	Clear()                                  // zero elements and length
-	Release()                                // recycle buffers
+	// Insert(int, ...[]byte) ByteArray
+	// InsertFrom(int, ByteArray) ByteArray
+	// Copy(ByteArray, int, int, int) ByteArray // src, dstPos, srcPos, len (ReplaceFrom)
+	Delete(int, int) ByteArray // index, len
+	// Grow(int) ByteArray        // len
+	Clear()   // zero elements and length
+	Release() // recycle buffers
 	Slice() [][]byte
 	Subslice(int, int) [][]byte // start, end
 	MinMax() ([]byte, []byte)
@@ -47,8 +47,8 @@ type ByteArray interface {
 	ForEachUnique(func(int, []byte))
 
 	// sort interface
-	Less(int, int) bool
-	Swap(int, int)
+	// Less(int, int) bool
+	// Swap(int, int)
 
 	// debug
 	Dump() string

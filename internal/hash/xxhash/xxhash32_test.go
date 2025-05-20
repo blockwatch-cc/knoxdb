@@ -5,11 +5,20 @@ package xxhash
 
 import (
 	"encoding/binary"
+	"math/rand/v2"
 	"testing"
 
-	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/constraints"
 )
+
+func RandUints[T constraints.Unsigned](sz int) []T {
+	s := make([]T, sz)
+	for i := 0; i < sz; i++ {
+		s[i] = T(rand.Uint64())
+	}
+	return s
+}
 
 type XXHash32Uint32Test struct {
 	name   string
@@ -255,7 +264,7 @@ func TestXXHash32Uint32Generic(t *testing.T) {
 
 func BenchmarkXXHash32Uint32Generic(b *testing.B) {
 	for _, n := range hashBenchmarkSizes {
-		a := util.RandUints[uint32](n.l)
+		a := RandUints[uint32](n.l)
 		res := make([]uint32, n.l)
 		b.Run(n.name, func(b *testing.B) {
 			b.SetBytes(int64(n.l * 4))
@@ -303,7 +312,7 @@ func TestXXHash32Uint64Generic(t *testing.T) {
 
 func BenchmarkXXHash32Uint64Generic(b *testing.B) {
 	for _, n := range hashBenchmarkSizes {
-		a := util.RandUints[uint64](n.l)
+		a := RandUints[uint64](n.l)
 		res := make([]uint32, n.l)
 		b.Run(n.name, func(b *testing.B) {
 			b.SetBytes(8 * int64(n.l))

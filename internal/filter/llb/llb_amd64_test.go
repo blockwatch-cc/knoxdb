@@ -8,12 +8,13 @@ import (
 	"math"
 	"testing"
 
+	"blockwatch.cc/knoxdb/internal/cpu"
 	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 func TestCardinalityUint32AVX2(t *testing.T) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		t.SkipNow()
 	}
 	llb := NewFilter()
@@ -42,7 +43,7 @@ func TestCardinalityUint32AVX2(t *testing.T) {
 }
 
 func TestCardinalityUint32AVX512(t *testing.T) {
-	if !util.UseAVX512_CD {
+	if !cpu.UseAVX512_CD {
 		t.SkipNow()
 	}
 	llb := NewFilter()
@@ -71,7 +72,7 @@ func TestCardinalityUint32AVX512(t *testing.T) {
 }
 
 func TestCardinalityUint64AVX2(t *testing.T) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		t.SkipNow()
 	}
 	llb := NewFilter()
@@ -100,7 +101,7 @@ func TestCardinalityUint64AVX2(t *testing.T) {
 }
 
 func TestCardinalityUint64AVX512(t *testing.T) {
-	if !util.UseAVX512_CD {
+	if !cpu.UseAVX512_CD {
 		t.SkipNow()
 	}
 	llb := NewFilter()
@@ -129,7 +130,7 @@ func TestCardinalityUint64AVX512(t *testing.T) {
 }
 
 func TestMergeAVX2(t *testing.T) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		t.SkipNow()
 	}
 
@@ -168,7 +169,7 @@ func TestMergeAVX2(t *testing.T) {
 }
 
 func BenchmarkAddUint32AVX2(b *testing.B) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		b.SkipNow()
 	}
 	for _, c := range tests.BenchmarkSizes {
@@ -186,7 +187,7 @@ func BenchmarkAddUint32AVX2(b *testing.B) {
 }
 
 func BenchmarkAddUint32AVX512(b *testing.B) {
-	if !util.UseAVX512_CD {
+	if !cpu.UseAVX512_CD {
 		b.SkipNow()
 	}
 	for _, c := range tests.BenchmarkSizes {
@@ -204,7 +205,7 @@ func BenchmarkAddUint32AVX512(b *testing.B) {
 }
 
 func BenchmarkAddUint64AVX2(b *testing.B) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		b.SkipNow()
 	}
 	for _, c := range tests.BenchmarkSizes {
@@ -222,7 +223,7 @@ func BenchmarkAddUint64AVX2(b *testing.B) {
 }
 
 func BenchmarkAddUint64AVX512(b *testing.B) {
-	if !util.UseAVX512_CD {
+	if !cpu.UseAVX512_CD {
 		b.SkipNow()
 	}
 	for _, c := range tests.BenchmarkSizes {
@@ -240,7 +241,7 @@ func BenchmarkAddUint64AVX512(b *testing.B) {
 }
 
 func BenchmarkCardinalityAVX2(b *testing.B) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		b.SkipNow()
 	}
 	for _, c := range tests.BenchmarkSizes {
@@ -278,7 +279,7 @@ func BenchmarkCardinalityAVX512(b *testing.B) {
 }
 
 func BenchmarkMergeAVX2(b *testing.B) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		b.SkipNow()
 	}
 	for _, c := range tests.BenchmarkSizes {

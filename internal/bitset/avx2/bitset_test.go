@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/bitset/tests"
-	"blockwatch.cc/knoxdb/pkg/util"
+	"blockwatch.cc/knoxdb/internal/cpu"
 )
 
 var (
@@ -52,7 +52,7 @@ var bitsetSizes = []int{
 }
 
 func TestAndAVX2(t *testing.T) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		t.SkipNow()
 	}
 
@@ -108,7 +108,7 @@ func TestAndAVX2(t *testing.T) {
 }
 
 func TestAndAVX2Flag(t *testing.T) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		t.SkipNow()
 	}
 	// calls use the function selector to do proper last byte masking!
@@ -223,7 +223,7 @@ func TestAndAVX2Flag(t *testing.T) {
 }
 
 func TestBitAndNotAVX2(t *testing.T) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		t.SkipNow()
 	}
 	// calls use the function selector to do proper last byte masking!
@@ -278,7 +278,7 @@ func TestBitAndNotAVX2(t *testing.T) {
 }
 
 func TestBitOrAVX2(t *testing.T) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		t.SkipNow()
 	}
 	// calls use the function selector to do proper last byte masking!
@@ -333,7 +333,7 @@ func TestBitOrAVX2(t *testing.T) {
 }
 
 func TestBitOrAVX2Flag(t *testing.T) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		t.SkipNow()
 	}
 	// calls use the function selector to do proper last byte masking!
@@ -448,7 +448,7 @@ func TestBitOrAVX2Flag(t *testing.T) {
 }
 
 func TestBitXorAVX2(t *testing.T) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		t.SkipNow()
 	}
 	// calls use the function selector to do proper last byte masking!
@@ -504,7 +504,7 @@ func TestBitXorAVX2(t *testing.T) {
 }
 
 func TestBitNegAVX2(t *testing.T) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		t.SkipNow()
 	}
 	// calls use the function selector to do proper last byte masking!
@@ -526,7 +526,7 @@ func TestBitNegAVX2(t *testing.T) {
 }
 
 func TestBitsetPopCountAVX2(t *testing.T) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		t.SkipNow()
 	}
 	for _, c := range popCases {
@@ -549,7 +549,7 @@ func TestBitsetPopCountAVX2(t *testing.T) {
 }
 
 func TestBitsetIndexAVX2(t *testing.T) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		t.SkipNow()
 	}
 	for _, c := range runTestcases {

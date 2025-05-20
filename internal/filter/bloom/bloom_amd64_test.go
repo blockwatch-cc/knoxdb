@@ -7,13 +7,13 @@ import (
 	"fmt"
 	"testing"
 
+	"blockwatch.cc/knoxdb/internal/cpu"
 	"blockwatch.cc/knoxdb/internal/filter"
 	"blockwatch.cc/knoxdb/internal/tests"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 func TestUint32AVX2(t *testing.T) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		t.Skip()
 	}
 
@@ -62,7 +62,7 @@ func TestUint32AVX2(t *testing.T) {
 }
 
 func TestUint64AVX2(t *testing.T) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		t.Skip()
 	}
 
@@ -111,7 +111,7 @@ func TestUint64AVX2(t *testing.T) {
 }
 
 func TestMergeAVX2(t *testing.T) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		t.Skip()
 	}
 
@@ -168,7 +168,7 @@ func TestMergeAVX2(t *testing.T) {
 }
 
 func BenchmarkAddManyUint32AVX2(b *testing.B) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		b.Skip()
 	}
 	for _, c := range tests.BenchmarkSizes {
@@ -186,7 +186,7 @@ func BenchmarkAddManyUint32AVX2(b *testing.B) {
 }
 
 func BenchmarkAddManyUint64AVX2(b *testing.B) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		b.Skip()
 	}
 	for _, c := range tests.BenchmarkSizes {
@@ -204,7 +204,7 @@ func BenchmarkAddManyUint64AVX2(b *testing.B) {
 }
 
 func BenchmarkMergeAVX2(b *testing.B) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		b.Skip()
 	}
 	for _, s := range bloomSizes {

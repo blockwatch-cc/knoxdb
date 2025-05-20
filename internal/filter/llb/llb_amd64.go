@@ -7,28 +7,30 @@
 package llb
 
 import (
-	"blockwatch.cc/knoxdb/pkg/util"
+	"blockwatch.cc/knoxdb/internal/cpu"
 )
 
 func init() {
 	// multi add algos
-	if util.UseAVX512_CD {
+	switch {
+	case cpu.UseAVX512_CD:
 		llb_add_u32 = llb_add_u32_avx512
 		llb_add_u64 = llb_add_u64_avx512
-	} else if util.UseAVX2 {
+	case cpu.UseAVX2:
 		llb_add_u32 = llb_add_u32_avx2
 		llb_add_u64 = llb_add_u64_avx2
 	}
 
 	// cardinality
-	if util.UseAVX512_F {
+	switch {
+	case cpu.UseAVX512_F:
 		llb_cardinality = llb_cardinality_avx512
-	} else if util.UseAVX2 {
+	case cpu.UseAVX2:
 		llb_cardinality = llb_cardinality_avx2
 	}
 
 	// merge (AVX2 only)
-	if util.UseAVX2 {
+	if cpu.UseAVX2 {
 		llb_merge = llb_merge_core_avx2
 	}
 }

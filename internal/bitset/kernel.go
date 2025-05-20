@@ -6,7 +6,7 @@ package bitset
 import (
 	"blockwatch.cc/knoxdb/internal/bitset/avx2"
 	"blockwatch.cc/knoxdb/internal/bitset/generic"
-	"blockwatch.cc/knoxdb/pkg/util"
+	"blockwatch.cc/knoxdb/internal/cpu"
 )
 
 var (
@@ -29,7 +29,7 @@ var (
 )
 
 func init() {
-	if util.UseAVX2 {
+	if cpu.UseAVX2 {
 		bitsetAnd = avx2.And
 		bitsetAndFlag = avx2.AndFlag
 		bitsetAndNot = avx2.AndNot

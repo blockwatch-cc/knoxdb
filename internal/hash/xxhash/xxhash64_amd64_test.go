@@ -6,6 +6,7 @@ package xxhash
 import (
 	"testing"
 
+	"blockwatch.cc/knoxdb/internal/cpu"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/require"
 )
@@ -13,7 +14,7 @@ import (
 /*************** xxhash64Uint32 *******************************************************/
 
 func TestXXHash64Uint32SliceAVX2(t *testing.T) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		t.SkipNow()
 	}
 	for _, c := range xxhash64Uint32Cases {
@@ -25,7 +26,7 @@ func TestXXHash64Uint32SliceAVX2(t *testing.T) {
 }
 
 func TestXXHash64Uint32SliceAVX512(t *testing.T) {
-	if !util.UseAVX512_DQ {
+	if !cpu.UseAVX512_DQ {
 		t.SkipNow()
 	}
 	for _, c := range xxhash64Uint32Cases {
@@ -37,7 +38,7 @@ func TestXXHash64Uint32SliceAVX512(t *testing.T) {
 }
 
 func BenchmarkXXHash64Uint32SliceAVX2(b *testing.B) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		b.SkipNow()
 	}
 	for _, n := range hashBenchmarkSizes {
@@ -53,7 +54,7 @@ func BenchmarkXXHash64Uint32SliceAVX2(b *testing.B) {
 }
 
 func BenchmarkXXHash64Uint32SliceAVX512(b *testing.B) {
-	if !util.UseAVX512_DQ {
+	if !cpu.UseAVX512_DQ {
 		b.SkipNow()
 	}
 	for _, n := range hashBenchmarkSizes {
@@ -71,7 +72,7 @@ func BenchmarkXXHash64Uint32SliceAVX512(b *testing.B) {
 /*************** xxhash64Uint64 *******************************************************/
 
 func TestXXHash64Uint64SliceAVX2(t *testing.T) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		t.SkipNow()
 	}
 	for _, c := range xxhash64Uint64Cases {
@@ -83,7 +84,7 @@ func TestXXHash64Uint64SliceAVX2(t *testing.T) {
 }
 
 func TestXXHash64Uint64SliceAVX512(t *testing.T) {
-	if !util.UseAVX512_DQ {
+	if !cpu.UseAVX512_DQ {
 		t.SkipNow()
 	}
 	for _, c := range xxhash64Uint64Cases {
@@ -95,7 +96,7 @@ func TestXXHash64Uint64SliceAVX512(t *testing.T) {
 }
 
 func BenchmarkXXHash64Uint64SliceAVX2(b *testing.B) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		b.SkipNow()
 	}
 	for _, n := range hashBenchmarkSizes {
@@ -111,7 +112,7 @@ func BenchmarkXXHash64Uint64SliceAVX2(b *testing.B) {
 }
 
 func BenchmarkXXHash64Uint64SliceAVX512(b *testing.B) {
-	if !util.UseAVX512_DQ {
+	if !cpu.UseAVX512_DQ {
 		b.SkipNow()
 	}
 	for _, n := range hashBenchmarkSizes {

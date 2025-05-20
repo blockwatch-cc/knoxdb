@@ -6,12 +6,13 @@ package xxhash
 import (
 	"testing"
 
+	"blockwatch.cc/knoxdb/internal/cpu"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
 func TestXXhash32Uint32AVX2(t *testing.T) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		t.SkipNow()
 	}
 	for _, c := range xxhash32Uint32Cases {
@@ -35,7 +36,7 @@ func TestXXhash32Uint32AVX512(t *testing.T) {
 }
 
 func BenchmarkXXHash32Uint32AVX2(b *testing.B) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		b.SkipNow()
 	}
 	for _, n := range hashBenchmarkSizes {
@@ -69,7 +70,7 @@ func BenchmarkXXHash32Uint32AVX512(b *testing.B) {
 /*************** xxhash32Uint64 *******************************************************/
 
 func TestXXHash32Uint64AVX2(t *testing.T) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		t.SkipNow()
 	}
 	for _, c := range xxhash32Uint64Cases {
@@ -93,7 +94,7 @@ func TestXXHash32Uint64AVX512(t *testing.T) {
 }
 
 func BenchmarkXXHash32Uint64AVX2(b *testing.B) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		b.SkipNow()
 	}
 	for _, n := range hashBenchmarkSizes {

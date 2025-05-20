@@ -1,7 +1,7 @@
 // Copyright (c) 2020-2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package util
+package cpu
 
 import (
 	"log"
@@ -120,7 +120,7 @@ func DisableAVX512() {
 	UseAVX512_VBMI2 = false
 }
 
-func CPUInfo(l *log.Logger) {
+func Info(l *log.Logger) {
 	if l == nil {
 		l = log.Default()
 	}

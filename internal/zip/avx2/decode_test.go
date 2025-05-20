@@ -10,6 +10,7 @@ import (
 	"slices"
 	"testing"
 
+	"blockwatch.cc/knoxdb/internal/cpu"
 	"blockwatch.cc/knoxdb/internal/tests"
 	ztests "blockwatch.cc/knoxdb/internal/zip/tests"
 	"blockwatch.cc/knoxdb/pkg/util"
@@ -26,7 +27,7 @@ var (
 // ---------------- zzDeltaDecodeInt64 -------------------------------------------------------------
 
 func TestZzDeltaDecodeInt64AVX2(t *testing.T) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		t.SkipNow()
 	}
 	for _, c := range zzDeltaEncodeUint64Cases {
@@ -38,7 +39,7 @@ func TestZzDeltaDecodeInt64AVX2(t *testing.T) {
 }
 
 func BenchmarkZzDeltaDecodeInt64AVX2(b *testing.B) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		b.SkipNow()
 	}
 	for _, c := range tests.BenchmarkSizes {
@@ -55,7 +56,7 @@ func BenchmarkZzDeltaDecodeInt64AVX2(b *testing.B) {
 // ---------------- zzDeltaDecodeInt32 -------------------------------------------------------------
 
 func TestZzDeltaDecodeInt32AVX2(t *testing.T) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		t.SkipNow()
 	}
 	for _, c := range zzDeltaEncodeUint32Cases {
@@ -67,7 +68,7 @@ func TestZzDeltaDecodeInt32AVX2(t *testing.T) {
 }
 
 func BenchmarkZzDeltaDecodeInt32AVX2(b *testing.B) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		b.SkipNow()
 	}
 	for _, c := range tests.BenchmarkSizes {
@@ -84,7 +85,7 @@ func BenchmarkZzDeltaDecodeInt32AVX2(b *testing.B) {
 // ---------------- zzDeltaDecodeInt16 -------------------------------------------------------------
 
 func TestZzDeltaDecodeInt16AVX2(t *testing.T) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		t.SkipNow()
 	}
 	for _, c := range zzDeltaEncodeUint16Cases {
@@ -96,7 +97,7 @@ func TestZzDeltaDecodeInt16AVX2(t *testing.T) {
 }
 
 func BenchmarkZzDeltaDecodeInt16AVX2(b *testing.B) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		b.SkipNow()
 	}
 	for _, c := range tests.BenchmarkSizes {
@@ -113,7 +114,7 @@ func BenchmarkZzDeltaDecodeInt16AVX2(b *testing.B) {
 // ---------------- zzDeltaDecodeInt8 -------------------------------------------------------------
 
 func TestZzDeltaDecodeInt8AVX2(t *testing.T) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		t.SkipNow()
 	}
 	for _, c := range zzDeltaEncodeUint8Cases {
@@ -125,7 +126,7 @@ func TestZzDeltaDecodeInt8AVX2(t *testing.T) {
 }
 
 func BenchmarkZzDeltaDecodeInt8AVX2(b *testing.B) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		b.SkipNow()
 	}
 	for _, c := range tests.BenchmarkSizes {
@@ -142,7 +143,7 @@ func BenchmarkZzDeltaDecodeInt8AVX2(b *testing.B) {
 // ------------ deltaDecodeTime -----------------------------------------------------------------
 
 func BenchmarkDeltaDecodeTimeAVX2(b *testing.B) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		b.SkipNow()
 	}
 	mod := uint64(1000000000)
@@ -160,7 +161,7 @@ func BenchmarkDeltaDecodeTimeAVX2(b *testing.B) {
 // ------------ zzDeltaDecodeTime -----------------------------------------------------------------
 
 func BenchmarkZzDeltaDecodeTimeAVX2(b *testing.B) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		b.SkipNow()
 	}
 	mod := uint64(1000000000)
@@ -178,7 +179,7 @@ func BenchmarkZzDeltaDecodeTimeAVX2(b *testing.B) {
 // ------------ zzDecodeInt64 -----------------------------------------------------------------
 
 // func TestZzDecodeInt64AVX2(t *testing.T) {
-// 	if !util.UseAVX2 {
+// 	if !cpu.UseAVX2 {
 // 		t.SkipNow()
 // 	}
 // 	for _, c := range zzDeltaEncodeUint64Cases {
@@ -194,7 +195,7 @@ func BenchmarkZzDeltaDecodeTimeAVX2(b *testing.B) {
 // }
 
 // func BenchmarkZzDecodeInt64AVX2(b *testing.B) {
-// 	if !util.UseAVX2 {
+// 	if !cpu.UseAVX2 {
 // 		b.SkipNow()
 // 	}
 // 	for _, n := range benchmarkSizes {
@@ -211,7 +212,7 @@ func BenchmarkZzDeltaDecodeTimeAVX2(b *testing.B) {
 // -------------- deltaDecodeInt64 ---------------------------------------------------------------
 
 // func TestDeltaDecodeInt64AVX2(t *testing.T) {
-// 	if !util.UseAVX2 {
+// 	if !cpu.UseAVX2 {
 // 		t.SkipNow()
 // 	}
 // 	for _, c := range zzDeltaEncodeUint64Cases {
@@ -227,7 +228,7 @@ func BenchmarkZzDeltaDecodeTimeAVX2(b *testing.B) {
 // }
 
 // func BenchmarkDeltaDecodeInt64AVX2(b *testing.B) {
-// 	if !util.UseAVX2 {
+// 	if !cpu.UseAVX2 {
 // 		b.SkipNow()
 // 	}
 // 	for _, n := range benchmarkSizes {
@@ -244,7 +245,7 @@ func BenchmarkZzDeltaDecodeTimeAVX2(b *testing.B) {
 // -------------- deltaDecodeInt64 ---------------------------------------------------------------
 
 // func TestDeltaDecodeInt32AVX2(t *testing.T) {
-// 	if !util.UseAVX2 {
+// 	if !cpu.UseAVX2 {
 // 		t.SkipNow()
 // 	}
 // 	for _, c := range zzDeltaEncodeUint32Cases {
@@ -260,7 +261,7 @@ func BenchmarkZzDeltaDecodeTimeAVX2(b *testing.B) {
 // }
 
 // func BenchmarkDeltaDecodeInt32AVX2(b *testing.B) {
-// 	if !util.UseAVX2 {
+// 	if !cpu.UseAVX2 {
 // 		b.SkipNow()
 // 	}
 // 	for _, n := range benchmarkSizes {

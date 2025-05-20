@@ -7,7 +7,7 @@
 package xxhash64
 
 import (
-	"blockwatch.cc/knoxdb/pkg/util"
+	"unsafe"
 )
 
 // In the future it's possible that compiler optimizations will make these
@@ -28,13 +28,13 @@ import (
 // Sum64String computes the 64-bit xxHash digest of s.
 // It may be faster than Sum64([]byte(s)) by avoiding a copy.
 func Sum64String(s string) uint64 {
-	return Sum64(util.UnsafeGetBytes(s))
+	return Sum64(unsafe.Slice(unsafe.StringData(s), len(s)))
 }
 
 // WriteString adds more data to d. It always returns len(s), nil.
 // It may be faster than Write([]byte(s)) by avoiding a copy.
 func (d *Digest) WriteString(s string) (n int, err error) {
-	d.Write(util.UnsafeGetBytes(s))
+	d.Write(unsafe.Slice(unsafe.StringData(s), len(s)))
 	// d.Write always returns len(s), nil.
 	// Ignoring the return output and returning these fixed values buys a
 	// savings of 6 in the inliner's cost model.
