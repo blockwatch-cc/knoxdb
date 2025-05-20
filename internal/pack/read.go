@@ -287,6 +287,10 @@ func (p *Package) ReadCol(col int) any {
 		return nil
 	}
 
+	// TODO: change return value to some accessor interface which may
+	// provide Iterator and AppendTo access, maybe raw Slice but must have
+	// clear use case!
+
 	switch f.Type() {
 	case types.FieldTypeInt64:
 		return b.Int64().Slice()

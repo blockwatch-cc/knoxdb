@@ -376,37 +376,37 @@ func (b *Block) Clone(sz int) *Block {
 // Grow increases the block's capacity by n elements and reallocates if necessary.
 // This makes space for appending additional n elements but does not increase the
 // block's length. If n is negative or too large to allocate memory, Grow panics.
-func (b *Block) Grow(n int) {
-	assert.Always(b != nil, "nil block, potential use after free")
-	assert.Always(b.ptr != nil, "nil block ptr, potential use after free")
-	b.cap += n
-	switch b.typ {
-	case BlockBytes:
-		(*(*dedup.ByteArray)(b.ptr)).Grow(n)
-	case BlockBool:
-		(*bitset.Bitset)(b.ptr).Grow(n)
-	case BlockInt128:
-		i128 := (*num.Int128Stride)(b.ptr)
-		i128.X0 = slices.Grow(i128.X0, n)
-		i128.X1 = slices.Grow(i128.X1, n)
-	case BlockInt256:
-		i256 := (*num.Int256Stride)(b.ptr)
-		i256.X0 = slices.Grow(i256.X0, n)
-		i256.X1 = slices.Grow(i256.X1, n)
-		i256.X2 = slices.Grow(i256.X2, n)
-		i256.X3 = slices.Grow(i256.X3, n)
-	default:
-		n *= blockTypeDataSize[b.typ]
-		buf := slices.Grow(b.buf, n)
-		buf = buf[:len(buf)+n]
-		if &buf[0] != &b.buf[0] {
-			arena.Free(b.buf)
-			b.buf = buf
-			b.ptr = unsafe.Pointer(unsafe.SliceData(b.buf))
-		}
-	}
-	b.dirty = true
-}
+// func (b *Block) Grow(n int) {
+// 	assert.Always(b != nil, "nil block, potential use after free")
+// 	assert.Always(b.ptr != nil, "nil block ptr, potential use after free")
+// 	b.cap += n
+// 	switch b.typ {
+// 	case BlockBytes:
+// 		(*(*dedup.ByteArray)(b.ptr)).Grow(n)
+// 	case BlockBool:
+// 		(*bitset.Bitset)(b.ptr).Grow(n)
+// 	case BlockInt128:
+// 		i128 := (*num.Int128Stride)(b.ptr)
+// 		i128.X0 = slices.Grow(i128.X0, n)
+// 		i128.X1 = slices.Grow(i128.X1, n)
+// 	case BlockInt256:
+// 		i256 := (*num.Int256Stride)(b.ptr)
+// 		i256.X0 = slices.Grow(i256.X0, n)
+// 		i256.X1 = slices.Grow(i256.X1, n)
+// 		i256.X2 = slices.Grow(i256.X2, n)
+// 		i256.X3 = slices.Grow(i256.X3, n)
+// 	default:
+// 		n *= blockTypeDataSize[b.typ]
+// 		buf := slices.Grow(b.buf, n)
+// 		buf = buf[:len(buf)+n]
+// 		if &buf[0] != &b.buf[0] {
+// 			arena.Free(b.buf)
+// 			b.buf = buf
+// 			b.ptr = unsafe.Pointer(unsafe.SliceData(b.buf))
+// 		}
+// 	}
+// 	b.dirty = true
+// }
 
 // Delete removes n elements starting at position i (i.e. [i:from+n])
 // and decreases the blocks size, but not its capacity. Delete is O(len(s)-(from+n))

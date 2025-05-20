@@ -410,27 +410,27 @@ func (p *Package) AppendPack(src *Package, from, n int) error {
 }
 
 // Grow appends new rows with zero values to all underlying blocks.
-func (p *Package) Grow(n int) error {
-	if n <= 0 {
-		return nil
-	}
-	assert.Always(p.CanGrow(n), "pack: overflow on grow",
-		"rows", n,
-		"pack", p.key,
-		"len", p.nRows,
-		"cap", p.maxRows,
-		"blockLen", p.blocks[0].Len(),
-		"blockCap", p.blocks[0].Cap(),
-	)
-	for _, b := range p.blocks {
-		if b == nil {
-			continue
-		}
-		b.Grow(n)
-	}
-	p.nRows += n
-	return nil
-}
+// func (p *Package) Grow(n int) error {
+// 	if n <= 0 {
+// 		return nil
+// 	}
+// 	assert.Always(p.CanGrow(n), "pack: overflow on grow",
+// 		"rows", n,
+// 		"pack", p.key,
+// 		"len", p.nRows,
+// 		"cap", p.maxRows,
+// 		"blockLen", p.blocks[0].Len(),
+// 		"blockCap", p.blocks[0].Cap(),
+// 	)
+// 	for _, b := range p.blocks {
+// 		if b == nil {
+// 			continue
+// 		}
+// 		b.Grow(n)
+// 	}
+// 	p.nRows += n
+// 	return nil
+// }
 
 func (p *Package) Delete(start, n int) error {
 	if start < 0 || n <= 0 {
