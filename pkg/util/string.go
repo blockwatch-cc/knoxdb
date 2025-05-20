@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2020 Blockwatch Data Inc.
+// Copyright (c) 2013-2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package util
@@ -17,8 +17,6 @@ import (
 	"unicode"
 	"unicode/utf8"
 )
-
-// var stringerType = reflect.TypeOf((*fmt.Stringer)(nil)).Elem()
 
 func ToString(s any) string {
 	if s == nil {
@@ -300,25 +298,6 @@ func TrimAllSpace(str string) string {
 		return r
 	}, str)
 }
-
-// func HashString(s string) string {
-// 	h := hash.NewInlineFNV64a()
-// 	h.WriteString(s)
-// 	return hex.EncodeToString(h.Sum())
-// }
-
-// func UniqueStrings(s []string) []string {
-// 	unique := make(map[string]bool)
-// 	res := make([]string, 0, len(s))
-// 	for _, v := range s {
-// 		h := HashString(v)
-// 		if _, ok := unique[h]; !ok {
-// 			res = append(res, v)
-// 			unique[h] = true
-// 		}
-// 	}
-// 	return res
-// }
 
 func IsASCII(s string) bool {
 	for i := 0; i < len(s); i++ {

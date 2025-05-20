@@ -41,16 +41,18 @@ type NumberMatcher[T Number] interface {
 	MatchGreater(val T, bits, mask *Bitset)
 	MatchGreaterEqual(val T, bits, mask *Bitset)
 	MatchBetween(a, b T, bits, mask *Bitset)
-
-	// Int: *xorar.Bitmap
-	// Float: []float64, []float32
 	MatchInSet(s any, bits, mask *Bitset)
 	MatchNotInSet(s any, bits, mask *Bitset)
 }
 
+type NumberSetter[T Number] interface {
+	Append(T)
+	Set(uint32, T)
+}
+
 type NumberAccessor[T Number] interface {
-	Get(int) T
-	AppendTo([]uint32, []T) []T
+	Get(uint32) T
+	AppendTo([]T, []uint32) []T
 }
 
 func IsSigned[T Number]() bool {
