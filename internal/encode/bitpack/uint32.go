@@ -434,8 +434,7 @@ func bp32_6(in *[64]uint32, p unsafe.Pointer, minv uint32) {
 			uint64(in[31]-minv)<<58
 
 	out[3] =
-		uint64(in[31]-minv)>>6 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<6 |
 			uint64(in[34]-minv)<<12 |
 			uint64(in[35]-minv)<<18 |
@@ -787,8 +786,7 @@ func bp32_10(in *[64]uint32, p unsafe.Pointer, minv uint32) {
 			uint64(in[31]-minv)<<54
 
 	out[5] =
-		uint64(in[31]-minv)>>10 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<10 |
 			uint64(in[34]-minv)<<20 |
 			uint64(in[35]-minv)<<30 |
@@ -960,8 +958,7 @@ func bp32_12(in *[64]uint32, p unsafe.Pointer, minv uint32) {
 			uint64(in[15]-minv)<<52
 
 	out[3] =
-		uint64(in[15]-minv)>>12 |
-			uint64(in[16]-minv) |
+		uint64(in[16]-minv) |
 			uint64(in[17]-minv)<<12 |
 			uint64(in[18]-minv)<<24 |
 			uint64(in[19]-minv)<<36 |
@@ -985,8 +982,7 @@ func bp32_12(in *[64]uint32, p unsafe.Pointer, minv uint32) {
 			uint64(in[31]-minv)<<52
 
 	out[6] =
-		uint64(in[31]-minv)>>12 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<12 |
 			uint64(in[34]-minv)<<24 |
 			uint64(in[35]-minv)<<36 |
@@ -1010,8 +1006,7 @@ func bp32_12(in *[64]uint32, p unsafe.Pointer, minv uint32) {
 			uint64(in[47]-minv)<<52
 
 	out[9] =
-		uint64(in[47]-minv)>>12 |
-			uint64(in[48]-minv) |
+		uint64(in[48]-minv) |
 			uint64(in[49]-minv)<<12 |
 			uint64(in[50]-minv)<<24 |
 			uint64(in[51]-minv)<<36 |
@@ -1195,8 +1190,7 @@ func bp32_14(in *[64]uint32, p unsafe.Pointer, minv uint32) {
 			uint64(in[31]-minv)<<50
 
 	out[7] =
-		uint64(in[31]-minv)>>14 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<14 |
 			uint64(in[34]-minv)<<28 |
 			uint64(in[35]-minv)<<42 |
@@ -1636,8 +1630,7 @@ func bp32_18(in *[64]uint32, p unsafe.Pointer, minv uint32) {
 			uint64(in[31]-minv)<<46
 
 	out[9] =
-		uint64(in[31]-minv)>>18 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<18 |
 			uint64(in[34]-minv)<<36 |
 			uint64(in[35]-minv)<<54
@@ -1851,8 +1844,7 @@ func bp32_20(in *[64]uint32, p unsafe.Pointer, minv uint32) {
 			uint64(in[15]-minv)<<44
 
 	out[5] =
-		uint64(in[15]-minv)>>20 |
-			uint64(in[16]-minv) |
+		uint64(in[16]-minv) |
 			uint64(in[17]-minv)<<20 |
 			uint64(in[18]-minv)<<40 |
 			uint64(in[19]-minv)<<60
@@ -1882,8 +1874,7 @@ func bp32_20(in *[64]uint32, p unsafe.Pointer, minv uint32) {
 			uint64(in[31]-minv)<<44
 
 	out[10] =
-		uint64(in[31]-minv)>>20 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<20 |
 			uint64(in[34]-minv)<<40 |
 			uint64(in[35]-minv)<<60
@@ -1913,8 +1904,7 @@ func bp32_20(in *[64]uint32, p unsafe.Pointer, minv uint32) {
 			uint64(in[47]-minv)<<44
 
 	out[15] =
-		uint64(in[47]-minv)>>20 |
-			uint64(in[48]-minv) |
+		uint64(in[48]-minv) |
 			uint64(in[49]-minv)<<20 |
 			uint64(in[50]-minv)<<40 |
 			uint64(in[51]-minv)<<60
@@ -2140,8 +2130,7 @@ func bp32_22(in *[64]uint32, p unsafe.Pointer, minv uint32) {
 			uint64(in[31]-minv)<<42
 
 	out[11] =
-		uint64(in[31]-minv)>>22 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<22 |
 			uint64(in[34]-minv)<<44
 
@@ -2359,8 +2348,7 @@ func bp32_24(in *[64]uint32, p unsafe.Pointer, minv uint32) {
 			uint64(in[7]-minv)<<40
 
 	out[3] =
-		uint64(in[7]-minv)>>24 |
-			uint64(in[8]-minv) |
+		uint64(in[8]-minv) |
 			uint64(in[9]-minv)<<24 |
 			uint64(in[10]-minv)<<48
 
@@ -2376,8 +2364,7 @@ func bp32_24(in *[64]uint32, p unsafe.Pointer, minv uint32) {
 			uint64(in[15]-minv)<<40
 
 	out[6] =
-		uint64(in[15]-minv)>>24 |
-			uint64(in[16]-minv) |
+		uint64(in[16]-minv) |
 			uint64(in[17]-minv)<<24 |
 			uint64(in[18]-minv)<<48
 
@@ -2393,8 +2380,7 @@ func bp32_24(in *[64]uint32, p unsafe.Pointer, minv uint32) {
 			uint64(in[23]-minv)<<40
 
 	out[9] =
-		uint64(in[23]-minv)>>24 |
-			uint64(in[24]-minv) |
+		uint64(in[24]-minv) |
 			uint64(in[25]-minv)<<24 |
 			uint64(in[26]-minv)<<48
 
@@ -2410,8 +2396,7 @@ func bp32_24(in *[64]uint32, p unsafe.Pointer, minv uint32) {
 			uint64(in[31]-minv)<<40
 
 	out[12] =
-		uint64(in[31]-minv)>>24 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<24 |
 			uint64(in[34]-minv)<<48
 
@@ -2427,8 +2412,7 @@ func bp32_24(in *[64]uint32, p unsafe.Pointer, minv uint32) {
 			uint64(in[39]-minv)<<40
 
 	out[15] =
-		uint64(in[39]-minv)>>24 |
-			uint64(in[40]-minv) |
+		uint64(in[40]-minv) |
 			uint64(in[41]-minv)<<24 |
 			uint64(in[42]-minv)<<48
 
@@ -2444,8 +2428,7 @@ func bp32_24(in *[64]uint32, p unsafe.Pointer, minv uint32) {
 			uint64(in[47]-minv)<<40
 
 	out[18] =
-		uint64(in[47]-minv)>>24 |
-			uint64(in[48]-minv) |
+		uint64(in[48]-minv) |
 			uint64(in[49]-minv)<<24 |
 			uint64(in[50]-minv)<<48
 
@@ -2461,8 +2444,7 @@ func bp32_24(in *[64]uint32, p unsafe.Pointer, minv uint32) {
 			uint64(in[55]-minv)<<40
 
 	out[21] =
-		uint64(in[55]-minv)>>24 |
-			uint64(in[56]-minv) |
+		uint64(in[56]-minv) |
 			uint64(in[57]-minv)<<24 |
 			uint64(in[58]-minv)<<48
 
@@ -2692,8 +2674,7 @@ func bp32_26(in *[64]uint32, p unsafe.Pointer, minv uint32) {
 			uint64(in[31]-minv)<<38
 
 	out[13] =
-		uint64(in[31]-minv)>>26 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<26 |
 			uint64(in[34]-minv)<<52
 
@@ -2949,8 +2930,7 @@ func bp32_28(in *[64]uint32, p unsafe.Pointer, minv uint32) {
 			uint64(in[15]-minv)<<36
 
 	out[7] =
-		uint64(in[15]-minv)>>28 |
-			uint64(in[16]-minv) |
+		uint64(in[16]-minv) |
 			uint64(in[17]-minv)<<28 |
 			uint64(in[18]-minv)<<56
 
@@ -2986,8 +2966,7 @@ func bp32_28(in *[64]uint32, p unsafe.Pointer, minv uint32) {
 			uint64(in[31]-minv)<<36
 
 	out[14] =
-		uint64(in[31]-minv)>>28 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<28 |
 			uint64(in[34]-minv)<<56
 
@@ -3023,8 +3002,7 @@ func bp32_28(in *[64]uint32, p unsafe.Pointer, minv uint32) {
 			uint64(in[47]-minv)<<36
 
 	out[21] =
-		uint64(in[47]-minv)>>28 |
-			uint64(in[48]-minv) |
+		uint64(in[48]-minv) |
 			uint64(in[49]-minv)<<28 |
 			uint64(in[50]-minv)<<56
 
@@ -3292,8 +3270,7 @@ func bp32_30(in *[64]uint32, p unsafe.Pointer, minv uint32) {
 			uint64(in[31]-minv)<<34
 
 	out[15] =
-		uint64(in[31]-minv)>>30 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<30 |
 			uint64(in[34]-minv)<<60
 

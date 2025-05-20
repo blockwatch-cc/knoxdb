@@ -431,8 +431,7 @@ func bp8_6(in *[64]uint8, p unsafe.Pointer, minv uint8) {
 			uint64(in[31]-minv)<<58
 
 	out[3] =
-		uint64(in[31]-minv)>>6 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<6 |
 			uint64(in[34]-minv)<<12 |
 			uint64(in[35]-minv)<<18 |

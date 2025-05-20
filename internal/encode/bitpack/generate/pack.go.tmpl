@@ -35,7 +35,9 @@ func bp{{$.Bits}}_{{$bitsize}}(in *[64]uint{{$.Bits}}, p unsafe.Pointer, minv ui
                 {{- if lt $shifter 64 }}
                     {{- if $shiftRight }}
                         {{- $inputIdx = dec $inputIdx 1 }}
+                        {{- if lt $shifter $bitsize }}
                         uint64(in[{{$inputIdx}}]-minv) >> {{$shifter}} |
+                        {{- end }}
                         {{- $shifter = dec $bitsize $shifter }}
                         {{- $offset = 0 }}
                         {{- $inputIdx = inc $inputIdx 1 }}

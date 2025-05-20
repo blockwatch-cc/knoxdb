@@ -438,8 +438,7 @@ func bp64_6(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[31]-minv)<<58
 
 	out[3] =
-		uint64(in[31]-minv)>>6 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<6 |
 			uint64(in[34]-minv)<<12 |
 			uint64(in[35]-minv)<<18 |
@@ -791,8 +790,7 @@ func bp64_10(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[31]-minv)<<54
 
 	out[5] =
-		uint64(in[31]-minv)>>10 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<10 |
 			uint64(in[34]-minv)<<20 |
 			uint64(in[35]-minv)<<30 |
@@ -964,8 +962,7 @@ func bp64_12(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[15]-minv)<<52
 
 	out[3] =
-		uint64(in[15]-minv)>>12 |
-			uint64(in[16]-minv) |
+		uint64(in[16]-minv) |
 			uint64(in[17]-minv)<<12 |
 			uint64(in[18]-minv)<<24 |
 			uint64(in[19]-minv)<<36 |
@@ -989,8 +986,7 @@ func bp64_12(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[31]-minv)<<52
 
 	out[6] =
-		uint64(in[31]-minv)>>12 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<12 |
 			uint64(in[34]-minv)<<24 |
 			uint64(in[35]-minv)<<36 |
@@ -1014,8 +1010,7 @@ func bp64_12(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[47]-minv)<<52
 
 	out[9] =
-		uint64(in[47]-minv)>>12 |
-			uint64(in[48]-minv) |
+		uint64(in[48]-minv) |
 			uint64(in[49]-minv)<<12 |
 			uint64(in[50]-minv)<<24 |
 			uint64(in[51]-minv)<<36 |
@@ -1199,8 +1194,7 @@ func bp64_14(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[31]-minv)<<50
 
 	out[7] =
-		uint64(in[31]-minv)>>14 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<14 |
 			uint64(in[34]-minv)<<28 |
 			uint64(in[35]-minv)<<42 |
@@ -1640,8 +1634,7 @@ func bp64_18(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[31]-minv)<<46
 
 	out[9] =
-		uint64(in[31]-minv)>>18 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<18 |
 			uint64(in[34]-minv)<<36 |
 			uint64(in[35]-minv)<<54
@@ -1855,8 +1848,7 @@ func bp64_20(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[15]-minv)<<44
 
 	out[5] =
-		uint64(in[15]-minv)>>20 |
-			uint64(in[16]-minv) |
+		uint64(in[16]-minv) |
 			uint64(in[17]-minv)<<20 |
 			uint64(in[18]-minv)<<40 |
 			uint64(in[19]-minv)<<60
@@ -1886,8 +1878,7 @@ func bp64_20(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[31]-minv)<<44
 
 	out[10] =
-		uint64(in[31]-minv)>>20 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<20 |
 			uint64(in[34]-minv)<<40 |
 			uint64(in[35]-minv)<<60
@@ -1917,8 +1908,7 @@ func bp64_20(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[47]-minv)<<44
 
 	out[15] =
-		uint64(in[47]-minv)>>20 |
-			uint64(in[48]-minv) |
+		uint64(in[48]-minv) |
 			uint64(in[49]-minv)<<20 |
 			uint64(in[50]-minv)<<40 |
 			uint64(in[51]-minv)<<60
@@ -2144,8 +2134,7 @@ func bp64_22(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[31]-minv)<<42
 
 	out[11] =
-		uint64(in[31]-minv)>>22 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<22 |
 			uint64(in[34]-minv)<<44
 
@@ -2363,8 +2352,7 @@ func bp64_24(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[7]-minv)<<40
 
 	out[3] =
-		uint64(in[7]-minv)>>24 |
-			uint64(in[8]-minv) |
+		uint64(in[8]-minv) |
 			uint64(in[9]-minv)<<24 |
 			uint64(in[10]-minv)<<48
 
@@ -2380,8 +2368,7 @@ func bp64_24(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[15]-minv)<<40
 
 	out[6] =
-		uint64(in[15]-minv)>>24 |
-			uint64(in[16]-minv) |
+		uint64(in[16]-minv) |
 			uint64(in[17]-minv)<<24 |
 			uint64(in[18]-minv)<<48
 
@@ -2397,8 +2384,7 @@ func bp64_24(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[23]-minv)<<40
 
 	out[9] =
-		uint64(in[23]-minv)>>24 |
-			uint64(in[24]-minv) |
+		uint64(in[24]-minv) |
 			uint64(in[25]-minv)<<24 |
 			uint64(in[26]-minv)<<48
 
@@ -2414,8 +2400,7 @@ func bp64_24(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[31]-minv)<<40
 
 	out[12] =
-		uint64(in[31]-minv)>>24 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<24 |
 			uint64(in[34]-minv)<<48
 
@@ -2431,8 +2416,7 @@ func bp64_24(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[39]-minv)<<40
 
 	out[15] =
-		uint64(in[39]-minv)>>24 |
-			uint64(in[40]-minv) |
+		uint64(in[40]-minv) |
 			uint64(in[41]-minv)<<24 |
 			uint64(in[42]-minv)<<48
 
@@ -2448,8 +2432,7 @@ func bp64_24(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[47]-minv)<<40
 
 	out[18] =
-		uint64(in[47]-minv)>>24 |
-			uint64(in[48]-minv) |
+		uint64(in[48]-minv) |
 			uint64(in[49]-minv)<<24 |
 			uint64(in[50]-minv)<<48
 
@@ -2465,8 +2448,7 @@ func bp64_24(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[55]-minv)<<40
 
 	out[21] =
-		uint64(in[55]-minv)>>24 |
-			uint64(in[56]-minv) |
+		uint64(in[56]-minv) |
 			uint64(in[57]-minv)<<24 |
 			uint64(in[58]-minv)<<48
 
@@ -2696,8 +2678,7 @@ func bp64_26(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[31]-minv)<<38
 
 	out[13] =
-		uint64(in[31]-minv)>>26 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<26 |
 			uint64(in[34]-minv)<<52
 
@@ -2953,8 +2934,7 @@ func bp64_28(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[15]-minv)<<36
 
 	out[7] =
-		uint64(in[15]-minv)>>28 |
-			uint64(in[16]-minv) |
+		uint64(in[16]-minv) |
 			uint64(in[17]-minv)<<28 |
 			uint64(in[18]-minv)<<56
 
@@ -2990,8 +2970,7 @@ func bp64_28(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[31]-minv)<<36
 
 	out[14] =
-		uint64(in[31]-minv)>>28 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<28 |
 			uint64(in[34]-minv)<<56
 
@@ -3027,8 +3006,7 @@ func bp64_28(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[47]-minv)<<36
 
 	out[21] =
-		uint64(in[47]-minv)>>28 |
-			uint64(in[48]-minv) |
+		uint64(in[48]-minv) |
 			uint64(in[49]-minv)<<28 |
 			uint64(in[50]-minv)<<56
 
@@ -3296,8 +3274,7 @@ func bp64_30(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[31]-minv)<<34
 
 	out[15] =
-		uint64(in[31]-minv)>>30 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<30 |
 			uint64(in[34]-minv)<<60
 
@@ -3913,8 +3890,7 @@ func bp64_34(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[31]-minv)<<30
 
 	out[17] =
-		uint64(in[31]-minv)>>34 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<34
 
 	out[18] =
@@ -4212,8 +4188,7 @@ func bp64_36(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[15]-minv)<<28
 
 	out[9] =
-		uint64(in[15]-minv)>>36 |
-			uint64(in[16]-minv) |
+		uint64(in[16]-minv) |
 			uint64(in[17]-minv)<<36
 
 	out[10] =
@@ -4255,8 +4230,7 @@ func bp64_36(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[31]-minv)<<28
 
 	out[18] =
-		uint64(in[31]-minv)>>36 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<36
 
 	out[19] =
@@ -4298,8 +4272,7 @@ func bp64_36(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[47]-minv)<<28
 
 	out[27] =
-		uint64(in[47]-minv)>>36 |
-			uint64(in[48]-minv) |
+		uint64(in[48]-minv) |
 			uint64(in[49]-minv)<<36
 
 	out[28] =
@@ -4609,8 +4582,7 @@ func bp64_38(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[31]-minv)<<26
 
 	out[19] =
-		uint64(in[31]-minv)>>38 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<38
 
 	out[20] =
@@ -4906,8 +4878,7 @@ func bp64_40(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[7]-minv)<<24
 
 	out[5] =
-		uint64(in[7]-minv)>>40 |
-			uint64(in[8]-minv) |
+		uint64(in[8]-minv) |
 			uint64(in[9]-minv)<<40
 
 	out[6] =
@@ -4929,8 +4900,7 @@ func bp64_40(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[15]-minv)<<24
 
 	out[10] =
-		uint64(in[15]-minv)>>40 |
-			uint64(in[16]-minv) |
+		uint64(in[16]-minv) |
 			uint64(in[17]-minv)<<40
 
 	out[11] =
@@ -4952,8 +4922,7 @@ func bp64_40(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[23]-minv)<<24
 
 	out[15] =
-		uint64(in[23]-minv)>>40 |
-			uint64(in[24]-minv) |
+		uint64(in[24]-minv) |
 			uint64(in[25]-minv)<<40
 
 	out[16] =
@@ -4975,8 +4944,7 @@ func bp64_40(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[31]-minv)<<24
 
 	out[20] =
-		uint64(in[31]-minv)>>40 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<40
 
 	out[21] =
@@ -4998,8 +4966,7 @@ func bp64_40(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[39]-minv)<<24
 
 	out[25] =
-		uint64(in[39]-minv)>>40 |
-			uint64(in[40]-minv) |
+		uint64(in[40]-minv) |
 			uint64(in[41]-minv)<<40
 
 	out[26] =
@@ -5021,8 +4988,7 @@ func bp64_40(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[47]-minv)<<24
 
 	out[30] =
-		uint64(in[47]-minv)>>40 |
-			uint64(in[48]-minv) |
+		uint64(in[48]-minv) |
 			uint64(in[49]-minv)<<40
 
 	out[31] =
@@ -5044,8 +5010,7 @@ func bp64_40(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[55]-minv)<<24
 
 	out[35] =
-		uint64(in[55]-minv)>>40 |
-			uint64(in[56]-minv) |
+		uint64(in[56]-minv) |
 			uint64(in[57]-minv)<<40
 
 	out[36] =
@@ -5353,8 +5318,7 @@ func bp64_42(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[31]-minv)<<22
 
 	out[21] =
-		uint64(in[31]-minv)>>42 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<42
 
 	out[22] =
@@ -5694,8 +5658,7 @@ func bp64_44(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[15]-minv)<<20
 
 	out[11] =
-		uint64(in[15]-minv)>>44 |
-			uint64(in[16]-minv) |
+		uint64(in[16]-minv) |
 			uint64(in[17]-minv)<<44
 
 	out[12] =
@@ -5743,8 +5706,7 @@ func bp64_44(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[31]-minv)<<20
 
 	out[22] =
-		uint64(in[31]-minv)>>44 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<44
 
 	out[23] =
@@ -5792,8 +5754,7 @@ func bp64_44(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[47]-minv)<<20
 
 	out[33] =
-		uint64(in[47]-minv)>>44 |
-			uint64(in[48]-minv) |
+		uint64(in[48]-minv) |
 			uint64(in[49]-minv)<<44
 
 	out[34] =
@@ -6145,8 +6106,7 @@ func bp64_46(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[31]-minv)<<18
 
 	out[23] =
-		uint64(in[31]-minv)>>46 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<46
 
 	out[24] =
@@ -6468,8 +6428,7 @@ func bp64_48(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[3]-minv)<<16
 
 	out[3] =
-		uint64(in[3]-minv)>>48 |
-			uint64(in[4]-minv) |
+		uint64(in[4]-minv) |
 			uint64(in[5]-minv)<<48
 
 	out[4] =
@@ -6481,8 +6440,7 @@ func bp64_48(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[7]-minv)<<16
 
 	out[6] =
-		uint64(in[7]-minv)>>48 |
-			uint64(in[8]-minv) |
+		uint64(in[8]-minv) |
 			uint64(in[9]-minv)<<48
 
 	out[7] =
@@ -6494,8 +6452,7 @@ func bp64_48(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[11]-minv)<<16
 
 	out[9] =
-		uint64(in[11]-minv)>>48 |
-			uint64(in[12]-minv) |
+		uint64(in[12]-minv) |
 			uint64(in[13]-minv)<<48
 
 	out[10] =
@@ -6507,8 +6464,7 @@ func bp64_48(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[15]-minv)<<16
 
 	out[12] =
-		uint64(in[15]-minv)>>48 |
-			uint64(in[16]-minv) |
+		uint64(in[16]-minv) |
 			uint64(in[17]-minv)<<48
 
 	out[13] =
@@ -6520,8 +6476,7 @@ func bp64_48(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[19]-minv)<<16
 
 	out[15] =
-		uint64(in[19]-minv)>>48 |
-			uint64(in[20]-minv) |
+		uint64(in[20]-minv) |
 			uint64(in[21]-minv)<<48
 
 	out[16] =
@@ -6533,8 +6488,7 @@ func bp64_48(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[23]-minv)<<16
 
 	out[18] =
-		uint64(in[23]-minv)>>48 |
-			uint64(in[24]-minv) |
+		uint64(in[24]-minv) |
 			uint64(in[25]-minv)<<48
 
 	out[19] =
@@ -6546,8 +6500,7 @@ func bp64_48(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[27]-minv)<<16
 
 	out[21] =
-		uint64(in[27]-minv)>>48 |
-			uint64(in[28]-minv) |
+		uint64(in[28]-minv) |
 			uint64(in[29]-minv)<<48
 
 	out[22] =
@@ -6559,8 +6512,7 @@ func bp64_48(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[31]-minv)<<16
 
 	out[24] =
-		uint64(in[31]-minv)>>48 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<48
 
 	out[25] =
@@ -6572,8 +6524,7 @@ func bp64_48(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[35]-minv)<<16
 
 	out[27] =
-		uint64(in[35]-minv)>>48 |
-			uint64(in[36]-minv) |
+		uint64(in[36]-minv) |
 			uint64(in[37]-minv)<<48
 
 	out[28] =
@@ -6585,8 +6536,7 @@ func bp64_48(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[39]-minv)<<16
 
 	out[30] =
-		uint64(in[39]-minv)>>48 |
-			uint64(in[40]-minv) |
+		uint64(in[40]-minv) |
 			uint64(in[41]-minv)<<48
 
 	out[31] =
@@ -6598,8 +6548,7 @@ func bp64_48(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[43]-minv)<<16
 
 	out[33] =
-		uint64(in[43]-minv)>>48 |
-			uint64(in[44]-minv) |
+		uint64(in[44]-minv) |
 			uint64(in[45]-minv)<<48
 
 	out[34] =
@@ -6611,8 +6560,7 @@ func bp64_48(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[47]-minv)<<16
 
 	out[36] =
-		uint64(in[47]-minv)>>48 |
-			uint64(in[48]-minv) |
+		uint64(in[48]-minv) |
 			uint64(in[49]-minv)<<48
 
 	out[37] =
@@ -6624,8 +6572,7 @@ func bp64_48(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[51]-minv)<<16
 
 	out[39] =
-		uint64(in[51]-minv)>>48 |
-			uint64(in[52]-minv) |
+		uint64(in[52]-minv) |
 			uint64(in[53]-minv)<<48
 
 	out[40] =
@@ -6637,8 +6584,7 @@ func bp64_48(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[55]-minv)<<16
 
 	out[42] =
-		uint64(in[55]-minv)>>48 |
-			uint64(in[56]-minv) |
+		uint64(in[56]-minv) |
 			uint64(in[57]-minv)<<48
 
 	out[43] =
@@ -6650,8 +6596,7 @@ func bp64_48(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[59]-minv)<<16
 
 	out[45] =
-		uint64(in[59]-minv)>>48 |
-			uint64(in[60]-minv) |
+		uint64(in[60]-minv) |
 			uint64(in[61]-minv)<<48
 
 	out[46] =
@@ -6985,8 +6930,7 @@ func bp64_50(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[31]-minv)<<14
 
 	out[25] =
-		uint64(in[31]-minv)>>50 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<50
 
 	out[26] =
@@ -7368,8 +7312,7 @@ func bp64_52(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[15]-minv)<<12
 
 	out[13] =
-		uint64(in[15]-minv)>>52 |
-			uint64(in[16]-minv) |
+		uint64(in[16]-minv) |
 			uint64(in[17]-minv)<<52
 
 	out[14] =
@@ -7423,8 +7366,7 @@ func bp64_52(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[31]-minv)<<12
 
 	out[26] =
-		uint64(in[31]-minv)>>52 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<52
 
 	out[27] =
@@ -7478,8 +7420,7 @@ func bp64_52(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[47]-minv)<<12
 
 	out[39] =
-		uint64(in[47]-minv)>>52 |
-			uint64(in[48]-minv) |
+		uint64(in[48]-minv) |
 			uint64(in[49]-minv)<<52
 
 	out[40] =
@@ -7873,8 +7814,7 @@ func bp64_54(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[31]-minv)<<10
 
 	out[27] =
-		uint64(in[31]-minv)>>54 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<54
 
 	out[28] =
@@ -8248,8 +8188,7 @@ func bp64_56(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[7]-minv)<<8
 
 	out[7] =
-		uint64(in[7]-minv)>>56 |
-			uint64(in[8]-minv) |
+		uint64(in[8]-minv) |
 			uint64(in[9]-minv)<<56
 
 	out[8] =
@@ -8277,8 +8216,7 @@ func bp64_56(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[15]-minv)<<8
 
 	out[14] =
-		uint64(in[15]-minv)>>56 |
-			uint64(in[16]-minv) |
+		uint64(in[16]-minv) |
 			uint64(in[17]-minv)<<56
 
 	out[15] =
@@ -8306,8 +8244,7 @@ func bp64_56(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[23]-minv)<<8
 
 	out[21] =
-		uint64(in[23]-minv)>>56 |
-			uint64(in[24]-minv) |
+		uint64(in[24]-minv) |
 			uint64(in[25]-minv)<<56
 
 	out[22] =
@@ -8335,8 +8272,7 @@ func bp64_56(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[31]-minv)<<8
 
 	out[28] =
-		uint64(in[31]-minv)>>56 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<56
 
 	out[29] =
@@ -8364,8 +8300,7 @@ func bp64_56(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[39]-minv)<<8
 
 	out[35] =
-		uint64(in[39]-minv)>>56 |
-			uint64(in[40]-minv) |
+		uint64(in[40]-minv) |
 			uint64(in[41]-minv)<<56
 
 	out[36] =
@@ -8393,8 +8328,7 @@ func bp64_56(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[47]-minv)<<8
 
 	out[42] =
-		uint64(in[47]-minv)>>56 |
-			uint64(in[48]-minv) |
+		uint64(in[48]-minv) |
 			uint64(in[49]-minv)<<56
 
 	out[43] =
@@ -8422,8 +8356,7 @@ func bp64_56(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[55]-minv)<<8
 
 	out[49] =
-		uint64(in[55]-minv)>>56 |
-			uint64(in[56]-minv) |
+		uint64(in[56]-minv) |
 			uint64(in[57]-minv)<<56
 
 	out[50] =
@@ -8809,8 +8742,7 @@ func bp64_58(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[31]-minv)<<6
 
 	out[29] =
-		uint64(in[31]-minv)>>58 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<58
 
 	out[30] =
@@ -9234,8 +9166,7 @@ func bp64_60(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[15]-minv)<<4
 
 	out[15] =
-		uint64(in[15]-minv)>>60 |
-			uint64(in[16]-minv) |
+		uint64(in[16]-minv) |
 			uint64(in[17]-minv)<<60
 
 	out[16] =
@@ -9295,8 +9226,7 @@ func bp64_60(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[31]-minv)<<4
 
 	out[30] =
-		uint64(in[31]-minv)>>60 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<60
 
 	out[31] =
@@ -9356,8 +9286,7 @@ func bp64_60(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[47]-minv)<<4
 
 	out[45] =
-		uint64(in[47]-minv)>>60 |
-			uint64(in[48]-minv) |
+		uint64(in[48]-minv) |
 			uint64(in[49]-minv)<<60
 
 	out[46] =
@@ -9793,8 +9722,7 @@ func bp64_62(in *[64]uint64, p unsafe.Pointer, minv uint64) {
 			uint64(in[31]-minv)<<2
 
 	out[31] =
-		uint64(in[31]-minv)>>62 |
-			uint64(in[32]-minv) |
+		uint64(in[32]-minv) |
 			uint64(in[33]-minv)<<62
 
 	out[32] =
