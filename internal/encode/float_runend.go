@@ -16,8 +16,8 @@ import (
 
 // TFloatRunEnd
 type FloatRunEndContainer[T types.Float] struct {
-	Values FloatContainer[T]        // []T
-	Ends   IntegerContainer[uint32] // []uint32
+	Values NumberContainer[T]      // []T
+	Ends   NumberContainer[uint32] // []uint32
 }
 
 func (c *FloatRunEndContainer[T]) Info() string {
@@ -32,7 +32,7 @@ func (c *FloatRunEndContainer[T]) Close() {
 	putFloatRunEndContainer(c)
 }
 
-func (c *FloatRunEndContainer[T]) Type() FloatContainerType {
+func (c *FloatRunEndContainer[T]) Type() ContainerType {
 	return TFloatRunEnd
 }
 
@@ -61,7 +61,7 @@ func (c *FloatRunEndContainer[T]) Load(buf []byte) ([]byte, error) {
 	buf = buf[1:]
 
 	// alloc and decode values child container
-	c.Values = NewFloat[T](FloatContainerType(buf[0]))
+	c.Values = NewFloat[T](ContainerType(buf[0]))
 	var err error
 	buf, err = c.Values.Load(buf)
 	if err != nil {
@@ -69,7 +69,7 @@ func (c *FloatRunEndContainer[T]) Load(buf []byte) ([]byte, error) {
 	}
 
 	// alloc and decode ends child container
-	c.Ends = NewInt[uint32](IntegerContainerType(buf[0]))
+	c.Ends = NewInt[uint32](ContainerType(buf[0]))
 	return c.Ends.Load(buf)
 }
 
@@ -80,12 +80,12 @@ func (c *FloatRunEndContainer[T]) Get(n int) T {
 	return c.Values.Get(idx)
 }
 
-func (c *FloatRunEndContainer[T]) AppendTo(sel []uint32, dst []T) []T {
+func (c *FloatRunEndContainer[T]) AppendTo(dst []T, sel []uint32) []T {
 	if sel == nil {
 		var (
 			sz   = c.Ends.Len()
-			vals = c.Values.AppendTo(nil, arena.Alloc[T](sz))
-			ends = c.Ends.AppendTo(nil, arena.Alloc[uint32](sz))
+			vals = c.Values.AppendTo(arena.Alloc[T](sz), nil)
+			ends = c.Ends.AppendTo(arena.Alloc[uint32](sz), nil)
 			i    uint32
 		)
 		dst = dst[:ends[sz-1]+1]
@@ -161,7 +161,7 @@ func (c *FloatRunEndContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 	return dst
 }
 
-func (c *FloatRunEndContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int) FloatContainer[T] {
+func (c *FloatRunEndContainer[T]) Encode(ctx *Context[T], vals []T) NumberContainer[T] {
 	// generate run-end encoding from originals
 	values := arena.Alloc[T](ctx.NumRuns)[:ctx.NumRuns]
 	ends := arena.Alloc[uint32](ctx.NumRuns)[:ctx.NumRuns]
@@ -184,17 +184,17 @@ func (c *FloatRunEndContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int
 
 	// encode child containers, reuse analysis context
 	ctx.NumValues = ctx.NumRuns
-	c.Values = EncodeFloat(ctx, values, lvl-1)
+	c.Values = EncodeFloat(ctx.WithLevel(ctx.Lvl-1), values)
 	if c.Values.Type() != TFloatRaw {
 		arena.Free(values)
 	}
 	ctx.NumValues = len(vals)
 
 	// create analysis context for known sequential data (min=first, max=last)
-	ectx := NewIntegerContext[uint32](ends[0], ends[len(ends)-1], len(ends))
-	c.Ends = EncodeInt(ectx, ends, lvl-1)
+	ectx := NewIntContext[uint32](ends[0], ends[len(ends)-1], len(ends)).WithLevel(ctx.Lvl - 1)
+	c.Ends = EncodeInt(ectx, ends)
 	ectx.Close()
-	if c.Ends.Type() != TIntegerRaw {
+	if c.Ends.Type() != TIntRaw {
 		arena.Free(ends)
 	}
 
@@ -290,18 +290,18 @@ type FloatRunEndFactory struct {
 	f32ItPool sync.Pool
 }
 
-func newFloatRunEndContainer[T types.Float]() FloatContainer[T] {
+func newFloatRunEndContainer[T types.Float]() NumberContainer[T] {
 	switch any(T(0)).(type) {
 	case float64:
-		return floatRunEndFactory.f64Pool.Get().(FloatContainer[T])
+		return floatRunEndFactory.f64Pool.Get().(NumberContainer[T])
 	case float32:
-		return floatRunEndFactory.f32Pool.Get().(FloatContainer[T])
+		return floatRunEndFactory.f32Pool.Get().(NumberContainer[T])
 	default:
 		return nil
 	}
 }
 
-func putFloatRunEndContainer[T types.Float](c FloatContainer[T]) {
+func putFloatRunEndContainer[T types.Float](c NumberContainer[T]) {
 	switch any(T(0)).(type) {
 	case float64:
 		floatRunEndFactory.f64Pool.Put(c)
@@ -341,14 +341,14 @@ var floatRunEndFactory = FloatRunEndFactory{
 // Iterator
 //
 
-func (c *FloatRunEndContainer[T]) Iterator() Iterator[T] {
+func (c *FloatRunEndContainer[T]) Iterator() NumberIterator[T] {
 	return NewFloatRunEndIterator(c)
 }
 
 type FloatRunEndIterator[T types.Float] struct {
 	BaseIterator[T]
-	valIt Iterator[T]
-	endIt Iterator[uint32]
+	valIt NumberIterator[T]
+	endIt NumberIterator[uint32]
 }
 
 func NewFloatRunEndIterator[T types.Float](c *FloatRunEndContainer[T]) *FloatRunEndIterator[T] {

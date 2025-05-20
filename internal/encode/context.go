@@ -9,6 +9,7 @@ import (
 	"unsafe"
 
 	"blockwatch.cc/knoxdb/internal/arena"
+	"blockwatch.cc/knoxdb/internal/encode/alp"
 	"blockwatch.cc/knoxdb/internal/encode/analyze"
 	"blockwatch.cc/knoxdb/internal/encode/hashprobe"
 	"blockwatch.cc/knoxdb/internal/filter/llb"
@@ -17,23 +18,34 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
-type IntegerContext[T types.Integer] struct {
-	Min         T                  // vector minimum
-	Max         T                  // vector maximum
-	Delta       T                  // common delta between vector values
-	NumRuns     int                // vector runs
-	NumUnique   int                // vector cardinality (hint, may not be precise)
-	NumValues   int                // vector length
-	PhyBits     int                // phy type bit width 8, 16, 32, 64
-	UseBits     int                // used bits for bit-packing
-	Sample      []T                // data sample (optional)
-	SampleCtx   *IntegerContext[T] // sample analysis
-	FreeSample  bool               // hint whether sample may be reused
-	UniqueArray []T                // unique values as array (optional)
+// max encoder nesting level
+const MAX_LEVEL = 3
+
+type Context[T types.Number] struct {
+	Min         T            // vector minimum
+	Max         T            // vector maximum
+	Delta       T            // common delta between vector values
+	Lvl         int          // max encoder nesting level
+	NumRuns     int          // vector runs
+	NumUnique   int          // vector cardinality (hint, may not be precise)
+	NumValues   int          // vector length
+	PhyBits     int          // phy type bit width 8, 16, 32, 64
+	UseBits     int          // used bits for bit-packing
+	Sample      []T          // data sample (optional)
+	SampleCtx   *Context[T]  // sample analysis
+	FreeSample  bool         // hint whether sample may be reused
+	UniqueArray []T          // unique values as array (optional)
+	Alp         alp.Analysis // ALP analysis
 }
 
-func NewIntegerContext[T types.Integer](minv, maxv T, n int) *IntegerContext[T] {
-	c := newIntegerContext[T]()
+func (c *Context[T]) WithLevel(l int) *Context[T] {
+	c.Lvl = l
+	return c
+}
+
+func NewIntContext[T types.Integer](minv, maxv T, n int) *Context[T] {
+	c := newContext[T]()
+	c.Lvl = MAX_LEVEL
 	c.PhyBits = int(unsafe.Sizeof(T(0))) * 8
 	c.UseBits = types.Log2Range(minv, maxv)
 	c.NumValues = n
@@ -44,10 +56,23 @@ func NewIntegerContext[T types.Integer](minv, maxv T, n int) *IntegerContext[T] 
 	return c
 }
 
-// AnalyzeInt produces statistics about slice vals which are used to
-// find the most efficient encoding scheme.
-func AnalyzeInt[T types.Integer](vals []T, checkUnique bool) *IntegerContext[T] {
-	c := newIntegerContext[T]()
+func NewFloatContext[T types.Float](minv, maxv T, n int) *Context[T] {
+	c := newContext[T]()
+	c.Lvl = MAX_LEVEL
+	c.PhyBits = util.SizeOf[T]() * 8
+	c.UseBits = c.PhyBits
+	c.NumValues = n
+	c.Min = minv
+	c.Max = maxv
+	c.NumRuns = n
+	c.NumUnique = n
+	return c
+}
+
+// AnalyzeInt produces statistics about signed and unsigned integer vectors.
+func AnalyzeInt[T types.Integer](vals []T, checkUnique bool) *Context[T] {
+	c := newContext[T]()
+	c.Lvl = MAX_LEVEL
 	c.PhyBits = util.SizeOf[T]() * 8
 	c.NumValues = len(vals)
 
@@ -111,7 +136,51 @@ func AnalyzeInt[T types.Integer](vals []T, checkUnique bool) *IntegerContext[T] 
 	return c
 }
 
-func (c *IntegerContext[T]) estimateCardinality(vals []T) int {
+// AnalyzeFloat produces statistics about float64 and float32 vectors.
+func AnalyzeFloat[T types.Float](vals []T, checkUnique, checkALP bool) *Context[T] {
+	c := newContext[T]()
+	c.Lvl = MAX_LEVEL
+	c.PhyBits = util.SizeOf[T]() * 8
+	c.UseBits = c.PhyBits
+	if len(vals) == 0 {
+		return c
+	}
+	c.NumValues = len(vals)
+
+	if c.PhyBits == 64 {
+		minv, maxv, nruns := analyze.AnalyzeFloat64(util.ReinterpretSlice[T, float64](vals))
+		c.Min, c.Max, c.NumRuns = T(minv), T(maxv), nruns
+	} else {
+		minv, maxv, nruns := analyze.AnalyzeFloat32(util.ReinterpretSlice[T, float32](vals))
+		c.Min, c.Max, c.NumRuns = T(minv), T(maxv), nruns
+	}
+
+	c.NumUnique = c.NumRuns
+
+	// run more analysis steps when const encoding is excluded
+	if c.NumRuns > 1 {
+		// let ALP estimate the best scheme, avoid ALP-in-ALP nesting
+		if checkALP {
+			// analyze full vector for compatibility, ALP will do its own sampling
+			if c.PhyBits == 64 {
+				c.Alp = alp.Analyze[T, int64](vals)
+			} else {
+				c.Alp = alp.Analyze[T, int32](vals)
+			}
+		}
+
+		// count unique only if requested, prefer ALP over float dict
+		// i.e. disable unique estimation when ALP is enabled which leads
+		// to not selecting dict encoding at this level
+		if !checkALP && checkUnique {
+			c.NumUnique = max(1, c.estimateCardinality(vals))
+		}
+	}
+
+	return c
+}
+
+func (c *Context[T]) estimateCardinality(vals []T) int {
 	var scratch [256]byte // need 256 byte scratch space
 	unique, _ := llb.NewFilterBuffer(scratch[:], 8)
 	if c.PhyBits == 64 {
@@ -123,7 +192,7 @@ func (c *IntegerContext[T]) estimateCardinality(vals []T) int {
 	return card
 }
 
-func (c *IntegerContext[T]) buildUniqueArray(vals []T) int {
+func (c *Context[T]) buildUniqueArray(vals []T) int {
 	// we only need enough space for our data range
 	sz := int64(c.Max) - int64(c.Min) + 1
 	if cap(c.UniqueArray) < int(sz) {
@@ -148,22 +217,22 @@ func (c *IntegerContext[T]) buildUniqueArray(vals []T) int {
 	return numUnique
 }
 
-func (c *IntegerContext[T]) EligibleSchemes() []IntegerContainerType {
+func (c *Context[T]) EligibleIntSchemes() []ContainerType {
 	// constant only
 	if c.NumRuns == 1 {
-		return []IntegerContainerType{TIntegerConstant}
+		return []ContainerType{TIntConstant}
 	}
 	// delta only with at least 3 values
 	if c.Delta > 0 && c.NumValues > 2 {
-		return []IntegerContainerType{TIntegerDelta}
+		return []ContainerType{TIntDelta}
 	}
 	// raw always works
-	schemes := []IntegerContainerType{
-		TIntegerRaw,
+	schemes := []ContainerType{
+		TIntRaw,
 	}
 	// bit-packed width must decrease
 	if c.UseBits < c.PhyBits {
-		schemes = append(schemes, TIntegerBitpacked)
+		schemes = append(schemes, TIntBitpacked)
 	}
 
 	// FIXME: disabled s8 because s8b.Iterator decodes partial chunks which breaks
@@ -177,33 +246,69 @@ func (c *IntegerContext[T]) EligibleSchemes() []IntegerContainerType {
 
 	// run-end requires avg run lengths >= 4
 	if c.preferRunEnd() {
-		schemes = append(schemes, TIntegerRunEnd)
+		schemes = append(schemes, TIntRunEnd)
 	}
 	// dict makes only sense when more efficient than bit-packing
 	if c.preferDict() {
-		schemes = append(schemes, TIntegerDictionary)
+		schemes = append(schemes, TIntDictionary)
 	}
 	return schemes
 }
 
-func (c *IntegerContext[T]) preferDict() bool {
+func (c *Context[T]) EligibleFloatSchemes() []ContainerType {
+	// constant only
+	if c.NumRuns == 1 {
+		return []ContainerType{TFloatConstant}
+	}
+
+	// raw always works
+	schemes := []ContainerType{
+		TFloatRaw,
+	}
+
+	// use ALP only when requested in analysis step (otherwise scheme is invalid)
+	switch c.Alp.Scheme {
+	case alp.ALP_SCHEME:
+		schemes = append(schemes, TFloatAlp)
+	case alp.ALP_RD_SCHEME:
+		schemes = append(schemes, TFloatAlpRd)
+	}
+
+	// run-end requires avg run lengths >= 2
+	if c.preferRunEnd() {
+		schemes = append(schemes, TFloatRunEnd)
+	}
+
+	// dict makes only sense when more efficient than raw
+	if c.preferDict() {
+		schemes = append(schemes, TFloatDictionary)
+	}
+
+	return schemes
+}
+
+func (c *Context[T]) preferDict() bool {
 	return c.NumUnique <= hashprobe.MAX_DICT_LIMIT && c.dictCosts() < c.bitPackCosts()
 }
 
-func (c *IntegerContext[T]) preferRunEnd() bool {
+func (c *Context[T]) preferRunEnd() bool {
 	return c.NumRuns*RUN_END_THRESHOLD <= c.NumValues && c.runEndCosts() < c.bitPackCosts()
 }
 
-func (c *IntegerContext[T]) dictCosts() int {
+func (c *Context[T]) dictCosts() int {
 	return dictCosts(c.NumValues, c.UseBits, c.NumUnique)
 }
 
-func (c *IntegerContext[T]) bitPackCosts() int {
+func (c *Context[T]) bitPackCosts() int {
 	return bitPackCosts(c.NumValues, c.UseBits)
 }
 
-func (c *IntegerContext[T]) runEndCosts() int {
+func (c *Context[T]) runEndCosts() int {
 	return runEndCosts(c.NumValues, c.NumRuns, c.UseBits)
+}
+
+func (c *Context[T]) rawCosts() int {
+	return 1 + num.UvarintLen(c.NumValues) + c.NumValues*c.PhyBits/8
 }
 
 func dictCosts(n, w, c int) int {
@@ -218,7 +323,7 @@ func runEndCosts(n, r, w int) int {
 	return 1 + bitPackCosts(r, w) + bitPackCosts(r, bits.Len(uint(n-1)))
 }
 
-func (c *IntegerContext[T]) Close() {
+func (c *Context[T]) Close() {
 	if c.UniqueArray != nil {
 		clear(c.UniqueArray)
 		c.UniqueArray = c.UniqueArray[:0]
@@ -234,7 +339,6 @@ func (c *IntegerContext[T]) Close() {
 		c.FreeSample = false
 		c.Sample = nil
 	}
-
 	c.Min = 0
 	c.Max = 0
 	c.Delta = 0
@@ -243,11 +347,11 @@ func (c *IntegerContext[T]) Close() {
 	c.NumValues = 0
 	c.PhyBits = 0
 	c.UseBits = 0
-
-	putIntegerContext(c)
+	c.Alp = alp.Analysis{}
+	putContext(c)
 }
 
-type IntegerContextFactory struct {
+type ContextFactory struct {
 	i64Pool sync.Pool
 	i32Pool sync.Pool
 	i16Pool sync.Pool
@@ -256,75 +360,91 @@ type IntegerContextFactory struct {
 	u32Pool sync.Pool
 	u16Pool sync.Pool
 	u8Pool  sync.Pool
+	f64Pool sync.Pool
+	f32Pool sync.Pool
 }
 
-func newIntegerContext[T types.Integer]() *IntegerContext[T] {
+func newContext[T types.Number]() *Context[T] {
 	switch (any(T(0))).(type) {
 	case int64:
-		return intContextFactory.i64Pool.Get().(*IntegerContext[T])
+		return contextFactory.i64Pool.Get().(*Context[T])
 	case int32:
-		return intContextFactory.i32Pool.Get().(*IntegerContext[T])
+		return contextFactory.i32Pool.Get().(*Context[T])
 	case int16:
-		return intContextFactory.i16Pool.Get().(*IntegerContext[T])
+		return contextFactory.i16Pool.Get().(*Context[T])
 	case int8:
-		return intContextFactory.i8Pool.Get().(*IntegerContext[T])
+		return contextFactory.i8Pool.Get().(*Context[T])
 	case uint64:
-		return intContextFactory.u64Pool.Get().(*IntegerContext[T])
+		return contextFactory.u64Pool.Get().(*Context[T])
 	case uint32:
-		return intContextFactory.u32Pool.Get().(*IntegerContext[T])
+		return contextFactory.u32Pool.Get().(*Context[T])
 	case uint16:
-		return intContextFactory.u16Pool.Get().(*IntegerContext[T])
+		return contextFactory.u16Pool.Get().(*Context[T])
 	case uint8:
-		return intContextFactory.u8Pool.Get().(*IntegerContext[T])
+		return contextFactory.u8Pool.Get().(*Context[T])
+	case float64:
+		return contextFactory.f64Pool.Get().(*Context[T])
+	case float32:
+		return contextFactory.f32Pool.Get().(*Context[T])
 	default:
 		return nil
 	}
 }
 
-func putIntegerContext[T types.Integer](c *IntegerContext[T]) {
+func putContext[T types.Number](c *Context[T]) {
 	switch (any(T(0))).(type) {
 	case int64:
-		intContextFactory.i64Pool.Put(c)
+		contextFactory.i64Pool.Put(c)
 	case int32:
-		intContextFactory.i32Pool.Put(c)
+		contextFactory.i32Pool.Put(c)
 	case int16:
-		intContextFactory.i16Pool.Put(c)
+		contextFactory.i16Pool.Put(c)
 	case int8:
-		intContextFactory.i8Pool.Put(c)
+		contextFactory.i8Pool.Put(c)
 	case uint64:
-		intContextFactory.u64Pool.Put(c)
+		contextFactory.u64Pool.Put(c)
 	case uint32:
-		intContextFactory.u32Pool.Put(c)
+		contextFactory.u32Pool.Put(c)
 	case uint16:
-		intContextFactory.u16Pool.Put(c)
+		contextFactory.u16Pool.Put(c)
 	case uint8:
-		intContextFactory.u8Pool.Put(c)
+		contextFactory.u8Pool.Put(c)
+	case float64:
+		contextFactory.f64Pool.Put(c)
+	case float32:
+		contextFactory.f32Pool.Put(c)
 	}
 }
 
-var intContextFactory = IntegerContextFactory{
+var contextFactory = ContextFactory{
 	i64Pool: sync.Pool{
-		New: func() any { return new(IntegerContext[int64]) },
+		New: func() any { return new(Context[int64]) },
 	},
 	i32Pool: sync.Pool{
-		New: func() any { return new(IntegerContext[int32]) },
+		New: func() any { return new(Context[int32]) },
 	},
 	i16Pool: sync.Pool{
-		New: func() any { return new(IntegerContext[int16]) },
+		New: func() any { return new(Context[int16]) },
 	},
 	i8Pool: sync.Pool{
-		New: func() any { return new(IntegerContext[int8]) },
+		New: func() any { return new(Context[int8]) },
 	},
 	u64Pool: sync.Pool{
-		New: func() any { return new(IntegerContext[uint64]) },
+		New: func() any { return new(Context[uint64]) },
 	},
 	u32Pool: sync.Pool{
-		New: func() any { return new(IntegerContext[uint32]) },
+		New: func() any { return new(Context[uint32]) },
 	},
 	u16Pool: sync.Pool{
-		New: func() any { return new(IntegerContext[uint16]) },
+		New: func() any { return new(Context[uint16]) },
 	},
 	u8Pool: sync.Pool{
-		New: func() any { return new(IntegerContext[uint8]) },
+		New: func() any { return new(Context[uint8]) },
+	},
+	f64Pool: sync.Pool{
+		New: func() any { return new(Context[float64]) },
+	},
+	f32Pool: sync.Pool{
+		New: func() any { return new(Context[float32]) },
 	},
 }

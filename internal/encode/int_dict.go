@@ -15,10 +15,10 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
-// TIntegerDictionary
+// TIntDictionary
 type DictionaryContainer[T types.Integer] struct {
-	Dict  IntegerContainer[T]
-	Codes IntegerContainer[uint16]
+	Dict  NumberContainer[T]
+	Codes NumberContainer[uint16]
 }
 
 func (c *DictionaryContainer[T]) Info() string {
@@ -33,8 +33,8 @@ func (c *DictionaryContainer[T]) Close() {
 	putDictionaryContainer[T](c)
 }
 
-func (c *DictionaryContainer[T]) Type() IntegerContainerType {
-	return TIntegerDictionary
+func (c *DictionaryContainer[T]) Type() ContainerType {
+	return TIntDictionary
 }
 
 func (c *DictionaryContainer[T]) Len() int {
@@ -46,19 +46,19 @@ func (c *DictionaryContainer[T]) Size() int {
 }
 
 func (c *DictionaryContainer[T]) Store(dst []byte) []byte {
-	dst = append(dst, byte(TIntegerDictionary))
+	dst = append(dst, byte(TIntDictionary))
 	dst = c.Dict.Store(dst)
 	return c.Codes.Store(dst)
 }
 
 func (c *DictionaryContainer[T]) Load(buf []byte) ([]byte, error) {
-	if buf[0] != byte(TIntegerDictionary) {
+	if buf[0] != byte(TIntDictionary) {
 		return buf, ErrInvalidType
 	}
 	buf = buf[1:]
 
 	// alloc and decode dict child container
-	c.Dict = NewInt[T](IntegerContainerType(buf[0]))
+	c.Dict = NewInt[T](ContainerType(buf[0]))
 	var err error
 	buf, err = c.Dict.Load(buf)
 	if err != nil {
@@ -66,7 +66,7 @@ func (c *DictionaryContainer[T]) Load(buf []byte) ([]byte, error) {
 	}
 
 	// alloc and decode codes child container
-	c.Codes = NewInt[uint16](IntegerContainerType(buf[0]))
+	c.Codes = NewInt[uint16](ContainerType(buf[0]))
 	return c.Codes.Load(buf)
 }
 
@@ -74,7 +74,7 @@ func (c *DictionaryContainer[T]) Get(n int) T {
 	return c.Dict.Get(int(c.Codes.Get(n)))
 }
 
-func (c *DictionaryContainer[T]) AppendTo(sel []uint32, dst []T) []T {
+func (c *DictionaryContainer[T]) AppendTo(dst []T, sel []uint32) []T {
 	it := c.Iterator()
 	if sel == nil {
 		for {
@@ -93,7 +93,7 @@ func (c *DictionaryContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 	return dst
 }
 
-func (c *DictionaryContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) IntegerContainer[T] {
+func (c *DictionaryContainer[T]) Encode(ctx *Context[T], vals []T) NumberContainer[T] {
 	// construct dictionary and encode vals
 	var (
 		dict  []T
@@ -106,20 +106,20 @@ func (c *DictionaryContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl in
 	}
 
 	// encode child containers
-	vctx := AnalyzeInt(dict, false)
-	c.Dict = EncodeInt(vctx, dict, lvl-1)
+	vctx := AnalyzeInt(dict, false).WithLevel(ctx.Lvl - 1)
+	c.Dict = EncodeInt(vctx, dict)
 	vctx.Close()
 	arena.Free(dict)
 
-	cctx := AnalyzeInt(codes, false)
-	c.Codes = EncodeInt(cctx, codes, lvl-1)
+	cctx := AnalyzeInt(codes, false).WithLevel(ctx.Lvl - 1)
+	c.Codes = EncodeInt(cctx, codes)
 	cctx.Close()
 	arena.Free(codes)
 
 	return c
 }
 
-func dictEncodeArray[T types.Integer](ctx *IntegerContext[T], vals []T) ([]T, []uint16) {
+func dictEncodeArray[T types.Integer](ctx *Context[T], vals []T) ([]T, []uint16) {
 	// cross-check we have the unique array initialized
 	if len(ctx.UniqueArray) == 0 {
 		ctx.NumUnique = ctx.buildUniqueArray(vals)
@@ -459,30 +459,30 @@ type DictionaryFactory struct {
 	u8ItPool  sync.Pool
 }
 
-func newDictionaryContainer[T types.Integer]() IntegerContainer[T] {
+func newDictionaryContainer[T types.Integer]() NumberContainer[T] {
 	switch any(T(0)).(type) {
 	case int64:
-		return dictionaryFactory.i64Pool.Get().(IntegerContainer[T])
+		return dictionaryFactory.i64Pool.Get().(NumberContainer[T])
 	case int32:
-		return dictionaryFactory.i32Pool.Get().(IntegerContainer[T])
+		return dictionaryFactory.i32Pool.Get().(NumberContainer[T])
 	case int16:
-		return dictionaryFactory.i16Pool.Get().(IntegerContainer[T])
+		return dictionaryFactory.i16Pool.Get().(NumberContainer[T])
 	case int8:
-		return dictionaryFactory.i8Pool.Get().(IntegerContainer[T])
+		return dictionaryFactory.i8Pool.Get().(NumberContainer[T])
 	case uint64:
-		return dictionaryFactory.u64Pool.Get().(IntegerContainer[T])
+		return dictionaryFactory.u64Pool.Get().(NumberContainer[T])
 	case uint32:
-		return dictionaryFactory.u32Pool.Get().(IntegerContainer[T])
+		return dictionaryFactory.u32Pool.Get().(NumberContainer[T])
 	case uint16:
-		return dictionaryFactory.u16Pool.Get().(IntegerContainer[T])
+		return dictionaryFactory.u16Pool.Get().(NumberContainer[T])
 	case uint8:
-		return dictionaryFactory.u8Pool.Get().(IntegerContainer[T])
+		return dictionaryFactory.u8Pool.Get().(NumberContainer[T])
 	default:
 		return nil
 	}
 }
 
-func putDictionaryContainer[T types.Integer](c IntegerContainer[T]) {
+func putDictionaryContainer[T types.Integer](c NumberContainer[T]) {
 	switch (any(T(0))).(type) {
 	case int64:
 		dictionaryFactory.i64Pool.Put(c)
@@ -566,19 +566,19 @@ var dictionaryFactory = DictionaryFactory{
 	u8ItPool:  sync.Pool{New: func() any { return new(DictionaryIterator[uint8]) }},
 }
 
-func (c *DictionaryContainer[T]) Iterator() Iterator[T] {
+func (c *DictionaryContainer[T]) Iterator() NumberIterator[T] {
 	return NewDictionaryIterator(c.Dict, c.Codes)
 }
 
 type DictionaryIterator[T types.Integer] struct {
 	BaseIterator[T]
 	dict []T
-	code Iterator[uint16]
+	code NumberIterator[uint16]
 }
 
-func NewDictionaryIterator[T types.Integer](dict IntegerContainer[T], code IntegerContainer[uint16]) *DictionaryIterator[T] {
+func NewDictionaryIterator[T types.Integer](dict NumberContainer[T], code NumberContainer[uint16]) *DictionaryIterator[T] {
 	it := newDictionaryIterator[T]()
-	it.dict = dict.AppendTo(nil, arena.Alloc[T](dict.Len()))
+	it.dict = dict.AppendTo(arena.Alloc[T](dict.Len()), nil)
 	it.code = code.Iterator()
 	it.base = -1
 	it.len = it.code.Len()

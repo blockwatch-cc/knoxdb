@@ -15,8 +15,8 @@ import (
 
 // TFloatDictionary
 type FloatDictionaryContainer[T types.Float] struct {
-	Dict  FloatContainer[T]
-	Codes IntegerContainer[uint16]
+	Dict  NumberContainer[T]
+	Codes NumberContainer[uint16]
 }
 
 func (c *FloatDictionaryContainer[T]) Info() string {
@@ -31,7 +31,7 @@ func (c *FloatDictionaryContainer[T]) Close() {
 	putFloatDictionaryContainer(c)
 }
 
-func (c *FloatDictionaryContainer[T]) Type() FloatContainerType {
+func (c *FloatDictionaryContainer[T]) Type() ContainerType {
 	return TFloatDictionary
 }
 
@@ -56,7 +56,7 @@ func (c *FloatDictionaryContainer[T]) Load(buf []byte) ([]byte, error) {
 	buf = buf[1:]
 
 	// alloc and decode values child container
-	c.Dict = NewFloat[T](FloatContainerType(buf[0]))
+	c.Dict = NewFloat[T](ContainerType(buf[0]))
 	var err error
 	buf, err = c.Dict.Load(buf)
 	if err != nil {
@@ -64,7 +64,7 @@ func (c *FloatDictionaryContainer[T]) Load(buf []byte) ([]byte, error) {
 	}
 
 	// alloc and decode ends child container
-	c.Codes = NewInt[uint16](IntegerContainerType(buf[0]))
+	c.Codes = NewInt[uint16](ContainerType(buf[0]))
 	return c.Codes.Load(buf)
 }
 
@@ -72,7 +72,7 @@ func (c *FloatDictionaryContainer[T]) Get(n int) T {
 	return c.Dict.Get(int(c.Codes.Get(n)))
 }
 
-func (c *FloatDictionaryContainer[T]) AppendTo(sel []uint32, dst []T) []T {
+func (c *FloatDictionaryContainer[T]) AppendTo(dst []T, sel []uint32) []T {
 	it := c.Iterator()
 	if sel == nil {
 		for {
@@ -91,18 +91,18 @@ func (c *FloatDictionaryContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 	return dst
 }
 
-func (c *FloatDictionaryContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int) FloatContainer[T] {
+func (c *FloatDictionaryContainer[T]) Encode(ctx *Context[T], vals []T) NumberContainer[T] {
 	// construct dictionary and encode vals
 	dict, codes := hashprobe.BuildFloatDict(vals, ctx.NumUnique)
 
 	// encode child containers
-	vctx := AnalyzeFloat(dict, false, lvl == MAX_CASCADE)
-	c.Dict = EncodeFloat(vctx, dict, lvl-1)
+	vctx := AnalyzeFloat(dict, false, ctx.Lvl == MAX_LEVEL).WithLevel(ctx.Lvl - 1)
+	c.Dict = EncodeFloat(vctx, dict)
 	vctx.Close()
 	arena.Free(dict)
 
-	cctx := AnalyzeInt(codes, false)
-	c.Codes = EncodeInt(cctx, codes, lvl-1)
+	cctx := AnalyzeInt(codes, false).WithLevel(ctx.Lvl - 1)
+	c.Codes = EncodeInt(cctx, codes)
 	cctx.Close()
 	arena.Free(codes)
 
@@ -302,18 +302,18 @@ type FloatDictionaryFactory struct {
 	f32ItPool sync.Pool
 }
 
-func newFloatDictionaryContainer[T types.Float]() FloatContainer[T] {
+func newFloatDictionaryContainer[T types.Float]() NumberContainer[T] {
 	switch any(T(0)).(type) {
 	case float64:
-		return floatDictionaryFactory.f64Pool.Get().(FloatContainer[T])
+		return floatDictionaryFactory.f64Pool.Get().(NumberContainer[T])
 	case float32:
-		return floatDictionaryFactory.f32Pool.Get().(FloatContainer[T])
+		return floatDictionaryFactory.f32Pool.Get().(NumberContainer[T])
 	default:
 		return nil
 	}
 }
 
-func putFloatDictionaryContainer[T types.Float](c FloatContainer[T]) {
+func putFloatDictionaryContainer[T types.Float](c NumberContainer[T]) {
 	switch (any(T(0))).(type) {
 	case float64:
 		floatDictionaryFactory.f64Pool.Put(c)
@@ -349,19 +349,19 @@ var floatDictionaryFactory = FloatDictionaryFactory{
 	f32ItPool: sync.Pool{New: func() any { return new(FloatDictionaryIterator[float32]) }},
 }
 
-func (c *FloatDictionaryContainer[T]) Iterator() Iterator[T] {
+func (c *FloatDictionaryContainer[T]) Iterator() NumberIterator[T] {
 	return NewFloatDictionaryIterator(c.Dict, c.Codes)
 }
 
 type FloatDictionaryIterator[T types.Float] struct {
 	BaseIterator[T]
 	dict []T
-	code Iterator[uint16]
+	code NumberIterator[uint16]
 }
 
-func NewFloatDictionaryIterator[T types.Float](dict FloatContainer[T], code IntegerContainer[uint16]) *FloatDictionaryIterator[T] {
+func NewFloatDictionaryIterator[T types.Float](dict NumberContainer[T], code NumberContainer[uint16]) *FloatDictionaryIterator[T] {
 	it := newFloatDictionaryIterator[T]()
-	it.dict = dict.AppendTo(nil, arena.Alloc[T](dict.Len()))
+	it.dict = dict.AppendTo(arena.Alloc[T](dict.Len()), nil)
 	it.code = code.Iterator()
 	it.base = -1
 	it.len = it.code.Len()

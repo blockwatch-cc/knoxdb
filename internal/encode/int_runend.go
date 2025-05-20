@@ -15,11 +15,11 @@ import (
 
 const RUN_END_THRESHOLD = 4
 
-// TIntegerRunEnd
+// TIntRunEnd
 type RunEndContainer[T types.Integer] struct {
-	Values IntegerContainer[T]      // []T
-	Ends   IntegerContainer[uint32] // []uint32
-	it     Iterator[T]
+	Values NumberContainer[T]      // []T
+	Ends   NumberContainer[uint32] // []uint32
+	it     NumberIterator[T]
 	n      int
 }
 
@@ -40,8 +40,8 @@ func (c *RunEndContainer[T]) Close() {
 	putRunEndContainer[T](c)
 }
 
-func (c *RunEndContainer[T]) Type() IntegerContainerType {
-	return TIntegerRunEnd
+func (c *RunEndContainer[T]) Type() ContainerType {
+	return TIntRunEnd
 }
 
 func (c *RunEndContainer[T]) Len() int {
@@ -53,19 +53,19 @@ func (c *RunEndContainer[T]) Size() int {
 }
 
 func (c *RunEndContainer[T]) Store(dst []byte) []byte {
-	dst = append(dst, byte(TIntegerRunEnd))
+	dst = append(dst, byte(TIntRunEnd))
 	dst = c.Values.Store(dst)
 	return c.Ends.Store(dst)
 }
 
 func (c *RunEndContainer[T]) Load(buf []byte) ([]byte, error) {
-	if buf[0] != byte(TIntegerRunEnd) {
+	if buf[0] != byte(TIntRunEnd) {
 		return buf, ErrInvalidType
 	}
 	buf = buf[1:]
 
 	// alloc and decode values child container
-	c.Values = NewInt[T](IntegerContainerType(buf[0]))
+	c.Values = NewInt[T](ContainerType(buf[0]))
 	var err error
 	buf, err = c.Values.Load(buf)
 	if err != nil {
@@ -73,7 +73,7 @@ func (c *RunEndContainer[T]) Load(buf []byte) ([]byte, error) {
 	}
 
 	// alloc and decode ends child container
-	c.Ends = NewInt[uint32](IntegerContainerType(buf[0]))
+	c.Ends = NewInt[uint32](ContainerType(buf[0]))
 	buf, err = c.Ends.Load(buf)
 	if err != nil {
 		return buf, err
@@ -90,12 +90,12 @@ func (c *RunEndContainer[T]) Get(n int) T {
 	return c.it.Get(n)
 }
 
-func (c *RunEndContainer[T]) AppendTo(sel []uint32, dst []T) []T {
+func (c *RunEndContainer[T]) AppendTo(dst []T, sel []uint32) []T {
 	if sel == nil {
 		var (
 			sz   = c.Ends.Len()
-			vals = c.Values.AppendTo(nil, arena.Alloc[T](sz))
-			ends = c.Ends.AppendTo(nil, arena.Alloc[uint32](sz))
+			vals = c.Values.AppendTo(arena.Alloc[T](sz), nil)
+			ends = c.Ends.AppendTo(arena.Alloc[uint32](sz), nil)
 			i    uint32
 		)
 		dst = dst[:ends[sz-1]+1]
@@ -147,7 +147,7 @@ func (c *RunEndContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 	return dst
 }
 
-func (c *RunEndContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) IntegerContainer[T] {
+func (c *RunEndContainer[T]) Encode(ctx *Context[T], vals []T) NumberContainer[T] {
 	// generate run-end encoding from originals, Min-FOR is done by values child
 	values := arena.Alloc[T](ctx.NumRuns)[:ctx.NumRuns]
 	ends := arena.Alloc[uint32](ctx.NumRuns)[:ctx.NumRuns]
@@ -172,17 +172,15 @@ func (c *RunEndContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) I
 
 	// encode child containers, reuse analysis context
 	ctx.NumValues = ctx.NumRuns
-	c.Values = EncodeInt(ctx, values, lvl-1)
-	if c.Values.Type() != TIntegerRaw {
-		arena.Free(values)
-	}
+	c.Values = EncodeInt(ctx.WithLevel(ctx.Lvl-1), values)
+	arena.Free(values)
 	ctx.NumValues = len(vals)
 
 	// create analysis context for known sequential data (min=first, max=last)
-	ectx := NewIntegerContext[uint32](ends[0], ends[len(ends)-1], len(ends))
-	c.Ends = EncodeInt(ectx, ends, lvl-1)
+	ectx := NewIntContext[uint32](ends[0], ends[len(ends)-1], len(ends)).WithLevel(ctx.Lvl - 1)
+	c.Ends = EncodeInt(ectx, ends)
 	ectx.Close()
-	if c.Ends.Type() != TIntegerRaw {
+	if c.Ends.Type() != TIntRaw {
 		arena.Free(ends)
 	}
 	c.n = len(vals)
@@ -304,30 +302,30 @@ type RunEndFactory struct {
 	u8ItPool  sync.Pool
 }
 
-func newRunEndContainer[T types.Integer]() IntegerContainer[T] {
+func newRunEndContainer[T types.Integer]() NumberContainer[T] {
 	switch any(T(0)).(type) {
 	case int64:
-		return runEndFactory.i64Pool.Get().(IntegerContainer[T])
+		return runEndFactory.i64Pool.Get().(NumberContainer[T])
 	case int32:
-		return runEndFactory.i32Pool.Get().(IntegerContainer[T])
+		return runEndFactory.i32Pool.Get().(NumberContainer[T])
 	case int16:
-		return runEndFactory.i16Pool.Get().(IntegerContainer[T])
+		return runEndFactory.i16Pool.Get().(NumberContainer[T])
 	case int8:
-		return runEndFactory.i8Pool.Get().(IntegerContainer[T])
+		return runEndFactory.i8Pool.Get().(NumberContainer[T])
 	case uint64:
-		return runEndFactory.u64Pool.Get().(IntegerContainer[T])
+		return runEndFactory.u64Pool.Get().(NumberContainer[T])
 	case uint32:
-		return runEndFactory.u32Pool.Get().(IntegerContainer[T])
+		return runEndFactory.u32Pool.Get().(NumberContainer[T])
 	case uint16:
-		return runEndFactory.u16Pool.Get().(IntegerContainer[T])
+		return runEndFactory.u16Pool.Get().(NumberContainer[T])
 	case uint8:
-		return runEndFactory.u8Pool.Get().(IntegerContainer[T])
+		return runEndFactory.u8Pool.Get().(NumberContainer[T])
 	default:
 		return nil
 	}
 }
 
-func putRunEndContainer[T types.Integer](c IntegerContainer[T]) {
+func putRunEndContainer[T types.Integer](c NumberContainer[T]) {
 	switch any(T(0)).(type) {
 	case int64:
 		runEndFactory.i64Pool.Put(c)
@@ -411,14 +409,14 @@ var runEndFactory = RunEndFactory{
 	u8ItPool:  sync.Pool{New: func() any { return new(RunEndIterator[uint8]) }},
 }
 
-func (c *RunEndContainer[T]) Iterator() Iterator[T] {
+func (c *RunEndContainer[T]) Iterator() NumberIterator[T] {
 	return NewRunEndIterator(c)
 }
 
 type RunEndIterator[T types.Integer] struct {
 	BaseIterator[T]
-	valIt  Iterator[T]
-	endIt  Iterator[uint32]
+	valIt  NumberIterator[T]
+	endIt  NumberIterator[uint32]
 	window [2]uint32
 }
 

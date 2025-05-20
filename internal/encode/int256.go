@@ -12,10 +12,10 @@ import (
 )
 
 type Int256Container struct {
-	X0 IntegerContainer[int64]
-	X1 IntegerContainer[uint64]
-	X2 IntegerContainer[uint64]
-	X3 IntegerContainer[uint64]
+	X0 NumberContainer[int64]
+	X1 NumberContainer[uint64]
+	X2 NumberContainer[uint64]
+	X3 NumberContainer[uint64]
 }
 
 // NewInt256 creates a new 256bit integer container.
@@ -54,8 +54,8 @@ func (c *Int256Container) Close() {
 	putInt256Container(c)
 }
 
-func (c *Int256Container) Type() IntegerContainerType {
-	return TInteger256
+func (c *Int256Container) Type() ContainerType {
+	return TInt256
 }
 
 func (c *Int256Container) Len() int {
@@ -67,7 +67,7 @@ func (c *Int256Container) Size() int {
 }
 
 func (c *Int256Container) Store(dst []byte) []byte {
-	dst = append(dst, byte(TInteger256))
+	dst = append(dst, byte(TInt256))
 	dst = c.X0.Store(dst)
 	dst = c.X1.Store(dst)
 	dst = c.X2.Store(dst)
@@ -75,32 +75,32 @@ func (c *Int256Container) Store(dst []byte) []byte {
 }
 
 func (c *Int256Container) Load(buf []byte) ([]byte, error) {
-	if buf[0] != byte(TInteger256) {
+	if buf[0] != byte(TInt256) {
 		return buf, ErrInvalidType
 	}
 	buf = buf[1:]
 
 	// alloc and decode child containers
 	var err error
-	c.X0 = NewInt[int64](IntegerContainerType(buf[0]))
+	c.X0 = NewInt[int64](ContainerType(buf[0]))
 	buf, err = c.X0.Load(buf)
 	if err != nil {
 		return buf, err
 	}
 
-	c.X1 = NewInt[uint64](IntegerContainerType(buf[0]))
+	c.X1 = NewInt[uint64](ContainerType(buf[0]))
 	buf, err = c.X1.Load(buf)
 	if err != nil {
 		return buf, err
 	}
 
-	c.X2 = NewInt[uint64](IntegerContainerType(buf[0]))
+	c.X2 = NewInt[uint64](ContainerType(buf[0]))
 	buf, err = c.X2.Load(buf)
 	if err != nil {
 		return buf, err
 	}
 
-	c.X3 = NewInt[uint64](IntegerContainerType(buf[0]))
+	c.X3 = NewInt[uint64](ContainerType(buf[0]))
 	return c.X3.Load(buf)
 }
 
@@ -108,19 +108,19 @@ func (c *Int256Container) Get(n int) num.Int256 {
 	return num.Int256{uint64(c.X0.Get(n)), c.X1.Get(n), c.X2.Get(n), c.X3.Get(n)}
 }
 
-func (c *Int256Container) AppendTo(sel []uint32, dst num.Int256Stride) num.Int256Stride {
-	dst.X0 = c.X0.AppendTo(sel, dst.X0[:0])
-	dst.X1 = c.X1.AppendTo(sel, dst.X1[:0])
-	dst.X2 = c.X2.AppendTo(sel, dst.X2[:0])
-	dst.X3 = c.X3.AppendTo(sel, dst.X3[:0])
+func (c *Int256Container) AppendTo(dst num.Int256Stride, sel []uint32) num.Int256Stride {
+	dst.X0 = c.X0.AppendTo(dst.X0[:0], sel)
+	dst.X1 = c.X1.AppendTo(dst.X1[:0], sel)
+	dst.X2 = c.X2.AppendTo(dst.X2[:0], sel)
+	dst.X3 = c.X3.AppendTo(dst.X3[:0], sel)
 	return dst
 }
 
 func (c *Int256Container) Encode(vals num.Int256Stride) *Int256Container {
-	c.X0 = EncodeInt(nil, vals.X0, MAX_CASCADE-1)
-	c.X1 = EncodeInt(nil, vals.X1, MAX_CASCADE-1)
-	c.X2 = EncodeInt(nil, vals.X2, MAX_CASCADE-1)
-	c.X3 = EncodeInt(nil, vals.X3, MAX_CASCADE-1)
+	c.X0 = EncodeInt(nil, vals.X0)
+	c.X1 = EncodeInt(nil, vals.X1)
+	c.X2 = EncodeInt(nil, vals.X2)
+	c.X3 = EncodeInt(nil, vals.X3)
 	return c
 }
 
@@ -273,16 +273,16 @@ func (c *Int256Container) Iterator() *Int256Iterator {
 
 type Int256Iterator struct {
 	chunk num.Int256Stride
-	x0    Iterator[int64]
-	x1    Iterator[uint64]
-	x2    Iterator[uint64]
-	x3    Iterator[uint64]
+	x0    NumberIterator[int64]
+	x1    NumberIterator[uint64]
+	x2    NumberIterator[uint64]
+	x3    NumberIterator[uint64]
 	base  int
 	len   int
 	ofs   int
 }
 
-func NewInt256Iterator(x0 Iterator[int64], x1, x2, x3 Iterator[uint64]) *Int256Iterator {
+func NewInt256Iterator(x0 NumberIterator[int64], x1, x2, x3 NumberIterator[uint64]) *Int256Iterator {
 	it := newInt256Iterator()
 	it.x0 = x0
 	it.x1 = x1

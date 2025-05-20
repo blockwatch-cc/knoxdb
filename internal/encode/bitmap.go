@@ -13,29 +13,11 @@ import (
 	"blockwatch.cc/knoxdb/pkg/num"
 )
 
-type BitmapContainerType byte
-
-const (
-	TBitmapZero BitmapContainerType = iota
-	TBitmapOne
-	TBitmapDense
-	TBitmapSparse
-)
-
-var (
-	bTypeNames    = "zero_one_dense_sparse"
-	bTypeNamesOfs = []int{0, 5, 9, 15, 22}
-)
-
-func (t BitmapContainerType) String() string {
-	return bTypeNames[bTypeNamesOfs[t] : bTypeNamesOfs[t+1]-1]
-}
-
 // TBitmap
 type BitmapContainer struct {
 	Buf []byte
 	N   int
-	Typ BitmapContainerType
+	Typ ContainerType
 }
 
 // NewBitmap creates a new biitmap integer container.
@@ -69,7 +51,7 @@ func (c *BitmapContainer) Close() {
 	putBitmapContainer(c)
 }
 
-func (c *BitmapContainer) Type() BitmapContainerType {
+func (c *BitmapContainer) Type() ContainerType {
 	return c.Typ
 }
 
@@ -90,11 +72,13 @@ func (c *BitmapContainer) Store(dst []byte) []byte {
 }
 
 func (c *BitmapContainer) Load(buf []byte) ([]byte, error) {
-	if buf[0] > byte(TBitmapSparse) {
+	switch typ := ContainerType(buf[0]); typ {
+	case TBitmapZero, TBitmapOne, TBitmapDense, TBitmapSparse:
+		c.Typ = ContainerType(buf[0])
+		buf = buf[1:]
+	default:
 		return buf, ErrInvalidType
 	}
-	c.Typ = BitmapContainerType(buf[0])
-	buf = buf[1:]
 
 	// num bits
 	v, n := num.Uvarint(buf)
@@ -130,7 +114,7 @@ func (c *BitmapContainer) Get(n int) bool {
 	}
 }
 
-func (c *BitmapContainer) AppendTo(sel []uint32, dst *bitset.Bitset) *bitset.Bitset {
+func (c *BitmapContainer) AppendTo(dst *bitset.Bitset, sel []uint32) *bitset.Bitset {
 	if sel == nil {
 		start := dst.Len()
 		switch c.Typ {

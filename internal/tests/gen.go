@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"strconv"
 
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
@@ -516,101 +517,87 @@ func GenRuns[T types.Number](n, r, w int) []T {
 	return res
 }
 
-// creates n values with u% values equal to x
-func GenEqual[T types.Number](n, u int) ([]T, T) {
-	res := make([]T, n)
-	var x T
-	switch any(T(0)).(type) {
-	case int64:
-		x = T(util.RandInt64n(1<<BENCH_WIDTH - 1))
-		for i := range res {
-			if util.RandIntn(100) <= u {
-				res[i] = x
-			} else {
-				res[i] = T(util.RandInt64n(1<<BENCH_WIDTH - 1))
-			}
-		}
-	case int32:
-		x = T(util.RandInt32n(1<<(BENCH_WIDTH/2) - 1))
-		for i := range res {
-			if util.RandIntn(100) <= u {
-				res[i] = x
-			} else {
-				res[i] = T(util.RandInt32n(1<<(BENCH_WIDTH/2) - 1))
-			}
-		}
-	case int16:
-		x = T(util.RandInt64n(1<<16 - 1))
-		for i := range res {
-			if util.RandIntn(100) <= u {
-				res[i] = x
-			} else {
-				res[i] = T(util.RandInt64n(1<<16 - 1))
-			}
-		}
-	case int8:
-		x = T(util.RandInt64n(1<<8 - 1))
-		for i := range res {
-			if util.RandIntn(100) <= u {
-				res[i] = x
-			} else {
-				res[i] = T(util.RandInt64n(1<<8 - 1))
-			}
-		}
-	case uint64:
-		x = T(util.RandUint64n(1<<BENCH_WIDTH - 1))
-		for i := range res {
-			if util.RandIntn(100) <= u {
-				res[i] = x
-			} else {
-				res[i] = T(util.RandUint64n(1<<BENCH_WIDTH - 1))
-			}
-		}
-	case uint32:
-		x = T(util.RandUint32n(1<<(BENCH_WIDTH/2) - 1))
-		for i := range res {
-			if util.RandIntn(100) <= u {
-				res[i] = x
-			} else {
-				res[i] = T(util.RandUint32n(1<<(BENCH_WIDTH/2) - 1))
-			}
-		}
-	case uint16:
-		x = T(util.RandUint64n(1<<16 - 1))
-		for i := range res {
-			if util.RandIntn(100) <= u {
-				res[i] = x
-			} else {
-				res[i] = T(util.RandUint64n(1<<16 - 1))
-			}
-		}
-	case uint8:
-		x = T(util.RandUint64n(1<<8 - 1))
-		for i := range res {
-			if util.RandIntn(100) <= u {
-				res[i] = x
-			} else {
-				res[i] = T(util.RandUint64n(1<<8 - 1))
-			}
-		}
-		// case float64:
-		// 	x = T(util.RandFloat64() * float64(1<<BENCH_WIDTH-1))
-		// 	for i := range res {
-		// 		if util.RandIntn(100) <= u {
-		// 			res[i] = x
-		// 		} else {
-		// 			res[i] = T(util.RandFloat64() * float64(1<<BENCH_WIDTH-1))
-		// 		}
-		// 	}
-		// case float32:
-		// 	x = T(util.RandFloat32() * float32(1<<(BENCH_WIDTH/2)-1))
-		// 	for i := range res {
-		// 		if util.RandIntn(100) <= u {
-		// 			res[i] = x
-		// 		} else {
-		// 			res[i] = T(util.RandFloat32() * float32(1<<(BENCH_WIDTH/2)-1))
-		// 		}
-		// 	}
+func GenStringSeq(n, d int) *util.StringPool {
+	var i int
+	p := util.NewStringPool(n)
+	for range n {
+		p.AppendString(strconv.Itoa(i))
+		i += d
 	}
-	return res, x
+	return p
+}
+
+func GenStringConst(n int, v []byte) *util.StringPool {
+	p := util.NewStringPool(n)
+	for range n {
+		p.Append(v)
+	}
+	return p
+}
+
+func GenStringRnd(n, l int) *util.StringPool {
+	if l <= 0 {
+		// random lengths up to 64
+		p := util.NewStringPool(n)
+		for range n {
+			p.Append(util.RandBytes(util.RandIntn(l)))
+		}
+		return p
+	} else {
+		// fixed length strings
+		p := util.NewStringPoolSize(n, l)
+		p.AppendMany(util.RandByteSlices(n, l)...)
+		return p
+	}
+}
+
+func GenStringDups(n, c, l int) *util.StringPool {
+	var mk func() []byte
+	if l <= 0 {
+		mk = func() []byte { return util.RandBytes(util.RandIntn(64)) }
+	} else {
+		mk = func() []byte { return util.RandBytes(l) }
+	}
+	if c > n {
+		panic(fmt.Errorf("c=%d must be smaller than n=%d", c, n))
+	}
+	if c <= 0 {
+		c = 1
+	}
+	unique := make([][]byte, 0, c)
+	for range c {
+		unique = append(unique, mk())
+	}
+	p := util.NewStringPool(n)
+	for range n {
+		p.Append(unique[util.RandIntn(c)])
+	}
+	return p
+}
+
+// creates n values with run length r at max string length l
+func GenStringRuns(n, r, l int) *util.StringPool {
+	if r > n {
+		panic(fmt.Errorf("r=%d must be smaller than n=%d", r, n))
+	}
+	var mk func() []byte
+	if l <= 0 {
+		mk = func() []byte { return util.RandBytes(util.RandIntn(64)) }
+	} else {
+		mk = func() []byte { return util.RandBytes(l) }
+	}
+
+	p := util.NewStringPool(n)
+	sz := (n + r - 1) / r
+
+	for range sz {
+		v := mk()
+		for range r {
+			if p.Len() == n {
+				break
+			}
+			p.Append(v)
+		}
+	}
+	return p
 }

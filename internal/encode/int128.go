@@ -12,8 +12,8 @@ import (
 )
 
 type Int128Container struct {
-	X0 IntegerContainer[int64]
-	X1 IntegerContainer[uint64]
+	X0 NumberContainer[int64]
+	X1 NumberContainer[uint64]
 }
 
 // NewInt128 creates a new 128bit integer container.
@@ -48,8 +48,8 @@ func (c *Int128Container) Close() {
 	putInt128Container(c)
 }
 
-func (c *Int128Container) Type() IntegerContainerType {
-	return TInteger128
+func (c *Int128Container) Type() ContainerType {
+	return TInt128
 }
 
 func (c *Int128Container) Len() int {
@@ -61,26 +61,26 @@ func (c *Int128Container) Size() int {
 }
 
 func (c *Int128Container) Store(dst []byte) []byte {
-	dst = append(dst, byte(TInteger128))
+	dst = append(dst, byte(TInt128))
 	dst = c.X0.Store(dst)
 	return c.X1.Store(dst)
 }
 
 func (c *Int128Container) Load(buf []byte) ([]byte, error) {
-	if buf[0] != byte(TInteger128) {
+	if buf[0] != byte(TInt128) {
 		return buf, ErrInvalidType
 	}
 	buf = buf[1:]
 
 	// alloc and decode child containers
-	c.X0 = NewInt[int64](IntegerContainerType(buf[0]))
+	c.X0 = NewInt[int64](ContainerType(buf[0]))
 	var err error
 	buf, err = c.X0.Load(buf)
 	if err != nil {
 		return buf, err
 	}
 
-	c.X1 = NewInt[uint64](IntegerContainerType(buf[0]))
+	c.X1 = NewInt[uint64](ContainerType(buf[0]))
 	return c.X1.Load(buf)
 }
 
@@ -88,15 +88,15 @@ func (c *Int128Container) Get(n int) num.Int128 {
 	return num.Int128{uint64(c.X0.Get(n)), c.X1.Get(n)}
 }
 
-func (c *Int128Container) AppendTo(sel []uint32, dst num.Int128Stride) num.Int128Stride {
-	dst.X0 = c.X0.AppendTo(sel, dst.X0[:0])
-	dst.X1 = c.X1.AppendTo(sel, dst.X1[:0])
+func (c *Int128Container) AppendTo(dst num.Int128Stride, sel []uint32) num.Int128Stride {
+	dst.X0 = c.X0.AppendTo(dst.X0[:0], sel)
+	dst.X1 = c.X1.AppendTo(dst.X1[:0], sel)
 	return dst
 }
 
 func (c *Int128Container) Encode(vals num.Int128Stride) *Int128Container {
-	c.X0 = EncodeInt(nil, vals.X0, MAX_CASCADE-1)
-	c.X1 = EncodeInt(nil, vals.X1, MAX_CASCADE-1)
+	c.X0 = EncodeInt(nil, vals.X0)
+	c.X1 = EncodeInt(nil, vals.X1)
 	return c
 }
 
@@ -249,14 +249,14 @@ func (c *Int128Container) Iterator() *Int128Iterator {
 
 type Int128Iterator struct {
 	chunk num.Int128Stride
-	x0    Iterator[int64]
-	x1    Iterator[uint64]
+	x0    NumberIterator[int64]
+	x1    NumberIterator[uint64]
 	base  int
 	len   int
 	ofs   int
 }
 
-func NewInt128Iterator(x0 Iterator[int64], x1 Iterator[uint64]) *Int128Iterator {
+func NewInt128Iterator(x0 NumberIterator[int64], x1 NumberIterator[uint64]) *Int128Iterator {
 	it := newInt128Iterator()
 	it.x0 = x0
 	it.x1 = x1

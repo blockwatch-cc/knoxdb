@@ -31,7 +31,7 @@ func (c *FloatRawContainer[T]) Close() {
 	putFloatRawContainer(c)
 }
 
-func (c *FloatRawContainer[T]) Type() FloatContainerType {
+func (c *FloatRawContainer[T]) Type() ContainerType {
 	return TFloatRaw
 }
 
@@ -44,7 +44,7 @@ func (c *FloatRawContainer[T]) Size() int {
 		util.SizeOf[T]()*len(c.Values)
 }
 
-func (c *FloatRawContainer[T]) Iterator() Iterator[T] {
+func (c *FloatRawContainer[T]) Iterator() NumberIterator[T] {
 	return NewRawIterator(c.Values)
 }
 
@@ -70,7 +70,7 @@ func (c *FloatRawContainer[T]) Get(n int) T {
 	return c.Values[n]
 }
 
-func (c *FloatRawContainer[T]) AppendTo(sel []uint32, dst []T) []T {
+func (c *FloatRawContainer[T]) AppendTo(dst []T, sel []uint32) []T {
 	if sel == nil {
 		dst = append(dst, c.Values...)
 	} else {
@@ -81,7 +81,7 @@ func (c *FloatRawContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 	return dst
 }
 
-func (c *FloatRawContainer[T]) Encode(_ *FloatContext[T], vals []T, _ int) FloatContainer[T] {
+func (c *FloatRawContainer[T]) Encode(_ *Context[T], vals []T) NumberContainer[T] {
 	c.Values = slices.Clone(vals)
 	c.typ = BlockType[T]()
 	return c
@@ -188,18 +188,18 @@ type FloatRawFactory struct {
 	f32Pool sync.Pool
 }
 
-func newFloatRawContainer[T types.Float]() FloatContainer[T] {
+func newFloatRawContainer[T types.Float]() NumberContainer[T] {
 	switch any(T(0)).(type) {
 	case float64:
-		return floatRawFactory.f64Pool.Get().(FloatContainer[T])
+		return floatRawFactory.f64Pool.Get().(NumberContainer[T])
 	case float32:
-		return floatRawFactory.f32Pool.Get().(FloatContainer[T])
+		return floatRawFactory.f32Pool.Get().(NumberContainer[T])
 	default:
 		return nil
 	}
 }
 
-func putFloatRawContainer[T types.Float](c FloatContainer[T]) {
+func putFloatRawContainer[T types.Float](c NumberContainer[T]) {
 	switch (any(T(0))).(type) {
 	case float64:
 		floatRawFactory.f64Pool.Put(c)

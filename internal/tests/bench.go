@@ -5,6 +5,7 @@ package tests
 
 import (
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 type BenchmarkSize struct {
@@ -83,3 +84,25 @@ var BenchmarkPatterns = []BenchmarkPattern{
 // w = 16, c < 8192
 // w = 32, c < ≈32768 (33920)
 // w = 63, c < ≈48000 (48792)
+
+type StringBenchmark struct {
+	Name string
+	Data *util.StringPool
+	N    int
+}
+
+func MakeStringBenchmarks() []StringBenchmark {
+	return []StringBenchmark{
+		{"dups_1k", GenStringDups(1024, 128, 24), 1024},           // 8% unique, 24 chars
+		{"dups_16k", GenStringDups(16*1024, 2048, 24), 16 * 1024}, // 12% unique, 24 chars
+		{"dups_64k", GenStringDups(64*1024, 8192, 24), 64 * 1024}, // 16% unique, 24 chars
+
+		{"runs_1k", GenStringRuns(1024, 10, 24), 1024},          // run length 10, 24 chars
+		{"runs_16k", GenStringRuns(16*1024, 10, 24), 16 * 1024}, // run length 10, 24 chars
+		{"runs_64k", GenStringRuns(64*1024, 10, 24), 64 * 1024}, // run length 10, 24 chars
+
+		{"seq_1k", GenStringSeq(1024, 1), 1024},
+		{"seq_16k", GenStringSeq(16*1024, 1), 16 * 1024},
+		{"seq_64k", GenStringSeq(64*1024, 1), 64 * 1024},
+	}
+}

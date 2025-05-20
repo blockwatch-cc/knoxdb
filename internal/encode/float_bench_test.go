@@ -28,7 +28,7 @@ func BenchmarkFloatAnalyze(b *testing.B) {
 
 func BenchmarkFloatEstimate(b *testing.B) {
 	for _, c := range tests.MakeBenchmarks[float64]() {
-		for _, scheme := range []FloatContainerType{
+		for _, scheme := range []ContainerType{
 			TFloatConstant,
 			TFloatRunEnd,
 			TFloatDictionary,
@@ -41,7 +41,7 @@ func BenchmarkFloatEstimate(b *testing.B) {
 				b.SetBytes(int64(len(c.Data) * 8))
 				for b.Loop() {
 					ctx := AnalyzeFloat(c.Data, true, true)
-					_ = EstimateFloat(scheme, ctx, c.Data, MAX_CASCADE)
+					_ = EstimateFloat(ctx, scheme, c.Data)
 					ctx.Close()
 				}
 				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
@@ -52,7 +52,7 @@ func BenchmarkFloatEstimate(b *testing.B) {
 
 func BenchmarkFloatEncode(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
-		for _, scheme := range []FloatContainerType{
+		for _, scheme := range []ContainerType{
 			TFloatConstant,
 			TFloatRunEnd,
 			TFloatDictionary,
@@ -68,7 +68,7 @@ func BenchmarkFloatEncode(b *testing.B) {
 				var sz int
 				for b.Loop() {
 					ctx := AnalyzeFloat(data, scheme == TFloatDictionary, scheme == TFloatAlp || scheme == TFloatAlpRd)
-					enc := NewFloat[float64](scheme).Encode(ctx, data, MAX_CASCADE)
+					enc := NewFloat[float64](scheme).Encode(ctx, data)
 					if once {
 						b.Log(enc.Info())
 						once = false
@@ -86,7 +86,7 @@ func BenchmarkFloatEncode(b *testing.B) {
 
 func BenchmarkFloatEncodeAndStore(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
-		for _, scheme := range []FloatContainerType{
+		for _, scheme := range []ContainerType{
 			TFloatConstant,
 			TFloatRunEnd,
 			TFloatDictionary,
@@ -102,7 +102,7 @@ func BenchmarkFloatEncodeAndStore(b *testing.B) {
 				var sz int
 				for b.Loop() {
 					ctx := AnalyzeFloat(data, scheme == TFloatDictionary, scheme == TFloatAlp || scheme == TFloatAlpRd)
-					enc := NewFloat[float64](scheme).Encode(ctx, data, MAX_CASCADE)
+					enc := NewFloat[float64](scheme).Encode(ctx, data)
 					_ = enc.Store(make([]byte, 0, enc.Size()))
 					if once {
 						b.Log(enc.Info())
@@ -127,7 +127,7 @@ func BenchmarkFloatEncodeBest(b *testing.B) {
 			b.SetBytes(int64(len(c.Data) * 8))
 			var sz int
 			for b.Loop() {
-				enc := EncodeFloat(nil, c.Data, MAX_CASCADE)
+				enc := EncodeFloat(nil, c.Data)
 				sz += enc.Size()
 				if once {
 					b.Log(enc.Info())
@@ -158,7 +158,7 @@ func BenchmarkFloatEncodeFile(b *testing.B) {
 						if !ok {
 							break
 						}
-						enc := EncodeFloat(nil, src, MAX_CASCADE)
+						enc := EncodeFloat(nil, src)
 						if once {
 							b.Logf("%s %d => %d", enc.Info(), len(src)*8, enc.Size())
 							once = false
@@ -179,7 +179,7 @@ func BenchmarkFloatEncodeFile(b *testing.B) {
 
 func BenchmarkFloatDecode(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
-		for _, scheme := range []FloatContainerType{
+		for _, scheme := range []ContainerType{
 			TFloatConstant,
 			TFloatRunEnd,
 			TFloatDictionary,
@@ -189,7 +189,7 @@ func BenchmarkFloatDecode(b *testing.B) {
 		} {
 			data := etests.GenForFloatScheme[float64](int(scheme), c.N)
 			ctx := AnalyzeFloat(data, scheme == TFloatDictionary, scheme == TFloatAlp)
-			enc := NewFloat[float64](scheme).Encode(ctx, data, MAX_CASCADE)
+			enc := NewFloat[float64](scheme).Encode(ctx, data)
 			buf := enc.Store(make([]byte, 0, enc.Size()))
 			dst := make([]float64, 0, c.N)
 			once := etests.ShowInfo
@@ -199,7 +199,7 @@ func BenchmarkFloatDecode(b *testing.B) {
 					enc2 := NewFloat[float64](scheme)
 					_, err := enc2.Load(buf)
 					require.NoError(b, err)
-					dst = enc2.AppendTo(nil, dst)
+					dst = enc2.AppendTo(dst, nil)
 					dst = dst[:0]
 					if once {
 						b.Log(enc2.Info())
@@ -228,7 +228,7 @@ func BenchmarkFloatDecodeFile(b *testing.B) {
 					if !ok {
 						break
 					}
-					enc := EncodeFloat(nil, src, MAX_CASCADE)
+					enc := EncodeFloat(nil, src)
 					if once {
 						b.Logf("%s %d => %d", enc.Info(), len(src)*8, enc.Size())
 						once = false
@@ -248,7 +248,7 @@ func BenchmarkFloatDecodeFile(b *testing.B) {
 						if err != nil {
 							b.Fatal(err)
 						}
-						dec.AppendTo(nil, dst)
+						dec.AppendTo(dst, nil)
 						dst = dst[:0]
 						dec.Close()
 					}
@@ -262,7 +262,7 @@ func BenchmarkFloatDecodeFile(b *testing.B) {
 
 func BenchmarkFloatCmp(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
-		for _, scheme := range []FloatContainerType{
+		for _, scheme := range []ContainerType{
 			TFloatConstant,
 			TFloatRunEnd,
 			TFloatDictionary,
@@ -272,7 +272,7 @@ func BenchmarkFloatCmp(b *testing.B) {
 		} {
 			data := etests.GenForFloatScheme[float64](int(scheme), c.N)
 			ctx := AnalyzeFloat(data, true, true)
-			enc := NewFloat[float64](scheme).Encode(ctx, data, MAX_CASCADE)
+			enc := NewFloat[float64](scheme).Encode(ctx, data)
 			bits := bitset.New(c.N)
 			// da, db := data[0], data[0]
 			// if len(data) > 1 {
@@ -292,7 +292,7 @@ func BenchmarkFloatCmp(b *testing.B) {
 
 func BenchmarkFloatIterator(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
-		for _, scheme := range []FloatContainerType{
+		for _, scheme := range []ContainerType{
 			TFloatConstant,
 			TFloatRunEnd,
 			TFloatDictionary,
@@ -302,7 +302,7 @@ func BenchmarkFloatIterator(b *testing.B) {
 		} {
 			data := etests.GenForFloatScheme[float64](int(scheme), c.N)
 			ctx := AnalyzeFloat(data, true, true)
-			enc := NewFloat[float64](scheme).Encode(ctx, data, MAX_CASCADE)
+			enc := NewFloat[float64](scheme).Encode(ctx, data)
 			buf := enc.Store(make([]byte, 0, enc.Size()))
 			once := etests.ShowInfo
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {

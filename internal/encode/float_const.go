@@ -26,7 +26,7 @@ func (c *FloatConstContainer[T]) Close() {
 	putFloatConstContainer(c)
 }
 
-func (c *FloatConstContainer[T]) Type() FloatContainerType {
+func (c *FloatConstContainer[T]) Type() ContainerType {
 	return TFloatConstant
 }
 
@@ -38,7 +38,7 @@ func (c *FloatConstContainer[T]) Size() int {
 	return 1 + util.SizeOf[T]() + num.UvarintLen(uint64(c.N))
 }
 
-func (c *FloatConstContainer[T]) Iterator() Iterator[T] {
+func (c *FloatConstContainer[T]) Iterator() NumberIterator[T] {
 	return NewConstIterator(c.Val, c.N)
 }
 
@@ -63,7 +63,7 @@ func (c *FloatConstContainer[T]) Get(_ int) T {
 	return c.Val
 }
 
-func (c *FloatConstContainer[T]) AppendTo(sel []uint32, dst []T) []T {
+func (c *FloatConstContainer[T]) AppendTo(dst []T, sel []uint32) []T {
 	n := c.N
 	if sel != nil {
 		n = len(sel)
@@ -96,7 +96,7 @@ func (c *FloatConstContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 	return dst
 }
 
-func (c *FloatConstContainer[T]) Encode(ctx *FloatContext[T], vals []T, lvl int) FloatContainer[T] {
+func (c *FloatConstContainer[T]) Encode(ctx *Context[T], vals []T) NumberContainer[T] {
 	c.Val = vals[0]
 	c.N = len(vals)
 	return c
@@ -153,18 +153,18 @@ type FloatConstFactory struct {
 	f32Pool sync.Pool
 }
 
-func newFloatConstContainer[T types.Float]() FloatContainer[T] {
+func newFloatConstContainer[T types.Float]() NumberContainer[T] {
 	switch any(T(0)).(type) {
 	case float64:
-		return floatConstFactory.f64Pool.Get().(FloatContainer[T])
+		return floatConstFactory.f64Pool.Get().(NumberContainer[T])
 	case float32:
-		return floatConstFactory.f32Pool.Get().(FloatContainer[T])
+		return floatConstFactory.f32Pool.Get().(NumberContainer[T])
 	default:
 		return nil
 	}
 }
 
-func putFloatConstContainer[T types.Float](c FloatContainer[T]) {
+func putFloatConstContainer[T types.Float](c NumberContainer[T]) {
 	switch any(T(0)).(type) {
 	case float64:
 		floatConstFactory.f64Pool.Put(c)

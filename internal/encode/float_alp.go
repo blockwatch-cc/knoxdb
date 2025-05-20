@@ -23,9 +23,9 @@ const (
 
 // TFloatAlp
 type FloatAlpContainer[T types.Float, E int64 | int32] struct {
-	Values    IntegerContainer[E]
-	Patches   FloatContainer[T]
-	Positions IntegerContainer[uint32]
+	Values    NumberContainer[E]
+	Patches   NumberContainer[T]
+	Positions NumberContainer[uint32]
 	Exponent  uint8
 	Factor    uint8
 	flags     AlpFlags
@@ -59,7 +59,7 @@ func (c *FloatAlpContainer[T, E]) Close() {
 	putFloatAlpContainer[T](c)
 }
 
-func (c *FloatAlpContainer[T, E]) Type() FloatContainerType {
+func (c *FloatAlpContainer[T, E]) Type() ContainerType {
 	return TFloatAlp
 }
 
@@ -107,7 +107,7 @@ func (c *FloatAlpContainer[T, E]) Load(buf []byte) ([]byte, error) {
 	buf = buf[1:]
 
 	// alloc and decode values child container
-	c.Values = NewInt[E](IntegerContainerType(buf[0]))
+	c.Values = NewInt[E](ContainerType(buf[0]))
 	var err error
 	buf, err = c.Values.Load(buf)
 	if err != nil {
@@ -116,14 +116,14 @@ func (c *FloatAlpContainer[T, E]) Load(buf []byte) ([]byte, error) {
 
 	if c.flags&FlagPatched > 0 {
 		// patch values
-		c.Patches = NewFloat[T](FloatContainerType(buf[0]))
+		c.Patches = NewFloat[T](ContainerType(buf[0]))
 		buf, err = c.Patches.Load(buf)
 		if err != nil {
 			return buf, err
 		}
 
 		// patch positions
-		c.Positions = NewInt[uint32](IntegerContainerType(buf[0]))
+		c.Positions = NewInt[uint32](ContainerType(buf[0]))
 		buf, err = c.Positions.Load(buf)
 		if err != nil {
 			return buf, err
@@ -138,11 +138,11 @@ func (c *FloatAlpContainer[T, E]) Get(n int) T {
 	return c.dec.DecodeValue(c.Values.Get(n), n)
 }
 
-func (c *FloatAlpContainer[T, E]) AppendTo(sel []uint32, dst []T) []T {
+func (c *FloatAlpContainer[T, E]) AppendTo(dst []T, sel []uint32) []T {
 	if sel == nil {
 		// faster to do serial unpack & decode
 		sz := c.Len()
-		tmp := c.Values.AppendTo(nil, arena.Alloc[E](sz))
+		tmp := c.Values.AppendTo(arena.Alloc[E](sz), nil)
 		c.initDecoder()
 		dst = dst[:sz]
 		c.dec.Decode(dst, tmp)
@@ -157,7 +157,7 @@ func (c *FloatAlpContainer[T, E]) AppendTo(sel []uint32, dst []T) []T {
 	return dst
 }
 
-func (c *FloatAlpContainer[T, E]) Encode(ctx *FloatContext[T], vals []T, lvl int) FloatContainer[T] {
+func (c *FloatAlpContainer[T, E]) Encode(ctx *Context[T], vals []T) NumberContainer[T] {
 	// encode using parames from analysis
 	enc := alp.NewEncoder[T, E]()
 	res := enc.Encode(vals, ctx.Alp.Exp)
@@ -165,14 +165,16 @@ func (c *FloatAlpContainer[T, E]) Encode(ctx *FloatContext[T], vals []T, lvl int
 	c.Factor = ctx.Alp.Exp.F
 
 	// encode child containers, skip analysis and use known values
-	vctx := NewIntegerContext(res.Min, res.Max, len(vals))
-	c.Values = EncodeInt(vctx, res.Encoded, lvl-1)
+	vctx := NewIntContext(res.Min, res.Max, len(vals)).WithLevel(ctx.Lvl - 1)
+	c.Values = EncodeInt(vctx, res.Encoded)
 	vctx.Close()
 	if n := len(res.PatchValues); n > 0 {
 		c.flags |= FlagPatched
-		c.Patches = NewFloat[T](TFloatRaw).Encode(nil, res.PatchValues, 1)
-		ectx := NewIntegerContext(0, res.PatchIndices[n-1], n)
-		c.Positions = EncodeInt(ectx, res.PatchIndices, lvl-1)
+		pctx := AnalyzeFloat(res.PatchValues, false, false).WithLevel(1)
+		c.Patches = NewFloat[T](TFloatRaw).Encode(pctx, res.PatchValues)
+		pctx.Close()
+		ectx := NewIntContext(0, res.PatchIndices[n-1], n).WithLevel(ctx.Lvl - 1)
+		c.Positions = EncodeInt(ectx, res.PatchIndices)
 		ectx.Close()
 	}
 	if res.IsSafeInt {
@@ -191,8 +193,8 @@ func (c *FloatAlpContainer[T, E]) initDecoder() {
 	if c.flags&FlagPatched > 0 {
 		cnt := c.Patches.Len()
 		c.dec.WithPatches(
-			c.Patches.AppendTo(nil, arena.Alloc[T](cnt)),
-			c.Positions.AppendTo(nil, arena.Alloc[uint32](cnt)),
+			c.Patches.AppendTo(arena.Alloc[T](cnt), nil),
+			c.Positions.AppendTo(arena.Alloc[uint32](cnt), nil),
 		)
 	}
 }
@@ -466,18 +468,18 @@ type FloatAlpFactory struct {
 	f32ItPool sync.Pool
 }
 
-func newFloatAlpContainer[T types.Float]() FloatContainer[T] {
+func newFloatAlpContainer[T types.Float]() NumberContainer[T] {
 	switch any(T(0)).(type) {
 	case float64:
-		return floatAlpFactory.f64Pool.Get().(FloatContainer[T])
+		return floatAlpFactory.f64Pool.Get().(NumberContainer[T])
 	case float32:
-		return floatAlpFactory.f32Pool.Get().(FloatContainer[T])
+		return floatAlpFactory.f32Pool.Get().(NumberContainer[T])
 	default:
 		return nil
 	}
 }
 
-func putFloatAlpContainer[T types.Float](c FloatContainer[T]) {
+func putFloatAlpContainer[T types.Float](c NumberContainer[T]) {
 	switch any(T(0)).(type) {
 	case float64:
 		floatAlpFactory.f64Pool.Put(c)
@@ -517,7 +519,7 @@ var floatAlpFactory = FloatAlpFactory{
 // Iterator
 //
 
-func (c *FloatAlpContainer[T, E]) Iterator() Iterator[T] {
+func (c *FloatAlpContainer[T, E]) Iterator() NumberIterator[T] {
 	c.initDecoder()
 	return NewFloatAlpIterator(c)
 }
@@ -525,7 +527,7 @@ func (c *FloatAlpContainer[T, E]) Iterator() Iterator[T] {
 type FloatAlpIterator[T types.Float, E int64 | int32] struct {
 	BaseIterator[T]
 	dec *alp.Decoder[T, E]
-	src Iterator[E]
+	src NumberIterator[E]
 }
 
 func NewFloatAlpIterator[T types.Float, E int64 | int32](c *FloatAlpContainer[T, E]) *FloatAlpIterator[T, E] {

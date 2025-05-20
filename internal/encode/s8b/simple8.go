@@ -6,6 +6,7 @@ package s8b
 import (
 	"math/bits"
 
+	"blockwatch.cc/knoxdb/internal/cpu"
 	"blockwatch.cc/knoxdb/internal/encode/s8b/avx2"
 	"blockwatch.cc/knoxdb/internal/encode/s8b/avx512"
 	"blockwatch.cc/knoxdb/internal/encode/s8b/generic"
@@ -51,7 +52,7 @@ var (
 )
 
 func init() {
-	if util.UseAVX2 {
+	if cpu.UseAVX2 {
 		DecodeUint64 = avx2.DecodeUint64
 		DecodeUint32 = avx2.DecodeUint32
 		DecodeUint16 = avx2.DecodeUint16
@@ -62,7 +63,7 @@ func init() {
 		DecodeInt8 = avx2.DecodeInt8
 		CountValues = avx2.CountValues
 	}
-	if util.UseAVX512_F {
+	if cpu.UseAVX512_F {
 		DecodeUint64 = avx512.DecodeUint64
 		DecodeInt64 = avx512.DecodeInt64
 	}

@@ -22,7 +22,7 @@ type BitpackContainer[T types.Integer] struct {
 	For    T
 	free   bool
 	dec    *bitpack.Decoder[T]
-	it     Iterator[T]
+	it     NumberIterator[T]
 }
 
 func (c *BitpackContainer[T]) Info() string {
@@ -49,8 +49,8 @@ func (c *BitpackContainer[T]) Close() {
 	putBitpackContainer[T](c)
 }
 
-func (c *BitpackContainer[T]) Type() IntegerContainerType {
-	return TIntegerBitpacked
+func (c *BitpackContainer[T]) Type() ContainerType {
+	return TIntBitpacked
 }
 
 func (c *BitpackContainer[T]) Len() int {
@@ -63,7 +63,7 @@ func (c *BitpackContainer[T]) Size() int {
 }
 
 func (c *BitpackContainer[T]) Store(dst []byte) []byte {
-	dst = append(dst, byte(TIntegerBitpacked))
+	dst = append(dst, byte(TIntBitpacked))
 	dst = num.AppendUvarint(dst, uint64(c.For))
 	dst = num.AppendUvarint(dst, uint64(c.Log2))
 	dst = num.AppendUvarint(dst, uint64(c.N))
@@ -71,7 +71,7 @@ func (c *BitpackContainer[T]) Store(dst []byte) []byte {
 }
 
 func (c *BitpackContainer[T]) Load(buf []byte) ([]byte, error) {
-	if buf[0] != byte(TIntegerBitpacked) {
+	if buf[0] != byte(TIntBitpacked) {
 		return buf, ErrInvalidType
 	}
 	buf = buf[1:]
@@ -100,7 +100,7 @@ func (c *BitpackContainer[T]) Get(n int) T {
 	return c.dec.DecodeValue(n)
 }
 
-func (c *BitpackContainer[T]) AppendTo(sel []uint32, dst []T) []T {
+func (c *BitpackContainer[T]) AppendTo(dst []T, sel []uint32) []T {
 	if sel == nil {
 		dst = dst[:c.N]
 		c.dec.Decode(dst)
@@ -114,7 +114,7 @@ func (c *BitpackContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 	return dst
 }
 
-func (c *BitpackContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) IntegerContainer[T] {
+func (c *BitpackContainer[T]) Encode(ctx *Context[T], vals []T) NumberContainer[T] {
 	c.N = len(vals)
 	c.For = ctx.Min
 
@@ -279,30 +279,30 @@ type BitpackFactory struct {
 	u8ItPool  sync.Pool
 }
 
-func newBitpackContainer[T types.Integer]() IntegerContainer[T] {
+func newBitpackContainer[T types.Integer]() NumberContainer[T] {
 	switch any(T(0)).(type) {
 	case int64:
-		return bitpackFactory.i64Pool.Get().(IntegerContainer[T])
+		return bitpackFactory.i64Pool.Get().(NumberContainer[T])
 	case int32:
-		return bitpackFactory.i32Pool.Get().(IntegerContainer[T])
+		return bitpackFactory.i32Pool.Get().(NumberContainer[T])
 	case int16:
-		return bitpackFactory.i16Pool.Get().(IntegerContainer[T])
+		return bitpackFactory.i16Pool.Get().(NumberContainer[T])
 	case int8:
-		return bitpackFactory.i8Pool.Get().(IntegerContainer[T])
+		return bitpackFactory.i8Pool.Get().(NumberContainer[T])
 	case uint64:
-		return bitpackFactory.u64Pool.Get().(IntegerContainer[T])
+		return bitpackFactory.u64Pool.Get().(NumberContainer[T])
 	case uint32:
-		return bitpackFactory.u32Pool.Get().(IntegerContainer[T])
+		return bitpackFactory.u32Pool.Get().(NumberContainer[T])
 	case uint16:
-		return bitpackFactory.u16Pool.Get().(IntegerContainer[T])
+		return bitpackFactory.u16Pool.Get().(NumberContainer[T])
 	case uint8:
-		return bitpackFactory.u8Pool.Get().(IntegerContainer[T])
+		return bitpackFactory.u8Pool.Get().(NumberContainer[T])
 	default:
 		return nil
 	}
 }
 
-func putBitpackContainer[T types.Integer](c IntegerContainer[T]) {
+func putBitpackContainer[T types.Integer](c NumberContainer[T]) {
 	switch any(T(0)).(type) {
 	case int64:
 		bitpackFactory.i64Pool.Put(c)
@@ -390,7 +390,7 @@ var bitpackFactory = BitpackFactory{
 // Iterator
 //
 
-func (c *BitpackContainer[T]) Iterator() Iterator[T] {
+func (c *BitpackContainer[T]) Iterator() NumberIterator[T] {
 	return NewBitpackIterator[T](c.dec)
 }
 

@@ -14,7 +14,7 @@ import (
 	"blockwatch.cc/knoxdb/pkg/num"
 )
 
-// TIntegerSimple8
+// TIntSimple8
 type Simple8Container[T types.Integer] struct {
 	For    T
 	Packed []byte
@@ -40,8 +40,8 @@ func (c *Simple8Container[T]) Close() {
 	putSimple8Container[T](c)
 }
 
-func (c *Simple8Container[T]) Type() IntegerContainerType {
-	return TIntegerSimple8
+func (c *Simple8Container[T]) Type() ContainerType {
+	return TIntSimple8
 }
 
 func (c *Simple8Container[T]) Len() int {
@@ -55,12 +55,12 @@ func (c *Simple8Container[T]) Size() int {
 		len(c.Packed)
 }
 
-func (c *Simple8Container[T]) Iterator() Iterator[T] {
+func (c *Simple8Container[T]) Iterator() NumberIterator[T] {
 	return s8b.NewIterator[T](c.Packed, c.N, c.For)
 }
 
 func (c *Simple8Container[T]) Store(dst []byte) []byte {
-	dst = append(dst, byte(TIntegerSimple8))
+	dst = append(dst, byte(TIntSimple8))
 	dst = num.AppendUvarint(dst, uint64(c.For))
 	dst = num.AppendUvarint(dst, uint64(c.N))
 	dst = num.AppendUvarint(dst, uint64(len(c.Packed)))
@@ -69,7 +69,7 @@ func (c *Simple8Container[T]) Store(dst []byte) []byte {
 }
 
 func (c *Simple8Container[T]) Load(buf []byte) ([]byte, error) {
-	if buf[0] != byte(TIntegerSimple8) {
+	if buf[0] != byte(TIntSimple8) {
 		return buf, ErrInvalidType
 	}
 	buf = buf[1:]
@@ -96,7 +96,7 @@ func (c *Simple8Container[T]) Get(n int) T {
 	return c.it.Get(n)
 }
 
-func (c *Simple8Container[T]) AppendTo(sel []uint32, dst []T) []T {
+func (c *Simple8Container[T]) AppendTo(dst []T, sel []uint32) []T {
 	if sel == nil {
 		n, err := s8b.Decode(dst[:c.N], c.Packed, c.For)
 		if err != nil {
@@ -114,7 +114,7 @@ func (c *Simple8Container[T]) AppendTo(sel []uint32, dst []T) []T {
 	return dst
 }
 
-func (c *Simple8Container[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) IntegerContainer[T] {
+func (c *Simple8Container[T]) Encode(ctx *Context[T], vals []T) NumberContainer[T] {
 	sz := s8b.EstimateMaxSize(len(vals), ctx.Min, ctx.Max) * 8
 	buf := arena.AllocBytes(sz)[:sz]
 	buf, err := s8b.Encode(buf, vals, ctx.Min, ctx.Max)
@@ -291,30 +291,30 @@ type Simple8Factory struct {
 	u8ItPool  sync.Pool
 }
 
-func newSimple8Container[T types.Integer]() IntegerContainer[T] {
+func newSimple8Container[T types.Integer]() NumberContainer[T] {
 	switch any(T(0)).(type) {
 	case int64:
-		return simple8Factory.i64Pool.Get().(IntegerContainer[T])
+		return simple8Factory.i64Pool.Get().(NumberContainer[T])
 	case int32:
-		return simple8Factory.i32Pool.Get().(IntegerContainer[T])
+		return simple8Factory.i32Pool.Get().(NumberContainer[T])
 	case int16:
-		return simple8Factory.i16Pool.Get().(IntegerContainer[T])
+		return simple8Factory.i16Pool.Get().(NumberContainer[T])
 	case int8:
-		return simple8Factory.i8Pool.Get().(IntegerContainer[T])
+		return simple8Factory.i8Pool.Get().(NumberContainer[T])
 	case uint64:
-		return simple8Factory.u64Pool.Get().(IntegerContainer[T])
+		return simple8Factory.u64Pool.Get().(NumberContainer[T])
 	case uint32:
-		return simple8Factory.u32Pool.Get().(IntegerContainer[T])
+		return simple8Factory.u32Pool.Get().(NumberContainer[T])
 	case uint16:
-		return simple8Factory.u16Pool.Get().(IntegerContainer[T])
+		return simple8Factory.u16Pool.Get().(NumberContainer[T])
 	case uint8:
-		return simple8Factory.u8Pool.Get().(IntegerContainer[T])
+		return simple8Factory.u8Pool.Get().(NumberContainer[T])
 	default:
 		return nil
 	}
 }
 
-func putSimple8Container[T types.Integer](c IntegerContainer[T]) {
+func putSimple8Container[T types.Integer](c NumberContainer[T]) {
 	switch any(T(0)).(type) {
 	case int64:
 		simple8Factory.i64Pool.Put(c)

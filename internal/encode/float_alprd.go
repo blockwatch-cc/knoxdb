@@ -14,8 +14,8 @@ import (
 
 // TFloatAlpRd
 type FloatAlpRdContainer[T alp.Float, E alp.Uint] struct {
-	Left  IntegerContainer[uint16]
-	Right IntegerContainer[E]
+	Left  NumberContainer[uint16]
+	Right NumberContainer[E]
 	Shift int
 	dec   *alp.DecoderRD[T, E]
 }
@@ -35,7 +35,7 @@ func (c *FloatAlpRdContainer[T, E]) Close() {
 	putFloatAlpRdContainer[T, E](c)
 }
 
-func (c *FloatAlpRdContainer[T, E]) Type() FloatContainerType {
+func (c *FloatAlpRdContainer[T, E]) Type() ContainerType {
 	return TFloatAlpRd
 }
 
@@ -61,12 +61,12 @@ func (c *FloatAlpRdContainer[T, E]) Load(buf []byte) ([]byte, error) {
 		return buf, ErrInvalidType
 	}
 	buf = buf[1:]
-	c.Left = NewInt[uint16](IntegerContainerType(buf[0]))
+	c.Left = NewInt[uint16](ContainerType(buf[0]))
 	buf, err := c.Left.Load(buf)
 	if err != nil {
 		return buf, err
 	}
-	c.Right = NewInt[E](IntegerContainerType(buf[0]))
+	c.Right = NewInt[E](ContainerType(buf[0]))
 	buf, err = c.Right.Load(buf)
 	if err != nil {
 		return buf, err
@@ -81,7 +81,7 @@ func (c *FloatAlpRdContainer[T, E]) Get(n int) T {
 	return c.dec.DecodeValue(c.Left.Get(n), c.Right.Get(n))
 }
 
-func (c *FloatAlpRdContainer[T, E]) AppendTo(sel []uint32, dst []T) []T {
+func (c *FloatAlpRdContainer[T, E]) AppendTo(dst []T, sel []uint32) []T {
 	it := c.Iterator()
 	if sel == nil {
 		for {
@@ -100,7 +100,7 @@ func (c *FloatAlpRdContainer[T, E]) AppendTo(sel []uint32, dst []T) []T {
 	return dst
 }
 
-func (c *FloatAlpRdContainer[T, E]) Encode(ctx *FloatContext[T], vals []T, lvl int) FloatContainer[T] {
+func (c *FloatAlpRdContainer[T, E]) Encode(ctx *Context[T], vals []T) NumberContainer[T] {
 	// ensure we have an ALP analysis result (mostly relevant for testcases)
 	if ctx.Alp.Scheme != alp.ALP_RD_SCHEME {
 		a := alp.AnalyzeRD[T, E](vals)
@@ -118,17 +118,17 @@ func (c *FloatAlpRdContainer[T, E]) Encode(ctx *FloatContext[T], vals []T, lvl i
 	// - fusion: right always bitpack to max width during split
 
 	// prefer left side dict when small
-	lctx := AnalyzeInt(res.Left, ctx.Alp.Dict)
-	leftScheme := TIntegerBitpacked
+	lctx := AnalyzeInt(res.Left, ctx.Alp.Dict).WithLevel(ctx.Lvl - 1)
+	leftScheme := TIntBitpacked
 	if lctx.NumUnique <= alp.RD_MAX_DICT_SIZE {
-		leftScheme = TIntegerDictionary
+		leftScheme = TIntDictionary
 	}
-	c.Left = NewInt[uint16](leftScheme).Encode(lctx, res.Left, lvl-1)
+	c.Left = NewInt[uint16](leftScheme).Encode(lctx, res.Left)
 	lctx.Close()
 
 	// right is always bitpacked, estimate width
-	rctx := AnalyzeInt(res.Right, false)
-	c.Right = NewInt[E](TIntegerBitpacked).Encode(rctx, res.Right, lvl-1)
+	rctx := AnalyzeInt(res.Right, false).WithLevel(ctx.Lvl - 1)
+	c.Right = NewInt[E](TIntBitpacked).Encode(rctx, res.Right)
 	rctx.Close()
 
 	// close alp result to free resources
@@ -180,18 +180,18 @@ type FloatAlpRdFactory struct {
 	f32ItPool sync.Pool
 }
 
-func newFloatAlpRdContainer[T alp.Float]() FloatContainer[T] {
+func newFloatAlpRdContainer[T alp.Float]() NumberContainer[T] {
 	switch any(T(0)).(type) {
 	case float64:
-		return floatAlpRdFactory.f64Pool.Get().(FloatContainer[T])
+		return floatAlpRdFactory.f64Pool.Get().(NumberContainer[T])
 	case float32:
-		return floatAlpRdFactory.f32Pool.Get().(FloatContainer[T])
+		return floatAlpRdFactory.f32Pool.Get().(NumberContainer[T])
 	default:
 		return nil
 	}
 }
 
-func putFloatAlpRdContainer[T alp.Float, E alp.Uint](c FloatContainer[T]) {
+func putFloatAlpRdContainer[T alp.Float, E alp.Uint](c NumberContainer[T]) {
 	switch any(T(0)).(type) {
 	case float64:
 		floatAlpRdFactory.f64Pool.Put(c)
@@ -231,14 +231,14 @@ var floatAlpRdFactory = FloatAlpRdFactory{
 // Iterator
 //
 
-func (c *FloatAlpRdContainer[T, E]) Iterator() Iterator[T] {
+func (c *FloatAlpRdContainer[T, E]) Iterator() NumberIterator[T] {
 	return NewFloatAlpRdIterator(c)
 }
 
 type FloatAlpRdIterator[T alp.Float, E alp.Uint] struct {
 	BaseIterator[T]
-	left  Iterator[uint16]
-	right Iterator[E]
+	left  NumberIterator[uint16]
+	right NumberIterator[E]
 	dec   *alp.DecoderRD[T, E]
 }
 

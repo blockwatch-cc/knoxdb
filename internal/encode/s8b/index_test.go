@@ -11,6 +11,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/cmp"
+	"blockwatch.cc/knoxdb/internal/cpu"
 	"blockwatch.cc/knoxdb/internal/encode/s8b/generic"
 	stests "blockwatch.cc/knoxdb/internal/encode/s8b/tests"
 	"blockwatch.cc/knoxdb/internal/tests"
@@ -78,7 +79,7 @@ func BenchmarkCmpEqualUnpacked(b *testing.B) {
 }
 
 func CmpEqualUnpackedBenchmark[T types.Unsigned](b *testing.B) {
-	if util.UseAVX2 {
+	if cpu.UseAVX2 {
 		b.Log("AVX2 enabled")
 	} else {
 		b.Log("WARN: using generic algorithms only")

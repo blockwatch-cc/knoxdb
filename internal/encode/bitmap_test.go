@@ -48,13 +48,13 @@ func TestBitmapEncode(t *testing.T) {
 
 			// validate append
 			dst := bitset.New(c.N).Resize(0)
-			dst = enc.AppendTo(nil, dst)
+			dst = enc.AppendTo(dst, nil)
 			require.Equal(t, c.N, dst.Len())
 			require.Equal(t, c.Data.Bytes(), dst.Bytes())
 
 			// validate append selector
 			sel := util.RandUintsn[uint32](max(1, c.N/2), uint32(c.N))
-			dst = enc2.AppendTo(sel, dst.Resize(0))
+			dst = enc2.AppendTo(dst.Resize(0), sel)
 			require.Equal(t, len(sel), dst.Len())
 			for i, v := range sel {
 				require.Equal(t, c.Data.Contains(int(v)), dst.Contains(i), "sel[%d]", v)
@@ -331,7 +331,7 @@ func BenchmarkBitmapDecode(b *testing.B) {
 				for b.Loop() {
 					enc2, err := LoadBitmap(buf)
 					require.NoError(b, err)
-					dst = enc2.AppendTo(nil, dst)
+					dst = enc2.AppendTo(dst, nil)
 					if once {
 						b.Log(enc2.Info())
 						once = false

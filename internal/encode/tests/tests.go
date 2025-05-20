@@ -52,9 +52,9 @@ type TestCase[T types.Number] struct {
 
 func MakeShortIntTests[T types.Integer](scheme int) []TestCase[T] {
 	switch scheme {
-	case 0: // TIntegerConstant:
+	case 1: // TIntConstant:
 		return []TestCase[T]{MakeIntTest[T]("const", 6, constCase...)}
-	case 1: // TIntegerDelta:
+	case 2: // TIntDelta:
 		return []TestCase[T]{
 			MakeIntTest[T]("delta", 6, deltaCase...),
 			MakeIntTest[T]("negd", 6, negCase...),
@@ -99,7 +99,7 @@ func MakeIntTests[T types.Integer](n int) []TestCase[T] {
 }
 
 func MakeShortFloatTests[T types.Float](scheme int) []TestCase[T] {
-	if scheme == 0 {
+	if scheme == 10 {
 		// TFloatConstant:
 		return []TestCase[T]{MakeFloatTest[T]("const", 6, floatConstCase...)}
 	}

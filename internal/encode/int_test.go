@@ -28,8 +28,8 @@ func TestAnalyzeInt(t *testing.T) {
 	assert.InDelta(t, 4, x.NumUnique, 1.0, "num_unique")
 	assert.Equal(t, 4, x.NumRuns, "num_runs")
 	assert.Equal(t, 4, x.NumValues, "num_values")
-	assert.Len(t, x.EligibleSchemes(), 1, "eligible list")
-	assert.Contains(t, x.EligibleSchemes(), TIntegerDelta, "delta only")
+	assert.Len(t, x.EligibleIntSchemes(), 1, "eligible list")
+	assert.Contains(t, x.EligibleIntSchemes(), TIntDelta, "delta only")
 
 	// runs
 	x = AnalyzeInt([]int64{-1, -1, 5, 5, 1, 1}, true)
@@ -42,10 +42,10 @@ func TestAnalyzeInt(t *testing.T) {
 	assert.Equal(t, 3, x.NumUnique, "num_unique")
 	assert.Equal(t, 3, x.NumRuns, "num_runs")
 	assert.Equal(t, 6, x.NumValues, "num_values")
-	// assert.Contains(t, x.EligibleSchemes(), TIntegerRunEnd, "missing eligible scheme")
-	assert.Contains(t, x.EligibleSchemes(), TIntegerBitpacked, "missing eligible scheme")
-	assert.Contains(t, x.EligibleSchemes(), TIntegerRaw, "missing eligible scheme")
-	// assert.Contains(t, x.EligibleSchemes(), TIntegerSimple8, "missing eligible scheme")
+	// assert.Contains(t, x.EligibleIntSchemes(), TIntRunEnd, "missing eligible scheme")
+	assert.Contains(t, x.EligibleIntSchemes(), TIntBitpacked, "missing eligible scheme")
+	assert.Contains(t, x.EligibleIntSchemes(), TIntRaw, "missing eligible scheme")
+	// assert.Contains(t, x.EligibleIntSchemes(), TIntSimple8, "missing eligible scheme")
 
 	// dict-friendly
 	x = AnalyzeInt([]int64{
@@ -59,95 +59,95 @@ func TestAnalyzeInt(t *testing.T) {
 	assert.InDelta(t, 3, x.NumUnique, 1.0, "num_unique")
 	assert.Equal(t, 30, x.NumRuns, "num_runs")
 	assert.Equal(t, 30, x.NumValues, "num_values")
-	assert.NotContains(t, x.EligibleSchemes(), TIntegerRunEnd, "not eligible")
-	assert.Contains(t, x.EligibleSchemes(), TIntegerBitpacked, "missing eligible scheme")
-	assert.Contains(t, x.EligibleSchemes(), TIntegerRaw, "missing eligible scheme")
-	assert.Contains(t, x.EligibleSchemes(), TIntegerDictionary, "missing eligible scheme")
-	// assert.Contains(t, x.EligibleSchemes(), TIntegerSimple8, "missing eligible scheme")
+	assert.NotContains(t, x.EligibleIntSchemes(), TIntRunEnd, "not eligible")
+	assert.Contains(t, x.EligibleIntSchemes(), TIntBitpacked, "missing eligible scheme")
+	assert.Contains(t, x.EligibleIntSchemes(), TIntRaw, "missing eligible scheme")
+	assert.Contains(t, x.EligibleIntSchemes(), TIntDictionary, "missing eligible scheme")
+	// assert.Contains(t, x.EligibleIntSchemes(), TIntSimple8, "missing eligible scheme")
 }
 
 func TestIntEncodeConst(t *testing.T) {
-	testIntContainer[int64](t, TIntegerConstant)
-	testIntContainer[int32](t, TIntegerConstant)
-	testIntContainer[int16](t, TIntegerConstant)
-	testIntContainer[int8](t, TIntegerConstant)
+	testIntContainer[int64](t, TIntConstant)
+	testIntContainer[int32](t, TIntConstant)
+	testIntContainer[int16](t, TIntConstant)
+	testIntContainer[int8](t, TIntConstant)
 
-	testIntContainer[uint64](t, TIntegerConstant)
-	testIntContainer[uint32](t, TIntegerConstant)
-	testIntContainer[uint16](t, TIntegerConstant)
-	testIntContainer[uint8](t, TIntegerConstant)
+	testIntContainer[uint64](t, TIntConstant)
+	testIntContainer[uint32](t, TIntConstant)
+	testIntContainer[uint16](t, TIntConstant)
+	testIntContainer[uint8](t, TIntConstant)
 }
 
 func TestIntEncodeDelta(t *testing.T) {
-	testIntContainer[int64](t, TIntegerDelta)
-	testIntContainer[int32](t, TIntegerDelta)
-	testIntContainer[int16](t, TIntegerDelta)
-	testIntContainer[int8](t, TIntegerDelta)
+	testIntContainer[int64](t, TIntDelta)
+	testIntContainer[int32](t, TIntDelta)
+	testIntContainer[int16](t, TIntDelta)
+	testIntContainer[int8](t, TIntDelta)
 
-	testIntContainer[uint64](t, TIntegerDelta)
-	testIntContainer[uint32](t, TIntegerDelta)
-	testIntContainer[uint16](t, TIntegerDelta)
-	testIntContainer[uint8](t, TIntegerDelta)
+	testIntContainer[uint64](t, TIntDelta)
+	testIntContainer[uint32](t, TIntDelta)
+	testIntContainer[uint16](t, TIntDelta)
+	testIntContainer[uint8](t, TIntDelta)
 }
 
 func TestIntEncodeRaw(t *testing.T) {
-	testIntContainer[int64](t, TIntegerRaw)
-	testIntContainer[int32](t, TIntegerRaw)
-	testIntContainer[int16](t, TIntegerRaw)
-	testIntContainer[int8](t, TIntegerRaw)
+	testIntContainer[int64](t, TIntRaw)
+	testIntContainer[int32](t, TIntRaw)
+	testIntContainer[int16](t, TIntRaw)
+	testIntContainer[int8](t, TIntRaw)
 
-	testIntContainer[uint64](t, TIntegerRaw)
-	testIntContainer[uint32](t, TIntegerRaw)
-	testIntContainer[uint16](t, TIntegerRaw)
-	testIntContainer[uint8](t, TIntegerRaw)
+	testIntContainer[uint64](t, TIntRaw)
+	testIntContainer[uint32](t, TIntRaw)
+	testIntContainer[uint16](t, TIntRaw)
+	testIntContainer[uint8](t, TIntRaw)
 }
 
 func TestIntEncodeBitpack(t *testing.T) {
-	testIntContainer[int64](t, TIntegerBitpacked)
-	testIntContainer[int32](t, TIntegerBitpacked)
-	testIntContainer[int16](t, TIntegerBitpacked)
-	testIntContainer[int8](t, TIntegerBitpacked)
+	testIntContainer[int64](t, TIntBitpacked)
+	testIntContainer[int32](t, TIntBitpacked)
+	testIntContainer[int16](t, TIntBitpacked)
+	testIntContainer[int8](t, TIntBitpacked)
 
-	testIntContainer[uint64](t, TIntegerBitpacked)
-	testIntContainer[uint32](t, TIntegerBitpacked)
-	testIntContainer[uint16](t, TIntegerBitpacked)
-	testIntContainer[uint8](t, TIntegerBitpacked)
+	testIntContainer[uint64](t, TIntBitpacked)
+	testIntContainer[uint32](t, TIntBitpacked)
+	testIntContainer[uint16](t, TIntBitpacked)
+	testIntContainer[uint8](t, TIntBitpacked)
 }
 
 func TestIntEncodeDict(t *testing.T) {
-	testIntContainer[int64](t, TIntegerDictionary)
-	testIntContainer[int32](t, TIntegerDictionary)
-	testIntContainer[int16](t, TIntegerDictionary)
-	testIntContainer[int8](t, TIntegerDictionary)
+	testIntContainer[int64](t, TIntDictionary)
+	testIntContainer[int32](t, TIntDictionary)
+	testIntContainer[int16](t, TIntDictionary)
+	testIntContainer[int8](t, TIntDictionary)
 
-	testIntContainer[uint64](t, TIntegerDictionary)
-	testIntContainer[uint32](t, TIntegerDictionary)
-	testIntContainer[uint16](t, TIntegerDictionary)
-	testIntContainer[uint8](t, TIntegerDictionary)
+	testIntContainer[uint64](t, TIntDictionary)
+	testIntContainer[uint32](t, TIntDictionary)
+	testIntContainer[uint16](t, TIntDictionary)
+	testIntContainer[uint8](t, TIntDictionary)
 }
 
 func TestIntEncodeRun(t *testing.T) {
-	testIntContainer[int64](t, TIntegerRunEnd)
-	testIntContainer[int32](t, TIntegerRunEnd)
-	testIntContainer[int16](t, TIntegerRunEnd)
-	testIntContainer[int8](t, TIntegerRunEnd)
+	testIntContainer[int64](t, TIntRunEnd)
+	testIntContainer[int32](t, TIntRunEnd)
+	testIntContainer[int16](t, TIntRunEnd)
+	testIntContainer[int8](t, TIntRunEnd)
 
-	testIntContainer[uint64](t, TIntegerRunEnd)
-	testIntContainer[uint32](t, TIntegerRunEnd)
-	testIntContainer[uint16](t, TIntegerRunEnd)
-	testIntContainer[uint8](t, TIntegerRunEnd)
+	testIntContainer[uint64](t, TIntRunEnd)
+	testIntContainer[uint32](t, TIntRunEnd)
+	testIntContainer[uint16](t, TIntRunEnd)
+	testIntContainer[uint8](t, TIntRunEnd)
 }
 
 func TestIntEncodeSimple8(t *testing.T) {
-	testIntContainer[int64](t, TIntegerSimple8)
-	testIntContainer[int32](t, TIntegerSimple8)
-	testIntContainer[int16](t, TIntegerSimple8)
-	testIntContainer[int8](t, TIntegerSimple8)
+	testIntContainer[int64](t, TIntSimple8)
+	testIntContainer[int32](t, TIntSimple8)
+	testIntContainer[int16](t, TIntSimple8)
+	testIntContainer[int8](t, TIntSimple8)
 
-	testIntContainer[uint64](t, TIntegerSimple8)
-	testIntContainer[uint32](t, TIntegerSimple8)
-	testIntContainer[uint16](t, TIntegerSimple8)
-	testIntContainer[uint8](t, TIntegerSimple8)
+	testIntContainer[uint64](t, TIntSimple8)
+	testIntContainer[uint32](t, TIntSimple8)
+	testIntContainer[uint16](t, TIntSimple8)
+	testIntContainer[uint8](t, TIntSimple8)
 }
 
 func TestIntEncode(t *testing.T) {
@@ -166,10 +166,10 @@ func testIntEncodeT[T types.Integer](t *testing.T) {
 	for _, c := range etests.MakeIntTests[T](1024) {
 		t.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(t *testing.T) {
 			x := AnalyzeInt(c.Data, true)
-			e := EncodeInt(x, c.Data, MAX_CASCADE)
+			e := EncodeInt(x, c.Data)
 			require.Equal(t, len(c.Data), e.Len(), "T=%s x=%#v", e, x)
 			dst := make([]T, len(c.Data))
-			e.AppendTo(nil, dst)
+			e.AppendTo(dst, nil)
 			for i, v := range c.Data {
 				require.Equal(t, v, e.Get(i), "T=%s i=%d minv=%d\nsrc=%x\ndec=%x",
 					e.Info(), i, x.Min, c.Data, dst)
@@ -178,7 +178,7 @@ func testIntEncodeT[T types.Integer](t *testing.T) {
 	}
 }
 
-func testIntContainer[T types.Integer](t *testing.T, scheme IntegerContainerType) {
+func testIntContainer[T types.Integer](t *testing.T, scheme ContainerType) {
 	// general
 	testIntContainerEncode[T](t, scheme)
 	if t.Failed() {
@@ -191,12 +191,6 @@ func testIntContainer[T types.Integer](t *testing.T, scheme IntegerContainerType
 		t.FailNow()
 	}
 
-	// skip cmp tests for bitpack until implemented
-	if scheme == TIntegerBitpacked {
-		t.Logf("WARN: skipping bitpack compare tests")
-		t.Skip()
-	}
-
 	// compare
 	testIntContainerCompare[T](t, scheme)
 	if t.Failed() {
@@ -204,14 +198,14 @@ func testIntContainer[T types.Integer](t *testing.T, scheme IntegerContainerType
 	}
 }
 
-func testIntContainerEncode[T types.Integer](t *testing.T, scheme IntegerContainerType) {
+func testIntContainerEncode[T types.Integer](t *testing.T, scheme ContainerType) {
 	for _, c := range etests.MakeShortIntTests[T](int(scheme)) {
 		t.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(t *testing.T) {
 			enc := NewInt[T](scheme)
 
 			// analyze and encode data into container
-			ctx := AnalyzeInt(c.Data, true)
-			enc.Encode(ctx, c.Data, 1)
+			ctx := AnalyzeInt(c.Data, true).WithLevel(1)
+			enc.Encode(ctx, c.Data)
 			t.Logf("Info: %s", enc.Info())
 
 			// validate contents
@@ -239,7 +233,7 @@ func testIntContainerEncode[T types.Integer](t *testing.T, scheme IntegerContain
 
 			// validate append
 			dst := make([]T, 0, len(c.Data))
-			dst = enc2.AppendTo(nil, dst)
+			dst = enc2.AppendTo(dst, nil)
 			require.Len(t, dst, len(c.Data))
 			require.Equal(t, c.Data, dst)
 
@@ -247,7 +241,7 @@ func testIntContainerEncode[T types.Integer](t *testing.T, scheme IntegerContain
 			sel := util.RandUintsn[uint32](max(1, len(c.Data)/2), uint32(len(c.Data)))
 			clear(dst)
 			dst = dst[:0]
-			dst = enc2.AppendTo(sel, dst)
+			dst = enc2.AppendTo(dst, sel)
 			require.Len(t, dst, len(sel))
 			for i, v := range sel {
 				require.Equal(t, c.Data[v], dst[i], "sel[%d]", v)
@@ -262,12 +256,12 @@ func testIntContainerEncode[T types.Integer](t *testing.T, scheme IntegerContain
 	}
 }
 
-func isCompatibleTest[T types.Integer](scheme IntegerContainerType, ctx *IntegerContext[T]) bool {
+func isCompatibleTest[T types.Integer](scheme ContainerType, ctx *Context[T]) bool {
 	maxv := uint64(1<<(util.SizeOf[T]()*8) - 1)
 	if types.IsSigned[T]() {
 		maxv >>= 1
 	}
-	if scheme == TIntegerDelta {
+	if scheme == TIntDelta {
 		if uint64(ctx.NumValues) > maxv || ctx.Delta == 0 {
 			return false
 		}
@@ -275,20 +269,20 @@ func isCompatibleTest[T types.Integer](scheme IntegerContainerType, ctx *Integer
 	return true
 }
 
-func testIntContainerCompare[T types.Integer](t *testing.T, scheme IntegerContainerType) {
+func testIntContainerCompare[T types.Integer](t *testing.T, scheme ContainerType) {
 	// validate matchers
 	for _, sz := range etests.CompareSizes {
 		t.Run(fmt.Sprintf("%T/cmp/%d", T(0), sz), func(t *testing.T) {
 			src := etests.GenForIntScheme[T](int(scheme), sz)
 			enc := NewInt[T](scheme)
-			ctx := AnalyzeInt(src, true)
+			ctx := AnalyzeInt(src, true).WithLevel(1)
 
 			if !isCompatibleTest[T](scheme, ctx) {
 				t.Logf("Skipping cmp test sz=%d for %s/%T", sz, scheme, T(0))
 				t.Skip()
 			}
 
-			enc.Encode(ctx, src, 1)
+			enc.Encode(ctx, src)
 			t.Logf("Info: %s", enc.Info())
 
 			// equal
@@ -433,14 +427,14 @@ func testCompareFunc3[T types.Number](t *testing.T, cmp CompareFunc3[T], src []T
 	etests.EnsureBits(t, src, 0, 0, bits, set, mode)
 }
 
-func testIntContainerIterator[T types.Integer](t *testing.T, scheme IntegerContainerType) {
+func testIntContainerIterator[T types.Integer](t *testing.T, scheme ContainerType) {
 	for _, sz := range etests.ItSizes {
 		t.Run(fmt.Sprintf("%T/it/%d", T(0), sz), func(t *testing.T) {
 			// setup
 			src := etests.GenForIntScheme[T](int(scheme), sz)
 			enc := NewInt[T](scheme)
-			ctx := AnalyzeInt(src, true)
-			enc.Encode(ctx, src, 1)
+			ctx := AnalyzeInt(src, true).WithLevel(1)
+			enc.Encode(ctx, src)
 			it := enc.Iterator()
 			if it == nil {
 				t.Skip()

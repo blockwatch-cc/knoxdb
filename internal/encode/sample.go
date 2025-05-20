@@ -9,7 +9,6 @@ import (
 )
 
 const (
-	MAX_CASCADE  = 3
 	SAMPLE_SIZE  = 64
 	SAMPLE_COUNT = 10
 )

@@ -13,7 +13,7 @@ import (
 	"blockwatch.cc/knoxdb/pkg/num"
 )
 
-// TIntegerDelta
+// TIntDelta
 type DeltaContainer[T types.Integer] struct {
 	Delta T
 	For   T
@@ -28,8 +28,8 @@ func (c *DeltaContainer[T]) Close() {
 	putDeltaContainer[T](c)
 }
 
-func (c *DeltaContainer[T]) Type() IntegerContainerType {
-	return TIntegerDelta
+func (c *DeltaContainer[T]) Type() ContainerType {
+	return TIntDelta
 }
 
 func (c *DeltaContainer[T]) Len() int {
@@ -40,19 +40,19 @@ func (c *DeltaContainer[T]) Size() int {
 	return 1 + num.UvarintLen(c.For) + num.UvarintLen(c.Delta) + num.UvarintLen(c.N)
 }
 
-func (c *DeltaContainer[T]) Iterator() Iterator[T] {
+func (c *DeltaContainer[T]) Iterator() NumberIterator[T] {
 	return NewDeltaIterator[T](c.Delta, c.For, c.N)
 }
 
 func (c *DeltaContainer[T]) Store(dst []byte) []byte {
-	dst = append(dst, byte(TIntegerDelta))
+	dst = append(dst, byte(TIntDelta))
 	dst = num.AppendUvarint(dst, uint64(c.For))
 	dst = num.AppendUvarint(dst, uint64(c.Delta))
 	return num.AppendUvarint(dst, uint64(c.N))
 }
 
 func (c *DeltaContainer[T]) Load(buf []byte) ([]byte, error) {
-	if buf[0] != byte(TIntegerDelta) {
+	if buf[0] != byte(TIntDelta) {
 		return buf, ErrInvalidType
 	}
 	buf = buf[1:]
@@ -71,7 +71,7 @@ func (c *DeltaContainer[T]) Get(n int) T {
 	return T(n)*c.Delta + c.For
 }
 
-func (c *DeltaContainer[T]) AppendTo(sel []uint32, dst []T) []T {
+func (c *DeltaContainer[T]) AppendTo(dst []T, sel []uint32) []T {
 	if sel == nil {
 		dst = dst[:c.N]
 		var i int
@@ -112,7 +112,7 @@ func (c *DeltaContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 	return dst
 }
 
-func (c *DeltaContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) IntegerContainer[T] {
+func (c *DeltaContainer[T]) Encode(ctx *Context[T], vals []T) NumberContainer[T] {
 	c.For = vals[0]
 	c.Delta = ctx.Delta
 	c.N = len(vals)
@@ -468,30 +468,30 @@ type DeltaFactory struct {
 	u8Pool  sync.Pool
 }
 
-func newDeltaContainer[T types.Integer]() IntegerContainer[T] {
+func newDeltaContainer[T types.Integer]() NumberContainer[T] {
 	switch any(T(0)).(type) {
 	case int64:
-		return deltaFactory.i64Pool.Get().(IntegerContainer[T])
+		return deltaFactory.i64Pool.Get().(NumberContainer[T])
 	case int32:
-		return deltaFactory.i32Pool.Get().(IntegerContainer[T])
+		return deltaFactory.i32Pool.Get().(NumberContainer[T])
 	case int16:
-		return deltaFactory.i16Pool.Get().(IntegerContainer[T])
+		return deltaFactory.i16Pool.Get().(NumberContainer[T])
 	case int8:
-		return deltaFactory.i8Pool.Get().(IntegerContainer[T])
+		return deltaFactory.i8Pool.Get().(NumberContainer[T])
 	case uint64:
-		return deltaFactory.u64Pool.Get().(IntegerContainer[T])
+		return deltaFactory.u64Pool.Get().(NumberContainer[T])
 	case uint32:
-		return deltaFactory.u32Pool.Get().(IntegerContainer[T])
+		return deltaFactory.u32Pool.Get().(NumberContainer[T])
 	case uint16:
-		return deltaFactory.u16Pool.Get().(IntegerContainer[T])
+		return deltaFactory.u16Pool.Get().(NumberContainer[T])
 	case uint8:
-		return deltaFactory.u8Pool.Get().(IntegerContainer[T])
+		return deltaFactory.u8Pool.Get().(NumberContainer[T])
 	default:
 		return nil
 	}
 }
 
-func putDeltaContainer[T types.Integer](c IntegerContainer[T]) {
+func putDeltaContainer[T types.Integer](c NumberContainer[T]) {
 	switch any(T(0)).(type) {
 	case int64:
 		deltaFactory.i64Pool.Put(c)

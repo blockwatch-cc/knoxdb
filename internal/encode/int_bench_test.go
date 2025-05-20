@@ -40,21 +40,21 @@ func BenchmarkIntAnalyze(b *testing.B) {
 func BenchmarkIntEstimate(b *testing.B) {
 	for _, c := range tests.MakeBenchmarks[uint64]() {
 		ctx := AnalyzeInt(c.Data, true)
-		for _, scheme := range []IntegerContainerType{
-			TIntegerConstant,
-			TIntegerDelta,
-			TIntegerRunEnd,
-			TIntegerBitpacked,
-			TIntegerDictionary,
-			TIntegerSimple8,
-			TIntegerRaw,
+		for _, scheme := range []ContainerType{
+			TIntConstant,
+			TIntDelta,
+			TIntRunEnd,
+			TIntBitpacked,
+			TIntDictionary,
+			TIntSimple8,
+			TIntRaw,
 		} {
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
 				b.ReportAllocs()
 				b.SetBytes(int64(len(c.Data) * 8))
 				var n int
 				for b.Loop() {
-					_ = EstimateInt(scheme, ctx, c.Data, MAX_CASCADE)
+					_ = EstimateInt(ctx, scheme, c.Data)
 					n++
 				}
 				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
@@ -65,24 +65,24 @@ func BenchmarkIntEstimate(b *testing.B) {
 
 func BenchmarkIntEncode(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
-		for _, scheme := range []IntegerContainerType{
-			TIntegerConstant,
-			TIntegerDelta,
-			TIntegerRunEnd,
-			TIntegerBitpacked,
-			TIntegerDictionary,
-			TIntegerSimple8,
-			TIntegerRaw,
+		for _, scheme := range []ContainerType{
+			TIntConstant,
+			TIntDelta,
+			TIntRunEnd,
+			TIntBitpacked,
+			TIntDictionary,
+			TIntSimple8,
+			TIntRaw,
 		} {
 			data := etests.GenForIntScheme[int64](int(scheme), c.N)
-			ctx := AnalyzeInt(data, scheme == TIntegerDictionary)
+			ctx := AnalyzeInt(data, scheme == TIntDictionary)
 			once := etests.ShowInfo
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
 				b.ReportAllocs()
 				b.SetBytes(int64(c.N * 8))
 				var sz int
 				for b.Loop() {
-					enc := NewInt[int64](scheme).Encode(ctx, data, MAX_CASCADE)
+					enc := NewInt[int64](scheme).Encode(ctx, data)
 					if once {
 						b.Log(enc.Info())
 						once = false
@@ -101,14 +101,14 @@ func BenchmarkIntEncode(b *testing.B) {
 
 func BenchmarkIntEncodeAndStore(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
-		for _, scheme := range []IntegerContainerType{
-			TIntegerConstant,
-			TIntegerDelta,
-			TIntegerRunEnd,
-			TIntegerBitpacked,
-			TIntegerDictionary,
-			TIntegerSimple8,
-			TIntegerRaw,
+		for _, scheme := range []ContainerType{
+			TIntConstant,
+			TIntDelta,
+			TIntRunEnd,
+			TIntBitpacked,
+			TIntDictionary,
+			TIntSimple8,
+			TIntRaw,
 		} {
 			data := etests.GenForIntScheme[int64](int(scheme), c.N)
 			once := etests.ShowInfo
@@ -117,8 +117,8 @@ func BenchmarkIntEncodeAndStore(b *testing.B) {
 				b.SetBytes(int64(c.N * 8))
 				var sz int
 				for b.Loop() {
-					ctx := AnalyzeInt(data, scheme == TIntegerDictionary)
-					enc := NewInt[int64](scheme).Encode(ctx, data, MAX_CASCADE)
+					ctx := AnalyzeInt(data, scheme == TIntDictionary)
+					enc := NewInt[int64](scheme).Encode(ctx, data)
 					buf := enc.Store(make([]byte, 0, enc.Size()))
 					require.LessOrEqual(b, len(buf), enc.Size())
 					if once {
@@ -145,7 +145,7 @@ func BenchmarkIntEncodeBest(b *testing.B) {
 			b.SetBytes(int64(len(c.Data) * 8))
 			var sz int
 			for b.Loop() {
-				enc := EncodeInt(nil, c.Data, MAX_CASCADE)
+				enc := EncodeInt(nil, c.Data)
 				sz += enc.Size()
 				if once {
 					b.Log(enc.Info())
@@ -162,18 +162,18 @@ func BenchmarkIntEncodeBest(b *testing.B) {
 
 func BenchmarkIntDecode(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
-		for _, scheme := range []IntegerContainerType{
-			TIntegerConstant,
-			TIntegerDelta,
-			TIntegerRunEnd,
-			TIntegerBitpacked,
-			TIntegerDictionary,
-			TIntegerSimple8,
-			TIntegerRaw,
+		for _, scheme := range []ContainerType{
+			TIntConstant,
+			TIntDelta,
+			TIntRunEnd,
+			TIntBitpacked,
+			TIntDictionary,
+			TIntSimple8,
+			TIntRaw,
 		} {
 			data := etests.GenForIntScheme[int64](int(scheme), c.N)
-			ctx := AnalyzeInt(data, scheme == TIntegerDictionary)
-			enc := NewInt[int64](scheme).Encode(ctx, data, MAX_CASCADE)
+			ctx := AnalyzeInt(data, scheme == TIntDictionary)
+			enc := NewInt[int64](scheme).Encode(ctx, data)
 			buf := enc.Store(make([]byte, 0, enc.Size()))
 			dst := make([]int64, 0, c.N)
 			once := etests.ShowInfo
@@ -183,7 +183,7 @@ func BenchmarkIntDecode(b *testing.B) {
 					enc2 := NewInt[int64](scheme)
 					_, err := enc2.Load(buf)
 					require.NoError(b, err)
-					dst = enc2.AppendTo(nil, dst)
+					dst = enc2.AppendTo(dst, nil)
 					dst = dst[:0]
 					if once {
 						b.Log(enc2.Info())
@@ -199,18 +199,18 @@ func BenchmarkIntDecode(b *testing.B) {
 
 func BenchmarkIntCmp(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
-		for _, scheme := range []IntegerContainerType{
-			TIntegerConstant,
-			TIntegerDelta,
-			TIntegerRunEnd,
-			TIntegerBitpacked,
-			TIntegerDictionary,
-			TIntegerSimple8,
-			TIntegerRaw,
+		for _, scheme := range []ContainerType{
+			TIntConstant,
+			TIntDelta,
+			TIntRunEnd,
+			TIntBitpacked,
+			TIntDictionary,
+			TIntSimple8,
+			TIntRaw,
 		} {
 			data := etests.GenForIntScheme[uint64](int(scheme), c.N)
 			ctx := AnalyzeInt(data, true)
-			enc := NewInt[uint64](scheme).Encode(ctx, data, MAX_CASCADE)
+			enc := NewInt[uint64](scheme).Encode(ctx, data)
 			bits := bitset.New(c.N)
 			b.Log(enc.Info())
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
@@ -226,18 +226,18 @@ func BenchmarkIntCmp(b *testing.B) {
 
 func BenchmarkIntIterator(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
-		for _, scheme := range []IntegerContainerType{
-			TIntegerConstant,
-			TIntegerDelta,
-			TIntegerRunEnd,
-			TIntegerBitpacked,
-			TIntegerDictionary,
-			TIntegerSimple8,
-			TIntegerRaw,
+		for _, scheme := range []ContainerType{
+			TIntConstant,
+			TIntDelta,
+			TIntRunEnd,
+			TIntBitpacked,
+			TIntDictionary,
+			TIntSimple8,
+			TIntRaw,
 		} {
 			data := etests.GenForIntScheme[int64](int(scheme), c.N)
 			ctx := AnalyzeInt(data, true)
-			enc := NewInt[int64](scheme).Encode(ctx, data, MAX_CASCADE)
+			enc := NewInt[int64](scheme).Encode(ctx, data)
 			buf := enc.Store(make([]byte, 0, enc.Size()))
 			once := etests.ShowInfo
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {

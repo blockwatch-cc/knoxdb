@@ -32,7 +32,7 @@ func chunkPos(n int) int {
 //
 // Users can use Next or NextChunk for linear walks, Get for
 // point access and Seek or SkipChunk for jumping.
-type Iterator[T types.Number] interface {
+type NumberIterator[T types.Number] interface {
 	// Returns the total number of elements in this container.
 	Len() int
 
@@ -69,7 +69,7 @@ type Iterator[T types.Number] interface {
 	Close()
 }
 
-func matchIt[T types.Number](it Iterator[T], cmpFn unsafe.Pointer, val T, bits, mask *Bitset) {
+func matchIt[T types.Number](it NumberIterator[T], cmpFn unsafe.Pointer, val T, bits, mask *Bitset) {
 	var (
 		i   int
 		cnt int64
@@ -100,7 +100,7 @@ func matchIt[T types.Number](it Iterator[T], cmpFn unsafe.Pointer, val T, bits, 
 	it.Close()
 }
 
-func matchRangeIt[T types.Number](it Iterator[T], cmpFn unsafe.Pointer, a, b T, bits, mask *Bitset) {
+func matchRangeIt[T types.Number](it NumberIterator[T], cmpFn unsafe.Pointer, a, b T, bits, mask *Bitset) {
 	var (
 		i   int
 		cnt int64
@@ -171,7 +171,7 @@ func matchFn[T types.Float](mode types.FilterMode) unsafe.Pointer {
 // Base Iterator
 //
 
-var _ Iterator[uint64] = (*BaseIterator[uint64])(nil)
+var _ NumberIterator[uint64] = (*BaseIterator[uint64])(nil)
 
 type BaseIterator[T types.Number] struct {
 	chunk [CHUNK_SIZE]T
@@ -273,7 +273,7 @@ func (it *BaseIterator[T]) Seek(n int) bool {
 // Raw Iterator
 //
 
-var _ Iterator[uint64] = (*RawIterator[uint64])(nil)
+var _ NumberIterator[uint64] = (*RawIterator[uint64])(nil)
 
 type RawIterator[T types.Number] struct {
 	vals []T
@@ -350,7 +350,7 @@ func (it *RawIterator[T]) Seek(n int) bool {
 // Const Iterator
 //
 
-var _ Iterator[uint64] = (*ConstIterator[uint64])(nil)
+var _ NumberIterator[uint64] = (*ConstIterator[uint64])(nil)
 
 type ConstIterator[T types.Number] struct {
 	BaseIterator[T]
@@ -377,7 +377,7 @@ func (it *ConstIterator[T]) fill(base int) int {
 // Delta Iterator
 //
 
-var _ Iterator[uint64] = (*DeltaIterator[uint64])(nil)
+var _ NumberIterator[uint64] = (*DeltaIterator[uint64])(nil)
 
 type DeltaIterator[T types.Integer] struct {
 	BaseIterator[T]

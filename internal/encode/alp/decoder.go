@@ -7,6 +7,7 @@ import (
 	"slices"
 	"sync"
 
+	"blockwatch.cc/knoxdb/internal/cpu"
 	"blockwatch.cc/knoxdb/internal/encode/alp/avx2"
 	"blockwatch.cc/knoxdb/internal/encode/bitpack"
 	"blockwatch.cc/knoxdb/pkg/util"
@@ -164,7 +165,7 @@ var (
 )
 
 func init() {
-	if util.UseAVX2 {
+	if cpu.UseAVX2 {
 		decode64 = avx2.Decode64
 		decode32 = avx2.Decode32
 	}

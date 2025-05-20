@@ -20,18 +20,18 @@ func TestAnalyzeFloat(t *testing.T) {
 	assert.InDelta(t, 3, x.NumUnique, 1.0, "num_unique")
 	assert.Equal(t, 3, x.NumRuns, "num_runs")
 	assert.Equal(t, 12, x.NumValues, "num_values")
-	assert.Contains(t, x.EligibleSchemes(MAX_CASCADE), TFloatRunEnd, "eligible")
-	assert.Contains(t, x.EligibleSchemes(MAX_CASCADE), TFloatRaw, "eligible")
-	assert.Contains(t, x.EligibleSchemes(MAX_CASCADE), TFloatDictionary, "eligible")
+	assert.Contains(t, x.EligibleFloatSchemes(), TFloatRunEnd, "eligible")
+	assert.Contains(t, x.EligibleFloatSchemes(), TFloatRaw, "eligible")
+	assert.Contains(t, x.EligibleFloatSchemes(), TFloatDictionary, "eligible")
 
 	// dict-friendly
 	x = AnalyzeFloat([]float64{-1.05, 1.05, 5.05, 1.05, -1.05, 1.05}, true, false)
 	assert.InDelta(t, 3, x.NumUnique, 1.0, "num_unique")
 	assert.Equal(t, 6, x.NumRuns, "num_runs")
 	assert.Equal(t, 6, x.NumValues, "num_values")
-	assert.NotContains(t, x.EligibleSchemes(MAX_CASCADE), TFloatRunEnd, "not eligible")
-	assert.Contains(t, x.EligibleSchemes(MAX_CASCADE), TFloatRaw, "eligible")
-	assert.Contains(t, x.EligibleSchemes(MAX_CASCADE), TFloatDictionary, "eligible")
+	assert.NotContains(t, x.EligibleFloatSchemes(), TFloatRunEnd, "not eligible")
+	assert.Contains(t, x.EligibleFloatSchemes(), TFloatRaw, "eligible")
+	assert.Contains(t, x.EligibleFloatSchemes(), TFloatDictionary, "eligible")
 }
 
 func TestFloatEncodeConst(t *testing.T) {
@@ -73,7 +73,7 @@ func testEncodeFloatT[T types.Float](t *testing.T) {
 	for _, c := range etests.MakeFloatTests[T](16) {
 		t.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(t *testing.T) {
 			x := AnalyzeFloat(c.Data, true, true)
-			e := EncodeFloat(x, c.Data, MAX_CASCADE)
+			e := EncodeFloat(x, c.Data)
 			require.Equal(t, len(c.Data), e.Len(), "x=%#v", x)
 			for i, v := range c.Data {
 				require.Equal(t, v, e.Get(i), "i=%d d=%x e=%s", i, c.Data, e.Info())
@@ -82,7 +82,7 @@ func testEncodeFloatT[T types.Float](t *testing.T) {
 	}
 }
 
-func testFloatContainer[T types.Float](t *testing.T, scheme FloatContainerType) {
+func testFloatContainer[T types.Float](t *testing.T, scheme ContainerType) {
 	// general
 	testFloatContainerEncode[T](t, scheme)
 	if t.Failed() {
@@ -102,15 +102,15 @@ func testFloatContainer[T types.Float](t *testing.T, scheme FloatContainerType) 
 	}
 }
 
-func testFloatContainerEncode[T types.Float](t *testing.T, scheme FloatContainerType) {
+func testFloatContainerEncode[T types.Float](t *testing.T, scheme ContainerType) {
 	for _, c := range etests.MakeShortFloatTests[T](int(scheme)) {
 		t.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(t *testing.T) {
 			enc := NewFloat[T](scheme)
 
 			// analyze and encode data into container
-			ctx := AnalyzeFloat(c.Data, true, true)
+			ctx := AnalyzeFloat(c.Data, true, true).WithLevel(1)
 			require.Greater(t, ctx.NumUnique, 0, "%#v", ctx)
-			enc.Encode(ctx, c.Data, 1)
+			enc.Encode(ctx, c.Data)
 			t.Logf("Info: %s", enc.Info())
 
 			// validate contents
@@ -138,7 +138,7 @@ func testFloatContainerEncode[T types.Float](t *testing.T, scheme FloatContainer
 
 			// validate append
 			dst := make([]T, 0, len(c.Data))
-			dst = enc2.AppendTo(nil, dst)
+			dst = enc2.AppendTo(dst, nil)
 			assert.Len(t, dst, len(c.Data))
 			assert.Equal(t, c.Data, dst)
 
@@ -146,7 +146,7 @@ func testFloatContainerEncode[T types.Float](t *testing.T, scheme FloatContainer
 			sel := util.RandUintsn[uint32](len(c.Data)/2, uint32(len(c.Data)))
 			clear(dst)
 			dst = dst[:0]
-			dst = enc2.AppendTo(sel, dst)
+			dst = enc2.AppendTo(dst, sel)
 			assert.Len(t, dst, len(sel))
 			for i, v := range sel {
 				assert.Equal(t, c.Data[v], dst[i], "sel[%d]", v)
@@ -158,14 +158,14 @@ func testFloatContainerEncode[T types.Float](t *testing.T, scheme FloatContainer
 	}
 }
 
-func testFloatContainerCompare[T types.Float](t *testing.T, scheme FloatContainerType) {
+func testFloatContainerCompare[T types.Float](t *testing.T, scheme ContainerType) {
 	// validate matchers
 	for _, sz := range etests.CompareSizes {
 		t.Run(fmt.Sprintf("%T/cmp/%d", T(0), sz), func(t *testing.T) {
 			src := etests.GenForFloatScheme[T](int(scheme), sz)
 			enc := NewFloat[T](scheme)
-			ctx := AnalyzeFloat(src, true, true)
-			enc.Encode(ctx, src, 1)
+			ctx := AnalyzeFloat(src, true, true).WithLevel(1)
+			enc.Encode(ctx, src)
 			t.Logf("Info: %s", enc.Info())
 
 			// equal
@@ -206,14 +206,14 @@ func testFloatContainerCompare[T types.Float](t *testing.T, scheme FloatContaine
 	}
 }
 
-func testFloatContainerIterator[T types.Float](t *testing.T, scheme FloatContainerType) {
+func testFloatContainerIterator[T types.Float](t *testing.T, scheme ContainerType) {
 	for _, sz := range etests.ItSizes {
 		t.Run(fmt.Sprintf("%T/it-next/%d", T(0), sz), func(t *testing.T) {
 			// setup
 			src := etests.GenForFloatScheme[T](int(scheme), sz)
 			enc := NewFloat[T](scheme)
-			ctx := AnalyzeFloat(src, true, true)
-			enc.Encode(ctx, src, 1)
+			ctx := AnalyzeFloat(src, true, true).WithLevel(1)
+			enc.Encode(ctx, src)
 			it := enc.Iterator()
 			if it == nil {
 				t.Skip()

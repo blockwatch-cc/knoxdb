@@ -12,7 +12,7 @@ import (
 	"blockwatch.cc/knoxdb/pkg/num"
 )
 
-// TIntegerConstant
+// TIntConstant
 type ConstContainer[T types.Integer] struct {
 	Val T
 	N   int
@@ -26,8 +26,8 @@ func (c *ConstContainer[T]) Close() {
 	putConstContainer[T](c)
 }
 
-func (c *ConstContainer[T]) Type() IntegerContainerType {
-	return TIntegerConstant
+func (c *ConstContainer[T]) Type() ContainerType {
+	return TIntConstant
 }
 
 func (c *ConstContainer[T]) Len() int {
@@ -38,18 +38,18 @@ func (c *ConstContainer[T]) Size() int {
 	return 1 + num.UvarintLen(c.Val) + num.UvarintLen(c.N)
 }
 
-func (c *ConstContainer[T]) Iterator() Iterator[T] {
+func (c *ConstContainer[T]) Iterator() NumberIterator[T] {
 	return NewConstIterator(c.Val, c.N)
 }
 
 func (c *ConstContainer[T]) Store(dst []byte) []byte {
-	dst = append(dst, byte(TIntegerConstant))
+	dst = append(dst, byte(TIntConstant))
 	dst = num.AppendUvarint(dst, uint64(c.Val))
 	return num.AppendUvarint(dst, uint64(c.N))
 }
 
 func (c *ConstContainer[T]) Load(buf []byte) ([]byte, error) {
-	if buf[0] != byte(TIntegerConstant) {
+	if buf[0] != byte(TIntConstant) {
 		return buf, ErrInvalidType
 	}
 	buf = buf[1:]
@@ -65,7 +65,7 @@ func (c *ConstContainer[T]) Get(_ int) T {
 	return c.Val
 }
 
-func (c *ConstContainer[T]) AppendTo(sel []uint32, dst []T) []T {
+func (c *ConstContainer[T]) AppendTo(dst []T, sel []uint32) []T {
 	n := c.N
 	if sel != nil {
 		n = len(sel)
@@ -98,7 +98,7 @@ func (c *ConstContainer[T]) AppendTo(sel []uint32, dst []T) []T {
 	return dst
 }
 
-func (c *ConstContainer[T]) Encode(ctx *IntegerContext[T], vals []T, lvl int) IntegerContainer[T] {
+func (c *ConstContainer[T]) Encode(ctx *Context[T], vals []T) NumberContainer[T] {
 	c.Val = ctx.Min
 	c.N = len(vals)
 	return c
@@ -171,30 +171,30 @@ type ConstFactory struct {
 	u8Pool  sync.Pool
 }
 
-func newConstContainer[T types.Integer]() IntegerContainer[T] {
+func newConstContainer[T types.Integer]() NumberContainer[T] {
 	switch any(T(0)).(type) {
 	case int64:
-		return constFactory.i64Pool.Get().(IntegerContainer[T])
+		return constFactory.i64Pool.Get().(NumberContainer[T])
 	case int32:
-		return constFactory.i32Pool.Get().(IntegerContainer[T])
+		return constFactory.i32Pool.Get().(NumberContainer[T])
 	case int16:
-		return constFactory.i16Pool.Get().(IntegerContainer[T])
+		return constFactory.i16Pool.Get().(NumberContainer[T])
 	case int8:
-		return constFactory.i8Pool.Get().(IntegerContainer[T])
+		return constFactory.i8Pool.Get().(NumberContainer[T])
 	case uint64:
-		return constFactory.u64Pool.Get().(IntegerContainer[T])
+		return constFactory.u64Pool.Get().(NumberContainer[T])
 	case uint32:
-		return constFactory.u32Pool.Get().(IntegerContainer[T])
+		return constFactory.u32Pool.Get().(NumberContainer[T])
 	case uint16:
-		return constFactory.u16Pool.Get().(IntegerContainer[T])
+		return constFactory.u16Pool.Get().(NumberContainer[T])
 	case uint8:
-		return constFactory.u8Pool.Get().(IntegerContainer[T])
+		return constFactory.u8Pool.Get().(NumberContainer[T])
 	default:
 		return nil
 	}
 }
 
-func putConstContainer[T types.Integer](c IntegerContainer[T]) {
+func putConstContainer[T types.Integer](c NumberContainer[T]) {
 	switch any(T(0)).(type) {
 	case int64:
 		constFactory.i64Pool.Put(c)

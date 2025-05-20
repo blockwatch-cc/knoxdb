@@ -4,90 +4,37 @@
 package encode
 
 import (
-	"errors"
 	"fmt"
 
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
-
-var (
-	ErrInvalidType = errors.New("invalid container type")
-)
-
-type IntegerContainerType byte
-
-const (
-	TIntegerConstant IntegerContainerType = iota
-	TIntegerDelta
-	TIntegerRunEnd
-	TIntegerBitpacked
-	TIntegerDictionary
-	TIntegerSimple8
-	TIntegerRaw
-	TInteger128
-	TInteger256
-)
-
-var (
-	iTypeNames    = "const_delta_run_bp_dict_s8_raw_i128_i256"
-	iTypeNamesOfs = []int{0, 6, 12, 16, 19, 24, 27, 31, 36, 41}
-)
-
-func (t IntegerContainerType) String() string {
-	return iTypeNames[iTypeNamesOfs[t] : iTypeNamesOfs[t+1]-1]
-}
-
-type IntegerContainer[T types.Integer] interface {
-	// introspect
-	Type() IntegerContainerType
-	Len() int
-	Info() string
-
-	// data access
-	Get(int) T
-	AppendTo([]uint32, []T) []T
-	Iterator() Iterator[T]
-
-	// encode
-	Encode(ctx *IntegerContext[T], vals []T, lvl int) IntegerContainer[T]
-
-	// IO
-	Size() int                   // helps dimension buffer before write
-	Store([]byte) []byte         // simple, composable, pre-alloc via Size
-	Load([]byte) ([]byte, error) // simple, composable
-	Close()                      // free resources
-
-	// matchers
-	types.NumberMatcher[T]
-}
 
 // NewInt creates a new integer container from scheme type.
-func NewInt[T types.Integer](scheme IntegerContainerType) IntegerContainer[T] {
+func NewInt[T types.Integer](scheme ContainerType) NumberContainer[T] {
 	switch scheme {
-	case TIntegerConstant:
+	case TIntConstant:
 		return newConstContainer[T]()
-	case TIntegerDelta:
+	case TIntDelta:
 		return newDeltaContainer[T]()
-	case TIntegerRunEnd:
+	case TIntRunEnd:
 		return newRunEndContainer[T]()
-	case TIntegerBitpacked:
+	case TIntBitpacked:
 		return newBitpackContainer[T]()
-	case TIntegerDictionary:
+	case TIntDictionary:
 		return newDictionaryContainer[T]()
-	case TIntegerSimple8:
+	case TIntSimple8:
 		return newSimple8Container[T]()
-	case TIntegerRaw:
+	case TIntRaw:
 		return newRawContainer[T]()
 	default:
-		panic(fmt.Errorf("invalid integer scheme %d", scheme))
+		panic(fmt.Errorf("invalid integer scheme %d (%s)", scheme, scheme))
 	}
 }
 
 // EncodeInt encodes an integer type slice into an integer container
 // selecting the most efficient encoding scheme.
-func EncodeInt[T types.Integer](ctx *IntegerContext[T], v []T, lvl int) IntegerContainer[T] {
+func EncodeInt[T types.Integer](ctx *Context[T], v []T) NumberContainer[T] {
 	// analyze full data if missing
 	if ctx == nil {
 		ctx = AnalyzeInt(v, true)
@@ -96,12 +43,12 @@ func EncodeInt[T types.Integer](ctx *IntegerContext[T], v []T, lvl int) IntegerC
 
 	// try all eligible encoding schemes
 	var (
-		bestScheme IntegerContainerType = TIntegerRaw
-		bestRatio  float64              = 1.0
+		bestScheme ContainerType = TIntRaw
+		bestRatio  float64       = 1.0
 	)
-	if lvl > 0 {
-		for _, scheme := range ctx.EligibleSchemes() {
-			if rd := EstimateInt(scheme, ctx, v, lvl); rd < bestRatio {
+	if ctx.Lvl > 0 {
+		for _, scheme := range ctx.EligibleIntSchemes() {
+			if rd := EstimateInt(ctx, scheme, v); rd < bestRatio {
 				bestRatio = rd
 				bestScheme = scheme
 			}
@@ -109,34 +56,33 @@ func EncodeInt[T types.Integer](ctx *IntegerContext[T], v []T, lvl int) IntegerC
 	}
 
 	// alloc best container and encode
-	return NewInt[T](bestScheme).Encode(ctx, v, lvl)
+	return NewInt[T](bestScheme).Encode(ctx, v)
 }
 
 // EstimateInt provides encoded size estimation without running the full encoder
 // in some cases. In others, particularly nested cases, we need a full encode but
 // on a small sample only.
-func EstimateInt[T types.Integer](scheme IntegerContainerType, ctx *IntegerContext[T], v []T, lvl int) float64 {
+func EstimateInt[T types.Integer](ctx *Context[T], scheme ContainerType, v []T) float64 {
 	// estimate cheap encodings
 	var (
-		sz      int = util.SizeOf[T]()
-		rawSize int = 1 + num.UvarintLen(len(v)) + len(v)*sz
+		rawSize int = ctx.rawCosts()
 		estSize int
 		ok      bool
 	)
 	switch scheme {
-	case TIntegerConstant:
+	case TIntConstant:
 		estSize, ok = 1+2*num.MaxVarintLen32, true
-	case TIntegerDelta:
+	case TIntDelta:
 		estSize, ok = 1+3*num.MaxVarintLen64, true
-	case TIntegerBitpacked:
+	case TIntBitpacked:
 		estSize, ok = ctx.bitPackCosts(), true
-	case TIntegerRaw:
+	case TIntRaw:
 		estSize, ok = rawSize, true
-	case TIntegerDictionary:
+	case TIntDictionary:
 		// upper bound for dict encoding using bit-packing as child base
 		// penalize dict at lower levels
-		estSize, ok = ctx.dictCosts()+100*(MAX_CASCADE-lvl), true
-	case TIntegerRunEnd:
+		estSize, ok = ctx.dictCosts()+100*(MAX_LEVEL-ctx.Lvl), true
+	case TIntRunEnd:
 		// upper bound for run end encoding using bit-packing as child base
 		estSize, ok = ctx.runEndCosts(), true
 	}
@@ -148,22 +94,20 @@ func EstimateInt[T types.Integer](scheme IntegerContainerType, ctx *IntegerConte
 	if ctx.Sample == nil {
 		ctx.Sample, ctx.FreeSample = Sample(v)
 		ctx.SampleCtx = AnalyzeInt(ctx.Sample, false)
+		ctx.SampleCtx.Lvl = ctx.Lvl
 	}
 
-	// adjust raw size to sample len
-	rawSize = 1 + num.UvarintLen(len(ctx.Sample)) + len(ctx.Sample)*sz
-
 	// trail encode the sample as simple8
-	enc := NewInt[T](scheme).Encode(ctx.SampleCtx, ctx.Sample, lvl)
+	enc := NewInt[T](scheme).Encode(ctx.SampleCtx, ctx.Sample)
 	estSize = enc.Size()
 	enc.Close()
 
-	return float64(estSize) / float64(rawSize)
+	return float64(estSize) / float64(ctx.SampleCtx.rawCosts())
 }
 
 // LoadInt loads an integer container from buffer.
-func LoadInt[T types.Integer](buf []byte) (IntegerContainer[T], error) {
-	c := NewInt[T](IntegerContainerType(buf[0]))
+func LoadInt[T types.Integer](buf []byte) (NumberContainer[T], error) {
+	c := NewInt[T](ContainerType(buf[0]))
 	if _, err := c.Load(buf); err != nil {
 		return nil, err
 	}

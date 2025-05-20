@@ -48,7 +48,7 @@ func TestInt256Encode(t *testing.T) {
 
 			// validate append
 			dst := num.MakeInt256Stride(c.N)
-			dst = enc.AppendTo(nil, dst)
+			dst = enc.AppendTo(dst, nil)
 			require.Equal(t, c.N, dst.Len())
 			require.Equal(t, c.Data, dst)
 
@@ -56,7 +56,7 @@ func TestInt256Encode(t *testing.T) {
 			sel := util.RandUintsn[uint32](max(1, c.N/2), uint32(c.N))
 			clear(dst.X0)
 			clear(dst.X1)
-			dst = enc2.AppendTo(sel, dst)
+			dst = enc2.AppendTo(dst, sel)
 			require.Equal(t, len(sel), dst.Len())
 			for i, v := range sel {
 				require.Equal(t, c.Data.Elem(int(v)), dst.Elem(i), "sel[%d]", v)
@@ -481,7 +481,7 @@ func BenchmarkInt256Decode(b *testing.B) {
 			for b.Loop() {
 				enc2, err := LoadInt256(buf)
 				require.NoError(b, err)
-				dst = enc2.AppendTo(nil, dst)
+				dst = enc2.AppendTo(dst, nil)
 				if once {
 					b.Log(enc2.Info())
 					once = false
