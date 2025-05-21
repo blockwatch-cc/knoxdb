@@ -7,24 +7,23 @@ import (
 // export definitions to use by external tooling
 
 type (
-	ContainerTypeInteger = encode.IntegerContainerType
-	ContainerTypeFloat   = encode.FloatContainerType
+	ContainerType = encode.ContainerType
 
-	ContextInt64   = encode.IntegerContext[int64]
-	ContextFloat64 = encode.FloatContext[float64]
+	ContextInt64   = encode.Context[int64]
+	ContextFloat64 = encode.Context[float64]
 
-	ContainerInt64   = encode.IntegerContainer[int64]
-	ContainerFloat64 = encode.FloatContainer[float64]
+	ContainerInt64   = encode.NumberContainer[int64]
+	ContainerFloat64 = encode.NumberContainer[float64]
 )
 
 const (
-	TIntegerConstant   = encode.TIntegerConstant
-	TIntegerDelta      = encode.TIntegerDelta
-	TIntegerRunEnd     = encode.TIntegerRunEnd
-	TIntegerBitpacked  = encode.TIntegerBitpacked
-	TIntegerDictionary = encode.TIntegerDictionary
-	TIntegerSimple8    = encode.TIntegerSimple8
-	TIntegerRaw        = encode.TIntegerRaw
+	TIntConstant   = encode.TIntConstant
+	TIntDelta      = encode.TIntDelta
+	TIntRunEnd     = encode.TIntRunEnd
+	TIntBitpacked  = encode.TIntBitpacked
+	TIntDictionary = encode.TIntDictionary
+	TIntSimple8    = encode.TIntSimple8
+	TIntRaw        = encode.TIntRaw
 
 	TFloatConstant   = encode.TFloatConstant
 	TFloatRunEnd     = encode.TFloatRunEnd
@@ -32,6 +31,16 @@ const (
 	TFloatAlp        = encode.TFloatAlp
 	TFloatAlpRd      = encode.TFloatAlpRd
 	TFloatRaw        = encode.TFloatRaw
+
+	TStringConstant   = encode.TStringConstant
+	TStringFixed      = encode.TStringFixed
+	TStringCompact    = encode.TStringCompact
+	TStringDictionary = encode.TStringDictionary
+
+	TBitmapZero   = encode.TBitmapZero
+	TBitmapOne    = encode.TBitmapOne
+	TBitmapDense  = encode.TBitmapDense
+	TBitmapSparse = encode.TBitmapSparse
 )
 
 var (
