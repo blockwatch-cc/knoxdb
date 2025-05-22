@@ -37,7 +37,7 @@ import (
 const (
 	Separator = ','
 	Comment   = '#'
-	Wrapper   = "\""
+	Wrapper   = `"`
 )
 
 type DecodeError struct {
@@ -320,8 +320,9 @@ func (d *Decoder) unmarshal(val reflect.Value, line string) error {
 			// (1) .. ,"", .. (2) ..," text text ", ..
 			combined = append(combined, v[1:len(v)-1])
 			merged = ""
-		case strings.HasPrefix(v, Wrapper):
-			// .. ," text, more text", .. (1st part)
+		// case strings.HasPrefix(v, Wrapper) && strings.Contains(v[1:], Wrapper) && len(tokens) > len(d.headerKeys):
+		case strings.HasPrefix(v, Wrapper) && len(tokens) > len(d.headerKeys):
+			// .. ," text, more text", .. (multipart text with separators)
 			merged = v[1:]
 		case strings.HasSuffix(v, Wrapper):
 			// .. ," text, more text", .. (2nd part)
@@ -329,10 +330,12 @@ func (d *Decoder) unmarshal(val reflect.Value, line string) error {
 			combined = append(combined, merged)
 			merged = ""
 		default:
-			// .. ," text, more, text", .. (middle part)
 			if merged != "" {
+				// .. ," text, more, text", .. (middle part)
 				merged = strings.Join([]string{merged, v}, string(d.sep))
 			} else {
+				// .. ,"text" more text, .. (partial quoted text)
+				// .. ," text, .. (stray quote)
 				combined = append(combined, v)
 			}
 		}
@@ -340,7 +343,12 @@ func (d *Decoder) unmarshal(val reflect.Value, line string) error {
 	tokens = combined
 
 	if len(tokens) != len(d.headerKeys) {
-		return &DecodeError{d.lineNo, 0, "number of fields does not match header", nil}
+		return &DecodeError{
+			d.lineNo,
+			0,
+			fmt.Sprintf("number of fields (%d) does not match header (%d)", len(tokens), len(d.headerKeys)),
+			nil,
+		}
 	}
 
 	// Load value from interface, but only if the result will be
@@ -367,7 +375,7 @@ func (d *Decoder) unmarshal(val reflect.Value, line string) error {
 		}
 
 		// remove double quotes
-		tokens[i] = strings.ReplaceAll(tokens[i], "\"\"", "\"")
+		tokens[i] = strings.ReplaceAll(tokens[i], `\\`, `"`)
 
 		// handle maps
 		if val.Kind() == reflect.Map {
@@ -461,6 +469,10 @@ func setValue(dst reflect.Value, src, fName string) error {
 
 	dst0 := dst
 	if dst.Kind() == reflect.Ptr {
+		if src == "null" {
+			dst.SetZero()
+			return nil
+		}
 		if dst.IsNil() {
 			dst.Set(reflect.New(dst.Type().Elem()))
 		}
