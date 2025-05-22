@@ -21,8 +21,8 @@ Examples
 
 This example assumes your CSV file contains a header who's values match the struct tags defined on the Go type FrameInfo. CSV fields that are undefined in the type are ignored.
 
-```
-import "blockwatch.cc/knoxdb/encoding/csv"
+```go
+import "blockwatch.cc/knoxdb/pkg/csv"
 
 type FrameInfo struct {
 	ActiveImageHeight  int      `csv:"Active Image Height"`
@@ -53,7 +53,7 @@ func ReadFile(path string) (FrameSequence, error) {
 ```
 
 ### Fail when encountering unknown CSV fields
-```
+```go
 func ReadFileUnknown(path string) (FrameSequence, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -70,7 +70,7 @@ func ReadFileUnknown(path string) (FrameSequence, error) {
 ```
 
 ### Parsing an unknown CSV file into a slice of maps
-```
+```go
 type GenericRecord struct {
 	Record map[string]string `csv:,any`
 }
@@ -93,7 +93,7 @@ func ReadFileIntoMap(path string) (GenericCSV, error) {
 ```
 
 ### Stream-process CSV input
-```
+```go
 func ReadStream(r io.Reader) error {
 	dec := csv.NewDecoder(r)
 
