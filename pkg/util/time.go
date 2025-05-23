@@ -350,6 +350,10 @@ func (t Time) UnixNano() int64 {
 	return t.tm.UnixNano()
 }
 
+func (t Time) UnixDays() int {
+	return int(t.Time().Sub(time.Unix(0, 0)) / (24 * time.Hour))
+}
+
 func UnixNonZero(t time.Time) int64 {
 	if t.IsZero() {
 		return 0
