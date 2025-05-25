@@ -356,29 +356,41 @@ func Indexes(src []byte, size int, dst []uint32) int {
 	if size > 0 {
 		src[len(src)-1] &= bytemask(size)
 	}
-	var j int
-	var big int = (len(src) >> 3) << 3
-	var i uint32 = 0xffffffff
-	var n int
-	for n = 0; n < big; n += 8 {
-		if binary.BigEndian.Uint64(src[n:n+8]) == 0 {
-			i += 64
+	var (
+		i   int                 // input index
+		j   int                 // output index
+		val uint32 = 0xffffffff // running index
+	)
+	for _, word := range util.FromByteSlice[uint64](src) {
+		if word == 0 {
+			val += 64
+			i += 8
 			continue
 		}
-		for _, b := range src[n : n+8] {
-			for k, l := 0, int(LengthTable[b]); k < l; k++ {
-				dst[j] = DecodeTable[int(b)<<3+k] + i
-				j++
+		for range 8 {
+			b := word & 0xff
+			if b > 0 {
+				dtab := DecodeTable[b<<3:]
+				for k := range LengthTable[b] {
+					dst[j] = dtab[k] + val
+					j++
+				}
 			}
-			i += 8
-		}
-	}
-	for _, b := range src[n:] {
-		for k, l := 0, int(LengthTable[b]); k < l; k++ {
-			dst[j] = DecodeTable[int(b)<<3+k] + i
-			j++
+			val += 8
+			word >>= 8
 		}
 		i += 8
+	}
+	// tail
+	for _, b := range src[len(src)&^7:] {
+		if b > 0 {
+			dtab := DecodeTable[int(b)<<3:]
+			for k := range LengthTable[b] {
+				dst[j] = dtab[k] + val
+				j++
+			}
+		}
+		val += 8
 	}
 	return j
 }

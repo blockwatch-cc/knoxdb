@@ -555,6 +555,7 @@ func TestBitsetIndexAVX2(t *testing.T) {
 	for _, c := range runTestcases {
 		c.Buf = append(c.Buf, 0xff)
 		c.Buf = c.Buf[:len(c.Buf)-1]
+		// ensure pow2 space to prevent out of bounds AVX2 write
 		idx := make([]uint32, len(c.Idx)+8)
 		var ret = Indexes(c.Buf, c.Size, idx)
 		if got, want := ret, popcount_ref(c.Buf); got != want {

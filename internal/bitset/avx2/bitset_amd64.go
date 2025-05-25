@@ -102,6 +102,7 @@ func Neg(src []byte, size int) {
 	src[len(src)-1] &= bytemask(size)
 }
 
+// dst must have multiples of 8 capacity to prevent out of bounds AVX2 write
 func Indexes(src []byte, size int, dst []uint32) int {
 	if size > 0 {
 		src[len(src)-1] &= bytemask(size)

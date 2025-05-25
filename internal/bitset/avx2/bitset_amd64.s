@@ -113,9 +113,9 @@ prep_i8:
 
 loop_i8:
 	BITSET_I8(ANDB)
-	INCQ	DI
-	INCQ	SI
-	DECL	BX
+	ADDQ	$1, DI
+	ADDQ	$1, SI
+	SUBQ	$1, BX
 	JZ		done
 	JMP		loop_i8
 
@@ -193,9 +193,9 @@ loop_i8:
 	NOTB	AX
 	ANDB	0(SI), AX
 	MOVB	AX, 0(SI)
-	INCQ	DI
-	INCQ	SI
-	DECL	BX
+	ADDQ	$1, DI
+	ADDQ	$1, SI
+	SUBQ	$1, BX
 	JZ		done
 	JMP		loop_i8
 
@@ -267,9 +267,9 @@ prep_i8:
 
 loop_i8:
 	BITSET_I8(ORB)
-	INCQ	DI
-	INCQ	SI
-	DECL	BX
+	ADDQ	$1, DI
+	ADDQ	$1, SI
+	SUBQ	$1, BX
 	JZ		done
 	JMP		loop_i8
 
@@ -341,9 +341,9 @@ prep_i8:
 
 loop_i8:
 	BITSET_I8(XORB)
-	INCQ	DI
-	INCQ	SI
-	DECL	BX
+	ADDQ	$1, DI
+	ADDQ	$1, SI
+	SUBQ	$1, BX
 	JZ		done
 	JMP		loop_i8
 
@@ -489,9 +489,9 @@ prep_i8:
 
 loop_i8:
 	BITSET_I8_FLAG(ANDB)
-	INCQ	DI
-	INCQ	SI
-	DECL	BX
+	ADDQ	$1, DI
+	ADDQ	$1, SI
+	SUBQ	$1, BX
 	JZ		done
 	JMP		loop_i8
 
@@ -580,9 +580,9 @@ prep_i8:
 
 loop_i8:
 	BITSET_I8_FLAG(ORB)
-	INCQ	DI
-	INCQ	SI
-	DECL	BX
+	ADDQ	$1, DI
+	ADDQ	$1, SI
+	SUBQ	$1, BX
 	JZ		done
 	JMP		loop_i8
 
@@ -678,8 +678,8 @@ loop_i8:
 	MOVB	0(SI), AX
 	NOTB 	AX
 	MOVB	AX, 0(SI)
-	INCQ	SI
-	DECL	BX
+	ADDQ	$1, SI
+	SUBQ	$1, BX
 	JZ		done
 	JMP		loop_i8
 
@@ -895,8 +895,8 @@ loop_i8:
 	MOVB	(SI), R8
 	POPCNTW R8, R8
 	ADDQ    R8, AX
-	INCQ	SI
-	DECL	BX
+	ADDQ	$1, SI
+	SUBQ	$1, BX
 	JZ	 	done
 	JMP		loop_i8
 
@@ -1028,9 +1028,9 @@ loop_i8:
 	CMPB	(SI), $0
 	JNZ		found
 
-    VPADDD          Y10, Y13, Y10       // Y10 = Y10 + 8
-    INCQ    SI
-	DECL	CX
+    VPADDD  Y10, Y13, Y10       // Y10 = Y10 + 8
+    ADDQ    $1, SI
+	SUBQ	$1, CX
 	JZ		done
 	JMP		loop_i8
 
@@ -1048,22 +1048,22 @@ found:
 
     XORQ            R8, R8
     MOVB            (SI), R8            // R8 = bitmap[BX]  
-    LEAQ            (R8*8), R12         // Y9 = decodeTable[8*R8,...]
-    VMOVDQU         (BP)(R12*4), Y9
+    LEAQ            (R8*8), R12         // R12 = (decodeTable[8*R8])
+    VMOVDQU         (BP)(R12*4), Y9     // Y9 = decodeTable[8*R8,...] (8x u32)
 
-	VMOVD	        BX, X11              // no direct broadcast in AVX2
-    VPSLLD          $3, X11, X11
-    VPBROADCASTD    X11, Y12             // Y12 = 8*BX
-    VPADDD          Y10, Y12, Y10       // Y10 = Y10 + 8*BX
-    VPADDD          Y9, Y10, Y9         // Y9 = Y9 + Y10
+	VMOVD	        BX, X11             // X11 = leading zero bytes (no direct broadcast in AVX2)
+    VPSLLD          $3, X11, X11        // X11 = leading zero bits
+    VPBROADCASTD    X11, Y12            // Y12 = leading zero bits
+    VPADDD          Y10, Y12, Y10       // Y10 = Y10 + 8*BX (current bitset position)
+    VPADDD          Y9, Y10, Y9         // Y9 = Y9 + Y10 (decodeTable + current position)
 
-    VMOVDQU         Y9, (DI)            // [DI] = Y9
+    VMOVDQU         Y9, (DI)            // [DI] = Y9 (write 8x u32 to dst)
     XORQ            R14, R14
     MOVB            (DX)(R8*1), R14     // R14 = lengthTable[R8]
     LEAQ            (DI)(R14*4), DI     // DI = DI + 4*R14
     
     VPADDD          Y10, Y13, Y10       // Y10 = Y10 + 8
-    INCQ            SI
+    ADDQ            $1, SI
     SUBQ            $1, CX
     JMP             start
 

@@ -496,17 +496,19 @@ func TestBitNegGeneric(t *testing.T) {
 
 func TestBitsetIndexGeneric(t *testing.T) {
 	for _, c := range runTestcases {
-		idx := make([]uint32, len(c.Idx))
-		var ret = Indexes(c.Buf, c.Size, idx)
-		if got, want := ret, popcount(c.Buf); got != want {
-			t.Errorf("%s: unexpected index vector length %d, expected %d", c.Name, got, want)
-		}
-		if got, want := ret, len(c.Idx); got != want {
-			t.Errorf("%s: unexpected return value %d, expected %d", c.Name, got, want)
-		}
-		if !reflect.DeepEqual(idx, c.Idx) {
-			t.Errorf("%s: unexpected result %d, expected %d", c.Name, idx, c.Idx)
-		}
+		t.Run(c.Name, func(t *testing.T) {
+			idx := make([]uint32, len(c.Idx))
+			var ret = Indexes(c.Buf, c.Size, idx)
+			if got, want := ret, popcount(c.Buf); got != want {
+				t.Errorf("%s: unexpected index vector length %d, expected %d", c.Name, got, want)
+			}
+			if got, want := ret, len(c.Idx); got != want {
+				t.Errorf("%s: unexpected return value %d, expected %d", c.Name, got, want)
+			}
+			if !reflect.DeepEqual(idx, c.Idx) {
+				t.Errorf("%s: unexpected result %d, expected %d", c.Name, idx, c.Idx)
+			}
+		})
 	}
 }
 
