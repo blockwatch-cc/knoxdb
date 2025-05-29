@@ -15,6 +15,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/assert"
 	"blockwatch.cc/knoxdb/pkg/schema"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 type Converter interface {
@@ -77,43 +78,38 @@ func (c *RelinkConverter) ConvertPack(pkg *pack.Package, mode pack.WriteMode) *p
 		// convert first block to u64
 		if i == 0 && b.Type() != block.BlockUint64 {
 			u64 := block.New(block.BlockUint64, pkg.Len())
+			acc := u64.Uint64()
 			switch b.Type() {
-			case block.BlockTime:
-				for _, v := range b.Int64().Slice() {
-					u64.Append(uint64(v))
-				}
 			case block.BlockInt64:
-				for _, v := range b.Int64().Slice() {
-					u64.Append(uint64(v))
-				}
+				copy(u64.Int64().Slice(), b.Int64().Slice())
 			case block.BlockInt32:
 				for _, v := range b.Int32().Slice() {
-					u64.Append(uint64(v))
+					acc.Append(uint64(v))
 				}
 			case block.BlockInt16:
 				for _, v := range b.Int16().Slice() {
-					u64.Append(uint64(v))
+					acc.Append(uint64(v))
 				}
 			case block.BlockInt8:
 				for _, v := range b.Int8().Slice() {
-					u64.Append(uint64(v))
+					acc.Append(uint64(v))
 				}
 			case block.BlockUint32:
 				for _, v := range b.Uint32().Slice() {
-					u64.Append(uint64(v))
+					acc.Append(uint64(v))
 				}
 			case block.BlockUint16:
 				for _, v := range b.Uint16().Slice() {
-					u64.Append(uint64(v))
+					acc.Append(uint64(v))
 				}
 			case block.BlockUint8:
 				for _, v := range b.Uint8().Slice() {
-					u64.Append(uint64(v))
+					acc.Append(uint64(v))
 				}
 			}
 			b = u64
 		} else {
-			b.IncRef()
+			b.Ref()
 		}
 		ipkg.WithBlock(i, b)
 	}
@@ -133,7 +129,7 @@ func (c *SimpleHashConverter) ConvertPack(pkg *pack.Package, mode pack.WriteMode
 	ipkg.WithBlock(0, pkg.Block(c.hashBlock).Hash())
 	for i, v := range c.srcBlocks {
 		b := pkg.Block(v)
-		b.IncRef()
+		b.Ref()
 		ipkg.WithBlock(i+1, b)
 	}
 	ipkg.UpdateLen()
@@ -197,7 +193,7 @@ func (c *CompositeHashConverter) ConvertPack(pkg *pack.Package, mode pack.WriteM
 	// relink other source blocks in index schema order
 	for i, v := range c.srcBlocks {
 		b := pkg.Block(v)
-		b.IncRef()
+		b.Ref()
 		ipkg.WithBlock(i+1, b)
 	}
 
@@ -229,7 +225,7 @@ func (c *CompositeHashConverter) ConvertPack(pkg *pack.Package, mode pack.WriteM
 		for _, n := range c.hashBlocks {
 			b := pkg.Block(n)
 			switch b.Type() {
-			case block.BlockTime, block.BlockInt64, block.BlockUint64, block.BlockFloat64:
+			case block.BlockInt64, block.BlockUint64, block.BlockFloat64:
 				LE.PutUint64(x[:], b.Uint64().Get(i))
 				hasher.Write(x[:])
 			case block.BlockInt32, block.BlockUint32, block.BlockFloat32:
@@ -241,17 +237,13 @@ func (c *CompositeHashConverter) ConvertPack(pkg *pack.Package, mode pack.WriteM
 			case block.BlockInt8, block.BlockUint8:
 				hasher.Write([]byte{b.Uint8().Get(i)})
 			case block.BlockBool:
-				if b.Bool().Contains(i) {
-					hasher.Write([]byte{1})
-				} else {
-					hasher.Write([]byte{0})
-				}
+				hasher.Write([]byte{util.Bool2byte(b.Bool().Get(i))})
 			case block.BlockBytes:
-				hasher.Write(b.Bytes().Elem(i))
+				hasher.Write(b.Bytes().Get(i))
 			case block.BlockInt128:
-				hasher.Write(b.Int128().Elem(i).Bytes())
+				hasher.Write(b.Int128().Get(i).Bytes())
 			case block.BlockInt256:
-				hasher.Write(b.Int256().Elem(i).Bytes())
+				hasher.Write(b.Int256().Get(i).Bytes())
 			}
 		}
 		u64.Append(hasher.Sum64())

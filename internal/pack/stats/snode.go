@@ -14,7 +14,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/store"
-	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/assert"
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
@@ -109,18 +108,19 @@ func (n *SNode) AppendPack(pkg *pack.Package) bool {
 	n.spack.Block(STATS_ROW_KEY).Uint32().Append(pkg.Key())
 	n.spack.Block(STATS_ROW_SCHEMA).Uint64().Append(pkg.Schema().Hash())
 	n.spack.Block(STATS_ROW_NVALS).Int64().Append(int64(pkg.Len()))
-	n.spack.Block(STATS_ROW_SIZE).Int64().Append(pkg.Analysis().SizeDiff())
+	n.spack.Block(STATS_ROW_SIZE).Int64().Append(pkg.Stats().SizeDiff())
 
-	fields := pkg.Schema().Exported()
+	pstats := pkg.Stats()
 	for i, b := range pkg.Blocks() {
 		var minv, maxv any
 		if b == nil {
 			// use zero values for invalid blocks (deleted from schema)
-			minv = types.BlockTypes[fields[i].Type].Zero()
+			minv = b.Type().Zero()
 			maxv = minv
 		} else {
-			// calculate min/max statistics
-			minv, maxv = b.MinMax()
+			// reference min/max statistics
+			minv = pstats.MinMax[i][0]
+			maxv = pstats.MinMax[i][1]
 		}
 
 		// calculate data column positions inside statistics schema
@@ -143,15 +143,16 @@ func (n *SNode) UpdatePack(pkg *pack.Package) bool {
 	}
 
 	// update data statistics on change
-	analyze := pkg.Analysis()
+	pstats := pkg.Stats()
 	for i, b := range pkg.Blocks() {
 		// skip invalid blocks (deleted from schema) and non-dirty blocks
-		if b == nil || !analyze.WasDirty[i] {
+		if b == nil || !pstats.WasDirty[i] {
 			continue
 		}
 
-		// calculate min/max statistics
-		minv, maxv := b.MinMax()
+		// reference min/max statistics
+		minv := pstats.MinMax[i][0]
+		maxv := pstats.MinMax[i][1]
 
 		// calculate data column positions inside statistics schema
 		minx, maxx := minColIndex(i), maxColIndex(i)
@@ -180,7 +181,7 @@ func (n *SNode) UpdatePack(pkg *pack.Package) bool {
 		n.spack.Block(STATS_ROW_NVALS).Set(k, int64(pkg.Len()))
 		n.dirty = true
 	}
-	if diff, sz := n.spack.Int64(STATS_ROW_SIZE, k), analyze.SizeDiff(); diff != 0 {
+	if diff, sz := n.spack.Int64(STATS_ROW_SIZE, k), pstats.SizeDiff(); diff != 0 {
 		n.spack.Block(STATS_ROW_SIZE).Set(k, sz+diff)
 		n.dirty = true
 	}
@@ -201,7 +202,7 @@ func (n *SNode) DeletePack(pkg *pack.Package) bool {
 	}
 
 	// remove statistics row
-	err := n.spack.Delete(i, 1)
+	err := n.spack.Delete(i, i+1)
 	if err != nil {
 		assert.Unreachable("delete", err)
 	}
@@ -226,7 +227,7 @@ func (n *SNode) PrepareWrite(ctx context.Context, b store.Bucket) (*SNode, error
 		return nil, err
 	}
 
-	// materialize in-place
+	// materialize all blocks in-place
 	clone.spack.Materialize()
 
 	// use clone

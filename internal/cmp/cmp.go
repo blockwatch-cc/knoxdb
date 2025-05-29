@@ -94,15 +94,6 @@ var (
 	Float64GreaterEqual = cmp_ge_f[float64]
 	Float64Between      = cmp_bw_f[float64]
 
-	// bytes
-	BytesEqual        = cmp_bytes_eq
-	BytesNotEqual     = cmp_bytes_ne
-	BytesLess         = cmp_bytes_lt
-	BytesLessEqual    = cmp_bytes_le
-	BytesGreater      = cmp_bytes_gt
-	BytesGreaterEqual = cmp_bytes_ge
-	BytesBetween      = cmp_bytes_bw
-
 	// int128
 	Int128Equal        = cmp_i128_eq
 	Int128NotEqual     = cmp_i128_ne

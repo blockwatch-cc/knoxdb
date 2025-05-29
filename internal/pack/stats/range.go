@@ -15,7 +15,6 @@ import (
 	"math/bits"
 
 	"blockwatch.cc/knoxdb/internal/block"
-	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/util"
@@ -99,12 +98,12 @@ func (idx RangeIndex) Bytes() []byte {
 	return idx.buf
 }
 
-func (idx RangeIndex) Range(val, minVal int) pack.Range {
+func (idx RangeIndex) Range(val, minVal int) types.Range {
 	slot, ok := getSlot(val, minVal)
 	if !ok || slot >= len(idx.lower) {
-		return pack.InvalidRange
+		return types.InvalidRange
 	}
-	return pack.Range{idx.lower[slot], idx.upper[slot] - 1}
+	return types.Range{idx.lower[slot], idx.upper[slot] - 1}
 }
 
 // Query returns a vector range according to filter mode and value. Note that
@@ -114,33 +113,33 @@ func (idx RangeIndex) Range(val, minVal int) pack.Range {
 // out of range upper bound on range/in/greater queries would not perfectly
 // be detected as out of bounds. Given the imprecise nature for large values
 // in general this is still acceptable.
-func (idx RangeIndex) Query(flt *query.Filter, minVal any, nRows int) pack.Range {
+func (idx RangeIndex) Query(flt *query.Filter, minVal any, nRows int) types.Range {
 	switch flt.Mode {
 	case types.FilterModeEqual:
 		slot, ok := getSlotTyped(flt.Type, flt.Value, minVal)
 		if !ok || slot >= len(idx.lower) {
-			return pack.InvalidRange
+			return types.InvalidRange
 		}
-		return pack.Range{idx.lower[slot], idx.upper[slot] - 1}
+		return types.Range{idx.lower[slot], idx.upper[slot] - 1}
 
 	case types.FilterModeLt:
 		endSlot, ok := getSlotTyped(flt.Type, flt.Type.Dec(flt.Value), minVal)
 		if !ok {
-			return pack.InvalidRange
+			return types.InvalidRange
 		}
 		return idx.mergeRange(0, endSlot, uint32(nRows))
 
 	case types.FilterModeLe:
 		endSlot, ok := getSlotTyped(flt.Type, flt.Value, minVal)
 		if !ok {
-			return pack.InvalidRange
+			return types.InvalidRange
 		}
 		return idx.mergeRange(0, endSlot, uint32(nRows))
 
 	case types.FilterModeGt:
 		startSlot, ok := getSlotTyped(flt.Type, flt.Type.Inc(flt.Value), minVal)
 		if ok && startSlot >= len(idx.lower) {
-			return pack.InvalidRange
+			return types.InvalidRange
 		} else if !ok {
 			startSlot = 0
 		}
@@ -149,7 +148,7 @@ func (idx RangeIndex) Query(flt *query.Filter, minVal any, nRows int) pack.Range
 	case types.FilterModeGe:
 		startSlot, ok := getSlotTyped(flt.Type, flt.Value, minVal)
 		if ok && startSlot >= len(idx.lower) {
-			return pack.InvalidRange
+			return types.InvalidRange
 		} else if !ok {
 			startSlot = 0
 		}
@@ -159,13 +158,13 @@ func (idx RangeIndex) Query(flt *query.Filter, minVal any, nRows int) pack.Range
 		rv := flt.Value.(query.RangeValue)
 		startSlot, ok := getSlotTyped(flt.Type, rv[0], minVal)
 		if ok && startSlot >= len(idx.lower) {
-			return pack.InvalidRange
+			return types.InvalidRange
 		} else if !ok {
 			startSlot = 0
 		}
 		endSlot, ok := getSlotTyped(flt.Type, rv[1], minVal)
 		if !ok {
-			return pack.InvalidRange
+			return types.InvalidRange
 		}
 		return idx.mergeRange(startSlot, endSlot, uint32(nRows))
 
@@ -175,27 +174,27 @@ func (idx RangeIndex) Query(flt *query.Filter, minVal any, nRows int) pack.Range
 		minFlt, maxFlt, _ := flt.Type.Range(flt.Value)
 		startSlot, ok := getSlotTyped(flt.Type, minFlt, minVal)
 		if ok && startSlot >= len(idx.lower) {
-			return pack.InvalidRange
+			return types.InvalidRange
 		} else if !ok {
 			startSlot = 0
 		}
 		endSlot, ok := getSlotTyped(flt.Type, maxFlt, minVal)
 		if !ok {
-			return pack.InvalidRange
+			return types.InvalidRange
 		}
 		return idx.mergeRange(startSlot, endSlot, uint32(nRows))
 
 	default:
 		// other filter modes are unsupported (NE, NIN)
-		return pack.Range{0, uint32(nRows)}
+		return types.Range{0, uint32(nRows)}
 	}
 }
 
-func (idx RangeIndex) mergeRange(start, end int, maxRange uint32) pack.Range {
+func (idx RangeIndex) mergeRange(start, end int, maxRange uint32) types.Range {
 	// bounds check
 	l := idx.NumSlots()
 	if start >= l {
-		return pack.InvalidRange
+		return types.InvalidRange
 	}
 	end = min(end, l-1)
 
@@ -228,7 +227,7 @@ func (idx RangeIndex) mergeRange(start, end int, maxRange uint32) pack.Range {
 		}
 	}
 
-	return pack.Range{lower, upper - 1}
+	return types.Range{lower, upper - 1}
 }
 
 func buildRangeIndex[T constraints.Integer](src []T, minVal, maxVal T) *RangeIndex {

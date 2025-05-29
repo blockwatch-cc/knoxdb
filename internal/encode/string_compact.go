@@ -92,19 +92,19 @@ func (c *CompactStringContainer) Get(i int) []byte {
 	return c.buf[ofs : ofs+len]
 }
 
-func (c *CompactStringContainer) Iterator() iter.Seq[[]byte] {
-	return func(fn func([]byte) bool) {
+func (c *CompactStringContainer) Iterator() iter.Seq2[int, []byte] {
+	return func(fn func(int, []byte) bool) {
 		for i := range c.n {
 			ofs := c.ofs.Get(i)
 			len := c.len.Get(i)
-			if !fn(c.buf[ofs : ofs+len]) {
+			if !fn(i, c.buf[ofs:ofs+len]) {
 				return
 			}
 		}
 	}
 }
 
-func (c *CompactStringContainer) AppendTo(dst types.StringSetter, sel []uint32) {
+func (c *CompactStringContainer) AppendTo(dst types.StringWriter, sel []uint32) {
 	if sel == nil {
 		for i := range c.n {
 			ofs := c.ofs.Get(i)
@@ -128,21 +128,19 @@ func (c *CompactStringContainer) Encode(ctx *StringContext, vals types.StringAcc
 	uniq := arena.Alloc[int32](ctx.NumUnique)
 
 	// compact and reference duplicates
-	var i int32
-	for v := range vals.Iterator() {
+	for i, v := range vals.Iterator() {
 		k := ctx.Dups[i]
 		if k < 0 {
 			// append non duplicate
 			offs[i] = uint32(len(buf))
 			size[i] = uint32(len(v))
 			buf = append(buf, v...)
-			uniq = append(uniq, i)
+			uniq = append(uniq, int32(i))
 		} else {
 			// reference as duplicate
 			offs[i] = offs[uniq[k]]
 			size[i] = size[uniq[k]]
 		}
-		i++
 	}
 	arena.Free(uniq)
 

@@ -7,8 +7,7 @@ import (
 	"fmt"
 	"math"
 	"math/bits"
-
-	"golang.org/x/exp/slices"
+	"slices"
 )
 
 var (
@@ -167,7 +166,7 @@ func mkI64(name string, src []int64, match, match2 int64, result []byte, length 
 	if len(src)%8 != 0 {
 		panic(fmt.Errorf("i64 %s: length of slice has to be a multiple of 8", name))
 	}
-	if len(result) != bitFieldLen(len(src)) {
+	if len(result) != BitFieldLen(len(src)) {
 		panic(fmt.Errorf("i64 %s: length of slice and length of result does not match", name))
 	}
 
@@ -181,7 +180,7 @@ func mkI64(name string, src []int64, match, match2 int64, result []byte, length 
 
 	// create new result at requested length
 	result = slices.Clone(result)
-	l = bitFieldLen(length)
+	l = BitFieldLen(length)
 	for l > len(result) {
 		result = append(result, result...)
 	}

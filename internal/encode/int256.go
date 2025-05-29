@@ -11,6 +11,28 @@ import (
 	"blockwatch.cc/knoxdb/pkg/num"
 )
 
+type Int256Context struct {
+	Min       num.Int256
+	Max       num.Int256
+	NumValues int
+}
+
+// AnalyzeInt256 produces statistics
+func AnalyzeInt256(v *num.Int256Stride) *Int256Context {
+	minv, maxv := v.MinMax()
+	return &Int256Context{
+		Min:       minv,
+		Max:       maxv,
+		NumValues: v.Len(),
+	}
+}
+
+func (c *Int256Context) Close() {}
+
+func (c *Int256Context) MinMax() (any, any) {
+	return c.Min, c.Max
+}
+
 type Int256Container struct {
 	X0 NumberContainer[int64]
 	X1 NumberContainer[uint64]
@@ -25,8 +47,8 @@ func NewInt256() *Int256Container {
 
 // EncodeInt256 encodes a strided 256-bit integer vector
 // selecting the most efficient encoding schemes per stride.
-func EncodeInt256(v num.Int256Stride) *Int256Container {
-	return NewInt256().Encode(v)
+func EncodeInt256(ctx *Int256Context, v *num.Int256Stride) *Int256Container {
+	return NewInt256().Encode(ctx, v)
 }
 
 // LoadInt256 loads a 256bit integer container from buffer.
@@ -108,7 +130,7 @@ func (c *Int256Container) Get(n int) num.Int256 {
 	return num.Int256{uint64(c.X0.Get(n)), c.X1.Get(n), c.X2.Get(n), c.X3.Get(n)}
 }
 
-func (c *Int256Container) AppendTo(dst num.Int256Stride, sel []uint32) num.Int256Stride {
+func (c *Int256Container) AppendTo(dst *num.Int256Stride, sel []uint32) *num.Int256Stride {
 	dst.X0 = c.X0.AppendTo(dst.X0[:0], sel)
 	dst.X1 = c.X1.AppendTo(dst.X1[:0], sel)
 	dst.X2 = c.X2.AppendTo(dst.X2[:0], sel)
@@ -116,10 +138,32 @@ func (c *Int256Container) AppendTo(dst num.Int256Stride, sel []uint32) num.Int25
 	return dst
 }
 
-func (c *Int256Container) Encode(vals num.Int256Stride) *Int256Container {
-	c.X0 = EncodeInt(nil, vals.X0)
-	c.X1 = EncodeInt(nil, vals.X1)
-	c.X2 = EncodeInt(nil, vals.X2)
+func (c *Int256Container) Encode(ctx *Int256Context, vals *num.Int256Stride) *Int256Container {
+	bl := 256
+	if ctx != nil {
+		bl = max(ctx.Max.BitLen(), ctx.Min.BitLen())
+	}
+	if bl <= 192 {
+		vctx := NewIntContext[int64](0, 0, vals.Len())
+		c.X0 = EncodeInt(vctx, vals.X0)
+		vctx.Close()
+	} else {
+		c.X0 = EncodeInt(nil, vals.X0)
+	}
+	if bl <= 128 {
+		vctx := NewIntContext[uint64](0, 0, vals.Len())
+		c.X1 = EncodeInt(vctx, vals.X1)
+		vctx.Close()
+	} else {
+		c.X1 = EncodeInt(nil, vals.X1)
+	}
+	if bl <= 64 {
+		vctx := NewIntContext[uint64](0, 0, vals.Len())
+		c.X2 = EncodeInt(vctx, vals.X2)
+		vctx.Close()
+	} else {
+		c.X2 = EncodeInt(nil, vals.X2)
+	}
 	c.X3 = EncodeInt(nil, vals.X3)
 	return c
 }
@@ -193,9 +237,9 @@ func (c *Int256Container) match(cmpFn I256MatchFunc, val num.Int256, bits, mask 
 
 		// compare
 		if mask != nil {
-			cnt += cmpFn(*src, val, buf[i>>3:], mask.Bytes()[i>>3:])
+			cnt += cmpFn(src, val, buf[i>>3:], mask.Bytes()[i>>3:])
 		} else {
-			cnt += cmpFn(*src, val, buf[i>>3:], nil)
+			cnt += cmpFn(src, val, buf[i>>3:], nil)
 		}
 
 		i += n
@@ -230,9 +274,9 @@ func (c *Int256Container) matchRange(cmpFn I256RangeMatchFunc, a, b num.Int256, 
 
 		// compare
 		if mask != nil {
-			cnt += cmpFn(*src, a, b, buf[i>>3:], mask.Bytes()[i>>3:])
+			cnt += cmpFn(src, a, b, buf[i>>3:], mask.Bytes()[i>>3:])
 		} else {
-			cnt += cmpFn(*src, a, b, buf[i>>3:], nil)
+			cnt += cmpFn(src, a, b, buf[i>>3:], nil)
 		}
 
 		i += n
@@ -325,7 +369,7 @@ func (it *Int256Iterator) Get(n int) num.Int256 {
 	if base := chunkBase(n); base != it.base {
 		it.fill(base)
 	}
-	return it.chunk.Elem(chunkPos(n))
+	return it.chunk.Get(chunkPos(n))
 }
 
 func (it *Int256Iterator) Next() (num.Int256, bool) {
@@ -344,7 +388,7 @@ func (it *Int256Iterator) Next() (num.Int256, bool) {
 	it.ofs++
 
 	// return calculated value
-	return it.chunk.Elem(i), true
+	return it.chunk.Get(i), true
 }
 
 func (it *Int256Iterator) NextChunk() (*num.Int256Stride, int) {

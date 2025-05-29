@@ -45,14 +45,27 @@ type NumberMatcher[T Number] interface {
 	MatchNotInSet(s any, bits, mask *Bitset)
 }
 
-type NumberSetter[T Number] interface {
+type NumberWriter[T Number] interface {
 	Append(T)
-	Set(uint32, T)
+	Set(int, T)
+}
+
+type NumberReader[T Number] interface {
+	Len() int
+	Size() int
+	Get(int) T
+	AppendTo([]T, []uint32) []T
 }
 
 type NumberAccessor[T Number] interface {
-	Get(uint32) T
-	AppendTo([]T, []uint32) []T
+	NumberReader[T]
+	NumberWriter[T]
+	// Iterator() iter.Seq2[int, E]
+	// Chunks() NumberIterator[E]
+	Slice() []T
+	Matcher() NumberMatcher[T]
+	MinMax() (T, T)
+	Cmp(i, j int) int
 }
 
 func IsSigned[T Number]() bool {

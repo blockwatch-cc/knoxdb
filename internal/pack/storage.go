@@ -4,7 +4,6 @@
 package pack
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"slices"
@@ -25,26 +24,26 @@ import (
 // type specific encoding header and data.
 //
 
-// translate field type to block type
-var blockTypes = types.BlockTypes
-
 func cacheKey(packkey uint32, blockId uint16) uint64 {
-	return uint64(packkey)<<32 | uint64(blockId)
+	return uint64(blockId)<<32 | uint64(packkey)
 }
 
+// EncodeBlockKey produces a block key for use inside the table's data bucket.
+// We use the key to cluster blocks of the same column into on-disk data pages
+// to amortize load costs.
 func EncodeBlockKey(packkey uint32, blockId uint16) []byte {
 	var b [num.MaxVarintLen32 + num.MaxVarintLen16]byte
 	return num.AppendUvarint(
-		num.AppendUvarint(b[:0], uint64(packkey)),
-		uint64(blockId),
+		num.AppendUvarint(b[:0], uint64(blockId)),
+		uint64(packkey),
 	)
 }
 
 func DecodeBlockKey(buf []byte) (packkey uint32, blockId uint16) {
 	v, n := num.Uvarint(buf)
-	packkey = uint32(v)
-	v, _ = num.Uvarint(buf[n:])
 	blockId = uint16(v)
+	v, _ = num.Uvarint(buf[n:])
+	packkey = uint32(v)
 	return
 }
 
@@ -133,47 +132,12 @@ func (p *Package) LoadFromDisk(ctx context.Context, bucket store.Bucket, fids []
 		}
 		n += len(buf)
 
-		// TODO: alloc is part of new containers, no longer required here
-		// alloc block (use actual storage size, arena will round up to power of 2)
-		if p.blocks[i] == nil {
-			sz := nRows
-			if sz == 0 {
-				sz = p.maxRows
-			}
-			p.blocks[i] = block.New(blockTypes[f.Type], sz)
-		}
-
-		// read block compression
-		comp := types.FieldCompression(buf[0])
-		buf = buf[1:]
-
-		// decode block data
-		var err error
-		if comp > 0 {
-			// decode block data with optional decompressor
-			dec := NewDecompressor(bytes.NewBuffer(buf), comp)
-
-			// TODO: readall and decode (deprecate ReadFrom)
-			_, err = p.blocks[i].ReadFrom(dec)
-			err2 := dec.Close()
-			if err == nil {
-				err = err2
-			}
-
-			// TODO: BufferManager: at this point we hold a copy of the decompressed
-			// data referenced by a container and we can release any page locks
-
-		} else {
-			// TODO: BufferManager: here we reference data in pages and must hold
-			// the lock until the block is released (move page lock release into
-			// block.DeRef)
-
-			// fast-path, decode from buffer
-			err = p.blocks[i].Decode(buf)
-		}
+		// decode block from buffer page
+		b, err := block.Decode(f.Type.BlockType(), buf)
 		if err != nil {
 			return n, fmt.Errorf("loading block 0x%08x:%02d: %v", p.key, f.Id, err)
 		}
+		p.blocks[i] = b
 	}
 
 	// check if all non-nil blocks are equal length
@@ -206,49 +170,36 @@ func (p *Package) StoreToDisk(ctx context.Context, bucket store.Bucket) (int, er
 		return 0, store.ErrNoBucket
 	}
 
-	// TODO: re-use encoder analysis data here
-	// analyze
-	p.WithAnalysis()
-
-	// optimize blocks before writing (dedup)
-	// TODO: move this into an integrated analysis & encode pipeline
-	// TODO: don't do this in-place so a writer pack can be reused
-	p.Optimize()
-
 	var n int
 	for i, f := range p.schema.Exported() {
 		// skip empty blocks, clean blocks and deleted fields
-		if p.blocks[i] == nil || !p.blocks[i].IsDirty() || f.Flags.Is(types.FieldFlagDeleted) {
+		b := p.blocks[i]
+		if b == nil || !b.IsDirty() || f.Flags.Is(types.FieldFlagDeleted) {
 			continue
 		}
 
-		// encode block data using optional compressor into new allocated buffers
-		// (this is necessary because the underlying store may not copy our data)
-		buf := bytes.NewBuffer(make([]byte, 0, p.blocks[i].MaxStoredSize()))
-		buf.WriteByte(byte(f.Compress))
-		enc := NewCompressor(buf, f.Compress)
-
 		// encode block
-		_, err := p.blocks[i].WriteTo(enc)
-		err2 := enc.Close()
+		buf, stats, err := b.Encode(f.Compress)
 		if err != nil {
 			return 0, err
 		}
-		if err2 != nil {
-			return 0, err2
-		}
-
-		// TODO: cluster keys on block id (so that pages contain data from the same column)
 
 		// generate storage key for this block
 		bkey := EncodeBlockKey(p.key, f.Id)
 
-		// export block size statistics
-		p.analyze.DiffSize[i] = buf.Len() - len(bucket.Get(bkey))
-		n += buf.Len()
+		// export block statistics
+		if p.stats != nil {
+			minv, maxv := stats.MinMax()
+			stats.Close()
+			p.stats.MinMax[i][0] = minv
+			p.stats.MinMax[i][1] = maxv
+			p.stats.DiffSize[i] = len(buf) - len(bucket.Get(bkey))
+		}
+		n += len(buf)
 
-		// write to store
-		if err := bucket.Put(bkey, buf.Bytes()); err != nil {
+		// write to store (will keep a reference to buf until tx closes,
+		// so we cannot free buf at this point, TODO: free in buffer manager)
+		if err := bucket.Put(bkey, buf); err != nil {
 			return n, fmt.Errorf("storing block 0x%08x:%02d: %v", p.key, f.Id, err)
 		}
 		p.blocks[i].SetClean()

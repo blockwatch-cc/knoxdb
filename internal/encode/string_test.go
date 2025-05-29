@@ -6,13 +6,13 @@ package encode
 import (
 	"bytes"
 	"fmt"
-	"slices"
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/bitset"
 	etests "blockwatch.cc/knoxdb/internal/encode/tests"
 	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/pkg/stringx"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -20,7 +20,7 @@ import (
 
 func TestAnalyzeString(t *testing.T) {
 	// fixed
-	p := util.NewStringPool(3)
+	p := stringx.NewStringPool(3)
 	p.AppendManyStrings("a", "b", "c")
 	x := AnalyzeString(p)
 	assert.Equal(t, []byte("a"), x.Min, "min")
@@ -36,7 +36,7 @@ func TestAnalyzeString(t *testing.T) {
 	p.Close()
 
 	// no dups, not fixed -> compact
-	p = util.NewStringPool(4)
+	p = stringx.NewStringPool(4)
 	p.AppendManyStrings("a", "b", "c", "dd")
 	x = AnalyzeString(p)
 	assert.Equal(t, []byte("a"), x.Min, "min")
@@ -52,7 +52,7 @@ func TestAnalyzeString(t *testing.T) {
 	p.Close()
 
 	// const
-	p = util.NewStringPool(4)
+	p = stringx.NewStringPool(4)
 	p.AppendManyStrings("a", "a", "a", "a")
 	x = AnalyzeString(p)
 	assert.Equal(t, []byte("a"), x.Min, "min")
@@ -68,7 +68,7 @@ func TestAnalyzeString(t *testing.T) {
 	p.Close()
 
 	// dict
-	p = util.NewStringPool(6)
+	p = stringx.NewStringPool(6)
 	p.AppendManyStrings("ax", "bxx", "ax", "cx", "ax", "cx", "ax", "cx")
 	x = AnalyzeString(p)
 	assert.Equal(t, []byte("ax"), x.Min, "min")
@@ -103,7 +103,7 @@ func testStringEncode(t *testing.T, scheme ContainerType) {
 
 			// validate contents
 			require.Equal(t, c.N, enc.Len())
-			for i, v := range c.Data.Iterator2() {
+			for i, v := range c.Data.Iterator() {
 				require.Equal(t, v, enc.Get(i))
 			}
 
@@ -120,18 +120,18 @@ func testStringEncode(t *testing.T, scheme ContainerType) {
 
 			// validate contents
 			require.Equal(t, c.N, enc2.Len())
-			for i, v := range c.Data.Iterator2() {
+			for i, v := range c.Data.Iterator() {
 				require.Equal(t, v, enc2.Get(i))
 			}
 
 			// validate append
-			dst := util.NewStringPool(c.N)
+			dst := stringx.NewStringPool(c.N)
 			enc2.AppendTo(dst, nil)
 			require.Equal(t, c.N, dst.Len())
-			for i, v := range dst.Iterator2() {
+			for i, v := range dst.Iterator() {
 				require.Equal(t, v, c.Data.Get(i), "i=%d", i)
 			}
-			for i, v := range c.Data.Iterator2() {
+			for i, v := range c.Data.Iterator() {
 				require.Equal(t, v, dst.Get(i), "i=%d", i)
 			}
 
@@ -208,9 +208,9 @@ func testStringContainerCompare(t *testing.T, scheme ContainerType) {
 type StringCompareFunc func([]byte, *Bitset, *Bitset)
 type StringCompareFunc2 func([]byte, []byte, *Bitset, *Bitset)
 
-func testStringCompareFunc(t *testing.T, cmp StringCompareFunc, src *util.StringPool, mode types.FilterMode) {
+func testStringCompareFunc(t *testing.T, cmp StringCompareFunc, src *stringx.StringPool, mode types.FilterMode) {
 	bits := bitset.New(src.Len())
-	minv, maxv, _, _ := src.MinMax()
+	minv, maxv := src.MinMax()
 
 	// single value
 	val := src.Get(src.Len() / 2)
@@ -228,7 +228,7 @@ func testStringCompareFunc(t *testing.T, cmp StringCompareFunc, src *util.String
 
 	// value under bounds
 	if len(minv) > 0 {
-		under := slices.Clone(minv)
+		under := bytes.Clone(minv)
 		under[0] = 'a'
 		cmp(under, bits, nil)
 		EnsureStringBits(t, src, under, under, bits, mode)
@@ -237,9 +237,9 @@ func testStringCompareFunc(t *testing.T, cmp StringCompareFunc, src *util.String
 	}
 }
 
-func testStringCompareFunc2(t *testing.T, cmp StringCompareFunc2, src *util.StringPool, mode types.FilterMode) {
+func testStringCompareFunc2(t *testing.T, cmp StringCompareFunc2, src *stringx.StringPool, mode types.FilterMode) {
 	bits := bitset.New(src.Len())
-	minv, maxv, _, _ := src.MinMax()
+	minv, maxv := src.MinMax()
 
 	// single value
 	val := src.Get(src.Len() / 2)
@@ -267,7 +267,7 @@ func testStringCompareFunc2(t *testing.T, cmp StringCompareFunc2, src *util.Stri
 
 	// out of bounds (under)
 	if len(minv) > 0 {
-		under := slices.Clone(minv)
+		under := bytes.Clone(minv)
 		under[0] = 'a'
 		cmp(under, under, bits, nil)
 		EnsureStringBits(t, src, under, under, bits, mode)
@@ -278,7 +278,7 @@ func testStringCompareFunc2(t *testing.T, cmp StringCompareFunc2, src *util.Stri
 type TestCaseString struct {
 	Name string
 	N    int
-	Data *util.StringPool
+	Data *stringx.StringPool
 }
 
 func MakeStringTests(n int) []TestCaseString {
@@ -307,9 +307,9 @@ func MakeShortStringTests(scheme ContainerType) []TestCaseString {
 	}
 }
 
-func EnsureStringBits(t *testing.T, vals *util.StringPool, val, val2 []byte, bits *bitset.Bitset, mode types.FilterMode) {
+func EnsureStringBits(t *testing.T, vals *stringx.StringPool, val, val2 []byte, bits *bitset.Bitset, mode types.FilterMode) {
 	if etests.ShowValues {
-		for i, v := range vals.Iterator2() {
+		for i, v := range vals.Iterator() {
 			t.Logf("Val %d: %v", i, v)
 			i++
 		}
@@ -317,43 +317,43 @@ func EnsureStringBits(t *testing.T, vals *util.StringPool, val, val2 []byte, bit
 	}
 	switch mode {
 	case types.FilterModeEqual:
-		for i, v := range vals.Iterator2() {
+		for i, v := range vals.Iterator() {
 			require.Equal(t, bytes.Equal(v, val), bits.Contains(i), "bit=%d val=%x %s %x",
 				i, v, mode, val)
 		}
 
 	case types.FilterModeNotEqual:
-		for i, v := range vals.Iterator2() {
+		for i, v := range vals.Iterator() {
 			require.Equal(t, !bytes.Equal(v, val), bits.Contains(i), "bit=%d val=%v %s %v",
 				i, v, mode, val)
 		}
 
 	case types.FilterModeLt:
-		for i, v := range vals.Iterator2() {
+		for i, v := range vals.Iterator() {
 			require.Equal(t, bytes.Compare(v, val) < 0, bits.Contains(i), "bit=%d val=%v %s %v",
 				i, v, mode, val)
 		}
 
 	case types.FilterModeLe:
-		for i, v := range vals.Iterator2() {
+		for i, v := range vals.Iterator() {
 			require.Equal(t, bytes.Compare(v, val) <= 0, bits.Contains(i), "bit=%d val=%v %s %v",
 				i, v, mode, val)
 		}
 
 	case types.FilterModeGt:
-		for i, v := range vals.Iterator2() {
+		for i, v := range vals.Iterator() {
 			require.Equal(t, bytes.Compare(v, val) > 0, bits.Contains(i), "bit=%d val=%v %s %v",
 				i, v, mode, val)
 		}
 
 	case types.FilterModeGe:
-		for i, v := range vals.Iterator2() {
+		for i, v := range vals.Iterator() {
 			require.Equal(t, bytes.Compare(v, val) >= 0, bits.Contains(i), "bit=%d val=%v %s %v",
 				i, v, mode, val)
 		}
 
 	case types.FilterModeRange:
-		for i, v := range vals.Iterator2() {
+		for i, v := range vals.Iterator() {
 			require.Equal(t, bytes.Compare(v, val) >= 0 && bytes.Compare(v, val2) <= 0, bits.Contains(i), "bit=%d val=%v %s [%v,%v]",
 				i, v, mode, val, val2)
 		}

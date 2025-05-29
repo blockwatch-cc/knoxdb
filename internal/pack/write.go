@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"reflect"
 	"runtime/debug"
-	"slices"
 	"time"
 	"unsafe"
 
@@ -69,31 +68,28 @@ func (p *Package) AppendWire(buf []byte, meta *schema.Meta) {
 			continue
 		}
 
-		switch field.Type {
-		case types.FieldTypeUint64, types.FieldTypeInt64,
-			types.FieldTypeDatetime, types.FieldTypeFloat64,
-			types.FieldTypeDecimal64:
+		switch b.Type() {
+		case types.BlockUint64, types.BlockInt64, types.BlockFloat64:
 			b.Uint64().Append(*(*uint64)(unsafe.Pointer(&buf[0])))
 			buf = buf[8:]
 
-		case types.FieldTypeUint32, types.FieldTypeInt32,
-			types.FieldTypeFloat32, types.FieldTypeDecimal32:
+		case types.BlockUint32, types.BlockInt32, types.BlockFloat32:
 			b.Uint32().Append(*(*uint32)(unsafe.Pointer(&buf[0])))
 			buf = buf[4:]
 
-		case types.FieldTypeUint16, types.FieldTypeInt16:
+		case types.BlockUint16, types.BlockInt16:
 			b.Uint16().Append(*(*uint16)(unsafe.Pointer(&buf[0])))
 			buf = buf[2:]
 
-		case types.FieldTypeUint8, types.FieldTypeInt8:
+		case types.BlockUint8, types.BlockInt8:
 			b.Uint8().Append(*(*uint8)(unsafe.Pointer(&buf[0])))
 			buf = buf[1:]
 
-		case types.FieldTypeBoolean:
+		case types.BlockBool:
 			b.Bool().Append(*(*bool)(unsafe.Pointer(&buf[0])))
 			buf = buf[1:]
 
-		case types.FieldTypeString, types.FieldTypeBytes:
+		case types.BlockBytes:
 			if fixed := field.Fixed; fixed > 0 {
 				b.Bytes().Append(buf[:fixed])
 				buf = buf[fixed:]
@@ -104,19 +100,19 @@ func (p *Package) AppendWire(buf []byte, meta *schema.Meta) {
 				buf = buf[l:]
 			}
 
-		case types.FieldTypeInt256, types.FieldTypeDecimal256:
+		case types.BlockInt256:
 			b.Int256().Append(num.Int256FromBytes(buf[:32]))
 			buf = buf[32:]
 
-		case types.FieldTypeInt128, types.FieldTypeDecimal128:
+		case types.BlockInt128:
 			b.Int128().Append(num.Int128FromBytes(buf[:16]))
 			buf = buf[16:]
 
 		default:
 			// oh, its a type we don't support yet
-			assert.Unreachable("unhandled field type",
+			assert.Unreachable("unhandled block type",
 				"field", field.Name,
-				"type", field.Type.String(),
+				"type", b.Type().String(),
 				"pack", p.key,
 				"schema", p.schema.Name(),
 				"version", p.schema.Version(),
@@ -228,6 +224,8 @@ func (p *Package) SetValue(col, row int, val any) error {
 		b.Int64().Set(row, v.Quantize(f.Scale()).Int64())
 	case num.Decimal32:
 		b.Int32().Set(row, v.Quantize(f.Scale()).Int32())
+	case num.Big:
+		b.Bytes().Set(row, v.Bytes())
 	default:
 		// fallback to reflect for enum types
 		rval := reflect.Indirect(reflect.ValueOf(val))
@@ -260,16 +258,16 @@ func (p *Package) SetValue(col, row int, val any) error {
 					return fmt.Errorf("set_value: marshal failed on %s field %s: %v",
 						f.Type(), f.Name(), err)
 				}
-				b.Bytes().SetZeroCopy(row, buf)
+				b.Bytes().Set(row, buf)
 			case f.Can(types.IfaceTextMarshaler):
 				buf, err := val.(encoding.TextMarshaler).MarshalText()
 				if err != nil {
 					return fmt.Errorf("set_value: marshal failed on %s field %s: %v",
 						f.Type(), f.Name(), err)
 				}
-				b.Bytes().SetZeroCopy(row, buf)
+				b.Bytes().Set(row, buf)
 			case f.Can(types.IfaceStringer):
-				b.Bytes().SetZeroCopy(row, util.UnsafeGetBytes(val.((fmt.Stringer)).String()))
+				b.Bytes().Set(row, util.UnsafeGetBytes(val.((fmt.Stringer)).String()))
 			default:
 				// oh, its a type we don't support yet
 				assert.Unreachable("unhandled value type",
@@ -309,26 +307,24 @@ func (p *Package) SetWire(row int, buf []byte) {
 		if b == nil {
 			continue
 		}
-		switch field.Type {
-		case types.FieldTypeUint64, types.FieldTypeInt64, types.FieldTypeDatetime,
-			types.FieldTypeFloat64, types.FieldTypeDecimal64:
+		switch b.Type() {
+		case types.BlockUint64, types.BlockInt64, types.BlockFloat64:
 			b.Uint64().Set(row, *(*uint64)(unsafe.Pointer(&buf[0])))
 			buf = buf[8:]
 
-		case types.FieldTypeUint32, types.FieldTypeInt32,
-			types.FieldTypeFloat32, types.FieldTypeDecimal32:
+		case types.BlockUint32, types.BlockInt32, types.BlockFloat32:
 			b.Uint32().Set(row, *(*uint32)(unsafe.Pointer(&buf[0])))
 			buf = buf[4:]
 
-		case types.FieldTypeUint16, types.FieldTypeInt16:
+		case types.BlockUint16, types.BlockInt16:
 			b.Uint16().Set(row, *(*uint16)(unsafe.Pointer(&buf[0])))
 			buf = buf[2:]
 
-		case types.FieldTypeUint8, types.FieldTypeInt8:
+		case types.BlockUint8, types.BlockInt8:
 			b.Uint8().Set(row, *(*uint8)(unsafe.Pointer(&buf[0])))
 			buf = buf[1:]
 
-		case types.FieldTypeBoolean:
+		case types.BlockBool:
 			if *(*bool)(unsafe.Pointer(&buf[0])) {
 				b.Bool().Set(row)
 			} else {
@@ -336,7 +332,7 @@ func (p *Package) SetWire(row int, buf []byte) {
 			}
 			buf = buf[1:]
 
-		case types.FieldTypeString, types.FieldTypeBytes:
+		case types.BlockBytes:
 			if fixed := field.Fixed; fixed > 0 {
 				b.Bytes().Set(row, buf[:fixed])
 				buf = buf[fixed:]
@@ -347,11 +343,11 @@ func (p *Package) SetWire(row int, buf []byte) {
 				buf = buf[l:]
 			}
 
-		case types.FieldTypeInt256, types.FieldTypeDecimal256:
+		case types.BlockInt256:
 			b.Int256().Set(row, num.Int256FromBytes(buf[:32]))
 			buf = buf[32:]
 
-		case types.FieldTypeInt128, types.FieldTypeDecimal128:
+		case types.BlockInt128:
 			b.Int128().Set(row, num.Int128FromBytes(buf[:16]))
 			buf = buf[16:]
 
@@ -369,19 +365,21 @@ func (p *Package) SetWire(row int, buf []byte) {
 	}
 }
 
-// Append copies `n` rows from `src` starting at offset `from` to the end of
-// the package. Both packages must have same schema and block order.
-func (p *Package) AppendPack(src *Package, from, n int) error {
-	if src.schema.Hash() != p.schema.Hash() {
-		return fmt.Errorf("append: schema mismatch src=%s dst=%s", src.schema.Name(), p.schema.Name())
-	}
-	if src.nRows <= from {
-		return fmt.Errorf("append: invalid src offset=%d rows=%d", from, src.nRows)
-	}
-	if src.nRows <= from+n-1 {
-		return fmt.Errorf("append: src overflow from+n=%d rows=%d", from+n, src.nRows)
-	}
-	assert.Always(p.CanGrow(n), "pack: overflow on append",
+// AppendRange appends `src[i:j]` to the package. Packages must have
+// the same schema and block order. Range indices form a half open
+// interval [i,j) similar to Go slices. Panics on failed bounds checks
+// and overflow.
+func (p *Package) AppendRange(src *Package, i, j int) {
+	assert.Always(
+		src.schema.Hash() == p.schema.Hash(),
+		"append: schema mismatch",
+		"src", src.schema.Name(), "dst", p.schema.Name(),
+	)
+	assert.Always(i <= j, "append: src out of bounds", "i", i, "j", j)
+	assert.Always(src.nRows > i, "append: src out of bounds", "i", i, "rows", src.nRows)
+	assert.Always(src.nRows >= j, "append: src out of bounds", "j", j, "rows", src.nRows)
+	n := j - i
+	assert.Always(p.CanGrow(n), "append: overflow",
 		"rows", n,
 		"pack", p.key,
 		"len", p.nRows,
@@ -389,63 +387,71 @@ func (p *Package) AppendPack(src *Package, from, n int) error {
 		"blockLen", p.blocks[0].Len(),
 		"blockCap", p.blocks[0].Cap(),
 	)
+
+	// debug
 	defer func() {
 		if e := recover(); e != nil {
-			fmt.Printf("Append: %v\n", e)
-			fmt.Printf("SRC: id=%d rows=%d pklen=%d\n", src.key, src.nRows, len(src.PkColumn()))
-			fmt.Printf("DST: id=%d rows=%d pklen=%d\n", p.key, p.nRows, len(p.PkColumn()))
-			fmt.Printf("REQ: src:from=%d n=%d\n", from, n)
+			fmt.Printf("AppendRange: %v\n", e)
+			fmt.Printf("REQ: src[%d:%d]\n", i, j)
 			fmt.Printf("%s\n", string(debug.Stack()))
 			panic(e)
 		}
 	}()
-	for i, b := range p.blocks {
+
+	for k, b := range p.blocks {
 		if b == nil {
 			continue
 		}
-		b.AppendBlock(src.blocks[i], from, n)
+		b.AppendRange(src.blocks[k], i, j)
 	}
 	p.nRows += n
-	return nil
 }
 
-// Grow appends new rows with zero values to all underlying blocks.
-// func (p *Package) Grow(n int) error {
-// 	if n <= 0 {
-// 		return nil
-// 	}
-// 	assert.Always(p.CanGrow(n), "pack: overflow on grow",
-// 		"rows", n,
-// 		"pack", p.key,
-// 		"len", p.nRows,
-// 		"cap", p.maxRows,
-// 		"blockLen", p.blocks[0].Len(),
-// 		"blockCap", p.blocks[0].Cap(),
-// 	)
-// 	for _, b := range p.blocks {
-// 		if b == nil {
-// 			continue
-// 		}
-// 		b.Grow(n)
-// 	}
-// 	p.nRows += n
-// 	return nil
-// }
-
-func (p *Package) Delete(start, n int) error {
-	if start < 0 || n <= 0 {
-		return nil
+// AppendTo appends selected entries in package p to dst without
+// overflowing dst and returns how many entries were appended.
+// Both packages must have the same schema and block order.
+func (p *Package) AppendTo(dst *Package, sel []uint32) int {
+	assert.Always(
+		dst.schema.Hash() == p.schema.Hash(),
+		"append: schema mismatch",
+		"src", p.schema.Name(),
+		"dst", dst.schema.Name(),
+	)
+	// don't overflow dst
+	n := min(p.nRows, dst.maxRows-dst.nRows)
+	if sel != nil {
+		n = min(len(sel), n)
 	}
-	if p.nRows <= start+n-1 {
-		return fmt.Errorf("delete: invalid range [%d:%d] (rows %d)", start, start+n-1, p.nRows)
+	defer func() {
+		if e := recover(); e != nil {
+			fmt.Printf("AppendTo: %v\n", e)
+			fmt.Printf("REQ: p[%d:%d:%d] => dst[%d:%d:%d]\n",
+				0, n, p.maxRows, dst.nRows, dst.nRows+n, dst.maxRows)
+			fmt.Printf("%s\n", string(debug.Stack()))
+			panic(e)
+		}
+	}()
+	for k, b := range p.blocks {
+		if b == nil {
+			continue
+		}
+		b.AppendTo(dst.blocks[k], sel[:n])
+	}
+	p.nRows += n
+	return n
+}
+
+func (p *Package) Delete(i, j int) error {
+	if i < 0 || j < 0 || j < i || p.nRows < j {
+		return fmt.Errorf("delete: invalid range [%d:%d] (nrows=%d)", i, j, p.nRows)
 	}
 	for _, b := range p.blocks {
 		if b == nil {
 			continue
 		}
-		b.Delete(start, n)
+		b.Delete(i, j)
 	}
-	p.nRows -= n
+	p.nRows -= j - i
 	return nil
 }
 
@@ -499,49 +505,40 @@ func (s AppendState) More() bool {
 func (p *Package) AppendSelected(src *Package, mode WriteMode, state AppendState) AppendState {
 	switch mode {
 	case WriteModeAll:
-		// ignore selection vector
-		n := min(p.Cap(), src.Len()-state.srcOffset)
-		err := p.AppendPack(src, state.srcOffset, n)
-		if err != nil {
-			return AppendState{}
+		var sel []uint32
+		if state.srcOffset > 0 {
+			// create selection vector when src offs > 0
+			// i.e. src is split between multiple target packs
+			n := src.nRows - state.srcOffset
+			sel = types.NewRange(state.srcOffset, state.srcOffset+n).AsSelection()
 		}
+
+		// copy at most n records from src until p is full
+		n := src.AppendTo(p, sel)
+
+		// update state
 		state.srcOffset += n
-		state.hasMore = src.Len() > state.srcOffset
+		state.hasMore = src.nRows > state.srcOffset
 		return state
 
 	case WriteModeIncludeSelected:
 		// append selected vector data while keeping selection order
 		sel := src.selected[state.selOffset:]
-		tcap := p.Cap()
-		for tcap > 0 && len(sel) > 0 {
-			// identify runs of consecutive selections
-			n := 1
-			for len(sel) > n && sel[n-1] == sel[n]-1 {
-				n++
-			}
 
-			// copy n records
-			err := p.AppendPack(src, int(sel[0]), n)
-			if err != nil {
-				panic(err)
-			}
+		// copy at most n records from src until p is full
+		n := src.AppendTo(p, sel)
 
-			// clip sel
-			sel = sel[n:]
-			state.selOffset += n
-			tcap -= n
-		}
-		state.hasMore = len(sel) > 0
+		// update state
+		state.selOffset += n
+		state.hasMore = len(sel) > n
 		return state
 
 	case WriteModeExcludeSelected:
 		// append unselected vector data (i.e. gaps in the selection vector)
 		// requires sorted selection vector
-		sel := src.selected
-		slices.Sort(sel)
-		sel = sel[state.selOffset:]
+		sel := src.selected[state.selOffset:]
 		last := uint32(state.srcOffset)
-		tcap := p.Cap()
+		tcap := p.maxRows
 		for {
 			// find the next gap
 			for tcap > 0 && len(sel) > 0 && last == sel[0] {
@@ -562,10 +559,8 @@ func (p *Package) AppendSelected(src *Package, mode WriteMode, state AppendState
 
 			// copy n records
 			if n > 0 {
-				err := p.AppendPack(src, int(last), n)
-				if err != nil {
-					panic(err)
-				}
+				// FIXME: replace by AppendTo because src can be compressed
+				p.AppendRange(src, int(last), int(last)+n)
 				last += uint32(n)
 			}
 
@@ -575,7 +570,7 @@ func (p *Package) AppendSelected(src *Package, mode WriteMode, state AppendState
 			}
 		}
 		state.srcOffset = int(last)
-		state.hasMore = src.Len() > state.srcOffset
+		state.hasMore = src.nRows > state.srcOffset
 		return state
 
 	default:

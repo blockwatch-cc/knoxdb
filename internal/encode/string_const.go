@@ -65,17 +65,17 @@ func (c *ConstStringContainer) Get(i int) []byte {
 	return c.val
 }
 
-func (c *ConstStringContainer) Iterator() iter.Seq[[]byte] {
-	return func(fn func([]byte) bool) {
-		for range c.n {
-			if !fn(c.val) {
+func (c *ConstStringContainer) Iterator() iter.Seq2[int, []byte] {
+	return func(fn func(int, []byte) bool) {
+		for i := range c.n {
+			if !fn(i, c.val) {
 				return
 			}
 		}
 	}
 }
 
-func (c *ConstStringContainer) AppendTo(dst types.StringSetter, sel []uint32) {
+func (c *ConstStringContainer) AppendTo(dst types.StringWriter, sel []uint32) {
 	n := c.n
 	if sel != nil {
 		n = len(sel)

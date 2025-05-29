@@ -11,7 +11,6 @@ var (
 	BlockTypes = types.BlockTypes
 
 	FieldTypes = [...]types.FieldType{
-		types.BlockTime:    types.FieldTypeDatetime,
 		types.BlockBool:    types.FieldTypeBoolean,
 		types.BlockBytes:   types.FieldTypeBytes,
 		types.BlockInt8:    types.FieldTypeInt8,

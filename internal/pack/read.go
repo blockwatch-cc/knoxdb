@@ -9,7 +9,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"reflect"
-	"sort"
 	"time"
 	"unsafe"
 
@@ -63,42 +62,41 @@ func (p *Package) ReadWireBuffer(buf *bytes.Buffer, row int) error {
 
 		// encoding is based on field type
 		var x [8]byte
-		switch field.Type {
-		case types.FieldTypeInt64, types.FieldTypeDatetime, types.FieldTypeDecimal64,
-			types.FieldTypeUint64, types.FieldTypeFloat64:
+		switch b.Type() {
+		case types.BlockUint64, types.BlockInt64, types.BlockFloat64:
 			LE.PutUint64(x[:], b.Uint64().Get(row))
 			_, err = buf.Write(x[:])
-		case types.FieldTypeInt32, types.FieldTypeDecimal32, types.FieldTypeUint32, types.FieldTypeFloat32:
+		case types.BlockUint32, types.BlockInt32, types.BlockFloat32:
 			LE.PutUint32(x[:], b.Uint32().Get(row))
 			_, err = buf.Write(x[:4])
-		case types.FieldTypeInt16, types.FieldTypeUint16:
+		case types.BlockUint16, types.BlockInt16:
 			LE.PutUint16(x[:], b.Uint16().Get(row))
 			_, err = buf.Write(x[:2])
-		case types.FieldTypeInt8, types.FieldTypeUint8:
+		case types.BlockUint8, types.BlockInt8:
 			_, err = buf.Write([]byte{b.Uint8().Get(row)})
-		case types.FieldTypeBoolean:
+		case types.BlockBool:
 			v := b.Bool().Contains(row)
 			err = buf.WriteByte(*(*byte)(unsafe.Pointer(&v)))
-		case types.FieldTypeBytes, types.FieldTypeString:
+		case types.BlockBytes:
 			if fixed := field.Fixed; fixed > 0 {
-				_, err = buf.Write(b.Bytes().Elem(row)[:fixed])
+				_, err = buf.Write(b.Bytes().Get(row)[:fixed])
 			} else {
-				v := b.Bytes().Elem(row)
+				v := b.Bytes().Get(row)
 				LE.PutUint32(x[:], uint32(len(v)))
 				_, err = buf.Write(x[:4])
 				if err == nil {
 					_, err = buf.Write(v)
 				}
 			}
-		case types.FieldTypeInt256, types.FieldTypeDecimal256:
-			_, err = buf.Write(b.Int256().Elem(row).Bytes())
-		case types.FieldTypeInt128, types.FieldTypeDecimal128:
-			_, err = buf.Write(b.Int128().Elem(row).Bytes())
+		case types.BlockInt256:
+			_, err = buf.Write(b.Int256().Get(row).Bytes())
+		case types.BlockInt128:
+			_, err = buf.Write(b.Int128().Get(row).Bytes())
 		default:
 			// oh, its a type we don't support yet
 			assert.Unreachable("unhandled field type",
 				"typeid", int(field.Type),
-				"type", field.Type.String(),
+				"type", b.Type().String(),
 				"field", field.Name,
 				"pack", p.key,
 				"schema", p.schema.Name(),
@@ -195,11 +193,11 @@ func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, maps []
 			switch {
 			case field.Iface&types.IfaceBinaryUnmarshaler > 0:
 				rfield := field.StructValue(rval)
-				err = rfield.Addr().Interface().(encoding.BinaryUnmarshaler).UnmarshalBinary(b.Bytes().Elem(row))
+				err = rfield.Addr().Interface().(encoding.BinaryUnmarshaler).UnmarshalBinary(b.Bytes().Get(row))
 			case field.IsArray:
-				copy(unsafe.Slice((*byte)(fptr), field.Fixed), b.Bytes().Elem(row))
+				copy(unsafe.Slice((*byte)(fptr), field.Fixed), b.Bytes().Get(row))
 			default:
-				b := b.Bytes().Elem(row)
+				b := b.Bytes().Get(row)
 				if cap(*(*[]byte)(fptr)) < len(b) {
 					*(*[]byte)(fptr) = make([]byte, len(b))
 				} else {
@@ -212,23 +210,23 @@ func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, maps []
 			switch {
 			case field.Iface&types.IfaceTextUnmarshaler > 0:
 				rfield := field.StructValue(rval)
-				err = rfield.Addr().Interface().(encoding.TextUnmarshaler).UnmarshalText(b.Bytes().Elem(row))
+				err = rfield.Addr().Interface().(encoding.TextUnmarshaler).UnmarshalText(b.Bytes().Get(row))
 			default:
-				*(*string)(fptr) = string(b.Bytes().Elem(row))
+				*(*string)(fptr) = string(b.Bytes().Get(row))
 			}
 
 		case types.FieldTypeInt256:
-			*(*num.Int256)(fptr) = b.Int256().Elem(row)
+			*(*num.Int256)(fptr) = b.Int256().Get(row)
 
 		case types.FieldTypeInt128:
-			*(*num.Int128)(fptr) = b.Int128().Elem(row)
+			*(*num.Int128)(fptr) = b.Int128().Get(row)
 
 		case types.FieldTypeDecimal256:
-			(*(*num.Decimal256)(fptr)).Set(b.Int256().Elem(row))
+			(*(*num.Decimal256)(fptr)).Set(b.Int256().Get(row))
 			(*(*num.Decimal256)(fptr)).SetScale(field.Scale)
 
 		case types.FieldTypeDecimal128:
-			(*(*num.Decimal128)(fptr)).Set(b.Int128().Elem(row))
+			(*(*num.Decimal128)(fptr)).Set(b.Int128().Get(row))
 			(*(*num.Decimal128)(fptr)).SetScale(field.Scale)
 
 		case types.FieldTypeDecimal64:
@@ -238,6 +236,9 @@ func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, maps []
 		case types.FieldTypeDecimal32:
 			(*(*num.Decimal32)(fptr)).Set(b.Int32().Get(row))
 			(*(*num.Decimal32)(fptr)).SetScale(field.Scale)
+
+		case types.FieldTypeBigint:
+			*(*num.Big)(fptr) = num.NewBigFromBytes(b.Bytes().Get(row))
 
 		default:
 			// oh, its a type we don't support yet
@@ -256,6 +257,7 @@ func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, maps []
 	return nil
 }
 
+// TODO: replace by VectorAccessor or p.Block(col).[typename].Slice/iterator/..
 // Returns a single materialized column as typed slice.
 func (p *Package) ReadCol(col int) any {
 	f, ok := p.schema.FieldById(uint16(col))
@@ -287,75 +289,77 @@ func (p *Package) ReadCol(col int) any {
 		return nil
 	}
 
+	panic("ReadCol not implemented")
+
 	// TODO: change return value to some accessor interface which may
 	// provide Iterator and AppendTo access, maybe raw Slice but must have
 	// clear use case!
 
-	switch f.Type() {
-	case types.FieldTypeInt64:
-		return b.Int64().Slice()
-	case types.FieldTypeInt32:
-		return b.Int32().Slice()
-	case types.FieldTypeInt16:
-		return b.Int16().Slice()
-	case types.FieldTypeInt8:
-		return b.Int8().Slice()
-	case types.FieldTypeUint64:
-		return b.Uint64().Slice()
-	case types.FieldTypeUint32:
-		return b.Uint32().Slice()
-	case types.FieldTypeUint16:
-		return b.Uint16().Slice()
-	case types.FieldTypeUint8:
-		return b.Uint8().Slice()
-	case types.FieldTypeFloat64:
-		return b.Float64().Slice()
-	case types.FieldTypeFloat32:
-		return b.Float32().Slice()
-	case types.FieldTypeBytes:
-		return b.Bytes().Slice()
-	case types.FieldTypeString:
-		s := make([]string, p.nRows)
-		for i := 0; i < p.nRows; i++ {
-			s[i] = util.UnsafeGetString(b.Bytes().Elem(i))
-		}
-		return s
-	case types.FieldTypeInt256:
-		return b.Int256().Materialize()
-	case types.FieldTypeInt128:
-		return b.Int128().Materialize()
-	case types.FieldTypeDatetime:
-		res := make([]time.Time, p.nRows)
-		for i, v := range b.Int64().Slice() {
-			if v > 0 {
-				res[i] = schema.TimeScale(f.Scale()).FromUnix(v)
-			} else {
-				res[i] = zeroTime
-			}
-		}
-		return res
-	case types.FieldTypeBoolean:
-		return b.Bool().Slice()
-	case types.FieldTypeDecimal256:
-		return num.Decimal256Slice{Int256: b.Int256().Materialize(), Scale: f.Scale()}
-	case types.FieldTypeDecimal128:
-		return num.Decimal128Slice{Int128: b.Int128().Materialize(), Scale: f.Scale()}
-	case types.FieldTypeDecimal64:
-		return num.Decimal64Slice{Int64: b.Int64().Slice(), Scale: f.Scale()}
-	case types.FieldTypeDecimal32:
-		return num.Decimal32Slice{Int32: b.Int32().Slice(), Scale: f.Scale()}
-	default:
-		// oh, its a type we don't support yet
-		assert.Unreachable("unhandled field type",
-			"typeid", int(f.Type()),
-			"type", f.Type().String(),
-			"field", f.Name(),
-			"pack", p.key,
-			"schema", p.schema.Name(),
-			"version", p.schema.Version(),
-		)
-	}
-	return nil
+	// switch f.Type() {
+	// case types.FieldTypeInt64:
+	// 	return b.Int64().Slice()
+	// case types.FieldTypeInt32:
+	// 	return b.Int32().Slice()
+	// case types.FieldTypeInt16:
+	// 	return b.Int16().Slice()
+	// case types.FieldTypeInt8:
+	// 	return b.Int8().Slice()
+	// case types.FieldTypeUint64:
+	// 	return b.Uint64().Slice()
+	// case types.FieldTypeUint32:
+	// 	return b.Uint32().Slice()
+	// case types.FieldTypeUint16:
+	// 	return b.Uint16().Slice()
+	// case types.FieldTypeUint8:
+	// 	return b.Uint8().Slice()
+	// case types.FieldTypeFloat64:
+	// 	return b.Float64().Slice()
+	// case types.FieldTypeFloat32:
+	// 	return b.Float32().Slice()
+	// case types.FieldTypeBytes:
+	// 	return b.Bytes().Slice()
+	// case types.FieldTypeString:
+	// 	s := make([]string, p.nRows)
+	// 	for i := 0; i < p.nRows; i++ {
+	// 		s[i] = util.UnsafeGetString(b.Bytes().Elem(i))
+	// 	}
+	// 	return s
+	// case types.FieldTypeInt256:
+	// 	return b.Int256().Materialize()
+	// case types.FieldTypeInt128:
+	// 	return b.Int128().Materialize()
+	// case types.FieldTypeDatetime:
+	// 	res := make([]time.Time, p.nRows)
+	// 	for i, v := range b.Int64().Slice() {
+	// 		if v > 0 {
+	// 			res[i] = schema.TimeScale(f.Scale()).FromUnix(v)
+	// 		} else {
+	// 			res[i] = zeroTime
+	// 		}
+	// 	}
+	// 	return res
+	// case types.FieldTypeBoolean:
+	// 	return b.Bool().Slice()
+	// case types.FieldTypeDecimal256:
+	// 	return num.Decimal256Slice{Int256: b.Int256().Materialize(), Scale: f.Scale()}
+	// case types.FieldTypeDecimal128:
+	// 	return num.Decimal128Slice{Int128: b.Int128().Materialize(), Scale: f.Scale()}
+	// case types.FieldTypeDecimal64:
+	// 	return num.Decimal64Slice{Int64: b.Int64().Slice(), Scale: f.Scale()}
+	// case types.FieldTypeDecimal32:
+	// 	return num.Decimal32Slice{Int32: b.Int32().Slice(), Scale: f.Scale()}
+	// default:
+	// 	// oh, its a type we don't support yet
+	// 	assert.Unreachable("unhandled field type",
+	// 		"typeid", int(f.Type()),
+	// 		"type", f.Type().String(),
+	// 		"field", f.Name(),
+	// 		"pack", p.key,
+	// 		"schema", p.schema.Name(),
+	// 		"version", p.schema.Version(),
+	// 	)
+	// }
+	// return nil
 }
 
 // ForEach walks a pack decoding each row into type T. If T is invalid (not
@@ -428,15 +432,15 @@ func (p *Package) Float32(col, row int) float32 {
 }
 
 func (p *Package) String(col, row int) string {
-	return util.UnsafeGetString(p.blocks[col].Bytes().Elem(row))
+	return util.UnsafeGetString(p.blocks[col].Bytes().Get(row))
 }
 
 func (p *Package) Bytes(col, row int) []byte {
-	return p.blocks[col].Bytes().Elem(row)
+	return p.blocks[col].Bytes().Get(row)
 }
 
 func (p *Package) Bool(col, row int) bool {
-	return p.blocks[col].Bool().Contains(row)
+	return p.blocks[col].Bool().Get(row)
 }
 
 func (p *Package) Time(col, row int) time.Time {
@@ -449,21 +453,21 @@ func (p *Package) Time(col, row int) time.Time {
 }
 
 func (p *Package) Int256(col, row int) num.Int256 {
-	return p.blocks[col].Int256().Elem(row)
+	return p.blocks[col].Int256().Get(row)
 }
 
 func (p *Package) Int128(col, row int) num.Int128 {
-	return p.blocks[col].Int128().Elem(row)
+	return p.blocks[col].Int128().Get(row)
 }
 
 func (p *Package) Decimal256(col, row int) num.Decimal256 {
 	f, _ := p.schema.FieldByIndex(col)
-	return num.NewDecimal256(p.blocks[col].Int256().Elem(row), f.Scale())
+	return num.NewDecimal256(p.blocks[col].Int256().Get(row), f.Scale())
 }
 
 func (p *Package) Decimal128(col, row int) num.Decimal128 {
 	f, _ := p.schema.FieldByIndex(col)
-	return num.NewDecimal128(p.blocks[col].Int128().Elem(row), f.Scale())
+	return num.NewDecimal128(p.blocks[col].Int128().Get(row), f.Scale())
 }
 
 func (p *Package) Decimal64(col, row int) num.Decimal64 {
@@ -476,82 +480,86 @@ func (p *Package) Decimal32(col, row int) num.Decimal32 {
 	return num.NewDecimal32(p.blocks[col].Int32().Get(row), f.Scale())
 }
 
-func (p *Package) Pk(row int) uint64 {
+func (p *Package) Big(col, row int) num.Big {
+	return num.NewBigFromBytes(p.blocks[col].Bytes().Get(row))
+}
+
+func (p *Package) Rid(row int) uint64 {
 	return p.blocks[p.px].Uint64().Get(row)
 }
 
-func (p *Package) PkColumn() []uint64 {
-	assert.Always(p.px >= 0 && p.px < len(p.blocks), "invalid pk id",
-		"px", p.px,
-		"pack", p.key,
-		"schema", p.schema.Name(),
-		"version", p.schema.Version(),
-		"nFields", p.schema.NumFields(),
-		"nBlocks", len(p.blocks),
-	)
-	return p.blocks[p.px].Uint64().Slice()
-}
+// func (p *Package) PkColumn() []uint64 {
+// 	assert.Always(p.px >= 0 && p.px < len(p.blocks), "invalid pk id",
+// 		"px", p.px,
+// 		"pack", p.key,
+// 		"schema", p.schema.Name(),
+// 		"version", p.schema.Version(),
+// 		"nFields", p.schema.NumFields(),
+// 		"nBlocks", len(p.blocks),
+// 	)
+// 	return p.blocks[p.px].Uint64().Slice()
+// }
 
 // Searches id in primary key column and returns pos or -1 when not found.
 // This function is only safe to use when pack is sorted by pk (gaps allowed)!
-func (p *Package) FindPk(id uint64, last int) (int, int) {
-	assert.Always(p.px >= 0 && p.px < len(p.blocks), "invalid pk id",
-		"px", p.px,
-		"pack", p.key,
-		"schema", p.schema.Name(),
-		"version", p.schema.Version(),
-		"nFields", p.schema.NumFields(),
-		"nBlocks", len(p.blocks),
-	)
+// func (p *Package) FindPk(id uint64, last int) (int, int) {
+// 	assert.Always(p.px >= 0 && p.px < len(p.blocks), "invalid pk id",
+// 		"px", p.px,
+// 		"pack", p.key,
+// 		"schema", p.schema.Name(),
+// 		"version", p.schema.Version(),
+// 		"nFields", p.schema.NumFields(),
+// 		"nBlocks", len(p.blocks),
+// 	)
 
-	// primary key field required
-	// if p.px < 0 || last >= p.nRows {
-	if last >= p.nRows {
-		return -1, p.nRows
-	}
+// 	// primary key field required
+// 	// if p.px < 0 || last >= p.nRows {
+// 	if last >= p.nRows {
+// 		return -1, p.nRows
+// 	}
 
-	// search for id value in pk block (always an uint64) starting at last index
-	// this helps limiting search space when ids are pre-sorted
-	slice := p.blocks[p.px].Uint64().Slice()[last:]
-	l := len(slice)
+// 	// search for id value in pk block (always an uint64) starting at last index
+// 	// this helps limiting search space when ids are pre-sorted
+// 	slice := p.blocks[p.px].Uint64().Slice()[last:]
+// 	l := len(slice)
 
-	// for sparse pk spaces, use binary search on sorted slices
-	idx := sort.Search(l, func(i int) bool { return slice[i] >= id })
-	last += idx
-	if idx < l && slice[idx] == id {
-		return last, last
-	}
-	return -1, last
-}
+// 	// for sparse pk spaces, use binary search on sorted slices
+// 	idx := sort.Search(l, func(i int) bool { return slice[i] >= id })
+// 	last += idx
+// 	if idx < l && slice[idx] == id {
+// 		return last, last
+// 	}
+// 	return -1, last
+// }
 
 // FindPkUnsorted searches id in primary key column and returns pos or -1 when not found.
 // This function slower than FindPkSorted, but can be used of pack is unsorted, e.g.
 // when updates/inserts are out of order.
-func (p *Package) FindPkUnsorted(id uint64, last int) int {
-	assert.Always(p.px >= 0 && p.px < len(p.blocks), "invalid pk id",
-		"px", p.px,
-		"pack", p.key,
-		"schema", p.schema.Name(),
-		"version", p.schema.Version(),
-		"nFields", p.schema.NumFields(),
-		"nBlocks", len(p.blocks),
-	)
+// func (p *Package) FindPkUnsorted(id uint64, last int) int {
+// 	assert.Always(p.px >= 0 && p.px < len(p.blocks), "invalid pk id",
+// 		"px", p.px,
+// 		"pack", p.key,
+// 		"schema", p.schema.Name(),
+// 		"version", p.schema.Version(),
+// 		"nFields", p.schema.NumFields(),
+// 		"nBlocks", len(p.blocks),
+// 	)
 
-	// primary key field required
-	if p.nRows <= last {
-		return -1
-	}
+// 	// primary key field required
+// 	if p.nRows <= last {
+// 		return -1
+// 	}
 
-	// search for id value in pk block (always an uint64) starting at last index
-	// this helps limiting search space when ids are pre-sorted
-	slice := p.blocks[p.px].Uint64().Slice()[last:]
+// 	// search for id value in pk block (always an uint64) starting at last index
+// 	// this helps limiting search space when ids are pre-sorted
+// 	slice := p.blocks[p.px].Uint64().Slice()[last:]
 
-	// run full scan on unsorted slices
-	for i, v := range slice {
-		if v != id {
-			continue
-		}
-		return i + last
-	}
-	return -1
-}
+// 	// run full scan on unsorted slices
+// 	for i, v := range slice {
+// 		if v != id {
+// 			continue
+// 		}
+// 		return i + last
+// 	}
+// 	return -1
+// }

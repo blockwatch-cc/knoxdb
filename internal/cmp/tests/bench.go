@@ -18,8 +18,9 @@ type BenchmarkMask struct {
 }
 
 var BenchmarkMasks = []BenchmarkMask{
-	{"0xFFFF", maskAll},
-	{"0x0011", []byte{0x00, 0x11}},
+	{"0xFA", []byte{0xfa}},
+	{"0x10", []byte{0x10}},
+	{"0xFF", []byte{0xff}}, // translates to no mask
 }
 
 type (

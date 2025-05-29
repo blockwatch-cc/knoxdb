@@ -1,7 +1,7 @@
-// Copyright (c) 2023-2024 Blockwatch Data Inc.
+// Copyright (c) 2023-2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package pack
+package block
 
 import (
 	"io"
@@ -51,17 +51,17 @@ var (
 	)
 )
 
-func NewCompressor(w io.Writer, c types.FieldCompression) io.WriteCloser {
+func NewCompressor(w io.Writer, c types.BlockCompression) io.WriteCloser {
 	switch c {
-	case types.FieldCompressSnappy:
+	case types.BlockCompressSnappy:
 		enc := snappyWriterPool.Get().(*s2.Writer)
 		enc.Reset(w)
 		return &pooledWriteCloser{pool: snappyWriterPool, w: enc}
-	case types.FieldCompressLZ4:
+	case types.BlockCompressLZ4:
 		enc := lz4WriterPool.Get().(*lz4.Writer)
 		enc.Reset(w)
 		return &pooledWriteCloser{pool: lz4WriterPool, w: enc}
-	case types.FieldCompressZstd:
+	case types.BlockCompressZstd:
 		enc := zstdWriterPool.Get().(*zstd.Encoder)
 		enc.Reset(w)
 		return &pooledWriteCloser{pool: zstdWriterPool, w: enc}
@@ -70,17 +70,17 @@ func NewCompressor(w io.Writer, c types.FieldCompression) io.WriteCloser {
 	}
 }
 
-func NewDecompressor(r io.Reader, c types.FieldCompression) io.ReadCloser {
+func NewDecompressor(r io.Reader, c types.BlockCompression) io.ReadCloser {
 	switch c {
-	case types.FieldCompressSnappy:
+	case types.BlockCompressSnappy:
 		dec := snappyReaderPool.Get().(*s2.Reader)
 		dec.Reset(r)
 		return &pooledReadCloser{pool: snappyReaderPool, r: dec}
-	case types.FieldCompressLZ4:
+	case types.BlockCompressLZ4:
 		dec := lz4ReaderPool.Get().(*lz4.Reader)
 		dec.Reset(r)
 		return &pooledReadCloser{pool: lz4WriterPool, r: dec}
-	case types.FieldCompressZstd:
+	case types.BlockCompressZstd:
 		dec := zstdReaderPool.Get().(*zstd.Decoder)
 		dec.Reset(r)
 		return &pooledReadCloser{pool: zstdWriterPool, r: dec}

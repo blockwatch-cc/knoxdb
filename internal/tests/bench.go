@@ -5,7 +5,7 @@ package tests
 
 import (
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/util"
+	"blockwatch.cc/knoxdb/pkg/stringx"
 )
 
 type BenchmarkSize struct {
@@ -87,19 +87,21 @@ var BenchmarkPatterns = []BenchmarkPattern{
 
 type StringBenchmark struct {
 	Name string
-	Data *util.StringPool
+	Data *stringx.StringPool
 	N    int
 }
 
+const BENCH_STR_LEN = 32
+
 func MakeStringBenchmarks() []StringBenchmark {
 	return []StringBenchmark{
-		{"dups_1k", GenStringDups(1024, 128, 24), 1024},           // 8% unique, 24 chars
-		{"dups_16k", GenStringDups(16*1024, 2048, 24), 16 * 1024}, // 12% unique, 24 chars
-		{"dups_64k", GenStringDups(64*1024, 8192, 24), 64 * 1024}, // 16% unique, 24 chars
+		{"dups_1k", GenStringDups(1024, 128, BENCH_STR_LEN), 1024},           // 8% unique
+		{"dups_16k", GenStringDups(16*1024, 2048, BENCH_STR_LEN), 16 * 1024}, // 12% unique
+		{"dups_64k", GenStringDups(64*1024, 8192, BENCH_STR_LEN), 64 * 1024}, // 16% unique
 
-		{"runs_1k", GenStringRuns(1024, 10, 24), 1024},          // run length 10, 24 chars
-		{"runs_16k", GenStringRuns(16*1024, 10, 24), 16 * 1024}, // run length 10, 24 chars
-		{"runs_64k", GenStringRuns(64*1024, 10, 24), 64 * 1024}, // run length 10, 24 chars
+		{"runs_1k", GenStringRuns(1024, 10, BENCH_STR_LEN), 1024},          // run length 10
+		{"runs_16k", GenStringRuns(16*1024, 10, BENCH_STR_LEN), 16 * 1024}, // run length 10
+		{"runs_64k", GenStringRuns(64*1024, 10, BENCH_STR_LEN), 64 * 1024}, // run length 10
 
 		{"seq_1k", GenStringSeq(1024, 1), 1024},
 		{"seq_16k", GenStringSeq(16*1024, 1), 16 * 1024},

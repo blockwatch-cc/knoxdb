@@ -5,6 +5,7 @@ package table
 
 import (
 	"bytes"
+	"iter"
 	"time"
 
 	"blockwatch.cc/knoxdb/internal/engine"
@@ -14,6 +15,8 @@ import (
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
+
+// Columnar (pack-based) results
 
 var (
 	_ engine.QueryResult = (*Result)(nil)
@@ -27,7 +30,7 @@ var (
 )
 
 type QueryResultConsumer interface {
-	Append(*pack.Package, int, int) error
+	AppendRange(*pack.Package, int, int) error
 }
 
 type CountResult struct {
@@ -38,8 +41,8 @@ func NewCountResult() *CountResult {
 	return &CountResult{}
 }
 
-func (r *CountResult) Append(_ *pack.Package, _, n int) error {
-	r.n += uint64(n)
+func (r *CountResult) AppendRange(_ *pack.Package, i, j int) error {
+	r.n += uint64(j - i)
 	return nil
 }
 
@@ -60,10 +63,10 @@ type StreamResult struct {
 }
 
 // QueryResultConsumer interface
-func (r *StreamResult) Append(pkg *pack.Package, idx, _ int) error {
+func (r *StreamResult) AppendRange(pkg *pack.Package, i, j int) error {
 	r.r.pkg = pkg
 	r.n++
-	return r.fn(r.r.Row(idx))
+	return r.fn(r.r.Row(i))
 }
 
 func (r *StreamResult) Len() int {
@@ -117,7 +120,7 @@ func (r *Result) Row(row int) engine.QueryRow {
 	return r.row
 }
 
-func (r *Result) Record(row int) []byte {
+func (r *Result) EncodeRecord(row int) []byte {
 	buf, err := r.pkg.ReadWire(row)
 	assert.Always(err == nil, "pack wire encode failed", "err", err)
 	return buf
@@ -134,7 +137,14 @@ func (r *Result) Close() {
 	r.row = nil
 }
 
-func (r *Result) Bytes() []byte {
+func (r *Result) Err() error {
+	if !r.IsValid() {
+		return ErrResultClosed
+	}
+	return nil
+}
+
+func (r *Result) Encode() []byte {
 	buf := bytes.NewBuffer(make([]byte, 0, r.pkg.Schema().WireSize()))
 	for i, l := 0, r.pkg.Len(); i < l; i++ {
 		_ = r.pkg.ReadWireBuffer(buf, i)
@@ -156,38 +166,38 @@ func (r *Result) SortBy(name string, order types.OrderType) {
 	pack.NewPackageSorter([]int{idx}, []types.OrderType{order}).Sort(r.pkg)
 }
 
-func (r *Result) ForEach(fn func(r engine.QueryRow) error) error {
-	if !r.IsValid() {
-		return ErrResultClosed
-	}
-	for i, l := 0, r.Len(); i < l; i++ {
-		if err := fn(r.Row(i)); err != nil {
-			return err
+func (r *Result) Iterator() iter.Seq2[int, engine.QueryRow] {
+	return func(fn func(int, engine.QueryRow) bool) {
+		for i := range r.Len() {
+			if !fn(i, r.Row(i)) {
+				return
+			}
 		}
 	}
+}
+
+// non public
+func (r *Result) AppendRange(pkg *pack.Package, i, j int) error {
+	r.pkg.AppendRange(pkg, i, j)
 	return nil
 }
 
 // non public
-func (r *Result) Append(pkg *pack.Package, idx, n int) error {
-	return r.pkg.AppendPack(pkg, idx, n)
-}
+// func (r *Result) PkColumn() []uint64 {
+// 	return r.pkg.PkColumn()
+// }
 
-// non public
-func (r *Result) PkColumn() []uint64 {
-	return r.pkg.PkColumn()
-}
-
-func (r *Result) Column(name string) (any, error) {
-	if !r.IsValid() {
-		return nil, ErrResultClosed
-	}
-	f, ok := r.pkg.Schema().FieldByName(name)
-	if !ok {
-		return nil, schema.ErrInvalidField
-	}
-	return r.pkg.ReadCol(int(f.Id())), nil
-}
+// TODO: replace by vector accessor
+// func (r *Result) Column(name string) (any, error) {
+// 	if !r.IsValid() {
+// 		return nil, ErrResultClosed
+// 	}
+// 	f, ok := r.pkg.Schema().FieldByName(name)
+// 	if !ok {
+// 		return nil, schema.ErrInvalidField
+// 	}
+// 	return r.pkg.ReadCol(int(f.Id())), nil
+// }
 
 // Pack row
 type Row struct {
@@ -201,8 +211,8 @@ func (r *Row) Schema() *schema.Schema {
 	return r.res.pkg.Schema()
 }
 
-func (r *Row) Bytes() []byte {
-	return r.res.Record(r.row)
+func (r *Row) Encode() []byte {
+	return r.res.EncodeRecord(r.row)
 }
 
 func (r *Row) Decode(val any) error {
@@ -317,7 +327,7 @@ func (r *Row) String(col int) string {
 	return r.res.pkg.String(col, r.row)
 }
 
-func (r *Row) ByteSlice(col int) []byte {
+func (r *Row) Bytes(col int) []byte {
 	return r.res.pkg.Bytes(col, r.row)
 }
 

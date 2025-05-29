@@ -133,7 +133,14 @@ func (t *MockTable) Query(_ context.Context, _ engine.QueryPlan) (engine.QueryRe
 }
 
 func (t *MockTable) Stream(_ context.Context, _ engine.QueryPlan, fn func(engine.QueryRow) error) error {
-	return t.result.ForEach(fn)
+	var err error
+	for _, r := range t.result.Iterator() {
+		err = fn(r)
+		if err != nil {
+			break
+		}
+	}
+	return nil
 }
 
 func IsFilterEqual(a, b *FilterTreeNode) bool {

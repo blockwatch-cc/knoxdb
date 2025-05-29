@@ -285,27 +285,3 @@ func (s *Bitset) Indexes(result []uint32) []uint32 {
 	n := bitsetIndexes(s.buf, s.size, result)
 	return result[:n]
 }
-
-// Slice returns a boolean slice containing all values
-func (s *Bitset) Slice() []bool {
-	res := make([]bool, s.size)
-	var i int
-	for range s.size / 8 {
-		b := s.buf[i>>3]
-		res[i] = b&0x01 > 0
-		res[i+1] = b&0x02 > 0
-		res[i+2] = b&0x04 > 0
-		res[i+3] = b&0x08 > 0
-		res[i+4] = b&0x10 > 0
-		res[i+5] = b&0x20 > 0
-		res[i+6] = b&0x40 > 0
-		res[i+7] = b&0x80 > 0
-		i += 8
-	}
-	// tail
-	for range s.size & 0x7 {
-		res[i] = s.buf[i>>3]&bitmask[i&7] > 0
-		i++
-	}
-	return res
-}

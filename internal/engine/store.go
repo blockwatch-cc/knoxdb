@@ -6,11 +6,11 @@ package engine
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
-	"golang.org/x/exp/slices"
 )
 
 var (

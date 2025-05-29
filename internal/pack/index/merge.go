@@ -346,11 +346,11 @@ func (it *MergeIterator) loadNextPack(search MergeValue) error {
 		// it.idx.log.Infof("Merge: Loading block 0x%016x:%016x:%d", bik, bpk, i)
 
 		// create and decode block
-		b := block.New(
-			types.BlockTypes[it.idx.schema.Exported()[i].Type],
-			it.idx.opts.PackSize,
+		b, err := block.Decode(
+			it.idx.schema.Exported()[i].Type.BlockType(),
+			it.cur.Value(),
 		)
-		if err := b.Decode(it.cur.Value()); err != nil {
+		if err != nil {
 			return fmt.Errorf("loading block 0x%08x:%08x:%d: %v", bik, bpk, bid, err)
 		}
 		it.pack.WithBlock(i, b)
@@ -460,7 +460,7 @@ func (idx *Index) merge(ctx context.Context) error {
 		// 3-way merge: src, journal, tomb -> out
 		var (
 			pkg        *pack.Package
-			col1, col2 block.BlockAccessor[uint64]
+			col1, col2 types.NumberAccessor[uint64]
 		)
 		for {
 			// stop when all inputs are exhausted
@@ -556,8 +556,6 @@ func (idx *Index) merge(ctx context.Context) error {
 				if err := it.Store(pkg); err != nil {
 					return err
 				}
-				col1.Close()
-				col2.Close()
 				pkg.Release()
 				pkg = nil
 			}
@@ -568,8 +566,6 @@ func (idx *Index) merge(ctx context.Context) error {
 			if err := it.Store(pkg); err != nil {
 				return err
 			}
-			col1.Close()
-			col2.Close()
 			pkg.Release()
 			pkg = nil
 		}

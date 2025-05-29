@@ -7,13 +7,13 @@ import (
 	"fmt"
 	"math"
 	"math/bits"
+	"slices"
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/assert"
-	"golang.org/x/exp/slices"
 )
 
 type (
@@ -167,7 +167,7 @@ func mkI128(name string, src []Int128, match, match2 Int128, result []byte, leng
 	if len(src)%8 != 0 {
 		panic(fmt.Errorf("i128 %s: length of slice has to be a multiple of 8", name))
 	}
-	if len(result) != bitFieldLen(len(src)) {
+	if len(result) != BitFieldLen(len(src)) {
 		panic(fmt.Errorf("i128 %s: length of slice and length of result does not match", name))
 	}
 
@@ -181,7 +181,7 @@ func mkI128(name string, src []Int128, match, match2 Int128, result []byte, leng
 
 	// create new result at requested length
 	result = slices.Clone(result)
-	l = bitFieldLen(length)
+	l = BitFieldLen(length)
 	for l > len(result) {
 		result = append(result, result...)
 	}
@@ -209,14 +209,14 @@ func mkI128(name string, src []Int128, match, match2 Int128, result []byte, leng
 
 // Test Drivers
 type (
-	Int128MatchFunc  = func(num.Int128Stride, num.Int128, []byte, []byte) int64
-	Int128MatchFunc2 = func(num.Int128Stride, num.Int128, num.Int128, []byte, []byte) int64
+	Int128MatchFunc  = func(*num.Int128Stride, num.Int128, []byte, []byte) int64
+	Int128MatchFunc2 = func(*num.Int128Stride, num.Int128, num.Int128, []byte, []byte) int64
 )
 
 func TestInt128Cases(t *testing.T, cases []Int128MatchTest, fn Int128MatchFunc) {
 	t.Helper()
 	for _, c := range cases {
-		bits, mask := MakeBitsAndMaskPoisonTail(len(c.Slice), 32, maskAll)
+		bits, mask := MakeBitsAndMaskPoisonTail(len(c.Slice), 32, nil)
 		cnt := fn(num.Int128Optimize(c.Slice), c.Match, bits, mask)
 		assert.Len(t, bits, len(c.Result), c.Name)
 		assert.Equal(t, c.Count, cnt, "%s: unexpected result bit count", c.Name)
@@ -228,7 +228,7 @@ func TestInt128Cases(t *testing.T, cases []Int128MatchTest, fn Int128MatchFunc) 
 func TestInt128Cases2(t *testing.T, cases []Int128MatchTest, fn Int128MatchFunc2) {
 	t.Helper()
 	for _, c := range cases {
-		bits, mask := MakeBitsAndMaskPoisonTail(len(c.Slice), 32, maskAll)
+		bits, mask := MakeBitsAndMaskPoisonTail(len(c.Slice), 32, nil)
 		cnt := fn(num.Int128Optimize(c.Slice), c.Match, c.Match2, bits, mask)
 		assert.Len(t, bits, len(c.Result), c.Name)
 		assert.Equal(t, c.Count, cnt, "%s: unexpected result bit count", c.Name)

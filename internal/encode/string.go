@@ -52,8 +52,8 @@ type StringContainer interface {
 
 	// data access
 	Get(int) []byte                                // returns single value at position
-	AppendTo(dst types.StringSetter, sel []uint32) // decodes and appends all/selected values
-	Iterator() iter.Seq[[]byte]                    // Go iterator
+	AppendTo(dst types.StringWriter, sel []uint32) // decodes and appends all/selected values
+	Iterator() iter.Seq2[int, []byte]              // Go iterator
 
 	// encode
 	Encode(ctx *StringContext, vals types.StringAccessor) StringContainer
@@ -98,6 +98,10 @@ func (c *StringContext) Close() {
 	putStringContext(c)
 }
 
+func (c *StringContext) MinMax() (any, any) {
+	return bytes.Clone(c.Min), bytes.Clone(c.Max)
+}
+
 var emptyHash uint64 = 11400714785074694791 // xxhash64 prime1 used as AES hash seed
 
 // AnalyzeString produces statistics about []byte vectors.
@@ -118,8 +122,7 @@ func AnalyzeString(vals types.StringAccessor) *StringContext {
 		c.Max = c.Min
 		c.MinLen = len(c.Min)
 		c.MaxLen = c.MinLen
-		var i int
-		for v := range vals.Iterator() {
+		for i, v := range vals.Iterator() {
 			if bytes.Compare(v, c.Min) < 0 {
 				c.Min = v
 			} else if bytes.Compare(v, c.Max) > 0 {
@@ -140,7 +143,6 @@ func AnalyzeString(vals types.StringAccessor) *StringContext {
 				c.NumUnique++
 				c.UniqueSize += vlen
 			}
-			i++
 		}
 	}
 	return c

@@ -32,15 +32,15 @@ func NewTestPackage(key int, sz int) *TestPackage {
 	}
 }
 
-func (p *TestPackage) IncRef() int64 {
+func (p *TestPackage) Ref() int64 {
 	return atomic.AddInt64(&p.refCount, 1)
 }
 
-func (p *TestPackage) DecRef() int64 {
+func (p *TestPackage) Deref() int64 {
 	return atomic.AddInt64(&p.refCount, -1)
 }
 
-func (p *TestPackage) HeapSize() int {
+func (p *TestPackage) Size() int {
 	return szPackage + len(p.data)
 }
 

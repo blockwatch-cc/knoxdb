@@ -20,7 +20,8 @@ func TestInt128Encode(t *testing.T) {
 	for _, c := range MakeInt128Tests(16) {
 		t.Run(c.Name, func(t *testing.T) {
 			// analyze and encode data into container
-			enc := EncodeInt128(c.Data)
+			ctx := AnalyzeInt128(c.Data)
+			enc := EncodeInt128(ctx, c.Data)
 			t.Log(enc.Info())
 
 			// validate contents
@@ -59,11 +60,12 @@ func TestInt128Encode(t *testing.T) {
 			dst = enc2.AppendTo(dst, sel)
 			require.Equal(t, len(sel), dst.Len())
 			for i, v := range sel {
-				require.Equal(t, c.Data.Elem(int(v)), dst.Elem(i), "sel[%d]", v)
+				require.Equal(t, c.Data.Get(int(v)), dst.Get(i), "sel[%d]", v)
 			}
 
 			enc2.Close()
 			enc.Close()
+			ctx.Close()
 		})
 	}
 }
@@ -75,7 +77,7 @@ func TestInt128Iterator(t *testing.T) {
 				// setup
 				src := c.Data
 				enc := NewInt128()
-				enc.Encode(src)
+				enc.Encode(nil, src)
 				t.Logf("Enc %s", enc.Info())
 				it := enc.Iterator()
 				if it == nil {
@@ -88,7 +90,7 @@ func TestInt128Iterator(t *testing.T) {
 				for i, v := range src.Iterator() {
 					val, ok := it.Next()
 					require.True(t, ok, "short iterator at pos %d", i)
-					require.Equal(t, v, val, "invalid val=%d pos=%d src=%d", val, i, src.Elem(i))
+					require.Equal(t, v, val, "invalid val=%d pos=%d src=%d", val, i, src.Get(i))
 				}
 
 				// --------------------------
@@ -115,7 +117,7 @@ func TestInt128Iterator(t *testing.T) {
 					require.GreaterOrEqual(t, n, 0, "next chunk returned negative n")
 					require.LessOrEqual(t, seen+n, c.N, "next chunk returned too large n")
 					for i, v := range dst.Subslice(0, n).Iterator() {
-						require.Equal(t, src.Elem(seen+i), v, "invalid val=%d pos=%d src=%d", v, seen+i, src.Elem(seen+i))
+						require.Equal(t, src.Get(seen+i), v, "invalid val=%d pos=%d src=%d", v, seen+i, src.Get(seen+i))
 					}
 					seen += n
 				}
@@ -134,7 +136,7 @@ func TestInt128Iterator(t *testing.T) {
 					require.GreaterOrEqual(t, n, 0, "next chunk returned negative n")
 					require.LessOrEqual(t, seen+n, c.N, "next chunk returned too large n")
 					for i, v := range dst.Subslice(0, n).Iterator() {
-						require.Equal(t, src.Elem(seen+i), v, "invalid val=%d pos=%d src=%d after skip", v, seen+i, src.Elem(seen+i))
+						require.Equal(t, src.Get(seen+i), v, "invalid val=%d pos=%d src=%d after skip", v, seen+i, src.Get(seen+i))
 					}
 					seen += n
 				}
@@ -150,7 +152,7 @@ func TestInt128Iterator(t *testing.T) {
 					require.True(t, ok, "seek to existing pos %d/%d failed", i, c.N)
 					val, ok := it.Next()
 					require.True(t, ok, "next after seek to existing pos %d/%d failed", i, c.N)
-					require.Equal(t, src.Elem(i), val, "invalid val=%d pos=%d after seek", val, i)
+					require.Equal(t, src.Get(i), val, "invalid val=%d pos=%d after seek", val, i)
 				}
 
 				// seek to invalid values
@@ -182,7 +184,7 @@ func TestInt128Compare(t *testing.T) {
 			t.Run(fmt.Sprintf("%s/%d", c.Name, sz), func(t *testing.T) {
 				src := c.Data
 				enc := NewInt128()
-				enc.Encode(src)
+				enc.Encode(nil, src)
 				t.Logf("Info: %s", enc.Info())
 
 				// equal
@@ -231,39 +233,39 @@ func TestInt128Compare(t *testing.T) {
 type TestCaseInt128 struct {
 	Name string
 	N    int
-	Data num.Int128Stride
+	Data *num.Int128Stride
 }
 
 func MakeInt128Tests(n int) []TestCaseInt128 {
 	return []TestCaseInt128{
-		{"const", n, num.Int128Stride{
+		{"const", n, &num.Int128Stride{
 			X0: tests.GenConst[int64](n, 0),
 			X1: tests.GenConst[uint64](n, 42),
 		}},
-		{"delta-", n, num.Int128Stride{
+		{"delta-", n, &num.Int128Stride{
 			X0: tests.GenConst[int64](n, 0),
 			X1: tests.GenSeq[uint64](n, 1),
 		}},
-		{"delta+", n, num.Int128Stride{
+		{"delta+", n, &num.Int128Stride{
 			X0: tests.GenConst[int64](n, -1),
 			X1: tests.GenSeq[uint64](n, -1),
 		}},
-		{"dups", n, num.Int128Stride{
+		{"dups", n, &num.Int128Stride{
 			X0: tests.GenConst[int64](n, 1),
 			X1: tests.GenDups[uint64](n, n/10, -1),
 		}},
-		{"runs", n, num.Int128Stride{
+		{"runs", n, &num.Int128Stride{
 			X0: tests.GenConst[int64](n, 1),
 			X1: tests.GenRuns[uint64](n, min(n, 5), -1),
 		}},
-		{"rand", n, num.Int128Stride{
+		{"rand", n, &num.Int128Stride{
 			X0: tests.GenRndBits[int64](n, 5),
 			X1: tests.GenRnd[uint64](n),
 		}},
 	}
 }
 
-func i128EnsureBits(t *testing.T, vals num.Int128Stride, val, val2 num.Int128, bits *bitset.Bitset, mode types.FilterMode) {
+func i128EnsureBits(t *testing.T, vals *num.Int128Stride, val, val2 num.Int128, bits *bitset.Bitset, mode types.FilterMode) {
 	if etests.ShowValues {
 		for i, v := range vals.Iterator() {
 			t.Logf("Val %d: %v", i, v)
@@ -319,12 +321,12 @@ func i128EnsureBits(t *testing.T, vals num.Int128Stride, val, val2 num.Int128, b
 type i128CompareFunc func(num.Int128, *Bitset, *Bitset)
 type i128CompareFunc2 func(num.Int128, num.Int128, *Bitset, *Bitset)
 
-func i128TestCompare(t *testing.T, cmp i128CompareFunc, src num.Int128Stride, mode types.FilterMode) {
+func i128TestCompare(t *testing.T, cmp i128CompareFunc, src *num.Int128Stride, mode types.FilterMode) {
 	bits := bitset.New(src.Len())
 	minv, maxv := src.MinMax()
 
 	// single value
-	val := src.Elem(src.Len() / 2)
+	val := src.Get(src.Len() / 2)
 	cmp(val, bits, nil)
 	i128EnsureBits(t, src, val, val, bits, mode)
 	bits.Zero()
@@ -349,12 +351,12 @@ func i128TestCompare(t *testing.T, cmp i128CompareFunc, src num.Int128Stride, mo
 	}
 }
 
-func i128TestCompare2(t *testing.T, cmp i128CompareFunc2, src num.Int128Stride, mode types.FilterMode) {
+func i128TestCompare2(t *testing.T, cmp i128CompareFunc2, src *num.Int128Stride, mode types.FilterMode) {
 	bits := bitset.New(src.Len())
 	minv, maxv := src.MinMax()
 
 	// single value
-	val := src.Elem(src.Len() / 2)
+	val := src.Get(src.Len() / 2)
 	cmp(val, val, bits, nil)
 	i128EnsureBits(t, src, val, val, bits, mode)
 	bits.Zero()
@@ -398,8 +400,8 @@ func i128TestCompare2(t *testing.T, cmp i128CompareFunc2, src num.Int128Stride, 
 // Benchmarks
 //
 
-func GenInt128Data(n int) num.Int128Stride {
-	return num.Int128Stride{
+func GenInt128Data(n int) *num.Int128Stride {
+	return &num.Int128Stride{
 		X0: tests.GenRndBits[int64](n, 5),
 		X1: tests.GenRnd[uint64](n),
 	}
@@ -414,7 +416,7 @@ func BenchmarkInt128Encode(b *testing.B) {
 			b.SetBytes(int64(c.N * 16))
 			var sz int
 			for b.Loop() {
-				enc := NewInt128().Encode(data)
+				enc := NewInt128().Encode(nil, data)
 				if once {
 					b.Log(enc.Info())
 					once = false
@@ -438,7 +440,7 @@ func BenchmarkInt128EncodeAndStore(b *testing.B) {
 			b.SetBytes(int64(c.N * 16))
 			var sz int
 			for b.Loop() {
-				enc := NewInt128().Encode(data)
+				enc := NewInt128().Encode(nil, data)
 				buf := enc.Store(make([]byte, 0, enc.Size()))
 				require.LessOrEqual(b, len(buf), enc.Size())
 				if once {
@@ -458,7 +460,7 @@ func BenchmarkInt128EncodeAndStore(b *testing.B) {
 func BenchmarkInt128Decode(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		data := GenInt128Data(c.N)
-		enc := NewInt128().Encode(data)
+		enc := NewInt128().Encode(nil, data)
 		buf := enc.Store(make([]byte, 0, enc.Size()))
 		dst := num.MakeInt128Stride(c.N)
 		once := etests.ShowInfo
@@ -482,13 +484,13 @@ func BenchmarkInt128Decode(b *testing.B) {
 func BenchmarkInt128Cmp(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		data := GenInt128Data(c.N)
-		enc := NewInt128().Encode(data)
+		enc := NewInt128().Encode(nil, data)
 		bits := bitset.New(c.N)
 		b.Log(enc.Info())
 		b.Run(c.Name, func(b *testing.B) {
 			b.SetBytes(int64(c.N * 16))
 			for b.Loop() {
-				enc.MatchEqual(data.Elem(0), bits, nil)
+				enc.MatchEqual(data.Get(0), bits, nil)
 			}
 			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 		})
@@ -498,7 +500,7 @@ func BenchmarkInt128Cmp(b *testing.B) {
 func BenchmarkInt128Iterator(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		data := GenInt128Data(c.N)
-		enc := NewInt128().Encode(data)
+		enc := NewInt128().Encode(nil, data)
 		buf := enc.Store(make([]byte, 0, enc.Size()))
 		once := etests.ShowInfo
 		b.Run(c.Name, func(b *testing.B) {

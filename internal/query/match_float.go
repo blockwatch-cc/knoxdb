@@ -54,18 +54,11 @@ func (m floatInSetMatcher[T]) MatchFilter(flt filter.Filter) bool {
 }
 
 func (m floatInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
+	// Note: float compression containers do not implement set matching
 	acc := block.NewBlockAccessor[T](b)
-	if bm := acc.Matcher(); bm != nil {
-		bm.MatchInSet(m.slice, bits, mask)
-		return
-	}
 	if mask != nil {
-		// skip masked values
-		for i, v := range acc.Slice() {
-			if !mask.Contains(i) {
-				continue
-			}
-			if m.slice.Contains(v) {
+		for i := range mask.Iterator() {
+			if m.slice.Contains(acc.Get(i)) {
 				bits.Set(i)
 			}
 		}
@@ -124,18 +117,11 @@ func (m floatNotInSetMatcher[T]) MatchFilter(_ filter.Filter) bool {
 }
 
 func (m floatNotInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
+	// Note: float compression containers do not implement set matching
 	acc := block.NewBlockAccessor[T](b)
-	if bm := acc.Matcher(); bm != nil {
-		bm.MatchNotInSet(m.slice, bits, mask)
-		return
-	}
 	if mask != nil {
-		// skip masked values
-		for i, v := range acc.Slice() {
-			if !mask.Contains(i) {
-				continue
-			}
-			if !m.slice.Contains(v) {
+		for i := range mask.Iterator() {
+			if !m.slice.Contains(acc.Get(i)) {
 				bits.Set(i)
 			}
 		}

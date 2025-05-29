@@ -215,7 +215,7 @@ func EstimateCardinality(b *block.Block, precision int) int {
 	// - use llb for 256/128/64/32 bit numbers and bytes/strings
 	// - use xroar bitmaps for 16/8 bit
 	switch b.Type() {
-	case block.BlockInt64, block.BlockTime, block.BlockUint64, block.BlockFloat64:
+	case block.BlockInt64, block.BlockUint64, block.BlockFloat64:
 		flt := llb.NewFilterWithPrecision(uint32(precision))
 		flt.AddMultiUint64(b.Uint64().Slice())
 		return min(l, int(flt.Cardinality()))
@@ -241,25 +241,23 @@ func EstimateCardinality(b *block.Block, precision int) int {
 
 	case block.BlockInt256:
 		flt := llb.NewFilterWithPrecision(uint32(precision))
-		b.Int256().ForEach(func(v num.Int256) {
-			buf := v.Bytes32()
-			flt.Add(buf[:])
-		})
+		for _, v := range b.Int256().Iterator() {
+			flt.Add(v.Bytes())
+		}
 		return min(l, int(flt.Cardinality()))
 
 	case block.BlockInt128:
 		flt := llb.NewFilterWithPrecision(uint32(precision))
-		b.Int128().ForEach(func(v num.Int128) {
-			buf := v.Bytes16()
-			flt.Add(buf[:])
-		})
+		for _, v := range b.Int128().Iterator() {
+			flt.Add(v.Bytes())
+		}
 		return min(l, int(flt.Cardinality()))
 
 	case block.BlockBytes:
 		flt := llb.NewFilterWithPrecision(uint32(precision))
-		b.Bytes().ForEachUnique(func(_ int, buf []byte) {
-			flt.Add(buf)
-		})
+		for _, v := range b.Bytes().Iterator() {
+			flt.Add(v)
+		}
 		return min(l, int(flt.Cardinality()))
 
 	case block.BlockBool:
@@ -288,12 +286,12 @@ func BuildBloomFilter(b *block.Block, cardinality, factor int) *bloom.Filter {
 	flt := bloom.NewFilter(cardinality * factor * 8)
 
 	switch b.Type() {
-	case block.BlockInt64, block.BlockTime, block.BlockUint64, block.BlockFloat64:
+	case block.BlockInt64, block.BlockUint64:
 		// we write uint64 data in little endian order into the filter,
 		// so all 8 byte numeric types look the same (float64 uses FloatBits == uint64)
 		flt.AddManyUint64(b.Uint64().Slice())
 
-	case block.BlockInt32, block.BlockUint32, block.BlockFloat32:
+	case block.BlockInt32, block.BlockUint32:
 		// we write uint32 data in little endian order into the filter,
 		// so all 4 byte numeric types look the same (float32 uses FloatBits == uint32)
 		flt.AddManyUint32(b.Uint32().Slice())
@@ -308,25 +306,25 @@ func BuildBloomFilter(b *block.Block, cardinality, factor int) *bloom.Filter {
 
 	case block.BlockInt256:
 		// write individual elements (no optimization exists)
-		b.Int256().ForEach(func(v num.Int256) {
+		for _, v := range b.Int256().Iterator() {
 			flt.Add(v.Bytes())
-		})
+		}
 
 	case block.BlockInt128:
 		// write individual elements (no optimization exists)
-		b.Int128().ForEach(func(v num.Int128) {
+		for _, v := range b.Int128().Iterator() {
 			flt.Add(v.Bytes())
-		})
+		}
 
 	case block.BlockBytes:
 		// write only unique elements (post-dedup optimization this avoids
 		// calculating hashes for duplicates)
-		b.Bytes().ForEachUnique(func(_ int, buf []byte) {
-			flt.Add(buf)
-		})
+		for _, v := range b.Bytes().Iterator() {
+			flt.Add(v)
+		}
 
 	default:
-		// BlockBool and unknown/future types have no filter
+		// BlockFloat32/64, BlockBool and unknown/future types have no filter
 		return nil
 	}
 	return flt
@@ -340,7 +338,7 @@ func BuildBitsFilter(b *block.Block, cardinality int) *xroar.Bitmap {
 	flt := xroar.NewWithSize(cardinality)
 
 	switch b.Type() {
-	case block.BlockInt64, block.BlockTime, block.BlockUint64:
+	case block.BlockInt64, block.BlockUint64:
 		for _, v := range b.Uint64().Slice() {
 			flt.Set(v)
 		}
@@ -362,7 +360,7 @@ func BuildBitsFilter(b *block.Block, cardinality int) *xroar.Bitmap {
 
 	default:
 		// unsupported
-		// BlockInt256, BlockInt128, BlockBytes, BlockBool
+		// BlockInt256, BlockInt128, BlockBytes, BlockBool, BlockFloat32/64
 		// unknown/future types have no filter
 		return nil
 	}
@@ -370,58 +368,51 @@ func BuildBitsFilter(b *block.Block, cardinality int) *xroar.Bitmap {
 }
 
 func BuildFuseFilter(b *block.Block) (*fuse.BinaryFuse[uint8], error) {
+	if !b.IsMaterialized() {
+		return nil, block.ErrBlockNotMaterialized
+	}
 	// create a private data copy (for unique algos)
 	var u64 []uint64
 	switch b.Type() {
-	case block.BlockInt64, block.BlockTime, block.BlockUint64:
+	case block.BlockInt64, block.BlockUint64:
 		u64 = slices.Clone(b.Uint64().Slice())
-		u64 = slicex.Unique(u64)
 
 	case block.BlockInt32, block.BlockUint32:
 		u64 = util.ConvertSlice[uint32, uint64](b.Uint32().Slice())
-		u64 = slicex.Unique(u64)
 
 	case block.BlockInt16, block.BlockUint16:
 		u64 = util.ConvertSlice[uint16, uint64](b.Uint16().Slice())
-		u64 = slicex.Unique(u64)
 
 	case block.BlockInt8, block.BlockUint8:
 		u64 = util.ConvertSlice[uint8, uint64](b.Uint8().Slice())
-		u64 = slicex.Unique(u64)
 
 	case block.BlockInt256:
 		// write individual elements (no optimization exists)
 		u64 = make([]uint64, b.Len())
-		var i int
-		b.Int256().ForEach(func(v num.Int256) {
+		for i, v := range b.Int256().Iterator() {
 			u64[i] = filter.Hash(v.Bytes()).Uint64()
-			i++
-		})
-		u64 = slicex.Unique(u64)
+		}
 
 	case block.BlockInt128:
 		// write individual elements (no optimization exists)
 		u64 = make([]uint64, b.Len())
-		var i int
-		b.Int128().ForEach(func(v num.Int128) {
+		for i, v := range b.Int128().Iterator() {
 			u64[i] = filter.Hash(v.Bytes()).Uint64()
-			i++
-		})
-		u64 = slicex.Unique(u64)
+		}
 
 	case block.BlockBytes:
-		// write only unique elements (post-dedup optimization this avoids
-		// calculating hashes for duplicates)
+		// write all strings
 		u64 = make([]uint64, b.Len())
-		var i int
-		b.Bytes().ForEachUnique(func(_ int, buf []byte) {
-			u64[i] = filter.Hash(buf).Uint64()
-			i++
-		})
+		for i, v := range b.Bytes().Iterator() {
+			u64[i] = filter.Hash(v).Uint64()
+		}
 
 	default:
-		// unknown/future types have no filter
+		// BlockFloat32/64, BlockBool and unknown/future types have no filter
 		return nil, schema.ErrInvalidValueType
 	}
+
+	// need unique values for filter construction
+	u64 = slicex.Unique(u64)
 	return fuse.NewBinaryFuse[uint8](u64)
 }

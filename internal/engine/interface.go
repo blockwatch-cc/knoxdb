@@ -5,6 +5,7 @@ package engine
 
 import (
 	"context"
+	"iter"
 
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/types"
@@ -132,17 +133,17 @@ type QueryResult interface {
 	Schema() *Schema
 	Len() int
 	Row(n int) QueryRow
-	Record(n int) []byte
+	EncodeRecord(n int) []byte
 	Close()
-	Bytes() []byte
+	Encode() []byte
 	SortBy(name string, order OrderType)
-	ForEach(fn func(r QueryRow) error) error
+	Iterator() iter.Seq2[int, QueryRow]
 	Column(name string) (any, error)
 }
 
 type QueryRow interface {
 	Schema() *Schema
-	Bytes() []byte
+	Encode() []byte
 	Decode(any) error
 	Field(string) (any, error)
 	Index(int) (any, error)

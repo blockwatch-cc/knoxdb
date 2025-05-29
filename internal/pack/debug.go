@@ -44,7 +44,7 @@ func (p *Package) ReadRow(row int, dst []any) []any {
 		// insert zero value when block is not available (e.g. after schema change)
 		b := p.blocks[i]
 		if b == nil {
-			dst = append(dst, field.Type.Null())
+			dst = append(dst, field.Type.Zero())
 			continue
 		}
 
@@ -100,19 +100,19 @@ func (p *Package) ReadValue(col, row int, typ types.FieldType, scale uint8) any 
 			return zeroTime
 		}
 	case types.FieldTypeBoolean:
-		return b.Bool().Contains(row)
+		return b.Bool().Get(row)
 	case types.FieldTypeBytes:
-		return b.Bytes().Elem(row)
+		return b.Bytes().Get(row)
 	case types.FieldTypeString:
-		return util.UnsafeGetString(b.Bytes().Elem(row))
+		return util.UnsafeGetString(b.Bytes().Get(row))
 	case types.FieldTypeInt256:
-		return b.Int256().Elem(row)
+		return b.Int256().Get(row)
 	case types.FieldTypeInt128:
-		return b.Int128().Elem(row)
+		return b.Int128().Get(row)
 	case types.FieldTypeDecimal256:
-		return num.NewDecimal256(b.Int256().Elem(row), scale)
+		return num.NewDecimal256(b.Int256().Get(row), scale)
 	case types.FieldTypeDecimal128:
-		return num.NewDecimal128(b.Int128().Elem(row), scale)
+		return num.NewDecimal128(b.Int128().Get(row), scale)
 	case types.FieldTypeDecimal64:
 		return num.NewDecimal64(b.Int64().Get(row), scale)
 	case types.FieldTypeDecimal32:

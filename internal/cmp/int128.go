@@ -6,11 +6,12 @@ package cmp
 import (
 	"math/bits"
 
+	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
-func cmp_i128_eq(src num.Int128Stride, val num.Int128, res, mask []byte) int64 {
+func cmp_i128_eq(src *num.Int128Stride, val num.Int128, res, mask []byte) int64 {
 	var cnt int64
 	n := src.Len() / 8
 	var idx int
@@ -83,7 +84,7 @@ func cmp_i128_eq(src num.Int128Stride, val num.Int128, res, mask []byte) int64 {
 	return cnt
 }
 
-func cmp_i128_ne(src num.Int128Stride, val num.Int128, res, mask []byte) int64 {
+func cmp_i128_ne(src *num.Int128Stride, val num.Int128, res, mask []byte) int64 {
 	var cnt int64
 	n := src.Len() / 8
 	var idx int
@@ -156,7 +157,7 @@ func cmp_i128_ne(src num.Int128Stride, val num.Int128, res, mask []byte) int64 {
 	return cnt
 }
 
-func cmp_i128_lt(src num.Int128Stride, val num.Int128, res, mask []byte) int64 {
+func cmp_i128_lt(src *num.Int128Stride, val num.Int128, res, mask []byte) int64 {
 	var cnt int64
 	n := src.Len() / 8
 	var idx int
@@ -229,7 +230,7 @@ func cmp_i128_lt(src num.Int128Stride, val num.Int128, res, mask []byte) int64 {
 	return cnt
 }
 
-func cmp_i128_le(src num.Int128Stride, val num.Int128, res, mask []byte) int64 {
+func cmp_i128_le(src *num.Int128Stride, val num.Int128, res, mask []byte) int64 {
 	var cnt int64
 	n := src.Len() / 8
 	var idx int
@@ -302,7 +303,7 @@ func cmp_i128_le(src num.Int128Stride, val num.Int128, res, mask []byte) int64 {
 	return cnt
 }
 
-func cmp_i128_gt(src num.Int128Stride, val num.Int128, res, mask []byte) int64 {
+func cmp_i128_gt(src *num.Int128Stride, val num.Int128, res, mask []byte) int64 {
 	var cnt int64
 	n := src.Len() / 8
 	var idx int
@@ -375,7 +376,7 @@ func cmp_i128_gt(src num.Int128Stride, val num.Int128, res, mask []byte) int64 {
 	return cnt
 }
 
-func cmp_i128_ge(src num.Int128Stride, val num.Int128, res, mask []byte) int64 {
+func cmp_i128_ge(src *num.Int128Stride, val num.Int128, res, mask []byte) int64 {
 	var cnt int64
 	n := src.Len() / 8
 	var idx int
@@ -448,23 +449,18 @@ func cmp_i128_ge(src num.Int128Stride, val num.Int128, res, mask []byte) int64 {
 	return cnt
 }
 
-func cmp_i128_bw(src num.Int128Stride, a, b num.Int128, bits, mask []byte) int64 {
+func cmp_i128_bw(src *num.Int128Stride, a, b num.Int128, bits, mask []byte) int64 {
 	var cnt int64
 	if mask != nil {
-		for i := range src.X0 {
-			bit := byte(1) << (i & 7)
-			if (mask[i>>3] & bit) == 0 {
-				continue
-			}
-			v := num.Int128{uint64(src.X0[i]), src.X1[i]}
+		for i := range bitset.NewFromBuffer(mask, src.Len()).Iterator() {
+			v := src.Get(i)
 			if a.Le(v) && b.Ge(v) {
-				bits[i>>3] |= bit
+				bits[i>>3] |= byte(1) << (i & 7)
 				cnt++
 			}
 		}
 	} else {
-		for i := range src.X0 {
-			v := num.Int128{uint64(src.X0[i]), src.X1[i]}
+		for i, v := range src.Iterator() {
 			if a.Le(v) && b.Ge(v) {
 				bits[i>>3] |= byte(1) << (i & 7)
 				cnt++

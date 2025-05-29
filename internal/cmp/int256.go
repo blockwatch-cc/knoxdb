@@ -6,11 +6,12 @@ package cmp
 import (
 	"math/bits"
 
+	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
-func cmp_i256_eq(src num.Int256Stride, val num.Int256, res, mask []byte) int64 {
+func cmp_i256_eq(src *num.Int256Stride, val num.Int256, res, mask []byte) int64 {
 	var cnt int64
 	n := src.Len() / 8
 	var idx int
@@ -83,7 +84,7 @@ func cmp_i256_eq(src num.Int256Stride, val num.Int256, res, mask []byte) int64 {
 	return cnt
 }
 
-func cmp_i256_ne(src num.Int256Stride, val num.Int256, res, mask []byte) int64 {
+func cmp_i256_ne(src *num.Int256Stride, val num.Int256, res, mask []byte) int64 {
 	var cnt int64
 	n := src.Len() / 8
 	var idx int
@@ -156,23 +157,19 @@ func cmp_i256_ne(src num.Int256Stride, val num.Int256, res, mask []byte) int64 {
 	return cnt
 }
 
-func cmp_i256_lt(src num.Int256Stride, val num.Int256, bits, mask []byte) int64 {
+func cmp_i256_lt(src *num.Int256Stride, val num.Int256, bits, mask []byte) int64 {
 	var cnt int64
 	if mask != nil {
-		for i := range src.X0 {
-			bit := byte(1) << (i & 7)
-			if (mask[i>>3] & bit) == 0 {
+		for i := range bitset.NewFromBuffer(mask, src.Len()).Iterator() {
+			if src.Get(i).Ge(val) {
 				continue
 			}
-			if src.Elem(i).Ge(val) {
-				continue
-			}
-			bits[i>>3] |= bit
+			bits[i>>3] |= byte(1) << (i & 7)
 			cnt++
 		}
 	} else {
-		for i := range src.X0 {
-			if src.Elem(i).Ge(val) {
+		for i, v := range src.Iterator() {
+			if v.Ge(val) {
 				continue
 			}
 			bits[i>>3] |= byte(1) << (i & 7)
@@ -182,23 +179,19 @@ func cmp_i256_lt(src num.Int256Stride, val num.Int256, bits, mask []byte) int64 
 	return cnt
 }
 
-func cmp_i256_le(src num.Int256Stride, val num.Int256, bits, mask []byte) int64 {
+func cmp_i256_le(src *num.Int256Stride, val num.Int256, bits, mask []byte) int64 {
 	var cnt int64
 	if mask != nil {
-		for i := range src.X0 {
-			bit := byte(1) << (i & 7)
-			if (mask[i>>3] & bit) == 0 {
+		for i := range bitset.NewFromBuffer(mask, src.Len()).Iterator() {
+			if src.Get(i).Gt(val) {
 				continue
 			}
-			if src.Elem(i).Gt(val) {
-				continue
-			}
-			bits[i>>3] |= bit
+			bits[i>>3] |= byte(1) << (i & 7)
 			cnt++
 		}
 	} else {
-		for i := range src.X0 {
-			if src.Elem(i).Gt(val) {
+		for i, v := range src.Iterator() {
+			if v.Gt(val) {
 				continue
 			}
 			bits[i>>3] |= byte(1) << (i & 7)
@@ -208,23 +201,19 @@ func cmp_i256_le(src num.Int256Stride, val num.Int256, bits, mask []byte) int64 
 	return cnt
 }
 
-func cmp_i256_gt(src num.Int256Stride, val num.Int256, bits, mask []byte) int64 {
+func cmp_i256_gt(src *num.Int256Stride, val num.Int256, bits, mask []byte) int64 {
 	var cnt int64
 	if mask != nil {
-		for i := range src.X0 {
-			bit := byte(1) << (i & 7)
-			if (mask[i>>3] & bit) == 0 {
+		for i := range bitset.NewFromBuffer(mask, src.Len()).Iterator() {
+			if src.Get(i).Le(val) {
 				continue
 			}
-			if src.Elem(i).Le(val) {
-				continue
-			}
-			bits[i>>3] |= bit
+			bits[i>>3] |= byte(1) << (i & 7)
 			cnt++
 		}
 	} else {
-		for i := range src.X0 {
-			if src.Elem(i).Le(val) {
+		for i, v := range src.Iterator() {
+			if v.Le(val) {
 				continue
 			}
 			bits[i>>3] |= byte(1) << (i & 7)
@@ -234,23 +223,19 @@ func cmp_i256_gt(src num.Int256Stride, val num.Int256, bits, mask []byte) int64 
 	return cnt
 }
 
-func cmp_i256_ge(src num.Int256Stride, val num.Int256, bits, mask []byte) int64 {
+func cmp_i256_ge(src *num.Int256Stride, val num.Int256, bits, mask []byte) int64 {
 	var cnt int64
 	if mask != nil {
-		for i := range src.X0 {
-			bit := byte(1) << (i & 7)
-			if (mask[i>>3] & bit) == 0 {
+		for i := range bitset.NewFromBuffer(mask, src.Len()).Iterator() {
+			if src.Get(i).Lt(val) {
 				continue
 			}
-			if src.Elem(i).Lt(val) {
-				continue
-			}
-			bits[i>>3] |= bit
+			bits[i>>3] |= byte(1) << (i & 7)
 			cnt++
 		}
 	} else {
-		for i := range src.X0 {
-			if src.Elem(i).Lt(val) {
+		for i, v := range src.Iterator() {
+			if v.Lt(val) {
 				continue
 			}
 			bits[i>>3] |= byte(1) << (i & 7)
@@ -260,24 +245,20 @@ func cmp_i256_ge(src num.Int256Stride, val num.Int256, bits, mask []byte) int64 
 	return cnt
 }
 
-func cmp_i256_bw(src num.Int256Stride, a, b num.Int256, bits, mask []byte) int64 {
+func cmp_i256_bw(src *num.Int256Stride, a, b num.Int256, bits, mask []byte) int64 {
 	diff := b.Sub(a).Add64(1).Uint256()
 	var cnt int64
 	if mask != nil {
-		for i := range src.X0 {
-			bit := byte(1) << (i & 7)
-			if (mask[i>>3] & bit) == 0 {
+		for i := range bitset.NewFromBuffer(mask, src.Len()).Iterator() {
+			if src.Get(i).Sub(a).Uint256().Ge(diff) {
 				continue
 			}
-			if src.Elem(i).Sub(a).Uint256().Ge(diff) {
-				continue
-			}
-			bits[i>>3] |= bit
+			bits[i>>3] |= byte(1) << (i & 7)
 			cnt++
 		}
 	} else {
-		for i := range src.X0 {
-			if src.Elem(i).Sub(a).Uint256().Ge(diff) {
+		for i, v := range src.Iterator() {
+			if v.Sub(a).Uint256().Ge(diff) {
 				continue
 			}
 			bits[i>>3] |= byte(1) << (i & 7)

@@ -8,9 +8,9 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/bitset"
-	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/store"
+	"blockwatch.cc/knoxdb/internal/types"
 )
 
 // stats iterator
@@ -54,7 +54,7 @@ func (it *Iterator) IsValid() bool {
 }
 
 // query, merge
-func (it Iterator) Key() uint32 {
+func (it *Iterator) Key() uint32 {
 	if it.snode == nil {
 		return 0
 	}
@@ -62,7 +62,7 @@ func (it Iterator) Key() uint32 {
 }
 
 // merge
-func (it Iterator) IsFull() bool {
+func (it *Iterator) IsFull() bool {
 	if it.snode == nil {
 		return false
 	}
@@ -82,7 +82,7 @@ func (it *Iterator) MinMax(col int) (any, any) {
 }
 
 // query (range filter access only)
-func (it Iterator) NValues() int {
+func (it *Iterator) NValues() int {
 	if it.snode == nil {
 		return 0
 	}
@@ -91,7 +91,7 @@ func (it Iterator) NValues() int {
 }
 
 // query
-func (it Iterator) ReadWire() []byte {
+func (it *Iterator) ReadWire() []byte {
 	if it.snode == nil {
 		return nil
 	}
@@ -103,8 +103,8 @@ func (it Iterator) ReadWire() []byte {
 }
 
 // merge
-func (it Iterator) MinMaxPk() (any, any) {
-	return it.MinMax(it.idx.px)
+func (it *Iterator) MinMaxRid() (any, any) {
+	return it.MinMax(it.idx.rx)
 }
 
 // query, merge?
@@ -192,20 +192,20 @@ func (it *Iterator) prev() bool {
 }
 
 // query
-func (it Iterator) Range() pack.Range {
+func (it *Iterator) Range() types.Range {
 	// get max upper bound
 	nRows := it.NValues()
 
 	// return full range when no int column is used
 	if !it.use.Is(FeatRangeFilter) {
-		return pack.Range{0, uint32(nRows)}
+		return types.Range{0, uint32(nRows)}
 	}
 
 	// lookup data pack key
 	key := it.Key()
 
 	// run inside storage tx
-	var rg pack.Range
+	var rg types.Range
 	it.idx.db.View(func(tx store.Tx) error {
 		rg = it.combinedRange(it.idx.rangeBucket(tx), key, it.flt, nRows)
 		return nil
@@ -216,7 +216,7 @@ func (it Iterator) Range() pack.Range {
 
 // query and aggregate range filters for all integer columns
 // stop early when max range i.e. full pack (OR) or empty range (AND) is reached
-func (it *Iterator) combinedRange(b store.Bucket, key uint32, n *query.FilterTreeNode, nRows int) pack.Range {
+func (it *Iterator) combinedRange(b store.Bucket, key uint32, n *query.FilterTreeNode, nRows int) types.Range {
 	if n.IsLeaf() {
 		// load range index data
 		idx := RangeIndexFromBytes(b.Get(filterKey(key, n.Filter.Index)))
@@ -224,7 +224,7 @@ func (it *Iterator) combinedRange(b store.Bucket, key uint32, n *query.FilterTre
 
 		// ignore errors
 		if !idx.IsValid() {
-			return pack.InvalidRange
+			return types.InvalidRange
 		}
 
 		// load min value for this column
@@ -234,7 +234,7 @@ func (it *Iterator) combinedRange(b store.Bucket, key uint32, n *query.FilterTre
 		return idx.Query(n.Filter, minv, nRows)
 	}
 
-	rg := pack.InvalidRange
+	rg := types.InvalidRange
 	for _, v := range n.Children {
 		if n.OrKind {
 			rg = rg.Union(it.combinedRange(b, key, v, nRows))

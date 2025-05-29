@@ -109,13 +109,13 @@ var (
 	// switch statements.
 	//
 	// 11 filter modes (0 == invalid)
-	// 16 block types
+	// 14 block types
 	blockMatchFn = [11][15]unsafe.Pointer{
 		// FilterModeInvalid
 		{},
 		// FilterModeEqual
 		{
-			unsafe.Pointer(&i64_eq), // 0 BlockTime
+			nullPtr,                 // 0 BlockInvalid
 			unsafe.Pointer(&i64_eq), // 1 BlockInt64
 			unsafe.Pointer(&i32_eq), // 2 BlockInt32
 			unsafe.Pointer(&i16_eq), // 3 BlockInt16
@@ -133,7 +133,7 @@ var (
 		},
 		// FilterModeNotEqual
 		{
-			unsafe.Pointer(&i64_ne), // 0 BlockTime
+			nullPtr,                 // 0 BlockInvalid
 			unsafe.Pointer(&i64_ne), // 1 BlockInt64
 			unsafe.Pointer(&i32_ne), // 2 BlockInt32
 			unsafe.Pointer(&i16_ne), // 3 BlockInt16
@@ -151,7 +151,7 @@ var (
 		},
 		// FilterModeGt
 		{
-			unsafe.Pointer(&i64_gt), // 0 BlockTime
+			nullPtr,                 // 0 BlockInvalid
 			unsafe.Pointer(&i64_gt), // 1 BlockInt64
 			unsafe.Pointer(&i32_gt), // 2 BlockInt32
 			unsafe.Pointer(&i16_gt), // 3 BlockInt16
@@ -169,7 +169,7 @@ var (
 		},
 		// FilterModeGe
 		{
-			unsafe.Pointer(&i64_ge), // 0 BlockTime
+			nullPtr,                 // 0 BlockInvalid
 			unsafe.Pointer(&i64_ge), // 1 BlockInt64
 			unsafe.Pointer(&i32_ge), // 2 BlockInt32
 			unsafe.Pointer(&i16_ge), // 3 BlockInt16
@@ -187,7 +187,7 @@ var (
 		},
 		// FilterModeLt
 		{
-			unsafe.Pointer(&i64_lt), // 0 BlockTime
+			nullPtr,                 // 0 BlockInvalid
 			unsafe.Pointer(&i64_lt), // 1 BlockInt64
 			unsafe.Pointer(&i32_lt), // 2 BlockInt32
 			unsafe.Pointer(&i16_lt), // 3 BlockInt16
@@ -205,7 +205,7 @@ var (
 		},
 		// FilterModeLe
 		{
-			unsafe.Pointer(&i64_le), // 0 BlockTime
+			nullPtr,                 // 0 BlockInvalid
 			unsafe.Pointer(&i64_le), // 1 BlockInt64
 			unsafe.Pointer(&i32_le), // 2 BlockInt32
 			unsafe.Pointer(&i16_le), // 3 BlockInt16
@@ -227,7 +227,7 @@ var (
 		{},
 		// FilterModeRange
 		{
-			unsafe.Pointer(&i64_rg), // 0 BlockTime
+			nullPtr,                 // 0 BlockInvalid
 			unsafe.Pointer(&i64_rg), // 1 BlockInt64
 			unsafe.Pointer(&i32_rg), // 2 BlockInt32
 			unsafe.Pointer(&i16_rg), // 3 BlockInt16
@@ -336,18 +336,20 @@ func (m numEqualMatcher[T]) MatchRange(from, to any) bool {
 
 func (m numEqualMatcher[T]) MatchFilter(flt filter.Filter) bool {
 	if x, ok := flt.(*bloom.Filter); ok {
+		// only bloom uses hashes for all data types
 		return x.ContainsHash(m.hash)
 	}
+	// other filters contain numeric values for integers
 	return flt.Contains(uint64(m.val))
 }
 
 func (m numEqualMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
 	acc := block.NewBlockAccessor[T](b)
-	if bm := acc.Matcher(); bm != nil {
-		bm.MatchEqual(m.val, bits, mask)
-	} else {
+	if b.IsMaterialized() {
 		n := m.match(acc.Slice(), m.val, bits.Bytes())
 		bits.ResetCount(int(n))
+	} else {
+		acc.Matcher().MatchEqual(m.val, bits, mask)
 	}
 }
 
@@ -383,11 +385,11 @@ func (m numNotEqualMatcher[T]) MatchRange(from, to any) bool {
 
 func (m numNotEqualMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
 	acc := block.NewBlockAccessor[T](b)
-	if bm := acc.Matcher(); bm != nil {
-		bm.MatchNotEqual(m.val, bits, mask)
-	} else {
+	if b.IsMaterialized() {
 		n := m.match(acc.Slice(), m.val, bits.Bytes())
 		bits.ResetCount(int(n))
+	} else {
+		acc.Matcher().MatchNotEqual(m.val, bits, mask)
 	}
 }
 
@@ -417,11 +419,11 @@ func (m numGtMatcher[T]) MatchRange(_, to any) bool {
 
 func (m numGtMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
 	acc := block.NewBlockAccessor[T](b)
-	if bm := acc.Matcher(); bm != nil {
-		bm.MatchGreater(m.val, bits, mask)
-	} else {
+	if b.IsMaterialized() {
 		n := m.match(acc.Slice(), m.val, bits.Bytes())
 		bits.ResetCount(int(n))
+	} else {
+		acc.Matcher().MatchGreater(m.val, bits, mask)
 	}
 }
 
@@ -449,11 +451,11 @@ func (m numGeMatcher[T]) MatchRange(_, to any) bool {
 
 func (m numGeMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
 	acc := block.NewBlockAccessor[T](b)
-	if bm := acc.Matcher(); bm != nil {
-		bm.MatchGreaterEqual(m.val, bits, mask)
-	} else {
+	if b.IsMaterialized() {
 		n := m.match(acc.Slice(), m.val, bits.Bytes())
 		bits.ResetCount(int(n))
+	} else {
+		acc.Matcher().MatchGreaterEqual(m.val, bits, mask)
 	}
 }
 
@@ -481,11 +483,11 @@ func (m numLtMatcher[T]) MatchRange(from, _ any) bool {
 
 func (m numLtMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
 	acc := block.NewBlockAccessor[T](b)
-	if bm := acc.Matcher(); bm != nil {
-		bm.MatchLess(m.val, bits, mask)
-	} else {
+	if b.IsMaterialized() {
 		n := m.match(acc.Slice(), m.val, bits.Bytes())
 		bits.ResetCount(int(n))
+	} else {
+		acc.Matcher().MatchLess(m.val, bits, mask)
 	}
 }
 
@@ -513,11 +515,11 @@ func (m numLeMatcher[T]) MatchRange(from, _ any) bool {
 
 func (m numLeMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
 	acc := block.NewBlockAccessor[T](b)
-	if bm := acc.Matcher(); bm != nil {
-		bm.MatchLessEqual(m.val, bits, mask)
-	} else {
+	if b.IsMaterialized() {
 		n := m.match(acc.Slice(), m.val, bits.Bytes())
 		bits.ResetCount(int(n))
+	} else {
+		acc.Matcher().MatchLessEqual(m.val, bits, mask)
 	}
 }
 
@@ -560,11 +562,11 @@ func (m numRangeMatcher[T]) MatchRange(from, to any) bool {
 
 func (m numRangeMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
 	acc := block.NewBlockAccessor[T](b)
-	if bm := acc.Matcher(); bm != nil {
-		bm.MatchBetween(m.from, m.to, bits, mask)
-	} else {
+	if b.IsMaterialized() {
 		n := m.match(acc.Slice(), m.from, m.to, bits.Bytes())
 		bits.ResetCount(int(n))
+	} else {
+		acc.Matcher().MatchBetween(m.from, m.to, bits, mask)
 	}
 }
 
@@ -652,12 +654,25 @@ func (m numInSetMatcher[T]) MatchRange(from, to any) bool {
 }
 
 func (m numInSetMatcher[T]) MatchFilter(flt filter.Filter) bool {
-	if x, ok := flt.(*xroar.Bitmap); ok {
+	switch x := flt.(type) {
+	case *xroar.Bitmap:
 		return !xroar.And(m.set, x).IsEmpty()
-	}
-	for _, h := range m.hashes {
-		if flt.Contains(h.Uint64()) {
-			return true
+	case *bloom.Filter:
+		for _, h := range m.hashes {
+			if flt.Contains(h.Uint64()) {
+				return true
+			}
+		}
+	default:
+		it := m.set.NewIterator()
+		for {
+			v, ok := it.Next()
+			if !ok {
+				break
+			}
+			if flt.Contains(v) {
+				return true
+			}
 		}
 	}
 	return false
@@ -665,17 +680,13 @@ func (m numInSetMatcher[T]) MatchFilter(flt filter.Filter) bool {
 
 func (m numInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
 	acc := block.NewBlockAccessor[T](b)
-	if bm := acc.Matcher(); bm != nil {
-		bm.MatchInSet(m.set, bits, mask)
+	if !b.IsMaterialized() {
+		acc.Matcher().MatchInSet(m.set, bits, mask)
 		return
 	}
 	if mask != nil {
-		// skip masked values
-		for i, v := range acc.Slice() {
-			if !mask.Contains(i) {
-				continue
-			}
-			if m.set.Contains(uint64(v)) {
+		for i := range mask.Iterator() {
+			if m.set.Contains(uint64(acc.Get(i))) {
 				bits.Set(i)
 			}
 		}
@@ -689,11 +700,8 @@ func (m numInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitse
 }
 
 func (m numInSetMatcher[T]) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) {
-	minAcc := block.NewBlockAccessor[T](mins)
-	maxAcc := block.NewBlockAccessor[T](maxs)
-
 	// handle compressed blocks
-	if minAcc.Matcher() != nil || maxAcc.Matcher() != nil {
+	if !mins.IsMaterialized() || !maxs.IsMaterialized() {
 		setMin, setMax := m.set.Minimum(), m.set.Maximum()
 		rg := newFactory(mins.Type()).New(FilterModeRange)
 		rg.WithValue(RangeValue{T(setMin), T(setMax)})
@@ -702,13 +710,10 @@ func (m numInSetMatcher[T]) MatchRangeVectors(mins, maxs *block.Block, bits, mas
 	}
 
 	// handle fully materialized blocks with raw number vectors
-	minx := minAcc.Slice()
-	maxx := maxAcc.Slice()
+	minx := block.NewBlockAccessor[T](mins).Slice()
+	maxx := block.NewBlockAccessor[T](maxs).Slice()
 	if mask != nil {
-		for i := range len(minx) {
-			if !mask.Contains(i) {
-				continue
-			}
+		for i := range mask.Iterator() {
 			minU64, maxU64 := uint64(minx[i]), uint64(maxx[i])
 			// source could contain negative integers
 			if minU64 > maxU64 {
@@ -781,27 +786,24 @@ func (m numNotInSetMatcher[T]) MatchRange(from, to any) bool {
 }
 
 func (m numNotInSetMatcher[T]) MatchFilter(flt filter.Filter) bool {
-	if x, ok := flt.(*xroar.Bitmap); ok {
+	switch x := flt.(type) {
+	case *xroar.Bitmap:
 		return !xroar.AndNot(m.set, x).IsEmpty()
+	default:
+		// we don't know due to false positive probability, so full scan is required
+		return true
 	}
-
-	// we don't know generally, so full scan is required
-	return true
 }
 
 func (m numNotInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
 	acc := block.NewBlockAccessor[T](b)
-	if bm := acc.Matcher(); bm != nil {
-		bm.MatchNotInSet(m.set, bits, mask)
+	if !b.IsMaterialized() {
+		acc.Matcher().MatchNotInSet(m.set, bits, mask)
 		return
 	}
 	if mask != nil {
-		// skip masked values
-		for i, v := range acc.Slice() {
-			if !mask.Contains(i) {
-				continue
-			}
-			if !m.set.Contains(uint64(v)) {
+		for i := range mask.Iterator() {
+			if !m.set.Contains(uint64(acc.Get(i))) {
 				bits.Set(i)
 			}
 		}

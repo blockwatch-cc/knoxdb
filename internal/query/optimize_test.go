@@ -294,7 +294,7 @@ func makeNode(field schema.Field, mode FilterMode, value any) *FilterTreeNode {
 	// Log the initial value and its type
 	// log.Printf("makeNode called with mode: %v, fieldIndex: %d, value: %v (type: %T)", mode, fieldIndex, value, value)
 
-	blockType := BlockTypes[field.Type()]
+	blockType := field.Type().BlockType()
 	f := &Filter{
 		Name:    field.Name(),
 		Mode:    mode,

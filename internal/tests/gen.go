@@ -13,6 +13,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
+	"blockwatch.cc/knoxdb/pkg/stringx"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
@@ -517,9 +518,9 @@ func GenRuns[T types.Number](n, r, w int) []T {
 	return res
 }
 
-func GenStringSeq(n, d int) *util.StringPool {
+func GenStringSeq(n, d int) *stringx.StringPool {
 	var i int
-	p := util.NewStringPool(n)
+	p := stringx.NewStringPool(n)
 	for range n {
 		p.AppendString(strconv.Itoa(i))
 		i += d
@@ -527,31 +528,31 @@ func GenStringSeq(n, d int) *util.StringPool {
 	return p
 }
 
-func GenStringConst(n int, v []byte) *util.StringPool {
-	p := util.NewStringPool(n)
+func GenStringConst(n int, v []byte) *stringx.StringPool {
+	p := stringx.NewStringPool(n)
 	for range n {
 		p.Append(v)
 	}
 	return p
 }
 
-func GenStringRnd(n, l int) *util.StringPool {
+func GenStringRnd(n, l int) *stringx.StringPool {
 	if l <= 0 {
 		// random lengths up to 64
-		p := util.NewStringPool(n)
+		p := stringx.NewStringPool(n)
 		for range n {
 			p.Append(util.RandBytes(util.RandIntn(l)))
 		}
 		return p
 	} else {
 		// fixed length strings
-		p := util.NewStringPoolSize(n, l)
+		p := stringx.NewStringPoolSize(n, l)
 		p.AppendMany(util.RandByteSlices(n, l)...)
 		return p
 	}
 }
 
-func GenStringDups(n, c, l int) *util.StringPool {
+func GenStringDups(n, c, l int) *stringx.StringPool {
 	var mk func() []byte
 	if l <= 0 {
 		mk = func() []byte { return util.RandBytes(util.RandIntn(64)) }
@@ -568,7 +569,7 @@ func GenStringDups(n, c, l int) *util.StringPool {
 	for range c {
 		unique = append(unique, mk())
 	}
-	p := util.NewStringPool(n)
+	p := stringx.NewStringPool(n)
 	for range n {
 		p.Append(unique[util.RandIntn(c)])
 	}
@@ -576,7 +577,7 @@ func GenStringDups(n, c, l int) *util.StringPool {
 }
 
 // creates n values with run length r at max string length l
-func GenStringRuns(n, r, l int) *util.StringPool {
+func GenStringRuns(n, r, l int) *stringx.StringPool {
 	if r > n {
 		panic(fmt.Errorf("r=%d must be smaller than n=%d", r, n))
 	}
@@ -587,7 +588,7 @@ func GenStringRuns(n, r, l int) *util.StringPool {
 		mk = func() []byte { return util.RandBytes(l) }
 	}
 
-	p := util.NewStringPool(n)
+	p := stringx.NewStringPool(n)
 	sz := (n + r - 1) / r
 
 	for range sz {

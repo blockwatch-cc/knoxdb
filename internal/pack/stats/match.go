@@ -138,50 +138,45 @@ func matchFilterVector(f *query.Filter, pkg *pack.Package, bits, mask *bitset.Bi
 	// A filter no-match will flip the result bit for a data pack off
 	// so that the pack will not be loaded for this query.
 
-	// use bits.Iterate() instead of bits.Indexs() to avoid allocating a full sized
+	// use bits.Iterator() instead of bits.Indexes() to avoid allocating a full sized
 	// []uint32 slice here in case we have a full match
-	var (
-		hits [16]int
-		n    int
-	)
-	for n, hits := bits.Iterate(0, hits[:]); len(hits) > 0; n, hits = bits.Iterate(n, hits) {
-		for _, v := range hits {
-			// filter key is data-pack-key + data-pack-col-index
-			bkey := filterKey(pkg.Uint32(STATS_ROW_KEY, v), f.Index)
+	var n int
+	for v := range bits.Iterator() {
+		// filter key is data-pack-key + data-pack-col-index
+		bkey := filterKey(pkg.Uint32(STATS_ROW_KEY, v), f.Index)
 
-			// select filter type
-			var (
-				flt filter.Filter
-				err error
-			)
+		// select filter type
+		var (
+			flt filter.Filter
+			err error
+		)
 
-			// load filter from bucket and check
-			switch ftyp {
-			case types.IndexTypeBloom:
-				buf := b[STATS_BLOOM_KEY].Get(bkey)
+		// load filter from bucket and check
+		switch ftyp {
+		case types.IndexTypeBloom:
+			buf := b[STATS_BLOOM_KEY].Get(bkey)
+			n += len(buf)
+			flt, err = bloom.NewFilterBuffer(buf)
+		case types.IndexTypeBfuse:
+			buf := b[STATS_FUSE_KEY].Get(bkey)
+			n += len(buf)
+			flt, err = fuse.NewBinaryFuseFromBytes[uint8](buf)
+		case types.IndexTypeBits:
+			buf := b[STATS_BITS_KEY].Get(bkey)
+			if len(buf) > 0 {
 				n += len(buf)
-				flt, err = bloom.NewFilterBuffer(buf)
-			case types.IndexTypeBfuse:
-				buf := b[STATS_FUSE_KEY].Get(bkey)
-				n += len(buf)
-				flt, err = fuse.NewBinaryFuseFromBytes[uint8](buf)
-			case types.IndexTypeBits:
-				buf := b[STATS_BITS_KEY].Get(bkey)
-				if len(buf) > 0 {
-					n += len(buf)
-					flt = xroar.NewFromBuffer(buf)
-				}
+				flt = xroar.NewFromBuffer(buf)
 			}
+		}
 
-			// ignore errors (e.g. when buf is nil or filter size mismatch)
-			if flt == nil && err != nil {
-				continue
-			}
+		// ignore errors (e.g. when buf is nil or filter size mismatch)
+		if flt == nil && err != nil {
+			continue
+		}
 
-			// reset match bit when bloom check is negative
-			if !f.Matcher.MatchFilter(flt) {
-				bits.Unset(v)
-			}
+		// reset match bit when filter check is negative
+		if !f.Matcher.MatchFilter(flt) {
+			bits.Unset(v)
 		}
 	}
 

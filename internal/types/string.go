@@ -5,8 +5,6 @@ package types
 
 import (
 	"iter"
-
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 type StringMatcher interface {
@@ -19,12 +17,26 @@ type StringMatcher interface {
 	MatchBetween(a, b []byte, bits, mask *Bitset)
 }
 
-type StringSetter = util.StringSetter
+type StringWriter interface {
+	Append([]byte)
+	Set(int, []byte)
+	Delete(int, int)
+}
 
-type StringAccessor interface {
+type StringReader interface {
 	Len() int
 	Size() int
 	Get(int) []byte
-	Iterator() iter.Seq[[]byte]
-	AppendTo(StringSetter, []uint32)
+	AppendTo(StringWriter, []uint32)
+	Iterator() iter.Seq2[int, []byte]
+}
+
+type StringAccessor interface {
+	StringReader
+	StringWriter
+	// Chunks() VectorIterator[E]
+	// Slice() []E
+	Matcher() StringMatcher
+	MinMax() ([]byte, []byte)
+	Cmp(i, j int) int
 }

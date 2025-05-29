@@ -19,7 +19,6 @@ import (
 
 var (
 	testMatchBlockTypes = []BlockType{
-		BlockTime,
 		BlockInt64,
 		BlockInt32,
 		BlockInt16,
@@ -47,7 +46,7 @@ var (
 
 func makeRandomValue(typ BlockType) any {
 	switch typ {
-	case BlockTime, BlockInt64:
+	case BlockInt64:
 		return util.RandInt64()
 	case BlockInt32:
 		return util.RandInt32()
@@ -84,7 +83,7 @@ func makeRandomBlock(typ BlockType, sz int) *block.Block {
 	b := block.New(typ, sz)
 	for i := 0; i < sz; i++ {
 		switch typ {
-		case BlockTime, BlockInt64:
+		case BlockInt64:
 			b.Int64().Append(util.RandInt64())
 		case BlockInt32:
 			b.Int32().Append(util.RandInt32())

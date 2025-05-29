@@ -5,10 +5,10 @@ package engine
 
 import (
 	"context"
+	"slices"
 
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
-	"golang.org/x/exp/slices"
 )
 
 func (e *Engine) CloneEnums(names ...string) *schema.EnumRegistry {

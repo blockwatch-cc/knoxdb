@@ -60,7 +60,7 @@ func (tx *transaction) nextBucketID() ([bucketIdLen]byte, error) {
 	}
 	// use the first missing id
 	if ids.Count() > 0 {
-		if _, pos := ids.Iterate(0, make([]int, 1)); len(pos) > 0 {
+		if pos, ok := ids.Iterate(-1, make([]int, 1)); ok {
 			nextId = pos[0]
 		}
 	}

@@ -13,6 +13,30 @@ import (
 	"blockwatch.cc/knoxdb/pkg/num"
 )
 
+type BitmapContext struct {
+	Min       bool
+	Max       bool
+	NumValues int
+	Count     int
+}
+
+// AnalyzeBitmap produces statistics
+func AnalyzeBitmap(v *bitset.Bitset) *BitmapContext {
+	cnt, len := v.Count(), v.Len()
+	return &BitmapContext{
+		Min:       cnt < len,
+		Max:       cnt > 0,
+		NumValues: len,
+		Count:     cnt,
+	}
+}
+
+func (c *BitmapContext) Close() {}
+
+func (c *BitmapContext) MinMax() (any, any) {
+	return c.Min, c.Max
+}
+
 // TBitmap
 type BitmapContainer struct {
 	Buf []byte
@@ -27,8 +51,8 @@ func NewBitmap() *BitmapContainer {
 
 // EncodeBitmap encodes an optimized bitmap vector
 // selecting the most efficient encoding scheme.
-func EncodeBitmap(v *bitset.Bitset) *BitmapContainer {
-	return NewBitmap().Encode(v)
+func EncodeBitmap(ctx *BitmapContext, v *bitset.Bitset) *BitmapContainer {
+	return NewBitmap().Encode(ctx, v)
 }
 
 // LoadBitmap loads a bitmap container from buffer.
@@ -125,7 +149,7 @@ func (c *BitmapContainer) AppendTo(dst *bitset.Bitset, sel []uint32) *bitset.Bit
 		case TBitmapDense:
 			// don't grow, append already extends dst
 			b := bitset.NewFromBuffer(c.Buf, c.N)
-			dst.AppendFrom(b, 0, c.N)
+			dst.AppendRange(b, 0, c.N)
 			b.Close()
 		case TBitmapSparse:
 			dst.Grow(c.N)
@@ -166,7 +190,7 @@ func (c *BitmapContainer) AppendTo(dst *bitset.Bitset, sel []uint32) *bitset.Bit
 	return dst
 }
 
-func (c *BitmapContainer) Encode(vals *bitset.Bitset) *BitmapContainer {
+func (c *BitmapContainer) Encode(ctx *BitmapContext, vals *bitset.Bitset) *BitmapContainer {
 	c.N = vals.Len()
 	n := vals.Count()
 	switch {

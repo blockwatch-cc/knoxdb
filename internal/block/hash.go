@@ -6,15 +6,16 @@ package block
 import (
 	"blockwatch.cc/knoxdb/internal/hash/xxhash"
 	"blockwatch.cc/knoxdb/internal/hash/xxhash64"
+	"blockwatch.cc/knoxdb/pkg/slicex"
 )
 
 func (b *Block) Hash() *Block {
 	l := b.Len()
 	h := New(BlockUint64, l)
-	h.len = l
+	h.len = uint32(l)
 
 	switch b.typ {
-	case BlockTime, BlockFloat64, BlockInt64, BlockUint64:
+	case BlockFloat64, BlockInt64, BlockUint64:
 		xxhash.Vec64u64(b.Uint64().Slice(), h.Uint64().Slice())
 	case BlockUint32, BlockInt32, BlockFloat32:
 		xxhash.Vec64u32(b.Uint32().Slice(), h.Uint64().Slice())
@@ -26,30 +27,31 @@ func (b *Block) Hash() *Block {
 		zero, one := xxhash64.Sum64([]byte{0}), xxhash64.Sum64([]byte{1})
 		bits := b.Bool()
 		u64 := h.Uint64().Slice()
-		for i := 0; i < l; i++ {
-			if bits.Contains(i) {
+		switch {
+		case bits.All():
+			slicex.Fill(u64, one)
+		case bits.None():
+			slicex.Fill(u64, zero)
+		default:
+			slicex.Fill(u64, zero)
+			for i := range bits.Iterator() {
 				u64[i] = one
-			} else {
-				u64[i] = zero
 			}
 		}
 	case BlockBytes:
 		u64 := h.Uint64().Slice()
-		bytes := b.Bytes()
-		for i := 0; i < l; i++ {
-			u64[i] = xxhash64.Sum64(bytes.Elem(i))
+		for i, v := range b.Bytes().Iterator() {
+			u64[i] = xxhash64.Sum64(v)
 		}
 	case BlockInt128:
 		u64 := h.Uint64().Slice()
-		i128 := b.Int128()
-		for i := 0; i < l; i++ {
-			u64[i] = xxhash64.Sum64(i128.Elem(i).Bytes())
+		for i, v := range b.Int128().Iterator() {
+			u64[i] = xxhash64.Sum64(v.Bytes())
 		}
 	case BlockInt256:
 		u64 := h.Uint64().Slice()
-		i256 := b.Int256()
-		for i := 0; i < l; i++ {
-			u64[i] = xxhash64.Sum64(i256.Elem(i).Bytes())
+		for i, v := range b.Int256().Iterator() {
+			u64[i] = xxhash64.Sum64(v.Bytes())
 		}
 	}
 	return h

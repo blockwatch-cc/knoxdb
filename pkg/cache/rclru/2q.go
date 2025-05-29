@@ -130,7 +130,7 @@ func (c *TwoQueueCache[K, V]) Get(key K) (val V, ok bool) {
 func (c *TwoQueueCache[K, V]) GetLocked(key K) (val V, ok bool) {
 	// Check if this is a frequent value
 	if val, ok = c.frequent.Get(key); ok {
-		val.IncRef()
+		val.Ref()
 		c.stats.Hit()
 		return
 	}
@@ -140,7 +140,7 @@ func (c *TwoQueueCache[K, V]) GetLocked(key K) (val V, ok bool) {
 	if val, ok = c.recent.Peek(key); ok {
 		c.recent.Remove(key)
 		c.frequent.Add(key, val)
-		val.IncRef()
+		val.Ref()
 		c.stats.Hit()
 		return
 	}
@@ -160,7 +160,7 @@ func (c *TwoQueueCache[K, V]) Add(key K, value V) (updated, evicted bool) {
 
 func (c *TwoQueueCache[K, V]) AddLocked(key K, value V) (updated, evicted bool) {
 	// Grab a reference since this element will stay in the cache (even on update)
-	value.IncRef()
+	value.Ref()
 
 	// Check if the value is frequently used already,
 	// and just update the value
@@ -170,10 +170,10 @@ func (c *TwoQueueCache[K, V]) AddLocked(key K, value V) (updated, evicted bool) 
 		// to not count twice, if != we properly release the element's reference
 		// counter which may release the element) new value can take more space in memory,
 		// so maybe we have to evict something
-		c.stats.Rem(val.HeapSize())
-		val.DecRef()
+		c.stats.Rem(val.Size())
+		val.Deref()
 		c.frequent.Add(key, value)
-		c.stats.Add(value.HeapSize())
+		c.stats.Add(value.Size())
 		evicted = c.ensureSpace()
 		updated = true
 		return
@@ -184,10 +184,10 @@ func (c *TwoQueueCache[K, V]) AddLocked(key K, value V) (updated, evicted bool) 
 	if val, ok := c.recent.Peek(key); ok {
 		// on update replace the cached value with new value; this assumes
 		// the same element is never added twice to the cache
-		c.stats.Rem(val.HeapSize())
+		c.stats.Rem(val.Size())
 		c.recent.Remove(key)
-		val.DecRef()
-		c.stats.Add(value.HeapSize())
+		val.Deref()
+		c.stats.Add(value.Size())
 		c.frequent.Add(key, value)
 		evicted = c.ensureSpace()
 		updated = true
@@ -199,14 +199,14 @@ func (c *TwoQueueCache[K, V]) AddLocked(key K, value V) (updated, evicted bool) 
 	if c.recentEvict.Contains(key) {
 		c.recentEvict.Remove(key)
 		c.frequent.Add(key, value)
-		c.stats.Add(value.HeapSize())
+		c.stats.Add(value.Size())
 		evicted = c.ensureSpace()
 		return
 	}
 
 	// Add to the recently seen list
 	c.recent.Add(key, value)
-	c.stats.Add(value.HeapSize())
+	c.stats.Add(value.Size())
 	evicted = c.ensureSpace()
 	return
 }
@@ -253,8 +253,8 @@ func (c *TwoQueueCache[K, V]) ensureSpace() (evicted bool) {
 			_, v, e = c.frequent.RemoveOldest()
 		}
 		if e {
-			c.stats.Rem(v.HeapSize())
-			v.DecRef()
+			c.stats.Rem(v.Size())
+			v.Deref()
 		}
 		evicted = evicted || e
 	}
@@ -302,8 +302,8 @@ func (c *TwoQueueCache[K, V]) RemoveLocked(key K) {
 		val, ok = c.recent.Peek(key)
 	}
 	if ok {
-		c.stats.Rem(val.HeapSize())
-		val.DecRef()
+		c.stats.Rem(val.Size())
+		val.Deref()
 	}
 
 	if c.frequent.Remove(key) {
@@ -331,16 +331,16 @@ func (c *TwoQueueCache[K, V]) Purge() {
 	c.lock.Lock()
 	_, v, ok := c.recent.RemoveOldest()
 	for ok {
-		c.stats.Rem(v.HeapSize())
-		v.DecRef()
+		c.stats.Rem(v.Size())
+		v.Deref()
 		_, v, ok = c.recent.RemoveOldest()
 	}
 	c.recent.Purge()
 
 	_, v, ok = c.frequent.RemoveOldest()
 	for ok {
-		c.stats.Rem(v.HeapSize())
-		v.DecRef()
+		c.stats.Rem(v.Size())
+		v.Deref()
 		_, v, ok = c.frequent.RemoveOldest()
 	}
 	c.frequent.Purge()
@@ -363,13 +363,13 @@ func (c *TwoQueueCache[K, V]) Peek(key K) (value V, ok bool) {
 	c.lock.RLock()
 	value, ok = c.frequent.Peek(key)
 	if ok {
-		value.IncRef()
+		value.Ref()
 		c.lock.RUnlock()
 		return
 	}
 	value, ok = c.recent.Peek(key)
 	if ok {
-		value.IncRef()
+		value.Ref()
 	}
 	c.lock.RUnlock()
 	return

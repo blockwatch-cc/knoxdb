@@ -429,42 +429,34 @@ func (m bytesInSetMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask
 }
 
 func (m bytesInSetMatcher) matchBlockHashMap(b *block.Block, bits *bitset.Bitset) {
-	b.Bytes().ForEach(func(i int, val []byte) {
-		if m.matchHashMap(val) {
+	for i, v := range b.Bytes().Iterator() {
+		if m.matchHashMap(v) {
 			bits.Set(i)
 		}
-	})
+	}
 }
 
 func (m bytesInSetMatcher) matchBlockHashMapWithMask(b *block.Block, bits, mask *bitset.Bitset) {
 	arr := b.Bytes()
-	for i := range arr.Len() {
-		// skip masked values
-		if !mask.Contains(i) {
-			continue
-		}
-		if m.matchHashMap(arr.Elem(i)) {
+	for i := range mask.Iterator() {
+		if m.matchHashMap(arr.Get(i)) {
 			bits.Set(i)
 		}
 	}
 }
 
 func (m bytesInSetMatcher) matchBlockSlice(b *block.Block, bits *bitset.Bitset) {
-	b.Bytes().ForEach(func(i int, val []byte) {
-		if m.slice.Contains(val) {
+	for i, v := range b.Bytes().Iterator() {
+		if m.slice.Contains(v) {
 			bits.Set(i)
 		}
-	})
+	}
 }
 
 func (m bytesInSetMatcher) matchBlockSliceWithMask(b *block.Block, bits, mask *bitset.Bitset) {
 	arr := b.Bytes()
-	for i := range arr.Len() {
-		// skip masked values
-		if !mask.Contains(i) {
-			continue
-		}
-		if m.slice.Contains(arr.Elem(i)) {
+	for i := range mask.Iterator() {
+		if m.slice.Contains(arr.Get(i)) {
 			bits.Set(i)
 		}
 	}
@@ -515,42 +507,34 @@ func (m bytesNotInSetMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, m
 }
 
 func (m bytesNotInSetMatcher) matchBlockHashMap(b *block.Block, bits *bitset.Bitset) {
-	b.Bytes().ForEach(func(i int, val []byte) {
-		if !m.matchHashMap(val) {
+	for i, v := range b.Bytes().Iterator() {
+		if !m.matchHashMap(v) {
 			bits.Set(i)
 		}
-	})
+	}
 }
 
 func (m bytesNotInSetMatcher) matchBlockHashMapWithMask(b *block.Block, bits, mask *bitset.Bitset) {
 	arr := b.Bytes()
-	for i := range arr.Len() {
-		// skip masked values
-		if !mask.Contains(i) {
-			continue
-		}
-		if !m.matchHashMap(arr.Elem(i)) {
+	for i := range mask.Iterator() {
+		if !m.matchHashMap(arr.Get(i)) {
 			bits.Set(i)
 		}
 	}
 }
 
 func (m bytesNotInSetMatcher) matchBlockSlice(b *block.Block, bits *bitset.Bitset) {
-	b.Bytes().ForEach(func(i int, val []byte) {
-		if !m.slice.Contains(val) {
+	for i, v := range b.Bytes().Iterator() {
+		if !m.slice.Contains(v) {
 			bits.Set(i)
 		}
-	})
+	}
 }
 
 func (m bytesNotInSetMatcher) matchBlockSliceWithMask(b *block.Block, bits, mask *bitset.Bitset) {
 	arr := b.Bytes()
-	for i := range arr.Len() {
-		// skip masked values
-		if !mask.Contains(i) {
-			continue
-		}
-		if !m.slice.Contains(arr.Elem(i)) {
+	for i := range mask.Iterator() {
+		if !m.slice.Contains(arr.Get(i)) {
 			bits.Set(i)
 		}
 	}
@@ -609,22 +593,17 @@ func (m bytesRegexpMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitse
 	}
 	if mask != nil {
 		arr := b.Bytes()
-		for i := range arr.Len() {
-			// skip masked values
-			if !mask.Contains(i) {
-				continue
-			}
-			if m.re.Match(arr.Elem(i)) {
+		for i := range mask.Iterator() {
+			if m.re.Match(arr.Get(i)) {
 				bits.Set(i)
 			}
 		}
 	} else {
-		b.Bytes().ForEach(func(i int, val []byte) {
-			if m.re.Match(val) {
+		for i, v := range b.Bytes().Iterator() {
+			if m.re.Match(v) {
 				bits.Set(i)
 			}
-		})
-
+		}
 	}
 }
 

@@ -11,7 +11,7 @@ import (
 	"blockwatch.cc/knoxdb/pkg/num"
 )
 
-type i128MatchFunc func(src num.Int128Stride, val num.Int128, bits, mask []byte) int64
+type i128MatchFunc func(src *num.Int128Stride, val num.Int128, bits, mask []byte) int64
 
 type I128MatcherFactory struct{}
 
@@ -46,12 +46,14 @@ type i128Matcher struct {
 	noopMatcher
 	match i128MatchFunc
 	val   num.Int128
+	hash  uint64
 }
 
 func (m *i128Matcher) Weight() int { return 2 }
 
 func (m *i128Matcher) WithValue(v any) {
 	m.val = v.(num.Int128)
+	m.hash = filter.Hash(m.val.Bytes()).Uint64()
 }
 
 func (m *i128Matcher) Value() any {
@@ -59,7 +61,7 @@ func (m *i128Matcher) Value() any {
 }
 
 func (m i128Matcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
-	n := m.match(*b.Int128(), m.val, bits.Bytes(), mask.Bytes())
+	n := m.match(b.Int128(), m.val, bits.Bytes(), mask.Bytes())
 	bits.ResetCount(int(n))
 }
 
@@ -114,6 +116,10 @@ func (m i128NotEqualMatcher) MatchRangeVectors(_, _ *block.Block, bits, mask *bi
 	} else {
 		bits.One()
 	}
+}
+
+func (m i128NotEqualMatcher) MatchFilter(flt filter.Filter) bool {
+	return flt.Contains(m.hash)
 }
 
 // GT ---
@@ -232,7 +238,7 @@ func (m i128RangeMatcher) MatchRange(from, to any) bool {
 }
 
 func (m i128RangeMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
-	n := cmp.Int128Between(*b.Int128(), m.from, m.to, bits.Bytes(), mask.Bytes())
+	n := cmp.Int128Between(b.Int128(), m.from, m.to, bits.Bytes(), mask.Bytes())
 	bits.ResetCount(int(n))
 }
 
@@ -294,17 +300,14 @@ func (m i128InSetMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset)
 	stride := b.Int128()
 	if mask != nil {
 		// skip masked values
-		for i, l := 0, stride.Len(); i < l; i++ {
-			if !mask.Contains(i) {
-				continue
-			}
-			if num.Int128Contains(m.slice, stride.Elem(i)) {
+		for i := range mask.Iterator() {
+			if num.Int128Contains(m.slice, stride.Get(i)) {
 				bits.Set(i)
 			}
 		}
 	} else {
-		for i, l := 0, stride.Len(); i < l; i++ {
-			if num.Int128Contains(m.slice, stride.Elem(i)) {
+		for i, v := range stride.Iterator() {
+			if num.Int128Contains(m.slice, v) {
 				bits.Set(i)
 			}
 		}
@@ -358,17 +361,14 @@ func (m i128NotInSetMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bits
 	stride := b.Int128()
 	if mask != nil {
 		// skip masked values
-		for i, l := 0, stride.Len(); i < l; i++ {
-			if !mask.Contains(i) {
-				continue
-			}
-			if !num.Int128Contains(m.slice, stride.Elem(i)) {
+		for i := range mask.Iterator() {
+			if !num.Int128Contains(m.slice, stride.Get(i)) {
 				bits.Set(i)
 			}
 		}
 	} else {
-		for i, l := 0, stride.Len(); i < l; i++ {
-			if !num.Int128Contains(m.slice, stride.Elem(i)) {
+		for i, v := range stride.Iterator() {
+			if !num.Int128Contains(m.slice, v) {
 				bits.Set(i)
 			}
 		}

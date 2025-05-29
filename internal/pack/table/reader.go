@@ -42,10 +42,10 @@ import (
 // - ReadModeExcludeMask used with a query to exclude rids from selection vectors
 //
 // In exclusion mode, a query defines filter conditions which based on statistics
-// are used to identify potential candidate packs. Once loaded and query filters
-// select matching vector positions and the exclude mask is used as additional
-// criteria for de-selecting records that would otherwise match. This mode is used
-// to hide rows that are replaced by updates and deletions inside the table journal.
+// are used to identify potential candidate packs. Once loaded and after query filters
+// have selected matching vector positions, the exclude mask is used as additional
+// criteria for de-selecting records that would otherwise match. This hides rows
+// that are replaced by updates and deletions in the table journal.
 //
 // In inclusion mode, the mask provides a list of row_ids to lookup without additional
 // query filters. Recall that table packs are sorted by row id and row id pack vectors

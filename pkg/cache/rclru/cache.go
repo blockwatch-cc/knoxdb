@@ -4,9 +4,9 @@
 package rclru
 
 type RefCountedElem interface {
-	IncRef() int64
-	DecRef() int64
-	HeapSize() int
+	Ref() int64
+	Deref() int64
+	Size() int
 }
 
 type Cache[KeyType comparable, ValType RefCountedElem] interface {

@@ -318,7 +318,7 @@ func (p *QueryPlan) QueryIndexes(ctx context.Context) error {
 	ts := p.Table.Schema()
 	tmpl := &Filter{
 		Name:  ts.Pk().Name(),
-		Type:  BlockTypes[ts.Pk().Type()],
+		Type:  ts.Pk().Type().BlockType(),
 		Index: uint16(ts.PkIndex()),
 	}
 

@@ -10,137 +10,89 @@ import (
 	"blockwatch.cc/knoxdb/internal/types"
 )
 
-func matchStringEqual(a types.StringAccessor, val []byte, bits, mask *bitset.Bitset) {
+func matchStringEqual(a types.StringReader, val []byte, bits, mask *bitset.Bitset) {
 	set := bits.Bytes()
 	var cnt int
 	if mask != nil {
-		msk := mask.Bytes()
-		for i := range a.Len() {
-			bit := bitmask(i)
-			if (msk[i>>3] & bit) == 0 {
-				continue
-			}
-			if !bytes.Equal(a.Get(i), val) {
-				continue
-			}
-			set[i>>3] |= bit
-			cnt++
-		}
-	} else {
-		for i := range a.Len() {
+		for i := range mask.Iterator() {
 			if !bytes.Equal(a.Get(i), val) {
 				continue
 			}
 			set[i>>3] |= bitmask(i)
 			cnt++
 		}
+	} else {
+		for i, v := range a.Iterator() {
+			if !bytes.Equal(v, val) {
+				continue
+			}
+			set[i>>3] |= bitmask(i)
+			cnt++
+		}
 	}
 	bits.ResetCount(cnt)
 }
 
-func matchStringNotEqual(a types.StringAccessor, val []byte, bits, mask *bitset.Bitset) {
+func matchStringNotEqual(a types.StringReader, val []byte, bits, mask *bitset.Bitset) {
 	set := bits.Bytes()
 	var cnt int
 	if mask != nil {
-		msk := mask.Bytes()
-		for i := range a.Len() {
-			bit := bitmask(i)
-			if (msk[i>>3] & bit) == 0 {
-				continue
-			}
-			if bytes.Equal(a.Get(i), val) {
-				continue
-			}
-			set[i>>3] |= bit
-			cnt++
-		}
-	} else {
-		for i := range a.Len() {
+		for i := range mask.Iterator() {
 			if bytes.Equal(a.Get(i), val) {
 				continue
 			}
 			set[i>>3] |= bitmask(i)
 			cnt++
 		}
+	} else {
+		for i, v := range a.Iterator() {
+			if bytes.Equal(v, val) {
+				continue
+			}
+			set[i>>3] |= bitmask(i)
+			cnt++
+		}
 	}
 	bits.ResetCount(cnt)
 }
 
-func matchStringLess(a types.StringAccessor, val []byte, bits, mask *bitset.Bitset) {
+func matchStringLess(a types.StringReader, val []byte, bits, mask *bitset.Bitset) {
 	set := bits.Bytes()
 	var cnt int
 	if mask != nil {
-		msk := mask.Bytes()
-		for i := range a.Len() {
-			bit := bitmask(i)
-			if (msk[i>>3] & bit) == 0 {
-				continue
-			}
-			if bytes.Compare(a.Get(i), val) >= 0 {
-				continue
-			}
-			set[i>>3] |= bit
-			cnt++
-		}
-	} else {
-		for i := range a.Len() {
+		for i := range mask.Iterator() {
 			if bytes.Compare(a.Get(i), val) >= 0 {
 				continue
 			}
 			set[i>>3] |= bitmask(i)
 			cnt++
 		}
+	} else {
+		for i, v := range a.Iterator() {
+			if bytes.Compare(v, val) >= 0 {
+				continue
+			}
+			set[i>>3] |= bitmask(i)
+			cnt++
+		}
 	}
 	bits.ResetCount(cnt)
 }
 
-func matchStringLessEqual(a types.StringAccessor, val []byte, bits, mask *bitset.Bitset) {
+func matchStringLessEqual(a types.StringReader, val []byte, bits, mask *bitset.Bitset) {
 	set := bits.Bytes()
 	var cnt int
 	if mask != nil {
-		msk := mask.Bytes()
-		for i := range a.Len() {
-			bit := bitmask(i)
-			if (msk[i>>3] & bit) == 0 {
-				continue
-			}
-			if bytes.Compare(a.Get(i), val) > 0 {
-				continue
-			}
-			set[i>>3] |= bit
-			cnt++
-		}
-	} else {
-		for i := range a.Len() {
+		for i := range mask.Iterator() {
 			if bytes.Compare(a.Get(i), val) > 0 {
 				continue
 			}
 			set[i>>3] |= bitmask(i)
 			cnt++
 		}
-	}
-	bits.ResetCount(cnt)
-}
-
-func matchStringGreater(a types.StringAccessor, val []byte, bits, mask *bitset.Bitset) {
-	set := bits.Bytes()
-	var cnt int
-	if mask != nil {
-		msk := mask.Bytes()
-		for i := range a.Len() {
-			bit := bitmask(i)
-			if (msk[i>>3] & bit) == 0 {
-				continue
-			}
-			if bytes.Compare(a.Get(i), val) <= 0 {
-				continue
-			}
-			set[i>>3] |= bit
-			cnt++
-		}
 	} else {
-		for i := range a.Len() {
-			if bytes.Compare(a.Get(i), val) <= 0 {
+		for i, v := range a.Iterator() {
+			if bytes.Compare(v, val) > 0 {
 				continue
 			}
 			set[i>>3] |= bitmask(i)
@@ -150,25 +102,20 @@ func matchStringGreater(a types.StringAccessor, val []byte, bits, mask *bitset.B
 	bits.ResetCount(cnt)
 }
 
-func matchStringGreaterEqual(a types.StringAccessor, val []byte, bits, mask *bitset.Bitset) {
+func matchStringGreater(a types.StringReader, val []byte, bits, mask *bitset.Bitset) {
 	set := bits.Bytes()
 	var cnt int
 	if mask != nil {
-		msk := mask.Bytes()
-		for i := range a.Len() {
-			bit := bitmask(i)
-			if (msk[i>>3] & bit) == 0 {
+		for i := range mask.Iterator() {
+			if bytes.Compare(a.Get(i), val) <= 0 {
 				continue
 			}
-			if bytes.Compare(a.Get(i), val) < 0 {
-				continue
-			}
-			set[i>>3] |= bit
+			set[i>>3] |= bitmask(i)
 			cnt++
 		}
 	} else {
-		for i := range a.Len() {
-			if bytes.Compare(a.Get(i), val) < 0 {
+		for i, v := range a.Iterator() {
+			if bytes.Compare(v, val) <= 0 {
 				continue
 			}
 			set[i>>3] |= bitmask(i)
@@ -178,7 +125,30 @@ func matchStringGreaterEqual(a types.StringAccessor, val []byte, bits, mask *bit
 	bits.ResetCount(cnt)
 }
 
-func matchStringBetween(a types.StringAccessor, from, to []byte, bits, mask *bitset.Bitset) {
+func matchStringGreaterEqual(a types.StringReader, val []byte, bits, mask *bitset.Bitset) {
+	set := bits.Bytes()
+	var cnt int
+	if mask != nil {
+		for i := range mask.Iterator() {
+			if bytes.Compare(a.Get(i), val) < 0 {
+				continue
+			}
+			set[i>>3] |= bitmask(i)
+			cnt++
+		}
+	} else {
+		for i, v := range a.Iterator() {
+			if bytes.Compare(v, val) < 0 {
+				continue
+			}
+			set[i>>3] |= bitmask(i)
+			cnt++
+		}
+	}
+	bits.ResetCount(cnt)
+}
+
+func matchStringBetween(a types.StringReader, from, to []byte, bits, mask *bitset.Bitset) {
 	if a.Len() == 0 {
 		return
 	}
@@ -191,12 +161,7 @@ func matchStringBetween(a types.StringAccessor, from, to []byte, bits, mask *bit
 	set := bits.Bytes()
 	var cnt int
 	if mask != nil {
-		msk := mask.Bytes()
-		for i := range a.Len() {
-			bit := bitmask(i)
-			if (msk[i>>3] & bit) == 0 {
-				continue
-			}
+		for i := range mask.Iterator() {
 			v := a.Get(i)
 			if bytes.Compare(v, from) < 0 {
 				continue
@@ -204,12 +169,11 @@ func matchStringBetween(a types.StringAccessor, from, to []byte, bits, mask *bit
 			if bytes.Compare(v, to) > 0 {
 				continue
 			}
-			set[i>>3] |= bit
+			set[i>>3] |= bitmask(i)
 			cnt++
 		}
 	} else {
-		for i := range a.Len() {
-			v := a.Get(i)
+		for i, v := range a.Iterator() {
 			if bytes.Compare(v, from) < 0 {
 				continue
 			}

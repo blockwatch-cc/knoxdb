@@ -85,12 +85,12 @@ type MatcherFactory interface {
 // Need custom matchers for
 // Time (maybe, currently int64 internally; if we were to introduce time-zones, then yes)
 func NewFactory(ftyp types.FieldType) MatcherFactory {
-	return newFactory(BlockTypes[ftyp])
+	return newFactory(ftyp.BlockType())
 }
 
 func newFactory(typ types.BlockType) MatcherFactory {
 	switch typ {
-	case BlockTime, BlockInt64:
+	case BlockInt64:
 		return NumMatcherFactory[int64]{typ}
 	case BlockBool:
 		return BitMatcherFactory{}

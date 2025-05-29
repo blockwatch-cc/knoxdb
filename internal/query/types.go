@@ -30,7 +30,7 @@ const (
 )
 
 const (
-	BlockTime    = types.BlockTime
+	BlockInvalid = types.BlockInvalid
 	BlockInt64   = types.BlockInt64
 	BlockInt32   = types.BlockInt32
 	BlockInt16   = types.BlockInt16
@@ -46,5 +46,3 @@ const (
 	BlockInt128  = types.BlockInt128
 	BlockInt256  = types.BlockInt256
 )
-
-var BlockTypes = types.BlockTypes

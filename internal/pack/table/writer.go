@@ -150,6 +150,7 @@ func (w *Writer) appendTail(ctx context.Context, src *pack.Package, mode pack.Wr
 				Alloc()
 			w.wasFull = false
 		} else {
+			// FIXME: materialize?
 			var err error
 			w.tail, err = w.table.NewReader().Read(ctx, w.stats.NextKey()-1)
 			if err != nil {
@@ -180,6 +181,9 @@ func (w *Writer) storePack(ctx context.Context, pkg *pack.Package) error {
 		return err
 	}
 
+	// init statistics
+	pkg.WithStats()
+
 	// analyze, optimize, compress and write to disk
 	err := w.table.db.Update(func(tx store.Tx) error {
 		n, err := pkg.StoreToDisk(ctx, w.table.dataBucket(tx))
@@ -203,8 +207,8 @@ func (w *Writer) storePack(ctx context.Context, pkg *pack.Package) error {
 	// remove from cache
 	pkg.DropFromCache(engine.GetEngine(ctx).BlockCache(w.table.id))
 
-	// cleanup temp statistics data
-	pkg.FreeAnalysis()
+	// cleanup statistics
+	pkg.CloseStats()
 
 	return err
 }

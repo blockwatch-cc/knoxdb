@@ -32,7 +32,7 @@ type Package struct {
 	rx       int            // row id index (position in schema)
 	schema   *schema.Schema // logical data types for column vectors
 	blocks   []*block.Block // physical column vectors, maybe nil when unsued
-	analyze  *Analysis      // statistics for encoding and metadata
+	stats    *Stats         // vector and encoder statistics for metadata index
 	selected []uint32       // selection vector used in operator pipelines
 }
 
@@ -47,11 +47,11 @@ func NewFrom(src *Package) *Package {
 		WithSchema(src.schema)
 }
 
-func (p Package) Key() uint32 {
+func (p *Package) Key() uint32 {
 	return p.key
 }
 
-func (p Package) IsNil() bool {
+func (p *Package) IsNil() bool {
 	for _, b := range p.blocks {
 		if b != nil {
 			return false
@@ -60,7 +60,7 @@ func (p Package) IsNil() bool {
 	return true
 }
 
-func (p Package) IsDirty() bool {
+func (p *Package) IsDirty() bool {
 	for _, b := range p.blocks {
 		if b == nil {
 			continue
@@ -96,7 +96,7 @@ func (p *Package) WithSchema(s *schema.Schema) *Package {
 
 func (p *Package) WithBlock(i int, b *block.Block) *Package {
 	if p.blocks[i] != nil {
-		p.blocks[i].DecRef()
+		p.blocks[i].Deref()
 		p.blocks[i] = nil
 	}
 	p.blocks[i] = b
@@ -127,7 +127,7 @@ func (p *Package) Alloc() *Package {
 		}
 
 		// allocate block
-		p.blocks[i] = block.New(blockTypes[field.Type()], p.maxRows)
+		p.blocks[i] = block.New(field.Type().BlockType(), p.maxRows)
 	}
 
 	return p
@@ -163,21 +163,49 @@ func (p *Package) Copy() *Package {
 	for i, b := range p.blocks {
 		cp.blocks[i] = b
 		if b != nil {
-			p.blocks[i].IncRef()
+			p.blocks[i].Ref()
 		}
 	}
 	return cp
 }
 
-func (p Package) Cols() int {
+// convert block containers to writable form in-place
+func (p *Package) Materialize() *Package {
+	for i, b := range p.blocks {
+		if b == nil {
+			continue
+		}
+		clone := b.Clone(p.maxRows)
+		b.Deref()
+		p.blocks[i] = clone
+	}
+	return p
+}
+
+func (p *Package) IsMaterialized() bool {
+	fields := p.schema.Exported()
+	for i, b := range p.blocks {
+		if b == nil {
+			if !fields[i].Flags.Is(types.FieldFlagDeleted) {
+				return false
+			}
+		}
+		if !b.IsMaterialized() {
+			return false
+		}
+	}
+	return true
+}
+
+func (p *Package) Cols() int {
 	return p.schema.NumFields()
 }
 
-func (p Package) Len() int {
+func (p *Package) Len() int {
 	return p.nRows
 }
 
-func (p Package) Cap() int {
+func (p *Package) Cap() int {
 	return p.maxRows
 }
 
@@ -209,22 +237,22 @@ func (p *Package) Selected() []uint32 {
 	return p.selected
 }
 
-func (p *Package) HeapSize() int {
+func (p *Package) Size() int {
 	var sz int = szPackage
 	for _, b := range p.blocks {
 		if b == nil {
 			continue
 		}
-		sz += b.HeapSize()
+		sz += b.Size()
 	}
 	return sz
 }
 
-func (p Package) Blocks() []*block.Block {
+func (p *Package) Blocks() []*block.Block {
 	return p.blocks
 }
 
-func (p Package) Block(i int) *block.Block {
+func (p *Package) Block(i int) *block.Block {
 	return p.blocks[i]
 }
 
@@ -236,8 +264,11 @@ func (p *Package) Clear() {
 		}
 		b.Clear()
 	}
+	if p.stats != nil {
+		p.stats.Close()
+		p.stats = nil
+	}
 	p.nRows = 0
-	p.analyze = nil
 	p.selected = nil
 }
 
@@ -248,8 +279,12 @@ func (p *Package) Release() {
 		if p.blocks[i] == nil {
 			continue
 		}
-		p.blocks[i].DecRef()
+		p.blocks[i].Deref()
 		p.blocks[i] = nil
+	}
+	if p.stats != nil {
+		p.stats.Close()
+		p.stats = nil
 	}
 	p.key = 0
 	p.nRows = 0
@@ -257,7 +292,6 @@ func (p *Package) Release() {
 	p.px = 0
 	p.rx = 0
 	p.schema = nil
-	p.analyze = nil
 	p.selected = nil
 	p.blocks = p.blocks[:0]
 	packagePool.Put(p)

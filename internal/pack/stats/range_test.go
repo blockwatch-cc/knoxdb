@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/block"
-	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/util"
@@ -70,12 +69,12 @@ func TestRangeIndexBuild(t *testing.T) {
 	require.Equal(t, 4, idx.NumUsedSlots(), "num used slots")
 	require.Equal(t, 1, idx.NumGroups(), "num groups")
 	require.Equal(t, 5*8, idx.Size(), "byte size")
-	require.Equal(t, pack.Range{0, 4}, idx.Range(1, 1), "range 1")
-	require.Equal(t, pack.Range{1, 1}, idx.Range(2, 1), "range 2")
-	require.Equal(t, pack.Range{2, 2}, idx.Range(3, 1), "range 3")
-	require.Equal(t, pack.Range{3, 3}, idx.Range(5, 1), "range 5")
-	require.Equal(t, pack.InvalidRange, idx.Range(7, 1), "invalid 7")
-	require.Equal(t, pack.InvalidRange, idx.Range(4, 1), "invalid 4")
+	require.Equal(t, types.Range{0, 4}, idx.Range(1, 1), "range 1")
+	require.Equal(t, types.Range{1, 1}, idx.Range(2, 1), "range 2")
+	require.Equal(t, types.Range{2, 2}, idx.Range(3, 1), "range 3")
+	require.Equal(t, types.Range{3, 3}, idx.Range(5, 1), "range 5")
+	require.Equal(t, types.InvalidRange, idx.Range(7, 1), "invalid 7")
+	require.Equal(t, types.InvalidRange, idx.Range(4, 1), "invalid 4")
 
 	// export/import
 	idx2 := RangeIndexFromBytes(idx.Bytes())
@@ -83,12 +82,12 @@ func TestRangeIndexBuild(t *testing.T) {
 	require.Equal(t, 4, idx2.NumUsedSlots(), "num used slots")
 	require.Equal(t, 1, idx2.NumGroups(), "num groups")
 	require.Equal(t, 5*8, idx2.Size(), "byte size")
-	require.Equal(t, pack.Range{0, 4}, idx2.Range(1, 1), "range 1")
-	require.Equal(t, pack.Range{1, 1}, idx2.Range(2, 1), "range 2")
-	require.Equal(t, pack.Range{2, 2}, idx2.Range(3, 1), "range 3")
-	require.Equal(t, pack.Range{3, 3}, idx2.Range(5, 1), "range 5")
-	require.Equal(t, pack.InvalidRange, idx2.Range(7, 1), "invalid 7")
-	require.Equal(t, pack.InvalidRange, idx2.Range(4, 1), "invalid 4")
+	require.Equal(t, types.Range{0, 4}, idx2.Range(1, 1), "range 1")
+	require.Equal(t, types.Range{1, 1}, idx2.Range(2, 1), "range 2")
+	require.Equal(t, types.Range{2, 2}, idx2.Range(3, 1), "range 3")
+	require.Equal(t, types.Range{3, 3}, idx2.Range(5, 1), "range 5")
+	require.Equal(t, types.InvalidRange, idx2.Range(7, 1), "invalid 7")
+	require.Equal(t, types.InvalidRange, idx2.Range(4, 1), "invalid 4")
 }
 
 func TestRangeIndexQuery(t *testing.T) {
@@ -104,91 +103,91 @@ func TestRangeIndexQuery(t *testing.T) {
 	// values exist
 	//
 	f := newFilter(block, "eq", int64(1))
-	require.Equal(t, pack.Range{0, 4}, idx.Query(f, minVal, block.Len()), f)
+	require.Equal(t, types.Range{0, 4}, idx.Query(f, minVal, block.Len()), f)
 
 	f = newFilter(block, "eq", int64(2))
-	require.Equal(t, pack.Range{1, 1}, idx.Query(f, minVal, block.Len()), f)
+	require.Equal(t, types.Range{1, 1}, idx.Query(f, minVal, block.Len()), f)
 
 	f = newFilter(block, "eq", int64(3))
-	require.Equal(t, pack.Range{2, 2}, idx.Query(f, minVal, block.Len()), f)
+	require.Equal(t, types.Range{2, 2}, idx.Query(f, minVal, block.Len()), f)
 
 	f = newFilter(block, "eq", int64(5))
-	require.Equal(t, pack.Range{3, 3}, idx.Query(f, minVal, block.Len()), f)
+	require.Equal(t, types.Range{3, 3}, idx.Query(f, minVal, block.Len()), f)
 
 	f = newFilter(block, "lt", int64(2))
-	require.Equal(t, pack.Range{0, 4}, idx.Query(f, minVal, block.Len()), f)
+	require.Equal(t, types.Range{0, 4}, idx.Query(f, minVal, block.Len()), f)
 
 	f = newFilter(block, "le", int64(2))
-	require.Equal(t, pack.Range{0, 4}, idx.Query(f, minVal, block.Len()), f)
+	require.Equal(t, types.Range{0, 4}, idx.Query(f, minVal, block.Len()), f)
 
 	f = newFilter(block, "gt", int64(2))
-	require.Equal(t, pack.Range{2, 3}, idx.Query(f, minVal, block.Len()), f)
+	require.Equal(t, types.Range{2, 3}, idx.Query(f, minVal, block.Len()), f)
 
 	f = newFilter(block, "ge", int64(2))
-	require.Equal(t, pack.Range{1, 3}, idx.Query(f, minVal, block.Len()), f)
+	require.Equal(t, types.Range{1, 3}, idx.Query(f, minVal, block.Len()), f)
 
 	f = newFilter(block, "rg", int64(2), int64(3))
-	require.Equal(t, pack.Range{1, 2}, idx.Query(f, minVal, block.Len()), f)
+	require.Equal(t, types.Range{1, 2}, idx.Query(f, minVal, block.Len()), f)
 
 	//
-	// values do nox exist directly
+	// values do not exist directly
 	//
 	f = newFilter(block, "eq", int64(4))
-	require.Equal(t, pack.InvalidRange, idx.Query(f, minVal, block.Len()), f)
+	require.Equal(t, types.InvalidRange, idx.Query(f, minVal, block.Len()), f)
 
 	f = newFilter(block, "lt", int64(4))
-	require.Equal(t, pack.Range{0, 4}, idx.Query(f, minVal, block.Len()), f)
+	require.Equal(t, types.Range{0, 4}, idx.Query(f, minVal, block.Len()), f)
 
 	f = newFilter(block, "le", int64(4))
-	require.Equal(t, pack.Range{0, 4}, idx.Query(f, minVal, block.Len()), f)
+	require.Equal(t, types.Range{0, 4}, idx.Query(f, minVal, block.Len()), f)
 
 	f = newFilter(block, "gt", int64(4))
-	require.Equal(t, pack.Range{3, 3}, idx.Query(f, minVal, block.Len()), f)
+	require.Equal(t, types.Range{3, 3}, idx.Query(f, minVal, block.Len()), f)
 
 	f = newFilter(block, "ge", int64(4))
-	require.Equal(t, pack.Range{3, 3}, idx.Query(f, minVal, block.Len()), f)
+	require.Equal(t, types.Range{3, 3}, idx.Query(f, minVal, block.Len()), f)
 
 	f = newFilter(block, "rg", int64(4), int64(4))
-	require.Equal(t, pack.InvalidRange, idx.Query(f, minVal, block.Len()), f)
+	require.Equal(t, types.InvalidRange, idx.Query(f, minVal, block.Len()), f)
 
 	//
 	// values out of bounds
 	//
 	f = newFilter(block, "eq", int64(0))
-	require.Equal(t, pack.InvalidRange, idx.Query(f, minVal, block.Len()), f)
+	require.Equal(t, types.InvalidRange, idx.Query(f, minVal, block.Len()), f)
 
 	f = newFilter(block, "lt", int64(0))
-	require.Equal(t, pack.InvalidRange, idx.Query(f, minVal, block.Len()), f)
+	require.Equal(t, types.InvalidRange, idx.Query(f, minVal, block.Len()), f)
 
 	f = newFilter(block, "le", int64(0))
-	require.Equal(t, pack.InvalidRange, idx.Query(f, minVal, block.Len()), f)
+	require.Equal(t, types.InvalidRange, idx.Query(f, minVal, block.Len()), f)
 
 	f = newFilter(block, "gt", int64(0))
-	require.Equal(t, pack.Range{0, 4}, idx.Query(f, minVal, block.Len()), f)
+	require.Equal(t, types.Range{0, 4}, idx.Query(f, minVal, block.Len()), f)
 
 	f = newFilter(block, "ge", int64(0))
-	require.Equal(t, pack.Range{0, 4}, idx.Query(f, minVal, block.Len()), f)
+	require.Equal(t, types.Range{0, 4}, idx.Query(f, minVal, block.Len()), f)
 
 	f = newFilter(block, "rg", int64(-1), int64(0))
-	require.Equal(t, pack.InvalidRange, idx.Query(f, minVal, block.Len()), f)
+	require.Equal(t, types.InvalidRange, idx.Query(f, minVal, block.Len()), f)
 
 	f = newFilter(block, "eq", int64(7))
-	require.Equal(t, pack.InvalidRange, idx.Query(f, minVal, block.Len()), f)
+	require.Equal(t, types.InvalidRange, idx.Query(f, minVal, block.Len()), f)
 
 	f = newFilter(block, "lt", int64(7))
-	require.Equal(t, pack.Range{0, 4}, idx.Query(f, minVal, block.Len()), f)
+	require.Equal(t, types.Range{0, 4}, idx.Query(f, minVal, block.Len()), f)
 
 	f = newFilter(block, "le", int64(7))
-	require.Equal(t, pack.Range{0, 4}, idx.Query(f, minVal, block.Len()), f)
+	require.Equal(t, types.Range{0, 4}, idx.Query(f, minVal, block.Len()), f)
 
 	f = newFilter(block, "gt", int64(7))
-	require.Equal(t, pack.InvalidRange, idx.Query(f, minVal, block.Len()), f)
+	require.Equal(t, types.InvalidRange, idx.Query(f, minVal, block.Len()), f)
 
 	f = newFilter(block, "ge", int64(7))
-	require.Equal(t, pack.InvalidRange, idx.Query(f, minVal, block.Len()), f)
+	require.Equal(t, types.InvalidRange, idx.Query(f, minVal, block.Len()), f)
 
 	f = newFilter(block, "rg", int64(7), int64(10))
-	require.Equal(t, pack.InvalidRange, idx.Query(f, minVal, block.Len()), f)
+	require.Equal(t, types.InvalidRange, idx.Query(f, minVal, block.Len()), f)
 }
 
 func TestRangeIndexBuildI32(t *testing.T) {

@@ -9,7 +9,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/bitset"
 	etests "blockwatch.cc/knoxdb/internal/encode/tests"
 	"blockwatch.cc/knoxdb/internal/tests"
-	"blockwatch.cc/knoxdb/pkg/util"
+	"blockwatch.cc/knoxdb/pkg/stringx"
 	"github.com/stretchr/testify/require"
 )
 
@@ -21,7 +21,7 @@ func BenchmarkStringAnalyze(b *testing.B) {
 	for _, c := range tests.MakeStringBenchmarks() {
 		b.Run(c.Name, func(b *testing.B) {
 			b.ReportAllocs()
-			b.SetBytes(int64(c.Data.Size()))
+			b.SetBytes(int64(c.Data.DataSize()))
 			for b.Loop() {
 				ctx := AnalyzeString(c.Data)
 				ctx.Close()
@@ -44,7 +44,7 @@ func BenchmarkStringEncode(b *testing.B) {
 			once := etests.ShowInfo
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
 				b.ReportAllocs()
-				b.SetBytes(int64(data.Size()))
+				b.SetBytes(int64(data.DataSize()))
 				var sz int
 				for b.Loop() {
 					enc := NewString(scheme).Encode(ctx, data)
@@ -76,7 +76,7 @@ func BenchmarkStringEncodeAndStore(b *testing.B) {
 			once := etests.ShowInfo
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
 				b.ReportAllocs()
-				b.SetBytes(int64(data.Size()))
+				b.SetBytes(int64(data.DataSize()))
 				var sz int
 				for b.Loop() {
 					ctx := AnalyzeString(data)
@@ -104,7 +104,7 @@ func BenchmarkStringEncodeBest(b *testing.B) {
 		once := etests.ShowInfo
 		b.Run(c.Name, func(b *testing.B) {
 			b.ReportAllocs()
-			b.SetBytes(int64(c.Data.Size()))
+			b.SetBytes(int64(c.Data.DataSize()))
 			var sz int
 			for b.Loop() {
 				enc := EncodeString(nil, c.Data)
@@ -134,7 +134,7 @@ func BenchmarkStringDecode(b *testing.B) {
 			ctx := AnalyzeString(data)
 			enc := NewString(scheme).Encode(ctx, data)
 			buf := enc.Store(make([]byte, 0, enc.Size()))
-			dst := util.NewStringPool(c.N)
+			dst := stringx.NewStringPool(c.N)
 			once := etests.ShowInfo
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
 				b.SetBytes(int64(data.Size()))
@@ -170,7 +170,7 @@ func BenchmarkStringCmp(b *testing.B) {
 			bits := bitset.New(c.N)
 			b.Log(enc.Info())
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
-				b.SetBytes(int64(data.Size()))
+				b.SetBytes(int64(data.DataSize()))
 				for b.Loop() {
 					enc.MatchEqual(data.Get(0), bits, nil)
 				}

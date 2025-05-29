@@ -24,7 +24,7 @@ type MatchTest[T types.Number] struct {
 func TestCases[T types.Number](t *testing.T, cases []MatchTest[T], fn func([]T, T, []byte) int64) {
 	for _, c := range cases {
 		t.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(t *testing.T) {
-			bits, _ := MakeBitsAndMaskPoisonTail(len(c.Slice), 32, maskAll)
+			bits, _ := MakeBitsAndMaskPoisonTail(len(c.Slice), 32, nil)
 			cnt := fn(c.Slice, c.Match, bits)
 			assert.Len(t, bits, len(c.Result), "len")
 			assert.Equal(t, c.Count, cnt, "unexpected result bit count")
@@ -37,7 +37,7 @@ func TestCases[T types.Number](t *testing.T, cases []MatchTest[T], fn func([]T, 
 func TestCases2[T types.Number](t *testing.T, cases []MatchTest[T], fn func([]T, T, T, []byte) int64) {
 	for _, c := range cases {
 		t.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(t *testing.T) {
-			bits, _ := MakeBitsAndMaskPoisonTail(len(c.Slice), 32, maskAll)
+			bits, _ := MakeBitsAndMaskPoisonTail(len(c.Slice), 32, nil)
 			cnt := fn(c.Slice, c.Match, c.Match2, bits)
 			assert.Len(t, bits, len(c.Result), "len")
 			assert.Equal(t, c.Count, cnt, "unexpected result bit count")

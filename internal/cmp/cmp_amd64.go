@@ -113,14 +113,6 @@ func init() {
 		Int128GreaterEqual = avx2.Int128GreaterEqual
 		Int128Between = avx2.Int128Between
 
-		Int128Equal = avx2.Int128Equal
-		Int128NotEqual = avx2.Int128NotEqual
-		Int128Less = avx2.Int128Less
-		Int128LessEqual = avx2.Int128LessEqual
-		Int128Greater = avx2.Int128Greater
-		Int128GreaterEqual = avx2.Int128GreaterEqual
-		Int128Between = avx2.Int128Between
-
 		// int256
 		Int256Equal = avx2.Int256Equal
 		Int256NotEqual = avx2.Int256NotEqual

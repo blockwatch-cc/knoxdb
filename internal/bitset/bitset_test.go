@@ -90,7 +90,7 @@ func TestBitsetOne(t *testing.T) {
 func TestBitsetZero(t *testing.T) {
 	for _, c := range popCases {
 		t.Run(c.Name, func(t *testing.T) {
-			bits := NewFromBuffer(c.Source, c.Size)
+			bits := NewFromBuffer(bytes.Clone(c.Source), c.Size)
 			bits.Zero()
 			assert.Len(t, bits.Bytes(), len(c.Source), "length")
 			assert.Equal(t, c.Size, bits.Len(), "size")
@@ -276,30 +276,30 @@ func TestBitsetUnset(t *testing.T) {
 	}
 }
 
-func TestBitsetSlice(t *testing.T) {
-	for _, sz := range bitsetSizes {
-		t.Run(f("%d", sz), func(t *testing.T) {
-			for _, b := range randBitsets(sz) {
-				slice := b.Slice()
-				require.Len(t, slice, sz, "length")
-				for k, v := range slice {
-					assert.Equal(t, b.Contains(k), v, "bit %d in %x", k, b.Bytes())
-				}
-			}
-		})
-	}
-}
+// func TestBitsetSlice(t *testing.T) {
+// 	for _, sz := range bitsetSizes {
+// 		t.Run(f("%d", sz), func(t *testing.T) {
+// 			for _, b := range randBitsets(sz) {
+// 				slice := b.Slice()
+// 				require.Len(t, slice, sz, "length")
+// 				for k, v := range slice {
+// 					assert.Equal(t, b.Contains(k), v, "bit %d in %x", k, b.Bytes())
+// 				}
+// 			}
+// 		})
+// 	}
+// }
 
-func TestBitsetSubSlice(t *testing.T) {
+func TestBitsetSlice(t *testing.T) {
 	for _, sz := range bitsetSizes {
 		t.Run(f("%d", sz), func(t *testing.T) {
 			for _, b := range randBitsets(sz) {
 				start := int(util.RandInt32n(int32(b.Len())))
 				n := int(util.RandInt32n(int32(b.Len() - start)))
-				slice := b.SubSlice(start, n)
+				slice := b.Slice(start, start+n)
 				require.Len(t, slice, n, "length")
 				for k, v := range slice {
-					assert.Equal(t, b.Contains(start+k), v, "bit %d in %x", start+k, b.Bytes())
+					require.Equal(t, b.Contains(start+k), v, "bit %d in %x", start+k, b.Bytes())
 				}
 			}
 		})
@@ -325,10 +325,10 @@ func TestBitsetAppend(t *testing.T) {
 
 					lbefore := dst.Len()
 					cbefore := dst.Count()
-					dst.AppendFrom(src, srcPos, srcLen)
+					dst.AppendRange(src, srcPos, srcPos+srcLen)
 
-					dstSlice := dst.SubSlice(lbefore, srcLen)
-					srcSlice := src.SubSlice(srcPos, srcLen)
+					dstSlice := dst.Slice(lbefore, lbefore+srcLen)
+					srcSlice := src.Slice(srcPos, srcPos+srcLen)
 					var srcSet int
 					for i := range srcSlice {
 						if srcSlice[i] {
@@ -344,7 +344,7 @@ func TestBitsetAppend(t *testing.T) {
 					require.Len(t, dstSlice, len(srcSlice), "slice length")
 
 					for j := range dstSlice {
-						assert.Equal(t, dstSlice[j], srcSlice[j], "bit %d in %x", j, dst.Bytes())
+						require.Equal(t, dstSlice[j], srcSlice[j], "bit %d in %x", j, dst.Bytes())
 					}
 				}
 			})
@@ -363,7 +363,7 @@ func TestBitsetDelete(t *testing.T) {
 				for _, src := range randBitsets(sz) {
 					dst := New(sz)
 					dst.Fill(pat)
-					cmp := dst.Slice()
+					cmp := dst.Slice(0, sz)
 					delPos := int(util.RandInt32n(int32(src.Len())))
 					delLen := int(util.RandInt32n(int32(src.Len() - delPos)))
 
@@ -373,7 +373,7 @@ func TestBitsetDelete(t *testing.T) {
 						slow++
 					}
 
-					dst.Delete(delPos, delLen)
+					dst.DeleteRange(delPos, delPos+delLen)
 					cmp = slices.Delete(cmp, delPos, delPos+delLen)
 
 					require.Equal(t, dst.Len(), len(cmp), "length")

@@ -273,8 +273,8 @@ func (p *JoinPlan) Compile(ctx context.Context) error {
 	// set pk field (optimization) and remember block type
 	p.Left.PkId = ltab.Pk().Id()
 	p.Right.PkId = rtab.Pk().Id()
-	p.Left.Typ = BlockTypes[p.Left.On.Type()]
-	p.Right.Typ = BlockTypes[p.Right.On.Type()]
+	p.Left.Typ = p.Left.On.Type().BlockType()
+	p.Right.Typ = p.Right.On.Type().BlockType()
 
 	// default names {table_name}.{field_name}
 	for i, field := range p.Left.Select.Fields() {
@@ -377,7 +377,7 @@ func (p *JoinPlan) Compile(ctx context.Context) error {
 
 	// pk cursor on large side
 	pkField := x.Table.Schema().Pk()
-	pkBlockTyp := BlockTypes[pkField.Type()]
+	pkBlockTyp := pkField.Type().BlockType()
 	matcher := newFactory(pkBlockTyp).New(FilterModeGt)
 	x.Filter = &Filter{
 		Name:    pkField.Name(),
@@ -395,7 +395,7 @@ func (p *JoinPlan) Compile(ctx context.Context) error {
 	// IN condition for join predicate column on small side ONLY for equi-joins
 	if p.IsEquiJoin() {
 		joinField := y.On
-		joinBlockType := BlockTypes[joinField.Type()]
+		joinBlockType := joinField.Type().BlockType()
 		matcher = newFactory(joinBlockType).New(FilterModeIn)
 		y.Filter = &Filter{
 			Name:    joinField.Name(),
@@ -558,8 +558,11 @@ func (p *JoinPlan) doJoin(ctx context.Context, out QueryResultConsumer) error {
 			// walk result and append
 			var n uint32
 			view := schema.NewView(p.schema)
-			err = agg.ForEach(func(r engine.QueryRow) error {
-				buf := r.Bytes()
+			if err := agg.Err(); err != nil {
+				return err
+			}
+			for _, r := range agg.Iterator() {
+				buf := r.Encode()
 
 				// result record must match conditions
 				if !MatchTree(p.Where, view.Reset(buf)) {
@@ -575,7 +578,7 @@ func (p *JoinPlan) doJoin(ctx context.Context, out QueryResultConsumer) error {
 					return types.EndStream
 				}
 				return nil
-			})
+			}
 			if err != nil {
 				break
 			}
@@ -662,12 +665,12 @@ func (p *JoinPlan) appendResult(out QueryResultConsumer, left engine.QueryResult
 	// fill with zero value data
 	p.buf.Reset()
 	if l >= 0 {
-		p.buf.Write(left.Record(l))
+		p.buf.Write(left.EncodeRecord(l))
 	} else {
 		p.buf.Write(bytes.Repeat([]byte{0}, left.Schema().WireSize()))
 	}
 	if r >= 0 {
-		p.buf.Write(right.Record(r))
+		p.buf.Write(right.EncodeRecord(r))
 	} else {
 		p.buf.Write(bytes.Repeat([]byte{0}, right.Schema().WireSize()))
 	}

@@ -158,7 +158,7 @@ func (c Condition) Compile(s *schema.Schema) (*FilterTreeNode, error) {
 				{
 					Filter: &Filter{
 						Name:    s.Pk().Name(),
-						Type:    BlockTypes[s.Pk().Type()],
+						Type:    s.Pk().Type().BlockType(),
 						Mode:    FilterModeTrue,
 						Index:   uint16(s.PkIndex()),
 						Value:   nil,
@@ -202,7 +202,7 @@ func (c Condition) Compile(s *schema.Schema) (*FilterTreeNode, error) {
 		)
 		switch c.Mode {
 		case FilterModeIn, FilterModeNotIn:
-			switch BlockTypes[typ] {
+			switch typ.BlockType() {
 			case BlockFloat64, BlockFloat32, BlockBool, BlockInt128, BlockInt256:
 				// special case for unsupported IN/NI block types
 				// we rewrite IN -> OR(EQ) and NIN -> AND(NE) subtrees
@@ -226,7 +226,7 @@ func (c Condition) Compile(s *schema.Schema) (*FilterTreeNode, error) {
 					node.Children[i] = &FilterTreeNode{
 						Filter: &Filter{
 							Name:    c.Name,
-							Type:    BlockTypes[typ],
+							Type:    typ.BlockType(),
 							Mode:    mode,
 							Index:   uint16(fid),
 							Value:   val,
@@ -275,7 +275,7 @@ func (c Condition) Compile(s *schema.Schema) (*FilterTreeNode, error) {
 					{
 						Filter: &Filter{
 							Name:    c.Name,
-							Type:    BlockTypes[typ],
+							Type:    typ.BlockType(),
 							Mode:    c.Mode,
 							Index:   uint16(fid),
 							Value:   c.Value,

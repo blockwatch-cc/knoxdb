@@ -11,6 +11,28 @@ import (
 	"blockwatch.cc/knoxdb/pkg/num"
 )
 
+type Int128Context struct {
+	Min       num.Int128
+	Max       num.Int128
+	NumValues int
+}
+
+// AnalyzeInt128 produces statistics
+func AnalyzeInt128(v *num.Int128Stride) *Int128Context {
+	minv, maxv := v.MinMax()
+	return &Int128Context{
+		Min:       minv,
+		Max:       maxv,
+		NumValues: v.Len(),
+	}
+}
+
+func (c *Int128Context) Close() {}
+
+func (c *Int128Context) MinMax() (any, any) {
+	return c.Min, c.Max
+}
+
 type Int128Container struct {
 	X0 NumberContainer[int64]
 	X1 NumberContainer[uint64]
@@ -23,8 +45,8 @@ func NewInt128() *Int128Container {
 
 // EncodeInt128 encodes a strided 128-bit integer vector
 // selecting the most efficient encoding schemes per stride.
-func EncodeInt128(v num.Int128Stride) *Int128Container {
-	return NewInt128().Encode(v)
+func EncodeInt128(ctx *Int128Context, v *num.Int128Stride) *Int128Container {
+	return NewInt128().Encode(ctx, v)
 }
 
 // LoadInt128 loads a 128bit integer container from buffer.
@@ -88,14 +110,24 @@ func (c *Int128Container) Get(n int) num.Int128 {
 	return num.Int128{uint64(c.X0.Get(n)), c.X1.Get(n)}
 }
 
-func (c *Int128Container) AppendTo(dst num.Int128Stride, sel []uint32) num.Int128Stride {
+func (c *Int128Container) AppendTo(dst *num.Int128Stride, sel []uint32) *num.Int128Stride {
 	dst.X0 = c.X0.AppendTo(dst.X0[:0], sel)
 	dst.X1 = c.X1.AppendTo(dst.X1[:0], sel)
 	return dst
 }
 
-func (c *Int128Container) Encode(vals num.Int128Stride) *Int128Container {
-	c.X0 = EncodeInt(nil, vals.X0)
+func (c *Int128Container) Encode(ctx *Int128Context, vals *num.Int128Stride) *Int128Container {
+	bl := 128
+	if ctx != nil {
+		bl = max(ctx.Max.BitLen(), ctx.Min.BitLen())
+	}
+	if bl <= 64 {
+		vctx := NewIntContext[int64](0, 0, vals.Len())
+		c.X0 = EncodeInt(vctx, vals.X0)
+		vctx.Close()
+	} else {
+		c.X0 = EncodeInt(nil, vals.X0)
+	}
 	c.X1 = EncodeInt(nil, vals.X1)
 	return c
 }
@@ -169,9 +201,9 @@ func (c *Int128Container) match(cmpFn I128MatchFunc, val num.Int128, bits, mask 
 
 		// compare
 		if mask != nil {
-			cnt += cmpFn(*src, val, buf[i>>3:], mask.Bytes()[i>>3:])
+			cnt += cmpFn(src, val, buf[i>>3:], mask.Bytes()[i>>3:])
 		} else {
-			cnt += cmpFn(*src, val, buf[i>>3:], nil)
+			cnt += cmpFn(src, val, buf[i>>3:], nil)
 		}
 
 		i += n
@@ -206,9 +238,9 @@ func (c *Int128Container) matchRange(cmpFn I128RangeMatchFunc, a, b num.Int128, 
 
 		// compare
 		if mask != nil {
-			cnt += cmpFn(*src, a, b, buf[i>>3:], mask.Bytes()[i>>3:])
+			cnt += cmpFn(src, a, b, buf[i>>3:], mask.Bytes()[i>>3:])
 		} else {
-			cnt += cmpFn(*src, a, b, buf[i>>3:], nil)
+			cnt += cmpFn(src, a, b, buf[i>>3:], nil)
 		}
 
 		i += n
@@ -293,7 +325,7 @@ func (it *Int128Iterator) Get(n int) num.Int128 {
 	if base := chunkBase(n); base != it.base {
 		it.fill(base)
 	}
-	return it.chunk.Elem(chunkPos(n))
+	return it.chunk.Get(chunkPos(n))
 }
 
 func (it *Int128Iterator) Next() (num.Int128, bool) {
@@ -312,7 +344,7 @@ func (it *Int128Iterator) Next() (num.Int128, bool) {
 	it.ofs++
 
 	// return calculated value
-	return it.chunk.Elem(i), true
+	return it.chunk.Get(i), true
 }
 
 func (it *Int128Iterator) NextChunk() (*num.Int128Stride, int) {

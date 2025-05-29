@@ -15,12 +15,13 @@ func BenchmarkAppendWire(b *testing.B) {
 		buf := s.(Encodable).Encode()
 		b.Run(fmt.Sprintf("%T/%d", v, PACK_SIZE), func(b *testing.B) {
 			b.ReportAllocs()
-			for n := 0; n < b.N; n++ {
-				for i := 0; i < PACK_SIZE; i++ {
+			for b.Loop() {
+				for range PACK_SIZE {
 					pkg.AppendWire(buf, nil)
 				}
 				pkg.Clear()
 			}
+			b.ReportMetric(float64(PACK_SIZE*b.N)/float64(b.Elapsed().Nanoseconds()), "rec/ns")
 		})
 	}
 }
@@ -31,12 +32,14 @@ func BenchmarkAppendWireE2E(b *testing.B) {
 		z := makeZeroStruct(v)
 		b.Run(fmt.Sprintf("%T/%d", v, PACK_SIZE), func(b *testing.B) {
 			b.ReportAllocs()
-			for n := 0; n < b.N; n++ {
-				for i := 0; i < PACK_SIZE; i++ {
+			for b.Loop() {
+				for range PACK_SIZE {
 					pkg.AppendWire(z.(Encodable).Encode(), nil)
 				}
 				pkg.Clear()
 			}
+			b.ReportMetric(float64(PACK_SIZE*b.N)/float64(b.Elapsed().Nanoseconds()), "rec/ns")
+
 		})
 	}
 }

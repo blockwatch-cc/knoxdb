@@ -7,7 +7,6 @@ import (
 	"bytes"
 
 	"blockwatch.cc/knoxdb/internal/query"
-	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
@@ -94,7 +93,7 @@ func (n *INode) Update(view *schema.View, build *schema.Builder, left, right Nod
 	build.Reset()
 
 	for i, f := range view.Schema().Exported() {
-		typ := types.BlockTypes[f.Type]
+		typ := f.Type.BlockType()
 		lval, _ := view.Reset(left.Bytes()).GetPhy(i)
 		rval, _ := view.Reset(right.Bytes()).GetPhy(i)
 		vval, _ := view.Reset(n.meta).GetPhy(i)

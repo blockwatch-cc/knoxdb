@@ -186,11 +186,10 @@ func (it *LookupIterator) loadNextPack(ctx context.Context) (bool, error) {
 			// decode when not already found in cache
 			if it.pack.Block(i) == nil {
 				// it.idx.log.Infof("Loading block 0x%016x:%016x:%d", bik, bpk, i)
-				b := block.New(
-					types.BlockTypes[it.idx.schema.Exported()[i].Type],
-					it.idx.opts.PackSize,
-				)
-				if err := b.Decode(it.cur.Value()); err != nil {
+				f, ok := it.idx.schema.FieldByIndex(i)
+				assert.Always(ok, "missing schema field", "idx", i)
+				b, err := block.Decode(f.Type().BlockType(), it.cur.Value())
+				if err != nil {
 					return false, fmt.Errorf("decoding block 0x%016x:%016x:%d: %v", bik, bpk, bid, err)
 				}
 				it.pack.WithBlock(i, b)
@@ -422,11 +421,10 @@ func (it *ScanIterator) loadPack(ctx context.Context) error {
 	for i := range []int{0, 1} {
 		if it.pack.Block(i) == nil {
 			// it.idx.log.Infof("Loading block 0x%016x:%016x:%d", ik, pk, i)
-			b := block.New(
-				types.BlockTypes[it.idx.schema.Exported()[i].Type],
-				it.idx.opts.PackSize,
-			)
-			if err := b.Decode(it.cur.Value()); err != nil {
+			f, ok := it.idx.schema.FieldByIndex(i)
+			assert.Always(ok, "missing schema field", "idx", i)
+			b, err := block.Decode(f.Type().BlockType(), it.cur.Value())
+			if err != nil {
 				return fmt.Errorf("loading block 0x%016x:%016x:%d: %v", ik, pk, i, err)
 			}
 			it.pack.WithBlock(i, b)

@@ -20,7 +20,8 @@ func TestBitmapEncode(t *testing.T) {
 	for _, c := range MakeBitmapTests(129) {
 		t.Run(c.Name, func(t *testing.T) {
 			// analyze and encode data into container
-			enc := EncodeBitmap(c.Data)
+			ctx := AnalyzeBitmap(c.Data)
+			enc := EncodeBitmap(ctx, c.Data)
 			t.Log(enc.Info())
 
 			// validate contents
@@ -62,6 +63,7 @@ func TestBitmapEncode(t *testing.T) {
 
 			enc2.Close()
 			enc.Close()
+			ctx.Close()
 		})
 	}
 }
@@ -73,7 +75,7 @@ func TestBitmapCompare(t *testing.T) {
 			t.Run(fmt.Sprintf("%s/%d", c.Name, sz), func(t *testing.T) {
 				src := c.Data
 				enc := NewBitmap()
-				enc.Encode(src)
+				enc.Encode(nil, src)
 				t.Logf("Info: %s", enc.Info())
 
 				// equal
@@ -273,10 +275,10 @@ func BenchmarkBitmapEncode(b *testing.B) {
 			once := etests.ShowInfo
 			b.Run(c.Name+"/"+sz.Name, func(b *testing.B) {
 				b.ReportAllocs()
-				b.SetBytes(int64(c.Data.EncodedSize()))
+				b.SetBytes(int64(c.Data.Len() / 8))
 				var sz int
 				for b.Loop() {
-					enc := NewBitmap().Encode(c.Data)
+					enc := NewBitmap().Encode(nil, c.Data)
 					if once {
 						b.Log(enc.Info())
 						once = false
@@ -298,10 +300,10 @@ func BenchmarkBitmapEncodeAndStore(b *testing.B) {
 			once := etests.ShowInfo
 			b.Run(c.Name+"/"+sz.Name, func(b *testing.B) {
 				b.ReportAllocs()
-				b.SetBytes(int64(c.Data.EncodedSize()))
+				b.SetBytes(int64(c.Data.Len() / 8))
 				var sz int
 				for b.Loop() {
-					enc := NewBitmap().Encode(c.Data)
+					enc := NewBitmap().Encode(nil, c.Data)
 					buf := enc.Store(make([]byte, 0, enc.Size()))
 					require.LessOrEqual(b, len(buf), enc.Size())
 					if once {
@@ -322,12 +324,12 @@ func BenchmarkBitmapEncodeAndStore(b *testing.B) {
 func BenchmarkBitmapDecode(b *testing.B) {
 	for _, sz := range tests.BenchmarkSizes {
 		for _, c := range MakeBenchmarks(sz.N) {
-			enc := NewBitmap().Encode(c.Data)
+			enc := NewBitmap().Encode(nil, c.Data)
 			buf := enc.Store(make([]byte, 0, enc.Size()))
 			dst := bitset.New(c.N)
 			once := etests.ShowInfo
 			b.Run(c.Name+"/"+sz.Name, func(b *testing.B) {
-				b.SetBytes(int64(c.Data.EncodedSize()))
+				b.SetBytes(int64(c.Data.Len() / 8))
 				for b.Loop() {
 					enc2, err := LoadBitmap(buf)
 					require.NoError(b, err)
@@ -348,11 +350,11 @@ func BenchmarkBitmapDecode(b *testing.B) {
 func BenchmarkBitmapCmp(b *testing.B) {
 	for _, sz := range tests.BenchmarkSizes {
 		for _, c := range MakeBenchmarks(sz.N) {
-			enc := NewBitmap().Encode(c.Data)
+			enc := NewBitmap().Encode(nil, c.Data)
 			bits := bitset.New(c.N)
 			b.Log(enc.Info())
 			b.Run(c.Name+"/"+sz.Name, func(b *testing.B) {
-				b.SetBytes(int64(c.Data.EncodedSize()))
+				b.SetBytes(int64(c.Data.Len() / 8))
 				for b.Loop() {
 					enc.MatchEqual(true, bits, nil)
 				}

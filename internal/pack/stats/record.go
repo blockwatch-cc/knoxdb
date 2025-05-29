@@ -7,7 +7,6 @@ import (
 	"encoding/binary"
 
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
@@ -87,24 +86,23 @@ func NewRecordFromPack(pkg *pack.Package, n int) *Record {
 		DiskSize: int64(n),
 		view:     schema.NewView(s),
 	}
+	pstats := pkg.Stats()
 	build := schema.NewBuilder(s, binary.LittleEndian)
 	build.Write(STATS_ROW_KEY, pkg.Key())
 	build.Write(STATS_ROW_SCHEMA, pkg.Schema().Hash())
 	build.Write(STATS_ROW_NVALS, int64(pkg.Len()))
-	// TODO: use analysis when available
-	build.Write(STATS_ROW_SIZE, int64(n))
+	build.Write(STATS_ROW_SIZE, pstats.SizeDiff())
 
-	fields := pkg.Schema().Exported()
 	for i, b := range pkg.Blocks() {
 		var minv, maxv any
 		if b == nil {
 			// use zero values for invalid blocks (deleted from schema)
-			minv = types.BlockTypes[fields[i].Type].Zero()
+			minv = b.Type().Zero()
 			maxv = minv
 		} else {
-			// calculate min/max statistics
-			// TODO: use analysis when available
-			minv, maxv = b.MinMax()
+			// use min/max statistics
+			minv = pstats.MinMax[i][0]
+			maxv = pstats.MinMax[i][1]
 		}
 
 		// calculate data column positions inside statistics schema
@@ -120,17 +118,13 @@ func NewRecordFromPack(pkg *pack.Package, n int) *Record {
 }
 
 func (r *Record) Update(pkg *pack.Package) {
-	analysis := pkg.Analysis()
-	if analysis != nil {
-		r.DiskSize += analysis.SizeDiff()
-	}
+	pstats := pkg.Stats()
 	build := schema.NewBuilder(r.view.Schema(), binary.LittleEndian)
 	build.Write(STATS_ROW_KEY, pkg.Key())
 	build.Write(STATS_ROW_SCHEMA, pkg.Schema().Hash())
 	build.Write(STATS_ROW_NVALS, int64(pkg.Len()))
-	build.Write(STATS_ROW_SIZE, r.DiskSize)
+	build.Write(STATS_ROW_SIZE, r.DiskSize+pstats.SizeDiff())
 
-	fields := pkg.Schema().Exported()
 	for i, b := range pkg.Blocks() {
 		// calculate data column positions inside statistics schema
 		minx, maxx := minColIndex(i), maxColIndex(i)
@@ -139,12 +133,12 @@ func (r *Record) Update(pkg *pack.Package) {
 		switch {
 		case b == nil:
 			// use zero values for invalid blocks (deleted from schema)
-			minv = types.BlockTypes[fields[i].Type].Zero()
+			minv = b.Type().Zero()
 			maxv = minv
 		case b.IsDirty():
-			// calculate min/max statistics
-			// TODO: use analysis when available
-			minv, maxv = b.MinMax()
+			// use min/max statistics
+			minv = pstats.MinMax[i][0]
+			maxv = pstats.MinMax[i][1]
 		default:
 			// reuse existing values when block is not dirty
 			minv, _ = r.view.Get(minx)

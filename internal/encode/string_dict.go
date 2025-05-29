@@ -106,20 +106,20 @@ func (c *DictStringContainer) Get(i int) []byte {
 	return c.dict[ofs : ofs+len]
 }
 
-func (c *DictStringContainer) Iterator() iter.Seq[[]byte] {
-	return func(fn func([]byte) bool) {
+func (c *DictStringContainer) Iterator() iter.Seq2[int, []byte] {
+	return func(fn func(int, []byte) bool) {
 		for i := range c.n {
 			ptr := c.code.Get(i)
 			ofs := c.ofs.Get(int(ptr))
 			len := c.len.Get(int(ptr))
-			if !fn(c.dict[ofs : ofs+len]) {
+			if !fn(i, c.dict[ofs:ofs+len]) {
 				return
 			}
 		}
 	}
 }
 
-func (c *DictStringContainer) AppendTo(dst types.StringSetter, sel []uint32) {
+func (c *DictStringContainer) AppendTo(dst types.StringWriter, sel []uint32) {
 	if sel == nil {
 		for i := range c.n {
 			ptr := c.code.Get(i)
@@ -146,8 +146,7 @@ func (c *DictStringContainer) Encode(ctx *StringContext, vals types.StringAccess
 	// TODO: sorted dict for dict fusion match
 
 	// compact and reference duplicates
-	var i int32
-	for v := range vals.Iterator() {
+	for i, v := range vals.Iterator() {
 		k := ctx.Dups[i]
 		if k < 0 {
 			// append non duplicate strings to dict, register dict position
@@ -159,7 +158,6 @@ func (c *DictStringContainer) Encode(ctx *StringContext, vals types.StringAccess
 			// reference as duplicate
 			code = append(code, uint32(k))
 		}
-		i++
 	}
 
 	// encode child containers

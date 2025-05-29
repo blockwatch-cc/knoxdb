@@ -18,6 +18,11 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
+type ContextExporter interface {
+	MinMax() (any, any)
+	Close()
+}
+
 // max encoder nesting level
 const MAX_LEVEL = 3
 
@@ -321,6 +326,10 @@ func bitPackCosts(n, w int) int {
 
 func runEndCosts(n, r, w int) int {
 	return 1 + bitPackCosts(r, w) + bitPackCosts(r, bits.Len(uint(n-1)))
+}
+
+func (c *Context[T]) MinMax() (any, any) {
+	return c.Min, c.Max
 }
 
 func (c *Context[T]) Close() {

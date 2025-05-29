@@ -612,13 +612,10 @@ func (q GenericQuery[T]) Run(ctx context.Context) ([]T, error) {
 	defer res.Close()
 
 	vals := make([]T, res.Len())
-	i := -1
-	err = res.ForEach(func(r QueryRow) error {
-		i++
-		return r.Decode(&vals[i])
-	})
-	if err != nil {
-		return nil, fmt.Errorf("query %s: %v", q.tag, err)
+	for i, r := range res.Iterator() {
+		if err := r.Decode(&vals[i]); err != nil {
+			return nil, fmt.Errorf("query %s: %v", q.tag, err)
+		}
 	}
 
 	return vals, nil

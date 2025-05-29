@@ -1,56 +1,38 @@
-// Copyright (c) 2024 Blockwatch Data Inc.
+// Copyright (c) 2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package block
 
 import (
-	"reflect"
+	"bytes"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"unsafe"
 
-	"golang.org/x/exp/slices"
-
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/bitset"
-	"blockwatch.cc/knoxdb/internal/dedup"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/assert"
 	"blockwatch.cc/knoxdb/pkg/num"
+	"blockwatch.cc/knoxdb/pkg/stringx"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 var (
-	blockSz = int(reflect.TypeOf(Block{}).Size())
-
 	blockPool = &sync.Pool{
 		New: func() any { return &Block{} },
 	}
-
-	BlockSz = int(reflect.TypeOf(Block{}).Size())
-
-	blockTypeDataSize = [...]int{
-		BlockTime:    8,
-		BlockInt64:   8,
-		BlockInt32:   4,
-		BlockInt16:   2,
-		BlockInt8:    1,
-		BlockUint64:  8,
-		BlockUint32:  4,
-		BlockUint16:  2,
-		BlockUint8:   1,
-		BlockFloat64: 8,
-		BlockFloat32: 4,
-		BlockBool:    1,
-		BlockBytes:   0, // variable
-		BlockInt256:  32,
-		BlockInt128:  16,
-	}
+	blockSize = int(unsafe.Sizeof(Block{}))
 )
+
+// TODO: replace with BufferManager page
+type page *byte
 
 type BlockType = types.BlockType
 
 const (
-	BlockTime    = types.BlockTime
+	BlockInvalid = types.BlockInvalid
 	BlockInt64   = types.BlockInt64
 	BlockInt32   = types.BlockInt32
 	BlockInt16   = types.BlockInt16
@@ -67,150 +49,129 @@ const (
 	BlockInt256  = types.BlockInt256
 )
 
+type BlockFlags byte
+
+const (
+	BlockFlagDirty = 1 << iota // block has been written to
+	BlockFlagRaw               // backing object is writable
+)
+
+// Idea
+// block.vec is VectorAccessor[T] interface with all functions required to avoid
+// switch (block.type) statements so that external funcs become
+// {
+//    assert...
+//    b.vec.Func(...)
+// }
+//
+// type Vector interface {
+// 	Len() int
+// 	Cap() int
+// 	Size() int
+// 	Delete(int, int)
+// 	Append(any)
+// 	AppendTo(*Block, []uint32)
+// 	AppendRange(*Block, int, int)
+// 	Clear()
+// 	Close()
+// 	Get(int) any
+// 	Set(int, any)
+// 	Min() any
+// 	Max() any
+// 	MinMax() (any, any)
+// }
+//
+// Issues
+// - typed writers Append/Set etc use `any` type which a generic func impl in type Block
+//   cannot unwrap without switch/case and hard-coded concrete type. (still ok,
+//   its just a few funcs)
+
 type Block struct {
-	refCount int64
-	ptr      unsafe.Pointer // ptr to first byte of store
-	buf      []byte         // backing store
-	len      int            // in type units
-	cap      int            // in type units
-	typ      BlockType
-	dirty    bool
-	_        [6]byte // pad to 64 bytes
+	nref  int64      // ref counter
+	buf   *byte      // backing store for raw numeric types ([0:n:n] n = sz*cap)
+	page  *page      // buffer page reference (to release page lock on close)
+	any   any        // interface to embedded vector container
+	len   uint32     // in type units
+	cap   uint32     // in type units
+	sz    byte       // type size
+	typ   BlockType  // type
+	flags BlockFlags // flags
+	_     [21]byte   // pad to 64 bytes
 }
 
 func New(typ BlockType, sz int) *Block {
 	b := blockPool.Get().(*Block)
-	b.typ = typ
-	b.dirty = true
-	b.refCount = 1
+	b.nref = 1
 	b.len = 0
-	b.cap = sz
+	b.cap = uint32(sz)
+	b.sz = byte(typ.Size())
+	b.typ = typ
+	b.flags = BlockFlagRaw
 	switch typ {
 	case BlockInt128:
-		var i128 num.Int128Stride
-		i128.X0 = arena.AllocInt64(sz)
-		i128.X1 = arena.AllocUint64(sz)
-		b.ptr = unsafe.Pointer(&i128)
+		b.any = num.NewInt128Stride(sz)
 	case BlockInt256:
-		var i256 num.Int256Stride
-		i256.X0 = arena.AllocInt64(sz)
-		i256.X1 = arena.AllocUint64(sz)
-		i256.X2 = arena.AllocUint64(sz)
-		i256.X3 = arena.AllocUint64(sz)
-		b.ptr = unsafe.Pointer(&i256)
+		b.any = num.NewInt256Stride(sz)
 	case BlockBool:
-		// TODO: this can also become a managed buffer here, but accessor type
-		// does not fit
-		b.ptr = unsafe.Pointer(bitset.New(sz).Resize(0))
+		b.any = bitset.New(sz).Resize(0)
 	case BlockBytes:
-		arr := dedup.NewByteArray(sz)
-		b.ptr = unsafe.Pointer(&arr)
+		b.any = stringx.NewStringPool(sz)
 	default:
-		byteSize := sz * blockTypeDataSize[typ]
-		b.buf = arena.AllocBytes(byteSize)[:byteSize]
-		b.ptr = unsafe.Pointer(unsafe.SliceData(b.buf))
+		b.buf = unsafe.SliceData(arena.AllocBytes(sz * int(b.sz)))
 	}
 	return b
 }
 
-func Wrap(typ BlockType, vec any) *Block {
-	b := blockPool.Get().(*Block)
-	b.typ = typ
-	b.dirty = true
-	b.refCount = 1
+func (b *Block) buffer() []byte {
+	return unsafe.Slice(b.buf, int(b.sz)*int(b.cap))
+}
+
+func (b *Block) data() []byte {
+	return unsafe.Slice(b.buf, int(b.sz)*int(b.len))
+}
+
+// Free returns allocated memory to the arena and makes the block struct
+// reusable for future allocations. Since blocks are reference counted free
+// is only called from Deref().
+func (b *Block) free() {
+	assert.Always(b != nil, "free: nil block release, potential use after free")
+	switch b.typ {
+	case BlockInt128:
+		b.Int128().Close()
+	case BlockInt256:
+		b.Int256().Close()
+	case BlockBool:
+		b.Bool().Close()
+	case BlockBytes:
+		b.Bytes().Close()
+	default:
+		if b.IsMaterialized() {
+			arena.Free(b.buffer())
+		} else {
+			b.any.(Closer).Close()
+		}
+	}
+	b.flags = 0
+	b.any = nil
+	b.buf = nil
+	b.nref = 0
+	b.typ = 0
 	b.len = 0
 	b.cap = 0
-	switch typ {
-	case BlockInt128:
-		i128 := vec.(num.Int128Stride)
-		b.ptr = unsafe.Pointer(&i128)
-		b.len, b.cap = i128.Len(), i128.Cap()
-	case BlockInt256:
-		i256 := vec.(num.Int256Stride)
-		b.ptr = unsafe.Pointer(&i256)
-		b.len, b.cap = i256.Len(), i256.Cap()
-	case BlockBool:
-		bits := vec.(*bitset.Bitset)
-		b.ptr = unsafe.Pointer(bits)
-		b.len, b.cap = bits.Len(), bits.Cap()
-	case BlockBytes:
-		var arr dedup.ByteArray
-		switch v := vec.(type) {
-		case [][]byte:
-			arr = dedup.NewByteArray(len(v)).AppendZeroCopy(v...)
-		case dedup.ByteArray:
-			arr = v
-		}
-		b.ptr = unsafe.Pointer(&arr)
-	case BlockInt64:
-		v := vec.([]int64)
-		b.buf = unsafe.Slice((*byte)(unsafe.Pointer(unsafe.SliceData(v))), len(v)*8)
-		b.ptr = unsafe.Pointer(unsafe.SliceData(b.buf))
-		b.len, b.cap = len(v), len(v)
-	case BlockInt32:
-		v := vec.([]int32)
-		b.buf = unsafe.Slice((*byte)(unsafe.Pointer(unsafe.SliceData(v))), len(v)*4)
-		b.ptr = unsafe.Pointer(unsafe.SliceData(b.buf))
-		b.len, b.cap = len(v), len(v)
-	case BlockInt16:
-		v := vec.([]int16)
-		b.buf = unsafe.Slice((*byte)(unsafe.Pointer(unsafe.SliceData(v))), len(v)*2)
-		b.ptr = unsafe.Pointer(unsafe.SliceData(b.buf))
-		b.len, b.cap = len(v), len(v)
-	case BlockInt8:
-		v := vec.([]int8)
-		b.buf = unsafe.Slice((*byte)(unsafe.Pointer(unsafe.SliceData(v))), len(v))
-		b.ptr = unsafe.Pointer(unsafe.SliceData(b.buf))
-		b.len, b.cap = len(v), len(v)
-	case BlockUint64:
-		v := vec.([]uint64)
-		b.buf = unsafe.Slice((*byte)(unsafe.Pointer(unsafe.SliceData(v))), len(v)*8)
-		b.ptr = unsafe.Pointer(unsafe.SliceData(b.buf))
-		b.len, b.cap = len(v), len(v)
-	case BlockUint32:
-		v := vec.([]uint32)
-		b.buf = unsafe.Slice((*byte)(unsafe.Pointer(unsafe.SliceData(v))), len(v)*4)
-		b.ptr = unsafe.Pointer(unsafe.SliceData(b.buf))
-		b.len, b.cap = len(v), len(v)
-	case BlockUint16:
-		v := vec.([]uint16)
-		b.buf = unsafe.Slice((*byte)(unsafe.Pointer(unsafe.SliceData(v))), len(v)*2)
-		b.ptr = unsafe.Pointer(unsafe.SliceData(b.buf))
-		b.len, b.cap = len(v), len(v)
-	case BlockUint8:
-		v := vec.([]uint8)
-		b.buf = unsafe.Slice((*byte)(unsafe.Pointer(unsafe.SliceData(v))), len(v))
-		b.ptr = unsafe.Pointer(unsafe.SliceData(b.buf))
-		b.len, b.cap = len(v), len(v)
-	case BlockFloat64:
-		v := vec.([]float64)
-		b.buf = unsafe.Slice((*byte)(unsafe.Pointer(unsafe.SliceData(v))), len(v)*8)
-		b.ptr = unsafe.Pointer(unsafe.SliceData(b.buf))
-		b.len, b.cap = len(v), len(v)
-	case BlockFloat32:
-		v := vec.([]float32)
-		b.buf = unsafe.Slice((*byte)(unsafe.Pointer(unsafe.SliceData(v))), len(v)*4)
-		b.ptr = unsafe.Pointer(unsafe.SliceData(b.buf))
-		b.len, b.cap = len(v), len(v)
-	}
-	return b
+	b.sz = 0
+	blockPool.Put(b)
 }
 
-// only applicable to managed memory blocks, not byte, i128, i258, bool
-func (b *Block) data() []byte {
-	return b.buf[:b.len*blockTypeDataSize[b.typ]]
+func (b *Block) Ref() int64 {
+	assert.Always(b != nil, "ref: nil block, potential use after free")
+	assert.Always(atomic.LoadInt64(&b.nref) >= 0, "block refcount < 0")
+	return atomic.AddInt64(&b.nref, 1)
 }
 
-func (b *Block) IncRef() int64 {
-	assert.Always(b != nil, "nil block, potential use after free")
-	assert.Always(atomic.LoadInt64(&b.refCount) >= 0, "block refcount < 0")
-	return atomic.AddInt64(&b.refCount, 1)
-}
-
-func (b *Block) DecRef() int64 {
-	assert.Always(b != nil, "nil block, potential use after free", nil)
-	assert.Always(atomic.LoadInt64(&b.refCount) > 0, "block refcount <= 0")
-	val := atomic.AddInt64(&b.refCount, -1)
+func (b *Block) Deref() int64 {
+	assert.Always(b != nil, "deref: nil block, potential use after free", nil)
+	assert.Always(atomic.LoadInt64(&b.nref) > 0, "block refcount <= 0")
+	val := atomic.AddInt64(&b.nref, -1)
 	if val == 0 {
 		b.free()
 	}
@@ -222,321 +183,549 @@ func (b Block) Type() BlockType {
 }
 
 func (b *Block) IsDirty() bool {
-	return b.dirty
+	return b.flags&BlockFlagDirty > 0
 }
 
 func (b *Block) SetDirty() {
-	b.dirty = true
+	b.flags |= BlockFlagDirty
 }
 
 func (b *Block) SetClean() {
-	b.dirty = false
+	b.flags &^= BlockFlagDirty
 }
 
 func (b *Block) IsMaterialized() bool {
-	assert.Always(b != nil, "nil block, potential use after free")
-	assert.Always(b.ptr != nil, "nil block ptr, potential use after free")
-	return b.typ != BlockBytes || (*(*dedup.ByteArray)(b.ptr)).IsMaterialized()
-}
-
-func (b *Block) CanOptimize() bool {
-	assert.Always(b != nil, "nil block, potential use after free")
-	assert.Always(b.ptr != nil, "nil block ptr, potential use after free")
-	return b.typ == BlockBytes && !(*(*dedup.ByteArray)(b.ptr)).IsOptimized()
-}
-
-func (b *Block) Optimize() {
-	assert.Always(b != nil, "nil block, potential use after free")
-	assert.Always(b.ptr != nil, "nil block ptr, potential use after free")
-	switch b.typ {
-	case BlockBytes:
-		// ok
-	default:
-		// not (yet) supported
-		// TODO: support frame-of-reference (min-value) and truncation i64 -> 32/16/8
-		return
-	}
-	da := *(*dedup.ByteArray)(b.ptr)
-	if da.IsOptimized() {
-		return
-	}
-	do := da.Optimize()
-	da.Release()
-	b.ptr = unsafe.Pointer(&do)
-}
-
-func (b *Block) Materialize() {
-	assert.Always(b != nil, "nil block, potential use after free")
-	assert.Always(b.ptr != nil, "nil block ptr, potential use after free")
-	switch b.typ {
-	case BlockBytes:
-		// ok
-	default:
-		// not (yet) supported
-		return
-	}
-	da := *(*dedup.ByteArray)(b.ptr)
-	if da.IsMaterialized() {
-		return
-	}
-	dm := da.Materialize()
-	da.Release()
-	b.ptr = unsafe.Pointer(&dm)
+	return b.flags|BlockFlagRaw > 0
 }
 
 func (b *Block) Len() int {
-	assert.Always(b != nil, "nil block, potential use after free")
-	assert.Always(b.ptr != nil, "nil block ptr, potential use after free")
+	assert.Always(b != nil, "len: nil block, potential use after free")
 	switch b.typ {
 	case BlockBool:
-		return (*bitset.Bitset)(b.ptr).Len()
+		return b.Bool().Len()
 	case BlockBytes:
-		return (*(*dedup.ByteArray)(b.ptr)).Len()
+		return b.Bytes().Len()
 	case BlockInt128:
-		return (*num.Int128Stride)(b.ptr).Len()
+		return b.Int128().Len()
 	case BlockInt256:
-		return (*num.Int256Stride)(b.ptr).Len()
+		return b.Int256().Len()
 	default:
-		return b.len
+		return int(b.len)
 	}
 }
 
 func (b *Block) Cap() int {
-	assert.Always(b != nil, "nil block, potential use after free")
-	assert.Always(b.ptr != nil, "nil block ptr, potential use after free")
+	assert.Always(b != nil, "cap: nil block, potential use after free")
+	if !b.IsMaterialized() {
+		return 0
+	}
 	switch b.typ {
 	case BlockBool:
-		return (*bitset.Bitset)(b.ptr).Cap()
+		return b.Bool().Cap()
 	case BlockBytes:
-		return (*(*dedup.ByteArray)(b.ptr)).Cap()
+		return b.Bytes().Cap()
 	case BlockInt128:
-		return (*num.Int128Stride)(b.ptr).Cap()
+		return b.Int128().Cap()
 	case BlockInt256:
-		return (*num.Int256Stride)(b.ptr).Cap()
+		return b.Int256().Cap()
 	default:
-		return b.cap
+		return int(b.cap)
 	}
 }
 
-func (b *Block) HeapSize() int {
-	assert.Always(b != nil, "nil block, potential use after free")
-	assert.Always(b.ptr != nil, "nil block ptr, potential use after free")
-	sz := blockSz
+func (b *Block) Size() int {
+	assert.Always(b != nil, "size: nil block, potential use after free")
+	sz := blockSize
 	switch b.typ {
 	case BlockBool:
-		sz += (*bitset.Bitset)(b.ptr).HeapSize()
+		sz += b.Bool().Size()
 	case BlockBytes:
-		sz += (*(*dedup.ByteArray)(b.ptr)).HeapSize()
+		sz += b.Bytes().Size()
 	case BlockInt128:
-		sz += (*num.Int128Stride)(b.ptr).Len() * 16
+		sz += b.Int128().Size()
 	case BlockInt256:
-		sz += (*num.Int256Stride)(b.ptr).Len() * 32
+		sz += b.Int256().Size()
 	default:
-		sz += cap(b.buf)
+		sz += int(b.cap) * int(b.sz)
 	}
 	return sz
 }
 
 func (b *Block) Clone(sz int) *Block {
-	assert.Always(b != nil, "nil block, potential use after free")
-	assert.Always(b.ptr != nil, "nil block ptr, potential use after free")
-	assert.Always(b.Len() <= sz, "clone size smaller than block size")
-	c := New(b.typ, sz)
-	c.dirty = true
-	switch b.typ {
-	case BlockBytes:
-		(*(*dedup.ByteArray)(c.ptr)).AppendFrom((*(*dedup.ByteArray)(b.ptr)))
-	case BlockBool:
-		((*bitset.Bitset)(c.ptr)).AppendFrom(((*bitset.Bitset)(b.ptr)), 0, b.Len())
-	case BlockInt128:
-		d128 := (*num.Int128Stride)(c.ptr)
-		s128 := (*num.Int128Stride)(b.ptr)
-		d128.X0 = append(d128.X0, s128.X0...)
-		d128.X1 = append(d128.X1, s128.X1...)
-		d128.X0 = d128.X0[:b.len]
-		d128.X1 = d128.X1[:b.len]
-	case BlockInt256:
-		d256 := (*num.Int256Stride)(c.ptr)
-		s256 := (*num.Int256Stride)(b.ptr)
-		d256.X0 = append(d256.X0, s256.X0...)
-		d256.X1 = append(d256.X1, s256.X1...)
-		d256.X2 = append(d256.X2, s256.X2...)
-		d256.X3 = append(d256.X3, s256.X3...)
-		d256.X0 = d256.X0[:b.len]
-		d256.X1 = d256.X1[:b.len]
-		d256.X2 = d256.X2[:b.len]
-		d256.X3 = d256.X3[:b.len]
-	default:
-		c.len = b.len
-		copy(c.buf, b.buf)
+	assert.Always(b != nil, "clone: nil block, potential use after free")
+	assert.Always(b.Len() <= sz, "clone: size smaller than block size")
+	if sz == 0 {
+		sz = int(b.cap)
 	}
+	c := New(b.typ, sz)
+	c.len = uint32(b.Len())
+	switch b.typ {
+	case BlockInt64:
+		b.Int64().AppendTo(c.Int64().Slice(), nil)
+	case BlockInt32:
+		b.Int32().AppendTo(c.Int32().Slice(), nil)
+	case BlockInt16:
+		b.Int16().AppendTo(c.Int16().Slice(), nil)
+	case BlockInt8:
+		b.Int8().AppendTo(c.Int8().Slice(), nil)
+	case BlockUint64:
+		b.Uint64().AppendTo(c.Uint64().Slice(), nil)
+	case BlockUint32:
+		b.Uint32().AppendTo(c.Uint32().Slice(), nil)
+	case BlockUint16:
+		b.Uint16().AppendTo(c.Uint16().Slice(), nil)
+	case BlockUint8:
+		b.Uint8().AppendTo(c.Uint8().Slice(), nil)
+	case BlockFloat64:
+		b.Float64().AppendTo(c.Float64().Slice(), nil)
+	case BlockFloat32:
+		b.Float32().AppendTo(c.Float32().Slice(), nil)
+	case BlockBytes:
+		b.Bytes().AppendTo(c.Bytes(), nil)
+	case BlockBool:
+		b.Bool().AppendTo(c.Bool(), nil)
+	case BlockInt128:
+		b.Int128().AppendTo(c.Int128(), nil)
+	case BlockInt256:
+		b.Int256().AppendTo(c.Int256(), nil)
+	}
+	c.SetDirty()
 	return c
 }
 
-// Grow increases the block's capacity by n elements and reallocates if necessary.
-// This makes space for appending additional n elements but does not increase the
-// block's length. If n is negative or too large to allocate memory, Grow panics.
-// func (b *Block) Grow(n int) {
-// 	assert.Always(b != nil, "nil block, potential use after free")
-// 	assert.Always(b.ptr != nil, "nil block ptr, potential use after free")
-// 	b.cap += n
-// 	switch b.typ {
-// 	case BlockBytes:
-// 		(*(*dedup.ByteArray)(b.ptr)).Grow(n)
-// 	case BlockBool:
-// 		(*bitset.Bitset)(b.ptr).Grow(n)
-// 	case BlockInt128:
-// 		i128 := (*num.Int128Stride)(b.ptr)
-// 		i128.X0 = slices.Grow(i128.X0, n)
-// 		i128.X1 = slices.Grow(i128.X1, n)
-// 	case BlockInt256:
-// 		i256 := (*num.Int256Stride)(b.ptr)
-// 		i256.X0 = slices.Grow(i256.X0, n)
-// 		i256.X1 = slices.Grow(i256.X1, n)
-// 		i256.X2 = slices.Grow(i256.X2, n)
-// 		i256.X3 = slices.Grow(i256.X3, n)
-// 	default:
-// 		n *= blockTypeDataSize[b.typ]
-// 		buf := slices.Grow(b.buf, n)
-// 		buf = buf[:len(buf)+n]
-// 		if &buf[0] != &b.buf[0] {
-// 			arena.Free(b.buf)
-// 			b.buf = buf
-// 			b.ptr = unsafe.Pointer(unsafe.SliceData(b.buf))
-// 		}
-// 	}
-// 	b.dirty = true
-// }
-
-// Delete removes n elements starting at position i (i.e. [i:from+n])
-// and decreases the blocks size, but not its capacity. Delete is O(len(s)-(from+n))
-// as it mem-moves trailing items to overwrite the deleted range.
-func (b *Block) Delete(from, n int) {
-	assert.Always(b != nil, "nil block, potential use after free")
-	assert.Always(b.ptr != nil, "nil block ptr, potential use after free")
-	assert.Always(b.Len() >= from+n, "out of bounds", "dst.len", b.Len(), "from", from, "n", n)
+// Delete removes range [i:j] with half open bounds [i,j) and decreases block length.
+// Costs are O(j-i) due to memmove of trailing items.
+func (b *Block) Delete(i, j int) {
+	assert.Always(b != nil, "delete: nil block, potential use after free")
+	assert.Always(b.IsMaterialized(), "delete: block not materialized")
+	assert.Always(i >= 0 && j >= 0 && b.Len() >= i && b.Len() >= j,
+		"delete: out of bounds", "dst.len", b.Len(), "i", i, "j", j)
 	switch b.typ {
 	case BlockBytes:
-		(*(*dedup.ByteArray)(b.ptr)).Delete(from, n)
+		b.Bytes().Delete(i, j)
 	case BlockBool:
-		(*bitset.Bitset)(b.ptr).Delete(from, n)
+		b.Bool().Delete(i, j)
 	case BlockInt128:
-		i128 := (*num.Int128Stride)(b.ptr)
-		i128.X0 = slices.Delete(i128.X0, from, from+n)
-		i128.X1 = slices.Delete(i128.X1, from, from+n)
+		b.Int128().Delete(i, j)
 	case BlockInt256:
-		i256 := (*num.Int256Stride)(b.ptr)
-		i256.X0 = slices.Delete(i256.X0, from, from+n)
-		i256.X1 = slices.Delete(i256.X1, from, from+n)
-		i256.X2 = slices.Delete(i256.X2, from, from+n)
-		i256.X3 = slices.Delete(i256.X3, from, from+n)
+		b.Int256().Delete(i, j)
 	default:
-		b.len -= n
-		from *= blockTypeDataSize[b.typ]
-		n *= blockTypeDataSize[b.typ]
-		slices.Delete(b.buf, from, from+n)
+		_ = slices.Delete(b.buffer(), i*int(b.sz), j*int(b.sz))
+		b.len -= uint32(j - i)
 	}
-	b.dirty = true
+	b.SetDirty()
 }
 
 // Clear resets the block's length to zero, but does not deallocate memory.
 func (b *Block) Clear() {
-	assert.Always(b != nil, "nil block, potential use after free")
-	assert.Always(b.ptr != nil, "nil block ptr, potential use after free")
+	assert.Always(b != nil, "clear: nil block, potential use after free")
+	assert.Always(b.IsMaterialized(), "clear: block not materialized")
 	switch b.typ {
 	case BlockBytes:
-		(*(*dedup.ByteArray)(b.ptr)).Clear()
+		b.Bytes().Clear()
 	case BlockBool:
-		(*bitset.Bitset)(b.ptr).Clear()
+		b.Bool().Clear()
 	case BlockInt128:
-		i128 := (*num.Int128Stride)(b.ptr)
-		i128.X0 = i128.X0[:0]
-		i128.X1 = i128.X1[:0]
+		b.Int128().Clear()
 	case BlockInt256:
-		i256 := (*num.Int256Stride)(b.ptr)
-		i256.X0 = i256.X0[:0]
-		i256.X1 = i256.X1[:0]
-		i256.X2 = i256.X2[:0]
-		i256.X3 = i256.X3[:0]
+		b.Int256().Clear()
 	default:
 		b.len = 0
 	}
-	b.dirty = true
+	b.SetDirty()
 }
 
-// Free returns allocated memory to the arena and makes the block struct
-// reusable for future allocations. Since blocks are reference counted free
-// is only called from DecRef().
-func (b *Block) free() {
-	assert.Always(b != nil, "nil block release, potential use after free")
-	switch b.typ {
-	case BlockInt128:
-		i128 := (*num.Int128Stride)(b.ptr)
-		arena.Free(i128.X0[:0])
-		arena.Free(i128.X1[:0])
-		i128.X0 = nil
-		i128.X1 = nil
-	case BlockInt256:
-		i256 := (*num.Int256Stride)(b.ptr)
-		arena.Free(i256.X0[:0])
-		arena.Free(i256.X1[:0])
-		arena.Free(i256.X2[:0])
-		arena.Free(i256.X3[:0])
-		i256.X0 = nil
-		i256.X1 = nil
-		i256.X2 = nil
-		i256.X3 = nil
-	case BlockBool:
-		(*bitset.Bitset)(b.ptr).Close()
-	case BlockBytes:
-		(*(*dedup.ByteArray)(b.ptr)).Release()
-	default:
-		arena.Free(b.buf)
+type Closer interface {
+	Close()
+}
+
+// Appends range [i:j] from src to the block. Panics if range would overflow.
+// Src may be materialized or compressed block.
+func (b *Block) AppendRange(src *Block, i, j int) {
+	assert.Always(b != nil, "append: nil block, potential use after free")
+	assert.Always(b.IsMaterialized(), "append: block not materialized")
+	assert.Always(src != nil, "append: nil source block, potential use after free")
+	assert.Always(b.typ == src.typ, "append: block type mismatch", b.typ, src.typ)
+	n := uint32(j - i)
+	assert.Always(b.len+n <= b.cap, "append: out of bounds",
+		"dst.len", b.len, "dst.cap", b.cap, "n", n)
+	assert.Always(j <= int(src.len), "append: src out of bounds", "src.len", src.len, "j", j)
+	if b.len+n > b.cap || i > j || j > int(src.len) {
+		panic(ErrBlockOutOfBounds)
 	}
-	b.dirty = false
-	b.ptr = nil
-	b.buf = nil
-	b.refCount = 0
-	b.typ = 0
-	b.len = 0
-	b.cap = 0
-	blockPool.Put(b)
-}
-
-func (b *Block) AppendBlock(src *Block, from, n int) {
-	assert.Always(b != nil, "nil block, potential use after free")
-	assert.Always(src != nil, "nil source block, potential use after free")
-	assert.Always(b.typ == src.typ, "block type mismatch", b.typ, src.typ)
-	assert.Always(b.Len()+n <= b.Cap(), "dst out of bounds", "dst.len", b.Len(), "dst.cap", b.Cap())
-	assert.Always(from+n <= src.Len(), "src out of bounds", "src.len", src.Len(), "from", from)
 	switch b.typ {
 	case BlockBytes:
-		if n == 1 {
-			(*(*dedup.ByteArray)(b.ptr)).Append(src.Bytes().Elem(from))
-		} else {
-			(*(*dedup.ByteArray)(b.ptr)).Append(src.Bytes().Subslice(from, from+n)...)
+		switch {
+		case n == 1:
+			// single value
+			b.Bytes().Append(src.Bytes().Get(i))
+		case src.IsMaterialized():
+			// src is uncompressed (can optimize)
+			src.Bytes().Range(i, j).AppendTo(b.Bytes(), nil)
+		default:
+			sel := types.NewRange(i, j-1).AsSelection()
+			src.Bytes().AppendTo(b.Bytes(), sel)
 		}
+
 	case BlockBool:
-		((*bitset.Bitset)(b.ptr)).AppendFrom(((*bitset.Bitset)(src.ptr)), from, n)
+		switch {
+		case n == 1:
+			// single value
+			b.Bool().Append(src.Bool().Get(i))
+		case src.IsMaterialized():
+			// src is uncompressed (can optimize)
+			b.Bool().AppendRange(src.Bool(), i, j)
+		default:
+			// src is compressed
+			sel := types.NewRange(i, j-1).AsSelection()
+			src.Bool().AppendTo(b.Bool(), sel)
+		}
+
 	case BlockInt128:
-		d128 := (*num.Int128Stride)(b.ptr)
-		s128 := (*num.Int128Stride)(src.ptr)
-		d128.X0 = append(d128.X0, s128.X0[from:from+n]...)
-		d128.X1 = append(d128.X1, s128.X1[from:from+n]...)
+		switch {
+		case n == 1:
+			// single value
+			b.Int128().Append(src.Int128().Get(i))
+		case src.IsMaterialized():
+			// src is uncompressed (can optimize)
+			s128 := src.any.(*num.Int128Stride)
+			d128 := b.any.(*num.Int128Stride)
+			s128.Range(i, j).AppendTo(d128, nil)
+		default:
+			// src is compressed
+			sel := types.NewRange(i, j-1).AsSelection()
+			d128 := b.any.(*num.Int128Stride)
+			src.Int128().AppendTo(d128, sel)
+		}
+
 	case BlockInt256:
-		d256 := (*num.Int256Stride)(b.ptr)
-		s256 := (*num.Int256Stride)(src.ptr)
-		d256.X0 = append(d256.X0, s256.X0[from:from+n]...)
-		d256.X1 = append(d256.X1, s256.X1[from:from+n]...)
-		d256.X2 = append(d256.X2, s256.X2[from:from+n]...)
-		d256.X3 = append(d256.X3, s256.X3[from:from+n]...)
+		switch {
+		case n == 1:
+			// single value
+			b.Int256().Append(src.Int256().Get(i))
+		case src.IsMaterialized():
+			// src is uncompressed (can optimize)
+			s256 := src.any.(*num.Int256Stride)
+			d256 := b.any.(*num.Int256Stride)
+			s256.Range(i, j).AppendTo(d256, nil)
+		default:
+			// src is compressed
+			sel := types.NewRange(i, j-1).AsSelection()
+			d256 := b.any.(*num.Int256Stride)
+			src.Int256().AppendTo(d256, sel)
+		}
+
 	default:
-		end := b.len
-		b.len += n
-		from *= blockTypeDataSize[b.typ]
-		end *= blockTypeDataSize[b.typ]
-		n *= blockTypeDataSize[b.typ]
-		copy(b.buf[end:], src.buf[from:from+n])
+		switch {
+		case n == 1:
+			// single value
+			switch b.typ {
+			case BlockUint64, BlockInt64:
+				b.Uint64().Append(src.Uint64().Get(i))
+			case BlockUint32, BlockInt32:
+				b.Uint32().Append(src.Uint32().Get(i))
+			case BlockUint16, BlockInt16:
+				b.Uint16().Append(src.Uint16().Get(i))
+			case BlockUint8, BlockInt8:
+				b.Uint8().Append(src.Uint8().Get(i))
+			case BlockFloat64:
+				b.Float64().Append(src.Float64().Get(i))
+			case BlockFloat32:
+				b.Float32().Append(src.Float32().Get(i))
+			}
+		case src.IsMaterialized():
+			// src is uncompressed (can optimize)
+			i *= int(b.sz)
+			j *= int(b.sz)
+			ofs := int(b.len) * int(b.sz)
+			dbuf := b.buffer()
+			sbuf := src.buffer()
+			copy(dbuf[ofs:], sbuf[i:j])
+			b.len += uint32(n)
+		default:
+			// src is compressed
+			sel := types.NewRange(i, j-1).AsSelection()
+			switch b.typ {
+			case BlockUint64, BlockInt64:
+				src.Uint64().AppendTo(b.Uint64().Slice(), sel)
+			case BlockUint32, BlockInt32:
+				src.Uint32().AppendTo(b.Uint32().Slice(), sel)
+			case BlockUint16, BlockInt16:
+				src.Uint16().AppendTo(b.Uint16().Slice(), sel)
+			case BlockUint8, BlockInt8:
+				src.Uint8().AppendTo(b.Uint8().Slice(), sel)
+			case BlockFloat64:
+				src.Float64().AppendTo(b.Float64().Slice(), sel)
+			case BlockFloat32:
+				src.Float32().AppendTo(b.Float32().Slice(), sel)
+			}
+			b.len += uint32(n)
+		}
 	}
-	b.dirty = true
+	b.SetDirty()
+}
+
+// AppendTo appends all (sel = nil) or selected elements to dst. Dst
+// must be materialized and src may be compressed.
+func (b *Block) AppendTo(dst *Block, sel []uint32) {
+	var n int
+	if sel == nil {
+		n = b.Len()
+	}
+	assert.Always(b != nil, "appendTo: nil block, potential use after free")
+	assert.Always(dst != nil, "appendTo: nil dst block, potential use after free")
+	assert.Always(dst.IsMaterialized(), "appendTo: dst block not materialized")
+	assert.Always(dst.Cap()-dst.Len() < n, "appendTo: dst free capacity smaller than selection")
+	switch b.typ {
+	case BlockInt64:
+		b.Int64().AppendTo(dst.Int64().Slice(), sel)
+	case BlockInt32:
+		b.Int32().AppendTo(dst.Int32().Slice(), sel)
+	case BlockInt16:
+		b.Int16().AppendTo(dst.Int16().Slice(), sel)
+	case BlockInt8:
+		b.Int8().AppendTo(dst.Int8().Slice(), sel)
+	case BlockUint64:
+		b.Uint64().AppendTo(dst.Uint64().Slice(), sel)
+	case BlockUint32:
+		b.Uint32().AppendTo(dst.Uint32().Slice(), sel)
+	case BlockUint16:
+		b.Uint16().AppendTo(dst.Uint16().Slice(), sel)
+	case BlockUint8:
+		b.Uint8().AppendTo(dst.Uint8().Slice(), sel)
+	case BlockFloat64:
+		b.Float64().AppendTo(dst.Float64().Slice(), sel)
+	case BlockFloat32:
+		b.Float32().AppendTo(dst.Float32().Slice(), sel)
+	case BlockBytes:
+		b.Bytes().AppendTo(dst.Bytes(), sel)
+	case BlockBool:
+		b.Bool().AppendTo(dst.Bool(), sel)
+	case BlockInt128:
+		b.Int128().AppendTo(dst.Int128(), sel)
+	case BlockInt256:
+		b.Int256().AppendTo(dst.Int256(), sel)
+	}
+	dst.len += uint32(len(sel))
+	dst.SetDirty()
+}
+
+func (b *Block) Append(val any) {
+	switch b.typ {
+	case BlockInt64:
+		b.Int64().Append(val.(int64))
+	case types.BlockInt32:
+		b.Int32().Append(val.(int32))
+	case types.BlockInt16:
+		b.Int16().Append(val.(int16))
+	case types.BlockInt8:
+		b.Int8().Append(val.(int8))
+	case types.BlockUint64:
+		b.Uint64().Append(val.(uint64))
+	case types.BlockUint32:
+		b.Uint32().Append(val.(uint32))
+	case types.BlockUint16:
+		b.Uint16().Append(val.(uint16))
+	case types.BlockUint8:
+		b.Uint8().Append(val.(uint8))
+	case types.BlockFloat64:
+		b.Float64().Append(val.(float64))
+	case types.BlockFloat32:
+		b.Float32().Append(val.(float32))
+	case types.BlockBool:
+		b.Bool().Append(val.(bool))
+	case types.BlockBytes:
+		b.Bytes().Append(val.([]byte))
+	case types.BlockInt128:
+		b.Int128().Append(val.(num.Int128))
+	case types.BlockInt256:
+		b.Int256().Append(val.(num.Int256))
+	}
+	b.SetDirty()
+}
+
+func (b *Block) Get(row int) any {
+	switch b.typ {
+	case BlockInt64:
+		return b.Int64().Get(row)
+	case types.BlockInt32:
+		return b.Int32().Get(row)
+	case types.BlockInt16:
+		return b.Int16().Get(row)
+	case types.BlockInt8:
+		return b.Int8().Get(row)
+	case types.BlockUint64:
+		return b.Uint64().Get(row)
+	case types.BlockUint32:
+		return b.Uint32().Get(row)
+	case types.BlockUint16:
+		return b.Uint16().Get(row)
+	case types.BlockUint8:
+		return b.Uint8().Get(row)
+	case types.BlockFloat64:
+		return b.Float64().Get(row)
+	case types.BlockFloat32:
+		return b.Float32().Get(row)
+	case types.BlockBool:
+		return b.Bool().Get(row)
+	case types.BlockBytes:
+		return b.Bytes().Get(row)
+	case types.BlockInt128:
+		return b.Int128().Get(row)
+	case types.BlockInt256:
+		return b.Int256().Get(row)
+	default:
+		return nil
+	}
+}
+
+func (b *Block) Set(row int, val any) {
+	switch b.typ {
+	case BlockInt64:
+		b.Int64().Set(row, val.(int64))
+	case types.BlockInt32:
+		b.Int32().Set(row, val.(int32))
+	case types.BlockInt16:
+		b.Int16().Set(row, val.(int16))
+	case types.BlockInt8:
+		b.Int8().Set(row, val.(int8))
+	case types.BlockUint64:
+		b.Uint64().Set(row, val.(uint64))
+	case types.BlockUint32:
+		b.Uint32().Set(row, val.(uint32))
+	case types.BlockUint16:
+		b.Uint16().Set(row, val.(uint16))
+	case types.BlockUint8:
+		b.Uint8().Set(row, val.(uint8))
+	case types.BlockFloat64:
+		b.Float64().Set(row, val.(float64))
+	case types.BlockFloat32:
+		b.Float32().Set(row, val.(float32))
+	case types.BlockBool:
+		if val.(bool) {
+			b.Bool().Set(row)
+		} else {
+			b.Bool().Unset(row)
+		}
+	case types.BlockBytes:
+		b.Bytes().Set(row, val.([]byte))
+	case types.BlockInt128:
+		b.Int128().Set(row, val.(num.Int128))
+	case types.BlockInt256:
+		b.Int256().Set(row, val.(num.Int256))
+	}
+	b.SetDirty()
+}
+
+func (b *Block) MinMax() (any, any) {
+	switch b.typ {
+	case BlockInt64:
+		return util.MinMax(b.Int64().Slice()...)
+	case BlockInt32:
+		return util.MinMax(b.Int32().Slice()...)
+	case BlockInt16:
+		return util.MinMax(b.Int16().Slice()...)
+	case BlockInt8:
+		return util.MinMax(b.Int8().Slice()...)
+	case BlockUint64:
+		return util.MinMax(b.Uint64().Slice()...)
+	case BlockUint32:
+		return util.MinMax(b.Uint32().Slice()...)
+	case BlockUint16:
+		return util.MinMax(b.Uint16().Slice()...)
+	case BlockUint8:
+		return util.MinMax(b.Uint8().Slice()...)
+	case BlockInt128:
+		return b.Int128().MinMax()
+	case BlockInt256:
+		return b.Int256().MinMax()
+	case BlockFloat64:
+		return util.MinMax(b.Float64().Slice()...)
+	case BlockFloat32:
+		return util.MinMax(b.Float32().Slice()...)
+	case BlockBytes:
+		minv, maxv := b.Bytes().MinMax()
+		return bytes.Clone(minv), bytes.Clone(maxv) // clone
+	case BlockBool:
+		switch {
+		case b.Bool().All():
+			return true, true
+		case b.Bool().Any():
+			return false, true
+		default:
+			return false, false
+		}
+	default:
+		return nil, nil
+	}
+}
+
+func (b *Block) Min() any {
+	switch b.typ {
+	case BlockInt64:
+		return util.Min(b.Int64().Slice()...)
+	case BlockInt32:
+		return util.Min(b.Int32().Slice()...)
+	case BlockInt16:
+		return util.Min(b.Int16().Slice()...)
+	case BlockInt8:
+		return util.Min(b.Int8().Slice()...)
+	case BlockUint64:
+		return util.Min(b.Uint64().Slice()...)
+	case BlockUint32:
+		return util.Min(b.Uint32().Slice()...)
+	case BlockUint16:
+		return util.Min(b.Uint16().Slice()...)
+	case BlockUint8:
+		return util.Min(b.Uint8().Slice()...)
+	case BlockInt128:
+		return b.Int128().Min()
+	case BlockInt256:
+		return b.Int256().Min()
+	case BlockFloat64:
+		return util.Min(b.Float64().Slice()...)
+	case BlockFloat32:
+		return util.Min(b.Float32().Slice()...)
+	case BlockBytes:
+		return bytes.Clone(b.Bytes().Min())
+	case BlockBool:
+		return b.Bool().All()
+	default:
+		return nil
+	}
+}
+
+func (b *Block) Max() any {
+	switch b.typ {
+	case BlockInt64:
+		return util.Max(b.Int64().Slice()...)
+	case BlockInt32:
+		return util.Max(b.Int32().Slice()...)
+	case BlockInt16:
+		return util.Max(b.Int16().Slice()...)
+	case BlockInt8:
+		return util.Max(b.Int8().Slice()...)
+	case BlockUint64:
+		return util.Max(b.Uint64().Slice()...)
+	case BlockUint32:
+		return util.Max(b.Uint32().Slice()...)
+	case BlockUint16:
+		return util.Max(b.Uint16().Slice()...)
+	case BlockUint8:
+		return util.Max(b.Uint8().Slice()...)
+	case BlockInt128:
+		return b.Int128().Max()
+	case BlockInt256:
+		return b.Int256().Max()
+	case BlockFloat64:
+		return util.Max(b.Float64().Slice()...)
+	case BlockFloat32:
+		return util.Max(b.Float32().Slice()...)
+	case BlockBytes:
+		return bytes.Clone(b.Bytes().Max())
+	case BlockBool:
+		return b.Bool().Any()
+	default:
+		return nil
+	}
 }

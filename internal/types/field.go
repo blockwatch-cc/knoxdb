@@ -34,11 +34,12 @@ const (
 	FieldTypeDecimal128
 	FieldTypeDecimal64
 	FieldTypeDecimal32
+	FieldTypeBigint
 )
 
 var (
-	fieldTypeString  = "__datetime_int64_uint64_float64_boolean_string_bytes_int32_int16_int8_uint32_uint16_uint8_float32_int256_int128_decimal256_decimal128_decimal64_decimal32"
-	fieldTypeIdx     = [...]int{0, 2, 11, 17, 24, 32, 40, 47, 53, 59, 65, 70, 77, 84, 90, 98, 105, 112, 123, 134, 144, 154}
+	fieldTypeString  = "__datetime_int64_uint64_float64_boolean_string_bytes_int32_int16_int8_uint32_uint16_uint8_float32_int256_int128_decimal256_decimal128_decimal64_decimal32_bigint"
+	fieldTypeIdx     = [...]int{0, 2, 11, 17, 24, 32, 40, 47, 53, 59, 65, 70, 77, 84, 90, 98, 105, 112, 123, 134, 144, 154, 161}
 	fieldTypeReverse = map[string]FieldType{}
 
 	fieldTypeWireSize = [...]int{
@@ -63,6 +64,7 @@ var (
 		FieldTypeDecimal128: 16,
 		FieldTypeDecimal64:  8,
 		FieldTypeDecimal32:  4,
+		FieldTypeBigint:     4, // stored as var bytes
 	}
 )
 
@@ -80,7 +82,7 @@ func (t FieldType) String() string {
 	return fieldTypeString[fieldTypeIdx[t] : fieldTypeIdx[t+1]-1]
 }
 
-func (t FieldType) Null() any {
+func (t FieldType) Zero() any {
 	switch t {
 	case FieldTypeDatetime:
 		var t time.Time
@@ -123,6 +125,8 @@ func (t FieldType) Null() any {
 		return num.ZeroDecimal64
 	case FieldTypeDecimal32:
 		return num.ZeroDecimal32
+	case FieldTypeBigint:
+		return num.BigZero
 	default:
 		return nil
 	}
@@ -134,6 +138,10 @@ func ParseFieldType(s string) FieldType {
 
 func (t FieldType) Size() int {
 	return fieldTypeWireSize[t]
+}
+
+func (t FieldType) BlockType() BlockType {
+	return BlockTypes[t]
 }
 
 type FieldFlags byte
@@ -173,19 +181,6 @@ func (i FieldFlags) String() string {
 		}
 	}
 	return b.String()
-}
-
-type FieldCompression byte
-
-const (
-	FieldCompressNone FieldCompression = iota
-	FieldCompressSnappy
-	FieldCompressLZ4
-	FieldCompressZstd
-)
-
-func (i FieldCompression) Is(f FieldCompression) bool {
-	return i&f > 0
 }
 
 type IfaceFlags byte

@@ -6,6 +6,8 @@ package query
 import (
 	"bytes"
 	"encoding/binary"
+	"iter"
+	"slices"
 	"strings"
 	"time"
 
@@ -14,8 +16,9 @@ import (
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/util"
-	"golang.org/x/exp/slices"
 )
+
+// Binary (row-based) results
 
 var (
 	_ engine.QueryResult = (*Result)(nil)
@@ -105,7 +108,7 @@ func (r *Result) Row(row int) engine.QueryRow {
 	return r.row
 }
 
-func (r *Result) Record(n int) []byte {
+func (r *Result) EncodeRecord(n int) []byte {
 	olen := len(r.offsets)
 	if r.values == nil || olen < n {
 		return nil
@@ -129,7 +132,14 @@ func (r *Result) Close() {
 	r.offsets = nil
 }
 
-func (r *Result) Bytes() []byte {
+func (r *Result) Err() error {
+	if !r.IsValid() {
+		return ErrResultClosed
+	}
+	return nil
+}
+
+func (r *Result) Encode() []byte {
 	return r.values
 }
 
@@ -203,16 +213,14 @@ func (r *Result) SortBy(name string, order types.OrderType) {
 	}
 }
 
-func (r *Result) ForEach(fn func(val engine.QueryRow) error) error {
-	if !r.IsValid() {
-		return ErrResultClosed
-	}
-	for i, l := 0, r.Len(); i < l; i++ {
-		if err := fn(r.Row(i)); err != nil {
-			return err
+func (r *Result) Iterator() iter.Seq2[int, engine.QueryRow] {
+	return func(fn func(int, engine.QueryRow) bool) {
+		for i := range r.Len() {
+			if !fn(i, r.Row(i)) {
+				return
+			}
 		}
 	}
-	return nil
 }
 
 // QueryResultConsumer interface
@@ -237,7 +245,7 @@ func (r *Result) Column(name string) (any, error) {
 	view := schema.NewView(r.schema)
 	var vals any
 	for i := range r.offsets {
-		view.Reset(r.Record(i))
+		view.Reset(r.EncodeRecord(i))
 		vals = view.Append(vals, idx)
 	}
 	return vals, nil
@@ -255,8 +263,8 @@ func (r *Row) Schema() *schema.Schema {
 	return r.res.Schema()
 }
 
-func (r *Row) Bytes() []byte {
-	return r.res.Record(r.row)
+func (r *Row) Encode() []byte {
+	return r.res.EncodeRecord(r.row)
 }
 
 func (r *Row) Decode(val any) error {
@@ -274,7 +282,7 @@ func (r *Row) Decode(val any) error {
 		r.dec = schema.NewDecoder(s.WithEnums(r.res.schema.Enums()))
 	}
 
-	return r.dec.Decode(r.conv.Extract(r.Bytes()), val)
+	return r.dec.Decode(r.conv.Extract(r.res.EncodeRecord(r.row)), val)
 }
 
 func (r *Row) Field(name string) (any, error) {
@@ -288,7 +296,7 @@ func (r *Row) Field(name string) (any, error) {
 	if r.view == nil {
 		r.view = schema.NewView(r.res.schema)
 	}
-	r.view.Reset(r.Bytes())
+	r.view.Reset(r.Encode())
 	val, ok := r.view.Get(int(f.Id()))
 	if !ok {
 		return nil, schema.ErrInvalidField
@@ -307,7 +315,7 @@ func (r *Row) Index(i int) (any, error) {
 	if r.view == nil {
 		r.view = schema.NewView(r.res.schema)
 	}
-	r.view.Reset(r.Bytes())
+	r.view.Reset(r.Encode())
 	val, ok := r.view.Get(int(f.Id()))
 	if !ok {
 		return nil, schema.ErrInvalidField

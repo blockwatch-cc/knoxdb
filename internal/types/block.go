@@ -18,7 +18,7 @@ import (
 type BlockType byte
 
 const (
-	BlockTime    BlockType = iota // 0
+	BlockInvalid BlockType = iota // 0
 	BlockInt64                    // 1
 	BlockInt32                    // 2
 	BlockInt16                    // 3
@@ -35,12 +35,37 @@ const (
 	BlockInt256                   // 14
 )
 
+type BlockKind byte
+
+const (
+	BlockKindInvalid BlockKind = iota
+	BlockKindInteger
+	BlockKindFloat
+	BlockKindBytes
+	BlockKindBitmap
+	BlockKindInt128
+	BlockKindInt256
+)
+
+type BlockCompression byte
+
+const (
+	BlockCompressNone BlockCompression = iota
+	BlockCompressSnappy
+	BlockCompressLZ4
+	BlockCompressZstd
+)
+
+func (i BlockCompression) Is(f BlockCompression) bool {
+	return i&f > 0
+}
+
 var (
-	blockTypeNames    = "time_int64_int32_int16_int8_uint64_uint32_uint16_uint8_float64_float32_bool_bytes_int128_int256"
-	blockTypeNamesOfs = []int{0, 5, 11, 17, 23, 28, 35, 42, 49, 55, 63, 71, 76, 82, 89, 96}
+	blockTypeNames    = "__i64_i32_i16_i8_u64_u32_u16_u8_f64_f32_bool_bytes_i128_i256"
+	blockTypeNamesOfs = []int{0, 2, 6, 10, 14, 17, 21, 25, 29, 32, 36, 40, 45, 51, 65, 61}
 
 	blockTypeDataSize = [...]int{
-		BlockTime:    8,
+		BlockInvalid: 0,
 		BlockInt64:   8,
 		BlockInt32:   4,
 		BlockInt16:   2,
@@ -52,38 +77,39 @@ var (
 		BlockFloat64: 8,
 		BlockFloat32: 4,
 		BlockBool:    1,
-		BlockBytes:   0,
+		BlockBytes:   0, // fixed or variable
 		BlockInt128:  16,
 		BlockInt256:  32,
 	}
 
 	BlockTypes = [...]BlockType{
-		FieldTypeInvalid:    BlockUint8,
-		FieldTypeDatetime:   BlockTime,
+		FieldTypeInvalid:    BlockInvalid,
+		FieldTypeDatetime:   BlockInt64,
+		FieldTypeInt64:      BlockInt64,
+		FieldTypeUint64:     BlockUint64,
+		FieldTypeFloat64:    BlockFloat64,
 		FieldTypeBoolean:    BlockBool,
 		FieldTypeString:     BlockBytes,
 		FieldTypeBytes:      BlockBytes,
-		FieldTypeInt8:       BlockInt8,
-		FieldTypeInt16:      BlockInt16,
 		FieldTypeInt32:      BlockInt32,
-		FieldTypeInt64:      BlockInt64,
-		FieldTypeInt128:     BlockInt128,
-		FieldTypeInt256:     BlockInt256,
-		FieldTypeUint8:      BlockUint8,
-		FieldTypeUint16:     BlockUint16,
+		FieldTypeInt16:      BlockInt16,
+		FieldTypeInt8:       BlockInt8,
 		FieldTypeUint32:     BlockUint32,
-		FieldTypeUint64:     BlockUint64,
-		FieldTypeDecimal32:  BlockInt32,
-		FieldTypeDecimal64:  BlockInt64,
-		FieldTypeDecimal128: BlockInt128,
-		FieldTypeDecimal256: BlockInt256,
+		FieldTypeUint16:     BlockUint16,
+		FieldTypeUint8:      BlockUint8,
 		FieldTypeFloat32:    BlockFloat32,
-		FieldTypeFloat64:    BlockFloat64,
+		FieldTypeInt256:     BlockInt256,
+		FieldTypeInt128:     BlockInt128,
+		FieldTypeDecimal256: BlockInt256,
+		FieldTypeDecimal128: BlockInt128,
+		FieldTypeDecimal64:  BlockInt64,
+		FieldTypeDecimal32:  BlockInt32,
+		FieldTypeBigint:     BlockBytes,
 	}
 )
 
 func (t BlockType) IsValid() bool {
-	return t <= BlockInt256
+	return t > 0 && t <= BlockInt256
 }
 
 func (t BlockType) String() string {
@@ -98,6 +124,26 @@ func (t BlockType) Size() int {
 		return blockTypeDataSize[t]
 	}
 	return 0
+}
+
+func (t BlockType) Kind() BlockKind {
+	switch t {
+	case BlockInt64, BlockInt32, BlockInt16, BlockInt8,
+		BlockUint64, BlockUint32, BlockUint16, BlockUint8:
+		return BlockKindInteger
+	case BlockFloat32, BlockFloat64:
+		return BlockKindFloat
+	case BlockBool:
+		return BlockKindBitmap
+	case BlockBytes:
+		return BlockKindBytes
+	case BlockInt128:
+		return BlockKindInt128
+	case BlockInt256:
+		return BlockKindInt256
+	default:
+		return BlockKindInvalid
+	}
 }
 
 func (t BlockType) IsInt() bool {
@@ -153,7 +199,7 @@ func (t BlockType) Max(a, b any) any {
 
 func (t BlockType) MinNumericVal() any {
 	switch t {
-	case BlockInt64, BlockTime:
+	case BlockInt64:
 		return int64(math.MinInt64)
 	case BlockInt32:
 		return int32(math.MinInt32)
@@ -188,7 +234,7 @@ func (t BlockType) MinNumericVal() any {
 
 func (t BlockType) MaxNumericVal() any {
 	switch t {
-	case BlockInt64, BlockTime:
+	case BlockInt64:
 		return int64(math.MaxInt64)
 	case BlockInt32:
 		return int32(math.MaxInt32)
@@ -389,7 +435,7 @@ func (t BlockType) Zero() any {
 // Cast casts any Go integer type into a compatible Go type for a block.
 func (t BlockType) Cast(val any) (res any, ok bool) {
 	switch t {
-	case BlockInt64, BlockTime:
+	case BlockInt64:
 		res, ok = Cast[int64](val)
 	case BlockInt32:
 		res, ok = Cast[int32](val)
@@ -413,31 +459,26 @@ func (t BlockType) Cast(val any) (res any, ok bool) {
 
 func (t BlockType) Cmp(a, b any) (c int) {
 	switch t {
-	case BlockInt64, BlockTime:
+	case BlockInt64:
 		c = util.Cmp(a.(int64), b.(int64))
 	case BlockUint64:
 		c = util.Cmp(a.(uint64), b.(uint64))
 	case BlockFloat64:
 		c = util.Cmp(a.(float64), b.(float64))
 	case BlockBool:
-		var x, y byte
-		if a.(bool) {
-			x = 1
-		}
-		if b.(bool) {
-			y = 1
-		}
-		c = util.Cmp(x, y)
+		c = util.CmpBool(a.(bool), b.(bool))
 	case BlockBytes:
+		// check nil interface (nil == empty slice)
 		switch {
 		case a == nil && b == nil:
 			return 0
 		case a == nil:
-			return 1 // max is nil
+			c = 1 // nil < empty < []{...}
 		case b == nil:
-			return -1 // max is nil
+			c = -1 // nil < empty < []{...}
+		default:
+			c = bytes.Compare(a.([]byte), b.([]byte))
 		}
-		c = bytes.Compare(a.([]byte), b.([]byte))
 	case BlockInt32:
 		c = util.Cmp(a.(int32), b.(int32))
 	case BlockInt16:
@@ -497,7 +538,7 @@ func (t BlockType) LE(a, b any) bool { return t.Cmp(a, b) <= 0 }
 
 func (t BlockType) Unique(a any) any {
 	switch t {
-	case BlockInt64, BlockTime:
+	case BlockInt64:
 		return slicex.Unique(a.([]int64))
 	case BlockUint64:
 		return slicex.Unique(a.([]uint64))
@@ -532,7 +573,7 @@ func (t BlockType) Unique(a any) any {
 
 func (t BlockType) Intersect(a, b any) any {
 	switch t {
-	case BlockInt64, BlockTime:
+	case BlockInt64:
 		x := slicex.NewOrderedIntegers(a.([]int64)).SetUnique()
 		y := slicex.NewOrderedIntegers(b.([]int64)).SetUnique()
 		return x.Intersect(y).Values
@@ -590,7 +631,7 @@ func (t BlockType) Intersect(a, b any) any {
 
 func (t BlockType) Union(a, b any) any {
 	switch t {
-	case BlockInt64, BlockTime:
+	case BlockInt64:
 		x := slicex.NewOrderedIntegers(a.([]int64)).SetUnique()
 		y := slicex.NewOrderedIntegers(b.([]int64)).SetUnique()
 		return x.Union(y).Values
@@ -648,7 +689,7 @@ func (t BlockType) Union(a, b any) any {
 
 func (t BlockType) Difference(a, b any) any {
 	switch t {
-	case BlockInt64, BlockTime:
+	case BlockInt64:
 		x := slicex.NewOrderedIntegers(a.([]int64)).SetUnique()
 		y := slicex.NewOrderedIntegers(b.([]int64)).SetUnique()
 		return x.Difference(y).Values
@@ -716,7 +757,7 @@ func (t BlockType) Range(set any) (minv any, maxv any, isContinuous bool) {
 		return
 	}
 	switch t {
-	case BlockInt64, BlockTime:
+	case BlockInt64:
 		x := slicex.NewOrderedIntegers(set.([]int64))
 		minv, maxv = x.MinMax()
 		isContinuous = x.IsContinuous()
@@ -789,7 +830,7 @@ func (t BlockType) Range(set any) (minv any, maxv any, isContinuous bool) {
 
 func (t BlockType) RemoveRange(s, from, to any) any {
 	switch t {
-	case BlockInt64, BlockTime:
+	case BlockInt64:
 		return slicex.NewOrderedIntegers(s.([]int64)).
 			RemoveRange(from.(int64), to.(int64)).Values
 	case BlockUint64:
@@ -838,7 +879,7 @@ func (t BlockType) RemoveRange(s, from, to any) any {
 
 func (t BlockType) IntersectRange(s, from, to any) any {
 	switch t {
-	case BlockInt64, BlockTime:
+	case BlockInt64:
 		return slicex.NewOrderedIntegers(s.([]int64)).
 			IntersectRange(from.(int64), to.(int64)).Values
 	case BlockUint64:

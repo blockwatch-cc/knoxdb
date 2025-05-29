@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"blockwatch.cc/knoxdb/internal/query"
-	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/util"
@@ -160,7 +159,7 @@ func makeFilter(s *schema.Schema, name string, mode query.FilterMode, val, val2 
 	return &query.FilterTreeNode{
 		Filter: &query.Filter{
 			Name:    field.Name(),
-			Type:    types.BlockTypes[field.Type()],
+			Type:    field.Type().BlockType(),
 			Mode:    mode,
 			Index:   field.Id() - 1,
 			Value:   val,

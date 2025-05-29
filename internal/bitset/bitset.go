@@ -143,6 +143,8 @@ func (s *Bitset) SetFromBytes(buf []byte, size int, reverse bool) *Bitset {
 	return s
 }
 
+// Sets al bits in range. Start and end indices form a closed interval
+// [start, end], i.e. boundaries are inclusive.
 func (s *Bitset) SetRange(start, end int) *Bitset {
 	if start > s.size {
 		return s
@@ -198,6 +200,23 @@ func (s *Bitset) SetIndexes(idxs []int) *Bitset {
 	return s
 }
 
+func (s *Bitset) Get(i int) bool {
+	return s.Contains(i)
+}
+
+func (s *Bitset) Cmp(i, j int) int {
+	x := (s.buf[i>>3] & bitmask[i&7]) > 0
+	y := (s.buf[j>>3] & bitmask[j&7]) > 0
+	switch {
+	case x == y:
+		return 0
+	case !x && y:
+		return -1
+	default:
+		return 1
+	}
+}
+
 func (s *Bitset) Contains(i int) bool {
 	if i < 0 || i >= s.size {
 		return false
@@ -205,6 +224,8 @@ func (s *Bitset) Contains(i int) bool {
 	return (s.buf[i>>3] & bitmask[i&7]) > 0
 }
 
+// Returns true when any bit in range is set. Start and end indices form
+// a closed interval [start, end], i.e. boundaries are inclusive.
 func (s *Bitset) ContainsRange(start, end int) bool {
 	if start >= s.size {
 		return false
@@ -274,10 +295,10 @@ func (s *Bitset) MinMax() (int, int) {
 	return bitsetMinMax(s.buf, s.size)
 }
 
-// All returns true if all bits are set, false otherwise. Returns true for
+// All returns true if all bits are set, false otherwise. Returns false for
 // empty sets.
 func (s *Bitset) All() bool {
-	return s.Count() == s.size
+	return s.size > 0 && s.Count() == s.size
 }
 
 // None returns true if no bit is set, false otherwise. Returns true for
@@ -533,68 +554,93 @@ func (s *Bitset) Append(val bool) *Bitset {
 	return s
 }
 
-// AppendFrom grows the bitset by srcLen and appends srcLen values from
-// src starting at position srcPos.
-func (s *Bitset) AppendFrom(src *Bitset, srcPos, srcLen int) *Bitset {
-	if srcLen <= 0 {
-		return s
+// AppendTo appends selected values to dst.
+func (s *Bitset) AppendTo(dst *Bitset, sel []uint32) {
+	if sel == nil {
+		dst.AppendRange(s, 0, s.size)
+	} else {
+		dst.Grow(len(sel))
+		for i, v := range sel {
+			if s.Contains(int(v)) {
+				dst.Set(i)
+			}
+		}
 	}
+}
+
+// AppendRange appends n values from src[i:j] growing s. Range
+// indices form a half open interval [i,j) similar to Go slices.
+func (s *Bitset) AppendRange(src *Bitset, i, j int) *Bitset {
 	// clamp srcLen
-	if srcPos+srcLen > src.size {
-		srcLen = src.size - srcPos
+	j = min(j, src.size)
+
+	// sanity check
+	n := j - i
+	if n <= 0 {
+		return s
 	}
 
 	end := s.size
-	cnt := s.cnt
-	s.Resize(s.size + srcLen)
-	s.cnt = cnt
+	s.Resize(s.size + n)
 
-	if end&0x7+srcPos&0x7+srcLen&0x7 == 0 {
+	if end&7+i&7+n&7 == 0 {
 		// fast path
-		copy(s.buf[end>>3:], src.buf[srcPos>>3:(srcPos+srcLen)>>3])
+		copy(s.buf[end>>3:], src.buf[i>>3:j>>3])
 		s.cnt = -1
 	} else {
 		// slow path
-		for i := 0; i < srcLen; i++ {
-			if !src.Contains(srcPos + i) {
-				continue
+		var (
+			tmp  [128]int
+			last = i - 1
+			cnt  int
+			done bool
+		)
+		for {
+			idxs, ok := src.Iterate(last, tmp[:])
+			if done || !ok || idxs[0] > j {
+				break
 			}
-			s.setbit(end + i)
-			if s.cnt >= 0 {
-				s.cnt++
+			for _, idx := range idxs {
+				if idx >= j {
+					done = true
+					break
+				}
+				s.setbit(end + idx - i)
+				cnt++
 			}
+			last = idxs[len(idxs)-1]
+		}
+		if s.cnt >= 0 {
+			s.cnt += cnt
 		}
 	}
 	return s
 }
 
-func (s *Bitset) Delete(pos, n int) *Bitset {
-	if pos >= s.size {
-		return s
-	}
-	if pos < 0 {
-		pos = 0
-	}
-	if n < 0 || pos+n > s.size {
-		n = s.size - pos
-	}
+// Delete removes n values in range s[i:j] shrinking s and moving
+// tail values. Range indices form a half open interval [i,j) similar
+// to Go slices.
+func (s *Bitset) Delete(i, j int) *Bitset {
+	// clamp
+	i = max(0, i)
+	j = min(j, s.size)
 
-	if pos&0x7+n&0x7 == 0 {
+	if i&7+j&7 == 0 {
 		// fast path
-		copy(s.buf[pos>>3:], s.buf[(pos+n)>>3:])
+		copy(s.buf[i>>3:], s.buf[j>>3:])
 	} else {
 		// slow path
-		for i, v := range s.SubSlice(pos+n, -1) {
+		for k, v := range s.Slice(j, s.size) {
 			if v {
-				s.setbit(pos + i)
+				s.setbit(i + k)
 			} else {
-				s.clearbit(pos + i)
+				s.clearbit(i + k)
 			}
 		}
 	}
 
 	// shrink and reset counter
-	s.Resize(s.size - n)
+	s.Resize(s.size - j + i)
 	return s
 }
 
@@ -626,16 +672,8 @@ func (s *Bitset) Cap() int {
 	return cap(s.buf) * 8
 }
 
-func (s *Bitset) HeapSize() int {
+func (s *Bitset) Size() int {
 	return cap(s.buf) + 24 + 16 + 1
-}
-
-func (s *Bitset) EncodedSize() int {
-	sz := s.size / 8
-	if s.size&7 > 0 {
-		sz++
-	}
-	return sz
 }
 
 func (s *Bitset) ReadFrom(r io.Reader) (int64, error) {
@@ -643,39 +681,71 @@ func (s *Bitset) ReadFrom(r io.Reader) (int64, error) {
 	return int64(n), err
 }
 
-func (s *Bitset) SubSlice(start, n int) []bool {
-	if start >= s.size {
+// Slice returns a boolean slices for bits between [i:j]. Indices
+// form a half optn interval [i,j) like for Go slices.
+func (s *Bitset) Slice(i, j int) []bool {
+	i = max(i, 0)
+	j = min(j, s.size)
+
+	var (
+		n = j - i
+		k int
+	)
+	if n == 0 {
 		return nil
 	}
-	if start < 0 {
-		start = 0
-	}
-	if n < 0 {
-		n = s.size - start
-	} else if start+n > s.size {
-		n = s.size - start
-	}
 	res := make([]bool, n)
-	var j int
+
 	// head
-	for i := start; i < start+n && i&7 > 0; i, j = i+1, j+1 {
-		res[j] = s.buf[i>>3]&bitmask[i&7] > 0
+	if i&7 > 0 {
+		if word := s.buf[i>>3] >> (i & 7); word > 0 {
+			for i&7 > 0 && n > 0 {
+				if word&1 > 0 {
+					res[k] = true
+				}
+				word >>= 1
+				i++
+				k++
+				n--
+			}
+		} else {
+			k = 8 - i&7
+			i += 8 - i&7
+			n -= k
+		}
+		if n <= 0 {
+			return res
+		}
 	}
-	// fast inner loop
-	for i := start + j; i < (start+n) & ^0x7; i, j = i+8, j+8 {
-		b := s.buf[i>>3]
-		res[j] = b&0x01 > 0
-		res[j+1] = b&0x02 > 0
-		res[j+2] = b&0x04 > 0
-		res[j+3] = b&0x08 > 0
-		res[j+4] = b&0x10 > 0
-		res[j+5] = b&0x20 > 0
-		res[j+6] = b&0x40 > 0
-		res[j+7] = b&0x80 > 0
+
+	// inner loop
+	for n >= 8 {
+		word := s.buf[i>>3]
+		res[k] = word&0x01 > 0
+		res[k+1] = word&0x02 > 0
+		res[k+2] = word&0x04 > 0
+		res[k+3] = word&0x08 > 0
+		res[k+4] = word&0x10 > 0
+		res[k+5] = word&0x20 > 0
+		res[k+6] = word&0x40 > 0
+		res[k+7] = word&0x80 > 0
+		k += 8
+		i += 8
+		n -= 8
 	}
+
 	// tail
-	for i := start + j; i < start+n; i, j = i+1, j+1 {
-		res[j] = s.buf[i>>3]&bitmask[i&7] > 0
+	if n > 0 {
+		if word := s.buf[i>>3]; word > 0 {
+			for n > 0 {
+				if word&1 > 0 {
+					res[k] = true
+				}
+				word >>= 1
+				k++
+				n--
+			}
+		}
 	}
 	return res
 }

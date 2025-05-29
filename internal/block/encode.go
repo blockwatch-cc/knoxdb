@@ -1,360 +1,351 @@
-// Copyright (c) 2024 Blockwatch Data Inc.
+// Copyright (c) 2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package block
 
 import (
+	"bytes"
 	"fmt"
 	"io"
-	"unsafe"
 
-	"blockwatch.cc/knoxdb/internal/bitset"
-	"blockwatch.cc/knoxdb/internal/dedup"
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/encode"
-	"blockwatch.cc/knoxdb/internal/zip"
-	"blockwatch.cc/knoxdb/pkg/num"
+	"blockwatch.cc/knoxdb/internal/types"
 )
 
-// MaxStoredSize estimates the upper bound of space required to store
-// a serialization of this block. The size hint is used to dimension
-// encoder/decoder buffers which may help to avoid memcopy during processing.
-func (b *Block) MaxStoredSize() int {
-	l := b.len
-	switch b.typ {
-	case BlockInt64, BlockUint64:
-		return zip.Int64EncodedSize(l)
-
-	case BlockInt32, BlockUint32:
-		return zip.Int32EncodedSize(l)
-
-	case BlockInt16, BlockUint16:
-		return zip.Int16EncodedSize(l)
-
-	case BlockInt8, BlockUint8:
-		return zip.Int8EncodedSize(l)
-
-	case BlockTime:
-		return zip.TimeEncodedSize(l)
-
-	case BlockFloat64, BlockFloat32:
-		return zip.FloatEncodedSize(l)
-
-	case BlockBool:
-		return zip.BitsetEncodedSize(b.Bool())
-
-	case BlockBytes:
-		return b.Bytes().MaxEncodedSize()
-
-	case BlockInt128:
-		return zip.Int128EncodedSize(l)
-
-	case BlockInt256:
-		return zip.Int256EncodedSize(l)
-
-	default:
-		return 0
-	}
-}
-
-// WriteTo writes a compressed version of the block's content to w.
-// The compression method depends on data type and contents and is
-// signalled in the first byte of the serialized data. No additional
-// header or block type identifier is written. This is considered
-// task of an outer framing protocol.
-//
-// The choice of io.Writer as target makes it possible to combine
-// this method with different outer framing protocol, network transports,
-// disk storage, etc. The outer protocol may also choose to transparently
-// compress serialzed data with an entropy encoder.
-func (b *Block) WriteTo(w io.Writer) (int64, error) {
-	var (
-		n   int
-		err error
-	)
-	switch b.typ {
-	case BlockInt64, BlockUint64:
-		n, err = zip.EncodeUint64(b.Uint64().Slice(), w)
-
-	case BlockInt32, BlockUint32:
-		n, err = zip.EncodeUint32(b.Uint32().Slice(), w)
-
-	case BlockInt16, BlockUint16:
-		n, err = zip.EncodeUint16(b.Uint16().Slice(), w)
-
-	case BlockInt8, BlockUint8:
-		n, err = zip.EncodeUint8(b.Uint8().Slice(), w)
-
-	case BlockTime:
-		n, err = zip.EncodeTime(b.Int64().Slice(), w)
-
-	case BlockBytes:
-		var n64 int64
-		n64, err = (*(*dedup.ByteArray)(b.ptr)).WriteTo(w)
-		n = int(n64)
-
-	case BlockBool:
-		n, err = zip.EncodeBitset((*bitset.Bitset)(b.ptr), w)
-
-	case BlockFloat64:
-		n, err = zip.EncodeFloat64(b.Float64().Slice(), w)
-
-	case BlockFloat32:
-		n, err = zip.EncodeFloat32(b.Float32().Slice(), w)
-
-	case BlockInt128:
-		n, err = zip.EncodeInt128(*(*num.Int128Stride)(b.ptr), w)
-
-	case BlockInt256:
-		n, err = zip.EncodeInt256(*(*num.Int256Stride)(b.ptr), w)
-
-	default:
-		err = fmt.Errorf("block: invalid data type %s (%[1]d)", b.typ)
+func (b *Block) Encode(c types.BlockCompression) ([]byte, encode.ContextExporter, error) {
+	if !b.IsMaterialized() {
+		return nil, nil, ErrBlockNotMaterialized
 	}
 
-	return int64(n), err
-}
+	// encode with best scheme selection
+	buf, ctx, err := b.encode()
+	if err != nil {
+		return nil, nil, err
+	}
 
-// ReadFrom loads and decompresses block data from an io.Reader. It enables
-// composition with stream decoders like snappy/lz4, but it requires scratch
-// buffers because underlying decoders are block based.
-func (b *Block) ReadFrom(r io.Reader) (n int64, err error) {
-	switch b.typ {
-	case BlockInt64, BlockUint64:
-		b.len, n, err = zip.ReadUint64(b.Uint64().FullSlice(), r)
-
-	case BlockInt32, BlockUint32:
-		b.len, n, err = zip.ReadUint32(b.Uint32().FullSlice(), r)
-
-	case BlockInt16, BlockUint16:
-		b.len, n, err = zip.ReadUint16(b.Uint16().FullSlice(), r)
-
-	case BlockInt8, BlockUint8:
-		b.len, n, err = zip.ReadUint8(b.Uint8().FullSlice(), r)
-
-	case BlockTime:
-		b.len, n, err = zip.ReadTime(b.Int64().FullSlice(), r)
-
-	case BlockBytes:
-		// can re-allocate a new dedup kind
-		var arr dedup.ByteArray
-		arr, n, err = dedup.ReadFrom(r, b.Bytes())
-		if err != nil {
-			return n, err
+	// optional: compress block buffer
+	if c > 0 {
+		cbuf := bytes.NewBuffer(arena.AllocBytes(len(buf)))
+		cbuf.WriteByte(byte(c))
+		enc := NewCompressor(cbuf, c)
+		if _, err := enc.Write(buf); err != nil {
+			return nil, nil, err
 		}
-		b.ptr = unsafe.Pointer(&arr)
-		b.len = arr.Len()
-
-	case BlockFloat64:
-		b.len, n, err = zip.ReadFloat64(b.Float64().FullSlice(), r)
-
-	case BlockFloat32:
-		b.len, n, err = zip.ReadFloat32(b.Float32().FullSlice(), r)
-
-	case BlockBool:
-		n, err = zip.ReadBitset((*bitset.Bitset)(b.ptr), r)
-		b.len = (*bitset.Bitset)(b.ptr).Len()
-
-	case BlockInt128:
-		n, err = zip.ReadInt128((*num.Int128Stride)(b.ptr), r)
-		b.len = (*num.Int128Stride)(b.ptr).Len()
-
-	case BlockInt256:
-		n, err = zip.ReadInt256((*num.Int256Stride)(b.ptr), r)
-		b.len = (*num.Int256Stride)(b.ptr).Len()
-
-	default:
-		err = fmt.Errorf("block: unsupported data type %s (%[1]d)", b.typ)
-		b.len = 0
+		if err := enc.Close(); err != nil {
+			return nil, nil, err
+		}
+		arena.Free(buf)
+		buf = cbuf.Bytes()
+	} else {
+		buf[0] = byte(types.BlockCompressNone)
 	}
-	return
+	return buf, ctx, nil
 }
 
-// Decode unpacks compressed data found in buf and replaces the block's content.
-// This method is similar to ReadFrom(), however due to the block-based nature
-// of most underlying decoders, Decode is faster because it can avoid allocating
-// extra buffer space.
-//
-// Implemetation note: for performance reasons we should avoid passing pointer
-// to slice *[]uint64 because the Go compiler will add extra checks to the
-// generated ASM which makes slice value access 20-50% slower.
-func (b *Block) Decode(buf []byte) (err error) {
+func (b *Block) encode() ([]byte, encode.ContextExporter, error) {
 	switch b.typ {
-	case BlockInt64, BlockUint64:
-		b.len, err = zip.DecodeUint64(b.Uint64().FullSlice(), buf)
+	case BlockInt64:
+		src := b.Int64().Slice()
+		ctx := encode.AnalyzeInt(src, true)
+		enc := encode.EncodeInt(ctx, src)
+		// add zero byte for compression
+		buf := arena.AllocBytes(enc.Size() + 1)
+		buf = enc.Store(buf[:1])
+		enc.Close()
+		return buf, ctx, nil
 
-	case BlockInt32, BlockUint32:
-		b.len, err = zip.DecodeUint32(b.Uint32().FullSlice(), buf)
+	case BlockInt32:
+		src := b.Int32().Slice()
+		ctx := encode.AnalyzeInt(src, true)
+		enc := encode.EncodeInt(ctx, src)
+		// add zero byte for compression
+		buf := arena.AllocBytes(enc.Size() + 1)
+		buf = enc.Store(buf[:1])
+		enc.Close()
+		return buf, ctx, nil
 
-	case BlockInt16, BlockUint16:
-		b.len, err = zip.DecodeUint16(b.Uint16().FullSlice(), buf)
+	case BlockInt16:
+		src := b.Int16().Slice()
+		ctx := encode.AnalyzeInt(src, true)
+		enc := encode.EncodeInt(ctx, src)
+		// add zero byte for compression
+		buf := arena.AllocBytes(enc.Size() + 1)
+		buf = enc.Store(buf[:1])
+		enc.Close()
+		return buf, ctx, nil
 
-	case BlockInt8, BlockUint8:
-		b.len, err = zip.DecodeUint8(b.Uint8().FullSlice(), buf)
+	case BlockInt8:
+		src := b.Int8().Slice()
+		ctx := encode.AnalyzeInt(src, true)
+		enc := encode.EncodeInt(ctx, src)
+		// add zero byte for compression
+		buf := arena.AllocBytes(enc.Size() + 1)
+		buf = enc.Store(buf[:1])
+		enc.Close()
+		return buf, ctx, nil
 
-	case BlockTime:
-		b.len, err = zip.DecodeTime(b.Int64().FullSlice(), buf)
+	case BlockUint64:
+		src := b.Uint64().Slice()
+		ctx := encode.AnalyzeInt(src, true)
+		enc := encode.EncodeInt(ctx, src)
+		// add zero byte for compression
+		buf := arena.AllocBytes(enc.Size() + 1)
+		buf = enc.Store(buf[:1])
+		enc.Close()
+		return buf, ctx, nil
 
-	case BlockBytes:
-		// can re-allocate a new dedup kind
-		var arr dedup.ByteArray
-		arr, err = dedup.Decode(buf, b.Bytes(), b.Bytes().Len())
-		if err != nil {
-			return err
-		}
-		b.ptr = unsafe.Pointer(&arr)
-		b.len = arr.Len()
+	case BlockUint32:
+		src := b.Uint32().Slice()
+		ctx := encode.AnalyzeInt(src, true)
+		enc := encode.EncodeInt(ctx, src)
+		// add zero byte for compression
+		buf := arena.AllocBytes(enc.Size() + 1)
+		buf = enc.Store(buf[:1])
+		enc.Close()
+		return buf, ctx, nil
+
+	case BlockUint16:
+		src := b.Uint16().Slice()
+		ctx := encode.AnalyzeInt(src, true)
+		enc := encode.EncodeInt(ctx, src)
+		// add zero byte for compression
+		buf := arena.AllocBytes(enc.Size() + 1)
+		buf = enc.Store(buf[:1])
+		enc.Close()
+		return buf, ctx, nil
+
+	case BlockUint8:
+		src := b.Uint8().Slice()
+		ctx := encode.AnalyzeInt(src, true)
+		enc := encode.EncodeInt(ctx, src)
+		// add zero byte for compression
+		buf := arena.AllocBytes(enc.Size() + 1)
+		buf = enc.Store(buf[:1])
+		enc.Close()
+		return buf, ctx, nil
 
 	case BlockFloat64:
-		b.len, err = zip.DecodeFloat64(b.Float64().FullSlice(), buf)
+		src := b.Float64().Slice()
+		ctx := encode.AnalyzeFloat(src, true, true)
+		enc := encode.EncodeFloat(ctx, src)
+		// add zero byte for compression
+		buf := arena.AllocBytes(enc.Size() + 1)
+		buf = enc.Store(buf[:1])
+		enc.Close()
+		return buf, ctx, nil
 
 	case BlockFloat32:
-		b.len, err = zip.DecodeFloat32(b.Float32().FullSlice(), buf)
+		src := b.Float32().Slice()
+		ctx := encode.AnalyzeFloat(src, true, true)
+		enc := encode.EncodeFloat(ctx, src)
+		// add zero byte for compression
+		buf := arena.AllocBytes(enc.Size() + 1)
+		buf = enc.Store(buf[:1])
+		enc.Close()
+		return buf, ctx, nil
 
 	case BlockBool:
-		err = zip.DecodeBitset((*bitset.Bitset)(b.ptr), buf)
-		b.len = (*bitset.Bitset)(b.ptr).Len()
+		src := b.Bool()
+		ctx := encode.AnalyzeBitmap(src)
+		enc := encode.EncodeBitmap(ctx, src)
+		// add zero byte for compression
+		buf := arena.AllocBytes(enc.Size() + 1)
+		buf = enc.Store(buf[:1])
+		enc.Close()
+		return buf, ctx, nil
+
+	case BlockBytes:
+		src := b.Bytes()
+		ctx := encode.AnalyzeString(src)
+		enc := encode.EncodeString(ctx, src)
+		// add zero byte for compression
+		buf := arena.AllocBytes(enc.Size() + 1)
+		buf = enc.Store(buf[:1])
+		enc.Close()
+		return buf, ctx, nil
 
 	case BlockInt128:
-		err = zip.DecodeInt128((*num.Int128Stride)(b.ptr), buf)
-		b.len = (*num.Int128Stride)(b.ptr).Len()
+		i128 := b.Int128()
+		ctx := encode.AnalyzeInt128(i128)
+		enc := encode.EncodeInt128(ctx, i128)
+		// add zero byte for compression
+		buf := arena.AllocBytes(enc.Size() + 1)
+		buf = enc.Store(buf[:1])
+		enc.Close()
+		return buf, ctx, nil
 
 	case BlockInt256:
-		err = zip.DecodeInt256((*num.Int256Stride)(b.ptr), buf)
-		b.len = (*num.Int256Stride)(b.ptr).Len()
+		i256 := b.Int256()
+		ctx := encode.AnalyzeInt256(i256)
+		enc := encode.EncodeInt256(ctx, i256)
+		// add zero byte for compression
+		buf := arena.AllocBytes(enc.Size() + 1)
+		buf = enc.Store(buf[:1])
+		enc.Close()
+		return buf, ctx, nil
 
 	default:
-		err = fmt.Errorf("block: unsupported data type %s (%[1]d)", b.typ)
-		b.len = 0
+		return nil, nil, fmt.Errorf("block: unsupported data type %s (%[1]d)", b.typ)
 	}
-	return
 }
 
 func Decode(typ BlockType, buf []byte) (*Block, error) {
-	b := blockPool.Get().(*Block)
-	b.typ = typ
-	b.dirty = true
-	b.refCount = 1
-	b.len = 0
-	b.cap = 0
+	if len(buf) == 0 {
+		return nil, io.ErrShortBuffer
+	}
 
+	// read optional block compression
+	comp := types.BlockCompression(buf[0])
+
+	if comp > 0 {
+		// decode block data with optional decompressor
+		dec := NewDecompressor(bytes.NewBuffer(buf[1:]), comp)
+		dbuf, err := io.ReadAll(dec)
+		if err != nil {
+			return nil, err
+		}
+		if err := dec.Close(); err != nil {
+			return nil, err
+		}
+		buf = dbuf[1:]
+
+		// TODO: BufferManager: at this point we hold a copy of the decompressed
+		// data which will be referenced by an encode container. we can release
+		// any page locks
+
+	} else {
+		// TODO: BufferManager: here we reference data from a buffer page and
+		// must hold the lock until the block is released (page lock release
+		// happens during block.Deref or we replace Deref with page ref)
+
+		// with boltdb the backing buffer may become invalid after the tx closes
+		// hence we must make a copy here to allow the block to be cached and shared
+		buf = bytes.Clone(buf[1:])
+	}
+
+	b := blockPool.Get().(*Block)
+	b.nref = 1
+	b.typ = typ
+
+	// decode from buffer, set len/cap
 	switch b.typ {
-	case BlockInt64, BlockTime:
+	case BlockInt64:
 		c, err := encode.LoadInt[int64](buf)
 		if err != nil {
 			return nil, err
 		}
-		b.ptr = unsafe.Pointer(&c)
-		b.len, b.cap = c.Len(), c.Len()
+		b.any = c
+		b.len = uint32(c.Len())
 
 	case BlockUint64:
 		c, err := encode.LoadInt[uint64](buf)
 		if err != nil {
 			return nil, err
 		}
-		b.ptr = unsafe.Pointer(&c)
-		b.len, b.cap = c.Len(), c.Len()
+		b.any = c
+		b.len = uint32(c.Len())
 
 	case BlockInt32:
 		c, err := encode.LoadInt[int32](buf)
 		if err != nil {
 			return nil, err
 		}
-		b.ptr = unsafe.Pointer(&c)
-		b.len, b.cap = c.Len(), c.Len()
+		b.any = c
+		b.len = uint32(c.Len())
 
 	case BlockUint32:
 		c, err := encode.LoadInt[uint32](buf)
 		if err != nil {
 			return nil, err
 		}
-		b.ptr = unsafe.Pointer(&c)
-		b.len, b.cap = c.Len(), c.Len()
+		b.any = c
+		b.len = uint32(c.Len())
 
 	case BlockInt16:
 		c, err := encode.LoadInt[int16](buf)
 		if err != nil {
 			return nil, err
 		}
-		b.ptr = unsafe.Pointer(&c)
-		b.len, b.cap = c.Len(), c.Len()
+		b.any = c
+		b.len = uint32(c.Len())
 
 	case BlockUint16:
 		c, err := encode.LoadInt[uint16](buf)
 		if err != nil {
 			return nil, err
 		}
-		b.ptr = unsafe.Pointer(&c)
-		b.len, b.cap = c.Len(), c.Len()
+		b.any = c
+		b.len = uint32(c.Len())
 
 	case BlockInt8:
 		c, err := encode.LoadInt[int8](buf)
 		if err != nil {
 			return nil, err
 		}
-		b.ptr = unsafe.Pointer(&c)
-		b.len, b.cap = c.Len(), c.Len()
+		b.any = c
+		b.len = uint32(c.Len())
 
 	case BlockUint8:
 		c, err := encode.LoadInt[uint8](buf)
 		if err != nil {
 			return nil, err
 		}
-		b.ptr = unsafe.Pointer(&c)
-		b.len, b.cap = c.Len(), c.Len()
+		b.any = c
+		b.len = uint32(c.Len())
 
 	case BlockFloat64:
 		c, err := encode.LoadFloat[float64](buf)
 		if err != nil {
 			return nil, err
 		}
-		b.ptr = unsafe.Pointer(&c)
-		b.len, b.cap = c.Len(), c.Len()
+		b.any = c
+		b.len = uint32(c.Len())
 
 	case BlockFloat32:
 		c, err := encode.LoadFloat[float32](buf)
 		if err != nil {
 			return nil, err
 		}
-		b.ptr = unsafe.Pointer(&c)
-		b.len, b.cap = c.Len(), c.Len()
+		b.any = c
+		b.len = uint32(c.Len())
 
-	// case BlockBytes:
-	// 	// can re-allocate a new dedup kind
-	// 	var arr dedup.ByteArray
-	// 	arr, err = dedup.Decode(buf, b.Bytes(), b.Bytes().Len())
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// 	b.ptr = unsafe.Pointer(&arr)
-	// 	b.len = arr.Len()
+	case BlockBytes:
+		c, err := encode.LoadString(buf)
+		if err != nil {
+			return nil, err
+		}
+		b.any = c
+		b.len = uint32(c.Len())
 
 	case BlockBool:
 		c, err := encode.LoadBitmap(buf)
 		if err != nil {
 			return nil, err
 		}
-		b.ptr = unsafe.Pointer(&c)
-		b.len, b.cap = c.Len(), c.Len()
+		b.any = c
+		b.len = uint32(c.Len())
 
 	case BlockInt128:
 		c, err := encode.LoadInt128(buf)
 		if err != nil {
 			return nil, err
 		}
-		b.ptr = unsafe.Pointer(&c)
-		b.len, b.cap = c.Len(), c.Len()
+		b.any = c
+		b.len = uint32(c.Len())
 
 	case BlockInt256:
 		c, err := encode.LoadInt256(buf)
 		if err != nil {
 			return nil, err
 		}
-		b.ptr = unsafe.Pointer(&c)
-		b.len, b.cap = c.Len(), c.Len()
+		b.any = c
+		b.len = uint32(c.Len())
 
 	default:
 		return nil, fmt.Errorf("block: unsupported data type %s (%[1]d)", b.typ)
 	}
+	b.cap = b.len
 
 	return b, nil
 }

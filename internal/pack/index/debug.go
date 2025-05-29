@@ -12,7 +12,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/pack/stats"
 	"blockwatch.cc/knoxdb/internal/store"
-	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/bitmap"
 )
 
@@ -78,24 +77,25 @@ func (idx *Index) loadPack(i int) (*pack.Package, int, error) {
 			return engine.ErrNoKey
 		}
 		ik, pk, _ := idx.decodePackKey(cur.Key())
-		sz := idx.opts.PackSize
-		blk1 := block.New(types.BlockTypes[idx.schema.Exported()[0].Type], sz)
-		if err := blk1.Decode(cur.Value()); err != nil {
+		f1, _ := idx.schema.FieldByIndex(0)
+		blk1, err := block.Decode(f1.Type().BlockType(), cur.Value())
+		if err != nil {
 			return fmt.Errorf("loading block 0x%08x:%08x:%d: %v", ik, pk, 0, err)
 		}
 		nBytes += len(cur.Value())
 		if !cur.Next() {
 			return fmt.Errorf("loading block 0x%08x:%08x:%d: %v", ik, pk, 1, engine.ErrDatabaseCorrupt)
 		}
-		blk2 := block.New(types.BlockTypes[idx.schema.Exported()[1].Type], sz)
-		if err := blk2.Decode(cur.Value()); err != nil {
+		f2, _ := idx.schema.FieldByIndex(1)
+		blk2, err := block.Decode(f2.Type().BlockType(), cur.Value())
+		if err != nil {
 			return fmt.Errorf("loading block 0x%08x:%08x:%d: %v", ik, pk, 1, err)
 		}
 		nBytes += len(cur.Value())
 		pkg = pack.New().
 			WithKey(uint32(i)).
 			WithSchema(idx.schema).
-			WithMaxRows(sz).
+			WithMaxRows(blk1.Cap()).
 			WithBlock(0, blk1).
 			WithBlock(1, blk2)
 		return nil

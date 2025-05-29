@@ -60,7 +60,7 @@ func makeTestPackage(t testing.TB, key int, pk uint64) *pack.Package {
 		WithKey(uint32(key)).
 		WithSchema(TestSchema).
 		WithMaxRows(TEST_PKG_SIZE).
-		WithAnalysis().
+		WithStats().
 		Alloc()
 	enc := schema.NewGenericEncoder[TestStruct]()
 	for _, v := range makeTestData(TEST_PKG_SIZE, pk) {
@@ -68,6 +68,12 @@ func makeTestPackage(t testing.TB, key int, pk uint64) *pack.Package {
 		require.NoError(t, err)
 		pkg.AppendWire(buf, &schema.Meta{Rid: v.Id, Xmin: 1})
 	}
+	// init statistics
+	pstats := pkg.Stats()
+	for i, b := range pkg.Blocks() {
+		pstats.MinMax[i][0], pstats.MinMax[i][1] = b.MinMax()
+	}
+
 	return pkg
 }
 
@@ -100,7 +106,7 @@ func makeFilter(name string, mode query.FilterMode, val, val2 any) *query.Filter
 	return &query.FilterTreeNode{
 		Filter: &query.Filter{
 			Name:    field.Name(),
-			Type:    types.BlockTypes[field.Type()],
+			Type:    field.Type().BlockType(),
 			Mode:    mode,
 			Index:   field.Id() - 1,
 			Value:   val,
@@ -171,11 +177,11 @@ func TestIndexCreate(t *testing.T) {
 	assert.Equal(t, 0, idx.TableSize(), "table size")
 	assert.Equal(t, 0, idx.IndexSize(), "index size")
 	assert.Equal(t, uint32(0), idx.NextKey(), "next key")
-	assert.Equal(t, uint64(0), idx.GlobalMinPk(), "global min pk")
-	assert.Equal(t, uint64(0), idx.GlobalMaxPk(), "global max pk")
+	assert.Equal(t, uint64(0), idx.GlobalMinRid(), "global min rid")
+	assert.Equal(t, uint64(0), idx.GlobalMaxRid(), "global max rid")
 
 	// find should not panic
-	it, ok := idx.FindPk(ctx, uint64(1))
+	it, ok := idx.FindRid(ctx, uint64(1))
 	assert.False(t, ok, "find on empty index")
 	assert.False(t, it.IsValid(), "valid iterator")
 	it.Close()
@@ -225,8 +231,8 @@ func TestIndexAddSingle(t *testing.T) {
 	// assert.Less(t, 0, idx.TableSize(), "table size") // TODO
 	assert.Less(t, 0, idx.IndexSize(), "index size")
 	assert.Equal(t, uint32(1), idx.NextKey(), "next key")
-	assert.Equal(t, uint64(1), idx.GlobalMinPk(), "global min pk")
-	assert.Equal(t, uint64(TEST_PKG_SIZE), idx.GlobalMaxPk(), "global max pk")
+	assert.Equal(t, uint64(1), idx.GlobalMinRid(), "global min rid")
+	assert.Equal(t, uint64(TEST_PKG_SIZE), idx.GlobalMaxRid(), "global max rid")
 }
 
 func TestIndexAddMany(t *testing.T) {
@@ -264,8 +270,8 @@ func TestIndexAddMany(t *testing.T) {
 	assert.Equal(t, sz*STATS_PACK_SIZE, idx.Len(), "num data packs")
 	assert.Equal(t, sz*STATS_PACK_SIZE*TEST_PKG_SIZE, idx.Count(), "num data rows")
 	assert.Equal(t, uint32(sz*STATS_PACK_SIZE), idx.NextKey(), "next key")
-	assert.Equal(t, uint64(1), idx.GlobalMinPk(), "global min pk")
-	assert.Equal(t, uint64(sz*STATS_PACK_SIZE*TEST_PKG_SIZE), idx.GlobalMaxPk(), "global max pk")
+	assert.Equal(t, uint64(1), idx.GlobalMinRid(), "global min rid")
+	assert.Equal(t, uint64(sz*STATS_PACK_SIZE*TEST_PKG_SIZE), idx.GlobalMaxRid(), "global max rid")
 }
 
 func TestIndexUpdate(t *testing.T) {
@@ -287,7 +293,7 @@ func TestIndexUpdate(t *testing.T) {
 
 	// override pk in first row (note: use rid field since we use pack metadata!!)
 	pkg.Block(6).Uint64().Set(0, 1000)
-	pkg.WithAnalysis()
+	pkg.WithStats()
 	assert.True(t, pkg.Block(6).IsDirty(), "block is dirty after write")
 	require.NoError(t, idx.UpdatePack(ctx, pkg))
 
@@ -319,8 +325,8 @@ func TestIndexUpdate(t *testing.T) {
 	// assert.Less(t, 0, idx.TableSize(), "table size") // TODO
 	assert.Less(t, 0, idx.IndexSize(), "index size")
 	assert.Equal(t, uint32(1), idx.NextKey(), "next key")
-	assert.Equal(t, uint64(2), idx.GlobalMinPk(), "global min pk")
-	assert.Equal(t, uint64(1000), idx.GlobalMaxPk(), "global max pk")
+	assert.Equal(t, uint64(2), idx.GlobalMinRid(), "global min rid")
+	assert.Equal(t, uint64(1000), idx.GlobalMaxRid(), "global max rid")
 }
 
 func TestIndexDeleteSingle(t *testing.T) {
@@ -341,8 +347,8 @@ func TestIndexDeleteSingle(t *testing.T) {
 	validateTree(t, idx)
 	assert.Equal(t, 3, idx.Len(), "num data packs")
 	assert.Equal(t, 3*TEST_PKG_SIZE, idx.Count(), "num data rows")
-	assert.Equal(t, uint64(1), idx.GlobalMinPk(), "global min pk")
-	assert.Equal(t, uint64(3*TEST_PKG_SIZE), idx.GlobalMaxPk(), "global max pk")
+	assert.Equal(t, uint64(1), idx.GlobalMinRid(), "global min rid")
+	assert.Equal(t, uint64(3*TEST_PKG_SIZE), idx.GlobalMaxRid(), "global max rid")
 
 	// delete
 	require.NoError(t, idx.DeletePack(ctx, pkg))
@@ -353,8 +359,8 @@ func TestIndexDeleteSingle(t *testing.T) {
 	validateTree(t, idx)
 	assert.Equal(t, 2, idx.Len(), "num data packs")
 	assert.Equal(t, 2*TEST_PKG_SIZE, idx.Count(), "num data rows")
-	assert.Equal(t, uint64(1), idx.GlobalMinPk(), "global min pk")
-	assert.Equal(t, uint64(2*TEST_PKG_SIZE), idx.GlobalMaxPk(), "global max pk")
+	assert.Equal(t, uint64(1), idx.GlobalMinRid(), "global min rid")
+	assert.Equal(t, uint64(2*TEST_PKG_SIZE), idx.GlobalMaxRid(), "global max rid")
 }
 
 func TestIndexDeleteMany(t *testing.T) {
@@ -383,6 +389,7 @@ func TestIndexDeleteMany(t *testing.T) {
 
 	// store should remove first spack and rebuild the full tree
 	tx, err := idx.db.Begin(true)
+	defer tx.Rollback()
 	require.NoError(t, err)
 	require.NoError(t, idx.Store(ctx, tx))
 	require.NoError(t, tx.Commit())
@@ -401,8 +408,8 @@ func TestIndexDeleteMany(t *testing.T) {
 	assert.Equal(t, (sz-1)*STATS_PACK_SIZE, idx.Len(), "num data packs")
 	assert.Equal(t, (sz-1)*STATS_PACK_SIZE*TEST_PKG_SIZE, idx.Count(), "num data rows")
 	assert.Equal(t, uint32(sz*STATS_PACK_SIZE), idx.NextKey(), "next key")
-	assert.Equal(t, uint64(STATS_PACK_SIZE*TEST_PKG_SIZE+1), idx.GlobalMinPk(), "global min pk")
-	assert.Equal(t, uint64(sz*STATS_PACK_SIZE*TEST_PKG_SIZE), idx.GlobalMaxPk(), "global max pk")
+	assert.Equal(t, uint64(STATS_PACK_SIZE*TEST_PKG_SIZE+1), idx.GlobalMinRid(), "global min rid")
+	assert.Equal(t, uint64(sz*STATS_PACK_SIZE*TEST_PKG_SIZE), idx.GlobalMaxRid(), "global max rid")
 }
 
 // -------------------------------------------------------------
@@ -451,8 +458,8 @@ func TestIndexStore(t *testing.T) {
 	assert.Equal(t, sz*STATS_PACK_SIZE*TEST_PKG_SIZE, idx.Count(), "num data rows")
 	assert.Equal(t, uint32(sz*STATS_PACK_SIZE), idx.NextKey(), "next key")
 	assert.Equal(t, true, idx.IsTailFull(), "fill tail")
-	assert.Equal(t, uint64(1), idx.GlobalMinPk(), "global min pk")
-	assert.Equal(t, uint64(sz*STATS_PACK_SIZE*TEST_PKG_SIZE), idx.GlobalMaxPk(), "global max pk")
+	assert.Equal(t, uint64(1), idx.GlobalMinRid(), "global min rid")
+	assert.Equal(t, uint64(sz*STATS_PACK_SIZE*TEST_PKG_SIZE), idx.GlobalMaxRid(), "global max rid")
 }
 
 func TestIndexStoreAndAdd(t *testing.T) {
@@ -516,7 +523,7 @@ func TestIndexQueryEqual(t *testing.T) {
 	minv, maxv := it.MinMax(0)
 	assert.Equal(t, uint64(STATS_PACK_SIZE*TEST_PKG_SIZE+1), minv, "min pk")
 	assert.Equal(t, uint64((STATS_PACK_SIZE+1)*TEST_PKG_SIZE), maxv, "max pk")
-	assert.Equal(t, pack.Range{0, 0}, it.Range(), "scan range")
+	assert.Equal(t, types.Range{0, 0}, it.Range(), "scan range")
 	assert.False(t, it.Next(), "no more matches")
 	assert.False(t, it.IsValid(), "is no longer valid")
 }
@@ -553,7 +560,7 @@ func TestIndexQueryAll(t *testing.T) {
 		minv, maxv := it.MinMax(0)
 		require.Equal(t, pk, minv, "min pk")
 		require.Equal(t, pk+uint64(TEST_PKG_SIZE-1), maxv, "max pk")
-		require.Equal(t, pack.Range{0, TEST_PKG_SIZE - 1}, it.Range(), "scan range")
+		require.Equal(t, types.Range{0, TEST_PKG_SIZE - 1}, it.Range(), "scan range")
 		pk += TEST_PKG_SIZE
 		if i < sz*STATS_PACK_SIZE-1 {
 			require.True(t, it.Next(), "want more matches")
@@ -597,7 +604,7 @@ func TestIndexQueryLess(t *testing.T) {
 	// t.Logf("Pack pk range %d..%d", minv, maxv)
 	assert.Equal(t, uint64(1), minv, "min pk")
 	assert.Equal(t, uint64(TEST_PKG_SIZE), maxv, "max pk")
-	assert.Equal(t, pack.Range{0, 15}, it.Range(), "scan range")
+	assert.Equal(t, types.Range{0, 15}, it.Range(), "scan range")
 
 	assert.True(t, it.Next(), "more matches")
 	assert.True(t, it.IsValid(), "is still valid")
@@ -607,7 +614,7 @@ func TestIndexQueryLess(t *testing.T) {
 	// t.Logf("Pack pk range %d..%d", minv, maxv)
 	assert.Equal(t, uint64(TEST_PKG_SIZE+1), minv, "min pk")
 	assert.Equal(t, uint64(2*TEST_PKG_SIZE), maxv, "max pk")
-	assert.Equal(t, pack.Range{0, 0}, it.Range(), "scan range")
+	assert.Equal(t, types.Range{0, 0}, it.Range(), "scan range")
 
 	assert.False(t, it.Next(), "no more matches")
 	assert.False(t, it.IsValid(), "is no longer valid")
@@ -645,7 +652,7 @@ func TestIndexQueryRange(t *testing.T) {
 	// t.Logf("Pack pk range %d..%d", minv, maxv)
 	assert.Equal(t, uint64(1), minv, "min pk")
 	assert.Equal(t, uint64(TEST_PKG_SIZE), maxv, "max pk")
-	assert.Equal(t, pack.Range{0, 15}, it.Range(), "scan range")
+	assert.Equal(t, types.Range{0, 15}, it.Range(), "scan range")
 
 	assert.True(t, it.Next(), "more matches")
 	assert.True(t, it.IsValid(), "is still valid")
@@ -655,7 +662,7 @@ func TestIndexQueryRange(t *testing.T) {
 	// t.Logf("Pack pk range %d..%d", minv, maxv)
 	assert.Equal(t, uint64(TEST_PKG_SIZE+1), minv, "min pk")
 	assert.Equal(t, uint64(2*TEST_PKG_SIZE), maxv, "max pk")
-	assert.Equal(t, pack.Range{0, 0}, it.Range(), "scan range")
+	assert.Equal(t, types.Range{0, 0}, it.Range(), "scan range")
 
 	assert.False(t, it.Next(), "no more matches")
 	assert.False(t, it.IsValid(), "is no longer valid")
@@ -676,7 +683,7 @@ func TestIndexFindPk(t *testing.T) {
 	}
 
 	// find pk in first data pack
-	it, ok := idx.FindPk(ctx, 1)
+	it, ok := idx.FindRid(ctx, 1)
 	defer it.Close()
 	require.True(t, ok, "found match")
 	require.NotNil(t, it, "it is not nil")
@@ -687,7 +694,7 @@ func TestIndexFindPk(t *testing.T) {
 	minv, maxv := it.MinMax(0)
 	assert.Equal(t, uint64(1), minv, "min pk")
 	assert.Equal(t, uint64(TEST_PKG_SIZE), maxv, "max pk")
-	assert.Equal(t, pack.Range{0, 0}, it.Range(), "scan range")
+	assert.Equal(t, types.Range{0, 0}, it.Range(), "scan range")
 	assert.False(t, it.Next(), "no more matches")
 	assert.False(t, it.IsValid(), "is no longer valid")
 }
@@ -707,7 +714,7 @@ func TestIndexFindPkEnd(t *testing.T) {
 	}
 
 	// find pk beyond the last data pack
-	it, ok := idx.FindPk(ctx, uint64(STATS_PACK_SIZE/2*TEST_PKG_SIZE+1))
+	it, ok := idx.FindRid(ctx, uint64(STATS_PACK_SIZE/2*TEST_PKG_SIZE+1))
 	defer it.Close()
 	require.True(t, ok, "found match")
 	require.NotNil(t, it, "it is not nil")
@@ -739,7 +746,7 @@ func TestIndexFindPkEndWithSpace(t *testing.T) {
 	require.NoError(t, idx.AddPack(ctx, pkg))
 
 	// find pk beyond last data pack
-	it, ok := idx.FindPk(ctx, pk+1)
+	it, ok := idx.FindRid(ctx, pk+1)
 	defer it.Close()
 	require.True(t, ok, "found match")
 	require.NotNil(t, it, "it is not nil")

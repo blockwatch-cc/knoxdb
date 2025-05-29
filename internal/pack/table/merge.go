@@ -16,12 +16,12 @@ import (
 // storage and indexes. Merge is idempotent, it can crash, get interrupted and restarted.
 // The merged journal segment is only discarded when all data has been successfully written
 // eventually. Due to journal contents masking table data it is save to merge a segment
-// into on disk data vectors step wise without explicit syncronization or logging.
+// into on disk data vectors step-wise without explicit syncronization or logging.
 //
 // To prevent inconsistent backend data on crash, Merge uses short-lived backend
-// transactions for atomically updating all related column vectors for a particlar pack.
+// transactions for atomically updating all column vectors for a given pack.
 //
-// Merge appends new record versions from insert/updated operations at the end of
+// Merge appends new record versions from insert/update operations at the end of
 // a table's data vectors and removes old row versions replaced by update/delete.
 // When a history table is available, pre-images of old record versions are moved there.
 //
@@ -32,7 +32,7 @@ import (
 //
 // Invariants
 // - unique pk: main table contains at most one record per pk
-// - unique rid: main and history table tables contain at most one record with the same rid
+// - unique rid: main and history tables contain at most one record with the same rid
 // - sorted rid: main table is sorted by rid (append only)
 //
 // History Table Merge Strategy (unique rid, sorted by xmax)
@@ -53,9 +53,8 @@ import (
 // - updates indexes
 // - replaces stored data blocks on disk
 //   - atomic backend write of all blocks in a single pack
-//   - followed by cache flush of all blocks (under lock)
-//   - concurrent readers always see consistent version
-// - invalidates cached blocks
+//   - followed by cache flush of all blocks (under cache and tx locks)
+//   - concurrent readers always see a consistent pack version
 //
 // Design considerations for background merge
 //
@@ -110,6 +109,8 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 		defer hist.Close()
 	}
 
+	// TODO: alloc & reuse tomb map & mask
+
 	// Phase 1 - move deleted table rows to history, rewrite table packs
 	tomb, mask, inJournalDeletes := seg.PrepareMerge()
 	if len(mask) > 0 {
@@ -125,10 +126,12 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 			}
 
 			if hist != nil {
+				// FIXME: patch xmax in history pack (which is writable)
+
 				// set xmax for deleted rows
 				pkg.Xmaxs().Materialize()
 				xmaxs := pkg.Xmaxs().Uint64().Slice()
-				rids := pkg.RowIds().Uint64().Slice()
+				rids := pkg.RowIds().Uint64().Slice() // use Iterator
 				for i, l := 0, pkg.Len(); i < l; i++ {
 					if xid, ok := tomb[rids[i]]; ok {
 						xmaxs[i] = xid
@@ -162,8 +165,11 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 	// Phase 2 - move journal data to table and history
 	if seg.Data().Len() > 0 {
 		if inJournalDeletes {
-			// create selection vector for split based on xmax
+			// create selection vector excluding deleted records
 			sel := arena.AllocUint32(seg.Data().Len())
+			// TODO: is it more efficient to chain cmp.Equal + bitset.Indexes?
+			// plus, seg may be compressed, so Slice() is not available,
+			// -> use matcher instead
 			for i, v := range seg.Data().Xmaxs().Uint64().Slice() {
 				if v == 0 {
 					sel = append(sel, uint32(i))

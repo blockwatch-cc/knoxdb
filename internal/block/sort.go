@@ -4,14 +4,12 @@
 package block
 
 import (
-	"bytes"
-
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 func (b *Block) Cmp(i, j int) int {
 	switch b.typ {
-	case BlockTime, BlockInt64:
+	case BlockInt64:
 		return b.Int64().Cmp(i, j)
 	case BlockInt32:
 		return b.Int32().Cmp(i, j)
@@ -32,25 +30,13 @@ func (b *Block) Cmp(i, j int) int {
 	case BlockFloat32:
 		return b.Float32().Cmp(i, j)
 	case BlockBool:
-		bits := b.Bool()
-		bi, bj := bits.Contains(i), bits.Contains(j)
-		switch {
-		case bi == bj:
-			return 0
-		case !bi && bj:
-			return -1
-		default:
-			return 1
-		}
+		return b.Bool().Cmp(i, j)
 	case BlockBytes:
-		dd := b.Bytes()
-		return bytes.Compare(dd.Elem(i), dd.Elem(j))
+		return b.Bytes().Cmp(i, j)
 	case BlockInt256:
-		i256 := b.Int256()
-		return i256.Elem(i).Cmp(i256.Elem(j))
+		return b.Int256().Cmp(i, j)
 	case BlockInt128:
-		i128 := b.Int128()
-		return i128.Elem(i).Cmp(i128.Elem(j))
+		return b.Int128().Cmp(i, j)
 	default:
 		return 0
 	}
@@ -61,8 +47,8 @@ func (b *Block) Cmpi(i, j int) int {
 	if b.typ == BlockBytes {
 		dd := b.Bytes()
 		return util.CmpCaseInsensitive(
-			util.UnsafeGetString(dd.Elem(i)),
-			util.UnsafeGetString(dd.Elem(j)),
+			util.UnsafeGetString(dd.Get(i)),
+			util.UnsafeGetString(dd.Get(j)),
 		)
 	} else {
 		return b.Cmp(i, j)

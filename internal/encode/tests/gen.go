@@ -8,6 +8,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/pkg/stringx"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
@@ -31,7 +32,7 @@ func GenForIntScheme[T types.Number](scheme, n int) []T {
 	// 8 TInt128
 	// 9 TInt256
 	default:
-		panic(fmt.Errorf("GenForIntScheme: unsupported scheme %d (%s)", scheme, scheme))
+		panic(fmt.Errorf("GenForIntScheme: unsupported scheme %d", scheme))
 	}
 }
 
@@ -58,11 +59,11 @@ func GenForFloatScheme[T types.Float](scheme, n int) []T {
 	case 15: // TFloatRaw,
 		return tests.GenRnd[T](n)
 	default:
-		panic(fmt.Errorf("GenForFloatScheme: unsupported scheme %d (%s)", scheme, scheme))
+		panic(fmt.Errorf("GenForFloatScheme: unsupported scheme %d", scheme))
 	}
 }
 
-func GenForStringScheme(scheme, n int) *util.StringPool {
+func GenForStringScheme(scheme, n int) *stringx.StringPool {
 	switch scheme {
 	case 16:
 		// TStringConstant
@@ -77,6 +78,6 @@ func GenForStringScheme(scheme, n int) *util.StringPool {
 		// TStringDictionary
 		return tests.GenStringDups(n, n/5, -1)
 	default:
-		panic(fmt.Errorf("GenForStringScheme: unsupported scheme %d (%s)", scheme, scheme))
+		panic(fmt.Errorf("GenForStringScheme: unsupported scheme %d", scheme))
 	}
 }
