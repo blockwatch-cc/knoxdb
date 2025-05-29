@@ -266,6 +266,17 @@ func (d *Decoder) Read(r io.Reader, val any) error {
 			} else {
 				err = fmt.Errorf("translation for enum %q not registered", field.name)
 			}
+		case OpCodeBigInt:
+			// read as raw bytes and create num.Big
+			l := LE.Uint32(d.buf.Next(4))
+			n, err = io.CopyN(d.buf, r, int64(l)) // may realloc!
+			if err != nil {
+				return err
+			}
+			if n != int64(l) {
+				return ErrShortBuffer
+			}
+			err = (*num.Big)(ptr).UnmarshalBinary(d.buf.Next(int(l)))
 		}
 
 		if err != nil {
@@ -481,9 +492,18 @@ func readField(code OpCode, field *Field, ptr unsafe.Pointer, buf []byte, enums 
 		}
 		val, ok := enum.Value(u16)
 		if !ok {
-			panic(fmt.Errorf("%s: invalid enum value %d", field.name, u16))
+			panic(fmt.Errorf("%s: invalid enum value %d, have %#v", field.name, u16, enum))
 		}
 		*(*string)(ptr) = val // FIXME: may break when enum dict grows
+
+	case OpCodeBigInt:
+		l := LE.Uint32(buf)
+		buf = buf[4:]
+		if l > 0 {
+			_ = buf[l-1]
+			_ = (*num.Big)(ptr).UnmarshalBinary(buf[:l])
+			buf = buf[l:]
+		}
 	}
 	return buf
 }

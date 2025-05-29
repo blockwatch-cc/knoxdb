@@ -225,6 +225,7 @@ func TestCastNewCaster(t *testing.T) {
 		{"Decimal64", types.FieldTypeDecimal64, IntCaster[int64]{}},
 		{"Decimal128", types.FieldTypeDecimal128, I128Caster{}},
 		{"Decimal256", types.FieldTypeDecimal256, I256Caster{}},
+		{"BigInt", types.FieldTypeBigint, BigIntCaster{}},
 	}
 
 	for _, tt := range tests {

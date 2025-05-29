@@ -4,6 +4,7 @@
 package schema
 
 import (
+	"bytes"
 	"fmt"
 	"slices"
 	"strings"
@@ -84,7 +85,7 @@ func (e *EnumDictionary) Len() int {
 func (e *EnumDictionary) Clone() *EnumDictionary {
 	clone := &EnumDictionary{
 		name:    e.name,
-		values:  slices.Clone(e.values),
+		values:  bytes.Clone(e.values),
 		offsets: slices.Clone(e.offsets),
 		codes:   make(map[uint64]uint16, len(e.codes)),
 	}

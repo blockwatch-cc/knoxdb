@@ -8,10 +8,10 @@ import "time"
 type TimeScale byte
 
 const (
-	TIME_SCALE_NANO TimeScale = iota
-	TIME_SCALE_MICRO
-	TIME_SCALE_MILLI
-	TIME_SCALE_SECOND
+	TIME_SCALE_NANO   TimeScale = iota // 0
+	TIME_SCALE_MICRO                   // 1
+	TIME_SCALE_MILLI                   // 2
+	TIME_SCALE_SECOND                  // 3
 )
 
 var timeScaleFactor = [...]int64{

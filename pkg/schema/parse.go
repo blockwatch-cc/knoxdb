@@ -67,6 +67,8 @@ func NewParser(typ types.FieldType, scale uint8, enum *EnumDictionary) ValuePars
 		return D128Parser{scale}
 	case types.FieldTypeDecimal256:
 		return D256Parser{scale}
+	case types.FieldTypeBigint:
+		return BigIntParser{}
 	default:
 		panic(fmt.Errorf("parser: unsupported field type %s %d", typ, typ))
 	}
@@ -354,6 +356,26 @@ func (p BoolParser) ParseSlice(s string) (any, error) {
 	slice := make([]bool, len(vv))
 	for i, v := range vv {
 		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return nil, err
+		}
+		slice[i] = b
+	}
+	return slice, nil
+}
+
+// bigint parser
+type BigIntParser struct{}
+
+func (_ BigIntParser) ParseValue(s string) (any, error) {
+	return num.ParseBig(s)
+}
+
+func (p BigIntParser) ParseSlice(s string) (any, error) {
+	vv := strings.Split(s, ",")
+	slice := make([]num.Big, len(vv))
+	for i, v := range vv {
+		b, err := num.ParseBig(v)
 		if err != nil {
 			return nil, err
 		}

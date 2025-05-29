@@ -15,12 +15,12 @@ package schema
 //
 // ```
 // pk            mark this field as primary key
-// index={type}  generate db index (hash, int, bits, bloom)
+// index={type}  generate db index (hash, int, bits, bloom, bfuse)
 // zip={type}    use extra compression (snappy, lz4, zstd, none, (empty))
 // fixed={num}   treat as fixed length field (only byte array, byte slice, string)
-// scale={num}   use fixed point scale factor (decimal types only)
+// scale={num}   scale factor (for decimal and time types only)
 // enum          mark field as enum
-// internal      mark field as internal (not used in encode/decode)
+// internal      mark field as internal (not exported to users via encode/decode)
 // id={num}      override id value
 // ```
 //
@@ -48,3 +48,17 @@ package schema
 //    a visible field is never deleted or internal
 // - `active` means the field (internal or not) is in active use, i.e. it is not deleted
 // - `internal` means all non deleted internal fields
+//
+// Scale factor
+//
+// Time scales
+// - `ns` store time in nanosecond resolution
+// - `us` stores time in microsecond resolution
+// - `ms` stores time in millisecond resolution
+// - `s` stores time in second resolution
+//
+// Decimal (fixed-point scales)
+// - `Decimal32` values from `0..9`
+// - `Decimal64` values from `0..18`
+// - `Decimal128` values from `0..38`
+// - `Decimal256` values from `0..76`

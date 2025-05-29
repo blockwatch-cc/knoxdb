@@ -166,6 +166,8 @@ func (v View) Get(i int) (val any, ok bool) {
 		val, ok = num.NewDecimal64(int64(LE.Uint64(v.buf[x:y])), field.scale), true
 	case types.FieldTypeDecimal32:
 		val, ok = num.NewDecimal32(int32(LE.Uint32(v.buf[x:y])), field.scale), true
+	case types.FieldTypeBigint:
+		val, ok = num.NewBigFromBytes(v.buf[x:y]), true
 	}
 	return
 }
@@ -188,7 +190,7 @@ func (v View) GetPhy(i int) (val any, ok bool) {
 		val, ok = math.Float64frombits(LE.Uint64(v.buf[x:y])), true
 	case types.FieldTypeBoolean:
 		val, ok = v.buf[x] > 0, true
-	case types.FieldTypeString, types.FieldTypeBytes:
+	case types.FieldTypeString, types.FieldTypeBytes, types.FieldTypeBigint:
 		val, ok = v.buf[x:y], true
 	case types.FieldTypeInt32, types.FieldTypeDecimal32:
 		val, ok = int32(LE.Uint32(v.buf[x:y])), true
@@ -326,6 +328,11 @@ func (v View) Append(val any, i int) any {
 			val = make([]num.Decimal32, 0)
 		}
 		val = append(val.([]num.Decimal32), num.NewDecimal32(int32(LE.Uint32(v.buf[x:y])), field.scale))
+	case types.FieldTypeBigint:
+		if val == nil {
+			val = make([]num.Big, 0)
+		}
+		val = append(val.([]num.Big), num.NewBigFromBytes(v.buf[x:y]))
 	}
 	return val
 }
@@ -357,7 +364,7 @@ func (v View) Set(i int, val any) {
 		if u64, ok := val.(uint64); ok {
 			LE.PutUint64(v.buf[x:y], u64)
 		}
-	case types.FieldTypeString, types.FieldTypeBytes:
+	case types.FieldTypeString, types.FieldTypeBytes, types.FieldTypeBigint:
 		// unsupported, may alter length
 	case types.FieldTypeDatetime:
 		if tm, ok := val.(time.Time); ok {
@@ -459,7 +466,7 @@ func (v *View) Reset(buf []byte) *View {
 			}
 			skip = false
 			switch f.typ {
-			case types.FieldTypeString, types.FieldTypeBytes:
+			case types.FieldTypeString, types.FieldTypeBytes, types.FieldTypeBigint:
 				if f.fixed > 0 {
 					v.ofs[i] = ofs
 					v.len[i] = int(f.fixed)

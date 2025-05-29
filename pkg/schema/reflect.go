@@ -306,6 +306,8 @@ func (f *Field) ParseType(r reflect.StructField) error {
 		case "num.Decimal256":
 			typ = types.FieldTypeDecimal256
 			scale = num.MaxDecimal256Precision
+		case "num.Big":
+			typ = types.FieldTypeBigint
 		default:
 			switch {
 			case iface.Is(types.IfaceBinaryMarshaler):
@@ -364,7 +366,7 @@ func (f *Field) ParseTag(tag string) error {
 		maxFixed = MAX_FIXED
 		maxScale = f.scale
 		flags    types.FieldFlags
-		compress types.FieldCompression
+		compress types.BlockCompression
 		index    types.IndexType
 	)
 
@@ -424,13 +426,13 @@ func (f *Field) ParseTag(tag string) error {
 		case "zip":
 			switch val {
 			case "", "no", "none":
-				compress = types.FieldCompressNone
+				compress = types.BlockCompressNone
 			case "snappy":
-				compress = types.FieldCompressSnappy
+				compress = types.BlockCompressSnappy
 			case "lz4":
-				compress = types.FieldCompressLZ4
+				compress = types.BlockCompressLZ4
 			case "zstd":
-				compress = types.FieldCompressZstd
+				compress = types.BlockCompressZstd
 			default:
 				return fmt.Errorf("unsupported compression type %q", val)
 			}
@@ -526,7 +528,7 @@ func validateInt(name string, n, minVal, maxVal int) (int, error) {
 func compileCodecs(s *Schema) (enc []OpCode, dec []OpCode) {
 	for i := range s.fields {
 		f := &s.fields[i]
-		var ec, dc OpCode
+		ec, dc := OpCodeSkip, OpCodeSkip
 		switch f.typ {
 		case types.FieldTypeDatetime:
 			dc, ec = OpCodeDateTime, OpCodeDateTime
@@ -633,6 +635,9 @@ func compileCodecs(s *Schema) (enc []OpCode, dec []OpCode) {
 
 		case types.FieldTypeDecimal32:
 			dc, ec = OpCodeDecimal32, OpCodeDecimal32
+
+		case types.FieldTypeBigint:
+			dc, ec = OpCodeBigInt, OpCodeBigInt
 		}
 
 		if !f.IsVisible() {

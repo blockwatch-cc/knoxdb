@@ -133,6 +133,7 @@ type AllTypes struct {
 	Array   [2]byte        `knox:"array[2]"`
 	String  string         `knox:"string"`
 	MyEnum  MyEnum         `knox:"my_enum,enum"`
+	Big     num.Big        `knox:"big"`
 }
 
 func NewAllTypes(i int64) AllTypes {
@@ -162,6 +163,7 @@ func NewAllTypes(i int64) AllTypes {
 		Array:   [2]byte{byte(i >> 8 & 0xf), byte(i & 0xf)},
 		String:  util.U64Hex(uint64(i)),
 		MyEnum:  MyEnum("a"),
+		Big:     num.NewBig(int64(i)),
 	}
 }
 
@@ -393,6 +395,7 @@ const (
 	FT_D128   = types.FieldTypeDecimal128
 	FT_D64    = types.FieldTypeDecimal64
 	FT_D32    = types.FieldTypeDecimal32
+	FT_BIGINT = types.FieldTypeBigint
 
 	OC_I8        = OpCodeInt8
 	OC_I16       = OpCodeInt16
@@ -424,6 +427,7 @@ const (
 	OC_USHTXT    = OpCodeUnmarshalText
 	OC_ENUM      = OpCodeEnum
 	OC_SKIP      = OpCodeSkip
+	OC_BIGINT    = OpCodeBigInt
 )
 
 var (
@@ -558,14 +562,14 @@ var schemaTestCases = []schemaTest{
 	{
 		name:    "all_types",
 		build:   GenericSchema[AllTypes],
-		fields:  "id,i64,i32,i16,i8,u64,u32,u16,u8,f64,f32,d32,d64,d128,d256,i128,i256,bool,time,bytes,array[2],string,my_enum",
-		typs:    []types.FieldType{FT_U64, FT_I64, FT_I32, FT_I16, FT_I8, FT_U64, FT_U32, FT_U16, FT_U8, FT_F64, FT_F32, FT_D32, FT_D64, FT_D128, FT_D256, FT_I128, FT_I256, FT_BOOL, FT_TIME, FT_BYTES, FT_BYTES, FT_STRING, FT_U16},
-		flags:   []types.FieldFlags{types.FieldFlagPrimary, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, types.FieldFlagEnum},
-		scales:  []uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 15, 18, 24, 0, 0, 0, 0, 0, 0, 0, 0},
-		fixed:   []uint16{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0},
+		fields:  "id,i64,i32,i16,i8,u64,u32,u16,u8,f64,f32,d32,d64,d128,d256,i128,i256,bool,time,bytes,array[2],string,my_enum,big",
+		typs:    []types.FieldType{FT_U64, FT_I64, FT_I32, FT_I16, FT_I8, FT_U64, FT_U32, FT_U16, FT_U8, FT_F64, FT_F32, FT_D32, FT_D64, FT_D128, FT_D256, FT_I128, FT_I256, FT_BOOL, FT_TIME, FT_BYTES, FT_BYTES, FT_STRING, FT_U16, FT_BIGINT},
+		flags:   []types.FieldFlags{types.FieldFlagPrimary, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, types.FieldFlagEnum, 0},
+		scales:  []uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 15, 18, 24, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+		fixed:   []uint16{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0},
 		isFixed: false,
-		encode:  []OpCode{OC_U64, OC_I64, OC_I32, OC_I16, OC_I8, OC_U64, OC_U32, OC_U16, OC_U8, OC_F64, OC_F32, OC_D32, OC_D64, OC_D128, OC_D256, OC_I128, OC_I256, OC_BOOL, OC_TIME, OC_BYTES, OC_FIXARRAY, OC_STRING, OC_ENUM},
-		decode:  []OpCode{OC_U64, OC_I64, OC_I32, OC_I16, OC_I8, OC_U64, OC_U32, OC_U16, OC_U8, OC_F64, OC_F32, OC_D32, OC_D64, OC_D128, OC_D256, OC_I128, OC_I256, OC_BOOL, OC_TIME, OC_BYTES, OC_FIXARRAY, OC_STRING, OC_ENUM},
+		encode:  []OpCode{OC_U64, OC_I64, OC_I32, OC_I16, OC_I8, OC_U64, OC_U32, OC_U16, OC_U8, OC_F64, OC_F32, OC_D32, OC_D64, OC_D128, OC_D256, OC_I128, OC_I256, OC_BOOL, OC_TIME, OC_BYTES, OC_FIXARRAY, OC_STRING, OC_ENUM, OC_BIGINT},
+		decode:  []OpCode{OC_U64, OC_I64, OC_I32, OC_I16, OC_I8, OC_U64, OC_U32, OC_U16, OC_U8, OC_F64, OC_F32, OC_D32, OC_D64, OC_D128, OC_D256, OC_I128, OC_I256, OC_BOOL, OC_TIME, OC_BYTES, OC_FIXARRAY, OC_STRING, OC_ENUM, OC_BIGINT},
 	},
 
 	// fixed bytes and string

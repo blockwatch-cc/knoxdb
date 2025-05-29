@@ -22,7 +22,7 @@ type Field struct {
 	id       uint16                 // unique lifetime id of the field
 	typ      types.FieldType        // schema field type from struct tag or Go type
 	flags    types.FieldFlags       // schema flags from struct tag
-	compress types.FieldCompression // data compression from struct tag
+	compress types.BlockCompression // data compression from struct tag
 	index    types.IndexType        // index type: none, hash, int, bloom
 	fixed    uint16                 // 0..65535 fixed size array/bytes/string length
 	scale    uint8                  // 0..255 fixed point scale, time scale, bloom error probability 1/x (1..4)
@@ -42,7 +42,7 @@ type ExportedField struct {
 	Id         uint16
 	Type       types.FieldType
 	Flags      types.FieldFlags
-	Compress   types.FieldCompression
+	Compress   types.BlockCompression
 	Index      types.IndexType
 	IsVisible  bool
 	IsInternal bool
@@ -86,7 +86,7 @@ func (f *Field) Can(v types.IfaceFlags) bool {
 	return f.iface.Is(v)
 }
 
-func (f *Field) Compress() types.FieldCompression {
+func (f *Field) Compress() types.BlockCompression {
 	return f.compress
 }
 
@@ -177,7 +177,7 @@ func (f Field) WithFlags(v types.FieldFlags) Field {
 	return f
 }
 
-func (f Field) WithCompression(c types.FieldCompression) Field {
+func (f Field) WithCompression(c types.BlockCompression) Field {
 	f.compress = c
 	return f
 }
@@ -364,6 +364,9 @@ func (f *Field) Codec() OpCode {
 	case types.FieldTypeDecimal32:
 		return OpCodeDecimal32
 
+	case types.FieldTypeBigint:
+		return OpCodeBigInt
+
 	default:
 		return OpCodeInvalid
 	}
@@ -464,6 +467,12 @@ func (f *Field) Encode(w io.Writer, val any, layout binary.ByteOrder) (err error
 
 	case OpCodeEnum:
 		err = EncodeInt(w, OpCodeUint16, val.(uint16), layout)
+
+	case OpCodeBigInt:
+		v, ok := val.(num.Big)
+		if ok {
+			err = EncodeBytes(w, v.Bytes(), 0, layout)
+		}
 	}
 	return
 }
@@ -592,6 +601,16 @@ func (f *Field) Decode(r io.Reader, layout binary.ByteOrder) (val any, err error
 		d32 := num.NewDecimal32(int32(layout.Uint32(buf[:4])), f.scale)
 		val = d32
 
+	case types.FieldTypeBigint:
+		_, err = r.Read(buf[:4])
+		if err != nil {
+			return
+		}
+		u32 := layout.Uint32(buf[:4])
+		b := make([]byte, int(u32))
+		n, err = r.Read(b)
+		val = num.NewBigFromBytes(b[:n])
+
 	default:
 		err = ErrInvalidField
 	}
@@ -686,7 +705,7 @@ func (f *Field) ReadFrom(buf *bytes.Buffer) (err error) {
 	}
 	f.typ = types.FieldType(buf.Next(1)[0])
 	f.flags = types.FieldFlags(buf.Next(1)[0])
-	f.compress = types.FieldCompression(buf.Next(1)[0])
+	f.compress = types.BlockCompression(buf.Next(1)[0])
 	f.index = types.IndexType(buf.Next(1)[0])
 
 	// fixed: u16

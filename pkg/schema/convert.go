@@ -105,7 +105,7 @@ func NewConverter(parent, child *Schema, layout binary.ByteOrder) *Converter {
 				var b [16]byte
 				c.parts[i] = b[:]
 
-			case types.FieldTypeString, types.FieldTypeBytes:
+			case types.FieldTypeString, types.FieldTypeBytes, types.FieldTypeBigint:
 				if field.fixed > 0 {
 					c.parts[i] = make([]byte, field.fixed)
 				} else {
@@ -237,7 +237,7 @@ func extractFixed(c *Converter, buf []byte) []byte {
 			copy(res[ofs:], buf[:16])
 			buf = buf[16:]
 
-		case types.FieldTypeString, types.FieldTypeBytes:
+		case types.FieldTypeString, types.FieldTypeBytes, types.FieldTypeBigint:
 			// only fixed length string/byte data here
 			copy(res[ofs:], buf[:field.fixed])
 			buf = buf[field.fixed:]
@@ -287,7 +287,7 @@ func extractVariableInorder(c *Converter, buf []byte) []byte {
 
 		// read dynamic size when field is present in wire encoding
 		switch field.typ {
-		case types.FieldTypeString, types.FieldTypeBytes:
+		case types.FieldTypeString, types.FieldTypeBytes, types.FieldTypeBigint:
 			if field.fixed == 0 {
 				u := LE.Uint32(buf)
 				if c.skipLen {
@@ -381,7 +381,7 @@ func extractVariableReorder(c *Converter, buf []byte) []byte {
 
 		// read dynamic size when field is present in wire encoding
 		switch field.typ {
-		case types.FieldTypeString, types.FieldTypeBytes:
+		case types.FieldTypeString, types.FieldTypeBytes, types.FieldTypeBigint:
 			if field.fixed == 0 {
 				u := LE.Uint32(buf)
 				if c.skipLen {

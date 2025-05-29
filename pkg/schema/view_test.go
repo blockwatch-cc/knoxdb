@@ -39,7 +39,7 @@ func TestViewDynamic(t *testing.T) {
 	view := NewView(baseSchema).Reset(buf)
 	require.True(t, view.IsValid())
 	require.False(t, view.IsFixed())
-	require.Equal(t, view.Len(), baseSchema.WireSize()+8+16)
+	require.Equal(t, baseSchema.WireSize()+8+8+16, view.Len()) // big(8), bytes(8), string(16)
 	require.Equal(t, view.Bytes(), buf)
 }
 

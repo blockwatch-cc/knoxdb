@@ -7,7 +7,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"math"
-	"slices"
+	"math/big"
 	"time"
 
 	"blockwatch.cc/knoxdb/internal/types"
@@ -138,7 +138,7 @@ func (b *Builder) Write(i int, val any) error {
 			}
 		} else {
 			// variable size
-			b.dyn[i] = slices.Clone(buf)
+			b.dyn[i] = bytes.Clone(buf)
 		}
 
 	case types.FieldTypeDatetime:
@@ -279,6 +279,19 @@ func (b *Builder) Write(i int, val any) error {
 			err = ErrInvalidValueType
 		}
 
+	case types.FieldTypeBigint:
+		var buf []byte
+		switch v := val.(type) {
+		case num.Big:
+			buf = v.Bytes()
+		case *big.Int:
+			buf = v.Bytes()
+		default:
+			err = ErrInvalidValueType
+		}
+		// variable size (already in new allocated []byte)
+		b.dyn[i] = buf
+
 	default:
 		err = ErrInvalidField
 	}
@@ -289,7 +302,7 @@ func (b *Builder) Write(i int, val any) error {
 func (b *Builder) Bytes() []byte {
 	// fast path for fixed length schemas
 	if b.dyn == nil {
-		return slices.Clone(b.buf)
+		return bytes.Clone(b.buf)
 	}
 
 	// count variable len bytes

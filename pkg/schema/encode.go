@@ -360,6 +360,13 @@ func writeField(buf *bytes.Buffer, code OpCode, field *Field, ptr unsafe.Pointer
 		var b [2]byte
 		LE.PutUint16(b[:], code)
 		_, err = buf.Write(b[:])
+
+	case OpCodeBigInt:
+		v := *(*num.Big)(ptr)
+		b := v.Bytes()
+		LE.PutUint32(sz[:], uint32(len(b)))
+		buf.Write(sz[:])
+		_, err = buf.Write(b)
 	}
 	return err
 }

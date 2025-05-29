@@ -72,6 +72,7 @@ type encodeTestStruct struct {
 	D256      num.Decimal256 `knox:"d256,scale=24"`
 	I128      num.Int128     `knox:"i128"`
 	I256      num.Int256     `knox:"i256"`
+	Big       num.Big        `knox:"big"`
 }
 
 func makeTestData(sz int) (res []encodeTestStruct) {
@@ -101,6 +102,7 @@ func makeTestData(sz int) (res []encodeTestStruct) {
 			D256:      num.NewDecimal256(num.MustParseInt256(strconv.Itoa(i)+"0000000000000000000000000000000000000000"), 24),
 			I128:      num.MustParseInt128(strconv.Itoa(i) + "000000000000000000000000000000"),
 			I256:      num.MustParseInt256(strconv.Itoa(i) + "000000000000000000000000000000000000000000000000000000000000"),
+			Big:       num.NewBig(int64(i)),
 		})
 	}
 	return
@@ -288,6 +290,7 @@ type encodeBenchStruct struct {
 	D256    num.Decimal256 `knox:"d256,scale=24"`
 	I128    num.Int128     `knox:"i128"`
 	I256    num.Int256     `knox:"i256"`
+	Big     num.Big        `knox:"big"`
 }
 
 func makeBenchData(sz int) (res []encodeBenchStruct, size int64) {
@@ -315,6 +318,7 @@ func makeBenchData(sz int) (res []encodeBenchStruct, size int64) {
 			D256:    num.NewDecimal256(num.MustParseInt256(strconv.Itoa(i)+"0000000000000000000000000000000000000000"), 24),
 			I128:    num.MustParseInt128(strconv.Itoa(i) + "000000000000000000000000000000"),
 			I256:    num.MustParseInt256(strconv.Itoa(i) + "000000000000000000000000000000000000000000000000000000000000"),
+			Big:     num.NewBig(int64(i)),
 		})
 	}
 	enc := NewGenericEncoder[encodeBenchStruct]()
@@ -330,10 +334,11 @@ func BenchmarkEncodeVal(b *testing.B) {
 	b.ReportAllocs()
 	b.SetBytes(sz)
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = enc.Encode(slice[0], buf)
 		buf.Reset()
 	}
+	b.ReportMetric(float64(b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 }
 
 func BenchmarkEncodeValSkip(b *testing.B) {
@@ -348,10 +353,11 @@ func BenchmarkEncodeValSkip(b *testing.B) {
 	b.ReportAllocs()
 	b.SetBytes(sz)
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = enc.Encode(slice[0], buf)
 		buf.Reset()
 	}
+	b.ReportMetric(float64(b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 }
 
 func BenchmarkEncodePtr(b *testing.B) {
@@ -361,10 +367,11 @@ func BenchmarkEncodePtr(b *testing.B) {
 	b.ReportAllocs()
 	b.SetBytes(sz)
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = enc.EncodePtr(&slice[0], buf)
 		buf.Reset()
 	}
+	b.ReportMetric(float64(b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 }
 
 func BenchmarkEncodeSlice(b *testing.B) {
@@ -376,10 +383,11 @@ func BenchmarkEncodeSlice(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(sz)
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				_, _ = enc.EncodeSlice(slice, buf)
 				buf.Reset()
 			}
+			b.ReportMetric(float64(n.num*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 		})
 	}
 }
@@ -397,10 +405,11 @@ func BenchmarkEncodePtrSlice(b *testing.B) {
 			b.SetBytes(sz)
 			b.ReportAllocs()
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				_, _ = enc.EncodePtrSlice(ptrslice, buf)
 				buf.Reset()
 			}
+			b.ReportMetric(float64(n.num*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 		})
 	}
 }
@@ -417,9 +426,10 @@ func BenchmarkMemcopy(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(sz)
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				copy(dst, buf.Bytes())
 			}
+			b.ReportMetric(float64(n.num*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 		})
 	}
 }
@@ -434,9 +444,10 @@ func BenchmarkDecodeVal(b *testing.B) {
 	b.ReportAllocs()
 	b.SetBytes(sz)
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = dec.Decode(buf.Bytes(), nil)
 	}
+	b.ReportMetric(float64(b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 }
 
 func BenchmarkDecodeTo(b *testing.B) {
@@ -450,9 +461,10 @@ func BenchmarkDecodeTo(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 	b.SetBytes(sz)
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = dec.Decode(buf.Bytes(), &val)
 	}
+	b.ReportMetric(float64(b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 }
 
 func BenchmarkDecodeSlice(b *testing.B) {
@@ -466,9 +478,10 @@ func BenchmarkDecodeSlice(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(sz)
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				_, _ = dec.DecodeSlice(buf.Bytes(), nil)
 			}
+			b.ReportMetric(float64(n.num*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 		})
 	}
 }
@@ -485,9 +498,10 @@ func BenchmarkDecodeSliceNoAlloc(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(sz)
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				_, _ = dec.DecodeSlice(buf.Bytes(), res)
 			}
+			b.ReportMetric(float64(n.num*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 		})
 	}
 }
@@ -503,7 +517,7 @@ func BenchmarkDecodeSliceRead(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(sz)
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				rd := bytes.NewBuffer(buf.Bytes())
 				for {
 					_, err := dec.Read(rd)
@@ -512,6 +526,7 @@ func BenchmarkDecodeSliceRead(b *testing.B) {
 					}
 				}
 			}
+			b.ReportMetric(float64(n.num*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 		})
 	}
 }
