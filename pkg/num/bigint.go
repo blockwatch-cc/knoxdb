@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"math"
 	"math/big"
+	"math/bits"
 	"strings"
 )
 
@@ -30,8 +31,94 @@ func NewFromBigInt(b *big.Int) Big {
 	return z
 }
 
+func NewBigFromBytes(buf []byte) Big {
+	var z Big
+	(*big.Int)(&z).SetBytes(buf)
+	return z
+}
+
 func (z Big) Big() *big.Int {
 	return (*big.Int)(&z)
+}
+
+func (z Big) AsInt128() Int128 {
+	var i128 Int128
+	words := (*big.Int)(&z).Bits()
+	if bits.UintSize == 64 {
+		switch len(words) {
+		case 0:
+			// zero
+		case 1:
+			i128[1] = 0
+			i128[1] = uint64(words[0])
+		default:
+			i128[0] = uint64(words[1])
+			i128[1] = uint64(words[0])
+		}
+	} else {
+		switch len(words) {
+		case 0:
+			// zero
+		case 1:
+			i128[1] = uint64(words[0])
+		case 2:
+			i128[1] = uint64(words[1])<<32 | uint64(words[0])
+		case 3:
+			i128[0] = uint64(words[2])
+			i128[1] = uint64(words[1])<<32 | uint64(words[0])
+		default:
+			i128[0] = uint64(words[3])<<32 | uint64(words[2])
+			i128[1] = uint64(words[1])<<32 | uint64(words[0])
+		}
+	}
+	return i128
+}
+
+func (z Big) AsInt256() Int256 {
+	var i256 Int256
+	words := (*big.Int)(&z).Bits()
+	if bits.UintSize == 64 {
+		len := len(words)
+		if len > 0 {
+			i256[3] = uint64(words[0])
+		}
+		if len > 1 {
+			i256[2] = uint64(words[1])
+		}
+		if len > 2 {
+			i256[1] = uint64(words[2])
+		}
+		if len > 3 {
+			i256[0] = uint64(words[3])
+		}
+	} else {
+		len := len(words)
+		if len > 0 {
+			i256[3] = uint64(words[0])
+		}
+		if len > 1 {
+			i256[3] |= uint64(words[1]) << 32
+		}
+		if len > 2 {
+			i256[2] = uint64(words[2])
+		}
+		if len > 3 {
+			i256[2] |= uint64(words[3]) << 32
+		}
+		if len > 4 {
+			i256[1] = uint64(words[4])
+		}
+		if len > 5 {
+			i256[1] |= uint64(words[5]) << 32
+		}
+		if len > 6 {
+			i256[0] = uint64(words[6])
+		}
+		if len > 7 {
+			i256[0] |= uint64(words[7]) << 32
+		}
+	}
+	return i256
 }
 
 func (z Big) Equal(x Big) bool {
@@ -219,6 +306,32 @@ func (z Big) Div64(y int64) Big {
 	var x Big
 	if y != 0 {
 		x.SetBig(new(big.Int).Div(z.Big(), big.NewInt(y)))
+	}
+	return x
+}
+
+func (z Big) AddU64(y uint64) Big {
+	var x Big
+	x.SetBig(new(big.Int).Add(z.Big(), big.NewInt(0).SetUint64(y)))
+	return x
+}
+
+func (z Big) SubU64(y uint64) Big {
+	var x Big
+	x.SetBig(new(big.Int).Sub(z.Big(), big.NewInt(0).SetUint64(y)))
+	return x
+}
+
+func (z Big) MulU64(y uint64) Big {
+	var x Big
+	x.SetBig(new(big.Int).Mul(z.Big(), big.NewInt(0).SetUint64(y)))
+	return x
+}
+
+func (z Big) DivU64(y uint64) Big {
+	var x Big
+	if y != 0 {
+		x.SetBig(new(big.Int).Div(z.Big(), big.NewInt(0).SetUint64(y)))
 	}
 	return x
 }

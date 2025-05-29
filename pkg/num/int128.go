@@ -10,6 +10,7 @@ package num
 import (
 	"encoding/binary"
 	"math"
+	"math/big"
 	"math/bits"
 	"strconv"
 	"strings"
@@ -96,6 +97,13 @@ func (x Int128) Int64() int64 {
 func (x Int128) Int256() Int256 {
 	sign := uint64(int64(x[0]) >> 63)
 	return Int256{sign, sign, x[0], x[1]}
+}
+
+func (x Int128) AsBigInt() Big {
+	z := big.NewInt(int64(x[0]))
+	z = z.Lsh(z, 64)
+	z = z.Add(z, new(big.Int).SetUint64(x[1]))
+	return NewFromBigInt(z)
 }
 
 func (x Int128) Float64() float64 {

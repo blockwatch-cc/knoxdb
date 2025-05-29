@@ -3,7 +3,12 @@
 
 package num
 
-import "iter"
+import (
+	"iter"
+	"slices"
+
+	"blockwatch.cc/knoxdb/internal/arena"
+)
 
 // represents a Int128 slice in two strides for higher and lower qword
 // used for vector match algorithms
@@ -12,63 +17,106 @@ type Int128Stride struct {
 	X1 []uint64
 }
 
-func (s Int128Stride) IsNil() bool {
+func NewInt128Stride(sz int) *Int128Stride {
+	return &Int128Stride{
+		arena.AllocInt64(sz),
+		arena.AllocUint64(sz),
+	}
+}
+
+func (s *Int128Stride) Close() {
+	arena.Free(s.X0[:0])
+	arena.Free(s.X1[:0])
+	s.X0 = nil
+	s.X1 = nil
+}
+
+func (s *Int128Stride) IsNil() bool {
 	return s.X0 == nil || s.X1 == nil
 }
 
-func (s Int128Stride) Elem(i int) Int128 {
+func (s *Int128Stride) Get(i int) Int128 {
 	return Int128{uint64(s.X0[i]), s.X1[i]}
 }
 
-func (s Int128Stride) Set(i int, val Int128) {
+func (s *Int128Stride) Set(i int, val Int128) {
 	s.X0[i], s.X1[i] = int64(val[0]), val[1]
 }
 
-func MakeInt128Stride(sz int) Int128Stride {
-	return Int128Stride{make([]int64, sz), make([]uint64, sz)}
+func (s *Int128Stride) Cmp(i, j int) int {
+	switch {
+	case s.X0[i] < s.X0[j]:
+		return -1
+	case s.X0[i] > s.X0[j]:
+		return 1
+	case s.X1[i] < s.X1[j]:
+		return -1
+	case s.X1[i] > s.X1[j]:
+		return 1
+	default:
+		return 0
+	}
 }
 
-func (s *Int128Stride) Append(val Int128) Int128Stride {
+func (s *Int128Stride) Append(val Int128) *Int128Stride {
 	s.X0 = append(s.X0, int64(val[0]))
 	s.X1 = append(s.X1, val[1])
-	return *s
+	return s
 }
 
-func (dst *Int128Stride) AppendFrom(src Int128Stride) Int128Stride {
-	dst.X0 = append(dst.X0, src.X0...)
-	dst.X1 = append(dst.X1, src.X1...)
-	return *dst
+func (src *Int128Stride) AppendTo(dst *Int128Stride, sel []uint32) {
+	if sel == nil {
+		dst.X0 = append(dst.X0, src.X0...)
+		dst.X1 = append(dst.X1, src.X1...)
+	} else {
+		for v := range sel {
+			dst.X0 = append(dst.X0, src.X0[int(v)])
+			dst.X1 = append(dst.X1, src.X1[int(v)])
+		}
+	}
 }
 
-func (dst *Int128Stride) Delete(pos, n int) Int128Stride {
-	dst.X0 = append(dst.X0[:pos], dst.X0[pos+n:]...)
-	dst.X1 = append(dst.X1[:pos], dst.X1[pos+n:]...)
-	return *dst
+func (dst *Int128Stride) Delete(i, j int) *Int128Stride {
+	dst.X0 = slices.Delete(dst.X0, i, j)
+	dst.X1 = slices.Delete(dst.X1, i, j)
+	return dst
 }
 
-func (s Int128Stride) Swap(i, j int) {
+func (dst *Int128Stride) Clear() *Int128Stride {
+	clear(dst.X0)
+	clear(dst.X1)
+	dst.X0 = dst.X0[:0]
+	dst.X1 = dst.X1[:0]
+	return dst
+}
+
+func (s *Int128Stride) Swap(i, j int) {
 	s.X0[i], s.X0[j] = s.X0[j], s.X0[i]
 	s.X1[i], s.X1[j] = s.X1[j], s.X1[i]
 }
 
-func (s Int128Stride) Len() int {
+func (s *Int128Stride) Len() int {
 	return len(s.X0)
 }
 
-func (s Int128Stride) Cap() int {
+func (s *Int128Stride) Cap() int {
 	return cap(s.X0)
 }
 
-func (s Int128Stride) Min() Int128 {
+func (s *Int128Stride) Size() int {
+	return cap(s.X0) * 16 * 48
+}
+
+func (s *Int128Stride) Min() Int128 {
 	switch l := s.Len(); l {
 	case 0:
 		return ZeroInt128
 	case 1:
-		return s.Elem(0)
+		return s.Get(0)
 	default:
-		s0 := s.Elem(0)
+		s0 := s.Get(0)
 		for i := 2; i < l; i++ {
-			si := s.Elem(i)
+			si := s.Get(i)
 			if si.Lt(s0) {
 				s0 = si
 			}
@@ -77,16 +125,16 @@ func (s Int128Stride) Min() Int128 {
 	}
 }
 
-func (s Int128Stride) Max() Int128 {
+func (s *Int128Stride) Max() Int128 {
 	switch l := s.Len(); l {
 	case 0:
 		return ZeroInt128
 	case 1:
-		return s.Elem(0)
+		return s.Get(0)
 	default:
-		s0 := s.Elem(0)
+		s0 := s.Get(0)
 		for i := 2; i < l; i++ {
-			si := s.Elem(i)
+			si := s.Get(i)
 			if si.Gt(s0) {
 				s0 = si
 			}
@@ -95,18 +143,18 @@ func (s Int128Stride) Max() Int128 {
 	}
 }
 
-func (s Int128Stride) MinMax() (Int128, Int128) {
+func (s *Int128Stride) MinMax() (Int128, Int128) {
 	var min, max Int128
 
 	switch l := s.Len(); l {
 	case 0:
 		// nothing
 	case 1:
-		min, max = s.Elem(0), s.Elem(0)
+		min, max = s.Get(0), s.Get(0)
 	default:
 		// If there is more than one element, then initialize min and max
-		s0 := s.Elem(0)
-		s1 := s.Elem(1)
+		s0 := s.Get(0)
+		s1 := s.Get(1)
 		if s0.Lt(s1) {
 			max = s1
 			min = s0
@@ -116,7 +164,7 @@ func (s Int128Stride) MinMax() (Int128, Int128) {
 		}
 
 		for i := 2; i < l; i++ {
-			si := s.Elem(i)
+			si := s.Get(i)
 			if si.Gt(max) {
 				max = si
 			} else if si.Lt(min) {
@@ -128,10 +176,10 @@ func (s Int128Stride) MinMax() (Int128, Int128) {
 	return min, max
 }
 
-func Int128Optimize(s []Int128) Int128Stride {
-	var res Int128Stride
-	res.X0 = make([]int64, len(s))
-	res.X1 = make([]uint64, len(s))
+func Int128Optimize(s []Int128) *Int128Stride {
+	res := NewInt128Stride(len(s))
+	res.X0 = res.X0[:len(s)]
+	res.X1 = res.X1[:len(s)]
 	for i, v := range s {
 		res.X0[i] = int64(v[0])
 		res.X1[i] = v[1]
@@ -139,7 +187,7 @@ func Int128Optimize(s []Int128) Int128Stride {
 	return res
 }
 
-func (s Int128Stride) Materialize() []Int128 {
+func (s *Int128Stride) Materialize() []Int128 {
 	res := make([]Int128, s.Len())
 	for i, v := range res {
 		v[0] = uint64(s.X0[i])
@@ -148,43 +196,19 @@ func (s Int128Stride) Materialize() []Int128 {
 	return res
 }
 
-func (s Int128Stride) Subslice(start, end int) Int128Stride {
-	return Int128Stride{s.X0[start:end], s.X1[start:end]}
+func (s *Int128Stride) Range(i, j int) *Int128Stride {
+	return &Int128Stride{s.X0[i:j], s.X1[i:j]}
 }
 
-func (s Int128Stride) Tail(start int) Int128Stride {
-	return Int128Stride{s.X0[start:], s.X1[start:]}
-}
-
-func (dst Int128Stride) Copy(src Int128Stride, dstPos, srcPos, n int) {
+func (dst *Int128Stride) Copy(src *Int128Stride, dstPos, srcPos, n int) {
 	copy(dst.X0[dstPos:], src.X0[srcPos:srcPos+n])
 	copy(dst.X1[dstPos:], src.X1[srcPos:srcPos+n])
 }
 
-func (s *Int128Stride) Insert(k int, vs Int128Stride) {
-	if n := s.Len() + vs.Len(); n <= s.Cap() {
-		(*s) = s.Subslice(0, n)
-		s.Copy(*s, k+vs.Len(), k, vs.Len()-k)
-		s.Copy(vs, k, 0, vs.Len())
-		return
-	}
-	s2 := MakeInt128Stride(s.Len() + vs.Len())
-	s2.Copy(*s, 0, 0, k)
-	s2.Copy(vs, k, 0, vs.Len())
-	s2.Copy(*s, k+vs.Len(), k, vs.Len()-k)
-	*s = s2
-}
-
-func (s Int128Stride) ForEach(fn func(Int128)) {
-	for i, l := 0, len(s.X0); i < l; i++ {
-		fn(Int128{uint64(s.X0[i]), s.X1[i]})
-	}
-}
-
-func (s Int128Stride) Iterator() iter.Seq2[int, Int128] {
+func (s *Int128Stride) Iterator() iter.Seq2[int, Int128] {
 	return func(fn func(int, Int128) bool) {
 		for i := 0; i < len(s.X0); i++ {
-			if !fn(i, s.Elem(i)) {
+			if !fn(i, s.Get(i)) {
 				return
 			}
 		}
