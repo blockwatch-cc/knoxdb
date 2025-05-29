@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package util
+package stringx
 
 import (
 	"bytes"
@@ -11,6 +11,8 @@ import (
 	"unsafe"
 
 	"blockwatch.cc/knoxdb/internal/arena"
+	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 var (
@@ -18,12 +20,6 @@ var (
 		New: func() any { return new(StringPool) },
 	}
 )
-
-type StringSetter interface {
-	Append([]byte)
-	Set(int, []byte)
-	Delete(int)
-}
 
 const StringPoolDefaultSize = 64
 
@@ -78,32 +74,93 @@ func (p *StringPool) Len() int {
 	return len(p.ptr)
 }
 
+func (p *StringPool) Cap() int {
+	return cap(p.ptr)
+}
+
 func (p *StringPool) Size() int {
+	return 48 + cap(p.buf) + cap(p.ptr)*8
+}
+
+func (p *StringPool) DataSize() int {
 	return len(p.buf)
 }
 
-func (p *StringPool) MinMax() ([]byte, []byte, int, int) {
+// Compares strings at index i and j and returns
+//
+// - -1 when s[i] < s[j],
+// - 1 when s[i] > s[j],
+// - 0 when both strings are equal
+//
+// Panics when i or j are out of bounds.
+func (p *StringPool) Cmp(i, j int) int {
+	ofs, sz := ptr2pair(p.ptr[i])
+	x := p.buf[ofs : ofs+sz]
+	ofs, sz = ptr2pair(p.ptr[j])
+	y := p.buf[ofs : ofs+sz]
+	return bytes.Compare(x, y)
+}
+
+func (p *StringPool) MinMax() ([]byte, []byte) {
 	if p.Len() == 0 {
-		return nil, nil, 0, 0
+		return nil, nil
 	}
 	vmin := p.Get(0)
 	vmax := vmin
-	lmin := len(vmin)
-	lmax := lmin
-	for v := range p.Iterator() {
+	for v := range p.Values() {
 		if bytes.Compare(v, vmin) < 0 {
 			vmin = v
 		} else if bytes.Compare(v, vmax) > 0 {
 			vmax = v
 		}
-		lmin = min(lmin, len(v))
-		lmax = max(lmax, len(v))
 	}
-	return vmin, vmax, lmin, lmax
+	return vmin, vmax
+}
+
+func (p *StringPool) Min() []byte {
+	if p.Len() == 0 {
+		return nil
+	}
+	vmin := p.Get(0)
+	for v := range p.Values() {
+		if bytes.Compare(v, vmin) < 0 {
+			vmin = v
+		}
+	}
+	return vmin
+}
+
+func (p *StringPool) Max() []byte {
+	if p.Len() == 0 {
+		return nil
+	}
+	vmax := p.Get(0)
+	for v := range p.Values() {
+		if bytes.Compare(v, vmax) > 0 {
+			vmax = v
+		}
+	}
+	return vmax
+}
+
+func (p *StringPool) MinMaxLen() (int, int) {
+	if p.Len() == 0 {
+		return 0, 0
+	}
+	var (
+		lmin uint32 = 1<<32 - 1
+		lmax uint32 = 0
+	)
+	for _, v := range p.ptr {
+		_, l := ptr2pair(v)
+		lmin = min(lmin, l)
+		lmax = max(lmax, l)
+	}
+	return int(lmin), int(lmax)
 }
 
 // unary iterator `for v := range pool.Iterator() {}`
-func (p *StringPool) Iterator() iter.Seq[[]byte] {
+func (p *StringPool) Values() iter.Seq[[]byte] {
 	return func(fn func([]byte) bool) {
 		// beware of all empty strings
 		var base unsafe.Pointer
@@ -120,7 +177,7 @@ func (p *StringPool) Iterator() iter.Seq[[]byte] {
 }
 
 // 2-ary iterator `for i, v := range pool.Iterator2() {}`
-func (p *StringPool) Iterator2() iter.Seq2[int, []byte] {
+func (p *StringPool) Iterator() iter.Seq2[int, []byte] {
 	return func(fn func(int, []byte) bool) {
 		// beware of all empty strings
 		var base unsafe.Pointer
@@ -156,17 +213,17 @@ func (p *StringPool) AppendMany(vals ...[]byte) {
 }
 
 func (p *StringPool) AppendString(val string) {
-	p.Append(UnsafeGetBytes(val))
+	p.Append(util.UnsafeGetBytes(val))
 }
 
 func (p *StringPool) AppendManyStrings(vals ...string) {
 	for _, v := range vals {
-		p.Append(UnsafeGetBytes(v))
+		p.Append(util.UnsafeGetBytes(v))
 	}
 }
 
 // AppendTo adds selected strings to a destination pool or all if sel is nil.
-func (p *StringPool) AppendTo(dst StringSetter, sel []uint32) {
+func (p *StringPool) AppendTo(dst types.StringWriter, sel []uint32) {
 	if sel == nil {
 		for _, ptr := range p.ptr {
 			ofs, len := ptr2pair(ptr)
@@ -180,23 +237,16 @@ func (p *StringPool) AppendTo(dst StringSetter, sel []uint32) {
 	}
 }
 
-// Get returns element at position i or nil of i is out of bounds.
+// Get returns element at position i. Panics if i is out of bounds.
 func (p *StringPool) Get(i int) []byte {
-	if i < 0 || len(p.ptr) <= i {
-		return nil
-	}
 	ofs, sz := ptr2pair(p.ptr[i])
 	return p.buf[ofs : ofs+sz]
 }
 
 // Set replaces element at position i with a new string. The new string
 // is added to the buffer (without duplicate check) and the previous
-// string becomes garbage.
+// string becomes garbage. Panics if i is out of bounds.
 func (p *StringPool) Set(i int, val []byte) {
-	if i < 0 || i >= len(p.ptr) {
-		return
-	}
-
 	// insert val at place i and append string to the end of buf
 	vlen := uint32(len(val))
 	vofs := uint32(len(p.buf))
@@ -204,11 +254,18 @@ func (p *StringPool) Set(i int, val []byte) {
 	p.buf = append(p.buf, val...)
 }
 
-// Delete removes the element at position i but does not change the
-// contents of the string buffer.
-func (p *StringPool) Delete(i int) {
-	if i < 0 || i > len(p.ptr) {
-		return
+// Delete removes elements [i:j] where indices form an open
+// interval [i,j). Panics if i or j are out of bounds.
+func (p *StringPool) Delete(i, j int) {
+	p.ptr = slices.Delete(p.ptr, i, j)
+}
+
+// Range returns a new StringPool referencing a range of the original
+// pool. Do not close this pool as memory is shared. Panics if i or j
+// are out of bounds.
+func (p *StringPool) Range(i, j int) *StringPool {
+	return &StringPool{
+		buf: p.buf,
+		ptr: p.ptr[i:j],
 	}
-	p.ptr = slices.Delete(p.ptr, int(i), int(i+1))
 }

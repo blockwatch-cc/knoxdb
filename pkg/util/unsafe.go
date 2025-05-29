@@ -7,17 +7,19 @@ import (
 	"errors"
 	"reflect"
 	"unsafe"
+
+	"blockwatch.cc/knoxdb/internal/arena"
 )
 
 type Integer interface {
-	int | uint | int8 | int16 | int32 | int64 | uint8 | uint16 | uint32 | uint64
+	int8 | int16 | int32 | int64 | uint8 | uint16 | uint32 | uint64
 }
 
 type Number interface {
 	Integer | float32 | float64
 }
 
-func SizeOf[T Number]() int {
+func SizeOf[T Number | int | uint]() int {
 	return int(unsafe.Sizeof(T(0)))
 }
 
@@ -70,7 +72,7 @@ func ReinterpretValue[T Number, S Number](t T) S {
 }
 
 func ConvertSlice[T, S Number](t []T) (s []S) {
-	s = make([]S, len(t))
+	s = arena.Alloc[S](len(t))[:len(t)]
 	for i, v := range t {
 		s[i] = S(v)
 	}

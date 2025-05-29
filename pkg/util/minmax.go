@@ -34,6 +34,18 @@ func Cmp[T constraints.Ordered](a, b T) int {
 	}
 }
 
+// false < true
+func CmpBool(a, b bool) int {
+	switch {
+	case a == b:
+		return 0
+	case b:
+		return -1
+	default:
+		return 1
+	}
+}
+
 func Max[T constraints.Ordered](vals ...T) T {
 	var zero T
 	switch len(vals) {

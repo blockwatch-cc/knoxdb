@@ -1,11 +1,13 @@
 // Copyright (c) 2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package util
+package stringx
 
 import (
-	"slices"
+	"bytes"
 	"testing"
+
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 type BenchmarkSize struct {
@@ -19,9 +21,20 @@ var BenchmarkSizes = []BenchmarkSize{
 	{"64k", 64 * 1024},
 }
 
+type BenchmarkMask struct {
+	Name    string
+	Pattern []byte
+}
+
+var BenchmarkMasks = []BenchmarkMask{
+	{"0xFA", []byte{0xfa}},
+	{"0x10", []byte{0x10}},
+	{"0xFF", []byte{0xff}}, // translates to no mask
+}
+
 func BenchmarkStringPoolAppend(b *testing.B) {
 	for _, sz := range BenchmarkSizes {
-		src := RandByteSlices(sz.N, 32)
+		src := util.RandByteSlices(sz.N, 32)
 		b.Run(sz.Name, func(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(sz.N * 32))
@@ -41,14 +54,14 @@ func BenchmarkStringPoolIterator(b *testing.B) {
 	for _, sz := range BenchmarkSizes {
 		pool := NewStringPoolSize(sz.N, 32)
 		for range sz.N {
-			pool.Append(RandBytes(32))
+			pool.Append(util.RandBytes(32))
 		}
 		var x int
 		b.Run(sz.Name, func(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(sz.N * 32))
 			for b.Loop() {
-				for v := range pool.Iterator() {
+				for _, v := range pool.Iterator() {
 					x += len(v)
 				}
 			}
@@ -63,14 +76,14 @@ func BenchmarkStringPoolMinMax(b *testing.B) {
 	for _, sz := range BenchmarkSizes {
 		pool := NewStringPoolSize(sz.N, 32)
 		for range sz.N {
-			pool.Append(RandBytes(32))
+			pool.Append(util.RandBytes(32))
 		}
 		var minv, maxv []byte
 		b.Run(sz.Name, func(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(sz.N * 32))
 			for b.Loop() {
-				minv, maxv, _, _ = pool.MinMax()
+				minv, maxv = pool.MinMax()
 			}
 			b.ReportMetric(float64(sz.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 		})
@@ -84,7 +97,7 @@ func BenchmarkStringPoolAppendTo(b *testing.B) {
 	for _, sz := range BenchmarkSizes {
 		pool := NewStringPoolSize(sz.N, 32)
 		for range sz.N {
-			pool.Append(RandBytes(32))
+			pool.Append(util.RandBytes(32))
 		}
 		var x int
 		b.Run(sz.Name, func(b *testing.B) {
@@ -104,14 +117,14 @@ func BenchmarkStringPoolAppendTo(b *testing.B) {
 
 func BenchmarkByteSliceAppend(b *testing.B) {
 	for _, sz := range BenchmarkSizes {
-		src := RandByteSlices(sz.N, 32)
+		src := util.RandByteSlices(sz.N, 32)
 		b.Run(sz.Name, func(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(sz.N * 32))
 			for b.Loop() {
 				dst := make([][]byte, 0, len(src))
 				for _, v := range src {
-					dst = append(dst, slices.Clone(v))
+					dst = append(dst, bytes.Clone(v))
 				}
 			}
 			b.ReportMetric(float64(sz.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
@@ -121,7 +134,7 @@ func BenchmarkByteSliceAppend(b *testing.B) {
 
 func BenchmarkByteSliceIterator(b *testing.B) {
 	for _, sz := range BenchmarkSizes {
-		src := RandByteSlices(sz.N, 32)
+		src := util.RandByteSlices(sz.N, 32)
 		var x int
 		b.Run(sz.Name, func(b *testing.B) {
 			b.ReportAllocs()
