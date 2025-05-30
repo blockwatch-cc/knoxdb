@@ -12,7 +12,14 @@ import (
 	"blockwatch.cc/knoxdb/pkg/num"
 )
 
+// ensure we implement required interfaces
+var (
+	_ types.StringAccessor = (*ConstStringContainer)(nil)
+	_ StringContainer      = (*ConstStringContainer)(nil)
+)
+
 type ConstStringContainer struct {
+	readOnlyContainer[[]byte]
 	val []byte
 	n   int
 }
@@ -35,6 +42,10 @@ func (c *ConstStringContainer) Len() int {
 
 func (c *ConstStringContainer) Size() int {
 	return 1 + num.UvarintLen(c.n) + num.UvarintLen(len(c.val)) + len(c.val)
+}
+
+func (c *ConstStringContainer) Matcher() types.StringMatcher {
+	return c
 }
 
 func (c *ConstStringContainer) Store(dst []byte) []byte {
@@ -75,6 +86,10 @@ func (c *ConstStringContainer) Iterator() iter.Seq2[int, []byte] {
 	}
 }
 
+func (c *ConstStringContainer) Chunks() types.StringIterator {
+	return NewConstIterator(c.val, c.n)
+}
+
 func (c *ConstStringContainer) AppendTo(dst types.StringWriter, sel []uint32) {
 	n := c.n
 	if sel != nil {
@@ -89,6 +104,10 @@ func (c *ConstStringContainer) Encode(ctx *StringContext, vals types.StringAcces
 	c.val = ctx.Min
 	c.n = ctx.NumValues
 	return c
+}
+
+func (c *ConstStringContainer) Cmp(i, j int) int {
+	return 0
 }
 
 func (c *ConstStringContainer) MatchEqual(val []byte, bits, _ *Bitset) {

@@ -5,6 +5,7 @@ package encode
 
 import (
 	"fmt"
+	"iter"
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/arena"
@@ -12,10 +13,18 @@ import (
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/num"
+	"blockwatch.cc/knoxdb/pkg/util"
+)
+
+// ensure we implement required interfaces
+var (
+	_ types.NumberAccessor[int64] = (*Simple8Container[int64])(nil)
+	_ NumberContainer[int64]      = (*Simple8Container[int64])(nil)
 )
 
 // TIntSimple8
 type Simple8Container[T types.Integer] struct {
+	readOnlyContainer[T]
 	For    T
 	Packed []byte
 	N      int
@@ -55,8 +64,24 @@ func (c *Simple8Container[T]) Size() int {
 		len(c.Packed)
 }
 
-func (c *Simple8Container[T]) Iterator() NumberIterator[T] {
+func (c *Simple8Container[T]) Matcher() types.NumberMatcher[T] {
+	return c
+}
+
+func (c *Simple8Container[T]) Chunks() types.NumberIterator[T] {
 	return s8b.NewIterator[T](c.Packed, c.N, c.For)
+}
+
+func (c *Simple8Container[T]) Iterator() iter.Seq2[int, T] {
+	return func(fn func(int, T) bool) {
+		it := c.Chunks()
+		for i := range it.Len() {
+			if !fn(i, it.Get(i)) {
+				break
+			}
+		}
+		it.Close()
+	}
 }
 
 func (c *Simple8Container[T]) Store(dst []byte) []byte {
@@ -105,7 +130,7 @@ func (c *Simple8Container[T]) AppendTo(dst []T, sel []uint32) []T {
 		}
 		dst = dst[:n]
 	} else {
-		it := c.Iterator()
+		it := c.Chunks()
 		for _, v := range sel {
 			dst = append(dst, it.Get(int(v)))
 		}
@@ -128,6 +153,10 @@ func (c *Simple8Container[T]) Encode(ctx *Context[T], vals []T) NumberContainer[
 	c.N = len(vals)
 
 	return c
+}
+
+func (c *Simple8Container[T]) Cmp(i, j int) int {
+	return util.Cmp(c.Get(i), c.Get(j))
 }
 
 func (c *Simple8Container[T]) MatchEqual(val T, bits, _ *Bitset) {
@@ -206,20 +235,15 @@ func (c *Simple8Container[T]) MatchBetween(a, b T, bits, mask *Bitset) {
 }
 
 func (c *Simple8Container[T]) MatchInSet(s any, bits, mask *Bitset) {
-	it := c.Iterator()
+	it := c.Chunks()
 	set := s.(*xroar.Bitmap)
 	if mask != nil {
 		// only process values from mask
-		u32 := arena.Alloc[uint32](mask.Count())
-		for _, k := range mask.Indexes(u32) {
-			i := int(k)
-			it.Seek(i)
-			val, _ := it.Next()
-			if set.Contains(uint64(val)) {
+		for i := range mask.Iterator() {
+			if set.Contains(uint64(it.Get(i))) {
 				bits.Set(i)
 			}
 		}
-		arena.Free(u32)
 	} else {
 		var i int
 		for {
@@ -239,20 +263,15 @@ func (c *Simple8Container[T]) MatchInSet(s any, bits, mask *Bitset) {
 }
 
 func (c *Simple8Container[T]) MatchNotInSet(s any, bits, mask *Bitset) {
-	it := c.Iterator()
+	it := c.Chunks()
 	set := s.(*xroar.Bitmap)
 	if mask != nil {
 		// only process values from mask
-		u32 := arena.Alloc[uint32](mask.Count())
-		for _, k := range mask.Indexes(u32) {
-			i := int(k)
-			it.Seek(i)
-			val, _ := it.Next()
-			if !set.Contains(uint64(val)) {
+		for i := range mask.Iterator() {
+			if !set.Contains(uint64(it.Get(i))) {
 				bits.Set(i)
 			}
 		}
-		arena.Free(u32)
 	} else {
 		var i int
 		for {

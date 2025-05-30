@@ -11,9 +11,8 @@ import (
 	"blockwatch.cc/knoxdb/internal/types"
 )
 
-// keep in sync with main encode package
 const (
-	CHUNK_SIZE = 128 // must be pow2!
+	CHUNK_SIZE = types.CHUNK_SIZE // 128, must be pow2!
 )
 
 type Iterator[T types.Integer] struct {

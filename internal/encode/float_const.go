@@ -5,6 +5,7 @@ package encode
 
 import (
 	"fmt"
+	"iter"
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/types"
@@ -12,8 +13,15 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
+// ensure we implement required interfaces
+var (
+	_ types.NumberAccessor[float64] = (*FloatConstContainer[float64])(nil)
+	_ NumberContainer[float64]      = (*FloatConstContainer[float64])(nil)
+)
+
 // TFloatConstant
 type FloatConstContainer[T types.Float] struct {
+	readOnlyContainer[T]
 	Val T
 	N   int
 }
@@ -38,8 +46,22 @@ func (c *FloatConstContainer[T]) Size() int {
 	return 1 + util.SizeOf[T]() + num.UvarintLen(uint64(c.N))
 }
 
-func (c *FloatConstContainer[T]) Iterator() NumberIterator[T] {
+func (c *FloatConstContainer[T]) Matcher() types.NumberMatcher[T] {
+	return c
+}
+
+func (c *FloatConstContainer[T]) Chunks() types.NumberIterator[T] {
 	return NewConstIterator(c.Val, c.N)
+}
+
+func (c *FloatConstContainer[T]) Iterator() iter.Seq2[int, T] {
+	return func(fn func(int, T) bool) {
+		for i := range c.N {
+			if !fn(i, c.Val) {
+				return
+			}
+		}
+	}
 }
 
 func (c *FloatConstContainer[T]) Store(dst []byte) []byte {
@@ -94,6 +116,10 @@ func (c *FloatConstContainer[T]) AppendTo(dst []T, sel []uint32) []T {
 		i++
 	}
 	return dst
+}
+
+func (c *FloatConstContainer[T]) Cmp(i, j int) int {
+	return 0
 }
 
 func (c *FloatConstContainer[T]) Encode(ctx *Context[T], vals []T) NumberContainer[T] {

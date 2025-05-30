@@ -5,11 +5,16 @@ package encode
 
 import (
 	"fmt"
+	"iter"
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/cmp"
+	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
 )
+
+// ensure we implement required interfaces
+var _ num.BigIntAccessor[num.Int256, num.Int256Stride] = (*Int256Container)(nil)
 
 type Int256Context struct {
 	Min       num.Int256
@@ -34,6 +39,7 @@ func (c *Int256Context) MinMax() (any, any) {
 }
 
 type Int256Container struct {
+	readOnlyContainer[num.Int256]
 	X0 NumberContainer[int64]
 	X1 NumberContainer[uint64]
 	X2 NumberContainer[uint64]
@@ -88,6 +94,26 @@ func (c *Int256Container) Size() int {
 	return 1 + c.X0.Size() + c.X1.Size() + c.X2.Size() + c.X3.Size()
 }
 
+func (c *Int256Container) Iterator() iter.Seq2[int, num.Int256] {
+	return func(fn func(int, num.Int256) bool) {
+		it := c.Chunks()
+		for i := range it.Len() {
+			if !fn(i, it.Get(i)) {
+				break
+			}
+		}
+		it.Close()
+	}
+}
+
+func (c *Int256Container) Chunks() num.BigIntIterator[num.Int256, num.Int256Stride] {
+	return NewInt256Iterator(c)
+}
+
+func (c *Int256Container) Slice() *num.Int256Stride {
+	return nil
+}
+
 func (c *Int256Container) Store(dst []byte) []byte {
 	dst = append(dst, byte(TInt256))
 	dst = c.X0.Store(dst)
@@ -130,12 +156,12 @@ func (c *Int256Container) Get(n int) num.Int256 {
 	return num.Int256{uint64(c.X0.Get(n)), c.X1.Get(n), c.X2.Get(n), c.X3.Get(n)}
 }
 
-func (c *Int256Container) AppendTo(dst *num.Int256Stride, sel []uint32) *num.Int256Stride {
+func (c *Int256Container) AppendTo(v num.BigIntWriter[num.Int256], sel []uint32) {
+	dst := v.(*num.Int256Stride)
 	dst.X0 = c.X0.AppendTo(dst.X0[:0], sel)
 	dst.X1 = c.X1.AppendTo(dst.X1[:0], sel)
 	dst.X2 = c.X2.AppendTo(dst.X2[:0], sel)
 	dst.X3 = c.X3.AppendTo(dst.X3[:0], sel)
-	return dst
 }
 
 func (c *Int256Container) Encode(ctx *Int256Context, vals *num.Int256Stride) *Int256Container {
@@ -166,6 +192,14 @@ func (c *Int256Container) Encode(ctx *Int256Context, vals *num.Int256Stride) *In
 	}
 	c.X3 = EncodeInt(nil, vals.X3)
 	return c
+}
+
+func (c *Int256Container) Matcher() num.BigIntMatcher[num.Int256] {
+	return c
+}
+
+func (c *Int256Container) Cmp(i, j int) int {
+	return num.Compare256(c.Get(i), c.Get(j))
 }
 
 func (c *Int256Container) MatchEqual(val num.Int256, bits, mask *Bitset) {
@@ -216,7 +250,7 @@ func (c *Int256Container) match(cmpFn I256MatchFunc, val num.Int256, bits, mask 
 		i   int
 		cnt int64
 		buf = bits.Bytes()
-		it  = c.Iterator()
+		it  = c.Chunks()
 	)
 
 	for {
@@ -253,7 +287,7 @@ func (c *Int256Container) matchRange(cmpFn I256RangeMatchFunc, a, b num.Int256, 
 		i   int
 		cnt int64
 		buf = bits.Bytes()
-		it  = c.Iterator()
+		it  = c.Chunks()
 	)
 
 	for {
@@ -311,29 +345,25 @@ var i256Factory = Int256Factory{
 	itPool: sync.Pool{New: func() any { return new(Int256Iterator) }},
 }
 
-func (c *Int256Container) Iterator() *Int256Iterator {
-	return NewInt256Iterator(c.X0.Iterator(), c.X1.Iterator(), c.X2.Iterator(), c.X3.Iterator())
-}
-
 type Int256Iterator struct {
 	chunk num.Int256Stride
-	x0    NumberIterator[int64]
-	x1    NumberIterator[uint64]
-	x2    NumberIterator[uint64]
-	x3    NumberIterator[uint64]
+	x0    types.NumberIterator[int64]
+	x1    types.NumberIterator[uint64]
+	x2    types.NumberIterator[uint64]
+	x3    types.NumberIterator[uint64]
 	base  int
 	len   int
 	ofs   int
 }
 
-func NewInt256Iterator(x0 NumberIterator[int64], x1, x2, x3 NumberIterator[uint64]) *Int256Iterator {
+func NewInt256Iterator(c *Int256Container) *Int256Iterator {
 	it := newInt256Iterator()
-	it.x0 = x0
-	it.x1 = x1
-	it.x2 = x2
-	it.x3 = x3
+	it.x0 = c.X0.Chunks()
+	it.x1 = c.X1.Chunks()
+	it.x2 = c.X2.Chunks()
+	it.x3 = c.X3.Chunks()
 	it.base = -1
-	it.len = x0.Len()
+	it.len = c.Len()
 	return it
 }
 
@@ -354,9 +384,9 @@ func (it *Int256Iterator) Close() {
 	putInt256Iterator(it)
 }
 
-func (it *Int256Iterator) Reset() {
-	it.ofs = 0
-}
+// func (it *Int256Iterator) Reset() {
+// 	it.ofs = 0
+// }
 
 func (it *Int256Iterator) Len() int {
 	return it.len
@@ -372,24 +402,24 @@ func (it *Int256Iterator) Get(n int) num.Int256 {
 	return it.chunk.Get(chunkPos(n))
 }
 
-func (it *Int256Iterator) Next() (num.Int256, bool) {
-	if it.ofs >= it.len {
-		// EOF
-		return num.ZeroInt256, false
-	}
+// func (it *Int256Iterator) Next() (num.Int256, bool) {
+// 	if it.ofs >= it.len {
+// 		// EOF
+// 		return num.ZeroInt256, false
+// 	}
 
-	// refill on chunk boundary
-	if base := chunkBase(it.ofs); base != it.base {
-		it.fill(base)
-	}
-	i := chunkPos(it.ofs)
+// 	// refill on chunk boundary
+// 	if base := chunkBase(it.ofs); base != it.base {
+// 		it.fill(base)
+// 	}
+// 	i := chunkPos(it.ofs)
 
-	// advance ofs for next call
-	it.ofs++
+// 	// advance ofs for next call
+// 	it.ofs++
 
-	// return calculated value
-	return it.chunk.Get(i), true
-}
+// 	// return calculated value
+// 	return it.chunk.Get(i), true
+// }
 
 func (it *Int256Iterator) NextChunk() (*num.Int256Stride, int) {
 	// EOF

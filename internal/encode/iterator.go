@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	CHUNK_SIZE = 128 // must be pow2!
+	CHUNK_SIZE = types.CHUNK_SIZE // = 128, must be pow2!
 	CHUNK_MASK = CHUNK_SIZE - 1
 )
 
@@ -25,51 +25,7 @@ func chunkPos(n int) int {
 	return n & CHUNK_MASK
 }
 
-// Iterators allow efficient seqential and random access to
-// compressed vector data. They use an internal buffer to keep
-// chunks of decoded data in L1 cache to minimize costs of
-// linear and (limited range) random access.
-//
-// Users can use Next or NextChunk for linear walks, Get for
-// point access and Seek or SkipChunk for jumping.
-type NumberIterator[T types.Number] interface {
-	// Returns the total number of elements in this container.
-	Len() int
-
-	// Returns next element and true if valid or false on EOF.
-	// Implicitly decodes the next chunk.
-	Next() (T, bool)
-
-	// Returns element at position n or zero when out of bounds.
-	// Implicitly seeks and decodes the chunk containing n.
-	Get(int) T
-
-	// Seeks to position n and decodes the relevant chunk.
-	// Compatible with Next and Get.
-	Seek(int) bool
-
-	// Decodes and returns the next chunk at CHUNK_SIZE boundaries
-	// and the number of valid elements in the chunk. Past EOF
-	// returns nil and zero n. When used in combination with Next,
-	// users must first Reset the iterator before calling NextChunk.
-	NextChunk() (*[CHUNK_SIZE]T, int)
-
-	// Skips a chunk efficiently without decoding data and returns
-	// the number of elements skipped or zero when at EOF. Users may
-	// call skip repeatedly before requesting data from NextChunk.
-	SkipChunk() int
-
-	// Resets iterator state so that NextChunk/SkipChunk or Next
-	// restart at the first vector element.
-	Reset()
-
-	// Close releases pointers and allows for efficient re-use
-	// of iterators. Users are encouraged to call Close after use
-	// to reduce allocations and GC overhead.
-	Close()
-}
-
-func matchIt[T types.Number](it NumberIterator[T], cmpFn unsafe.Pointer, val T, bits, mask *Bitset) {
+func matchIt[T types.Number](it types.NumberIterator[T], cmpFn unsafe.Pointer, val T, bits, mask *Bitset) {
 	var (
 		i   int
 		cnt int64
@@ -100,7 +56,7 @@ func matchIt[T types.Number](it NumberIterator[T], cmpFn unsafe.Pointer, val T, 
 	it.Close()
 }
 
-func matchRangeIt[T types.Number](it NumberIterator[T], cmpFn unsafe.Pointer, a, b T, bits, mask *Bitset) {
+func matchRangeIt[T types.Number](it types.NumberIterator[T], cmpFn unsafe.Pointer, a, b T, bits, mask *Bitset) {
 	var (
 		i   int
 		cnt int64
@@ -171,9 +127,9 @@ func matchFn[T types.Float](mode types.FilterMode) unsafe.Pointer {
 // Base Iterator
 //
 
-var _ NumberIterator[uint64] = (*BaseIterator[uint64])(nil)
+var _ types.NumberIterator[uint64] = (*BaseIterator[uint64])(nil)
 
-type BaseIterator[T types.Number] struct {
+type BaseIterator[T types.Number | []byte] struct {
 	chunk [CHUNK_SIZE]T
 	base  int
 	len   int
@@ -188,17 +144,17 @@ func (it *BaseIterator[T]) Close() {
 	it.fill = nil
 }
 
-func (it *BaseIterator[T]) Reset() {
-	it.ofs = 0
-}
+// func (it *BaseIterator[T]) Reset() {
+// 	it.ofs = 0
+// }
 
 func (it *BaseIterator[T]) Len() int {
 	return it.len
 }
 
-func (it *BaseIterator[T]) Get(n int) T {
+func (it *BaseIterator[T]) Get(n int) (t T) {
 	if n < 0 || n >= it.len {
-		return 0
+		return
 	}
 	if base := chunkBase(n); base != it.base {
 		it.fill(base)
@@ -206,24 +162,24 @@ func (it *BaseIterator[T]) Get(n int) T {
 	return it.chunk[chunkPos(n)]
 }
 
-func (it *BaseIterator[T]) Next() (T, bool) {
-	if it.ofs >= it.len {
-		// EOF
-		return 0, false
-	}
+// func (it *BaseIterator[T]) Next() (T, bool) {
+// 	if it.ofs >= it.len {
+// 		// EOF
+// 		return 0, false
+// 	}
 
-	// refill on chunk boundary
-	if base := chunkBase(it.ofs); base != it.base {
-		it.fill(base)
-	}
-	i := chunkPos(it.ofs)
+// 	// refill on chunk boundary
+// 	if base := chunkBase(it.ofs); base != it.base {
+// 		it.fill(base)
+// 	}
+// 	i := chunkPos(it.ofs)
 
-	// advance ofs for next call
-	it.ofs++
+// 	// advance ofs for next call
+// 	it.ofs++
 
-	// return calculated value
-	return it.chunk[i], true
-}
+// 	// return calculated value
+// 	return it.chunk[i], true
+// }
 
 func (it *BaseIterator[T]) NextChunk() (*[CHUNK_SIZE]T, int) {
 	// EOF
@@ -273,7 +229,7 @@ func (it *BaseIterator[T]) Seek(n int) bool {
 // Raw Iterator
 //
 
-var _ NumberIterator[uint64] = (*RawIterator[uint64])(nil)
+var _ types.NumberIterator[uint64] = (*RawIterator[uint64])(nil)
 
 type RawIterator[T types.Number] struct {
 	vals []T
@@ -306,18 +262,18 @@ func (it *RawIterator[T]) Get(n int) T {
 	return 0
 }
 
-func (it *RawIterator[T]) Next() (T, bool) {
-	if it.ofs >= len(it.vals) {
-		// EOF
-		return 0, false
-	}
+// func (it *RawIterator[T]) Next() (T, bool) {
+// 	if it.ofs >= len(it.vals) {
+// 		// EOF
+// 		return 0, false
+// 	}
 
-	// advance ofs for next call
-	it.ofs++
+// 	// advance ofs for next call
+// 	it.ofs++
 
-	// return value
-	return it.vals[it.ofs-1], true
-}
+// 	// return value
+// 	return it.vals[it.ofs-1], true
+// }
 
 func (it *RawIterator[T]) NextChunk() (*[CHUNK_SIZE]T, int) {
 	// EOF
@@ -350,13 +306,13 @@ func (it *RawIterator[T]) Seek(n int) bool {
 // Const Iterator
 //
 
-var _ NumberIterator[uint64] = (*ConstIterator[uint64])(nil)
+var _ types.NumberIterator[uint64] = (*ConstIterator[uint64])(nil)
 
-type ConstIterator[T types.Number] struct {
+type ConstIterator[T types.Number | []byte] struct {
 	BaseIterator[T]
 }
 
-func NewConstIterator[T types.Number](val T, n int) *ConstIterator[T] {
+func NewConstIterator[T types.Number | []byte](val T, n int) *ConstIterator[T] {
 	it := &ConstIterator[T]{
 		BaseIterator: BaseIterator[T]{
 			base: -1,
@@ -377,7 +333,7 @@ func (it *ConstIterator[T]) fill(base int) int {
 // Delta Iterator
 //
 
-var _ NumberIterator[uint64] = (*DeltaIterator[uint64])(nil)
+var _ types.NumberIterator[uint64] = (*DeltaIterator[uint64])(nil)
 
 type DeltaIterator[T types.Integer] struct {
 	BaseIterator[T]

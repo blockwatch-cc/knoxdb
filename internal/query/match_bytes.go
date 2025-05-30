@@ -91,7 +91,7 @@ func (m bytesEqualMatcher) MatchRange(from, to any) bool {
 }
 
 func (m bytesEqualMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
-	b.Bytes().MatchEqual(m.val, bits, mask)
+	b.Bytes().Matcher().MatchEqual(m.val, bits, mask)
 }
 
 func (m bytesEqualMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) {
@@ -132,7 +132,7 @@ func (m bytesNotEqualMatcher) MatchRange(from, to any) bool {
 }
 
 func (m bytesNotEqualMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
-	b.Bytes().MatchNotEqual(m.val, bits, mask)
+	b.Bytes().Matcher().MatchNotEqual(m.val, bits, mask)
 }
 
 func (m bytesNotEqualMatcher) MatchRangeVectors(_, _ *block.Block, bits, mask *bitset.Bitset) {
@@ -159,7 +159,7 @@ func (m bytesGtMatcher) MatchRange(_, to any) bool {
 }
 
 func (m bytesGtMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
-	b.Bytes().MatchGreater(m.val, bits, mask)
+	b.Bytes().Matcher().MatchGreater(m.val, bits, mask)
 }
 
 func (m bytesGtMatcher) MatchRangeVectors(_, maxs *block.Block, bits, mask *bitset.Bitset) {
@@ -184,7 +184,7 @@ func (m bytesGeMatcher) MatchRange(_, to any) bool {
 }
 
 func (m bytesGeMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
-	b.Bytes().MatchGreaterEqual(m.val, bits, mask)
+	b.Bytes().Matcher().MatchGreaterEqual(m.val, bits, mask)
 }
 
 func (m bytesGeMatcher) MatchRangeVectors(_, maxs *block.Block, bits, mask *bitset.Bitset) {
@@ -209,7 +209,7 @@ func (m bytesLtMatcher) MatchRange(from, _ any) bool {
 }
 
 func (m bytesLtMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
-	b.Bytes().MatchLess(m.val, bits, mask)
+	b.Bytes().Matcher().MatchLess(m.val, bits, mask)
 }
 
 func (m bytesLtMatcher) MatchRangeVectors(mins, _ *block.Block, bits, mask *bitset.Bitset) {
@@ -234,7 +234,7 @@ func (m bytesLeMatcher) MatchRange(from, _ any) bool {
 }
 
 func (m bytesLeMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
-	b.Bytes().MatchLessEqual(m.val, bits, mask)
+	b.Bytes().Matcher().MatchLessEqual(m.val, bits, mask)
 }
 
 func (m bytesLeMatcher) MatchRangeVectors(mins, _ *block.Block, bits, mask *bitset.Bitset) {
@@ -276,7 +276,7 @@ func (m bytesRangeMatcher) MatchRange(from, to any) bool {
 }
 
 func (m bytesRangeMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
-	b.Bytes().MatchBetween(m.from, m.to, bits, mask)
+	b.Bytes().Matcher().MatchBetween(m.from, m.to, bits, mask)
 }
 
 func (m bytesRangeMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) {

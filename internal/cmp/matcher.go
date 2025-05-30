@@ -41,8 +41,8 @@ const (
 	u8_t
 	f64_t
 	f32_t
-	i128_t
-	i256_t
+	i128_t // unused
+	i256_t // unused
 )
 
 type Matcher[T types.Number] struct {

@@ -5,16 +5,25 @@ package encode
 
 import (
 	"fmt"
+	"iter"
 	"sort"
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/encode/hashprobe"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/pkg/util"
+)
+
+// ensure we implement required interfaces
+var (
+	_ types.NumberAccessor[float64] = (*FloatDictionaryContainer[float64])(nil)
+	_ NumberContainer[float64]      = (*FloatDictionaryContainer[float64])(nil)
 )
 
 // TFloatDictionary
 type FloatDictionaryContainer[T types.Float] struct {
+	readOnlyContainer[T]
 	Dict  NumberContainer[T]
 	Codes NumberContainer[uint16]
 }
@@ -41,6 +50,26 @@ func (c *FloatDictionaryContainer[T]) Len() int {
 
 func (c *FloatDictionaryContainer[T]) Size() int {
 	return 1 + c.Dict.Size() + c.Codes.Size()
+}
+
+func (c *FloatDictionaryContainer[T]) Matcher() types.NumberMatcher[T] {
+	return c
+}
+
+func (c *FloatDictionaryContainer[T]) Chunks() types.NumberIterator[T] {
+	return NewFloatDictionaryIterator(c.Dict, c.Codes)
+}
+
+func (c *FloatDictionaryContainer[T]) Iterator() iter.Seq2[int, T] {
+	return func(fn func(int, T) bool) {
+		it := c.Chunks()
+		for i := range it.Len() {
+			if !fn(i, it.Get(i)) {
+				break
+			}
+		}
+		it.Close()
+	}
 }
 
 func (c *FloatDictionaryContainer[T]) Store(dst []byte) []byte {
@@ -73,7 +102,7 @@ func (c *FloatDictionaryContainer[T]) Get(n int) T {
 }
 
 func (c *FloatDictionaryContainer[T]) AppendTo(dst []T, sel []uint32) []T {
-	it := c.Iterator()
+	it := c.Chunks()
 	if sel == nil {
 		for {
 			src, n := it.NextChunk()
@@ -107,6 +136,10 @@ func (c *FloatDictionaryContainer[T]) Encode(ctx *Context[T], vals []T) NumberCo
 	arena.Free(codes)
 
 	return c
+}
+
+func (c *FloatDictionaryContainer[T]) Cmp(i, j int) int {
+	return util.Cmp(c.Get(i), c.Get(j))
 }
 
 func (c *FloatDictionaryContainer[T]) MatchEqual(val T, bits, mask *Bitset) {
@@ -349,20 +382,16 @@ var floatDictionaryFactory = FloatDictionaryFactory{
 	f32ItPool: sync.Pool{New: func() any { return new(FloatDictionaryIterator[float32]) }},
 }
 
-func (c *FloatDictionaryContainer[T]) Iterator() NumberIterator[T] {
-	return NewFloatDictionaryIterator(c.Dict, c.Codes)
-}
-
 type FloatDictionaryIterator[T types.Float] struct {
 	BaseIterator[T]
 	dict []T
-	code NumberIterator[uint16]
+	code types.NumberIterator[uint16]
 }
 
 func NewFloatDictionaryIterator[T types.Float](dict NumberContainer[T], code NumberContainer[uint16]) *FloatDictionaryIterator[T] {
 	it := newFloatDictionaryIterator[T]()
 	it.dict = dict.AppendTo(arena.Alloc[T](dict.Len()), nil)
-	it.code = code.Iterator()
+	it.code = code.Chunks()
 	it.base = -1
 	it.len = it.code.Len()
 	it.BaseIterator.fill = it.fill

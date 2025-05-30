@@ -19,6 +19,9 @@ var (
 	stringPool = sync.Pool{
 		New: func() any { return new(StringPool) },
 	}
+
+	// ensure we implement required interfaces
+	_ types.StringAccessor = (*StringPool)(nil)
 )
 
 const StringPoolDefaultSize = 64
@@ -191,6 +194,10 @@ func (p *StringPool) Iterator() iter.Seq2[int, []byte] {
 			}
 		}
 	}
+}
+
+func (p *StringPool) Chunks() types.StringIterator {
+	return NewIterator(p)
 }
 
 // Append adds a new element and will reuse existing strings.

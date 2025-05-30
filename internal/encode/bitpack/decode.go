@@ -11,6 +11,8 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
+const CHUNK_SIZE = types.CHUNK_SIZE // 128
+
 type Decoder[T types.Integer] struct {
 	src  []uint64
 	log2 int
@@ -74,20 +76,21 @@ func (d *Decoder[T]) DecodeValue(n int) T {
 // DecodeChunk unpacks up to chunk size (128) values starting at position
 // ofs. Ofs must be a multiple of 128 and within bounds. Returns the number
 // of decoded values which is always chunk size unless at shorter tail ends.
-func (d *Decoder[T]) DecodeChunk(dst *[128]T, ofs int) int {
+func (d *Decoder[T]) DecodeChunk(dst *[CHUNK_SIZE]T, ofs int) int {
 	if ofs >= d.len {
 		return 0
 	}
-	n := min(128, d.len-ofs)
-	k := ofs >> 6 // = ofs/64 (must be multiple of 128)
+	n := min(CHUNK_SIZE, d.len-ofs)
+	k := ofs >> 6 // = ofs/64 (must be multiple of CHUNK_SIZE)
 
 	// take slow path for tails
-	if n < 128 {
+	if n < CHUNK_SIZE {
 		_, _ = decode(dst[:n], d.src[k*d.log2:], d.log2, d.minv)
 		return n
 	}
 
 	// calculate source code word group offsets for chunks size 128
+	// each group processes 64 elements, so we need 2 groups
 	var group0, group1 unsafe.Pointer
 	if d.log2 > 0 {
 		group0 = unsafe.Pointer(&d.src[k*d.log2])

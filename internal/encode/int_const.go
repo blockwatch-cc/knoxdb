@@ -5,6 +5,7 @@ package encode
 
 import (
 	"fmt"
+	"iter"
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/types"
@@ -12,8 +13,15 @@ import (
 	"blockwatch.cc/knoxdb/pkg/num"
 )
 
+// ensure we implement required interfaces
+var (
+	_ types.NumberAccessor[int64] = (*ConstContainer[int64])(nil)
+	_ NumberContainer[int64]      = (*ConstContainer[int64])(nil)
+)
+
 // TIntConstant
 type ConstContainer[T types.Integer] struct {
+	readOnlyContainer[T]
 	Val T
 	N   int
 }
@@ -38,8 +46,22 @@ func (c *ConstContainer[T]) Size() int {
 	return 1 + num.UvarintLen(c.Val) + num.UvarintLen(c.N)
 }
 
-func (c *ConstContainer[T]) Iterator() NumberIterator[T] {
+func (c *ConstContainer[T]) Matcher() types.NumberMatcher[T] {
+	return c
+}
+
+func (c *ConstContainer[T]) Chunks() types.NumberIterator[T] {
 	return NewConstIterator(c.Val, c.N)
+}
+
+func (c *ConstContainer[T]) Iterator() iter.Seq2[int, T] {
+	return func(fn func(int, T) bool) {
+		for i := range c.N {
+			if !fn(i, c.Val) {
+				return
+			}
+		}
+	}
 }
 
 func (c *ConstContainer[T]) Store(dst []byte) []byte {
@@ -102,6 +124,10 @@ func (c *ConstContainer[T]) Encode(ctx *Context[T], vals []T) NumberContainer[T]
 	c.Val = ctx.Min
 	c.N = len(vals)
 	return c
+}
+
+func (c *ConstContainer[T]) Cmp(i, j int) int {
+	return 0
 }
 
 func (c *ConstContainer[T]) MatchEqual(val T, bits, _ *Bitset) {

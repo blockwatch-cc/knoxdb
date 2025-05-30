@@ -5,11 +5,16 @@ package encode
 
 import (
 	"fmt"
+	"iter"
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/cmp"
+	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
 )
+
+// ensure we implement required interfaces
+var _ num.BigIntAccessor[num.Int128, num.Int128Stride] = (*Int128Container)(nil)
 
 type Int128Context struct {
 	Min       num.Int128
@@ -34,6 +39,7 @@ func (c *Int128Context) MinMax() (any, any) {
 }
 
 type Int128Container struct {
+	readOnlyContainer[num.Int128]
 	X0 NumberContainer[int64]
 	X1 NumberContainer[uint64]
 }
@@ -82,6 +88,26 @@ func (c *Int128Container) Size() int {
 	return 1 + c.X0.Size() + c.X1.Size()
 }
 
+func (c *Int128Container) Iterator() iter.Seq2[int, num.Int128] {
+	return func(fn func(int, num.Int128) bool) {
+		it := c.Chunks()
+		for i := range it.Len() {
+			if !fn(i, it.Get(i)) {
+				break
+			}
+		}
+		it.Close()
+	}
+}
+
+func (c *Int128Container) Chunks() num.BigIntIterator[num.Int128, num.Int128Stride] {
+	return NewInt128Iterator(c)
+}
+
+func (c *Int128Container) Slice() *num.Int128Stride {
+	return nil
+}
+
 func (c *Int128Container) Store(dst []byte) []byte {
 	dst = append(dst, byte(TInt128))
 	dst = c.X0.Store(dst)
@@ -110,10 +136,10 @@ func (c *Int128Container) Get(n int) num.Int128 {
 	return num.Int128{uint64(c.X0.Get(n)), c.X1.Get(n)}
 }
 
-func (c *Int128Container) AppendTo(dst *num.Int128Stride, sel []uint32) *num.Int128Stride {
+func (c *Int128Container) AppendTo(v num.BigIntWriter[num.Int128], sel []uint32) {
+	dst := v.(*num.Int128Stride)
 	dst.X0 = c.X0.AppendTo(dst.X0[:0], sel)
 	dst.X1 = c.X1.AppendTo(dst.X1[:0], sel)
-	return dst
 }
 
 func (c *Int128Container) Encode(ctx *Int128Context, vals *num.Int128Stride) *Int128Container {
@@ -130,6 +156,14 @@ func (c *Int128Container) Encode(ctx *Int128Context, vals *num.Int128Stride) *In
 	}
 	c.X1 = EncodeInt(nil, vals.X1)
 	return c
+}
+
+func (c *Int128Container) Matcher() num.BigIntMatcher[num.Int128] {
+	return c
+}
+
+func (c *Int128Container) Cmp(i, j int) int {
+	return num.Compare128(c.Get(i), c.Get(j))
 }
 
 func (c *Int128Container) MatchEqual(val num.Int128, bits, mask *Bitset) {
@@ -180,7 +214,7 @@ func (c *Int128Container) match(cmpFn I128MatchFunc, val num.Int128, bits, mask 
 		i   int
 		cnt int64
 		buf = bits.Bytes()
-		it  = c.Iterator()
+		it  = c.Chunks()
 	)
 
 	for {
@@ -217,7 +251,7 @@ func (c *Int128Container) matchRange(cmpFn I128RangeMatchFunc, a, b num.Int128, 
 		i   int
 		cnt int64
 		buf = bits.Bytes()
-		it  = c.Iterator()
+		it  = c.Chunks()
 	)
 
 	for {
@@ -275,25 +309,21 @@ var i128Factory = Int128Factory{
 	itPool: sync.Pool{New: func() any { return new(Int128Iterator) }},
 }
 
-func (c *Int128Container) Iterator() *Int128Iterator {
-	return NewInt128Iterator(c.X0.Iterator(), c.X1.Iterator())
-}
-
 type Int128Iterator struct {
 	chunk num.Int128Stride
-	x0    NumberIterator[int64]
-	x1    NumberIterator[uint64]
+	x0    types.NumberIterator[int64]
+	x1    types.NumberIterator[uint64]
 	base  int
 	len   int
 	ofs   int
 }
 
-func NewInt128Iterator(x0 NumberIterator[int64], x1 NumberIterator[uint64]) *Int128Iterator {
+func NewInt128Iterator(c *Int128Container) *Int128Iterator {
 	it := newInt128Iterator()
-	it.x0 = x0
-	it.x1 = x1
+	it.x0 = c.X0.Chunks()
+	it.x1 = c.X1.Chunks()
 	it.base = -1
-	it.len = x0.Len()
+	it.len = c.Len()
 	return it
 }
 
@@ -310,9 +340,9 @@ func (it *Int128Iterator) Close() {
 	putInt128Iterator(it)
 }
 
-func (it *Int128Iterator) Reset() {
-	it.ofs = 0
-}
+// func (it *Int128Iterator) Reset() {
+// 	it.ofs = 0
+// }
 
 func (it *Int128Iterator) Len() int {
 	return it.len
@@ -328,24 +358,24 @@ func (it *Int128Iterator) Get(n int) num.Int128 {
 	return it.chunk.Get(chunkPos(n))
 }
 
-func (it *Int128Iterator) Next() (num.Int128, bool) {
-	if it.ofs >= it.len {
-		// EOF
-		return num.ZeroInt128, false
-	}
+// func (it *Int128Iterator) Next() (num.Int128, bool) {
+// 	if it.ofs >= it.len {
+// 		// EOF
+// 		return num.ZeroInt128, false
+// 	}
 
-	// refill on chunk boundary
-	if base := chunkBase(it.ofs); base != it.base {
-		it.fill(base)
-	}
-	i := chunkPos(it.ofs)
+// 	// refill on chunk boundary
+// 	if base := chunkBase(it.ofs); base != it.base {
+// 		it.fill(base)
+// 	}
+// 	i := chunkPos(it.ofs)
 
-	// advance ofs for next call
-	it.ofs++
+// 	// advance ofs for next call
+// 	it.ofs++
 
-	// return calculated value
-	return it.chunk.Get(i), true
-}
+// 	// return calculated value
+// 	return it.chunk.Get(i), true
+// }
 
 func (it *Int128Iterator) NextChunk() (*num.Int128Stride, int) {
 	// EOF

@@ -5,21 +5,30 @@ package encode
 
 import (
 	"fmt"
+	"iter"
 	"sort"
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 const RUN_END_THRESHOLD = 4
 
+// ensure we implement required interfaces
+var (
+	_ types.NumberAccessor[int64] = (*RunEndContainer[int64])(nil)
+	_ NumberContainer[int64]      = (*RunEndContainer[int64])(nil)
+)
+
 // TIntRunEnd
 type RunEndContainer[T types.Integer] struct {
+	readOnlyContainer[T]
 	Values NumberContainer[T]      // []T
 	Ends   NumberContainer[uint32] // []uint32
-	it     NumberIterator[T]
+	it     types.NumberIterator[T]
 	n      int
 }
 
@@ -50,6 +59,26 @@ func (c *RunEndContainer[T]) Len() int {
 
 func (c *RunEndContainer[T]) Size() int {
 	return 1 + c.Values.Size() + c.Ends.Size()
+}
+
+func (c *RunEndContainer[T]) Matcher() types.NumberMatcher[T] {
+	return c
+}
+
+func (c *RunEndContainer[T]) Chunks() types.NumberIterator[T] {
+	return NewRunEndIterator(c)
+}
+
+func (c *RunEndContainer[T]) Iterator() iter.Seq2[int, T] {
+	return func(fn func(int, T) bool) {
+		it := c.Chunks()
+		for i := range it.Len() {
+			if !fn(i, it.Get(i)) {
+				break
+			}
+		}
+		it.Close()
+	}
 }
 
 func (c *RunEndContainer[T]) Store(dst []byte) []byte {
@@ -85,7 +114,7 @@ func (c *RunEndContainer[T]) Load(buf []byte) ([]byte, error) {
 func (c *RunEndContainer[T]) Get(n int) T {
 	// iterator may be more efficient
 	if c.it == nil {
-		c.it = c.Iterator()
+		c.it = c.Chunks()
 	}
 	return c.it.Get(n)
 }
@@ -138,7 +167,7 @@ func (c *RunEndContainer[T]) AppendTo(dst []T, sel []uint32) []T {
 		arena.Free(ends)
 		arena.Free(vals)
 	} else {
-		it := c.Iterator()
+		it := c.Chunks()
 		for _, v := range sel {
 			dst = append(dst, it.Get(int(v)))
 		}
@@ -186,6 +215,10 @@ func (c *RunEndContainer[T]) Encode(ctx *Context[T], vals []T) NumberContainer[T
 	c.n = len(vals)
 
 	return c
+}
+
+func (c *RunEndContainer[T]) Cmp(i, j int) int {
+	return util.Cmp(c.Get(i), c.Get(j))
 }
 
 func (c *RunEndContainer[T]) MatchEqual(val T, bits, mask *Bitset) {
@@ -409,21 +442,17 @@ var runEndFactory = RunEndFactory{
 	u8ItPool:  sync.Pool{New: func() any { return new(RunEndIterator[uint8]) }},
 }
 
-func (c *RunEndContainer[T]) Iterator() NumberIterator[T] {
-	return NewRunEndIterator(c)
-}
-
 type RunEndIterator[T types.Integer] struct {
 	BaseIterator[T]
-	valIt  NumberIterator[T]
-	endIt  NumberIterator[uint32]
+	valIt  types.NumberIterator[T]
+	endIt  types.NumberIterator[uint32]
 	window [2]uint32
 }
 
 func NewRunEndIterator[T types.Integer](c *RunEndContainer[T]) *RunEndIterator[T] {
 	it := newRunEndIterator[T]()
-	it.valIt = c.Values.Iterator()
-	it.endIt = c.Ends.Iterator()
+	it.valIt = c.Values.Chunks()
+	it.endIt = c.Ends.Chunks()
 	it.base = -1
 	it.len = c.Len()
 	it.BaseIterator.fill = it.fill

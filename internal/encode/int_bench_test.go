@@ -251,7 +251,7 @@ func BenchmarkIntIterator(b *testing.B) {
 						b.Log(enc2.Info())
 						once = false
 					}
-					it := enc2.Iterator()
+					it := enc2.Chunks()
 					for {
 						_, n := it.NextChunk()
 						if n == 0 {

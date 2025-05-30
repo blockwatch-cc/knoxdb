@@ -166,7 +166,7 @@ func (b *Block) encode() ([]byte, encode.ContextExporter, error) {
 		return buf, ctx, nil
 
 	case BlockInt128:
-		i128 := b.Int128()
+		i128 := b.Int128().Slice()
 		ctx := encode.AnalyzeInt128(i128)
 		enc := encode.EncodeInt128(ctx, i128)
 		// add zero byte for compression
@@ -176,7 +176,7 @@ func (b *Block) encode() ([]byte, encode.ContextExporter, error) {
 		return buf, ctx, nil
 
 	case BlockInt256:
-		i256 := b.Int256()
+		i256 := b.Int256().Slice()
 		ctx := encode.AnalyzeInt256(i256)
 		enc := encode.EncodeInt256(ctx, i256)
 		// add zero byte for compression

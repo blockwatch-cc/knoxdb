@@ -5,6 +5,7 @@ package encode
 
 import (
 	"fmt"
+	"iter"
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/arena"
@@ -12,17 +13,25 @@ import (
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/num"
+	"blockwatch.cc/knoxdb/pkg/util"
+)
+
+// ensure we implement required interfaces
+var (
+	_ types.NumberAccessor[int64] = (*BitpackContainer[int64])(nil)
+	_ NumberContainer[int64]      = (*BitpackContainer[int64])(nil)
 )
 
 // TIntegerBitpacked
 type BitpackContainer[T types.Integer] struct {
+	readOnlyContainer[T]
 	Packed []byte
 	Log2   int
 	N      int
 	For    T
 	free   bool
 	dec    *bitpack.Decoder[T]
-	it     NumberIterator[T]
+	it     types.NumberIterator[T]
 }
 
 func (c *BitpackContainer[T]) Info() string {
@@ -60,6 +69,24 @@ func (c *BitpackContainer[T]) Len() int {
 func (c *BitpackContainer[T]) Size() int {
 	// Typ (1) + FOR (varint) + log2 (1) + n (varint) + bits (variable)
 	return 2 + num.UvarintLen(c.For) + num.UvarintLen(c.N) + len(c.Packed)
+}
+
+func (c *BitpackContainer[T]) Matcher() types.NumberMatcher[T] {
+	return c
+}
+
+func (c *BitpackContainer[T]) Chunks() types.NumberIterator[T] {
+	return NewBitpackIterator[T](c.dec)
+}
+
+func (c *BitpackContainer[T]) Iterator() iter.Seq2[int, T] {
+	return func(fn func(int, T) bool) {
+		for i := range c.N {
+			if !fn(i, c.Get(i)) {
+				return
+			}
+		}
+	}
 }
 
 func (c *BitpackContainer[T]) Store(dst []byte) []byte {
@@ -105,7 +132,7 @@ func (c *BitpackContainer[T]) AppendTo(dst []T, sel []uint32) []T {
 		dst = dst[:c.N]
 		c.dec.Decode(dst)
 	} else {
-		it := c.Iterator()
+		it := c.Chunks()
 		for _, v := range sel {
 			dst = append(dst, it.Get(int(v)))
 		}
@@ -124,6 +151,10 @@ func (c *BitpackContainer[T]) Encode(ctx *Context[T], vals []T) NumberContainer[
 	c.free = sz > 0
 
 	return c
+}
+
+func (c *BitpackContainer[T]) Cmp(i, j int) int {
+	return util.Cmp(c.Get(i), c.Get(j))
 }
 
 func (c *BitpackContainer[T]) MatchEqual(val T, bits, _ *Bitset) {
@@ -388,12 +419,6 @@ var bitpackFactory = BitpackFactory{
 
 // ---------------------------------------
 // Iterator
-//
-
-func (c *BitpackContainer[T]) Iterator() NumberIterator[T] {
-	return NewBitpackIterator[T](c.dec)
-}
-
 func NewBitpackIterator[T types.Integer](dec *bitpack.Decoder[T]) *BitpackIterator[T] {
 	it := newBitpackIterator[T]()
 	it.dec = dec

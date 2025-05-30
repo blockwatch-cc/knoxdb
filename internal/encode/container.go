@@ -7,6 +7,7 @@ import (
 	"errors"
 
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/pkg/num"
 )
 
 var (
@@ -62,26 +63,67 @@ func (t ContainerType) String() string {
 	return cTypeNames[cTypeNamesOfs[t] : cTypeNamesOfs[t+1]-1]
 }
 
+// NumberContainer defines a common interface for all encoding containers
+// that embed native numeric vectors (signed & unsigned int, float). The
+// purpose of these containers is to unify data access across compression
+// schemes (e.g. dict, bitpack, delta, raw encodings) and perform filter/
+// comparison operations on compressed vectors without first having to
+// decompress the entire vector (i.e. most schemes use fusion kernels).
+//
+// Compression schemes in use are light-weight and require minimal CPU time
+// to initialize after loading data from disk. All containers reference
+// loaded data buffers, so their lifecycle must be synced with that of
+// buffer pages containing the underlying data.
 type NumberContainer[T types.Number] interface {
 	// introspect
 	Type() ContainerType // returns encoding type
-	Len() int            // returns vector length
 	Info() string        // describes encoding and nested containers
 
-	// data access
-	Get(int) T                          // returns single value at position
-	AppendTo(dst []T, sel []uint32) []T // decodes and appends all/selected values
-	Iterator() NumberIterator[T]        // buffered iterator
-
-	// encode
+	// encode and I/O
 	Encode(ctx *Context[T], vals []T) NumberContainer[T]
-
-	// IO
-	Size() int                   // helps dimension buffer before write
 	Store([]byte) []byte         // serializes into buf, returns updated buf
 	Load([]byte) ([]byte, error) // deserializes from buf, returns updated buf
-	Close()                      // free resources
 
-	// matchers
+	// Common vector access interface
+	//
+	// Some functions are only available on materialized vectors. These are
+	// not unavailable on encoded containers for semantic reasons (containers
+	// are read-only) and performance reasosn (decoding full vectors would
+	// defy the purpose of working on compressed data).
+	//
+	// Reader
+	//   Len() int                     // returns vector length
+	//   Size() int                    // encoded size, use to get buffer size before store
+	//   Get(int) T                    // returns single value at position
+	//   Slice() []T                   // (unavailable)
+	//   Iterator() iter.Seq2[int, T]  // Go style vector iterator
+	//   Chunks() NumberIterator[T]    // buffered chunk-based iterator
+	//   AppendTo([]T, []uint32) []T   // decodes and appends all/selected values to dst
+	//   MinMax() (T, T)               // (unavailable)
+	//   Cmp(i, j int) int             // compares values at positions i and j
+	// Writer
+	//   Append(T)                     // (unavailable)
+	//   Set(int, T)                   // (unavailable)
+	//   Delete(int, int)              // (unavailable)
+	// Accessor
+	//   Matcher() NumberMatcher[T]    // returns a matcher object (self)
+	//   Close()                       // free resources
+	//
+	types.NumberAccessor[T]
 	types.NumberMatcher[T]
 }
+
+// Use to add noop functions required by the common interface to each container type.
+type readOnlyContainer[T types.Number | []byte | num.Int128 | num.Int256] struct{}
+
+// unsupported writer and accessor interfaces (used on materialized blocks only,
+// but still part of the common interface)
+func (_ *readOnlyContainer[T]) Set(_ int, _ T)           {}
+func (_ *readOnlyContainer[T]) Delete(_, _ int)          {}
+func (_ *readOnlyContainer[T]) Clear()                   {}
+func (_ *readOnlyContainer[T]) Append(_ T)               {}
+func (_ *readOnlyContainer[T]) Cap() (n int)             { return }
+func (_ *readOnlyContainer[T]) Slice() (s []T)           { return }
+func (_ *readOnlyContainer[T]) MinMax() (minv T, maxv T) { return }
+func (_ *readOnlyContainer[T]) Min() (minv T)            { return }
+func (_ *readOnlyContainer[T]) Max() (maxv T)            { return }

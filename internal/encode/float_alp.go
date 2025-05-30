@@ -5,6 +5,7 @@ package encode
 
 import (
 	"fmt"
+	"iter"
 	"math"
 	"sync"
 
@@ -12,6 +13,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/encode/alp"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 type AlpFlags byte
@@ -21,8 +23,15 @@ const (
 	FlagSafeInt          // [-2^51, 2^51]
 )
 
+// ensure we implement required interfaces
+var (
+	_ types.NumberAccessor[float64] = (*FloatAlpContainer[float64, int64])(nil)
+	_ NumberContainer[float64]      = (*FloatAlpContainer[float64, int64])(nil)
+)
+
 // TFloatAlp
 type FloatAlpContainer[T types.Float, E int64 | int32] struct {
+	readOnlyContainer[T]
 	Values    NumberContainer[E]
 	Patches   NumberContainer[T]
 	Positions NumberContainer[uint32]
@@ -73,6 +82,27 @@ func (c *FloatAlpContainer[T, E]) Size() int {
 		v += c.Patches.Size() + c.Positions.Size()
 	}
 	return v
+}
+
+func (c *FloatAlpContainer[T, E]) Matcher() types.NumberMatcher[T] {
+	return c
+}
+
+func (c *FloatAlpContainer[T, E]) Chunks() types.NumberIterator[T] {
+	c.initDecoder()
+	return NewFloatAlpIterator(c)
+}
+
+func (c *FloatAlpContainer[T, E]) Iterator() iter.Seq2[int, T] {
+	return func(fn func(int, T) bool) {
+		it := c.Chunks()
+		for i := range it.Len() {
+			if !fn(i, it.Get(i)) {
+				break
+			}
+		}
+		it.Close()
+	}
 }
 
 func (c *FloatAlpContainer[T, E]) Store(dst []byte) []byte {
@@ -148,7 +178,7 @@ func (c *FloatAlpContainer[T, E]) AppendTo(dst []T, sel []uint32) []T {
 		c.dec.Decode(dst, tmp)
 		arena.Free(tmp)
 	} else {
-		it := c.Iterator()
+		it := c.Chunks()
 		for _, v := range sel {
 			dst = append(dst, it.Get(int(v)))
 		}
@@ -197,6 +227,10 @@ func (c *FloatAlpContainer[T, E]) initDecoder() {
 			c.Positions.AppendTo(arena.Alloc[uint32](cnt), nil),
 		)
 	}
+}
+
+func (c *FloatAlpContainer[T, E]) Cmp(i, j int) int {
+	return util.Cmp(c.Get(i), c.Get(j))
 }
 
 func (c *FloatAlpContainer[T, E]) MatchEqual(val T, bits, mask *Bitset) {
@@ -519,21 +553,16 @@ var floatAlpFactory = FloatAlpFactory{
 // Iterator
 //
 
-func (c *FloatAlpContainer[T, E]) Iterator() NumberIterator[T] {
-	c.initDecoder()
-	return NewFloatAlpIterator(c)
-}
-
 type FloatAlpIterator[T types.Float, E int64 | int32] struct {
 	BaseIterator[T]
 	dec *alp.Decoder[T, E]
-	src NumberIterator[E]
+	src types.NumberIterator[E]
 }
 
 func NewFloatAlpIterator[T types.Float, E int64 | int32](c *FloatAlpContainer[T, E]) *FloatAlpIterator[T, E] {
 	it := newFloatAlpIterator[T, E]()
 	it.dec = c.dec
-	it.src = c.Values.Iterator()
+	it.src = c.Values.Chunks()
 	it.base = -1
 	it.len = c.Len()
 	it.BaseIterator.fill = it.fill

@@ -5,15 +5,24 @@ package encode
 
 import (
 	"fmt"
+	"iter"
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/encode/alp"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
+	"blockwatch.cc/knoxdb/pkg/util"
+)
+
+// ensure we implement required interfaces
+var (
+	_ types.NumberAccessor[float64] = (*FloatAlpRdContainer[float64, uint64])(nil)
+	_ NumberContainer[float64]      = (*FloatAlpRdContainer[float64, uint64])(nil)
 )
 
 // TFloatAlpRd
 type FloatAlpRdContainer[T alp.Float, E alp.Uint] struct {
+	readOnlyContainer[T]
 	Left  NumberContainer[uint16]
 	Right NumberContainer[E]
 	Shift int
@@ -46,6 +55,26 @@ func (c *FloatAlpRdContainer[T, E]) Len() int {
 func (c *FloatAlpRdContainer[T, E]) Size() int {
 	v := 2 + c.Left.Size() + c.Right.Size()
 	return v
+}
+
+func (c *FloatAlpRdContainer[T, E]) Matcher() types.NumberMatcher[T] {
+	return c
+}
+
+func (c *FloatAlpRdContainer[T, E]) Chunks() types.NumberIterator[T] {
+	return NewFloatAlpRdIterator(c)
+}
+
+func (c *FloatAlpRdContainer[T, E]) Iterator() iter.Seq2[int, T] {
+	return func(fn func(int, T) bool) {
+		it := c.Chunks()
+		for i := range it.Len() {
+			if !fn(i, it.Get(i)) {
+				break
+			}
+		}
+		it.Close()
+	}
 }
 
 func (c *FloatAlpRdContainer[T, E]) Store(dst []byte) []byte {
@@ -82,7 +111,7 @@ func (c *FloatAlpRdContainer[T, E]) Get(n int) T {
 }
 
 func (c *FloatAlpRdContainer[T, E]) AppendTo(dst []T, sel []uint32) []T {
-	it := c.Iterator()
+	it := c.Chunks()
 	if sel == nil {
 		for {
 			src, n := it.NextChunk()
@@ -141,32 +170,36 @@ func (c *FloatAlpRdContainer[T, E]) Encode(ctx *Context[T], vals []T) NumberCont
 	return c
 }
 
+func (c *FloatAlpRdContainer[T, E]) Cmp(i, j int) int {
+	return util.Cmp(c.Get(i), c.Get(j))
+}
+
 func (c *FloatAlpRdContainer[T, E]) MatchEqual(val T, bits, mask *Bitset) {
-	matchIt(c.Iterator(), matchFn[T](types.FilterModeEqual), val, bits, mask)
+	matchIt(c.Chunks(), matchFn[T](types.FilterModeEqual), val, bits, mask)
 }
 
 func (c *FloatAlpRdContainer[T, E]) MatchNotEqual(val T, bits, mask *Bitset) {
-	matchIt(c.Iterator(), matchFn[T](types.FilterModeNotEqual), val, bits, mask)
+	matchIt(c.Chunks(), matchFn[T](types.FilterModeNotEqual), val, bits, mask)
 }
 
 func (c *FloatAlpRdContainer[T, E]) MatchLess(val T, bits, mask *Bitset) {
-	matchIt(c.Iterator(), matchFn[T](types.FilterModeLt), val, bits, mask)
+	matchIt(c.Chunks(), matchFn[T](types.FilterModeLt), val, bits, mask)
 }
 
 func (c *FloatAlpRdContainer[T, E]) MatchLessEqual(val T, bits, mask *Bitset) {
-	matchIt(c.Iterator(), matchFn[T](types.FilterModeLe), val, bits, mask)
+	matchIt(c.Chunks(), matchFn[T](types.FilterModeLe), val, bits, mask)
 }
 
 func (c *FloatAlpRdContainer[T, E]) MatchGreater(val T, bits, mask *Bitset) {
-	matchIt(c.Iterator(), matchFn[T](types.FilterModeGt), val, bits, mask)
+	matchIt(c.Chunks(), matchFn[T](types.FilterModeGt), val, bits, mask)
 }
 
 func (c *FloatAlpRdContainer[T, E]) MatchGreaterEqual(val T, bits, mask *Bitset) {
-	matchIt(c.Iterator(), matchFn[T](types.FilterModeGe), val, bits, mask)
+	matchIt(c.Chunks(), matchFn[T](types.FilterModeGe), val, bits, mask)
 }
 
 func (c *FloatAlpRdContainer[T, E]) MatchBetween(a, b T, bits, mask *Bitset) {
-	matchRangeIt(c.Iterator(), matchFn[T](types.FilterModeRange), a, b, bits, mask)
+	matchRangeIt(c.Chunks(), matchFn[T](types.FilterModeRange), a, b, bits, mask)
 }
 
 // N.A.
@@ -231,21 +264,17 @@ var floatAlpRdFactory = FloatAlpRdFactory{
 // Iterator
 //
 
-func (c *FloatAlpRdContainer[T, E]) Iterator() NumberIterator[T] {
-	return NewFloatAlpRdIterator(c)
-}
-
 type FloatAlpRdIterator[T alp.Float, E alp.Uint] struct {
 	BaseIterator[T]
-	left  NumberIterator[uint16]
-	right NumberIterator[E]
+	left  types.NumberIterator[uint16]
+	right types.NumberIterator[E]
 	dec   *alp.DecoderRD[T, E]
 }
 
 func NewFloatAlpRdIterator[T alp.Float, E alp.Uint](c *FloatAlpRdContainer[T, E]) *FloatAlpRdIterator[T, E] {
 	it := newFloatAlpRdIterator[T, E]()
-	it.left = c.Left.Iterator()
-	it.right = c.Right.Iterator()
+	it.left = c.Left.Chunks()
+	it.right = c.Right.Chunks()
 	it.dec = c.dec
 	it.base = -1
 	it.len = c.Len()

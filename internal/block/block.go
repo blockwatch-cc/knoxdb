@@ -195,7 +195,7 @@ func (b *Block) SetClean() {
 }
 
 func (b *Block) IsMaterialized() bool {
-	return b.flags|BlockFlagRaw > 0
+	return b.flags&BlockFlagRaw > 0
 }
 
 func (b *Block) Len() int {
@@ -361,7 +361,7 @@ func (b *Block) AppendRange(src *Block, i, j int) {
 			b.Bytes().Append(src.Bytes().Get(i))
 		case src.IsMaterialized():
 			// src is uncompressed (can optimize)
-			src.Bytes().Range(i, j).AppendTo(b.Bytes(), nil)
+			src.any.(*stringx.StringPool).Range(i, j).AppendTo(b.Bytes(), nil)
 		default:
 			sel := types.NewRange(i, j-1).AsSelection()
 			src.Bytes().AppendTo(b.Bytes(), sel)

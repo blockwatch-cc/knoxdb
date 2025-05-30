@@ -5,6 +5,7 @@ package encode
 
 import (
 	"fmt"
+	"iter"
 	"slices"
 	"sync"
 
@@ -16,8 +17,15 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
+// ensure we implement required interfaces
+var (
+	_ types.NumberAccessor[int64] = (*RawContainer[int64])(nil)
+	_ NumberContainer[int64]      = (*RawContainer[int64])(nil)
+)
+
 // TIntRaw
 type RawContainer[T types.Integer] struct {
+	readOnlyContainer[T]
 	Values []T
 	sz     int
 	typ    types.BlockType
@@ -44,8 +52,22 @@ func (c *RawContainer[T]) Size() int {
 	return 1 + num.UvarintLen(len(c.Values)) + c.sz*len(c.Values)
 }
 
-func (c *RawContainer[T]) Iterator() NumberIterator[T] {
+func (c *RawContainer[T]) Matcher() types.NumberMatcher[T] {
+	return c
+}
+
+func (c *RawContainer[T]) Chunks() types.NumberIterator[T] {
 	return NewRawIterator(c.Values)
+}
+
+func (c *RawContainer[T]) Iterator() iter.Seq2[int, T] {
+	return func(fn func(int, T) bool) {
+		for i, v := range c.Values {
+			if !fn(i, v) {
+				return
+			}
+		}
+	}
 }
 
 func (c *RawContainer[T]) Store(dst []byte) []byte {
@@ -91,6 +113,10 @@ func (c *RawContainer[T]) Encode(ctx *Context[T], vals []T) NumberContainer[T] {
 	c.sz = util.SizeOf[T]()
 	c.typ = BlockType[T]()
 	return c
+}
+
+func (c *RawContainer[T]) Cmp(i, j int) int {
+	return util.Cmp(c.Values[i], c.Values[j])
 }
 
 func (c *RawContainer[T]) MatchEqual(val T, bits, _ *Bitset) {

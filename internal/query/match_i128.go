@@ -60,11 +60,6 @@ func (m *i128Matcher) Value() any {
 	return m.val
 }
 
-func (m i128Matcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
-	n := m.match(b.Int128(), m.val, bits.Bytes(), mask.Bytes())
-	bits.ResetCount(int(n))
-}
-
 // EQUAL ---
 
 type i128EqualMatcher struct {
@@ -95,6 +90,15 @@ func (m i128EqualMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask 
 	minBits.Close()
 }
 
+func (m i128EqualMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
+	if b.IsMaterialized() {
+		n := m.match(b.Int128().Slice(), m.val, bits.Bytes(), mask.Bytes())
+		bits.ResetCount(int(n))
+	} else {
+		b.Int128().Matcher().MatchEqual(m.val, bits, mask)
+	}
+}
+
 // NOT EQUAL ---
 
 type i128NotEqualMatcher struct {
@@ -122,6 +126,15 @@ func (m i128NotEqualMatcher) MatchFilter(flt filter.Filter) bool {
 	return flt.Contains(m.hash)
 }
 
+func (m i128NotEqualMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
+	if b.IsMaterialized() {
+		n := m.match(b.Int128().Slice(), m.val, bits.Bytes(), mask.Bytes())
+		bits.ResetCount(int(n))
+	} else {
+		b.Int128().Matcher().MatchNotEqual(m.val, bits, mask)
+	}
+}
+
 // GT ---
 
 type i128GtMatcher struct {
@@ -141,6 +154,15 @@ func (m i128GtMatcher) MatchRangeVectors(_, maxs *block.Block, bits, mask *bitse
 	gt := newFactory(maxs.Type()).New(FilterModeGt)
 	gt.WithValue(m.val)
 	gt.MatchVector(maxs, bits, mask)
+}
+
+func (m i128GtMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
+	if b.IsMaterialized() {
+		n := m.match(b.Int128().Slice(), m.val, bits.Bytes(), mask.Bytes())
+		bits.ResetCount(int(n))
+	} else {
+		b.Int128().Matcher().MatchGreater(m.val, bits, mask)
+	}
 }
 
 // GE ---
@@ -164,6 +186,15 @@ func (m i128GeMatcher) MatchRangeVectors(_, maxs *block.Block, bits, mask *bitse
 	ge.MatchVector(maxs, bits, mask)
 }
 
+func (m i128GeMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
+	if b.IsMaterialized() {
+		n := m.match(b.Int128().Slice(), m.val, bits.Bytes(), mask.Bytes())
+		bits.ResetCount(int(n))
+	} else {
+		b.Int128().Matcher().MatchGreaterEqual(m.val, bits, mask)
+	}
+}
+
 // LT ---
 
 type i128LtMatcher struct {
@@ -185,6 +216,15 @@ func (m i128LtMatcher) MatchRangeVectors(mins, _ *block.Block, bits, mask *bitse
 	lt.MatchVector(mins, bits, mask)
 }
 
+func (m i128LtMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
+	if b.IsMaterialized() {
+		n := m.match(b.Int128().Slice(), m.val, bits.Bytes(), mask.Bytes())
+		bits.ResetCount(int(n))
+	} else {
+		b.Int128().Matcher().MatchLess(m.val, bits, mask)
+	}
+}
+
 // LE ---
 
 type i128LeMatcher struct {
@@ -204,6 +244,15 @@ func (m i128LeMatcher) MatchRangeVectors(mins, _ *block.Block, bits, mask *bitse
 	le := newFactory(mins.Type()).New(FilterModeLe)
 	le.WithValue(m.val)
 	le.MatchVector(mins, bits, mask)
+}
+
+func (m i128LeMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
+	if b.IsMaterialized() {
+		n := m.match(b.Int128().Slice(), m.val, bits.Bytes(), mask.Bytes())
+		bits.ResetCount(int(n))
+	} else {
+		b.Int128().Matcher().MatchLessEqual(m.val, bits, mask)
+	}
 }
 
 // RANGE ---
@@ -238,8 +287,12 @@ func (m i128RangeMatcher) MatchRange(from, to any) bool {
 }
 
 func (m i128RangeMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
-	n := cmp.Int128Between(b.Int128(), m.from, m.to, bits.Bytes(), mask.Bytes())
-	bits.ResetCount(int(n))
+	if b.IsMaterialized() {
+		n := cmp.Int128Between(b.Int128().Slice(), m.from, m.to, bits.Bytes(), mask.Bytes())
+		bits.ResetCount(int(n))
+	} else {
+		b.Int128().Matcher().MatchBetween(m.from, m.to, bits, mask)
+	}
 }
 
 func (m i128RangeMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) {

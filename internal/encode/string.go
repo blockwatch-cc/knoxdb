@@ -6,7 +6,6 @@ package encode
 import (
 	"bytes"
 	"fmt"
-	"iter"
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/arena"
@@ -47,24 +46,15 @@ import (
 type StringContainer interface {
 	// introspect
 	Type() ContainerType // returns encoding type
-	Len() int            // returns vector length
 	Info() string        // describes encoding and nested containers
 
-	// data access
-	Get(int) []byte                                // returns single value at position
-	AppendTo(dst types.StringWriter, sel []uint32) // decodes and appends all/selected values
-	Iterator() iter.Seq2[int, []byte]              // Go iterator
-
-	// encode
+	// encode and I/O
 	Encode(ctx *StringContext, vals types.StringAccessor) StringContainer
-
-	// IO
-	Size() int                   // helps dimension buffer before write
 	Store([]byte) []byte         // serializes into buf, returns updated buf
 	Load([]byte) ([]byte, error) // deserializes from buf, returns updated buf
-	Close()                      // free resources
 
-	// matchers
+	// Common string vector access interface
+	types.StringAccessor
 	types.StringMatcher
 }
 
@@ -216,10 +206,13 @@ func LoadString(buf []byte) (StringContainer, error) {
 }
 
 type StringFactory struct {
-	constPool   sync.Pool
-	fixedPool   sync.Pool
-	compactPool sync.Pool
-	dictPool    sync.Pool
+	constPool     sync.Pool // containers
+	fixedPool     sync.Pool
+	compactPool   sync.Pool
+	dictPool      sync.Pool
+	fixedItPool   sync.Pool // iterators
+	compactItPool sync.Pool
+	dictItPool    sync.Pool
 }
 
 func newStringContainer[T any](typ ContainerType) *T {
@@ -250,6 +243,30 @@ func putStringContainer[T StringContainer](c T) {
 	}
 }
 
+func newStringIterator[T any](typ ContainerType) *T {
+	switch typ {
+	case TStringFixed:
+		return stringFactory.fixedItPool.Get().(*T)
+	case TStringCompact:
+		return stringFactory.compactItPool.Get().(*T)
+	case TStringDictionary:
+		return stringFactory.dictItPool.Get().(*T)
+	default:
+		return nil
+	}
+}
+
+func putStringIterator[T types.StringIterator](c T) {
+	switch any(c).(type) {
+	case *FixedStringIterator:
+		stringFactory.fixedItPool.Put(c)
+	case *CompactStringIterator:
+		stringFactory.compactItPool.Put(c)
+	case *DictStringIterator:
+		stringFactory.dictItPool.Put(c)
+	}
+}
+
 var stringFactory = StringFactory{
 	constPool: sync.Pool{
 		New: func() any { return new(ConstStringContainer) },
@@ -262,5 +279,14 @@ var stringFactory = StringFactory{
 	},
 	dictPool: sync.Pool{
 		New: func() any { return new(DictStringContainer) },
+	},
+	fixedItPool: sync.Pool{
+		New: func() any { return new(FixedStringIterator) },
+	},
+	compactItPool: sync.Pool{
+		New: func() any { return new(CompactStringIterator) },
+	},
+	dictItPool: sync.Pool{
+		New: func() any { return new(DictStringIterator) },
 	},
 }

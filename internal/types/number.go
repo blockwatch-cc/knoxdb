@@ -4,6 +4,7 @@
 package types
 
 import (
+	"iter"
 	"math"
 	"math/bits"
 
@@ -48,24 +49,97 @@ type NumberMatcher[T Number] interface {
 type NumberWriter[T Number] interface {
 	Append(T)
 	Set(int, T)
+	Delete(int, int)
 }
 
+// NumberReader defines uniform access interface to read
+// vector data from materialized and compressed vectors.
 type NumberReader[T Number] interface {
+	// Len returns the total number of elements in this container.
 	Len() int
+
+	// Size returns the total size of the vector including metadata.
+	// Use it to estimate heap size and required buffer sizes
+	// before storing a compressed vector.
 	Size() int
+
+	// Get returns an element at position n or zero when out of bounds.
 	Get(int) T
-	AppendTo([]T, []uint32) []T
+
+	// Slice returns a raw Go slice directly referencing the internal
+	// storage representation of the vector. It is only available on
+	// materialized vectors.
+	Slice() []T
+
+	// Iterator returns a Go style iterator to walk the container
+	// with a for range loop.
+	Iterator() iter.Seq2[int, T]
+
+	// Chunks returns a chunked iterator which enables efficient
+	// batch processing of vector data.
+	Chunks() NumberIterator[T]
+
+	// AppendTo appends selected vector elements to a dst
+	// returns an updated slice header reflecting the new length.
+	// A selection vector sel controls which elements to append.
+	// When nil, all source data is appended. To avoid reallocation
+	// of dst, users must carefully capacity and selection vector.
+	AppendTo(dst []T, sel []uint32) []T
+
+	// MinMax returns vector minimum and maximum. It is only available
+	// on materialized vectors.
+	MinMax() (T, T)
+
+	// Cmp compares two vector elements at positions i and j. It returns
+	// -1 if `v[i] < v[j]`, 0 if `v[i] == v[j]` and 1 if `v[i] > v[j]`.
+	Cmp(i, j int) int
+
+	// more iterators?
+	// Range(i, j int) iter.Seq2[int, T]
+	// Select(sel []uint32) iter.Seq2[int, T]
+}
+
+// Iterators allow efficient seqential and random access to
+// materialized and compressed vector data. For compressed vectors
+// iterators may use an internal buffer to keep a chunk of decoded
+// values in L1 cache which minimizes costs of linear and (small range)
+// random access.
+//
+// Use NextChunk for linear walks, Get for point access and
+// Seek or SkipChunk for jumping.
+type NumberIterator[T Number] interface {
+	// Returns the total number of elements in this vector.
+	Len() int
+
+	// Returns an element at position n or zero when out of bounds.
+	// Implicitly seeks and decodes the chunk containing n.
+	Get(int) T
+
+	// Seeks to position n rounded by CHUNK_SIZE and decodes
+	// the relevant chunk. Compatible with NextChunk and Get.
+	Seek(int) bool
+
+	// Decodes and returns the next chunk at CHUNK_SIZE boundaries
+	// and the number of valid elements in the chunk. Past EOF
+	// returns nil and zero n.
+	NextChunk() (*[CHUNK_SIZE]T, int)
+
+	// Skips a chunk efficiently without decoding data and returns
+	// the number of elements skipped or zero when at EOF. Users may
+	// call skip repeatedly before requesting data from NextChunk.
+	SkipChunk() int
+
+	// Close releases pointers and allows for efficient re-use
+	// of iterators. Users are encouraged to call Close after use
+	// to reduce allocations and GC overhead.
+	Close()
 }
 
 type NumberAccessor[T Number] interface {
 	NumberReader[T]
 	NumberWriter[T]
-	// Iterator() iter.Seq2[int, E]
-	// Chunks() NumberIterator[E]
-	Slice() []T
 	Matcher() NumberMatcher[T]
-	MinMax() (T, T)
-	Cmp(i, j int) int
+	Close()
 }
 
 func IsSigned[T Number]() bool {

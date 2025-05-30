@@ -5,6 +5,7 @@ package encode
 
 import (
 	"fmt"
+	"iter"
 	"sort"
 	"sync"
 
@@ -15,8 +16,15 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
+// ensure we implement required interfaces
+var (
+	_ types.NumberAccessor[int64] = (*DictionaryContainer[int64])(nil)
+	_ NumberContainer[int64]      = (*DictionaryContainer[int64])(nil)
+)
+
 // TIntDictionary
 type DictionaryContainer[T types.Integer] struct {
+	readOnlyContainer[T]
 	Dict  NumberContainer[T]
 	Codes NumberContainer[uint16]
 }
@@ -43,6 +51,26 @@ func (c *DictionaryContainer[T]) Len() int {
 
 func (c *DictionaryContainer[T]) Size() int {
 	return 1 + c.Dict.Size() + c.Codes.Size()
+}
+
+func (c *DictionaryContainer[T]) Matcher() types.NumberMatcher[T] {
+	return c
+}
+
+func (c *DictionaryContainer[T]) Chunks() types.NumberIterator[T] {
+	return NewDictionaryIterator(c.Dict, c.Codes)
+}
+
+func (c *DictionaryContainer[T]) Iterator() iter.Seq2[int, T] {
+	return func(fn func(int, T) bool) {
+		it := c.Chunks()
+		for i := range it.Len() {
+			if !fn(i, it.Get(i)) {
+				break
+			}
+		}
+		it.Close()
+	}
 }
 
 func (c *DictionaryContainer[T]) Store(dst []byte) []byte {
@@ -75,7 +103,7 @@ func (c *DictionaryContainer[T]) Get(n int) T {
 }
 
 func (c *DictionaryContainer[T]) AppendTo(dst []T, sel []uint32) []T {
-	it := c.Iterator()
+	it := c.Chunks()
 	if sel == nil {
 		for {
 			src, n := it.NextChunk()
@@ -144,6 +172,10 @@ func dictEncodeArray[T types.Integer](ctx *Context[T], vals []T) ([]T, []uint16)
 	}
 
 	return dict, codes
+}
+
+func (c *DictionaryContainer[T]) Cmp(i, j int) int {
+	return util.Cmp(c.Get(i), c.Get(j))
 }
 
 func (c *DictionaryContainer[T]) MatchEqual(val T, bits, mask *Bitset) {
@@ -566,20 +598,16 @@ var dictionaryFactory = DictionaryFactory{
 	u8ItPool:  sync.Pool{New: func() any { return new(DictionaryIterator[uint8]) }},
 }
 
-func (c *DictionaryContainer[T]) Iterator() NumberIterator[T] {
-	return NewDictionaryIterator(c.Dict, c.Codes)
-}
-
 type DictionaryIterator[T types.Integer] struct {
 	BaseIterator[T]
 	dict []T
-	code NumberIterator[uint16]
+	code types.NumberIterator[uint16]
 }
 
 func NewDictionaryIterator[T types.Integer](dict NumberContainer[T], code NumberContainer[uint16]) *DictionaryIterator[T] {
 	it := newDictionaryIterator[T]()
 	it.dict = dict.AppendTo(arena.Alloc[T](dict.Len()), nil)
-	it.code = code.Iterator()
+	it.code = code.Chunks()
 	it.base = -1
 	it.len = it.code.Len()
 	it.BaseIterator.fill = it.fill

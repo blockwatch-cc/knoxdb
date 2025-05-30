@@ -60,11 +60,6 @@ func (m *i256Matcher) Value() any {
 	return m.val
 }
 
-func (m i256Matcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
-	n := m.match(b.Int256(), m.val, bits.Bytes(), mask.Bytes())
-	bits.ResetCount(int(n))
-}
-
 func (m i256Matcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) {
 	// min <= v && max >= v, mask is optional
 	f := newFactory(mins.Type())
@@ -115,6 +110,15 @@ func (m i256EqualMatcher) MatchFilter(flt filter.Filter) bool {
 	return flt.Contains(m.hash)
 }
 
+func (m i256EqualMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
+	if b.IsMaterialized() {
+		n := m.match(b.Int256().Slice(), m.val, bits.Bytes(), mask.Bytes())
+		bits.ResetCount(int(n))
+	} else {
+		b.Int256().Matcher().MatchEqual(m.val, bits, mask)
+	}
+}
+
 // NOT EQUAL ---
 
 type i256NotEqualMatcher struct {
@@ -135,6 +139,15 @@ func (m i256NotEqualMatcher) MatchRangeVectors(_, _ *block.Block, bits, mask *bi
 		bits.Copy(mask)
 	} else {
 		bits.One()
+	}
+}
+
+func (m i256NotEqualMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
+	if b.IsMaterialized() {
+		n := m.match(b.Int256().Slice(), m.val, bits.Bytes(), mask.Bytes())
+		bits.ResetCount(int(n))
+	} else {
+		b.Int256().Matcher().MatchNotEqual(m.val, bits, mask)
 	}
 }
 
@@ -159,6 +172,15 @@ func (m i256GtMatcher) MatchRangeVectors(_, maxs *block.Block, bits, mask *bitse
 	gt.MatchVector(maxs, bits, mask)
 }
 
+func (m i256GtMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
+	if b.IsMaterialized() {
+		n := m.match(b.Int256().Slice(), m.val, bits.Bytes(), mask.Bytes())
+		bits.ResetCount(int(n))
+	} else {
+		b.Int256().Matcher().MatchGreater(m.val, bits, mask)
+	}
+}
+
 // GE ---
 
 type i256GeMatcher struct {
@@ -178,6 +200,15 @@ func (m i256GeMatcher) MatchRangeVectors(_, maxs *block.Block, bits, mask *bitse
 	ge := newFactory(maxs.Type()).New(FilterModeGe)
 	ge.WithValue(m.val)
 	ge.MatchVector(maxs, bits, mask)
+}
+
+func (m i256GeMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
+	if b.IsMaterialized() {
+		n := m.match(b.Int256().Slice(), m.val, bits.Bytes(), mask.Bytes())
+		bits.ResetCount(int(n))
+	} else {
+		b.Int256().Matcher().MatchGreaterEqual(m.val, bits, mask)
+	}
 }
 
 // LT ---
@@ -201,6 +232,15 @@ func (m i256LtMatcher) MatchRangeVectors(mins, _ *block.Block, bits, mask *bitse
 	lt.MatchVector(mins, bits, mask)
 }
 
+func (m i256LtMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
+	if b.IsMaterialized() {
+		n := m.match(b.Int256().Slice(), m.val, bits.Bytes(), mask.Bytes())
+		bits.ResetCount(int(n))
+	} else {
+		b.Int256().Matcher().MatchLess(m.val, bits, mask)
+	}
+}
+
 // LE ---
 
 type i256LeMatcher struct {
@@ -220,6 +260,15 @@ func (m i256LeMatcher) MatchRangeVectors(mins, _ *block.Block, bits, mask *bitse
 	le := newFactory(mins.Type()).New(FilterModeLe)
 	le.WithValue(m.val)
 	le.MatchVector(mins, bits, mask)
+}
+
+func (m i256LeMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
+	if b.IsMaterialized() {
+		n := m.match(b.Int256().Slice(), m.val, bits.Bytes(), mask.Bytes())
+		bits.ResetCount(int(n))
+	} else {
+		b.Int256().Matcher().MatchLessEqual(m.val, bits, mask)
+	}
 }
 
 // RANGE ---
@@ -254,8 +303,12 @@ func (m i256RangeMatcher) MatchRange(from, to any) bool {
 }
 
 func (m i256RangeMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
-	n := cmp.Int256Between(b.Int256(), m.from, m.to, bits.Bytes(), mask.Bytes())
-	bits.ResetCount(int(n))
+	if b.IsMaterialized() {
+		n := cmp.Int256Between(b.Int256().Slice(), m.from, m.to, bits.Bytes(), mask.Bytes())
+		bits.ResetCount(int(n))
+	} else {
+		b.Int256().Matcher().MatchBetween(m.from, m.to, bits, mask)
+	}
 }
 
 func (m i256RangeMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) {

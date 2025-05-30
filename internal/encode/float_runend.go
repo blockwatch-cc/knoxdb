@@ -5,6 +5,7 @@ package encode
 
 import (
 	"fmt"
+	"iter"
 	"slices"
 	"sort"
 	"sync"
@@ -12,10 +13,18 @@ import (
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/pkg/util"
+)
+
+// ensure we implement required interfaces
+var (
+	_ types.NumberAccessor[float64] = (*FloatRunEndContainer[float64])(nil)
+	_ NumberContainer[float64]      = (*FloatRunEndContainer[float64])(nil)
 )
 
 // TFloatRunEnd
 type FloatRunEndContainer[T types.Float] struct {
+	readOnlyContainer[T]
 	Values NumberContainer[T]      // []T
 	Ends   NumberContainer[uint32] // []uint32
 }
@@ -46,6 +55,26 @@ func (c *FloatRunEndContainer[T]) Len() int {
 
 func (c *FloatRunEndContainer[T]) Size() int {
 	return 1 + c.Values.Size() + c.Ends.Size()
+}
+
+func (c *FloatRunEndContainer[T]) Matcher() types.NumberMatcher[T] {
+	return c
+}
+
+func (c *FloatRunEndContainer[T]) Chunks() types.NumberIterator[T] {
+	return NewFloatRunEndIterator(c)
+}
+
+func (c *FloatRunEndContainer[T]) Iterator() iter.Seq2[int, T] {
+	return func(fn func(int, T) bool) {
+		it := c.Chunks()
+		for i := range it.Len() {
+			if !fn(i, it.Get(i)) {
+				break
+			}
+		}
+		it.Close()
+	}
 }
 
 func (c *FloatRunEndContainer[T]) Store(dst []byte) []byte {
@@ -130,8 +159,8 @@ func (c *FloatRunEndContainer[T]) AppendTo(dst []T, sel []uint32) []T {
 		arena.Free(vals)
 	} else {
 		if slices.IsSorted(sel) {
-			vit := c.Values.Iterator()
-			eit := c.Ends.Iterator()
+			vit := c.Values.Chunks()
+			eit := c.Ends.Chunks()
 			idx, end, val := 0, eit.Get(0), vit.Get(0)
 			for len(sel) > 0 {
 				// use current run while valid
@@ -151,7 +180,7 @@ func (c *FloatRunEndContainer[T]) AppendTo(dst []T, sel []uint32) []T {
 			eit.Close()
 		} else {
 			// fallback to slower get for unsorted selection lists
-			it := c.Iterator()
+			it := c.Chunks()
 			for _, v := range sel {
 				dst = append(dst, it.Get(int(v)))
 			}
@@ -199,6 +228,10 @@ func (c *FloatRunEndContainer[T]) Encode(ctx *Context[T], vals []T) NumberContai
 	}
 
 	return c
+}
+
+func (c *FloatRunEndContainer[T]) Cmp(i, j int) int {
+	return util.Cmp(c.Get(i), c.Get(j))
 }
 
 func (c *FloatRunEndContainer[T]) MatchEqual(val T, bits, mask *Bitset) {
@@ -341,20 +374,16 @@ var floatRunEndFactory = FloatRunEndFactory{
 // Iterator
 //
 
-func (c *FloatRunEndContainer[T]) Iterator() NumberIterator[T] {
-	return NewFloatRunEndIterator(c)
-}
-
 type FloatRunEndIterator[T types.Float] struct {
 	BaseIterator[T]
-	valIt NumberIterator[T]
-	endIt NumberIterator[uint32]
+	valIt types.NumberIterator[T]
+	endIt types.NumberIterator[uint32]
 }
 
 func NewFloatRunEndIterator[T types.Float](c *FloatRunEndContainer[T]) *FloatRunEndIterator[T] {
 	it := newFloatRunEndIterator[T]()
-	it.valIt = c.Values.Iterator()
-	it.endIt = c.Ends.Iterator()
+	it.valIt = c.Values.Chunks()
+	it.endIt = c.Ends.Chunks()
 	it.base = -1
 	it.len = c.Len()
 	it.BaseIterator.fill = it.fill

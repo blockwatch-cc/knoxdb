@@ -48,8 +48,8 @@ func TestInt128Encode(t *testing.T) {
 			}
 
 			// validate append
-			dst := num.MakeInt128Stride(c.N)
-			dst = enc.AppendTo(dst, nil)
+			dst := num.NewInt128Stride(c.N)
+			enc.AppendTo(dst, nil)
 			require.Equal(t, c.N, dst.Len())
 			require.Equal(t, c.Data, dst)
 
@@ -57,7 +57,7 @@ func TestInt128Encode(t *testing.T) {
 			sel := util.RandUintsn[uint32](max(1, c.N/2), uint32(c.N))
 			clear(dst.X0)
 			clear(dst.X1)
-			dst = enc2.AppendTo(dst, sel)
+			enc2.AppendTo(dst, sel)
 			require.Equal(t, len(sel), dst.Len())
 			for i, v := range sel {
 				require.Equal(t, c.Data.Get(int(v)), dst.Get(i), "sel[%d]", v)
@@ -79,35 +79,21 @@ func TestInt128Iterator(t *testing.T) {
 				enc := NewInt128()
 				enc.Encode(nil, src)
 				t.Logf("Enc %s", enc.Info())
-				it := enc.Iterator()
-				if it == nil {
-					t.Skip()
-				}
 
 				// --------------------------
 				// test next
 				//
-				for i, v := range src.Iterator() {
-					val, ok := it.Next()
-					require.True(t, ok, "short iterator at pos %d", i)
-					require.Equal(t, v, val, "invalid val=%d pos=%d src=%d", val, i, src.Get(i))
-				}
-
-				// --------------------------
-				// test reset
-				//
-				it.Reset()
-				require.Equal(t, c.N, it.Len(), "bad it len post reset")
-				for i, v := range src.Iterator() {
-					val, ok := it.Next()
-					require.True(t, ok, "short iterator at pos %d post reset", i)
-					require.Equal(t, v, val, "invalid val=%d pos=%d post reset", val, i)
+				for i, v := range enc.Iterator() {
+					require.Equal(t, src.Get(i), v, "invalid val at pos=%d", i)
 				}
 
 				// --------------------
 				// test chunk
 				//
-				it.Reset()
+				it := enc.Chunks()
+				if it == nil {
+					t.Skip()
+				}
 				var seen int
 				for {
 					dst, n := it.NextChunk()
@@ -116,16 +102,17 @@ func TestInt128Iterator(t *testing.T) {
 					}
 					require.GreaterOrEqual(t, n, 0, "next chunk returned negative n")
 					require.LessOrEqual(t, seen+n, c.N, "next chunk returned too large n")
-					for i, v := range dst.Subslice(0, n).Iterator() {
+					for i, v := range dst.Range(0, n).Iterator() {
 						require.Equal(t, src.Get(seen+i), v, "invalid val=%d pos=%d src=%d", v, seen+i, src.Get(seen+i))
 					}
 					seen += n
 				}
 				require.Equal(t, c.N, seen, "next chunk did not return all values")
+				it.Close()
 
 				// --------------------------
 				// test skip
-				it.Reset()
+				it = enc.Chunks()
 				seen = it.SkipChunk()
 				seen += it.SkipChunk()
 				for {
@@ -135,38 +122,39 @@ func TestInt128Iterator(t *testing.T) {
 					}
 					require.GreaterOrEqual(t, n, 0, "next chunk returned negative n")
 					require.LessOrEqual(t, seen+n, c.N, "next chunk returned too large n")
-					for i, v := range dst.Subslice(0, n).Iterator() {
+					for i, v := range dst.Range(0, n).Iterator() {
 						require.Equal(t, src.Get(seen+i), v, "invalid val=%d pos=%d src=%d after skip", v, seen+i, src.Get(seen+i))
 					}
 					seen += n
 				}
 				require.Equal(t, c.N, seen, "skip&next chunk did not return all values")
+				it.Close()
 
 				// --------------------------
 				// test seek
 				//
-				it.Reset()
+				it = enc.Chunks()
 				for range c.N {
 					i := util.RandIntn(c.N)
 					ok := it.Seek(i)
 					require.True(t, ok, "seek to existing pos %d/%d failed", i, c.N)
-					val, ok := it.Next()
-					require.True(t, ok, "next after seek to existing pos %d/%d failed", i, c.N)
-					require.Equal(t, src.Get(i), val, "invalid val=%d pos=%d after seek", val, i)
+					vals, n := it.NextChunk()
+					require.Greater(t, n, 0, "next after seek to existing pos %d/%d failed", i, src.Len())
+					require.Equal(t, src.Get(i), vals.Get(i%CHUNK_SIZE), "invalid val at pos=%d after seek", i)
 				}
 
 				// seek to invalid values
 				require.False(t, it.Seek(-1), "seek to negative")
-				_, ok := it.Next()
-				require.False(t, ok, "next after bad seek")
+				_, n := it.NextChunk()
+				require.Equal(t, 0, n, "next after bad seek")
 
 				require.False(t, it.Seek(c.N), "seek to end")
-				_, ok = it.Next()
-				require.False(t, it.Seek(c.N), "seek to end")
+				_, n = it.NextChunk()
+				require.Equal(t, 0, n, "next after bad seek to end")
 
 				require.False(t, it.Seek(c.N+1), "seek beyond end")
-				_, ok = it.Next()
-				require.False(t, it.Seek(c.N), "seek to end")
+				_, n = it.NextChunk()
+				require.Equal(t, 0, n, "next after bad seek to end")
 
 				it.Close()
 			})
@@ -462,14 +450,14 @@ func BenchmarkInt128Decode(b *testing.B) {
 		data := GenInt128Data(c.N)
 		enc := NewInt128().Encode(nil, data)
 		buf := enc.Store(make([]byte, 0, enc.Size()))
-		dst := num.MakeInt128Stride(c.N)
+		dst := num.NewInt128Stride(c.N)
 		once := etests.ShowInfo
 		b.Run(c.Name, func(b *testing.B) {
 			b.SetBytes(int64(c.N * 16))
 			for b.Loop() {
 				enc2, err := LoadInt128(buf)
 				require.NoError(b, err)
-				dst = enc2.AppendTo(dst, nil)
+				enc2.AppendTo(dst, nil)
 				if once {
 					b.Log(enc2.Info())
 					once = false
@@ -513,7 +501,7 @@ func BenchmarkInt128Iterator(b *testing.B) {
 					b.Log(enc2.Info())
 					once = false
 				}
-				it := enc2.Iterator()
+				it := enc2.Chunks()
 				for {
 					_, n := it.NextChunk()
 					if n == 0 {

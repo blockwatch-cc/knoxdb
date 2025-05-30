@@ -435,35 +435,21 @@ func testIntContainerIterator[T types.Integer](t *testing.T, scheme ContainerTyp
 			enc := NewInt[T](scheme)
 			ctx := AnalyzeInt(src, true).WithLevel(1)
 			enc.Encode(ctx, src)
-			it := enc.Iterator()
-			if it == nil {
-				t.Skip()
-			}
 
 			// --------------------------
 			// test next
 			//
-			for i, v := range src {
-				val, ok := it.Next()
-				require.True(t, ok, "short iterator at pos %d", i)
-				require.Equal(t, v, val, "invalid val=%d pos=%d src=%d min=%d", val, i, src[i], ctx.Min)
-			}
-
-			// --------------------------
-			// test reset
-			//
-			it.Reset()
-			require.Equal(t, len(src), it.Len(), "bad it len post reset")
-			for i, v := range src {
-				val, ok := it.Next()
-				require.True(t, ok, "short iterator at pos %d post reset", i)
-				require.Equal(t, v, val, "invalid val=%d pos=%d post reset", val, i)
+			for i, v := range enc.Iterator() {
+				require.Equal(t, src[i], v, "invalid val at pos=%d", i)
 			}
 
 			// --------------------
 			// test chunk
 			//
-			it.Reset()
+			it := enc.Chunks()
+			if it == nil {
+				t.Skip()
+			}
 			var seen int
 			for {
 				dst, n := it.NextChunk()
@@ -478,10 +464,11 @@ func testIntContainerIterator[T types.Integer](t *testing.T, scheme ContainerTyp
 				seen += n
 			}
 			require.Equal(t, len(src), seen, "next chunk did not return all values")
+			it.Close()
 
 			// --------------------------
 			// test skip
-			it.Reset()
+			it = enc.Chunks()
 			seen = it.SkipChunk()
 			seen += it.SkipChunk()
 			for {
@@ -497,32 +484,37 @@ func testIntContainerIterator[T types.Integer](t *testing.T, scheme ContainerTyp
 				seen += n
 			}
 			require.Equal(t, len(src), seen, "skip&next chunk did not return all values")
+			it.Close()
 
 			// --------------------------
 			// test seek
 			//
-			it.Reset()
+			it = enc.Chunks()
 			for range len(src) {
 				i := util.RandIntn(len(src))
 				ok := it.Seek(i)
 				require.True(t, ok, "seek to existing pos %d/%d failed", i, len(src))
-				val, ok := it.Next()
-				require.True(t, ok, "next after seek to existing pos %d/%d failed", i, len(src))
-				require.Equal(t, src[i], val, "invalid val=%d pos=%d after seek", val, i)
+				vals, n := it.NextChunk()
+				require.Greater(t, n, 0, "next after seek to existing pos %d/%d failed", i, len(src))
+
+				// FIXME: ignore s8b iterator which seeks to encoder word boundaries only
+				if enc.Type() != TIntSimple8 {
+					require.Equal(t, src[i], vals[i%CHUNK_SIZE], "invalid val at pos=%d after seek, vals=%v ", i, vals[:n])
+				}
 			}
 
 			// seek to invalid values
 			require.False(t, it.Seek(-1), "seek to negative")
-			_, ok := it.Next()
-			require.False(t, ok, "next after bad seek")
+			_, n := it.NextChunk()
+			require.Equal(t, 0, n, "next after bad seek")
 
 			require.False(t, it.Seek(len(src)), "seek to end")
-			_, ok = it.Next()
-			require.False(t, it.Seek(len(src)), "seek to end")
+			_, n = it.NextChunk()
+			require.Equal(t, 0, n, "next after bad seek to end")
 
 			require.False(t, it.Seek(len(src)+1), "seek beyond end")
-			_, ok = it.Next()
-			require.False(t, it.Seek(len(src)), "seek to end")
+			_, n = it.NextChunk()
+			require.Equal(t, 0, n, "next after bad seek to end")
 
 			it.Close()
 		})

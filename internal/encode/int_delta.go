@@ -5,16 +5,25 @@ package encode
 
 import (
 	"fmt"
+	"iter"
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/num"
+	"blockwatch.cc/knoxdb/pkg/util"
+)
+
+// ensure we implement required interfaces
+var (
+	_ types.NumberAccessor[int64] = (*DeltaContainer[int64])(nil)
+	_ NumberContainer[int64]      = (*DeltaContainer[int64])(nil)
 )
 
 // TIntDelta
 type DeltaContainer[T types.Integer] struct {
+	readOnlyContainer[T]
 	Delta T
 	For   T
 	N     int
@@ -40,8 +49,22 @@ func (c *DeltaContainer[T]) Size() int {
 	return 1 + num.UvarintLen(c.For) + num.UvarintLen(c.Delta) + num.UvarintLen(c.N)
 }
 
-func (c *DeltaContainer[T]) Iterator() NumberIterator[T] {
+func (c *DeltaContainer[T]) Matcher() types.NumberMatcher[T] {
+	return c
+}
+
+func (c *DeltaContainer[T]) Chunks() types.NumberIterator[T] {
 	return NewDeltaIterator[T](c.Delta, c.For, c.N)
+}
+
+func (c *DeltaContainer[T]) Iterator() iter.Seq2[int, T] {
+	return func(fn func(int, T) bool) {
+		for i := range c.N {
+			if !fn(i, c.Get(i)) {
+				return
+			}
+		}
+	}
 }
 
 func (c *DeltaContainer[T]) Store(dst []byte) []byte {
@@ -117,6 +140,10 @@ func (c *DeltaContainer[T]) Encode(ctx *Context[T], vals []T) NumberContainer[T]
 	c.Delta = ctx.Delta
 	c.N = len(vals)
 	return c
+}
+
+func (c *DeltaContainer[T]) Cmp(i, j int) int {
+	return util.Cmp(c.Get(i), c.Get(j))
 }
 
 func (c *DeltaContainer[T]) MatchEqual(val T, bits, _ *Bitset) {

@@ -13,6 +13,10 @@ import (
 	"blockwatch.cc/knoxdb/internal/arena"
 )
 
+var _ BigIntAccessor[Int256, Int256Stride] = (*Int256Stride)(nil)
+
+type Int256Accessor = BigIntAccessor[Int256, Int256Stride]
+
 // represents a Int256 slice in four strides fom highest to lowest qword
 // used for vector match algorithms
 type Int256Stride struct {
@@ -77,15 +81,15 @@ func (s *Int256Stride) Cmp(i, j int) int {
 	}
 }
 
-func (s *Int256Stride) Append(val Int256) *Int256Stride {
+func (s *Int256Stride) Append(val Int256) {
 	s.X0 = append(s.X0, int64(val[0]))
 	s.X1 = append(s.X1, val[1])
 	s.X2 = append(s.X2, val[2])
 	s.X3 = append(s.X3, val[3])
-	return s
 }
 
-func (src *Int256Stride) AppendTo(dst *Int256Stride, sel []uint32) {
+func (src *Int256Stride) AppendTo(v BigIntWriter[Int256], sel []uint32) {
+	dst := v.(*Int256Stride)
 	if sel == nil {
 		dst.X0 = append(dst.X0, src.X0...)
 		dst.X1 = append(dst.X1, src.X1...)
@@ -101,15 +105,14 @@ func (src *Int256Stride) AppendTo(dst *Int256Stride, sel []uint32) {
 	}
 }
 
-func (dst *Int256Stride) Delete(i, j int) *Int256Stride {
+func (dst *Int256Stride) Delete(i, j int) {
 	dst.X0 = slices.Delete(dst.X0, i, j)
 	dst.X1 = slices.Delete(dst.X1, i, j)
 	dst.X2 = slices.Delete(dst.X2, i, j)
 	dst.X3 = slices.Delete(dst.X3, i, j)
-	return dst
 }
 
-func (dst *Int256Stride) Clear() *Int256Stride {
+func (dst *Int256Stride) Clear() {
 	clear(dst.X0)
 	clear(dst.X1)
 	clear(dst.X2)
@@ -118,7 +121,6 @@ func (dst *Int256Stride) Clear() *Int256Stride {
 	dst.X1 = dst.X1[:0]
 	dst.X2 = dst.X2[:0]
 	dst.X3 = dst.X3[:0]
-	return dst
 }
 
 func (s *Int256Stride) Swap(i, j int) {
@@ -254,4 +256,17 @@ func (s *Int256Stride) Iterator() iter.Seq2[int, Int256] {
 			}
 		}
 	}
+}
+
+func (s *Int256Stride) Chunks() BigIntIterator[Int256, Int256Stride] {
+	return NewInt256Iterator(s)
+}
+
+func (s *Int256Stride) Matcher() BigIntMatcher[Int256] {
+	// unused due to circular dependency, see query/match_i256.go
+	return nil
+}
+
+func (s *Int256Stride) Slice() *Int256Stride {
+	return s
 }

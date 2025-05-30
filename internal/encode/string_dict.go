@@ -4,6 +4,7 @@
 package encode
 
 import (
+	"bytes"
 	"fmt"
 	"iter"
 
@@ -12,7 +13,14 @@ import (
 	"blockwatch.cc/knoxdb/pkg/num"
 )
 
+// ensure we implement required interfaces
+var (
+	_ types.StringAccessor = (*DictStringContainer)(nil)
+	_ StringContainer      = (*DictStringContainer)(nil)
+)
+
 type DictStringContainer struct {
+	readOnlyContainer[[]byte]
 	dict []byte
 	ofs  NumberContainer[uint32]
 	len  NumberContainer[uint32]
@@ -53,6 +61,10 @@ func (c *DictStringContainer) Len() int {
 func (c *DictStringContainer) Size() int {
 	return 1 + c.ofs.Size() + c.len.Size() + c.code.Size() +
 		num.UvarintLen(len(c.dict)) + len(c.dict)
+}
+
+func (c *DictStringContainer) Matcher() types.StringMatcher {
+	return c
 }
 
 func (c *DictStringContainer) Store(dst []byte) []byte {
@@ -101,8 +113,11 @@ func (c *DictStringContainer) Get(i int) []byte {
 		return nil
 	}
 	ptr := c.code.Get(i)
-	ofs := c.ofs.Get(int(ptr))
 	len := c.len.Get(int(ptr))
+	if len == 0 {
+		return nil
+	}
+	ofs := c.ofs.Get(int(ptr))
 	return c.dict[ofs : ofs+len]
 }
 
@@ -117,6 +132,10 @@ func (c *DictStringContainer) Iterator() iter.Seq2[int, []byte] {
 			}
 		}
 	}
+}
+
+func (c *DictStringContainer) Chunks() types.StringIterator {
+	return NewDictStringIterator(c)
 }
 
 func (c *DictStringContainer) AppendTo(dst types.StringWriter, sel []uint32) {
@@ -174,6 +193,10 @@ func (c *DictStringContainer) Encode(ctx *StringContext, vals types.StringAccess
 	return c
 }
 
+func (c *DictStringContainer) Cmp(i, j int) int {
+	return bytes.Compare(c.Get(i), c.Get(j))
+}
+
 func (c *DictStringContainer) MatchEqual(val []byte, bits, mask *Bitset) {
 	matchStringEqual(c, val, bits, mask)
 }
@@ -200,4 +223,61 @@ func (c *DictStringContainer) MatchGreaterEqual(val []byte, bits, mask *Bitset) 
 
 func (c *DictStringContainer) MatchBetween(a, b []byte, bits, mask *Bitset) {
 	matchStringBetween(c, a, b, bits, mask)
+}
+
+type DictStringIterator struct {
+	BaseIterator[[]byte]
+	dict  []byte
+	start []uint32
+	size  []uint32
+	code  types.NumberIterator[uint32]
+}
+
+func NewDictStringIterator(c *DictStringContainer) *DictStringIterator {
+	it := newStringIterator[DictStringIterator](TStringDictionary)
+	it.dict = c.dict
+	it.start = c.ofs.AppendTo(arena.AllocUint32(c.ofs.Len()), nil)
+	it.size = c.len.AppendTo(arena.AllocUint32(c.len.Len()), nil)
+	it.code = c.code.Chunks()
+	it.base = -1
+	it.len = c.Len()
+	it.BaseIterator.fill = it.fill
+	return it
+}
+
+func (it *DictStringIterator) Close() {
+	arena.Free(it.start)
+	arena.Free(it.size)
+	it.start = nil
+	it.size = nil
+	it.code.Close()
+	it.code = nil
+	it.dict = nil
+	it.BaseIterator.Close()
+	putStringIterator(it)
+}
+
+func (it *DictStringIterator) fill(base int) int {
+	// load code chunk at base and translate
+	it.code.Seek(base)
+	codes, n := it.code.NextChunk()
+	if n == 0 {
+		it.ofs = it.len
+		it.base = -1
+		return 0
+	}
+
+	// translate codes
+	for i := range n {
+		len := it.size[codes[i]]
+		if len == 0 {
+			it.chunk[i] = nil
+			continue
+		}
+		ofs := it.start[codes[i]]
+		it.chunk[i] = it.dict[ofs : ofs+len]
+	}
+
+	it.base = base
+	return n
 }

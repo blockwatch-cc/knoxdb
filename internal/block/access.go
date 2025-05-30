@@ -5,6 +5,8 @@ package block
 
 import (
 	"errors"
+	"iter"
+	"slices"
 	"unsafe"
 
 	"blockwatch.cc/knoxdb/internal/bitset"
@@ -19,6 +21,8 @@ import (
 var (
 	ErrBlockOutOfBounds     = errors.New("block: out of bounds access")
 	ErrBlockNotMaterialized = errors.New("block: not materialized")
+
+	_ types.NumberAccessor[int64] = (*BlockAccessor[int64])(nil)
 )
 
 // BlockAccessor provides typed access to materialized block contents.
@@ -34,10 +38,28 @@ func NewBlockAccessor[T types.Number](b *Block) BlockAccessor[T] {
 	}
 }
 
-func (a BlockAccessor[T]) Close() {
+// -------------------------------
+// NumberAccessor interface
+//
+
+// Matcher selects the appropriate match implementation. Its likely unused
+// for materialized blocks since query.Matcher functions handle all cases
+// with less overhead (avoid func table lookups for each block). Keeping
+// this implementation for reference and completeness.
+func (a BlockAccessor[T]) Matcher() types.NumberMatcher[T] {
+	assert.Always(a.block != nil, "slice: nil block")
+	assert.Always(a.block.IsMaterialized(), "matcher: block not materialized")
+	return cmp.NewMatcher[T](a.Slice())
+}
+
+func (_ BlockAccessor[T]) Close() {
 	// keep struct receiver access across all funcs, close cannot write
 	// a.block = nil
 }
+
+// -------------------------------
+// NumberReader interface
+//
 
 func (a BlockAccessor[T]) Len() int {
 	return a.block.Len()
@@ -57,29 +79,44 @@ func (a BlockAccessor[T]) Get(n int) (t T) {
 	return *(*T)(ptr)
 }
 
-func (a BlockAccessor[T]) Set(n int, v T) {
-	assert.Always(a.block != nil, "set: nil block")
-	assert.Always(a.block.IsMaterialized(), "set: block not materialized")
-	assert.Always(n < int(a.block.len), "set: block bounds out of range", "n", n, "len", a.block.len)
-	if n >= int(a.block.len) {
-		panic(ErrBlockOutOfBounds)
-	}
-	ptr := unsafe.Add(unsafe.Pointer(a.block.buf), n*int(a.block.sz))
-	*(*T)(ptr) = v
-	a.block.SetDirty()
+func (a BlockAccessor[T]) Slice() []T {
+	assert.Always(a.block != nil, "slice: nil block")
+	assert.Always(a.block.IsMaterialized(), "slice: block not materialized")
+	return unsafe.Slice((*T)(unsafe.Pointer(a.block.buf)), a.block.len)
 }
 
-func (a BlockAccessor[T]) Append(v T) {
-	assert.Always(a.block != nil, "append: nil block")
-	assert.Always(a.block.IsMaterialized(), "append: block not materialized")
-	assert.Always(a.block.len < a.block.cap, "append: block capacity exhausted", "len", a.block.len, "cap", a.block.cap)
-	if a.block.len >= a.block.cap {
-		panic(ErrBlockOutOfBounds)
+func (a BlockAccessor[T]) Iterator() iter.Seq2[int, T] {
+	return func(fn func(int, T) bool) {
+		ptr := unsafe.Pointer(a.block.buf)
+		for i := range a.block.len {
+			if !fn(int(i), *(*T)(unsafe.Add(ptr, i*uint32(a.block.sz)))) {
+				return
+			}
+		}
 	}
-	ptr := unsafe.Add(unsafe.Pointer(a.block.buf), a.block.len*uint32(a.block.sz))
-	*(*T)(ptr) = v
-	a.block.len++
-	a.block.SetDirty()
+}
+
+func (a BlockAccessor[T]) Chunks() types.NumberIterator[T] {
+	return NewBlockIterator[T](a.block)
+}
+
+func (a BlockAccessor[T]) AppendTo(dst []T, sel []uint32) []T {
+	assert.Always(a.block != nil, "appendTo: nil block")
+	assert.Always(a.block.IsMaterialized(), "appendTo: block not materialized")
+	ptr := unsafe.Pointer(a.block.buf)
+	if sel == nil {
+		dst = append(dst, unsafe.Slice((*T)(ptr), a.block.len)...)
+	} else {
+		sz := uint32(a.block.sz)
+		for _, v := range sel {
+			dst = append(dst, *(*T)(unsafe.Add(ptr, v*sz)))
+		}
+	}
+	return dst
+}
+
+func (a BlockAccessor[T]) MinMax() (T, T) {
+	return util.MinMax[T](unsafe.Slice((*T)(unsafe.Pointer(a.block.buf)), a.block.len)...)
 }
 
 func (a BlockAccessor[T]) Cmp(i, j int) int {
@@ -103,43 +140,43 @@ func (a BlockAccessor[T]) Cmp(i, j int) int {
 	}
 }
 
-func (a BlockAccessor[T]) Slice() []T {
-	assert.Always(a.block != nil, "slice: nil block")
-	assert.Always(a.block.IsMaterialized(), "slice: block not materialized")
-	return unsafe.Slice((*T)(unsafe.Pointer(a.block.buf)), a.block.len)
-}
+// -------------------------------
+// NumberWriter interface
+//
 
-// Matcher selects the appropriate match implementation. Its likely unused
-// for materialized blocks since query.Matcher functions handle all cases
-// with less overhead (avoid func table lookups for each block). Keeping
-// this implementation for reference and completeness.
-func (a BlockAccessor[T]) Matcher() types.NumberMatcher[T] {
-	assert.Always(a.block != nil, "slice: nil block")
-	assert.Always(a.block.IsMaterialized(), "matcher: block not materialized")
-	return cmp.NewMatcher[T](a.Slice())
-}
-
-func (a BlockAccessor[T]) AppendTo(dst []T, sel []uint32) []T {
-	assert.Always(a.block != nil, "appendTo: nil block")
-	assert.Always(a.block.IsMaterialized(), "appendTo: block not materialized")
-	ptr := unsafe.Pointer(a.block.buf)
-	if sel == nil {
-		dst = append(dst, unsafe.Slice((*T)(ptr), a.block.len)...)
-	} else {
-		sz := uint32(a.block.sz)
-		for _, v := range sel {
-			dst = append(dst, *(*T)(unsafe.Add(ptr, v*sz)))
-		}
+func (a BlockAccessor[T]) Append(v T) {
+	assert.Always(a.block != nil, "append: nil block")
+	assert.Always(a.block.IsMaterialized(), "append: block not materialized")
+	assert.Always(a.block.len < a.block.cap, "append: block capacity exhausted", "len", a.block.len, "cap", a.block.cap)
+	if a.block.len >= a.block.cap {
+		panic(ErrBlockOutOfBounds)
 	}
-	return dst
+	ptr := unsafe.Add(unsafe.Pointer(a.block.buf), a.block.len*uint32(a.block.sz))
+	*(*T)(ptr) = v
+	a.block.len++
+	a.block.SetDirty()
 }
 
-func (a BlockAccessor[T]) MinMax() (T, T) {
-	return util.MinMax[T](unsafe.Slice((*T)(unsafe.Pointer(a.block.buf)), a.block.len)...)
+func (a BlockAccessor[T]) Set(n int, v T) {
+	assert.Always(a.block != nil, "set: nil block")
+	assert.Always(a.block.IsMaterialized(), "set: block not materialized")
+	assert.Always(n < int(a.block.len), "set: block bounds out of range", "n", n, "len", a.block.len)
+	if n >= int(a.block.len) {
+		panic(ErrBlockOutOfBounds)
+	}
+	ptr := unsafe.Add(unsafe.Pointer(a.block.buf), n*int(a.block.sz))
+	*(*T)(ptr) = v
+	a.block.SetDirty()
+}
+
+func (a BlockAccessor[T]) Delete(i, j int) {
+	_ = slices.Delete(a.block.buffer(), i*int(a.block.sz), j*int(a.block.sz))
+	a.block.len -= uint32(j - i)
+	a.block.SetDirty()
 }
 
 // ---------------------------------------------
-// Block Accessors
+// Block Accessor Selection
 //
 
 func (b *Block) Int64() types.NumberAccessor[int64] {
@@ -212,62 +249,25 @@ func (b *Block) Float32() types.NumberAccessor[float32] {
 	return b.any.(types.NumberAccessor[float32])
 }
 
-// -------------------------------------
-
-// TODO: can we wrap these types into an accessor interface of type T?
-// type WrappedAccessor[E any] struct {
-// 	types.VectorAccessor[E]
-// }
-
-// func (a *WrappedAccessor[E]) Get(i int) E                                     { return a.Get(i) }
-// func (a *WrappedAccessor[E]) Set(i int, val E)                                { a.Set(i, val) }
-// func (a *WrappedAccessor[E]) Delete(i int)                                    { a.Delete(i) }
-// func (a *WrappedAccessor[E]) Close()                                          {}
-// func (a *WrappedAccessor[E]) Append(val E)                                    { a.Append(val) }
-// func (a *WrappedAccessor[E]) AppendTo(to types.VectorSetter[E], sel []uint32) { a.AppendTo(to, sel) }
-// func (a *WrappedAccessor[E]) Len() int                                        { return a.Len() }
-// func (a *WrappedAccessor[E]) Size() int                                       { return a.Size() }
-// func (a *WrappedAccessor[E]) Iterator() iter.Seq2[int, E]                     { return a.Iterator() }
-
-// TODO: is there a benefit in hiding concrete implementations for
-// StringPool, Bitset, IntXXXStride ?
-// var (
-// 	_ types.VectorGetter[[]byte]     = (*stringx.StringPool)(nil)
-// 	_ types.VectorGetter[num.Int128] = (*num.Int128Stride)(nil)
-// 	_ types.VectorGetter[num.Int256] = (*num.Int256Stride)(nil)
-// 	_ types.VectorGetter[bool]       = (*bitset.Bitset)(nil)
-// )
-
-// -------------------------------------
-
-// TODO: handle compressed containers here
-// func Matcher() (types.VectorMatcher[[]byte], bool)
-// func Matcher() (types.VectorMatcher[bool], bool)
-// func Matcher() (types.VectorMatcher[num.Int128], bool)
-// func Matcher() (types.VectorMatcher[num.Int256], bool)
-
-// TODO: need Int128Accessor type (can we use VectorAccessor[num.Int128]?)
-
-func (b *Block) Int128() *num.Int128Stride {
+func (b *Block) Int128() num.Int128Accessor {
 	if b.IsMaterialized() {
 		return b.any.(*num.Int128Stride)
 	}
-	return nil // TODO
+	return b.any.(num.Int128Accessor)
 }
 
-func (b *Block) Int256() *num.Int256Stride {
+func (b *Block) Int256() num.Int256Accessor {
 	if b.IsMaterialized() {
 		return b.any.(*num.Int256Stride)
 	}
-	return nil // TODO
+	return b.any.(num.Int256Accessor)
 }
 
-func (b *Block) Bytes() *stringx.StringPool {
+func (b *Block) Bytes() types.StringAccessor {
 	if b.IsMaterialized() {
 		return b.any.(*stringx.StringPool)
 	}
-	// return b.any.(types.StringAccessor)
-	return nil // TODO
+	return b.any.(types.StringAccessor)
 }
 
 func (b *Block) Bool() *bitset.Bitset {

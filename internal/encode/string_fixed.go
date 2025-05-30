@@ -4,6 +4,7 @@
 package encode
 
 import (
+	"bytes"
 	"fmt"
 	"iter"
 
@@ -12,7 +13,14 @@ import (
 	"blockwatch.cc/knoxdb/pkg/num"
 )
 
+// ensure we implement required interfaces
+var (
+	_ types.StringAccessor = (*FixedStringContainer)(nil)
+	_ StringContainer      = (*FixedStringContainer)(nil)
+)
+
 type FixedStringContainer struct {
+	readOnlyContainer[[]byte]
 	buf  []byte
 	sz   int
 	n    int
@@ -42,6 +50,10 @@ func (c *FixedStringContainer) Len() int {
 
 func (c *FixedStringContainer) Size() int {
 	return 1 + num.UvarintLen(c.n) + num.UvarintLen(c.sz) + len(c.buf)
+}
+
+func (c *FixedStringContainer) Matcher() types.StringMatcher {
+	return c
 }
 
 func (c *FixedStringContainer) Store(dst []byte) []byte {
@@ -86,6 +98,10 @@ func (c *FixedStringContainer) Iterator() iter.Seq2[int, []byte] {
 	}
 }
 
+func (c *FixedStringContainer) Chunks() types.StringIterator {
+	return NewFixedStringIterator(c)
+}
+
 func (c *FixedStringContainer) AppendTo(dst types.StringWriter, sel []uint32) {
 	if sel == nil {
 		var i int
@@ -110,6 +126,10 @@ func (c *FixedStringContainer) Encode(ctx *StringContext, vals types.StringAcces
 		c.buf = append(c.buf, v...)
 	}
 	return c
+}
+
+func (c *FixedStringContainer) Cmp(i, j int) int {
+	return bytes.Compare(c.Get(i), c.Get(j))
 }
 
 func (c *FixedStringContainer) MatchEqual(val []byte, bits, mask *Bitset) {
@@ -138,4 +158,61 @@ func (c *FixedStringContainer) MatchGreaterEqual(val []byte, bits, mask *Bitset)
 
 func (c *FixedStringContainer) MatchBetween(a, b []byte, bits, mask *Bitset) {
 	matchStringBetween(c, a, b, bits, mask)
+}
+
+type FixedStringIterator struct {
+	BaseIterator[[]byte]
+	buf []byte
+	sz  int
+}
+
+func NewFixedStringIterator(c *FixedStringContainer) *FixedStringIterator {
+	it := newStringIterator[FixedStringIterator](TStringFixed)
+	it.buf = c.buf
+	it.sz = c.sz
+	it.base = -1
+	it.len = c.n
+	it.BaseIterator.fill = it.fill
+	return it
+}
+
+func (it *FixedStringIterator) Close() {
+	it.buf = nil
+	it.sz = 0
+	it.BaseIterator.Close()
+	putStringIterator(it)
+}
+
+func (it *FixedStringIterator) fill(base int) int {
+	n := min(CHUNK_SIZE, it.len-base)
+
+	// translate codes
+	var i int
+	for range n / 16 {
+		it.chunk[i] = it.buf[(base+i)*it.sz : (base+i+1)*it.sz]
+		it.chunk[i+1] = it.buf[(base+i+1)*it.sz : (base+i+2)*it.sz]
+		it.chunk[i+2] = it.buf[(base+i+2)*it.sz : (base+i+2)*it.sz]
+		it.chunk[i+3] = it.buf[(base+i+3)*it.sz : (base+i+3)*it.sz]
+		it.chunk[i+4] = it.buf[(base+i+4)*it.sz : (base+i+4)*it.sz]
+		it.chunk[i+5] = it.buf[(base+i+5)*it.sz : (base+i+5)*it.sz]
+		it.chunk[i+6] = it.buf[(base+i+6)*it.sz : (base+i+6)*it.sz]
+		it.chunk[i+7] = it.buf[(base+i+7)*it.sz : (base+i+7)*it.sz]
+		it.chunk[i+8] = it.buf[(base+i+8)*it.sz : (base+i+8)*it.sz]
+		it.chunk[i+9] = it.buf[(base+i+9)*it.sz : (base+i+9)*it.sz]
+		it.chunk[i+10] = it.buf[(base+i+10)*it.sz : (base+i+10)*it.sz]
+		it.chunk[i+11] = it.buf[(base+i+11)*it.sz : (base+i+11)*it.sz]
+		it.chunk[i+12] = it.buf[(base+i+12)*it.sz : (base+i+12)*it.sz]
+		it.chunk[i+13] = it.buf[(base+i+13)*it.sz : (base+i+13)*it.sz]
+		it.chunk[i+14] = it.buf[(base+i+14)*it.sz : (base+i+14)*it.sz]
+		it.chunk[i+15] = it.buf[(base+i+15)*it.sz : (base+i+15)*it.sz]
+		i += 16
+	}
+	for i < n {
+		it.chunk[i] = it.buf[(base+i)*it.sz : (base+i+1)*it.sz]
+		i++
+	}
+	clear(it.chunk[n:])
+
+	it.base = base
+	return n
 }
