@@ -90,7 +90,7 @@ func (c *FixedStringContainer) Iterator() iter.Seq2[int, []byte] {
 	return func(fn func(int, []byte) bool) {
 		var n int
 		for i := range c.n {
-			if !fn(i, c.buf[n:n+c.sz]) {
+			if !fn(i, c.buf[n:n+c.sz:n+c.sz]) {
 				return
 			}
 			n += c.sz
@@ -179,6 +179,7 @@ func NewFixedStringIterator(c *FixedStringContainer) *FixedStringIterator {
 func (it *FixedStringIterator) Close() {
 	it.buf = nil
 	it.sz = 0
+	clear(it.chunk[:])
 	it.BaseIterator.Close()
 	putStringIterator(it)
 }
@@ -189,26 +190,26 @@ func (it *FixedStringIterator) fill(base int) int {
 	// translate codes
 	var i int
 	for range n / 16 {
-		it.chunk[i] = it.buf[(base+i)*it.sz : (base+i+1)*it.sz]
-		it.chunk[i+1] = it.buf[(base+i+1)*it.sz : (base+i+2)*it.sz]
-		it.chunk[i+2] = it.buf[(base+i+2)*it.sz : (base+i+2)*it.sz]
-		it.chunk[i+3] = it.buf[(base+i+3)*it.sz : (base+i+3)*it.sz]
-		it.chunk[i+4] = it.buf[(base+i+4)*it.sz : (base+i+4)*it.sz]
-		it.chunk[i+5] = it.buf[(base+i+5)*it.sz : (base+i+5)*it.sz]
-		it.chunk[i+6] = it.buf[(base+i+6)*it.sz : (base+i+6)*it.sz]
-		it.chunk[i+7] = it.buf[(base+i+7)*it.sz : (base+i+7)*it.sz]
-		it.chunk[i+8] = it.buf[(base+i+8)*it.sz : (base+i+8)*it.sz]
-		it.chunk[i+9] = it.buf[(base+i+9)*it.sz : (base+i+9)*it.sz]
-		it.chunk[i+10] = it.buf[(base+i+10)*it.sz : (base+i+10)*it.sz]
-		it.chunk[i+11] = it.buf[(base+i+11)*it.sz : (base+i+11)*it.sz]
-		it.chunk[i+12] = it.buf[(base+i+12)*it.sz : (base+i+12)*it.sz]
-		it.chunk[i+13] = it.buf[(base+i+13)*it.sz : (base+i+13)*it.sz]
-		it.chunk[i+14] = it.buf[(base+i+14)*it.sz : (base+i+14)*it.sz]
-		it.chunk[i+15] = it.buf[(base+i+15)*it.sz : (base+i+15)*it.sz]
+		it.chunk[i] = it.buf[(base+i)*it.sz : (base+i+1)*it.sz : (base+i+1)*it.sz]
+		it.chunk[i+1] = it.buf[(base+i+1)*it.sz : (base+i+2)*it.sz : (base+i+2)*it.sz]
+		it.chunk[i+2] = it.buf[(base+i+2)*it.sz : (base+i+3)*it.sz : (base+i+3)*it.sz]
+		it.chunk[i+3] = it.buf[(base+i+3)*it.sz : (base+i+4)*it.sz : (base+i+4)*it.sz]
+		it.chunk[i+4] = it.buf[(base+i+4)*it.sz : (base+i+5)*it.sz : (base+i+5)*it.sz]
+		it.chunk[i+5] = it.buf[(base+i+5)*it.sz : (base+i+6)*it.sz : (base+i+6)*it.sz]
+		it.chunk[i+6] = it.buf[(base+i+6)*it.sz : (base+i+7)*it.sz : (base+i+7)*it.sz]
+		it.chunk[i+7] = it.buf[(base+i+7)*it.sz : (base+i+8)*it.sz : (base+i+8)*it.sz]
+		it.chunk[i+8] = it.buf[(base+i+8)*it.sz : (base+i+9)*it.sz : (base+i+9)*it.sz]
+		it.chunk[i+9] = it.buf[(base+i+9)*it.sz : (base+i+10)*it.sz : (base+i+10)*it.sz]
+		it.chunk[i+10] = it.buf[(base+i+10)*it.sz : (base+i+11)*it.sz : (base+i+11)*it.sz]
+		it.chunk[i+11] = it.buf[(base+i+11)*it.sz : (base+i+12)*it.sz : (base+i+12)*it.sz]
+		it.chunk[i+12] = it.buf[(base+i+12)*it.sz : (base+i+13)*it.sz : (base+i+13)*it.sz]
+		it.chunk[i+13] = it.buf[(base+i+13)*it.sz : (base+i+14)*it.sz : (base+i+14)*it.sz]
+		it.chunk[i+14] = it.buf[(base+i+14)*it.sz : (base+i+15)*it.sz : (base+i+15)*it.sz]
+		it.chunk[i+15] = it.buf[(base+i+15)*it.sz : (base+i+16)*it.sz : (base+i+16)*it.sz]
 		i += 16
 	}
 	for i < n {
-		it.chunk[i] = it.buf[(base+i)*it.sz : (base+i+1)*it.sz]
+		it.chunk[i] = it.buf[(base+i)*it.sz : (base+i+1)*it.sz : (base+i+1)*it.sz]
 		i++
 	}
 	clear(it.chunk[n:])

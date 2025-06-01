@@ -13,6 +13,9 @@ import (
 	"golang.org/x/exp/constraints"
 )
 
+// ensure we implement required interfaces
+var _ BitmapAccessor = (*Bitset)(nil)
+
 var bitsetPool = sync.Pool{
 	New: func() any { return &Bitset{} },
 }
@@ -67,14 +70,13 @@ func NewFromIndexes[T constraints.Integer](idxs []T) *Bitset {
 }
 
 // Clear clears the bitset contents and sets its size to zero.
-func (s *Bitset) Clear() *Bitset {
+func (s *Bitset) Clear() {
 	if len(s.buf) > 0 && s.cnt != 0 {
 		clear(s.buf)
 	}
 	s.size = 0
 	s.cnt = 0
 	s.buf = s.buf[:0]
-	return s
 }
 
 // Close resets size to zero and returns the internal buffer back to
@@ -94,28 +96,26 @@ func (s *Bitset) Close() {
 	bitsetPool.Put(s)
 }
 
-func (s *Bitset) Set(i int) *Bitset {
+func (s *Bitset) Set(i int) {
 	if i < 0 || i >= s.size {
-		return s
+		return
 	}
 	s.buf[i>>3] |= bitmask[i&7]
 	s.cnt = -1
-	return s
 }
 
-func (s *Bitset) Unset(i int) *Bitset {
+func (s *Bitset) Unset(i int) {
 	if i < 0 || i >= s.size {
-		return s
+		return
 	}
 	mask := bitmask[i&7]
 	if s.cnt > 0 && s.buf[i>>3]&mask > 0 {
 		s.cnt--
 	}
 	s.buf[i>>3] &^= mask
-	return s
 }
 
-func (s *Bitset) SetFromBytes(buf []byte, size int, reverse bool) *Bitset {
+func (s *Bitset) SetFromBytes(buf []byte, size int, reverse bool) {
 	l := bitFieldLen(size)
 	if cap(s.buf) < l {
 		if !s.noclose {
@@ -140,14 +140,13 @@ func (s *Bitset) SetFromBytes(buf []byte, size int, reverse bool) *Bitset {
 	if size&7 > 0 {
 		s.buf[l-1] &= bytemask(size)
 	}
-	return s
 }
 
 // Sets al bits in range. Start and end indices form a closed interval
 // [start, end], i.e. boundaries are inclusive.
-func (s *Bitset) SetRange(start, end int) *Bitset {
+func (s *Bitset) SetRange(start, end int) {
 	if start > s.size {
-		return s
+		return
 	}
 	// sanitize bounds
 	start = max(0, start)
@@ -162,7 +161,7 @@ func (s *Bitset) SetRange(start, end int) *Bitset {
 		}
 		s.buf[x] |= b
 		s.cnt = -1
-		return s
+		return
 	}
 
 	// long range across bytes
@@ -188,8 +187,6 @@ func (s *Bitset) SetRange(start, end int) *Bitset {
 
 	// reset count
 	s.cnt = -1
-
-	return s
 }
 
 func (s *Bitset) SetIndexes(idxs []int) *Bitset {
@@ -546,12 +543,11 @@ func (s *Bitset) Fill(b byte) *Bitset {
 }
 
 // Append grows bitset by 1 and sets the trailing bit to val
-func (s *Bitset) Append(val bool) *Bitset {
+func (s *Bitset) Append(val bool) {
 	s.Grow(1)
 	if val {
 		s.setbit(s.size - 1)
 	}
-	return s
 }
 
 // AppendTo appends selected values to dst.
@@ -619,8 +615,9 @@ func (s *Bitset) AppendRange(src *Bitset, i, j int) *Bitset {
 
 // Delete removes n values in range s[i:j] shrinking s and moving
 // tail values. Range indices form a half open interval [i,j) similar
-// to Go slices.
-func (s *Bitset) Delete(i, j int) *Bitset {
+// to Go slices. Note deletion changes indices of bits after the
+// deleted range.
+func (s *Bitset) Delete(i, j int) {
 	// clamp
 	i = max(0, i)
 	j = min(j, s.size)
@@ -641,7 +638,6 @@ func (s *Bitset) Delete(i, j int) *Bitset {
 
 	// shrink and reset counter
 	s.Resize(s.size - j + i)
-	return s
 }
 
 func (s *Bitset) Bytes() []byte {

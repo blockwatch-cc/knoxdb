@@ -176,7 +176,7 @@ func BenchmarkIntDecode(b *testing.B) {
 			enc := NewInt[int64](scheme).Encode(ctx, data)
 			buf := enc.Store(make([]byte, 0, enc.Size()))
 			dst := make([]int64, 0, c.N)
-			once := etests.ShowInfo
+			b.Log(enc.Info())
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
 				b.SetBytes(int64(c.N * 8))
 				for b.Loop() {
@@ -185,10 +185,6 @@ func BenchmarkIntDecode(b *testing.B) {
 					require.NoError(b, err)
 					dst = enc2.AppendTo(dst, nil)
 					dst = dst[:0]
-					if once {
-						b.Log(enc2.Info())
-						once = false
-					}
 					enc2.Close()
 				}
 				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
@@ -239,7 +235,7 @@ func BenchmarkIntIterator(b *testing.B) {
 			ctx := AnalyzeInt(data, true)
 			enc := NewInt[int64](scheme).Encode(ctx, data)
 			buf := enc.Store(make([]byte, 0, enc.Size()))
-			once := etests.ShowInfo
+			b.Log(enc.Info())
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
 				b.ReportAllocs()
 				b.SetBytes(int64(c.N * 8))
@@ -247,10 +243,6 @@ func BenchmarkIntIterator(b *testing.B) {
 					enc2 := NewInt[int64](scheme)
 					_, err := enc2.Load(buf)
 					require.NoError(b, err)
-					if once {
-						b.Log(enc2.Info())
-						once = false
-					}
 					it := enc2.Chunks()
 					for {
 						_, n := it.NextChunk()

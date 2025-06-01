@@ -9,7 +9,6 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/bitset"
 	etests "blockwatch.cc/knoxdb/internal/encode/tests"
-	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/slicex"
 	"blockwatch.cc/knoxdb/pkg/util"
@@ -30,6 +29,11 @@ func TestBitmapEncode(t *testing.T) {
 				require.Equal(t, c.Data.Contains(i), enc.Get(i), "bit %d", i)
 			}
 
+			// validate iterator
+			for i := range enc.Iterator() {
+				require.True(t, enc.Get(i))
+			}
+
 			// serialize to buffer
 			buf := make([]byte, 0, enc.Size())
 			buf = enc.Store(buf)
@@ -47,15 +51,20 @@ func TestBitmapEncode(t *testing.T) {
 				require.Equal(t, c.Data.Contains(i), enc2.Get(i), "bit %d", i)
 			}
 
+			// validate iterator
+			for i := range enc2.Iterator() {
+				require.True(t, enc2.Get(i))
+			}
+
 			// validate append
 			dst := bitset.New(c.N).Resize(0)
-			dst = enc.AppendTo(dst, nil)
+			enc.AppendTo(dst, nil)
 			require.Equal(t, c.N, dst.Len())
 			require.Equal(t, c.Data.Bytes(), dst.Bytes())
 
 			// validate append selector
 			sel := util.RandUintsn[uint32](max(1, c.N/2), uint32(c.N))
-			dst = enc2.AppendTo(dst.Resize(0), sel)
+			enc2.AppendTo(dst.Resize(0), sel)
 			require.Equal(t, len(sel), dst.Len())
 			for i, v := range sel {
 				require.Equal(t, c.Data.Contains(int(v)), dst.Contains(i), "sel[%d]", v)
@@ -252,114 +261,49 @@ func bitmapTestCompare2(t *testing.T, cmp bitmapCompareFunc2, src *bitset.Bitset
 	bits.Zero()
 }
 
-// ---------------------------------------------
-// Benchmarks
-//
+func TestBitmapIterator(t *testing.T) {
+	for _, sz := range etests.ItSizes {
+		for _, c := range MakeBitmapTests(sz) {
+			t.Run(fmt.Sprintf("%s/%d", c.Name, sz), func(t *testing.T) {
+				src := c.Data
+				enc := NewBitmap()
+				enc.Encode(nil, src)
+				t.Logf("Info: %s", enc.Info())
 
-type Benchmark struct {
-	Name string
-	N    int
-	Data *bitset.Bitset
-}
+				// --------------------------
+				// test next
+				//
+				for i := range enc.Iterator() {
+					require.True(t, src.Get(i), "invalid val at pos=%d", i)
+				}
 
-func MakeBenchmarks(n int) []Benchmark {
-	return []Benchmark{
-		{"dense", n, bitset.New(n).SetIndexes(seq(n/2, 2))},
-		{"sparse", n, bitset.New(n).SetIndexes(seq(n/32, 32))},
-	}
-}
-
-func BenchmarkBitmapEncode(b *testing.B) {
-	for _, sz := range tests.BenchmarkSizes {
-		for _, c := range MakeBenchmarks(sz.N) {
-			once := etests.ShowInfo
-			b.Run(c.Name+"/"+sz.Name, func(b *testing.B) {
-				b.ReportAllocs()
-				b.SetBytes(int64(c.Data.Len() / 8))
-				var sz int
-				for b.Loop() {
-					enc := NewBitmap().Encode(nil, c.Data)
-					if once {
-						b.Log(enc.Info())
-						once = false
+				// --------------------
+				// test chunk
+				//
+				it := enc.Chunks()
+				if it == nil {
+					t.Skip()
+				}
+				var seen int
+				for {
+					dst, ok := it.Next()
+					if !ok {
+						break
 					}
-					sz += enc.Size()
-					enc.Close()
-				}
-				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
-				b.ReportMetric(float64(sz*8)/float64(b.N)/float64(c.N), "bits/val")
-				b.ReportMetric(100*float64(sz)/float64(b.N*c.N*16), "c(%)")
-			})
-		}
-	}
-}
-
-func BenchmarkBitmapEncodeAndStore(b *testing.B) {
-	for _, sz := range tests.BenchmarkSizes {
-		for _, c := range MakeBenchmarks(sz.N) {
-			once := etests.ShowInfo
-			b.Run(c.Name+"/"+sz.Name, func(b *testing.B) {
-				b.ReportAllocs()
-				b.SetBytes(int64(c.Data.Len() / 8))
-				var sz int
-				for b.Loop() {
-					enc := NewBitmap().Encode(nil, c.Data)
-					buf := enc.Store(make([]byte, 0, enc.Size()))
-					require.LessOrEqual(b, len(buf), enc.Size())
-					if once {
-						b.Log(enc.Info())
-						once = false
+					n := len(dst)
+					require.GreaterOrEqual(t, n, 1, "next chunk returned empty dst")
+					require.LessOrEqual(t, seen+n, src.Count(), "next chunk returned too large n")
+					for i, v := range dst[:n] {
+						require.True(t, src.Get(v), "invalid at pos=%d", seen+i)
 					}
-					sz += enc.Size()
-					enc.Close()
+					seen += n
 				}
-				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
-				b.ReportMetric(float64(sz*8)/float64(b.N)/float64(c.N), "bits/val")
-				b.ReportMetric(100*float64(sz)/float64(b.N*c.N*16), "c(%)")
+				require.Equal(t, src.Count(), seen, "next chunk did not return all values")
+				it.Close()
 			})
-		}
-	}
-}
-
-func BenchmarkBitmapDecode(b *testing.B) {
-	for _, sz := range tests.BenchmarkSizes {
-		for _, c := range MakeBenchmarks(sz.N) {
-			enc := NewBitmap().Encode(nil, c.Data)
-			buf := enc.Store(make([]byte, 0, enc.Size()))
-			dst := bitset.New(c.N)
-			once := etests.ShowInfo
-			b.Run(c.Name+"/"+sz.Name, func(b *testing.B) {
-				b.SetBytes(int64(c.Data.Len() / 8))
-				for b.Loop() {
-					enc2, err := LoadBitmap(buf)
-					require.NoError(b, err)
-					dst = enc2.AppendTo(dst, nil)
-					if once {
-						b.Log(enc2.Info())
-						once = false
-					}
-					dst.Resize(0)
-					enc2.Close()
-				}
-				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
-			})
-		}
-	}
-}
-
-func BenchmarkBitmapCmp(b *testing.B) {
-	for _, sz := range tests.BenchmarkSizes {
-		for _, c := range MakeBenchmarks(sz.N) {
-			enc := NewBitmap().Encode(nil, c.Data)
-			bits := bitset.New(c.N)
-			b.Log(enc.Info())
-			b.Run(c.Name+"/"+sz.Name, func(b *testing.B) {
-				b.SetBytes(int64(c.Data.Len() / 8))
-				for b.Loop() {
-					enc.MatchEqual(true, bits, nil)
-				}
-				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
-			})
+			if t.Failed() {
+				t.FailNow()
+			}
 		}
 	}
 }

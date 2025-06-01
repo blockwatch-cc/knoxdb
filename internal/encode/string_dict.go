@@ -114,9 +114,6 @@ func (c *DictStringContainer) Get(i int) []byte {
 	}
 	ptr := c.code.Get(i)
 	len := c.len.Get(int(ptr))
-	if len == 0 {
-		return nil
-	}
 	ofs := c.ofs.Get(int(ptr))
 	return c.dict[ofs : ofs+len]
 }
@@ -127,7 +124,7 @@ func (c *DictStringContainer) Iterator() iter.Seq2[int, []byte] {
 			ptr := c.code.Get(i)
 			ofs := c.ofs.Get(int(ptr))
 			len := c.len.Get(int(ptr))
-			if !fn(i, c.dict[ofs:ofs+len]) {
+			if !fn(i, c.dict[ofs:ofs+len:ofs+len]) {
 				return
 			}
 		}
@@ -253,6 +250,7 @@ func (it *DictStringIterator) Close() {
 	it.code.Close()
 	it.code = nil
 	it.dict = nil
+	clear(it.chunk[:])
 	it.BaseIterator.Close()
 	putStringIterator(it)
 }
@@ -269,13 +267,10 @@ func (it *DictStringIterator) fill(base int) int {
 
 	// translate codes
 	for i := range n {
-		len := it.size[codes[i]]
-		if len == 0 {
-			it.chunk[i] = nil
-			continue
-		}
-		ofs := it.start[codes[i]]
-		it.chunk[i] = it.dict[ofs : ofs+len]
+		code := codes[i]
+		len := it.size[code]
+		ofs := it.start[code]
+		it.chunk[i] = it.dict[ofs : ofs+len : ofs+len]
 	}
 
 	it.base = base

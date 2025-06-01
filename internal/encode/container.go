@@ -114,7 +114,7 @@ type NumberContainer[T types.Number] interface {
 }
 
 // Use to add noop functions required by the common interface to each container type.
-type readOnlyContainer[T types.Number | []byte | num.Int128 | num.Int256] struct{}
+type readOnlyContainer[T types.Number | []byte | num.Int128 | num.Int256 | bool] struct{}
 
 // unsupported writer and accessor interfaces (used on materialized blocks only,
 // but still part of the common interface)

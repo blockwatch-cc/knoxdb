@@ -7,6 +7,7 @@
 package avx512
 
 import (
+	"blockwatch.cc/knoxdb/internal/cpu"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
@@ -28,7 +29,7 @@ func DecodeInt64(dst []int64, src []byte, minv int64) (int, error) {
 }
 
 func init() {
-	if util.UseAVX512_F {
+	if cpu.UseAVX512_F {
 		initUint64AVX512()
 	}
 }

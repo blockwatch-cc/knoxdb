@@ -91,6 +91,38 @@ func TestStringEncode(t *testing.T) {
 	testStringEncode(t, TStringDictionary)
 }
 
+func TestStringFixed(t *testing.T) {
+	testStringContainer(t, TStringFixed)
+}
+
+func TestStringCompact(t *testing.T) {
+	testStringContainer(t, TStringCompact)
+}
+
+func TestStringDict(t *testing.T) {
+	testStringContainer(t, TStringDictionary)
+}
+
+func testStringContainer(t *testing.T, scheme ContainerType) {
+	// general
+	testStringEncode(t, scheme)
+	if t.Failed() {
+		t.FailNow()
+	}
+
+	// iterator
+	testStringIterator(t, scheme)
+	if t.Failed() {
+		t.FailNow()
+	}
+
+	// compare
+	testStringCompare(t, scheme)
+	if t.Failed() {
+		t.FailNow()
+	}
+}
+
 func testStringEncode(t *testing.T, scheme ContainerType) {
 	for _, c := range MakeShortStringTests(scheme) {
 		t.Run(fmt.Sprintf("%s", c.Name), func(t *testing.T) {
@@ -153,10 +185,10 @@ func testStringEncode(t *testing.T, scheme ContainerType) {
 	}
 }
 
-func testStringContainerCompare(t *testing.T, scheme ContainerType) {
+func testStringCompare(t *testing.T, scheme ContainerType) {
 	// validate matchers
 	for _, sz := range etests.CompareSizes {
-		t.Run(fmt.Sprintf("cmp/%d", sz), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%s/cmp/%d", scheme, sz), func(t *testing.T) {
 			src := etests.GenForStringScheme(int(scheme), sz)
 			enc := NewString(scheme)
 			ctx := AnalyzeString(src)
@@ -254,9 +286,11 @@ func testStringCompareFunc2(t *testing.T, cmp StringCompareFunc2, src *stringx.S
 	bits.Zero()
 
 	// partial range
-	from, to := src.Get(2), src.Get(3)
-	if bytes.Compare(from, to) > 0 {
-		from, to = to, from
+	if src.Len() > 3 {
+		from, to := src.Get(2), src.Get(3)
+		if bytes.Compare(from, to) > 0 {
+			from, to = to, from
+		}
 	}
 
 	// out of bounds (over)
@@ -356,6 +390,104 @@ func EnsureStringBits(t *testing.T, vals *stringx.StringPool, val, val2 []byte, 
 		for i, v := range vals.Iterator() {
 			require.Equal(t, bytes.Compare(v, val) >= 0 && bytes.Compare(v, val2) <= 0, bits.Contains(i), "bit=%d val=%v %s [%v,%v]",
 				i, v, mode, val, val2)
+		}
+	}
+}
+
+func testStringIterator(t *testing.T, scheme ContainerType) {
+	for _, sz := range etests.ItSizes {
+		t.Run(fmt.Sprintf("%s/it/%d", scheme, sz), func(t *testing.T) {
+			// setup
+			src := etests.GenForStringScheme(int(scheme), sz)
+			enc := NewString(scheme)
+			ctx := AnalyzeString(src)
+			enc.Encode(ctx, src)
+			t.Logf("Info: %s", enc.Info())
+
+			// --------------------------
+			// test next
+			//
+			for i, v := range enc.Iterator() {
+				require.Equal(t, src.Get(i), v, "invalid val at pos=%d", i)
+			}
+
+			// --------------------
+			// test chunk
+			//
+			it := enc.Chunks()
+			if it == nil {
+				t.Skip()
+			}
+			var seen int
+			for {
+				dst, n := it.NextChunk()
+				if n == 0 {
+					break
+				}
+				require.GreaterOrEqual(t, n, 0, "next chunk returned negative n")
+				require.LessOrEqual(t, seen+n, src.Len(), "next chunk returned too large n")
+				for i, v := range dst[:n] {
+					require.Equal(t, src.Get(seen+i), v, "invalid val=%q pos=%d src=%q", v, seen+i, src.Get(seen+i))
+				}
+				seen += n
+			}
+			require.Equal(t, src.Len(), seen, "next chunk did not return all values")
+			it.Close()
+
+			// --------------------------
+			// test skip
+			it = enc.Chunks()
+			seen = it.SkipChunk()
+			seen += it.SkipChunk()
+			for {
+				dst, n := it.NextChunk()
+				if n == 0 {
+					break
+				}
+				require.GreaterOrEqual(t, n, 0, "next chunk returned negative n")
+				require.LessOrEqual(t, seen+n, src.Len(), "next chunk returned too large n")
+				for i, v := range dst[:n] {
+					require.Equal(t, src.Get(seen+i), v, "invalid val=%d pos=%d src=%d after skip", v, seen+i, src.Get(seen+i))
+				}
+				seen += n
+			}
+			require.Equal(t, src.Len(), seen, "skip&next chunk did not return all values")
+			it.Close()
+
+			// --------------------------
+			// test seek
+			//
+			it = enc.Chunks()
+			for range src.Len() {
+				i := util.RandIntn(src.Len())
+				ok := it.Seek(i)
+				require.True(t, ok, "seek to existing pos %d/%d failed", i, src.Len())
+				vals, n := it.NextChunk()
+				require.Greater(t, n, 0, "next after seek to existing pos %d/%d failed", i, src.Len())
+
+				// FIXME: ignore s8b iterator which seeks to encoder word boundaries only
+				if enc.Type() != TIntSimple8 {
+					require.Equal(t, src.Get(i), vals[i%CHUNK_SIZE], "invalid val at pos=%d after seek, vals=%v ", i, vals[:n])
+				}
+			}
+
+			// seek to invalid values
+			require.False(t, it.Seek(-1), "seek to negative")
+			_, n := it.NextChunk()
+			require.Equal(t, 0, n, "next after bad seek")
+
+			require.False(t, it.Seek(src.Len()), "seek to end")
+			_, n = it.NextChunk()
+			require.Equal(t, 0, n, "next after bad seek to end")
+
+			require.False(t, it.Seek(src.Len()+1), "seek beyond end")
+			_, n = it.NextChunk()
+			require.Equal(t, 0, n, "next after bad seek to end")
+
+			it.Close()
+		})
+		if t.Failed() {
+			t.FailNow()
 		}
 	}
 }

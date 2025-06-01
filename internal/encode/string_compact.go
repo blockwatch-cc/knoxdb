@@ -100,9 +100,6 @@ func (c *CompactStringContainer) Get(i int) []byte {
 		return nil
 	}
 	len := c.len.Get(i)
-	if len == 0 {
-		return nil
-	}
 	ofs := c.ofs.Get(i)
 	return c.buf[ofs : ofs+len]
 }
@@ -112,7 +109,7 @@ func (c *CompactStringContainer) Iterator() iter.Seq2[int, []byte] {
 		for i := range c.n {
 			ofs := c.ofs.Get(i)
 			len := c.len.Get(i)
-			if !fn(i, c.buf[ofs:ofs+len]) {
+			if !fn(i, c.buf[ofs:ofs+len:ofs+len]) {
 				return
 			}
 		}
@@ -229,6 +226,7 @@ func (it *CompactStringIterator) Close() {
 	it.start = nil
 	it.size.Close()
 	it.size = nil
+	clear(it.chunk[:])
 	it.BaseIterator.Close()
 	putStringIterator(it)
 }
@@ -245,29 +243,34 @@ func (it *CompactStringIterator) fill(base int) int {
 		return 0
 	}
 
-	// translate codes
+	// translate
 	var i int
 	for range n / 16 {
-		it.chunk[i] = it.buf[ofs[i] : ofs[i]+len[i]]
-		it.chunk[i+1] = it.buf[ofs[i+1] : ofs[i]+len[i+1]]
-		it.chunk[i+2] = it.buf[ofs[i+2] : ofs[i]+len[i+2]]
-		it.chunk[i+3] = it.buf[ofs[i+3] : ofs[i]+len[i+3]]
-		it.chunk[i+4] = it.buf[ofs[i+4] : ofs[i]+len[i+4]]
-		it.chunk[i+5] = it.buf[ofs[i+5] : ofs[i]+len[i+5]]
-		it.chunk[i+6] = it.buf[ofs[i+6] : ofs[i]+len[i+6]]
-		it.chunk[i+7] = it.buf[ofs[i+7] : ofs[i]+len[i+7]]
-		it.chunk[i+8] = it.buf[ofs[i+8] : ofs[i]+len[i+8]]
-		it.chunk[i+9] = it.buf[ofs[i+9] : ofs[i]+len[i+9]]
-		it.chunk[i+10] = it.buf[ofs[i+10] : ofs[i]+len[i+10]]
-		it.chunk[i+11] = it.buf[ofs[i+11] : ofs[i]+len[i+11]]
-		it.chunk[i+12] = it.buf[ofs[i+12] : ofs[i]+len[i+12]]
-		it.chunk[i+13] = it.buf[ofs[i+13] : ofs[i]+len[i+13]]
-		it.chunk[i+14] = it.buf[ofs[i+14] : ofs[i]+len[i+14]]
-		it.chunk[i+15] = it.buf[ofs[i+15] : ofs[i]+len[i+15]]
+		it.chunk[i] = it.buf[ofs[i] : ofs[i]+len[i] : ofs[i]+len[i]]
+		it.chunk[i+1] = it.buf[ofs[i+1] : ofs[i]+len[i+1] : ofs[i]+len[i+1]]
+		it.chunk[i+2] = it.buf[ofs[i+2] : ofs[i]+len[i+2] : ofs[i]+len[i+2]]
+		it.chunk[i+3] = it.buf[ofs[i+3] : ofs[i]+len[i+3] : ofs[i]+len[i+3]]
+		it.chunk[i+4] = it.buf[ofs[i+4] : ofs[i]+len[i+4] : ofs[i]+len[i+4]]
+		it.chunk[i+5] = it.buf[ofs[i+5] : ofs[i]+len[i+5] : ofs[i]+len[i+5]]
+		it.chunk[i+6] = it.buf[ofs[i+6] : ofs[i]+len[i+6] : ofs[i]+len[i+6]]
+		it.chunk[i+7] = it.buf[ofs[i+7] : ofs[i]+len[i+7] : ofs[i]+len[i+7]]
+		it.chunk[i+8] = it.buf[ofs[i+8] : ofs[i]+len[i+8] : ofs[i]+len[i+8]]
+		it.chunk[i+9] = it.buf[ofs[i+9] : ofs[i]+len[i+9] : ofs[i]+len[i+9]]
+		it.chunk[i+10] = it.buf[ofs[i+10] : ofs[i]+len[i+10] : ofs[i]+len[i+10]]
+		it.chunk[i+11] = it.buf[ofs[i+11] : ofs[i]+len[i+11] : ofs[i]+len[i+11]]
+		it.chunk[i+12] = it.buf[ofs[i+12] : ofs[i]+len[i+12] : ofs[i]+len[i+12]]
+		it.chunk[i+13] = it.buf[ofs[i+13] : ofs[i]+len[i+13] : ofs[i]+len[i+13]]
+		it.chunk[i+14] = it.buf[ofs[i+14] : ofs[i]+len[i+14] : ofs[i]+len[i+14]]
+		it.chunk[i+15] = it.buf[ofs[i+15] : ofs[i]+len[i+15] : ofs[i]+len[i+15]]
 		i += 16
 	}
 	for i < n {
-		it.chunk[i] = it.buf[ofs[i] : ofs[i]+len[i]]
+		if l := len[i]; l == 0 {
+			it.chunk[i] = nil
+		} else {
+			o := ofs[i]
+			it.chunk[i] = it.buf[o : o+l : o+l]
+		}
 		i++
 	}
 

@@ -14,7 +14,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/assert"
 	"blockwatch.cc/knoxdb/pkg/num"
-	"blockwatch.cc/knoxdb/pkg/stringx"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
@@ -22,6 +21,7 @@ var (
 	ErrBlockOutOfBounds     = errors.New("block: out of bounds access")
 	ErrBlockNotMaterialized = errors.New("block: not materialized")
 
+	// ensure we implement required interfaces
 	_ types.NumberAccessor[int64] = (*BlockAccessor[int64])(nil)
 )
 
@@ -250,29 +250,17 @@ func (b *Block) Float32() types.NumberAccessor[float32] {
 }
 
 func (b *Block) Int128() num.Int128Accessor {
-	if b.IsMaterialized() {
-		return b.any.(*num.Int128Stride)
-	}
 	return b.any.(num.Int128Accessor)
 }
 
 func (b *Block) Int256() num.Int256Accessor {
-	if b.IsMaterialized() {
-		return b.any.(*num.Int256Stride)
-	}
 	return b.any.(num.Int256Accessor)
 }
 
 func (b *Block) Bytes() types.StringAccessor {
-	if b.IsMaterialized() {
-		return b.any.(*stringx.StringPool)
-	}
 	return b.any.(types.StringAccessor)
 }
 
-func (b *Block) Bool() *bitset.Bitset {
-	if b.IsMaterialized() {
-		return b.any.(*bitset.Bitset)
-	}
-	return nil // TODO
+func (b *Block) Bool() bitset.BitmapAccessor {
+	return b.any.(bitset.BitmapAccessor)
 }

@@ -125,7 +125,7 @@ type ChunkIterator struct {
 	last int
 }
 
-func (s *Bitset) Chunks() *ChunkIterator {
+func (s *Bitset) Chunks() BitmapIterator {
 	it := chunkFactory.Get().(*ChunkIterator)
 	it.set = s
 	it.last = -1

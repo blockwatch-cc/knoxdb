@@ -5,13 +5,17 @@ package encode
 
 import (
 	"fmt"
+	"iter"
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/bitset"
+	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/num"
 )
+
+var _ bitset.BitmapAccessor = (*BitmapContainer)(nil)
 
 type BitmapContext struct {
 	Min       bool
@@ -39,6 +43,7 @@ func (c *BitmapContext) MinMax() (any, any) {
 
 // TBitmap
 type BitmapContainer struct {
+	readOnlyContainer[bool]
 	Buf []byte
 	N   int
 	Typ ContainerType
@@ -138,7 +143,47 @@ func (c *BitmapContainer) Get(n int) bool {
 	}
 }
 
-func (c *BitmapContainer) AppendTo(dst *bitset.Bitset, sel []uint32) *bitset.Bitset {
+func (c *BitmapContainer) All() bool {
+	switch c.Typ {
+	case TBitmapZero:
+		return false
+	case TBitmapOne:
+		return true
+	case TBitmapDense:
+		b := bitset.NewFromBuffer(c.Buf, c.N)
+		ok := b.All()
+		b.Close()
+		return ok
+	case TBitmapSparse:
+		return xroar.NewFromBuffer(c.Buf).Count() == c.N
+	default:
+		return false
+	}
+}
+
+func (c *BitmapContainer) Any() bool {
+	switch c.Typ {
+	case TBitmapZero:
+		return false
+	case TBitmapOne:
+		return true
+	case TBitmapDense:
+		b := bitset.NewFromBuffer(c.Buf, c.N)
+		ok := b.Any()
+		b.Close()
+		return ok
+	case TBitmapSparse:
+		return xroar.NewFromBuffer(c.Buf).Count() > 0
+	default:
+		return false
+	}
+}
+
+func (c *BitmapContainer) None() bool {
+	return c.Typ == TBitmapZero
+}
+
+func (c *BitmapContainer) AppendTo(dst *bitset.Bitset, sel []uint32) {
 	if sel == nil {
 		start := dst.Len()
 		switch c.Typ {
@@ -187,7 +232,6 @@ func (c *BitmapContainer) AppendTo(dst *bitset.Bitset, sel []uint32) *bitset.Bit
 			}
 		}
 	}
-	return dst
 }
 
 func (c *BitmapContainer) Encode(ctx *BitmapContext, vals *bitset.Bitset) *BitmapContainer {
@@ -210,6 +254,69 @@ func (c *BitmapContainer) Encode(ctx *BitmapContext, vals *bitset.Bitset) *Bitma
 		c.Buf = vals.Bytes()
 	}
 	return c
+}
+
+func (c *BitmapContainer) Iterator() iter.Seq[int] {
+	switch c.Typ {
+	case TBitmapOne:
+		return func(fn func(int) bool) {
+			for i := range c.N {
+				if !fn(i) {
+					return
+				}
+			}
+		}
+	case TBitmapDense:
+		b := bitset.NewFromBuffer(c.Buf, c.N)
+		return b.Iterator()
+	case TBitmapSparse:
+		return func(fn func(int) bool) {
+			it := xroar.NewFromBuffer(c.Buf).NewIterator()
+			for {
+				n, ok := it.Next()
+				if !ok {
+					break
+				}
+				if !fn(int(n)) {
+					break
+				}
+			}
+		}
+	default:
+		// TBitmapZero
+		return func(fn func(int) bool) {}
+	}
+}
+
+func (c *BitmapContainer) Chunks() bitset.BitmapIterator {
+	switch c.Typ {
+	case TBitmapOne:
+		return &oneBitmapIterator{size: c.N, last: -1}
+	case TBitmapDense:
+		b := bitset.NewFromBuffer(c.Buf, c.N)
+		return b.Chunks()
+	case TBitmapSparse:
+		return &xroarBitmapIterator{it: xroar.NewFromBuffer(c.Buf).NewIterator()}
+	default:
+		// TBitmapZero
+		return &zeroBitmapIterator{}
+	}
+}
+
+func (c *BitmapContainer) Matcher() bitset.BitmapMatcher {
+	return c
+}
+
+func (c *BitmapContainer) Cmp(i, j int) int {
+	x, y := c.Get(i), c.Get(j)
+	switch {
+	case x == y:
+		return 0
+	case !x && y:
+		return -1
+	default:
+		return 1
+	}
 }
 
 func (c *BitmapContainer) MatchEqual(val bool, bits, _ *Bitset) {
@@ -300,13 +407,14 @@ func (c *BitmapContainer) MatchBetween(a, b bool, bits, _ *Bitset) {
 	}
 }
 
-func (c *BitmapContainer) MatchInSet(s any, bits, mask *Bitset) {
-	// N.A.
-}
+// N.A.
+func (_ *BitmapContainer) MatchInSet(_ any, _, _ *Bitset)    {}
+func (_ *BitmapContainer) MatchNotInSet(_ any, _, _ *Bitset) {}
 
-func (c *BitmapContainer) MatchNotInSet(s any, bits, mask *Bitset) {
-	// N.A.
-}
+// special read-only bitmap function overrides
+func (_ *BitmapContainer) Set(_ int)       {}
+func (_ *BitmapContainer) Unset(_ int)     {}
+func (_ *BitmapContainer) Writer() *Bitset { return nil }
 
 // ---------------------------------------
 // Factory
@@ -326,4 +434,74 @@ func putBitmapContainer(c *BitmapContainer) {
 
 var bitmapFactory = BitmapFactory{
 	cpool: sync.Pool{New: func() any { return new(BitmapContainer) }},
+}
+
+// ---------------------------------------
+// Iterators
+//
+
+type xroarBitmapIterator struct {
+	chunk [types.CHUNK_SIZE]int
+	it    *xroar.Iterator
+}
+
+func (it *xroarBitmapIterator) Close() {
+	it.it = nil
+}
+
+func (it *xroarBitmapIterator) Next() ([]int, bool) {
+	var n int
+	for {
+		val, ok := it.it.Next()
+		if !ok {
+			break
+		}
+		it.chunk[n] = int(val)
+		n++
+		if n == types.CHUNK_SIZE {
+			break
+		}
+	}
+	return it.chunk[:n], n > 0
+}
+
+type zeroBitmapIterator struct{}
+
+func (_ *zeroBitmapIterator) Close()              {}
+func (_ *zeroBitmapIterator) Next() ([]int, bool) { return nil, false }
+
+type oneBitmapIterator struct {
+	chunk [types.CHUNK_SIZE]int
+	last  int
+	size  int
+}
+
+func (it *oneBitmapIterator) Close() {
+	it.last = 0
+	it.size = 0
+}
+
+func (it *oneBitmapIterator) Next() ([]int, bool) {
+	if it.last+1 >= it.size {
+		return nil, false
+	}
+	var (
+		i int
+		v = it.last + 1
+	)
+	for range 16 {
+		it.chunk[i] = v
+		it.chunk[i+1] = v + 1
+		it.chunk[i+2] = v + 2
+		it.chunk[i+3] = v + 3
+		it.chunk[i+4] = v + 4
+		it.chunk[i+5] = v + 5
+		it.chunk[i+6] = v + 6
+		it.chunk[i+7] = v + 7
+		i += 8
+		v += 8
+	}
+	n := min(128, it.size-it.last-1)
+	it.last += n
+	return it.chunk[:n], true
 }

@@ -135,7 +135,7 @@ func BenchmarkStringDecode(b *testing.B) {
 			enc := NewString(scheme).Encode(ctx, data)
 			buf := enc.Store(make([]byte, 0, enc.Size()))
 			dst := stringx.NewStringPool(c.N)
-			once := etests.ShowInfo
+			b.Log(enc.Info())
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
 				b.SetBytes(int64(data.Size()))
 				for b.Loop() {
@@ -144,10 +144,6 @@ func BenchmarkStringDecode(b *testing.B) {
 					require.NoError(b, err)
 					enc2.AppendTo(dst, nil)
 					dst.Clear()
-					if once {
-						b.Log(enc2.Info())
-						once = false
-					}
 					enc2.Close()
 				}
 				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
@@ -173,6 +169,41 @@ func BenchmarkStringCmp(b *testing.B) {
 				b.SetBytes(int64(data.DataSize()))
 				for b.Loop() {
 					enc.MatchEqual(data.Get(0), bits, nil)
+				}
+				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+			})
+		}
+	}
+}
+
+func BenchmarkStringIterator(b *testing.B) {
+	for _, c := range tests.BenchmarkSizes {
+		for _, scheme := range []ContainerType{
+			TStringConstant,
+			TStringFixed,
+			TStringCompact,
+			TStringDictionary,
+		} {
+			data := etests.GenForStringScheme(int(scheme), c.N)
+			ctx := AnalyzeString(data)
+			enc := NewString(scheme).Encode(ctx, data)
+			buf := enc.Store(make([]byte, 0, enc.Size()))
+			b.Log(enc.Info())
+			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
+				b.SetBytes(int64(data.Size()))
+				for b.Loop() {
+					enc2 := NewString(scheme)
+					_, err := enc2.Load(buf)
+					require.NoError(b, err)
+					it := enc2.Chunks()
+					for {
+						_, n := it.NextChunk()
+						if n == 0 {
+							break
+						}
+					}
+					it.Close()
+					enc2.Close()
 				}
 				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 			})

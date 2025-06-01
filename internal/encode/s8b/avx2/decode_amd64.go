@@ -9,12 +9,13 @@ package avx2
 import (
 	"encoding/binary"
 
+	"blockwatch.cc/knoxdb/internal/cpu"
 	"blockwatch.cc/knoxdb/internal/encode/s8b/generic"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 func init() {
-	if util.UseAVX2 {
+	if cpu.UseAVX2 {
 		initUint64AVX2()
 		initUint32AVX2()
 		initUint16AVX2()

@@ -172,7 +172,13 @@ func (p *StringPool) Values() iter.Seq[[]byte] {
 		}
 		for _, ptr := range p.ptr {
 			ofs, len := ptr2pair(ptr)
-			if !fn(unsafe.Slice((*byte)(unsafe.Add(base, ofs)), len)) {
+			var buf []byte
+			if len == 0 {
+				buf = p.buf[:0:0]
+			} else {
+				buf = unsafe.Slice((*byte)(unsafe.Add(base, ofs)), len)
+			}
+			if !fn(buf) {
 				return
 			}
 		}
@@ -189,7 +195,13 @@ func (p *StringPool) Iterator() iter.Seq2[int, []byte] {
 		}
 		for i, ptr := range p.ptr {
 			ofs, len := ptr2pair(ptr)
-			if !fn(i, unsafe.Slice((*byte)(unsafe.Add(base, ofs)), len)) {
+			var buf []byte
+			if len == 0 {
+				buf = p.buf[:0:0]
+			} else {
+				buf = unsafe.Slice((*byte)(unsafe.Add(base, ofs)), len)
+			}
+			if !fn(i, buf) {
 				return
 			}
 		}
@@ -247,7 +259,7 @@ func (p *StringPool) AppendTo(dst types.StringWriter, sel []uint32) {
 // Get returns element at position i. Panics if i is out of bounds.
 func (p *StringPool) Get(i int) []byte {
 	ofs, sz := ptr2pair(p.ptr[i])
-	return p.buf[ofs : ofs+sz]
+	return p.buf[ofs : ofs+sz : ofs+sz]
 }
 
 // Set replaces element at position i with a new string. The new string

@@ -9,6 +9,7 @@ import (
 	"io"
 
 	"blockwatch.cc/knoxdb/internal/arena"
+	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/encode"
 	"blockwatch.cc/knoxdb/internal/types"
 )
@@ -147,8 +148,8 @@ func (b *Block) encode() ([]byte, encode.ContextExporter, error) {
 
 	case BlockBool:
 		src := b.Bool()
-		ctx := encode.AnalyzeBitmap(src)
-		enc := encode.EncodeBitmap(ctx, src)
+		ctx := encode.AnalyzeBitmap(src.(*bitset.Bitset))
+		enc := encode.EncodeBitmap(ctx, src.(*bitset.Bitset))
 		// add zero byte for compression
 		buf := arena.AllocBytes(enc.Size() + 1)
 		buf = enc.Store(buf[:1])

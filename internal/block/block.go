@@ -56,35 +56,36 @@ const (
 	BlockFlagRaw               // backing object is writable
 )
 
-// Idea
-// block.vec is VectorAccessor[T] interface with all functions required to avoid
-// switch (block.type) statements so that external funcs become
-// {
-//    assert...
-//    b.vec.Func(...)
-// }
+// Challenge
 //
-// type Vector interface {
-// 	Len() int
-// 	Cap() int
-// 	Size() int
-// 	Delete(int, int)
-// 	Append(any)
-// 	AppendTo(*Block, []uint32)
-// 	AppendRange(*Block, int, int)
-// 	Clear()
-// 	Close()
-// 	Get(int) any
-// 	Set(int, any)
-// 	Min() any
-// 	Max() any
-// 	MinMax() (any, any)
-// }
+// Define a common abstraction across vector types (int64, int32, float64,
+// string, bits) and vector representations (compressed, materialized) that
+// provides efficient typed access (as slices `[]int64`, iterator `for range .. {}`
+// and chunks `*[128]int64`) without using Go `any` at the API level.
 //
-// Issues
-// - typed writers Append/Set etc use `any` type which a generic func impl in type Block
-//   cannot unwrap without switch/case and hard-coded concrete type. (still ok,
-//   its just a few funcs)
+// One can build a common vector interface with Go `any`, however in/out
+// data types must be wrapped into `any`. This is inefficient for heavy access
+// data containers in a database core. Go interfaces have too high hidden
+// allocation costs, they cost an indirection and type check at runtime
+// and have bad coding ergonomics `x.(int64)`.
+//
+// Go generics are not an alternative either. Although one can define typed
+// interfaces `type X[T any] interface { ... }` this produces a family of
+// incompatible actual interface types when instantiated. There is no way
+// to make generics implement a common type interface.
+//
+// Solution
+//
+// 1. Use untyped `[]byte` backing buffer for fixed size native types (int64),
+// an internal `any` for variable size custom types (string pools, bitset) and
+// reuse the same `any` for compressed vectors.
+//
+// 2. Wrap native/materialized types into accessors. Expose access wrappers
+// via typed functions (e.g. `func (b *Block) Int64() NumberAccessor[int64] {}`
+//
+// 3. Put compressed vectors into containers with the same common interface as
+// materialized containers (can be generic native typed as well, e.g.
+// `IntegerDictionary[int64]`).
 
 type Block struct {
 	nref  int64      // ref counter
@@ -283,7 +284,7 @@ func (b *Block) Clone(sz int) *Block {
 	case BlockBytes:
 		b.Bytes().AppendTo(c.Bytes(), nil)
 	case BlockBool:
-		b.Bool().AppendTo(c.Bool(), nil)
+		b.Bool().AppendTo(c.Bool().Writer(), nil)
 	case BlockInt128:
 		b.Int128().AppendTo(c.Int128(), nil)
 	case BlockInt256:
@@ -374,11 +375,11 @@ func (b *Block) AppendRange(src *Block, i, j int) {
 			b.Bool().Append(src.Bool().Get(i))
 		case src.IsMaterialized():
 			// src is uncompressed (can optimize)
-			b.Bool().AppendRange(src.Bool(), i, j)
+			b.Bool().Writer().AppendRange(src.Bool().Writer(), i, j)
 		default:
 			// src is compressed
 			sel := types.NewRange(i, j-1).AsSelection()
-			src.Bool().AppendTo(b.Bool(), sel)
+			src.Bool().AppendTo(b.Bool().Writer(), sel)
 		}
 
 	case BlockInt128:
@@ -500,7 +501,7 @@ func (b *Block) AppendTo(dst *Block, sel []uint32) {
 	case BlockBytes:
 		b.Bytes().AppendTo(dst.Bytes(), sel)
 	case BlockBool:
-		b.Bool().AppendTo(dst.Bool(), sel)
+		b.Bool().AppendTo(dst.Bool().Writer(), sel)
 	case BlockInt128:
 		b.Int128().AppendTo(dst.Int128(), sel)
 	case BlockInt256:
