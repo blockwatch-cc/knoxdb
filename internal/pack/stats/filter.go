@@ -21,11 +21,12 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
+// ke = [type:pack_id], keep filter types close within data pages
 func filterKey(pkey uint32, fx uint16) []byte {
 	var b [num.MaxVarintLen32 + num.MaxVarintLen16]byte
 	return num.AppendUvarint(
-		num.AppendUvarint(b[:0], uint64(pkey)),
-		uint64(fx),
+		num.AppendUvarint(b[:0], uint64(fx)),
+		uint64(pkey),
 	)
 }
 
@@ -41,6 +42,7 @@ func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
 	bits := make(map[uint16][]byte)
 	fuses := make(map[uint16][]byte)
 	ranges := make(map[uint16][]byte)
+	pstats := pkg.Stats()
 	for i, f := range pkg.Schema().Exported() {
 		b := pkg.Block(i)
 		if b == nil || !b.IsDirty() {
@@ -50,8 +52,12 @@ func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
 		switch f.Index {
 		case types.IndexTypeBloom:
 			if idx.use.Is(FeatBloomFilter) {
-				// TODO: use cardinality and unique values from pack analyis step
-				card := EstimateCardinality(b, 8)
+				// use cardinality from pack analyze step if exists, otherwise
+				// fall back to cardinality estimation
+				card := pstats.Unique[i]
+				if card <= 0 {
+					card = EstimateCardinality(b, 8)
+				}
 				if flt := BuildBloomFilter(b, card, int(f.Scale)); flt != nil {
 					blooms[uint16(i)] = flt.Bytes()
 				}
@@ -67,8 +73,12 @@ func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
 			}
 		case types.IndexTypeBits:
 			if idx.use.Is(FeatBitsFilter) {
-				// TODO: use cardinality and unique values from pack analyis step
-				card := EstimateCardinality(b, 8)
+				// use cardinality from pack analyze step if exists, otherwise
+				// fall back to cardinality estimation
+				card := pstats.Unique[i]
+				if card <= 0 {
+					card = EstimateCardinality(b, 8)
+				}
 				if flt := BuildBitsFilter(b, card); flt != nil {
 					bits[uint16(i)] = flt.ToBuffer()
 				}
@@ -95,7 +105,7 @@ func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
 	// store filters
 	return idx.db.Update(func(tx store.Tx) error {
 		// create stats buckets if not exist
-		for k := 0; k < STATS_BUCKETS; k++ {
+		for k := range STATS_BUCKETS {
 			_, err := tx.Root().CreateBucketIfNotExists(idx.keys[k])
 			if err != nil {
 				return err

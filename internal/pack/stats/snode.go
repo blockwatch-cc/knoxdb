@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"sort"
+	"sync"
 	"sync/atomic"
 
 	"blockwatch.cc/knoxdb/internal/block"
@@ -19,6 +20,7 @@ import (
 )
 
 type SNode struct {
+	mu       sync.Mutex    // sync missing data block load across readers
 	spack    *pack.Package // statistics union package
 	meta     []byte        // wire encoded min/max/sum statistics over pkg content
 	disksize int           // statistics package on-disk data size
@@ -47,7 +49,7 @@ func (n *SNode) Clear() {
 	n.dirty = false
 }
 
-func (n SNode) Key() uint32 {
+func (n *SNode) Key() uint32 {
 	return n.spack.Key()
 }
 
@@ -55,26 +57,26 @@ func (n *SNode) Bytes() []byte {
 	return n.meta
 }
 
-func (n SNode) IsEmpty() bool {
+func (n *SNode) IsEmpty() bool {
 	return n.spack.Len() == 0
 }
 
-func (n SNode) IsWritable() bool {
+func (n *SNode) IsWritable() bool {
 	return n.spack.IsMaterialized()
 }
 
-func (n SNode) NPacks() int {
+func (n *SNode) NPacks() int {
 	return n.spack.Len()
 }
 
-func (n SNode) MinKey() uint32 {
+func (n *SNode) MinKey() uint32 {
 	if n.spack.Len() > 0 {
 		return n.spack.Uint32(STATS_ROW_KEY, 0)
 	}
 	return 0
 }
 
-func (n SNode) MaxKey() uint32 {
+func (n *SNode) MaxKey() uint32 {
 	if l := n.spack.Len(); l > 0 {
 		return n.spack.Uint32(STATS_ROW_KEY, l-1)
 	} else {
@@ -82,7 +84,7 @@ func (n SNode) MaxKey() uint32 {
 	}
 }
 
-func (n SNode) LastNValues() int {
+func (n *SNode) LastNValues() int {
 	if l := n.spack.Len(); l > 0 {
 		return int(n.spack.Int64(STATS_ROW_NVALS, l-1))
 	} else {
@@ -90,7 +92,7 @@ func (n SNode) LastNValues() int {
 	}
 }
 
-func (n SNode) FindKey(key uint32) (int, bool) {
+func (n *SNode) FindKey(key uint32) (int, bool) {
 	// find pack offset (spack is sorted by data pack key)
 	keys := n.spack.Block(STATS_ROW_KEY).Uint32().Slice()
 	i := sort.Search(len(keys), func(i int) bool { return keys[i] >= key })
@@ -244,43 +246,45 @@ func (n *SNode) Query(it *Iterator) error {
 	// organize data required for this query
 	var loadBlocks []uint16
 
-	// we always need data pack keys and num values
-	if n.spack.Block(STATS_ROW_KEY) == nil {
-		// translate index to field id
-		loadBlocks = append(loadBlocks, STATS_ROW_KEY+1, STATS_ROW_NVALS+1)
-	}
+	if !n.spack.IsComplete() {
+		// we always need data pack keys and num values
+		if n.spack.Block(STATS_ROW_KEY) == nil {
+			// translate index to field id
+			loadBlocks = append(loadBlocks, STATS_ROW_KEY+1, STATS_ROW_NVALS+1)
+		}
 
-	// translate filter indexes -> spack columns
-	if it.flt != nil {
-		uniqueFields := make(map[uint16]struct{})
-		it.flt.ForEach(func(f *query.Filter) error {
-			// skip already processed fields
-			if _, ok := uniqueFields[f.Index]; ok {
+		// translate filter indexes -> spack columns
+		if it.flt != nil {
+			uniqueFields := make(map[uint16]struct{})
+			it.flt.ForEach(func(f *query.Filter) error {
+				// skip already processed fields
+				if _, ok := uniqueFields[f.Index]; ok {
+					return nil
+				}
+				uniqueFields[f.Index] = struct{}{}
+
+				// translate table column indices into min/max statistics columns
+				minx, maxx := minColIndex(f.Index), maxColIndex(f.Index)
+
+				// identify missing statistics blocks and load by id (not by index)
+				if n.spack.Block(int(minx)) == nil {
+					loadBlocks = append(loadBlocks, minx+1)
+				}
+				if n.spack.Block(int(maxx)) == nil {
+					loadBlocks = append(loadBlocks, maxx+1)
+				}
+
 				return nil
+			})
+		} else {
+			// load all missing fields
+			loadBlocks = loadBlocks[:0]
+			for i, b := range n.spack.Blocks() {
+				if b != nil {
+					continue
+				}
+				loadBlocks = append(loadBlocks, uint16(i)+1)
 			}
-			uniqueFields[f.Index] = struct{}{}
-
-			// translate table column indices into min/max statistics columns
-			minx, maxx := minColIndex(f.Index), maxColIndex(f.Index)
-
-			// identify missing statistics blocks and load by id (not by index)
-			if n.spack.Block(int(minx)) == nil {
-				loadBlocks = append(loadBlocks, minx+1)
-			}
-			if n.spack.Block(int(maxx)) == nil {
-				loadBlocks = append(loadBlocks, maxx+1)
-			}
-
-			return nil
-		})
-	} else {
-		// load all missing fields
-		loadBlocks = loadBlocks[:0]
-		for i, b := range n.spack.Blocks() {
-			if b != nil {
-				continue
-			}
-			loadBlocks = append(loadBlocks, uint16(i)+1)
 		}
 	}
 
@@ -308,6 +312,9 @@ func (n *SNode) Query(it *Iterator) error {
 				cache        block.BlockCachePartition
 			)
 
+			// lock snode
+			n.mu.Lock()
+
 			// use cache with a private partition key
 			if it.idx.use.Is(FeatUseCache) {
 				cache = engine.GetEngine(it.ctx).BlockCache(it.idx.schema.Hash())
@@ -323,6 +330,7 @@ func (n *SNode) Query(it *Iterator) error {
 					0,                      // read block/pack length from storage
 				)
 				if err != nil {
+					n.mu.Unlock()
 					return err
 				}
 				atomic.AddInt64(&it.idx.bytesRead, int64(nBytes))
@@ -332,6 +340,7 @@ func (n *SNode) Query(it *Iterator) error {
 					n.spack.AddToCache(cache)
 				}
 			}
+			n.mu.Unlock()
 		}
 
 		// init filter buckets if required
@@ -354,7 +363,7 @@ func (n *SNode) Query(it *Iterator) error {
 			// reset match vector
 			it.vmatch.Resize(n.spack.Len()).Zero()
 
-			// match minmax ranges
+			// match minmax ranges and optional filters
 			m, it.vmatch = matchVector(it.flt, n.spack, buckets, it.vmatch)
 			if it.vmatch.None() {
 				it.match = it.match[:0]

@@ -294,6 +294,9 @@ func TestIndexUpdate(t *testing.T) {
 	// override pk in first row (note: use rid field since we use pack metadata!!)
 	pkg.Block(6).Uint64().Set(0, 1000)
 	pkg.WithStats()
+	pstat := pkg.Stats() // fake pack stats (required to trigger a change during UpdatePack)
+	pstat.MinMax[6][0] = uint64(2)
+	pstat.MinMax[6][1] = uint64(1000)
 	assert.True(t, pkg.Block(6).IsDirty(), "block is dirty after write")
 	require.NoError(t, idx.UpdatePack(ctx, pkg))
 
@@ -739,10 +742,10 @@ func TestIndexFindPkEndWithSpace(t *testing.T) {
 		pk := uint64(1 + k*TEST_PKG_SIZE)
 		require.NoError(t, idx.AddPack(ctx, makeTestPackage(t, k, pk)))
 	}
-	// add one more data pack that is partially full
+	// add one more data pack that contains a single row only
 	pk := uint64(1 + STATS_PACK_SIZE/2*TEST_PKG_SIZE)
 	pkg := makeTestPackage(t, STATS_PACK_SIZE/2, pk)
-	pkg.Delete(1, TEST_PKG_SIZE-1)
+	pkg.Delete(1, TEST_PKG_SIZE) // remove all but the first record
 	require.NoError(t, idx.AddPack(ctx, pkg))
 
 	// find pk beyond last data pack
@@ -783,7 +786,8 @@ func BenchmarkIndexQueryEqual(b *testing.B) {
 		f := makeFilter("id", query.FilterModeEqual, uint64(STATS_PACK_SIZE*TEST_PKG_SIZE+1), nil)
 
 		b.Run(fmt.Sprintf("tree-%dx2048", sz), func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
+			b.ReportAllocs()
+			for b.Loop() {
 				it, ok := idx.Query(ctx, f, types.OrderAsc)
 				for ; ok; ok = it.Next() {
 				}
@@ -814,7 +818,8 @@ func BenchmarkIndexQueryAll(b *testing.B) {
 		}
 
 		b.Run(fmt.Sprintf("tree-%dx2048", sz), func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
+			b.ReportAllocs()
+			for b.Loop() {
 				it, ok := idx.Query(ctx, nil, types.OrderAsc)
 				for ; ok; ok = it.Next() {
 				}

@@ -187,7 +187,7 @@ func matchFilterVector(f *query.Filter, pkg *pack.Package, bits, mask *bitset.Bi
 func filterType(f *query.Filter, pkg *pack.Package, id int) types.IndexType {
 	switch f.Mode {
 	case types.FilterModeEqual, types.FilterModeIn:
-		typ := pkg.Schema().Exported()[id].Index
+		typ := pkg.Schema().Field(id).Index()
 		switch typ {
 		case types.IndexTypeBloom, types.IndexTypeBfuse, types.IndexTypeBits:
 			return typ

@@ -28,10 +28,7 @@ import (
 
 // TODO
 // - debug features, packview integration
-// - spack query
-//   - multi-reader sync on load packs
 // - spack append/update
-//   - where to get data pack size in bytes from? -> analytics extension on pack
 //   - spack disksize is not yet stored
 //   - bloom and range index sizes are not yet stored
 // - limit string size to max 8 (how do filters change?)
