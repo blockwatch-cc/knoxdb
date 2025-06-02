@@ -307,9 +307,10 @@ func (w *Wal) Len() int64 {
 
 func (w *Wal) Sync() error {
 	w.mu.Lock()
-	defer w.mu.Unlock()
+	err := w.sync()
+	w.mu.Unlock()
 	// w.log.Debugf("wal: sync")
-	return w.sync()
+	return err
 }
 
 func (w *Wal) Schedule() *util.Future {
@@ -325,8 +326,8 @@ func (w *Wal) Schedule() *util.Future {
 
 func (w *Wal) Write(rec *Record) (LSN, error) {
 	w.mu.Lock()
-	defer w.mu.Unlock()
 	lsn, err := w.write(rec)
+	w.mu.Unlock()
 	if err == nil {
 		rec.Lsn = lsn
 		// w.log.Debugf("wal: write %s", rec)
@@ -336,20 +337,22 @@ func (w *Wal) Write(rec *Record) (LSN, error) {
 
 func (w *Wal) WriteAndSync(rec *Record) (LSN, error) {
 	w.mu.Lock()
-	defer w.mu.Unlock()
 	lsn, err := w.write(rec)
 	if err != nil {
+		w.mu.Unlock()
 		return 0, err
 	}
 	rec.Lsn = lsn
 	// w.log.Debugf("wal: write_and_sync %s", rec)
-	return lsn, w.sync()
+	err = w.sync()
+	w.mu.Unlock()
+	return lsn, err
 }
 
 func (w *Wal) WriteAndSchedule(rec *Record) (LSN, *util.Future, error) {
 	w.mu.Lock()
-	defer w.mu.Unlock()
 	lsn, err := w.write(rec)
+	w.mu.Unlock()
 	if err != nil {
 		return 0, nil, err
 	}
