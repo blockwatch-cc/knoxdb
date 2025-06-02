@@ -193,6 +193,14 @@ type CompareCase[T types.Integer] struct {
 	SignedOnly bool
 }
 
+func convertSlice[T types.Number](src []int) []T {
+	dst := make([]T, len(src))
+	for i, v := range src {
+		dst[i] = T(v)
+	}
+	return dst
+}
+
 func MakeCompareCases[T types.Integer]() []CompareCase[T] {
 	return []CompareCase[T]{
 		// test each selector
@@ -218,7 +226,7 @@ func MakeCompareCases[T types.Integer]() []CompareCase[T] {
 		{"seq", func(n int) []T { return tests.GenSeq[T](n, 0) }, false},
 		{"256", func(n int) []T { return tests.GenRndBits[T](n, 8) }, false},
 		{"adj-bug", func(n int) []T {
-			vals := util.ConvertSlice[int, T]([]int{
+			vals := convertSlice[T]([]int{
 				22, 17, 201, 169, 41, 85, 178, 137, 222, 109, 73, 37, 3, 121,
 				183, 7, 16, 181, 138, 191, 187, 113, 94, 124, 142, 127, 132,
 				195, 81, 228, 247, 251, 58, 10, 32, 63, 67, 164, 96, 253, 173,
@@ -292,7 +300,7 @@ func MakeCompareCases[T types.Integer]() []CompareCase[T] {
 			return vals[:n]
 		}, false},
 		{"sign-bug", func(n int) []T {
-			vals := util.ConvertSlice[int, T]([]int{
+			vals := convertSlice[T]([]int{
 				0, -3, -126, -89, 113, -5, 22, 69, -127, 123, -106, -64, -65, 83, -84, 107, -11, 118, 91, 29, -58, 69, 123, -8, -46, -59, 120, -91, -93, -7, 37, 41, -108, 102, 95, 126, 24, -107, 31, 95, -90, -56, 30, 106, 104, 31, 60, -114, 53, 33, 29, -8, -59, 67, -114, 87, 90, 63, 9, 24, 80, 2, -32, 7, 46, -96, -106, 34, -2, -98, 40, -72, -5, -96, 45, -28, -107, -100, 46, -98, -64, -88, -64, -121, -106, -28, 3, 42, 116, 90, -18, -53, -110, 30, 89, -29, -79, 53, -69, 2, 107, 114, 79, -47, 98, -89, -128, -24, 71, -16, -94, 33, 9, -97, -91, -79, -116, -45, -40, -128,
 			})
 			for len(vals) < n {
