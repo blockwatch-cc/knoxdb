@@ -75,7 +75,7 @@ func (p *Package) ReadWireBuffer(buf *bytes.Buffer, row int) error {
 		case types.BlockUint8, types.BlockInt8:
 			_, err = buf.Write([]byte{b.Uint8().Get(row)})
 		case types.BlockBool:
-			v := b.Bool().Contains(row)
+			v := b.Bool().Get(row)
 			err = buf.WriteByte(*(*byte)(unsafe.Pointer(&v)))
 		case types.BlockBytes:
 			if fixed := field.Fixed; fixed > 0 {
@@ -187,7 +187,7 @@ func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, maps []
 			(*(*time.Time)(fptr)) = schema.TimeScale(field.Scale).FromUnix(b.Int64().Get(row))
 
 		case types.FieldTypeBoolean:
-			*(*bool)(fptr) = b.Bool().Contains(row)
+			*(*bool)(fptr) = b.Bool().Get(row)
 
 		case types.FieldTypeBytes:
 			switch {

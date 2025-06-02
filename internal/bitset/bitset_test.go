@@ -373,7 +373,7 @@ func TestBitsetDelete(t *testing.T) {
 						slow++
 					}
 
-					dst.DeleteRange(delPos, delPos+delLen)
+					dst.Delete(delPos, delPos+delLen)
 					cmp = slices.Delete(cmp, delPos, delPos+delLen)
 
 					require.Equal(t, dst.Len(), len(cmp), "length")
@@ -407,7 +407,8 @@ func randBits(n int) []byte {
 func randBitsets(sz int) []*Bitset {
 	res := make([]*Bitset, 100)
 	for i := range res {
-		res[i] = New(sz).SetFromBytes(randBits(sz), sz, false)
+		res[i] = New(sz)
+		res[i].SetFromBytes(randBits(sz), sz, false)
 	}
 	return res
 }

@@ -74,18 +74,30 @@ func (m bitEqualMatcher) MatchRange(from, to any) bool {
 }
 
 func (m bitEqualMatcher) MatchVector(b *block.Block, bits, _ *bitset.Bitset) {
-	if m.val {
-		bits.Copy(b.Bool())
+	if b.IsMaterialized() {
+		bits.Copy(b.Bool().Writer())
 	} else {
-		bits.Copy(b.Bool()).Neg()
+		b.Bool().AppendTo(bits.Resize(0), nil)
+	}
+	if !m.val {
+		bits.Neg()
 	}
 }
 
 func (m bitEqualMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, _ *bitset.Bitset) {
 	if m.val {
-		bits.Copy(maxs.Bool())
+		if maxs.IsMaterialized() {
+			bits.Copy(maxs.Bool().Writer())
+		} else {
+			maxs.Bool().AppendTo(bits.Resize(0), nil)
+		}
 	} else {
-		bits.Copy(mins.Bool()).Neg()
+		if mins.IsMaterialized() {
+			bits.Copy(mins.Bool().Writer()).Neg()
+		} else {
+			mins.Bool().AppendTo(bits.Resize(0), nil)
+			bits.Neg()
+		}
 	}
 }
 
@@ -119,18 +131,30 @@ func (m bitNotEqualMatcher) MatchRange(from, to any) bool {
 }
 
 func (m bitNotEqualMatcher) MatchVector(b *block.Block, bits, _ *bitset.Bitset) {
-	if !m.val {
-		bits.Copy(b.Bool())
+	if b.IsMaterialized() {
+		bits.Copy(b.Bool().Writer())
 	} else {
-		bits.Copy(b.Bool()).Neg()
+		b.Bool().AppendTo(bits.Resize(0), nil)
+	}
+	if m.val {
+		bits.Neg()
 	}
 }
 
 func (m bitNotEqualMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, _ *bitset.Bitset) {
 	if !m.val {
-		bits.Copy(maxs.Bool())
+		if maxs.IsMaterialized() {
+			bits.Copy(maxs.Bool().Writer())
+		} else {
+			maxs.Bool().AppendTo(bits.Resize(0), nil)
+		}
 	} else {
-		bits.Copy(mins.Bool()).Neg()
+		if mins.IsMaterialized() {
+			bits.Copy(mins.Bool().Writer()).Neg()
+		} else {
+			mins.Bool().AppendTo(bits.Resize(0), nil)
+			bits.Neg()
+		}
 	}
 }
 
@@ -152,7 +176,11 @@ func (m bitGtMatcher) MatchVector(b *block.Block, bits, _ *bitset.Bitset) {
 	if m.val {
 		bits.Zero()
 	} else {
-		bits.Copy(b.Bool())
+		if b.IsMaterialized() {
+			bits.Copy(b.Bool().Writer())
+		} else {
+			b.Bool().AppendTo(bits.Resize(0), nil)
+		}
 	}
 }
 
@@ -160,7 +188,11 @@ func (m bitGtMatcher) MatchRangeVectors(_, maxs *block.Block, bits, _ *bitset.Bi
 	if m.val {
 		bits.Zero()
 	} else {
-		bits.Copy(maxs.Bool())
+		if maxs.IsMaterialized() {
+			bits.Copy(maxs.Bool().Writer())
+		} else {
+			maxs.Bool().AppendTo(bits.Resize(0), nil)
+		}
 	}
 }
 
@@ -189,7 +221,11 @@ func (m bitGeMatcher) MatchRange(from, to any) bool {
 
 func (m bitGeMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
 	if m.val {
-		bits.Copy(b.Bool())
+		if b.IsMaterialized() {
+			bits.Copy(b.Bool().Writer())
+		} else {
+			b.Bool().AppendTo(bits.Resize(0), nil)
+		}
 	} else {
 		// always true
 		if mask != nil {
@@ -202,7 +238,11 @@ func (m bitGeMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
 
 func (m bitGeMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) {
 	if m.val {
-		bits.Copy(maxs.Bool())
+		if maxs.IsMaterialized() {
+			bits.Copy(maxs.Bool().Writer())
+		} else {
+			maxs.Bool().AppendTo(bits.Resize(0), nil)
+		}
 	} else {
 		// always true
 		if mask != nil {
@@ -229,7 +269,12 @@ func (m bitLtMatcher) MatchRange(from, _ any) bool {
 
 func (m bitLtMatcher) MatchVector(b *block.Block, bits, _ *bitset.Bitset) {
 	if m.val {
-		bits.Copy(b.Bool()).Neg()
+		if b.IsMaterialized() {
+			bits.Copy(b.Bool().Writer()).Neg()
+		} else {
+			b.Bool().AppendTo(bits.Resize(0), nil)
+			bits.Neg()
+		}
 	} else {
 		bits.Zero()
 	}
@@ -237,7 +282,12 @@ func (m bitLtMatcher) MatchVector(b *block.Block, bits, _ *bitset.Bitset) {
 
 func (m bitLtMatcher) MatchRangeVectors(mins, _ *block.Block, bits, _ *bitset.Bitset) {
 	if m.val {
-		bits.Copy(mins.Bool()).Neg()
+		if mins.IsMaterialized() {
+			bits.Copy(mins.Bool().Writer()).Neg()
+		} else {
+			mins.Bool().AppendTo(bits.Resize(0), nil)
+			bits.Neg()
+		}
 	} else {
 		bits.Zero()
 	}
@@ -276,7 +326,12 @@ func (m bitLeMatcher) MatchRangeVectors(mins, _ *block.Block, bits, mask *bitset
 			bits.One()
 		}
 	} else {
-		bits.Copy(mins.Bool()).Neg()
+		if mins.IsMaterialized() {
+			bits.Copy(mins.Bool().Writer()).Neg()
+		} else {
+			mins.Bool().AppendTo(bits.Resize(0), nil)
+			bits.Neg()
+		}
 	}
 }
 
@@ -319,23 +374,41 @@ func (m bitRangeMatcher) MatchBitmap(flt *xroar.Bitmap) bool {
 func (m bitRangeMatcher) MatchVector(b *block.Block, bits, _ *bitset.Bitset) {
 	switch {
 	case m.from:
-		bits.Copy(b.Bool())
+		if b.IsMaterialized() {
+			bits.Copy(b.Bool().Writer())
+		} else {
+			b.Bool().AppendTo(bits.Resize(0), nil)
+		}
 	case m.to:
 		bits.One()
 	default:
-		bits.Copy(b.Bool()).Neg()
+		if b.IsMaterialized() {
+			bits.Copy(b.Bool().Writer()).Neg()
+		} else {
+			b.Bool().AppendTo(bits.Resize(0), nil)
+			bits.Neg()
+		}
 	}
 }
 
 func (m bitRangeMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) {
 	switch {
 	case !m.from && !m.to: // 00, data vec must contain false -> min = false
-		bits.Copy(mins.Bool()).Neg()
+		if mins.IsMaterialized() {
+			bits.Copy(mins.Bool().Writer()).Neg()
+		} else {
+			mins.Bool().AppendTo(bits.Resize(0), nil)
+			bits.Neg()
+		}
 	case !m.from && m.to: // 01, always true
 		bits.One()
 	// case m.from && !m.to: // 10, illegal range
 	default: // 11, data vec must contain true -> max = true
-		bits.Copy(maxs.Bool())
+		if maxs.IsMaterialized() {
+			bits.Copy(maxs.Bool().Writer())
+		} else {
+			maxs.Bool().AppendTo(bits.Resize(0), nil)
+		}
 	}
 }
 
