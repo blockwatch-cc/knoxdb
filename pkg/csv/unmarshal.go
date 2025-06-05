@@ -374,6 +374,11 @@ func (d *Decoder) unmarshal(val reflect.Value, line string) error {
 			tokens[i] = strings.TrimSpace(tokens[i])
 		}
 
+		// handle nulls
+		if tokens[i] == "null" {
+			continue
+		}
+
 		// remove double quotes
 		tokens[i] = strings.ReplaceAll(tokens[i], `\\`, `"`)
 
@@ -383,6 +388,7 @@ func (d *Decoder) unmarshal(val reflect.Value, line string) error {
 			continue
 		}
 
+		// resolve field, potentially allocate ptr
 		_, f := d.findStructField(val, fName)
 		if !f.IsValid() {
 			if d.skipUnknown {
@@ -469,10 +475,6 @@ func setValue(dst reflect.Value, src, fName string) error {
 
 	dst0 := dst
 	if dst.Kind() == reflect.Ptr {
-		if src == "null" {
-			dst.SetZero()
-			return nil
-		}
 		if dst.IsNil() {
 			dst.Set(reflect.New(dst.Type().Elem()))
 		}
