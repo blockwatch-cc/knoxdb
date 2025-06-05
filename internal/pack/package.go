@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Blockwatch Data Inc.
+// Copyright (c) 2024-2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package pack
@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/assert"
@@ -47,35 +48,6 @@ func NewFrom(src *Package) *Package {
 		WithSchema(src.schema)
 }
 
-func (p *Package) Key() uint32 {
-	return p.key
-}
-
-func (p *Package) IsNil() bool {
-	for _, b := range p.blocks {
-		if b != nil {
-			return false
-		}
-	}
-	return true
-}
-
-func (p *Package) IsDirty() bool {
-	for _, b := range p.blocks {
-		if b == nil {
-			continue
-		}
-		if b.IsDirty() {
-			return true
-		}
-	}
-	return false
-}
-
-func (p Package) Schema() *schema.Schema {
-	return p.schema
-}
-
 func (p *Package) WithKey(k uint32) *Package {
 	p.key = k
 	return p
@@ -107,6 +79,50 @@ func (p *Package) WithBlock(i int, b *block.Block) *Package {
 func (p *Package) WithSelection(sel []uint32) *Package {
 	p.selected = sel
 	return p
+}
+
+func (p *Package) Key() uint32 {
+	return p.key
+}
+
+func (p Package) Schema() *schema.Schema {
+	return p.schema
+}
+
+func (p *Package) Cols() int {
+	return p.schema.NumFields()
+}
+
+func (p *Package) Len() int {
+	return p.nRows
+}
+
+func (p *Package) Cap() int {
+	return p.maxRows
+}
+
+func (p *Package) IsFull() bool {
+	return p.nRows == p.maxRows
+}
+
+func (p *Package) CanGrow(n int) bool {
+	return p.nRows+n <= p.maxRows
+}
+
+func (p *Package) NumSelected() int {
+	return len(p.selected)
+}
+
+func (p *Package) Selected() []uint32 {
+	return p.selected
+}
+
+func (p *Package) Blocks() []*block.Block {
+	return p.blocks
+}
+
+func (p *Package) Block(i int) *block.Block {
+	return p.blocks[i]
 }
 
 func (p *Package) Alloc() *Package {
@@ -169,74 +185,6 @@ func (p *Package) Copy() *Package {
 	return cp
 }
 
-// convert block containers to writable form in-place
-func (p *Package) Materialize() *Package {
-	for i, b := range p.blocks {
-		if b == nil {
-			continue
-		}
-		clone := b.Clone(p.maxRows)
-		b.Deref()
-		p.blocks[i] = clone
-	}
-	return p
-}
-
-func (p *Package) IsMaterialized() bool {
-	fields := p.schema.Exported()
-	for i, b := range p.blocks {
-		if b == nil {
-			if !fields[i].Flags.Is(types.FieldFlagDeleted) {
-				return false
-			}
-		}
-		if !b.IsMaterialized() {
-			return false
-		}
-	}
-	return true
-}
-
-func (p *Package) Cols() int {
-	return p.schema.NumFields()
-}
-
-func (p *Package) Len() int {
-	return p.nRows
-}
-
-func (p *Package) Cap() int {
-	return p.maxRows
-}
-
-func (p *Package) IsFull() bool {
-	return p.nRows == p.maxRows
-}
-
-func (p *Package) IsComplete() bool {
-	fields := p.schema.Exported()
-	for i, b := range p.blocks {
-		if b == nil {
-			if !fields[i].Flags.Is(types.FieldFlagDeleted) {
-				return false
-			}
-		}
-	}
-	return true
-}
-
-func (p *Package) CanGrow(n int) bool {
-	return p.nRows+n <= p.maxRows
-}
-
-func (p *Package) NumSelected() int {
-	return len(p.selected)
-}
-
-func (p *Package) Selected() []uint32 {
-	return p.selected
-}
-
 func (p *Package) Size() int {
 	var sz int = szPackage
 	for _, b := range p.blocks {
@@ -246,14 +194,6 @@ func (p *Package) Size() int {
 		sz += b.Size()
 	}
 	return sz
-}
-
-func (p *Package) Blocks() []*block.Block {
-	return p.blocks
-}
-
-func (p *Package) Block(i int) *block.Block {
-	return p.blocks[i]
 }
 
 // Clear empties a pack but retains structure and allocated blocks.
@@ -286,13 +226,75 @@ func (p *Package) Release() {
 		p.stats.Close()
 		p.stats = nil
 	}
+	if p.selected != nil {
+		arena.Free(p.selected[:0])
+		p.selected = nil
+	}
 	p.key = 0
 	p.nRows = 0
 	p.maxRows = 0
 	p.px = 0
 	p.rx = 0
 	p.schema = nil
-	p.selected = nil
 	p.blocks = p.blocks[:0]
 	packagePool.Put(p)
+}
+
+// convert block containers to writable form in-place
+func (p *Package) Materialize() *Package {
+	for i, b := range p.blocks {
+		if b == nil {
+			continue
+		}
+		clone := b.Clone(p.maxRows)
+		b.Deref()
+		p.blocks[i] = clone
+	}
+	return p
+}
+
+func (p *Package) IsMaterialized() bool {
+	for i, b := range p.blocks {
+		if b == nil {
+			if !p.schema.Field(i).Is(types.FieldFlagDeleted) {
+				return false
+			}
+		}
+		if !b.IsMaterialized() {
+			return false
+		}
+	}
+	return true
+}
+
+func (p *Package) IsComplete() bool {
+	for i, b := range p.blocks {
+		if b == nil {
+			if !p.schema.Field(i).Is(types.FieldFlagDeleted) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func (p *Package) IsNil() bool {
+	for _, b := range p.blocks {
+		if b != nil {
+			return false
+		}
+	}
+	return true
+}
+
+func (p *Package) IsDirty() bool {
+	for _, b := range p.blocks {
+		if b == nil {
+			continue
+		}
+		if b.IsDirty() {
+			return true
+		}
+	}
+	return false
 }

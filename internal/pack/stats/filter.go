@@ -21,7 +21,7 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
-// ke = [type:pack_id], keep filter types close within data pages
+// key = [field_id:pack_id], keep filter types close within data pages
 func filterKey(pkey uint32, fx uint16) []byte {
 	var b [num.MaxVarintLen32 + num.MaxVarintLen16]byte
 	return num.AppendUvarint(
@@ -59,7 +59,7 @@ func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
 					card = EstimateCardinality(b, 8)
 				}
 				if flt := BuildBloomFilter(b, card, int(f.Scale)); flt != nil {
-					blooms[uint16(i)] = flt.Bytes()
+					blooms[f.Id] = flt.Bytes()
 				}
 			}
 		case types.IndexTypeBfuse:
@@ -69,7 +69,7 @@ func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
 				if err != nil {
 					return err
 				}
-				fuses[uint16(i)], _ = flt.MarshalBinary()
+				fuses[f.Id], _ = flt.MarshalBinary()
 			}
 		case types.IndexTypeBits:
 			if idx.use.Is(FeatBitsFilter) {
@@ -80,7 +80,7 @@ func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
 					card = EstimateCardinality(b, 8)
 				}
 				if flt := BuildBitsFilter(b, card); flt != nil {
-					bits[uint16(i)] = flt.ToBuffer()
+					bits[f.Id] = flt.Bytes()
 				}
 			}
 		}
@@ -93,7 +93,7 @@ func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
 			if err != nil {
 				return err
 			}
-			ranges[uint16(i)] = rg.Bytes()
+			ranges[f.Id] = rg.Bytes()
 		}
 	}
 
@@ -184,7 +184,6 @@ func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
 func (idx Index) dropFilters(pkg *pack.Package) error {
 	// delete bloom and range filters using pkg key as prefix
 	return idx.db.Update(func(tx store.Tx) error {
-		prefix := num.EncodeUvarint(uint64(pkg.Key()))
 		for _, k := range []int{
 			STATS_BLOOM_KEY,
 			STATS_RANGE_KEY,
@@ -195,11 +194,12 @@ func (idx Index) dropFilters(pkg *pack.Package) error {
 			if b == nil {
 				return store.ErrNoBucket
 			}
-			c := b.Range(prefix)
-			for ok := c.First(); ok; ok = c.Next() {
-				_ = b.Delete(c.Key())
+			for _, f := range pkg.Schema().Exported() {
+				if f.Index == 0 {
+					continue
+				}
+				_ = b.Delete(filterKey(pkg.Key(), f.Id))
 			}
-			c.Close()
 		}
 		return nil
 	})

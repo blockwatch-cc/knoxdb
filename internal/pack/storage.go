@@ -190,11 +190,12 @@ func (p *Package) StoreToDisk(ctx context.Context, bucket store.Bucket) (int, er
 		// export block statistics
 		if p.stats != nil {
 			minv, maxv := stats.MinMax()
-			stats.Close()
 			p.stats.MinMax[i][0] = minv
 			p.stats.MinMax[i][1] = maxv
+			p.stats.Unique[i] = stats.Unique()
 			p.stats.DiffSize[i] = len(buf) - len(bucket.Get(bkey))
 		}
+		stats.Close()
 		n += len(buf)
 
 		// write to store (will keep a reference to buf until tx closes,

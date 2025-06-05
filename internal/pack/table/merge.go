@@ -112,9 +112,9 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 	// TODO: alloc & reuse tomb map & mask
 
 	// Phase 1 - move deleted table rows to history, rewrite table packs
-	tomb, mask, inJournalDeletes := seg.PrepareMerge()
-	if len(mask) > 0 {
-		src := t.NewReader().WithMask(mask, engine.ReadModeIncludeMask)
+	tombStones, tombMask, inJournalDeletes := seg.PrepareMerge()
+	if tombMask != nil {
+		src := t.NewReader().WithMask(tombMask, engine.ReadModeIncludeMask)
 		defer src.Close()
 		for {
 			pkg, err := src.Next(ctx)
@@ -129,13 +129,11 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 				// FIXME: patch xmax in history pack (which is writable)
 
 				// set xmax for deleted rows
-				pkg.Xmaxs().Materialize()
-				xmaxs := pkg.Xmaxs().Uint64().Slice()
-				rids := pkg.RowIds().Uint64().Slice() // use Iterator
-				for i, l := 0, pkg.Len(); i < l; i++ {
-					if xid, ok := tomb[rids[i]]; ok {
-						xmaxs[i] = xid
-					}
+				// pkg.Xmaxs().Materialize()
+				xmaxs := pkg.Xmaxs().Slice()
+				for _, v := range pkg.Selected() {
+					xmaxs[int(v)] = tombStones[0].Xid
+					tombStones = tombStones[1:]
 				}
 
 				// insert deleted rows into history
@@ -170,7 +168,7 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 			// TODO: is it more efficient to chain cmp.Equal + bitset.Indexes?
 			// plus, seg may be compressed, so Slice() is not available,
 			// -> use matcher instead
-			for i, v := range seg.Data().Xmaxs().Uint64().Slice() {
+			for i, v := range seg.Data().Xmaxs().Slice() {
 				if v == 0 {
 					sel = append(sel, uint32(i))
 				}

@@ -11,11 +11,12 @@ import (
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/engine"
+	"blockwatch.cc/knoxdb/internal/operator/filter"
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/internal/pack/match"
 	"blockwatch.cc/knoxdb/internal/pack/stats"
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/store"
+	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
@@ -63,7 +64,7 @@ type Reader struct {
 	rx        int                       // row id vector position
 	reqFields []uint16                  // query field ids for matching
 	resFields []uint16                  // result field ids (all when nil)
-	mask      []uint64                  // masked row ids (sorted)
+	mask      *xroar.Bitmap             // masked row ids (sorted)
 	pack      *pack.Package             // current package
 	hits      []uint32                  // selection vector
 	bits      *bitset.Bitset            // selection bitset
@@ -82,7 +83,7 @@ func (t *Table) NewReader() engine.TableReader {
 			Filters: makeRxFilter(rx),
 			Log:     t.log,
 		},
-		reqFields: []uint16{uint16(rx), uint16(rx + 2), uint16(rx + 3)},
+		reqFields: []uint16{schema.MetaRid, schema.MetaXmin, schema.MetaXmin},
 		hits:      arena.AllocUint32(t.opts.PackSize),
 		bits:      bitset.New(t.opts.PackSize),
 		useCache:  true,
@@ -102,7 +103,7 @@ func (r *Reader) WithFields(fids []uint16) engine.TableReader {
 	return r
 }
 
-func (r *Reader) WithMask(mask []uint64, mode engine.ReadMode) engine.TableReader {
+func (r *Reader) WithMask(mask *xroar.Bitmap, mode engine.ReadMode) engine.TableReader {
 	r.mask = mask
 	r.mode = mode
 	return r
@@ -125,7 +126,7 @@ func (r *Reader) Reset() {
 		Filters: makeRxFilter(r.rx),
 		Log:     r.table.log,
 	}
-	r.reqFields = []uint16{uint16(r.rx), uint16(r.rx + 2), uint16(r.rx + 3)}
+	r.reqFields = []uint16{schema.MetaRid, schema.MetaXmin, schema.MetaXmin}
 	r.resFields = nil
 	r.mask = nil
 	r.bcache = nil
@@ -182,24 +183,23 @@ func (r *Reader) Next(ctx context.Context) (*pack.Package, error) {
 
 func (r *Reader) nextLookupMatch(ctx context.Context) (*pack.Package, error) {
 	// no more matches
-	if len(r.mask) == 0 {
+	if r.mask.Count() == 0 {
 		return nil, nil
 	}
 
 	// find next potential pack match in statistics index
 	// (may use a backend read tx to load stats)
 	var ok bool
-	r.it, ok = r.stats.FindPk(ctx, r.mask[0])
+	r.it, ok = r.stats.FindRid(ctx, r.mask.Min())
 	if !ok {
-		r.mask = r.mask[:0]
+		r.mask.Reset()
 		return nil, nil
 	}
 
 	// obtain max row id and remove mask entries within this pack
-	_, rmax := r.it.MinMaxPk()
-	for len(r.mask) > 0 && r.mask[0] <= rmax.(uint64) {
-		r.mask = r.mask[1:]
-	}
+	// assumes table is sorted by rid (not applicable to history tables)
+	rmin, rmax := r.it.MinMaxRid()
+	r.mask.UnsetRange(rmin, rmax+1)
 
 	// load pack from it
 	err := r.loadPack(ctx, r.it.Key(), r.it.NValues(), r.resFields)
@@ -247,8 +247,8 @@ func (r *Reader) nextQueryMatch(ctx context.Context) (*pack.Package, error) {
 			return nil, err
 		}
 
-		// find actual matches (zero bits befor checking a pack)
-		match.MatchTree(r.query.Filters, r.pack, r.it, r.bits.Zero())
+		// find actual matches (zero bits before checking a pack)
+		filter.MatchTree(r.query.Filters, r.pack, r.it, r.bits.Zero())
 		r.query.Stats.Count(PACKS_SCHEDULED_KEY, 1)
 
 		// handle false positive metadata matches
@@ -259,35 +259,35 @@ func (r *Reader) nextQueryMatch(ctx context.Context) (*pack.Package, error) {
 		}
 
 		// handle real matches
-		r.hits = r.bits.Indexes(r.hits)
 		r.query.Stats.Count(PACKS_SCANNED_KEY, 1)
 
-		// constrain hits
-		var needCleanup bool
-
-		// apply exclusion mask
+		// apply exclusion mask, do not assume forward scan order,
+		// we may also walk backwards!
 		if r.mode == engine.ReadModeExcludeMask {
-			_, rmax := r.it.MinMaxPk()
-			for i, pos := range r.hits {
-				// read next row id
-				rid := r.pack.Pk(int(pos))
+			rmin, rmax := r.it.MinMaxRid()
+			if r.mask.ContainsRange(rmin, rmax) {
+				rids := r.pack.RowIds()
 
-				// drop non existent mask values (unlikely)
-				for len(r.mask) > 0 && r.mask[0] < rid {
-					r.mask = r.mask[1:]
-				}
+				// TODO: use chunk iterator
+				for i := range r.bits.Iterator() {
+					// read next row id
+					rid := rids.Get(i)
 
-				// stop when mask is exhausted or next mask value is outside this pack
-				if len(r.mask) == 0 || r.mask[0] > rmax.(uint64) {
-					break
-				}
+					// reset matched bit and remove rid from mask
+					if r.mask.Contains(rid) {
+						r.bits.Unset(i)
+						r.mask.Unset(rid)
+					}
 
-				// on match, mark selection for removal and advance mask
-				if rid == r.mask[0] {
-					r.hits[i] = DROP_MARKER
-					r.mask = r.mask[1:]
-					needCleanup = true
+					// TODO: measure if this is faster than checking all matches
+					// and removing a range
+
+					// stop early when next mask value is outside this pack
+					if r.mask.Min() > rmax {
+						break
+					}
 				}
+				// r.mask.UnsetRange(rmin, rmax+1)
 			}
 		}
 
@@ -307,11 +307,11 @@ func (r *Reader) nextQueryMatch(ctx context.Context) (*pack.Package, error) {
 		if !r.query.Snap.Safe {
 			// hide future values from concurrent txn based on rec.$xmin
 			x, y := r.it.MinMax(r.rx + 2)
+			xmins := r.pack.Xmins()
 			if r.query.Snap.Xmin >= x.(uint64) && r.query.Snap.Xmin <= y.(uint64) {
-				for i, pos := range r.hits {
-					if !r.query.Snap.IsVisible(r.pack.Xmin(int(pos))) {
-						r.hits[i] = DROP_MARKER
-						needCleanup = true
+				for i := range r.bits.Iterator() {
+					if !r.query.Snap.IsVisible(xmins.Get(i)) {
+						r.bits.Unset(i)
 					}
 				}
 			}
@@ -319,33 +319,20 @@ func (r *Reader) nextQueryMatch(ctx context.Context) (*pack.Package, error) {
 			// hide deleted rows based on rec.$xmax
 			x, y = r.it.MinMax(r.rx + 3)
 			if r.query.Snap.Xmax >= x.(uint64) && r.query.Snap.Xmax <= y.(uint64) {
-				for i, pos := range r.hits {
-					if !r.query.Snap.IsVisible(r.pack.Xmax(int(pos))) {
-						r.hits[i] = DROP_MARKER
-						needCleanup = true
+				xmaxs := r.pack.Xmaxs()
+				for i := range r.bits.Iterator() {
+					if !r.query.Snap.IsVisible(xmaxs.Get(i)) {
+						r.bits.Unset(i)
 					}
 				}
 			}
-
 		}
 
-		// remove excluded hits
-		if needCleanup {
-			var k int
-			for i, l := 0, len(r.hits); i < l; i++ {
-				if r.hits[i] != DROP_MARKER {
-					r.hits[k] = r.hits[i]
-					k++
-				}
-			}
-			r.hits = r.hits[:k]
-
-			// skip pack when no more hits remain
-			if len(r.hits) == 0 {
-				r.pack.Release()
-				r.pack = nil
-				continue
-			}
+		// check if there is a result match left
+		if r.bits.None() {
+			r.pack.Release()
+			r.pack = nil
+			continue
 		}
 
 		// load remaining columns here
@@ -357,7 +344,7 @@ func (r *Reader) nextQueryMatch(ctx context.Context) (*pack.Package, error) {
 			r.table.schema.Name(), r.it.Key(), len(r.hits), r.it.NValues())
 
 		// set pack selection vector
-		r.pack.WithSelection(r.hits)
+		r.pack.WithSelection(r.bits.Indexes(r.hits))
 
 		return r.pack, nil
 	}
@@ -371,7 +358,8 @@ func makeRxFilter(rx int) *query.FilterTreeNode {
 					Name:    "$rid",
 					Type:    query.BlockUint64,
 					Mode:    query.FilterModeTrue,
-					Index:   uint16(rx),
+					Index:   rx,
+					Id:      schema.MetaRid,
 					Value:   nil,
 					Matcher: query.NoopMatcher,
 				},

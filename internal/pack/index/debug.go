@@ -12,7 +12,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/pack/stats"
 	"blockwatch.cc/knoxdb/internal/store"
-	"blockwatch.cc/knoxdb/pkg/bitmap"
+	"blockwatch.cc/knoxdb/internal/xroar"
 )
 
 func (idx *Index) ViewStats(i int) *stats.Record {
@@ -48,8 +48,8 @@ func (idx *Index) ViewPackage(ctx context.Context, i int) *pack.Package {
 	}
 }
 
-func (idx *Index) ViewTomb() bitmap.Bitmap {
-	bits := bitmap.New()
+func (idx *Index) ViewTomb() *xroar.Bitmap {
+	bits := xroar.New()
 	for _, v := range idx.tomb.Block(0).Uint64().Slice() {
 		bits.Set(v)
 	}

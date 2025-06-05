@@ -22,13 +22,13 @@ import (
 // Test Helpers
 //
 
+// we use a test struct without metadata (i.e. rid == pk)
 type TestStruct struct {
 	Id  uint64 `knox:"id,pk"`
 	I64 int64  `knox:"i64,index=bloom:2"`
 	I32 int32  `knox:"i32,index=bfuse"`
 	I16 int16  `knox:"i16"`
 	I8  int8   `knox:"i8,index=bits"`
-	// Buf []byte `knox:"buf,fixed=8"`
 	Buf []byte `knox:"buf"`
 }
 
@@ -108,7 +108,8 @@ func makeFilter(name string, mode query.FilterMode, val, val2 any) *query.Filter
 			Name:    field.Name(),
 			Type:    field.Type().BlockType(),
 			Mode:    mode,
-			Index:   field.Id() - 1,
+			Index:   int(field.Id() - 1), // valid for test schema without metadata
+			Id:      field.Id(),
 			Value:   val,
 			Matcher: m,
 		},
@@ -141,20 +142,6 @@ func validateTree(t *testing.T, idx *Index) {
 			require.NotNil(t, idx.inodes[n], "inode=%d", n)
 		}
 	}
-
-	// TODO (only right sub-trees may not exist up to a certain level
-	// we could probably compute at which level to stop)
-	// all parent inodes for non-existing snodes are nil
-	// make slen even because parent exists for left only child
-	// t.Logf("ilen=%d slen=%d", ilen, slen)
-	// slen += slen % 2
-	// for i := slen; i < ilen; i++ {
-	// 	sx := i + ilen - 1
-	// 	t.Logf("snode=%d id=%d parent=%d", i, sx, parentIndex(sx))
-	// 	for n := parentIndex(sx); n >= 0; n = parentIndex(n) {
-	// 		require.Nil(t, (*idx.inodes)[n], "inode=%d", n)
-	// 	}
-	// }
 }
 
 // -------------------------------------------------------------
@@ -246,7 +233,6 @@ func TestIndexAddMany(t *testing.T) {
 	// num snodes we expect to attach
 	sz := 5
 	for n := 0; n < sz; n++ {
-		// t.Logf("Starting spack #%d", n)
 		// number of data packs per spack
 		for p := 0; p < STATS_PACK_SIZE; p++ {
 			// package key (sequential)
@@ -386,7 +372,7 @@ func TestIndexDeleteMany(t *testing.T) {
 
 	// delete the first spack worth of data packs
 	for i := 0; i < STATS_PACK_SIZE; i++ {
-		pkg := pack.New().WithKey(uint32(i))
+		pkg := pack.New().WithKey(uint32(i)).WithSchema(TestSchema)
 		require.NoError(t, idx.DeletePack(ctx, pkg))
 	}
 

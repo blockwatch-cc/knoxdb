@@ -12,7 +12,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/bitmap"
+	"blockwatch.cc/knoxdb/internal/xroar"
 )
 
 // This index supports the following condition types on lookup.
@@ -76,7 +76,7 @@ func (idx *Index) canMatchFilter(f *query.Filter) bool {
 	}
 }
 
-func (idx *Index) Query(ctx context.Context, c engine.QueryCondition) (*bitmap.Bitmap, bool, error) {
+func (idx *Index) Query(ctx context.Context, c engine.QueryCondition) (*xroar.Bitmap, bool, error) {
 	node, ok := c.(*query.FilterTreeNode)
 	if !ok {
 		return nil, false, fmt.Errorf("invalid condition type %T", c)
@@ -93,7 +93,7 @@ func (idx *Index) Query(ctx context.Context, c engine.QueryCondition) (*bitmap.B
 
 	// choose the query algorithm (lookup or scan)
 	var (
-		bits *bitmap.Bitmap
+		bits *xroar.Bitmap
 		err  error
 	)
 	switch idx.opts.Type {
@@ -114,7 +114,7 @@ func (idx *Index) Query(ctx context.Context, c engine.QueryCondition) (*bitmap.B
 	return bits, canCollide, err
 }
 
-func (idx *Index) QueryComposite(ctx context.Context, c engine.QueryCondition) (*bitmap.Bitmap, bool, error) {
+func (idx *Index) QueryComposite(ctx context.Context, c engine.QueryCondition) (*xroar.Bitmap, bool, error) {
 	node, ok := c.(*query.FilterTreeNode)
 	if !ok {
 		return nil, false, fmt.Errorf("invalid condition type %T", c)
@@ -139,9 +139,9 @@ func (idx *Index) QueryComposite(ctx context.Context, c engine.QueryCondition) (
 }
 
 // Range scans for LE, LT, GE, GT, RG (int type only)
-func (idx *Index) queryKeys(ctx context.Context, node *query.FilterTreeNode) (*bitmap.Bitmap, error) {
+func (idx *Index) queryKeys(ctx context.Context, node *query.FilterTreeNode) (*xroar.Bitmap, error) {
 	var (
-		bits = bitmap.New()
+		bits = xroar.New()
 		it   = NewScanIterator(idx, node, true)
 	)
 
@@ -183,18 +183,18 @@ func (idx *Index) queryKeys(ctx context.Context, node *query.FilterTreeNode) (*b
 		}
 	}
 
-	return &bits, nil
+	return bits, nil
 }
 
 // lookup only matches EQ, IN, NI (list of search keys is known)
-func (idx *Index) lookupKeys(ctx context.Context, keys []uint64) (*bitmap.Bitmap, error) {
+func (idx *Index) lookupKeys(ctx context.Context, keys []uint64) (*xroar.Bitmap, error) {
 	var (
 		next         int
 		nKeysMatched uint32
 		nKeys        = uint32(len(keys))
 		maxKey       = keys[nKeys-1]
 		it           = NewLookupIterator(idx, keys, true)
-		bits         = bitmap.New()
+		bits         = xroar.New()
 		in           = keys
 	)
 
@@ -310,5 +310,5 @@ func (idx *Index) lookupKeys(ctx context.Context, keys []uint64) (*bitmap.Bitmap
 		// }
 	}
 
-	return &bits, nil
+	return bits, nil
 }

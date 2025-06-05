@@ -5,47 +5,48 @@ package journal
 
 import (
 	"bytes"
+	"container/heap"
 	"context"
 	"encoding/binary"
 	"io"
-	"slices"
 	"sort"
 
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
-	"blockwatch.cc/knoxdb/pkg/util"
+	"blockwatch.cc/knoxdb/pkg/num"
 )
 
 type Tomb struct {
-	keys   *xroar.Bitmap // pks with tombstones (updated or deleted records)
-	stones []Tombstone   // list of tombstones sorted by pk and rid
+	rids   *xroar.Bitmap // rids with tombstones (updated or deleted records)
+	stones Tombstones    // list of tombstones sorted by xid
 	maxsz  int           // max number of tombstones
 	dirty  bool
 }
 
 type Tombstone struct {
-	pk  uint64 // unique pk of the deleted record
-	rid uint64 // unique row id that deleted record
-	xid uint64 // transaction that deleted this record
-	upd bool   // true when deletion was due to an update
+	Xid uint64 // transaction that deleted this record
+	Rid uint64 // unique row id the deleted record
 }
 
-func cmpTombstone(a, b Tombstone) int {
-	if a.pk < b.pk {
-		return -1
-	}
-	if a.pk > b.pk {
-		return 1
-	}
-	if a.rid < b.rid {
-		return -1
-	}
-	if a.rid > b.rid {
-		return 1
-	}
-	return 0
+// implements container/heap interface to keep list sorted by xid
+type Tombstones []Tombstone
+
+func (l Tombstones) Len() int           { return len(l) }
+func (l Tombstones) Less(i, j int) bool { return l[i].Xid < l[j].Xid }
+func (l Tombstones) Swap(i, j int)      { l[i], l[j] = l[j], l[i] }
+
+func (h *Tombstones) Push(x any) {
+	*h = append(*h, x.(Tombstone))
+}
+
+func (h *Tombstones) Pop() any {
+	old := *h
+	n := len(old)
+	x := old[n-1]
+	*h = old[0 : n-1]
+	return x
 }
 
 func newTomb(maxsz int) *Tomb {
@@ -53,14 +54,14 @@ func newTomb(maxsz int) *Tomb {
 }
 
 func (t *Tomb) Clear() {
-	t.keys = nil
+	t.rids = nil
 	t.stones = nil
 	t.dirty = false
 }
 
 func (t *Tomb) Reset() {
-	if t.keys != nil {
-		t.keys.Reset()
+	if t.rids != nil {
+		t.rids.Reset()
 	}
 	t.stones = t.stones[:0]
 	t.dirty = false
@@ -70,32 +71,26 @@ func (t *Tomb) Len() int {
 	return len(t.stones)
 }
 
-func (t *Tomb) Keys() *xroar.Bitmap {
-	return t.keys
+func (t *Tomb) RowIds() *xroar.Bitmap {
+	return t.rids
 }
 
 func (t *Tomb) Stones() []Tombstone {
 	return t.stones
 }
 
-func (t *Tomb) HeapSize() int {
-	return 28*len(t.stones) + t.keys.Size() + 36
+func (t *Tomb) Size() int {
+	return 16*len(t.stones) + t.rids.Size() + 44
 }
 
-func (t *Tomb) Append(pk, xid, rid uint64, isUpd bool) {
-	var idx int
-	stone := Tombstone{pk: pk, rid: rid, xid: xid, upd: isUpd}
-	if t.keys == nil {
-		t.keys = xroar.New()
-		t.stones = make([]Tombstone, 1, t.maxsz)
-	} else {
-		// insert in place, keep duplicates (equal pk/rid, different xid)
-		idx, _ = slices.BinarySearchFunc(t.stones, stone, cmpTombstone)
-		t.stones = append(t.stones, Tombstone{})
-		copy(t.stones[idx+1:], t.stones[idx:])
+func (t *Tomb) Append(xid, rid uint64) {
+	stone := Tombstone{Xid: xid, Rid: rid}
+	if t.rids == nil {
+		t.rids = xroar.New()
+		t.stones = make([]Tombstone, 0, t.maxsz)
 	}
-	t.keys.Set(pk)
-	t.stones[idx] = stone
+	heap.Push(&t.stones, stone)
+	t.rids.Set(rid)
 	t.dirty = true
 }
 
@@ -104,71 +99,94 @@ func (t *Tomb) CommitTx(xid uint64) {
 }
 
 func (t *Tomb) AbortTx(xid uint64) int {
+	l := len(t.stones)
+	idx := sort.Search(l, func(i int) bool {
+		return t.stones[i].Xid >= xid
+	})
+	if idx == l {
+		return 0
+	}
 	var n int
-	for i, v := range t.stones {
-		if v.xid != xid {
-			continue
+	for i := range t.stones[idx:] {
+		s := &t.stones[i]
+		if s.Xid != xid {
+			break
 		}
-		t.stones[i].xid = 0
-		n += util.Bool2int(!t.stones[i].upd)
-		t.dirty = true
+		s.Xid = 0
+		t.rids.Unset(s.Rid)
+		n++
+	}
+
+	// fix heap and remove aborted entries
+	if n > 0 {
+		heap.Init(&t.stones)
+		copy(t.stones, t.stones[n:])
+		t.stones = t.stones[:len(t.stones)-n]
+		t.dirty = len(t.stones) > 0
 	}
 	return n
 }
 
 func (t *Tomb) AbortActiveTx(xact *xroar.Bitmap) int {
-	var n int
-	for i, v := range t.stones {
-		if !xact.Contains(v.xid) {
-			continue
+	var (
+		n, i int
+		l    = len(t.stones)
+	)
+	it := xact.NewIterator()
+	for {
+		xid, ok := it.Next()
+		if !ok || i == l {
+			break
 		}
-		t.stones[i].xid = 0
-		n += util.Bool2int(!t.stones[i].upd)
-		t.dirty = true
+
+		// skip non-matching stones
+		for i < l && t.stones[i].Xid < xid {
+			i++
+		}
+
+		// reset matching stones
+		for i < l && t.stones[i].Xid == xid {
+			t.stones[i].Xid = 0
+			t.rids.Unset(t.stones[i].Rid)
+			i++
+			n++
+		}
 	}
+
+	// fix heap and remove aborted entries
+	if n > 0 {
+		heap.Init(&t.stones)
+		copy(t.stones, t.stones[n:])
+		t.stones = t.stones[:len(t.stones)-n]
+		t.dirty = len(t.stones) > 0
+	}
+
 	return n
 }
 
-// allow multiple entries with the same pk and different rid/xids
-func (t *Tomb) Lookup(pk uint64) ([]Tombstone, bool) {
-	if t.keys == nil {
-		return nil, false
+func (t *Tomb) MergeVisible(set *xroar.Bitmap, snap *types.Snapshot) {
+	if len(t.stones) == 0 {
+		return
 	}
-	if !t.keys.Contains(pk) {
-		return nil, false
-	}
-	idx := sort.Search(len(t.stones), func(i int) bool {
-		return t.stones[i].pk >= pk
-	})
-	if idx == len(t.stones) || t.stones[idx].pk != pk {
-		return nil, false
-	}
-	var n int
-	for idx+n < len(t.stones) && t.stones[idx+n].pk == pk {
-		n++
-	}
-	return t.stones[idx : idx+n], true
-}
+	for _, s := range t.stones {
+		// future tx are invisible
+		if s.Xid > snap.Xmax {
+			continue
+		}
 
-func (t *Tomb) IsDeleted(pk uint64, snap *types.Snapshot) (Tombstone, bool) {
-	stones, ok := t.Lookup(pk)
-	if ok {
-		for _, stone := range stones {
-			// skip updates
-			if stone.upd {
-				continue
-			}
-			// skip aborted and future tx (quick check)
-			if stone.xid == 0 || stone.xid >= snap.Xmax {
-				continue
-			}
-			// check visibility (full check)
-			if snap.IsVisible(stone.xid) {
-				return stone, true
-			}
+		// past tx before horizon and own tx are visible
+		if s.Xid == snap.Xown || s.Xid < snap.Xmin {
+			set.Set(s.Rid)
+			continue
+		}
+
+		// TODO: benchmark if we can just use the full check without shortcuts
+
+		// full visibility check
+		if snap.IsVisible(s.Xid) {
+			set.Set(s.Rid)
 		}
 	}
-	return Tombstone{}, false
 }
 
 func (t *Tomb) Load(ctx context.Context, bucket store.Bucket, id uint32) error {
@@ -211,35 +229,31 @@ func (t *Tomb) Remove(ctx context.Context, bucket store.Bucket, id uint32) error
 }
 
 func (t *Tomb) MarshalBinary() ([]byte, error) {
-	var b [binary.MaxVarintLen64]byte
-	buf := bytes.NewBuffer(make([]byte, 0, len(t.stones)*13)) // approx
+	var b [num.MaxVarintLen64]byte
+	buf := bytes.NewBuffer(make([]byte, 0, len(t.stones)*8)) // approx
 
 	// n items
-	buf.Write(b[:binary.PutUvarint(b[:], uint64(len(t.stones)))])
+	buf.Write(b[:num.PutUvarint(b[:], uint64(len(t.stones)))])
 
 	if len(t.stones) == 0 {
 		return buf.Bytes(), nil
 	}
 
-	// minima
-	minPk, minRid, minXid := t.stones[0].pk, t.stones[0].rid, t.stones[0].xid
+	// find minima
+	minRid, minXid := t.stones[0].Rid, t.stones[0].Xid
 	for _, v := range t.stones[1:] {
-		minPk = min(minPk, v.pk)
-		minRid = min(minRid, v.rid)
-		minXid = min(minXid, v.xid)
+		minRid = min(minRid, v.Rid)
+		minXid = min(minXid, v.Xid)
 	}
 
 	// write minima
-	buf.Write(b[:binary.PutUvarint(b[:], minPk)])
-	buf.Write(b[:binary.PutUvarint(b[:], minRid)])
-	buf.Write(b[:binary.PutUvarint(b[:], minXid)])
+	buf.Write(b[:num.PutUvarint(b[:], minRid)])
+	buf.Write(b[:num.PutUvarint(b[:], minXid)])
 
 	// write diffs
 	for _, v := range t.stones {
-		buf.Write(b[:binary.PutUvarint(b[:], v.pk-minPk)])
-		buf.Write(b[:binary.PutUvarint(b[:], v.rid-minRid)])
-		buf.Write(b[:binary.PutUvarint(b[:], v.xid-minXid)])
-		buf.WriteByte(util.Bool2byte(v.upd))
+		buf.Write(b[:binary.PutUvarint(b[:], v.Rid-minRid)])
+		buf.Write(b[:binary.PutUvarint(b[:], v.Xid-minXid)])
 	}
 
 	return buf.Bytes(), nil
@@ -247,13 +261,11 @@ func (t *Tomb) MarshalBinary() ([]byte, error) {
 
 func (t *Tomb) UnmarshalBinary(buf []byte) error {
 	// n items
-	v, n := binary.Uvarint(buf)
-	t.stones = make([]Tombstone, int(v))
+	v, n := num.Uvarint(buf)
+	t.stones = make(Tombstones, int(v))
 	buf = buf[n:]
 
 	// minima
-	minPk, n := binary.Uvarint(buf)
-	buf = buf[n:]
 	minRid, n := binary.Uvarint(buf)
 	buf = buf[n:]
 	minXid, n := binary.Uvarint(buf)
@@ -264,30 +276,24 @@ func (t *Tomb) UnmarshalBinary(buf []byte) error {
 	}
 
 	if len(t.stones) > 0 {
-		t.keys = xroar.New()
+		t.rids = xroar.New()
 	}
 
 	// read diffs
 	for i := range t.stones {
-		v, n = binary.Uvarint(buf)
+		v, n = num.Uvarint(buf)
 		buf = buf[n:]
-		t.stones[i].pk = v + minPk
-		t.keys.Set(v + minPk)
+		rid := v + minRid
+		t.stones[i].Rid = rid
+		t.rids.Set(rid)
 
-		v, n = binary.Uvarint(buf)
+		v, n = num.Uvarint(buf)
 		buf = buf[n:]
-		t.stones[i].rid = v + minRid
+		t.stones[i].Xid = v + minXid
 
-		v, n = binary.Uvarint(buf)
-		buf = buf[n:]
-		t.stones[i].xid = v + minXid
-
-		t.stones[i].upd = buf[0] > 0
-		buf = buf[1:]
-	}
-
-	if n == 0 {
-		return io.ErrShortBuffer
+		if n == 0 {
+			return io.ErrShortBuffer
+		}
 	}
 
 	return nil

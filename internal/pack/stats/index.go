@@ -190,6 +190,7 @@ type Index struct {
 	inodes       []*INode              // inner nodes of the binary tree as array
 	snodes       []*SNode              // leaf nodes of the binary tree as array
 	rx           int                   // index of the data pack's rowid column
+	px           int                   // index of the data pack's primary key column
 	nmax         int                   // max data pack size
 	view         *schema.View          // helper to extract tree node data from wire format
 	build        *schema.Builder       // wire format builder (writer only)
@@ -211,6 +212,10 @@ func NewIndex(db store.DB, s *schema.Schema, nmax int) *Index {
 	makekey := func(k []byte) []byte {
 		return bytes.Join([][]byte{[]byte(ss.Name()), k}, nil)
 	}
+	rx, px := s.RowIdIndex(), s.PkIndex()
+	if rx < 0 {
+		rx = px
+	}
 	return &Index{
 		schema: ss,
 		db:     db,
@@ -224,7 +229,8 @@ func NewIndex(db store.DB, s *schema.Schema, nmax int) *Index {
 		},
 		inodes: inodes,
 		snodes: snodes,
-		rx:     s.RowIdIndex(),
+		rx:     rx,
+		px:     px,
 		nmax:   nmax,
 		view:   schema.NewView(ss),
 		build:  schema.NewBuilder(ss, binary.LittleEndian),
@@ -241,6 +247,7 @@ func (idx Index) Clone() *Index {
 		inodes: slices.Clone(idx.inodes),
 		snodes: slices.Clone(idx.snodes),
 		rx:     idx.rx,
+		px:     idx.px,
 		nmax:   idx.nmax,
 		view:   schema.NewView(idx.schema), // create a private view state
 		build:  idx.build,                  // link builder, its only accessed during updates
@@ -290,6 +297,7 @@ func (idx *Index) Close() {
 	idx.view = nil
 	idx.build = nil
 	idx.rx = 0
+	idx.px = 0
 	idx.nmax = 0
 	idx.use = 0
 }
@@ -633,6 +641,22 @@ func (idx Index) GlobalMaxRid() uint64 {
 	return val.(uint64)
 }
 
+func (idx Index) GlobalMinPk() uint64 {
+	val, ok := idx.root().Get(idx.view, minColIndex(idx.px))
+	if !ok {
+		return 0
+	}
+	return val.(uint64)
+}
+
+func (idx Index) GlobalMaxPk() uint64 {
+	val, ok := idx.root().Get(idx.view, maxColIndex(idx.px))
+	if !ok {
+		return 0
+	}
+	return val.(uint64)
+}
+
 func (idx Index) IsTailFull() bool {
 	if idx.Len() == 0 {
 		return false
@@ -681,14 +705,15 @@ func (idx *Index) Get(key uint32) (*Record, bool) {
 // pack order invariant (this is required to quickly lookup packs in the index)
 func (idx *Index) FindRid(ctx context.Context, rid uint64) (*Iterator, bool) {
 	// create an equal filter condition which will be used to find
-	// the matching data pack for this pk based on min/max statistics
-	// this filter ensures the spack min.max pk columns aere loaded
+	// the matching data pack for this rowid based on min/max statistics
+	// this filter ensures the spack min/max rowid columns are loaded
 	// other required columns: STATS_ROW_KEY and STATS_ROW_NVALS are
 	// auto-loaded by iterator queries
 	flt := idx.makeRidFilter(query.FilterModeEqual, rid)
 
 	// return an iterator for the last data pack in the last spack
-	// unless this data pack is full (requires pack order == pk order)
+	// unless this data pack is full (requires pack order == rid order
+	// which is true for regular table packs but not history packs)
 	if gmax := idx.GlobalMaxRid(); rid > gmax {
 		slen := len(idx.snodes)
 
@@ -706,7 +731,7 @@ func (idx *Index) FindRid(ctx context.Context, rid uint64) (*Iterator, bool) {
 			use:    0,
 			vmatch: bitset.New(STATS_PACK_SIZE),
 			smatch: bitset.New(slen),
-			match:  make([]uint32, 0),
+			match:  make([]uint32, 0, 1),
 			sx:     slen - 2, // start at last spack (it will +1)
 			n:      -1,       // start at first offset (it will +1)
 		}
@@ -1130,15 +1155,21 @@ func (idx *Index) rebuildInodeTree() {
 }
 
 func (idx Index) makeRidFilter(mode query.FilterMode, rid uint64) *query.FilterTreeNode {
-	pkField, _ := idx.schema.FieldByIndex(minColIndex(idx.rx))
-	m := query.NewFactory(pkField.Type()).New(mode)
+	// when schema has no metadata (px == rx) fall back to pk field
+	field, _ := idx.schema.FieldByIndex(minColIndex(idx.rx))
+	m := query.NewFactory(types.FieldTypeUint64).New(mode)
 	m.WithValue(rid)
+	id := schema.MetaRid
+	if idx.rx == idx.px {
+		id = uint16(idx.px + 1)
+	}
 	return &query.FilterTreeNode{
 		Filter: &query.Filter{
-			Name:    strings.TrimSuffix(pkField.Name(), "_min"),
-			Type:    pkField.Type().BlockType(),
+			Name:    strings.TrimPrefix(field.Name(), "min_"),
+			Type:    types.BlockUint64,
 			Mode:    mode,
-			Index:   uint16(idx.rx),
+			Index:   idx.rx,
+			Id:      id,
 			Value:   rid,
 			Matcher: m,
 		},

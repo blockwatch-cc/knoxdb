@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"slices"
 
-	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/query"
@@ -17,6 +16,11 @@ import (
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
+
+// TODO
+// - split and roll segements automatically, return to caller with (n, ok?, err)
+// - refactor segment.PrepareMerge
+// - design when/how to store a segment and replace it with loaded/compressed blocks
 
 // Outside caller must split message batches into individual operations and
 // must break logical operations into physical append-only updates:
@@ -30,6 +34,7 @@ import (
 //
 // Special case handling (same tx merge not yet implemented)
 //
+// FIXME: this comment is no longer correct:
 // Any sequence of insert/update/delete to the same pk in the same tx
 // is minified on merge combining all updates into a single event:
 //
@@ -90,10 +95,10 @@ func (j *Journal) Segments() []*Segment {
 	return append([]*Segment{j.active}, j.passive...)
 }
 
-func (j *Journal) HeapSize() (sz int) {
-	sz = j.active.HeapSize()
+func (j *Journal) Size() (sz int) {
+	sz = j.active.Size()
 	for _, v := range j.passive {
-		sz += v.HeapSize()
+		sz += v.Size()
 	}
 	return
 }
@@ -328,143 +333,30 @@ func (j *Journal) Query(node *query.FilterTreeNode, snap *types.Snapshot) *Resul
 	res := NewResult()
 	bits := bitset.New(j.maxsz)
 
-	// scratch space for bitset indexes
-	hits := arena.AllocUint32(j.maxsz)
-
 	// Walk segments in LIFO order starting at active segment, this ensures we
-	// find the most recent visible update of a primary key first. We will then
-	// skip any previous/older copy of that primary key.
+	// find all deleted records (row ids) with the effect that we only keep the
+	// most recent visible update of a record in the query result set.
 	for _, seg := range slices.Backward(append(j.passive, j.active)) {
-		// Identify deleted records under snapshot isolation first. This ensures we know
-		// which record is actually active and which has been deleted before we merge
-		// segment matches into our query result. The reason is that we do not set xmax
-		// in completed segments so that a SI visibility check alone is not sufficient
-		// to hide deleted records.
-		for _, stone := range seg.Tomb().Stones() {
-			// skip updates
-			if stone.upd {
-				continue
-			}
+		// First, identify deleted records under snapshot isolation by merging visible
+		// tombstones across all segments. This ensures we know which journal records
+		// are actually active for a given xid and which records have been deleted
+		// even if deletion happened in a younger segments. We will use this info to
+		// exclude deleted row ids from table scans and exclude them from the current
+		// and from older journal segments' match results. Recall, (a) we walk the journal
+		// backwards in time and (b) passive/immutable segments will not have xmax set
+		// if an update/delete happend after a segment was frozen. Because xmax is
+		// not written in such cases, a regular SI visibility check alone is insufficient.
+		seg.MergeDeleted(res.tomb, snap)
 
-			// skip invisible deletions
-			if !snap.IsVisible(stone.xid) {
-				continue
-			}
+		// match filters & apply snapshot visibility and tomb
+		seg.Match(node, snap, res.tomb, bits.Zero())
 
-			// remember true deletions
-			res.SetDeleted(stone.pk)
-		}
-
-		// match filters & apply snapshot visibility
-		if matched := seg.Match(node, snap, bits); matched != nil && matched.Any() {
-			// merge matches across segments
-			res.Append(seg, matched.Indexes(hits))
-		}
+		// add segment to result if it has any match
+		res.Append(seg, bits)
 	}
 
 	// free scratch
-	arena.Free(hits[:0])
 	bits.Close()
 
 	return res
 }
-
-// Finds the rowid of the most recent non deleted primary key. Uses snapshot to
-// identify conflicts. Returns rid, isConflict, isFound.
-//
-// Function is used during update with user record that lacks rid. If we had update
-// call with query this would not be necessary. A conflict exists when the found pk's
-// active record has a xmin in the snapshot's xact set, call snap.IsConflict(xid)
-func (j *Journal) FindRid(pk uint64, snap *types.Snapshot) (uint64, bool, bool) {
-	// TODO: lock-free segment walk
-	// - use linked list for passive segments and optimistic locks
-	// - requires max size array and rotation (is this desirable?)
-	// - walk conflicts with segment rotation and free after merge
-	// j.mu.RLock()
-	// defer j.mu.RUnlock()
-
-	// check if pk is deleted, succeed if tombstone is visible
-	if _, ok := j.IsDeleted(pk, snap); ok {
-		// TODO: conflicts are hidden by visibility check
-		// return 0, snap.IsConflict(stone.xid), true
-		return 0, false, true
-	}
-
-	// start with active segment
-	seg := j.active
-	passive := j.passive
-
-	// find the most recent version of pk that is visible at the point where tx
-	// started (xmin < xmax), and cross-check isolation snapshot for conflict
-	// (a concurrent tx has created the record)
-	for {
-		// todo: per segment bloom filter on contained pks for quick exclusion check
-
-		// reverse scan
-		pks := seg.data.PkColumn()
-		for i := len(pks) - 1; i >= 0; i-- {
-			// skip non matches
-			if pks[i] != pk {
-				continue
-			}
-
-			// skip journal records from aborted and future txn
-			xid := seg.data.Xmin(i)
-			if xid == 0 || xid >= snap.Xmax {
-				continue
-			}
-
-			// found the most recent record
-			isConflict := snap.IsConflict(xid)
-			rid := seg.data.RowId(i)
-			return rid, isConflict, true
-		}
-
-		// next round
-		if len(passive) == 0 {
-			break
-		}
-		seg = passive[0]
-		passive = passive[1:]
-	}
-
-	// return: rid, isConflict, isFound
-	return 0, false, false
-}
-
-// IsDeleted checks if pk is in any of the current tombstones and visible under
-// snapshot isolation rules.
-func (j *Journal) IsDeleted(pk uint64, snap *types.Snapshot) (Tombstone, bool) {
-	if ts, ok := j.active.Tomb().IsDeleted(pk, snap); ok {
-		return ts, ok
-	}
-	for _, v := range j.passive {
-		if ts, ok := v.Tomb().IsDeleted(pk, snap); ok {
-			return ts, ok
-		}
-	}
-	return Tombstone{}, false
-}
-
-// LookupTomb returns all tombstone records for this pk regardless of snapshot rules.
-// It is up to the caller to decide which tombstones are visible.
-// func (j *Journal) LookupTomb(pk uint64) []Tombstone {
-// 	var ts []Tombstone
-// 	if v, ok := j.active.Tomb().Lookup(pk); ok {
-// 		ts = append(ts, v...)
-// 	}
-// 	for _, v := range j.passive {
-// 		if v, ok := v.Tomb().Lookup(pk); ok {
-// 			ts = append(ts, v...)
-// 		}
-// 	}
-// 	return ts
-// }
-
-// Searches for the most recent version of a record based on its unique pk
-// and the transaction's snapshot visibility rules. Returns record metadata,
-// the wire encoded record and true when found.
-// func (j *Journal) FindPk(pk uint64, snap *types.Snapshot) (schema.Meta, []byte, bool) {
-// 	// TODO: unnecessary
-// 	return schema.Meta{}, nil, false
-// }

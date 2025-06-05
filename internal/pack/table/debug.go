@@ -8,7 +8,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/pack/stats"
-	"blockwatch.cc/knoxdb/pkg/bitmap"
+	"blockwatch.cc/knoxdb/internal/xroar"
 )
 
 func (t *Table) ViewStats(i int) *stats.Record {
@@ -45,7 +45,7 @@ func (t *Table) ViewPackage(ctx context.Context, i int) *pack.Package {
 	return pkg
 }
 
-func (t *Table) ViewTomb() bitmap.Bitmap {
+func (t *Table) ViewTomb() *xroar.Bitmap {
 	// TODO: howto address multi-segment journal?
-	return bitmap.Bitmap{Bitmap: t.journal.Active().Tomb().Keys()}
+	return t.journal.Active().Tomb().RowIds()
 }

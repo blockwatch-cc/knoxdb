@@ -4,7 +4,6 @@
 package index
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"sync/atomic"
@@ -188,14 +187,13 @@ func (it *MergeIterator) Store(pkg *pack.Package) error {
 			it.nTxBytes++
 		} else {
 			// it.idx.log.Infof("Storing block 0x%016x:%016x:%d as %x", id.Ik, id.Pk, i, key)
-			b := pkg.Block(i)
-			buf := bytes.NewBuffer(make([]byte, 0, b.MaxStoredSize()))
-			_, err = b.WriteTo(buf)
+			buf, stats, err := pkg.Block(i).Encode(types.BlockCompressNone)
 			if err == nil {
-				err = bucket.Put(key, buf.Bytes())
+				err = bucket.Put(key, buf)
 			}
-			n += buf.Len()
-			b.SetClean()
+			stats.Close()
+			n += len(buf)
+			pkg.Block(i).SetClean()
 		}
 		if err != nil {
 			return err
@@ -347,7 +345,7 @@ func (it *MergeIterator) loadNextPack(search MergeValue) error {
 
 		// create and decode block
 		b, err := block.Decode(
-			it.idx.schema.Exported()[i].Type.BlockType(),
+			it.idx.schema.Field(i).Type().BlockType(),
 			it.cur.Value(),
 		)
 		if err != nil {
@@ -455,6 +453,8 @@ func (idx *Index) merge(ctx context.Context) error {
 		if src != nil {
 			slen = src.Len()
 		}
+		src0 := src.Block(0).Uint64()
+		src1 := src.Block(1).Uint64()
 		// idx.log.Infof("Merge src=%d j=%d t=%d next=%016x:%016x:%t", slen, jlen, tlen, next.Ik, next.Pk, next.Ok)
 
 		// 3-way merge: src, journal, tomb -> out
@@ -492,7 +492,7 @@ func (idx *Index) merge(ctx context.Context) error {
 
 			// init next source val when available
 			if spos < slen {
-				sval = NewMergeValue(src.Uint64(0, spos), src.Uint64(1, spos))
+				sval = NewMergeValue(src0.Get(spos), src1.Get(spos))
 				// idx.log.Infof("Merge sval=%016x:%016x", sval.Ik, sval.Pk)
 			}
 

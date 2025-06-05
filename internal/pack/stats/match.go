@@ -142,8 +142,8 @@ func matchFilterVector(f *query.Filter, pkg *pack.Package, bits, mask *bitset.Bi
 	// []uint32 slice here in case we have a full match
 	var n int
 	for v := range bits.Iterator() {
-		// filter key is data-pack-key + data-pack-col-index
-		bkey := filterKey(pkg.Uint32(STATS_ROW_KEY, v), f.Index)
+		// filter key is data-pack-key + data-pack-col-id
+		bkey := filterKey(pkg.Uint32(STATS_ROW_KEY, v), f.Id)
 
 		// select filter type
 		var (
@@ -165,7 +165,7 @@ func matchFilterVector(f *query.Filter, pkg *pack.Package, bits, mask *bitset.Bi
 			buf := b[STATS_BITS_KEY].Get(bkey)
 			if len(buf) > 0 {
 				n += len(buf)
-				flt = xroar.NewFromBuffer(buf)
+				flt = xroar.NewFromBytes(buf)
 			}
 		}
 

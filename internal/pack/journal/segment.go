@@ -4,20 +4,19 @@
 package journal
 
 import (
+	"bytes"
 	"context"
 	"reflect"
-	"slices"
 
 	"blockwatch.cc/knoxdb/internal/bitset"
+	"blockwatch.cc/knoxdb/internal/operator/filter"
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/internal/pack/match"
 	"blockwatch.cc/knoxdb/internal/pack/stats"
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/schema"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 const (
@@ -125,10 +124,10 @@ func (s *Segment) Len() int {
 	return s.data.Len() + s.tomb.Len()
 }
 
-// A segment is considered full when the sum of data and tombstone
-// records exceeds the segment's capacity.
+// A segment is considered full when either data or tombstone
+// records exceed the segment's capacity.
 func (s *Segment) IsFull() bool {
-	return s.data.IsFull() || s.Len() >= s.data.Cap()
+	return s.data.IsFull() || s.tomb.Len() >= s.data.Cap()
 }
 
 // A segment is considered empty when it either contains no data
@@ -140,7 +139,7 @@ func (s *Segment) IsEmpty() bool {
 	return s.nInsert+s.nUpdate+s.nDelete-s.nAbort == 0
 }
 
-// IsDone returns true when all transactions who wrote records into
+// IsDone returns true when all transactions that wrote records into
 // this segment have either committed or aborted.
 func (s *Segment) IsDone() bool {
 	if s.Len() == 0 {
@@ -149,14 +148,19 @@ func (s *Segment) IsDone() bool {
 	return s.xact.IsEmpty()
 }
 
-func (s *Segment) HeapSize() int {
-	return s.xact.Size() + s.data.HeapSize() + s.tomb.HeapSize() + segmentSz
+func (s *Segment) Size() int {
+	return s.xact.Size() + s.data.Size() + s.tomb.Size() + segmentSz
 }
 
 func (s *Segment) ContainsTx(xid uint64) bool {
 	return s.xact.Contains(xid)
 }
 
+// ContainsRid returns true if rid is in segment bounds. Rids are
+// assigned sequentially and only one segment is active in the journal.
+// Once inactive a segment remains immutable and cannot be written to
+// again even though transactions may still abort. This guarantees
+// non-overlap in rid space between segments.
 func (s *Segment) ContainsRid(rid uint64) bool {
 	// fast range exclusion check
 	return rid-s.minRid > s.maxRid-s.minRid
@@ -207,7 +211,7 @@ func (s *Segment) Update(pk, xid, rid, ref uint64, buf []byte) {
 	s.data.AppendWire(buf, s.meta)
 
 	// append tomb entry for ref record
-	s.tomb.Append(pk, xid, ref, true)
+	s.tomb.Append(xid, ref)
 
 	// track xid range
 	s.minXid = min(s.minXid, xid)
@@ -219,6 +223,10 @@ func (s *Segment) Update(pk, xid, rid, ref uint64, buf []byte) {
 
 	// count
 	s.nUpdate++
+	if s.ContainsRid(ref) {
+		// same segment delete via update
+		s.nDelete++
+	}
 }
 
 // append delete
@@ -227,7 +235,7 @@ func (s *Segment) Delete(pk, xid, rid uint64) {
 	s.xact.Set(xid)
 
 	// append tomb entry
-	s.tomb.Append(pk, xid, rid, false)
+	s.tomb.Append(xid, rid)
 
 	// track xid range
 	s.minXid = min(s.minXid, xid)
@@ -240,10 +248,9 @@ func (s *Segment) Delete(pk, xid, rid uint64) {
 // assumes rids are unique sorted (append only) and never reused (post abort)
 func (s *Segment) SetXmax(rid, xid uint64) {
 	idx := int(rid - s.minRid)
-	s.data.Xmaxs().Uint64().Set(idx, xid)
-	s.data.Dels().Bool().Set(idx)
-	s.data.Xmaxs().SetDirty()
-	s.data.Dels().SetDirty()
+	s.data.Xmaxs().Set(idx, xid)
+	s.data.Dels().Set(idx)
+	s.data.DelBlock().SetDirty()
 	s.minXid = min(s.minXid, xid)
 	s.maxXid = max(s.maxXid, xid)
 }
@@ -256,7 +263,7 @@ func (s *Segment) CommitTx(xid uint64) {
 func (s *Segment) AbortTx(xid uint64) {
 	// reset all metadata records where xmin or xmax = xid to zero
 	var dirty bool
-	xmins := s.data.Xmins().Uint64().Slice()
+	xmins := s.data.Xmins().Slice()
 	for i, v := range xmins {
 		if v == xid {
 			xmins[i] = 0
@@ -265,12 +272,12 @@ func (s *Segment) AbortTx(xid uint64) {
 		}
 	}
 	if dirty {
-		s.data.Xmins().SetDirty()
+		s.data.XminBlock().SetDirty()
 		dirty = false
 	}
 
-	xmaxs := s.data.Xmaxs().Uint64().Slice()
-	dels := s.data.Dels().Bool()
+	xmaxs := s.data.Xmaxs().Slice()
+	dels := s.data.Dels()
 	for i, v := range xmaxs {
 		if v == xid {
 			xmaxs[i] = 0
@@ -279,11 +286,11 @@ func (s *Segment) AbortTx(xid uint64) {
 		}
 	}
 	if dirty {
-		s.data.Xmaxs().SetDirty()
-		s.data.Dels().SetDirty()
+		s.data.XmaxBlock().SetDirty()
+		s.data.DelBlock().SetDirty()
 	}
 
-	// update tomb, count aborted true deletes (exclude replace by update)
+	// update tomb, count aborted deletes (including replace by update)
 	s.nAbort += uint32(s.tomb.AbortTx(xid))
 
 	// drop from active set
@@ -293,7 +300,7 @@ func (s *Segment) AbortTx(xid uint64) {
 func (s *Segment) AbortActiveTx() int {
 	// reset all metadata records where xmin or xmax is in xact to zero
 	var dirty bool
-	xmins := s.data.Xmins().Uint64().Slice()
+	xmins := s.data.Xmins().Slice()
 	for i, v := range xmins {
 		if s.xact.Contains(v) {
 			xmins[i] = 0
@@ -302,12 +309,12 @@ func (s *Segment) AbortActiveTx() int {
 		}
 	}
 	if dirty {
-		s.data.Xmins().SetDirty()
+		s.data.XminBlock().SetDirty()
 		dirty = false
 	}
 
-	xmaxs := s.data.Xmaxs().Uint64().Slice()
-	dels := s.data.Dels().Bool()
+	xmaxs := s.data.Xmaxs().Slice()
+	dels := s.data.Dels()
 	for i, v := range xmaxs {
 		if s.xact.Contains(v) {
 			xmaxs[i] = 0
@@ -316,11 +323,11 @@ func (s *Segment) AbortActiveTx() int {
 		}
 	}
 	if dirty {
-		s.data.Xmaxs().SetDirty()
-		s.data.Dels().SetDirty()
+		s.data.XmaxBlock().SetDirty()
+		s.data.DelBlock().SetDirty()
 	}
 
-	// update tomb, count aborted true deletes (exclude replace by update)
+	// update tomb, count aborted deletes (including replace by update)
 	s.nAbort += uint32(s.tomb.AbortActiveTx(s.xact))
 
 	// clear xact
@@ -333,13 +340,14 @@ func (s *Segment) Store(ctx context.Context, bucket store.Bucket) error {
 	switch s.state {
 	case SegmentStateFlushing:
 		// write full segment to disk
+		s.data.WithStats()
 		if _, err := s.data.StoreToDisk(ctx, bucket); err != nil {
 			return err
 		}
 
 		// generate stats record after store
 		s.stats = stats.NewRecordFromPack(s.data, 0)
-		s.data.FreeAnalysis()
+		s.data.CloseStats()
 
 		// write tomb data to disk
 		if s.tomb.dirty {
@@ -354,7 +362,7 @@ func (s *Segment) Store(ctx context.Context, bucket store.Bucket) error {
 		if s.xact.IsEmpty() {
 			err = bucket.Delete(xkey)
 		} else {
-			err = bucket.Put(xkey, s.xact.ToBuffer())
+			err = bucket.Put(xkey, s.xact.Bytes())
 		}
 		if err != nil {
 			return err
@@ -373,13 +381,14 @@ func (s *Segment) Store(ctx context.Context, bucket store.Bucket) error {
 
 	case SegmentStateCompleting:
 		// write dirty metadata
+		s.data.WithStats()
 		if _, err := s.data.StoreToDisk(ctx, bucket); err != nil {
 			return err
 		}
 
 		// update meta stats after store
 		s.stats.Update(s.data)
-		s.data.FreeAnalysis()
+		s.data.CloseStats()
 
 		// write tomb data to disk
 		if s.tomb.dirty {
@@ -394,7 +403,7 @@ func (s *Segment) Store(ctx context.Context, bucket store.Bucket) error {
 		if s.xact.IsEmpty() {
 			err = bucket.Delete(xkey)
 		} else {
-			err = bucket.Put(xkey, s.xact.ToBuffer())
+			err = bucket.Put(xkey, s.xact.Bytes())
 		}
 		if err != nil {
 			return err
@@ -442,11 +451,12 @@ func loadSegment(ctx context.Context, s *schema.Schema, bucket store.Bucket, id 
 		return nil, err
 	}
 
+	// FIXME: pack.Stats is empty here, need to initialize from blocks
 	// regenerate stats after load
 	seg.stats = stats.NewRecordFromPack(seg.data, 0)
 
 	// find min and max xid, rid and skip zeros (aborted xid's)
-	for _, v := range seg.data.Xmins().Uint64().Slice() {
+	for _, v := range seg.data.Xmins().Iterator() {
 		if v == 0 {
 			seg.nAbort++
 			continue
@@ -454,23 +464,23 @@ func loadSegment(ctx context.Context, s *schema.Schema, bucket store.Bucket, id 
 		seg.minXid = min(seg.minXid, v)
 		seg.maxXid = max(seg.maxXid, v)
 	}
-	for _, v := range seg.data.Xmaxs().Uint64().Slice() {
+	for _, v := range seg.data.Xmaxs().Iterator() {
 		if v == 0 {
 			continue
 		}
 		seg.minXid = min(seg.minXid, v)
 		seg.maxXid = max(seg.maxXid, v)
 	}
-	for _, v := range seg.data.RowIds().Uint64().Slice() {
+	for _, v := range seg.data.RowIds().Iterator() {
 		seg.minRid = min(seg.minRid, v)
 		seg.maxRid = max(seg.maxRid, v)
 	}
 
 	// count inserts and updates (including aborted ins/upd)
-	rids := seg.data.RowIds().Uint64().Slice()
-	refs := seg.data.RefIds().Uint64().Slice()
-	for i := range rids {
-		if rids[i] == refs[i] {
+	rids := seg.data.RowIds()
+	refs := seg.data.RefIds()
+	for i, v := range rids.Iterator() {
+		if v == refs.Get(i) {
 			seg.nInsert++
 		} else {
 			seg.nUpdate++
@@ -481,7 +491,7 @@ func loadSegment(ctx context.Context, s *schema.Schema, bucket store.Bucket, id 
 	xkey := pack.EncodeBlockKey(id, JournalXactKey)
 	buf := bucket.Get(xkey)
 	if buf != nil {
-		seg.xact = xroar.NewFromBufferWithCopy(buf)
+		seg.xact = xroar.NewFromBytes(bytes.Clone(buf))
 	}
 
 	// load tomb
@@ -489,41 +499,42 @@ func loadSegment(ctx context.Context, s *schema.Schema, bucket store.Bucket, id 
 		return nil, err
 	}
 
-	// count true deletes and aborted deletes
-	for _, s := range seg.tomb.Stones() {
-		seg.nDelete += uint32(util.Bool2int(!s.upd))
-		seg.nAbort += uint32(util.Bool2int(!s.upd && s.xid == 0))
-	}
+	// count deletes
+	seg.nDelete = uint32(seg.tomb.Len())
 
 	return seg, nil
 }
 
-// match and exclude records not visible to this tx based on snapshot
-// isolation rules. considers both xmin (creation xid) and xmax (deletion xid)
-// and also excludes records from aborted transactions (xmin  = 0)
-func (s *Segment) Match(node *query.FilterTreeNode, snap *types.Snapshot, bits *bitset.Bitset) *bitset.Bitset {
+// Match and exclude records not visible to this tx based on snapshot
+// isolation rules. Considers both xmin (creation xid) and xmax (deletion xid)
+// and also excludes records from aborted transactions (xmin  = 0) as well
+// as records deleted in other journal segments.
+func (s *Segment) Match(node *query.FilterTreeNode, snap *types.Snapshot, tomb *xroar.Bitmap, bits *bitset.Bitset) {
 	// check empty state and return early
 	if s.state == SegmentStateEmpty {
-		return nil
+		return
 	}
 
-	// shortcut: can skip segment when no matches visible to this snapshot (only future tx)
+	// shortcut: skip when no records are visible to this snapshot (only future tx)
 	if s.minXid >= snap.Xmax {
-		return nil
+		return
 	}
 
 	// quick check on stats for any potential match (active segment has no stats)
-	if !stats.Match(node, s.stats) {
-		return nil
+	if s.stats != nil && !stats.Match(node, s.stats) {
+		return
 	}
 
 	// run a vector match
-	bits = match.MatchTree(node, s.data, s.stats, bits)
+	bits = filter.MatchTree(node, s.data, s.stats, bits)
 
 	// stop early on empty match
 	if bits.None() {
-		return bits
+		return
 	}
+
+	// check if this segment contains any records that have visible tombstones
+	hasTombstones := tomb.ContainsRange(s.minRid, s.maxRid)
 
 	// apply snapshot isolation rules; a record is visible iff
 	// - xmin is self AND xmax is null
@@ -535,48 +546,94 @@ func (s *Segment) Match(node *query.FilterTreeNode, snap *types.Snapshot, bits *
 		// only contains data from txn that committed before the snapshot was created,
 		// hence all matches are valid
 
-		// remove deleted records (xmax[n] > 0) and records from aborted
-		// transactions (xmin[n] == 0)
-		for i, l := 0, s.data.Len(); i < l; i++ {
-			if !bits.Contains(i) {
-				continue
+		// remove deleted (xmax[n] > 0) and aborted records
+		rids := s.data.RowIds()
+		xmins := s.data.Xmins()
+		switch {
+		case hasTombstones && s.nAbort > 0:
+			for i := range bits.Iterator() {
+				if tomb.Contains(rids.Get(i)) || xmins.Get(i) == 0 {
+					bits.Unset(i)
+				}
 			}
-			if s.data.Xmax(i) == 0 && s.data.Xmin(i) > 0 {
-				continue
+		case hasTombstones:
+			// optimize potential: rids are sequential, may stop early when rid > tomb_max
+			for i := range bits.Iterator() {
+				if tomb.Contains(rids.Get(i)) {
+					bits.Unset(i)
+				}
 			}
-			bits.Unset(i)
+		case s.nAbort > 0:
+			// optimize potential: vector check for == 0
+			for i := range bits.Iterator() {
+				if xmins.Get(i) == 0 {
+					bits.Unset(i)
+				}
+			}
 		}
 
 	default:
 		// general vectorized snapshot isolation check
 		// - xmin[n] < snap.xmax
 		// - xmin[n] NIN snap.xact
-		for i, l := 0, s.data.Len(); i < l; i++ {
-			if !bits.Contains(i) {
-				continue
+		rids := s.data.RowIds()
+		xmins := s.data.Xmins()
+		// xmaxs := s.data.Xmaxs()
+		if hasTombstones {
+			// 1. remove deleted records, i.e. xmax is set and visible
+			// 2. remove new records when xmin is not yet visible
+			//    (includes records from aborted transactions i.e. xmin = 0)
+			for i := range bits.Iterator() {
+				if tomb.Contains(rids.Get(i)) || !snap.IsVisible(xmins.Get(i)) {
+					bits.Unset(i)
+				}
 			}
-
-			// remove deleted records, i.e. xmax is set and visible
-			if xmax := s.data.Xmax(i); xmax > 0 && snap.IsVisible(xmax) {
-				bits.Unset(i)
-				continue
-			}
-
-			// remove inserted records when xmin is not visible
-			// (includes records from aborted transactions i.e. xmin = 0)
-			if !snap.IsVisible(s.data.Xmin(i)) {
-				bits.Unset(i)
+		} else {
+			// 1. only remove new records when xmin is not yet visible
+			//    (includes records from aborted transactions i.e. xmin = 0)
+			for i := range bits.Iterator() {
+				if !snap.IsVisible(xmins.Get(i)) {
+					bits.Unset(i)
+				}
 			}
 		}
 	}
-
-	return bits
 }
+
+// MergeDeleted collects row ids of deleted records into a bitset considering
+// snapshot isolation visibility rules. A row id is considered deleted when
+// it was either replaced in an update or deleted explicitly and the corresponding
+// transaction is visible to the snapshot.
+func (s *Segment) MergeDeleted(set *xroar.Bitmap, snap *types.Snapshot) {
+	// check empty state and return early
+	if s.state == SegmentStateEmpty {
+		return
+	}
+
+	// shortcut: can skip this segment when no tombstones are visible
+	// to the snapshot, i.e. the segment contains only future tx
+	if s.minXid >= snap.Xmax {
+		return
+	}
+
+	// optimization: if the segment is complete (no more open tx) and all xids are
+	// visible to the snapshot, we can merge the entire tombstone
+	if s.IsDone() && s.maxXid < snap.Xmin {
+		set.Or(s.tomb.rids)
+		return
+	}
+
+	// merge only visible xids into set
+	s.tomb.MergeVisible(set, snap)
+}
+
+// TODO: needs refactoring / cross-check
+// - inJournalDeletes flag can be tracked in segment (careful with aborts)
 
 // PrepareMerge constructs info in deleted records outside the segment. A merge algo
 // can use tombMask [rid] to locate tuples for deletion and tombMap [rid->xid]
 // to assign xmax metadata.
-func (s *Segment) PrepareMerge() (tombMap map[uint64]uint64, tombMask []uint64, inJournalDeletes bool) {
+func (s *Segment) PrepareMerge() (stones Tombstones, tombMask *xroar.Bitmap, inJournalDeletes bool) {
 	if s.tomb.Len() == 0 {
 		return
 	}
@@ -584,30 +641,18 @@ func (s *Segment) PrepareMerge() (tombMap map[uint64]uint64, tombMask []uint64, 
 	// determine boundary (first journal rid), i.e. any row > boundary
 	// has not yet been merged into the table, hence any delete/update
 	// for such row has already written xmax inside the journal pack
-	var bound uint64 = 1<<64 - 1
-	if s.data.Len() > 0 {
-		bound = s.data.RowId(0)
-	}
 
-	// collect out-of-journal tombstones
-	tombMap = make(map[uint64]uint64, s.tomb.Len())
-	tombMask = make([]uint64, 0, s.tomb.Len())
-	for _, stone := range s.tomb.stones {
-		// skip aborted data
-		if stone.xid == 0 {
-			continue
-		}
-
-		// skip in-journal upd/del
-		if stone.rid >= bound {
+	// prepare tombstones
+	stones = s.tomb.stones
+	tombMask = s.tomb.rids
+	for _, stone := range stones {
+		// detect in-segment deletes
+		if stone.Rid >= s.minRid && stone.Rid <= s.maxRid {
 			inJournalDeletes = true
-			continue
+			// 	continue
 		}
 
-		// build mapping and mask
-		tombMap[stone.rid] = stone.xid
-		tombMask = append(tombMask, stone.rid)
 	}
-	slices.Sort(tombMask)
+	// util.Sort(tombMask, 0)
 	return
 }

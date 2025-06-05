@@ -102,9 +102,10 @@ func (it *Iterator) ReadWire() []byte {
 	return buf
 }
 
-// merge
-func (it *Iterator) MinMaxRid() (any, any) {
-	return it.MinMax(it.idx.rx)
+// merge, query
+func (it *Iterator) MinMaxRid() (uint64, uint64) {
+	a, b := it.MinMax(it.idx.rx)
+	return a.(uint64), b.(uint64)
 }
 
 // query, merge?
@@ -219,7 +220,7 @@ func (it *Iterator) Range() types.Range {
 func (it *Iterator) combinedRange(b store.Bucket, key uint32, n *query.FilterTreeNode, nRows int) types.Range {
 	if n.IsLeaf() {
 		// load range index data
-		idx := RangeIndexFromBytes(b.Get(filterKey(key, n.Filter.Index)))
+		idx := RangeIndexFromBytes(b.Get(filterKey(key, n.Filter.Id)))
 		defer idx.Close()
 
 		// ignore errors

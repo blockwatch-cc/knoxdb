@@ -7,6 +7,7 @@ type Stats struct {
 	WasDirty []bool   // flag indicating this block was dirty and rewritten
 	DiffSize []int    // storage size diff in bytes after encoding/compression (when dirty)
 	MinMax   [][2]any // type-based min/max statistics
+	Unique   []int    // cardinalities
 }
 
 func (s *Stats) Close() {
@@ -38,6 +39,7 @@ func (p *Package) WithStats() *Package {
 			WasDirty: make([]bool, len(p.blocks)),
 			DiffSize: make([]int, len(p.blocks)),
 			MinMax:   make([][2]any, len(p.blocks)),
+			Unique:   make([]int, len(p.blocks)),
 		}
 	}
 	for i, b := range p.blocks {

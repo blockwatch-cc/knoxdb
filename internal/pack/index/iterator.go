@@ -13,8 +13,8 @@ import (
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/engine"
+	"blockwatch.cc/knoxdb/internal/operator/filter"
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/internal/pack/match"
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
@@ -291,7 +291,7 @@ func (it *ScanIterator) Next(ctx context.Context) (*pack.Package, []uint32, erro
 		// find actual matches, zero bits before
 		// it.idx.log.Infof("Run filter %s %T %v idx=%d",
 		// it.node, it.node.Filter.Matcher, it.node.Filter.Matcher.Value(), it.node.Filter.Index)
-		it.bits = match.MatchTree(it.node, it.pack, nil, it.bits.Zero())
+		it.bits = filter.MatchTree(it.node, it.pack, nil, it.bits.Zero())
 
 		// skip this pack when no matches were found
 		if it.bits.None() {

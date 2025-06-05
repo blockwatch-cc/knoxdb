@@ -10,13 +10,14 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/internal/pack/stats"
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/wal"
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
+
+type QueryResultConsumer = engine.QueryResultConsumer
 
 var (
 	// statistics keys
@@ -38,12 +39,14 @@ func (t *Table) Query(ctx context.Context, q engine.QueryPlan) (engine.QueryResu
 	}
 
 	// prepare result
-	res := NewResult(
+	res := query.NewResult(
 		pack.New().
 			WithMaxRows(int(plan.Limit)).
 			WithSchema(plan.ResultSchema).
 			Alloc(),
 	)
+
+	// TODO: manage offset/limit in result
 
 	// protect journal access
 	t.mu.RLock()
@@ -78,7 +81,8 @@ func (t *Table) Stream(ctx context.Context, q engine.QueryPlan, fn func(engine.Q
 	}
 
 	// prepare result
-	res := NewStreamResult(fn)
+	// TODO: manage offset/limit in result
+	res := query.NewStreamResult(fn)
 	defer res.Close()
 
 	// protect journal access
@@ -121,7 +125,8 @@ func (t *Table) Count(ctx context.Context, q engine.QueryPlan) (uint64, error) {
 	plan.ResultSchema = rs.WithName("count")
 
 	// use count result
-	res := NewCountResult()
+	// TODO: manage offset/limit in result
+	res := query.NewCountResult()
 
 	// protect journal read access
 	t.mu.RLock()
@@ -174,10 +179,15 @@ func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (uint64, error) 
 		msg  = make([]byte, 0, t.journal.MaxSize()*num.MaxVarintLen64)
 		n    uint64
 	)
-	res := NewStreamResult(func(row engine.QueryRow) error {
+
+	// TODO
+	// - convert to a DeleteResultConsumer
+	// - vectorize, i.e consume pack & selection vector
+	// - handle offset/limit in result
+	res := query.NewStreamResult(func(row engine.QueryRow) error {
 		// collect pk/rid until journal segment is full
-		msg = num.AppendUvarint(msg, row.(*Row).Uint64(rx))
-		msg = num.AppendUvarint(msg, row.(*Row).Uint64(px))
+		msg = num.AppendUvarint(msg, row.(*query.Row).Uint64(rx))
+		msg = num.AppendUvarint(msg, row.(*query.Row).Uint64(px))
 		jcap--
 		n++
 
@@ -270,14 +280,14 @@ func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (uint64, error) 
 
 func (t *Table) doQueryAsc(ctx context.Context, plan *query.QueryPlan, res QueryResultConsumer) error {
 	var (
-		nRowsScanned, nRowsMatched uint32
+		nRowsScanned, nRowsMatched int
 	)
 
 	// cleanup and log on exit
 	defer func() {
 		plan.Stats.Tick(query.SCAN_TIME_KEY)
-		plan.Stats.Count(query.ROWS_SCANNED_KEY, int(nRowsScanned))
-		plan.Stats.Count(query.ROWS_MATCHED_KEY, int(nRowsMatched))
+		plan.Stats.Count(query.ROWS_SCANNED_KEY, nRowsScanned)
+		plan.Stats.Count(query.ROWS_MATCHED_KEY, nRowsMatched)
 		atomic.AddInt64(&t.metrics.QueriedTuples, int64(nRowsMatched))
 	}()
 
@@ -286,7 +296,7 @@ func (t *Table) doQueryAsc(ctx context.Context, plan *query.QueryPlan, res Query
 	// journal are missing
 	jres := t.journal.Query(plan.Filters, plan.Snap)
 	defer jres.Close()
-	nRowsScanned += uint32(t.journal.Len())
+	nRowsScanned += t.journal.Len()
 	plan.Stats.Tick(JOURNAL_TIME_KEY)
 	plan.Log.Debugf("%d journal results in %s", jres.Len(), plan.Stats.GetRuntime(JOURNAL_TIME_KEY))
 
@@ -305,10 +315,10 @@ func (t *Table) doQueryAsc(ctx context.Context, plan *query.QueryPlan, res Query
 		// pack iterator manages selection, load and scan of packs including snapshot isolation
 		// (note: long-running read queries may see data from future tx during table scans
 		// when completed journal segments have been merged concurrently)
-		r := t.NewReader().WithQuery(plan)
+		r := t.NewReader().WithQuery(plan).WithMask(jres.TombMask(), engine.ReadModeExcludeMask)
 		defer r.Close()
 
-	packloop:
+		// packloop:
 		for {
 			// check context
 			if err := ctx.Err(); err != nil {
@@ -325,87 +335,111 @@ func (t *Table) doQueryAsc(ctx context.Context, plan *query.QueryPlan, res Query
 			if pkg == nil {
 				break
 			}
-			nRowsScanned += uint32(pkg.Len())
+			nRowsScanned += pkg.Len()
 
-			for _, idx := range pkg.Selected() {
-				index := int(idx)
-				src := pkg
+			// TODO: vectorize pack & journal merge, no more need to preserve order
+			// - fast path when journal result has no overlap with pack result
+			// - remove pack selection for pks that are in the journal (or deleted)
+			// - output all remaining matches (no switch between pack and journal)
+			// - last, output all journal matches, segment by segment (keep per segment
+			//   selection vector)
+			//
+			// TableReader already supports ExcludeMask which looks perfect for this
+			// scenario too. Produce a RowId mask for all deleted records (by updates
+			// or deletes), exclude during read. Then we need no more check for pk's here!!
+			//
+			// Move limit/offset into result, count there and skip what is appended, return
+			// EndOfStream signal
 
-				// skip broken records (invalid pk)
-				pk := pkg.Pk(index)
-				if pk == 0 {
-					continue
-				}
-
-				// skip deleted records
-				if jres.IsDeleted(pk) {
-					continue
-				}
-
-				// use journal record if exists
-				if idx, ok := jres.FindPk(pk); ok {
-					// remove match bit (so we don't output this record twice)
-					jres.UnsetMatch(pk)
-
-					// use journal segment pack and offset to access result
-					src, index = jres.GetRef(idx)
-				}
-
-				// skip offset
-				if plan.Offset > 0 {
-					plan.Offset--
-					continue
-				}
-
-				// emit record
-				nRowsMatched++
-				if err := res.Append(src, index, 1); err != nil {
-					return err
-				}
-
-				// apply limit
-				if plan.Limit > 0 && nRowsMatched >= plan.Limit {
-					break packloop
-				}
+			sel := pkg.Selected()
+			if sel != nil {
+				nRowsMatched += len(sel)
+			} else {
+				nRowsMatched += pkg.Len()
 			}
+			if err := res.Append(pkg, sel); err != nil {
+				return err
+			}
+
+			// for _, idx := range pkg.Selected() {
+			// 	index := int(idx)
+			// 	pk := pkg.Pk(index)
+
+			// 	// skip broken records (invalid pk)
+			// 	// if pk == 0 {
+			// 	// 	continue
+			// 	// }
+
+			// 	// skip deleted records
+			// 	if jres.IsDeleted(pk) {
+			// 		continue
+			// 	}
+
+			// 	// use journal record if exists
+			// 	src := pkg
+			// 	if idx, ok := jres.FindPk(pk); ok {
+			// 		// remove match bit (so we don't output this record twice)
+			// 		jres.UnsetMatch(pk)
+
+			// 		// use journal segment pack and offset to access result
+			// 		src, index = jres.GetRef(idx)
+			// 	}
+
+			// 	// skip offset
+			// 	if plan.Offset > 0 {
+			// 		plan.Offset--
+			// 		continue
+			// 	}
+
+			// 	// emit record
+			// 	nRowsMatched++
+			// 	if err := res.AppendRange(src, index, index+1); err != nil {
+			// 		return err
+			// 	}
+
+			// 	// apply limit
+			// 	if plan.Limit > 0 && nRowsMatched >= plan.Limit {
+			// 		break packloop
+			// 	}
+			// }
 		}
 	}
 
 	// finalize on limit
-	if plan.Limit > 0 && nRowsMatched >= plan.Limit {
-		return nil
-	}
+	// if plan.Limit > 0 && nRowsMatched >= plan.Limit {
+	// 	return nil
+	// }
 
 	// after all packs have been scanned, add remaining rows from journal, if any
-	err := jres.ForEach(func(pkg *pack.Package, idx int) error {
+	for pkg := range jres.Iterator() {
 		// skip offset
-		if plan.Offset > 0 {
-			plan.Offset--
-			return nil
-		}
+		// if plan.Offset > 0 {
+		// 	plan.Offset--
+		// 	return nil
+		// }
 
 		// emit record
-		nRowsMatched++
-		if err := res.Append(pkg, idx, 1); err != nil {
+		sel := pkg.Selected()
+		if sel != nil {
+			nRowsMatched += len(sel)
+		} else {
+			nRowsMatched += pkg.Len()
+		}
+		if err := res.Append(pkg, sel); err != nil {
 			return err
 		}
 
-		// apply limit
-		if plan.Limit > 0 && nRowsMatched == plan.Limit {
-			return types.EndStream
-		}
-		return nil
-	})
-	if err != nil {
-		return err
+		// // apply limit
+		// if plan.Limit > 0 && nRowsMatched == plan.Limit {
+		// 	return types.EndStream
+		// }
 	}
-
 	return nil
 }
 
 func (t *Table) doQueryDesc(ctx context.Context, plan *query.QueryPlan, res QueryResultConsumer) error {
 	var (
-		nRowsScanned, nRowsMatched uint32
+		nRowsScanned, nRowsMatched int
 		snap                       = engine.GetTransaction(ctx).Snapshot()
 	)
 
@@ -422,7 +456,7 @@ func (t *Table) doQueryDesc(ctx context.Context, plan *query.QueryPlan, res Quer
 	// journal are missing
 	jres := t.journal.Query(plan.Filters, snap)
 	defer jres.Close()
-	nRowsScanned += uint32(t.journal.Len())
+	nRowsScanned += t.journal.Len()
 	plan.Stats.Tick(JOURNAL_TIME_KEY)
 	plan.Log.Debugf("%d journal results in %s", jres.Len(), plan.Stats.GetRuntime(JOURNAL_TIME_KEY))
 
@@ -439,47 +473,49 @@ func (t *Table) doQueryDesc(ctx context.Context, plan *query.QueryPlan, res Quer
 	// find max pk across all saved packs (we assume any journal entry greater than this max
 	// is new and hasn't been saved before; this assumption holds true because we disallow
 	// user-defined pk values
-	maxStoredPk := t.stats.Load().(*stats.Index).GlobalMaxPk()
+	// maxStoredPk := t.stats.Load().(*stats.Index).GlobalMaxPk()
 
 	// before table scan, emit 'new' journal-only records (i.e. pk > max) in desc order
 	// Note: deleted journal records are not present in this list
-	err := jres.ForEachReverse(func(pkg *pack.Package, idx int) error {
-		// stop on first pk that is merged into table data
-		pk := pkg.Pk(idx)
-		if pk <= maxStoredPk {
-			return types.EndStream
-		}
+	for pkg := range jres.ReverseIterator() {
+		// // stop on first pk that is merged into table data
+		// pk := pkg.Pk(idx)
+		// if pk <= maxStoredPk {
+		// 	return types.EndStream
+		// }
 
-		// skip offset
-		if plan.Offset > 0 {
-			plan.Offset--
-			return nil
-		}
+		// // skip offset
+		// if plan.Offset > 0 {
+		// 	plan.Offset--
+		// 	return nil
+		// }
 
-		// emit record
-		nRowsMatched++
-		if err := res.Append(pkg, idx, 1); err != nil {
+		// forward pack with matches
+		sel := pkg.Selected()
+		if sel != nil {
+			nRowsMatched += len(sel)
+		} else {
+			nRowsMatched += pkg.Len()
+		}
+		if err := res.Append(pkg, sel); err != nil {
 			return err
 		}
 
 		// remove match bit (so we don't output this record twice)
-		jres.UnsetMatch(pk)
+		// jres.UnsetMatch(pk)
 
 		// apply limit
-		if plan.Limit > 0 && nRowsMatched == plan.Limit {
-			return types.EndStream
-		}
-		return nil
-	})
-	if err != nil {
-		return err
+		// if plan.Limit > 0 && nRowsMatched == plan.Limit {
+		// 	return types.EndStream
+		// }
+		// return nil
 	}
 	plan.Stats.Tick(JOURNAL_TIME_KEY)
 
 	// finalize on limit
-	if plan.Limit > 0 && nRowsMatched >= plan.Limit {
-		return nil
-	}
+	// if plan.Limit > 0 && nRowsMatched >= plan.Limit {
+	// 	return nil
+	// }
 
 	// second return point (match was journal only)
 	if plan.IsNoMatch() {
@@ -490,10 +526,10 @@ func (t *Table) doQueryDesc(ctx context.Context, plan *query.QueryPlan, res Quer
 	// pack iterator manages selection, load and scan of packs including snapshot isolation
 	// (note: long-running read queries may see data from future tx during table scans
 	// when completed journal segments have been merged concurrently)
-	r := t.NewReader().WithQuery(plan)
+	r := t.NewReader().WithQuery(plan).WithMask(jres.TombMask(), engine.ReadModeExcludeMask)
 	defer r.Close()
 
-packloop:
+	// packloop:
 	for {
 		// check context
 		if err := ctx.Err(); err != nil {
@@ -510,51 +546,62 @@ packloop:
 		if pkg == nil {
 			break
 		}
-		nRowsScanned += uint32(pkg.Len())
+		nRowsScanned += pkg.Len()
+
+		// forward pack with matches
+		sel := pkg.Selected()
+		if sel != nil {
+			nRowsMatched += len(sel)
+		} else {
+			nRowsMatched += pkg.Len()
+		}
+		if err := res.Append(pkg, sel); err != nil {
+			return err
+		}
 
 		// walk hits in reverse scan order
-		hits := pkg.Selected()
-		for k := len(hits) - 1; k >= 0; k-- {
-			index := int(hits[k])
-			src := pkg
+		// hits := pkg.Selected()
+		// for k := len(hits) - 1; k >= 0; k-- {
+		// 	index := int(hits[k])
+		// 	src := pkg
 
-			// skip broken records (invalid pk)
-			pk := pkg.Pk(index)
-			if pk == 0 {
-				continue
-			}
+		// 	// skip broken records (invalid pk)
+		// 	pk := pkg.Pk(index)
+		// 	if pk == 0 {
+		// 		continue
+		// 	}
 
-			// skip deleted records
-			if jres.IsDeleted(pk) {
-				continue
-			}
+		// 	// skip deleted records
+		// 	if jres.IsDeleted(pk) {
+		// 		continue
+		// 	}
 
-			// use journal record if exists
-			if idx, ok := jres.FindPk(pk); ok {
-				// remove match bit (so we don't output this record twice)
-				jres.UnsetMatch(pk)
+		// 	// use journal record if exists
+		// 	if idx, ok := jres.FindPk(pk); ok {
+		// 		// remove match bit (so we don't output this record twice)
+		// 		jres.UnsetMatch(pk)
 
-				// use journal segment pack and offset to access result
-				src, index = jres.GetRef(idx)
-			}
+		// 		// use journal segment pack and offset to access result
+		// 		src, index = jres.GetRef(idx)
+		// 	}
 
-			// skip offset
-			if plan.Offset > 0 {
-				plan.Offset--
-				continue
-			}
+		// 	// skip offset
+		// 	if plan.Offset > 0 {
+		// 		plan.Offset--
+		// 		continue
+		// 	}
 
-			// emit record
-			nRowsMatched++
-			if err := res.Append(src, index, 1); err != nil {
-				return err
-			}
+		// 	// emit record
+		// 	nRowsMatched++
+		// 	if err := res.AppendRange(src, index, index+1); err != nil {
+		// 		return err
+		// 	}
 
-			// apply limit
-			if plan.Limit > 0 && nRowsMatched == plan.Limit {
-				break packloop
-			}
-		}
+		// 	// apply limit
+		// 	if plan.Limit > 0 && nRowsMatched == plan.Limit {
+		// 		break packloop
+		// 	}
+		// }
 	}
 
 	return nil

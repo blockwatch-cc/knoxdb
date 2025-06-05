@@ -4,11 +4,10 @@
 package pack
 
 import (
-	"time"
-
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/assert"
 	"blockwatch.cc/knoxdb/pkg/num"
+	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
@@ -95,7 +94,7 @@ func (p *Package) ReadValue(col, row int, typ types.FieldType, scale uint8) any 
 		return b.Float32().Get(row)
 	case types.FieldTypeDatetime:
 		if ts := b.Int64().Get(row); ts > 0 {
-			return time.Unix(0, ts).UTC()
+			return schema.TimeScale(scale).FromUnix(ts)
 		} else {
 			return zeroTime
 		}
@@ -117,6 +116,8 @@ func (p *Package) ReadValue(col, row int, typ types.FieldType, scale uint8) any 
 		return num.NewDecimal64(b.Int64().Get(row), scale)
 	case types.FieldTypeDecimal32:
 		return num.NewDecimal32(b.Int32().Get(row), scale)
+	case types.FieldTypeBigint:
+		return num.NewBigFromBytes(b.Bytes().Get(row))
 	default:
 		// oh, its a type we don't support yet
 		assert.Unreachable("unhandled field type", map[string]any{

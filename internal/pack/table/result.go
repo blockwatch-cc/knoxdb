@@ -1,5 +1,7 @@
 // Copyright (c) 2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
+//go:build ignore
+// +build ignore
 
 package table
 
@@ -19,19 +21,14 @@ import (
 // Columnar (pack-based) results
 
 var (
-	_ engine.QueryResult = (*Result)(nil)
-	_ engine.QueryRow    = (*Row)(nil)
-
-	_ QueryResultConsumer = (*Result)(nil)
-	_ QueryResultConsumer = (*CountResult)(nil)
-	_ QueryResultConsumer = (*StreamResult)(nil)
+	_ engine.QueryResult         = (*Result)(nil)
+	_ engine.QueryRow            = (*Row)(nil)
+	_ engine.QueryResultConsumer = (*Result)(nil)
+	_ engine.QueryResultConsumer = (*CountResult)(nil)
+	_ engine.QueryResultConsumer = (*StreamResult)(nil)
 
 	ErrResultClosed = engine.ErrResultClosed
 )
-
-type QueryResultConsumer interface {
-	AppendRange(*pack.Package, int, int) error
-}
 
 type CountResult struct {
 	n uint64
@@ -120,7 +117,7 @@ func (r *Result) Row(row int) engine.QueryRow {
 	return r.row
 }
 
-func (r *Result) EncodeRecord(row int) []byte {
+func (r *Result) Record(row int) []byte {
 	buf, err := r.pkg.ReadWire(row)
 	assert.Always(err == nil, "pack wire encode failed", "err", err)
 	return buf
@@ -145,8 +142,9 @@ func (r *Result) Err() error {
 }
 
 func (r *Result) Encode() []byte {
-	buf := bytes.NewBuffer(make([]byte, 0, r.pkg.Schema().WireSize()))
-	for i, l := 0, r.pkg.Len(); i < l; i++ {
+	sz := r.pkg.Len() * r.pkg.Schema().WireSize()
+	buf := bytes.NewBuffer(make([]byte, 0, sz))
+	for i := range r.pkg.Len() {
 		_ = r.pkg.ReadWireBuffer(buf, i)
 	}
 	return buf.Bytes()
@@ -176,28 +174,14 @@ func (r *Result) Iterator() iter.Seq2[int, engine.QueryRow] {
 	}
 }
 
-// non public
+func (r *Result) Value(row, col int) any {
+	return r.pkg.Block(col).Get(row)
+}
+
 func (r *Result) AppendRange(pkg *pack.Package, i, j int) error {
 	r.pkg.AppendRange(pkg, i, j)
 	return nil
 }
-
-// non public
-// func (r *Result) PkColumn() []uint64 {
-// 	return r.pkg.PkColumn()
-// }
-
-// TODO: replace by vector accessor
-// func (r *Result) Column(name string) (any, error) {
-// 	if !r.IsValid() {
-// 		return nil, ErrResultClosed
-// 	}
-// 	f, ok := r.pkg.Schema().FieldByName(name)
-// 	if !ok {
-// 		return nil, schema.ErrInvalidField
-// 	}
-// 	return r.pkg.ReadCol(int(f.Id())), nil
-// }
 
 // Pack row
 type Row struct {
@@ -211,8 +195,8 @@ func (r *Row) Schema() *schema.Schema {
 	return r.res.pkg.Schema()
 }
 
-func (r *Row) Encode() []byte {
-	return r.res.EncodeRecord(r.row)
+func (r *Row) Record() []byte {
+	return r.res.Record(r.row)
 }
 
 func (r *Row) Decode(val any) error {
@@ -236,29 +220,22 @@ func (r *Row) Decode(val any) error {
 	return r.res.pkg.ReadStruct(r.row, val, r.schema, r.maps)
 }
 
-func (r *Row) Field(name string) (any, error) {
-	if !r.res.IsValid() {
-		return nil, ErrResultClosed
-	}
-	f, ok := r.res.Schema().FieldByName(name)
-	if !ok {
-		return nil, schema.ErrInvalidField
-	}
-	return r.res.pkg.ReadValue(int(f.Id()), r.row, f.Type(), f.Scale()), nil
+// debug only
+// func (r *Row) Field(name string) (any, error) {
+// 	if !r.res.IsValid() {
+// 		return nil, ErrResultClosed
+// 	}
+// 	f, ok := r.res.Schema().FieldByName(name)
+// 	if !ok {
+// 		return nil, schema.ErrInvalidField
+// 	}
+// 	return r.res.pkg.ReadValue(int(f.Id()), r.row, f.Type(), f.Scale()), nil
+// }
+
+func (r *Row) Get(i int) any {
+	return r.res.pkg.Block(i).Get(r.row)
 }
 
-func (r *Row) Index(i int) (any, error) {
-	if r.res.pkg == nil {
-		return nil, ErrResultClosed
-	}
-	f, ok := r.res.Schema().FieldById(uint16(i))
-	if !ok {
-		return nil, schema.ErrInvalidField
-	}
-	return r.res.pkg.ReadValue(int(f.Id()), r.row, f.Type(), f.Scale()), nil
-}
-
-// non public
 func (r *Row) Uint64(col int) uint64 {
 	return r.res.pkg.Uint64(col, r.row)
 }
@@ -337,6 +314,10 @@ func (r *Row) Bool(col int) bool {
 
 func (r *Row) Time(col int) time.Time {
 	return r.res.pkg.Time(col, r.row)
+}
+
+func (r *Row) Big(col int) num.Big {
+	return r.res.pkg.Big(col, r.row)
 }
 
 func (r *Row) Enum(col int) string {

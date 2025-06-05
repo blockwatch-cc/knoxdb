@@ -1,5 +1,7 @@
 // Copyright (c) 2024 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
+//go:build ignore
+// +build ignore
 
 package table
 
@@ -23,13 +25,15 @@ func (t *Table) doLookupRid(ctx context.Context, pk uint64) (uint64, error) {
 	snap := tx.Snapshot()
 	rid, isConflict, ok := t.journal.FindRid(pk, snap)
 	if ok {
-		// Note: no conflicts as long as we're single writer
+		// Note: no conflicts as long as we're in single writer mode
 		if isConflict {
 			tx.Fail(engine.ErrTxConflict)
 			return 0, engine.ErrTxConflict
 		}
 		return rid, nil
 	}
+
+	// TODO: use index pk -> rid
 
 	// target is $rid field
 	rs, err := t.schema.SelectFieldIds(schema.MetaRid)
