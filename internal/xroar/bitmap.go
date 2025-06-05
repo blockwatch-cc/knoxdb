@@ -28,6 +28,7 @@ import (
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/filter"
+	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/constraints"
 )
@@ -75,25 +76,25 @@ func NewWithSize(numKeys int) *Bitmap {
 	return ra
 }
 
-// NewFromBuffer returns a pointer to bitmap corresponding to the given buffer. This bitmap shouldn't
+// NewFromShared returns a pointer to bitmap corresponding to the given buffer. This bitmap shouldn't
 // be modified because it might corrupt the given buffer.
-func NewFromBuffer(data []byte) *Bitmap {
-	assert(len(data)%2 == 0)
-	if len(data) < 8 {
+func NewFromShared(src []byte) *Bitmap {
+	assert(len(src)%2 == 0)
+	if len(src) < 8 {
 		return New()
 	}
-	du := toUint16Slice(data)
+	du := toUint16Slice(src)
 	x := toUint64Slice(du[:4])[indexNodeSize]
 	return &Bitmap{
 		data: du,
-		_ptr: data, // Keep a hold of data, otherwise GC would do its thing.
+		_ptr: src, // Keep a hold of data, otherwise GC would do its thing.
 		keys: toUint64Slice(du[:x]),
 	}
 }
 
-// NewFromBufferWithCopy creates a copy of the given buffer and returns a bitmap based on the copied
+// NewFromBytes creates a copy of the given buffer and returns a bitmap based on the copied
 // buffer. This bitmap is safe for both read and write operations.
-func NewFromBufferWithCopy(src []byte) *Bitmap {
+func NewFromBytes(src []byte) *Bitmap {
 	assert(len(src)%2 == 0)
 	if len(src) < 8 {
 		return New()
@@ -109,7 +110,12 @@ func NewFromBufferWithCopy(src []byte) *Bitmap {
 	}
 }
 
-func NewFromSortedList[T constraints.Integer](vals []T) *Bitmap {
+func NewFromIndexes[T constraints.Integer](src []T) *Bitmap {
+	util.Sort(src, 0)
+	return NewFromSorted(src)
+}
+
+func NewFromSorted[T constraints.Integer](vals []T) *Bitmap {
 	arr := make([]uint16, 0)
 	var hi, lastHi, off uint64
 
@@ -174,6 +180,10 @@ func NewFromSortedList[T constraints.Integer](vals []T) *Bitmap {
 	return ra
 }
 
+func (b *Bitmap) IsValid() bool {
+	return b != nil
+}
+
 func (ra *Bitmap) Size() int {
 	if ra == nil {
 		return 0
@@ -181,24 +191,15 @@ func (ra *Bitmap) Size() int {
 	return len(ra.data) * 2
 }
 
-func (ra *Bitmap) ToBuffer() []byte {
+func (ra *Bitmap) Bytes() []byte {
 	if ra.IsEmpty() {
 		return nil
 	}
 	return toByteSlice(ra.data)
 }
 
-func (ra *Bitmap) ToBufferWithCopy() []byte {
-	if ra.IsEmpty() {
-		return nil
-	}
-	buf := make([]byte, len(ra.data)*2)
-	copy(buf, toByteSlice(ra.data))
-	return buf
-}
-
 func (ra *Bitmap) Clone() *Bitmap {
-	return NewFromBuffer(slices.Clone(ra.ToBuffer()))
+	return NewFromBytes(slices.Clone(ra.Bytes()))
 }
 
 // Capacity returns the underlying arrays uint16 capacity.
@@ -840,8 +841,8 @@ func (ra *Bitmap) String() string {
 const fwd int = 0x01
 const rev int = 0x02
 
-func (ra *Bitmap) Minimum() uint64 { return ra.extreme(fwd) }
-func (ra *Bitmap) Maximum() uint64 { return ra.extreme(rev) }
+func (ra *Bitmap) Min() uint64 { return ra.extreme(fwd) }
+func (ra *Bitmap) Max() uint64 { return ra.extreme(rev) }
 
 func (ra *Bitmap) Debug(x uint64) string {
 	var b strings.Builder
@@ -961,6 +962,7 @@ func (ra *Bitmap) And(bm *Bitmap) {
 		zeroOutContainer(a.getContainer(off))
 		ai++
 	}
+	ra.Cleanup()
 }
 
 func And(a, b *Bitmap) *Bitmap {
@@ -1044,6 +1046,7 @@ func (ra *Bitmap) AndNot(bm *Bitmap) {
 			bi++
 		}
 	}
+	ra.Cleanup()
 }
 
 // TODO: Check if we want to use lazyMode

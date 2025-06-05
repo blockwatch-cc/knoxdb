@@ -52,7 +52,7 @@ func BenchmarkIndexes(b *testing.B) {
 			buf := fillBitsetRand(nil, n.L, d.D)
 			cnt := popcount(buf)
 			slice := make([]uint32, cnt, n.L)
-			bits := NewFromBuffer(buf, n.L)
+			bits := NewFromBytes(buf, n.L)
 			b.Run(n.Name+"/"+d.Name, func(b *testing.B) {
 				b.SetBytes(int64(bits.Len()))
 				b.ResetTimer()
@@ -69,7 +69,7 @@ func BenchmarkIndexes(b *testing.B) {
 func BenchmarkIterate(b *testing.B) {
 	for _, n := range sizes {
 		for _, d := range densities {
-			bits := NewFromBuffer(fillBitsetRand(nil, n.L, d.D), n.L)
+			bits := NewFromBytes(fillBitsetRand(nil, n.L, d.D), n.L)
 			b.Run(n.Name+"/"+d.Name, func(b *testing.B) {
 				b.ResetTimer()
 				b.SetBytes(int64(bits.Len()))
@@ -95,7 +95,7 @@ func BenchmarkIterate(b *testing.B) {
 func BenchmarkChunk(b *testing.B) {
 	for _, n := range sizes {
 		for _, d := range densities {
-			bits := NewFromBuffer(fillBitsetRand(nil, n.L, d.D), n.L)
+			bits := NewFromBytes(fillBitsetRand(nil, n.L, d.D), n.L)
 			var sum int
 			b.Run(n.Name+"/"+d.Name, func(b *testing.B) {
 				b.ResetTimer()
@@ -125,7 +125,7 @@ func BenchmarkIterator(b *testing.B) {
 	for _, n := range sizes {
 		for _, d := range densities {
 			buf := fillBitsetRand(nil, n.L, d.D)
-			src := NewFromBuffer(buf, n.L)
+			src := NewFromBytes(buf, n.L)
 			var x int
 			b.Run(n.Name+"/"+d.Name, func(b *testing.B) {
 				b.SetBytes(int64(src.Len()))

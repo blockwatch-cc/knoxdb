@@ -692,36 +692,36 @@ func TestContainerFull(t *testing.T) {
 
 func TestExtremes(t *testing.T) {
 	a := New()
-	require.Equal(t, uint64(0), a.Minimum())
-	require.Equal(t, uint64(0), a.Maximum())
+	require.Equal(t, uint64(0), a.Min())
+	require.Equal(t, uint64(0), a.Max())
 
 	a.Set(1)
-	require.Equal(t, uint64(1), a.Minimum())
-	require.Equal(t, uint64(1), a.Maximum())
+	require.Equal(t, uint64(1), a.Min())
+	require.Equal(t, uint64(1), a.Max())
 
 	a.Set(100000)
-	require.Equal(t, uint64(1), a.Minimum())
-	require.Equal(t, uint64(100000), a.Maximum())
+	require.Equal(t, uint64(1), a.Min())
+	require.Equal(t, uint64(100000), a.Max())
 
 	a.Unset(100000)
-	require.Equal(t, uint64(1), a.Minimum())
-	require.Equal(t, uint64(1), a.Maximum())
+	require.Equal(t, uint64(1), a.Min())
+	require.Equal(t, uint64(1), a.Max())
 
 	a.Unset(1)
-	require.Equal(t, uint64(0), a.Minimum())
-	require.Equal(t, uint64(0), a.Maximum())
+	require.Equal(t, uint64(0), a.Min())
+	require.Equal(t, uint64(0), a.Max())
 
 	a.Set(100000)
-	require.Equal(t, uint64(100000), a.Minimum())
-	require.Equal(t, uint64(100000), a.Maximum())
+	require.Equal(t, uint64(100000), a.Min())
+	require.Equal(t, uint64(100000), a.Max())
 
 	a.Unset(100000)
 	a = New()
 	for i := 0; i <= maxContainerSize; i++ {
 		a.Set(uint64(i))
 	}
-	require.Equal(t, uint64(0), a.Minimum())
-	require.Equal(t, uint64(maxContainerSize), a.Maximum())
+	require.Equal(t, uint64(0), a.Min())
+	require.Equal(t, uint64(maxContainerSize), a.Max())
 }
 
 func TestCleanup(t *testing.T) {
@@ -731,7 +731,7 @@ func TestCleanup(t *testing.T) {
 	for i := 0; i < n; i++ {
 		a.Set(uint64((i * (1 << 16))))
 	}
-	abuf := a.ToBufferWithCopy()
+	abuf := slices.Clone(a.Bytes())
 
 	require.Equal(t, 10, a.keys.numKeys())
 	a.UnsetRange(1<<16, 2*(1<<16))
@@ -753,7 +753,7 @@ func TestCleanup(t *testing.T) {
 	}
 	b.UnsetRange(0, uint64(n/2))
 	require.Equal(t, n/2, b.Count())
-	buf := b.ToBuffer()
+	buf := b.Bytes()
 	b = NewFromBuffer(buf)
 	require.Equal(t, n/2, b.Count())
 }

@@ -39,8 +39,8 @@ func New(size int) *Bitset {
 	return s
 }
 
-// NewFromBuffer references a pre-allocated byte slice.
-func NewFromBuffer(buf []byte, sz int) *Bitset {
+// NewFromBytes references a pre-allocated byte slice.
+func NewFromBytes(buf []byte, sz int) *Bitset {
 	if sz == 0 {
 		sz = len(buf) << 3
 	}
@@ -56,7 +56,7 @@ func NewFromBuffer(buf []byte, sz int) *Bitset {
 	return s
 }
 
-// NewFromBuffer creates a new bitset and sets indexed positions.
+// NewFromIndexes creates a new bitset and sets indexed positions.
 func NewFromIndexes[T constraints.Integer](idxs []T) *Bitset {
 	if len(idxs) == 0 {
 		return New(0)

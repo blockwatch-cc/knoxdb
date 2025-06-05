@@ -453,7 +453,7 @@ func (b bitmap) rank(x uint16) int {
 		return -1
 	}
 
-	rank := bitset.NewFromBuffer(toByteSlice(b[int(startIdx):int(startIdx+idx)]), 0).Count()
+	rank := bitset.NewFromBytes(toByteSlice(b[int(startIdx):int(startIdx+idx)]), 0).Count()
 	for p := uint16(0); p <= pos; p++ {
 		if b[startIdx+idx]&bitmapMask[p] > 0 {
 			rank++

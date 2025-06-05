@@ -8,6 +8,7 @@ import (
 	"math/bits"
 	"sync"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
@@ -278,7 +279,7 @@ func (s *Bitset) Indexes(result []uint32) []uint32 {
 	// cnt = roundUpPow2(cnt, 8)
 	cnt = min(cnt+8, s.size)
 	if result == nil || cap(result) < cnt {
-		result = make([]uint32, cnt)
+		result = arena.AllocUint32(cnt)[:cnt]
 	} else {
 		result = result[:cnt]
 	}
