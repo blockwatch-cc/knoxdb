@@ -34,7 +34,7 @@ func Sort2[S, T constraints.Ordered](s []S, t []T) {
 const bits = 8
 
 // custom radix sort, faster than slices.Sort
-func Sort[T Integer | int | uint](vs []T, shift int) {
+func Sort[T constraints.Integer](vs []T, shift int) {
 	w := SizeOf[T]() * 8
 	s := w - bits - shift
 

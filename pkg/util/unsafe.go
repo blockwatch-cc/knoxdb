@@ -9,6 +9,7 @@ import (
 	"unsafe"
 
 	"blockwatch.cc/knoxdb/internal/arena"
+	"golang.org/x/exp/constraints"
 )
 
 type Integer interface {
@@ -19,7 +20,7 @@ type Number interface {
 	Integer | float32 | float64
 }
 
-func SizeOf[T Number | int | uint]() int {
+func SizeOf[T constraints.Integer | constraints.Float]() int {
 	return int(unsafe.Sizeof(T(0)))
 }
 
