@@ -142,6 +142,7 @@ func makeFilter(s *schema.Schema, name string, mode query.FilterMode, val, val2 
 	if !ok {
 		panic(fmt.Errorf("missing field %s in schema %s", name, s))
 	}
+	idx, _ := s.FieldIndexById(field.Id())
 	m := query.NewFactory(field.Type()).New(mode)
 	c := schema.NewCaster(field.Type(), field.Scale(), nil)
 	switch mode {
@@ -161,7 +162,8 @@ func makeFilter(s *schema.Schema, name string, mode query.FilterMode, val, val2 
 			Name:    field.Name(),
 			Type:    field.Type().BlockType(),
 			Mode:    mode,
-			Index:   field.Id() - 1,
+			Index:   idx,
+			Id:      field.Id(),
 			Value:   val,
 			Matcher: m,
 		},

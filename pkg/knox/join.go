@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"blockwatch.cc/knoxdb/internal/query"
+	"blockwatch.cc/knoxdb/internal/operator/join"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"github.com/echa/log"
@@ -276,8 +276,8 @@ func (j Join) Run(ctx context.Context) (QueryResult, error) {
 	return plan.Query(ctx)
 }
 
-func (j Join) MakePlan() (*query.JoinPlan, error) {
-	plan := query.NewJoinPlan().
+func (j Join) MakePlan() (*join.JoinPlan, error) {
+	plan := join.NewJoinPlan().
 		WithTag(j.tag).
 		WithFlags(j.flags).
 		WithLimit(j.limit).

@@ -8,8 +8,7 @@ import (
 	"fmt"
 
 	"blockwatch.cc/knoxdb/internal/engine"
-	"blockwatch.cc/knoxdb/pkg/bitmap"
-	"blockwatch.cc/knoxdb/pkg/schema"
+	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/slicex"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
@@ -25,7 +24,8 @@ type Filter struct {
 	Name    string     // schema field name
 	Type    BlockType  // block type (we need for opimizing filter trees)
 	Mode    FilterMode // eq|ne|gt|gte|lt|lte|rg|in|nin|re
-	Index   uint16     // field index (NOT field id, index = id - 1!!; compat with pack.Package.Block() and schema.View.Get())
+	Index   int        // field index (use with pack.Package.Block() and schema.View.Get())
+	Id      uint16     // field unique id (used as storage key)
 	Matcher Matcher    // encapsulated match data and function
 	Value   any        // direct val for eq|ne|gt|ge|lt|le, [2]any for rg, slice for in|nin, string re
 }
@@ -71,7 +71,7 @@ func (f *Filter) Validate() error {
 type FilterTreeNode struct {
 	Children []*FilterTreeNode // sub filter
 	Filter   *Filter           // ptr to condition
-	Bits     bitmap.Bitmap     // index scan result
+	Bits     *xroar.Bitmap     // index scan result
 	OrKind   bool              // AND|OR
 	Skip     bool              // sub-tree or leaf filter has been processed already
 
@@ -145,13 +145,13 @@ func (n *FilterTreeNode) Fields() []string {
 
 // Indexes returns a unique ordered list of field indexes referenced by
 // filters in this tree.
-func (n *FilterTreeNode) Indexes() []uint16 {
-	ord := slicex.NewOrderedIntegers(make([]uint16, 0)).SetUnique()
-	n.collectIndexes(ord)
-	return ord.Values
-}
+// func (n *FilterTreeNode) Indexes() []int {
+// 	ord := slicex.NewOrderedIntegers(make([]int, 0)).SetUnique()
+// 	n.collectIndexes(ord)
+// 	return ord.Values
+// }
 
-func (n *FilterTreeNode) collectIndexes(s *slicex.OrderedIntegers[uint16]) {
+func (n *FilterTreeNode) collectIndexes(s *slicex.OrderedIntegers[int]) {
 	if n.IsLeaf() {
 		s.Insert(n.Filter.Index)
 		return
@@ -212,9 +212,9 @@ func (n *FilterTreeNode) Cost(nValues int) int {
 }
 
 // engine matcher interface
-func (n *FilterTreeNode) MatchView(v *schema.View) bool {
-	return MatchTree(n, v)
-}
+// func (n *FilterTreeNode) MatchView(v *schema.View) bool {
+// 	return MatchTree(n, v)
+// }
 
 func (n *FilterTreeNode) Overlaps(v engine.ConditionMatcher) bool {
 	_, ok := v.(*FilterTreeNode)

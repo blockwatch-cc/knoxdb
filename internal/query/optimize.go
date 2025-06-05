@@ -359,7 +359,7 @@ func simplifyRanges(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 		resultNodes  []*FilterTreeNode
 		sameIdNodes  []*FilterTreeNode
 		sameIdRanges []RangeValue
-		lastId       uint16
+		lastIdx      int
 		eqMode       byte // bit flags: 1 = LE/GE/EQ/RG, 2 = LT/GT, 3 = both
 		f            *Filter
 	)
@@ -418,11 +418,11 @@ func simplifyRanges(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 
 	for _, node := range nodes {
 		// try optimize when field id changes
-		if lastId != node.Filter.Index {
+		if lastIdx != node.Filter.Index {
 			postProcess()
 
 			// prepare next round
-			lastId = node.Filter.Index
+			lastIdx = node.Filter.Index
 			eqMode = 0
 			if sameIdNodes != nil {
 				sameIdNodes = sameIdNodes[:0]
@@ -559,7 +559,7 @@ func simplifyRanges(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 func simplifySets(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 	var (
 		ins, nis    any
-		lastId      uint16
+		lastIdx     int
 		res         []*FilterTreeNode
 		f           *Filter
 		plus, minus func(any, any) any
@@ -599,12 +599,12 @@ func simplifySets(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 
 	// walk all nodes
 	for _, node := range nodes {
-		// reset when field id changes
-		if lastId != node.Filter.Index {
+		// reset when field index changes
+		if lastIdx != node.Filter.Index {
 			postProcess()
 
 			// reset state
-			lastId = node.Filter.Index
+			lastIdx = node.Filter.Index
 			ins, nis = nil, nil
 		}
 
@@ -780,6 +780,7 @@ func makeRangeFilterFrom(f *Filter, rg RangeValue, eqMode byte) *Filter {
 			Type:    f.Type,
 			Mode:    FilterModeEqual,
 			Index:   f.Index,
+			Id:      f.Id,
 			Matcher: m,
 			Value:   rg[0],
 		}
@@ -794,6 +795,7 @@ func makeRangeFilterFrom(f *Filter, rg RangeValue, eqMode byte) *Filter {
 				Type:    f.Type,
 				Mode:    FilterModeLe,
 				Index:   f.Index,
+				Id:      f.Id,
 				Matcher: m,
 				Value:   rg[1],
 			}
@@ -806,6 +808,7 @@ func makeRangeFilterFrom(f *Filter, rg RangeValue, eqMode byte) *Filter {
 				Type:    f.Type,
 				Mode:    FilterModeLt,
 				Index:   f.Index,
+				Id:      f.Id,
 				Matcher: m,
 				Value:   val,
 			}
@@ -821,6 +824,7 @@ func makeRangeFilterFrom(f *Filter, rg RangeValue, eqMode byte) *Filter {
 				Type:    f.Type,
 				Mode:    FilterModeGe,
 				Index:   f.Index,
+				Id:      f.Id,
 				Matcher: m,
 				Value:   rg[0],
 			}
@@ -833,6 +837,7 @@ func makeRangeFilterFrom(f *Filter, rg RangeValue, eqMode byte) *Filter {
 				Type:    f.Type,
 				Mode:    FilterModeGt,
 				Index:   f.Index,
+				Id:      f.Id,
 				Matcher: m,
 				Value:   val,
 			}
@@ -846,6 +851,7 @@ func makeRangeFilterFrom(f *Filter, rg RangeValue, eqMode byte) *Filter {
 			Type:    f.Type,
 			Mode:    FilterModeRange,
 			Index:   f.Index,
+			Id:      f.Id,
 			Matcher: m,
 			Value:   rg,
 		}
@@ -915,6 +921,7 @@ func makeFalseFilterFrom(f *Filter) *Filter {
 		Type:    f.Type,
 		Mode:    FilterModeFalse,
 		Index:   f.Index,
+		Id:      f.Id,
 		Matcher: &noopMatcher{},
 		Value:   nil,
 	}
@@ -926,6 +933,7 @@ func makeTrueFilterFrom(f *Filter) *Filter {
 		Type:    f.Type,
 		Mode:    FilterModeTrue,
 		Index:   f.Index,
+		Id:      f.Id,
 		Matcher: &noopMatcher{},
 		Value:   nil,
 	}
@@ -939,6 +947,7 @@ func makeFilterFrom(f *Filter, mode FilterMode, val any) *Filter {
 		Type:    f.Type,
 		Mode:    mode,
 		Index:   f.Index,
+		Id:      f.Id,
 		Matcher: m,
 		Value:   val,
 	}
@@ -952,6 +961,7 @@ func makeFilterFromSet(f *Filter, set *xroar.Bitmap) *Filter {
 		Type:    f.Type,
 		Mode:    FilterModeIn,
 		Index:   f.Index,
+		Id:      f.Id,
 		Matcher: m,
 		Value:   m.Value(), // FIXME: optimizer expects []T which is expensive
 	}

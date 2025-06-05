@@ -702,7 +702,7 @@ func (m numInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitse
 func (m numInSetMatcher[T]) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) {
 	// handle compressed blocks
 	if !mins.IsMaterialized() || !maxs.IsMaterialized() {
-		setMin, setMax := m.set.Minimum(), m.set.Maximum()
+		setMin, setMax := m.set.Min(), m.set.Max()
 		rg := newFactory(mins.Type()).New(FilterModeRange)
 		rg.WithValue(RangeValue{T(setMin), T(setMax)})
 		rg.MatchRangeVectors(mins, maxs, bits, mask)

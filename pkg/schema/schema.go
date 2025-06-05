@@ -280,6 +280,10 @@ func (s *Schema) Fields() []Field {
 	return s.fields
 }
 
+func (s *Schema) Field(i int) *Field {
+	return &s.fields[i]
+}
+
 func (s *Schema) Exported() []*ExportedField {
 	return s.exports
 }

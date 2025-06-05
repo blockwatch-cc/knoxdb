@@ -5,31 +5,55 @@ package query
 
 import (
 	"bytes"
-	"encoding/binary"
 	"iter"
-	"slices"
-	"strings"
 	"time"
 
 	"blockwatch.cc/knoxdb/internal/engine"
+	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/pkg/assert"
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/schema"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
-// Binary (row-based) results
+// Columnar (pack-based) results
+
+type QueryResultConsumer = engine.QueryResultConsumer
 
 var (
-	_ engine.QueryResult = (*Result)(nil)
-	_ engine.QueryRow    = (*Row)(nil)
+	_ engine.QueryResult         = (*Result)(nil)
+	_ engine.QueryRow            = (*Row)(nil)
+	_ engine.QueryResultConsumer = (*Result)(nil)
+	_ engine.QueryResultConsumer = (*CountResult)(nil)
+	_ engine.QueryResultConsumer = (*StreamResult)(nil)
 
 	ErrResultClosed = engine.ErrResultClosed
 )
 
-type QueryResultConsumer interface {
-	Append(buf []byte, isZeroCopy bool) error
-	Len() int
+type CountResult struct {
+	n uint64
+}
+
+func NewCountResult() *CountResult {
+	return &CountResult{}
+}
+
+func (r *CountResult) Append(_ *pack.Package, sel []uint32) error {
+	r.n += uint64(len(sel))
+	return nil
+}
+
+func (r *CountResult) AppendRange(_ *pack.Package, i, j int) error {
+	r.n += uint64(j - i)
+	return nil
+}
+
+func (r *CountResult) Count() uint64 {
+	return r.n
+}
+
+func (r *CountResult) Len() int {
+	return int(r.n)
 }
 
 type StreamCallback func(engine.QueryRow) error
@@ -40,63 +64,82 @@ type StreamResult struct {
 	n  int
 }
 
+func NewStreamResult(fn StreamCallback) *StreamResult {
+	sr := &StreamResult{
+		r:  NewResult(nil),
+		fn: fn,
+	}
+	return sr
+}
+
 // QueryResultConsumer interface
-func (r *StreamResult) Append(buf []byte, _ bool) error {
-	r.r.values = buf
+func (r *StreamResult) Append(pkg *pack.Package, sel []uint32) error {
+	r.r.pkg = pkg
+	for i := range sel {
+		r.n++
+		if err := r.fn(r.r.Row(int(i))); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *StreamResult) AppendRange(pkg *pack.Package, i, j int) error {
+	r.r.pkg = pkg
 	r.n++
-	return r.fn(r.r.Row(0))
+	return r.fn(r.r.Row(i))
 }
 
 func (r *StreamResult) Len() int {
 	return r.n
 }
 
-func NewStreamResult(s *schema.Schema, fn StreamCallback) *StreamResult {
-	sr := &StreamResult{
-		r:  NewResult(s, 1),
-		fn: fn,
-	}
-	sr.r.offsets = sr.r.offsets[:1]
-	return sr
+func (r *StreamResult) Close() {
+	r.r.pkg = nil
+	r.fn = nil
+	r.r.Close()
+	r.r = nil
 }
 
 type Result struct {
-	schema  *schema.Schema // result schema
-	row     *Row           // row cache
-	values  []byte
-	offsets []int32
-	sorted  []int32
-	desc    bool
+	pkg *pack.Package
+	row *Row // row cache
 }
 
-func NewResult(s *schema.Schema, szs ...int) *Result {
-	sz := 1024
-	if len(szs) > 0 {
-		sz = szs[0]
-	}
+func NewResult(pkg *pack.Package) *Result {
 	return &Result{
-		schema:  s,
-		offsets: make([]int32, 0, sz),
-		values:  make([]byte, 0, sz*s.WireSize()),
+		pkg: pkg,
 	}
+}
+
+func (r *Result) AppendRange(pkg *pack.Package, i, j int) error {
+	r.pkg.AppendRange(pkg, i, j)
+	return nil
+}
+
+func (r *Result) Append(pkg *pack.Package, sel []uint32) error {
+	pkg.AppendTo(r.pkg, sel)
+	return nil
 }
 
 func (r *Result) Reset() {
-	r.values = r.values[:0]
-	r.offsets = r.offsets[:0]
-	r.sorted = r.sorted[:0]
+	r.pkg.Clear()
 }
 
 func (r *Result) IsValid() bool {
-	return r.values != nil
+	return r.pkg != nil
 }
 
 func (r *Result) Schema() *schema.Schema {
-	return r.schema
+	return r.pkg.Schema()
+}
+
+func (r *Result) Pack() *pack.Package {
+	return r.pkg
 }
 
 func (r *Result) Len() int {
-	return len(r.offsets)
+	return r.pkg.Len()
 }
 
 func (r *Result) Row(row int) engine.QueryRow {
@@ -108,28 +151,21 @@ func (r *Result) Row(row int) engine.QueryRow {
 	return r.row
 }
 
-func (r *Result) EncodeRecord(n int) []byte {
-	olen := len(r.offsets)
-	if r.values == nil || olen < n {
-		return nil
-	}
-	if r.sorted != nil {
-		if r.desc {
-			n = int(r.sorted[olen-n])
-		} else {
-			n = int(r.sorted[n])
-		}
-	}
-	start, end := r.offsets[n], len(r.values)
-	if n < olen-1 {
-		end = int(r.offsets[n+1])
-	}
-	return r.values[start:end]
+func (r *Result) Record(row int) []byte {
+	buf, err := r.pkg.ReadWire(row)
+	assert.Always(err == nil, "pack wire encode failed", "err", err)
+	return buf
 }
 
 func (r *Result) Close() {
-	r.values = nil
-	r.offsets = nil
+	if r == nil {
+		return
+	}
+	if r.pkg != nil {
+		r.pkg.Release()
+	}
+	r.pkg = nil
+	r.row = nil
 }
 
 func (r *Result) Err() error {
@@ -140,77 +176,26 @@ func (r *Result) Err() error {
 }
 
 func (r *Result) Encode() []byte {
-	return r.values
+	sz := r.pkg.Len() * r.pkg.Schema().WireSize()
+	buf := bytes.NewBuffer(make([]byte, 0, sz))
+	for i := range r.pkg.Len() {
+		_ = r.pkg.ReadWireBuffer(buf, i)
+	}
+	return buf.Bytes()
 }
 
 func (r *Result) SortBy(name string, order types.OrderType) {
-	col, err := r.Column(name)
-	if err != nil {
+	if !r.IsValid() {
 		return
 	}
-
-	// prepare sort lookup table
-	n := len(r.values)
-	if cap(r.sorted) < n {
-		r.sorted = make([]int32, n)
+	if r.pkg.Len() == 0 {
+		return
 	}
-	r.sorted = r.sorted[:n]
-	for i := range r.sorted {
-		r.sorted[i] = int32(i)
+	idx, ok := r.pkg.Schema().FieldIndexByName(name)
+	if !ok {
+		return
 	}
-
-	// remember order
-	switch order {
-	case types.OrderDesc, types.OrderDescCaseInsensitive:
-		r.desc = true
-	}
-
-	// sort indirect by column
-	switch c := col.(type) {
-	case []int8:
-		slices.SortStableFunc(r.sorted, func(i, j int32) int { return util.Cmp(c[i], c[j]) })
-	case []int16:
-		slices.SortStableFunc(r.sorted, func(i, j int32) int { return util.Cmp(c[i], c[j]) })
-	case []int32:
-		slices.SortStableFunc(r.sorted, func(i, j int32) int { return util.Cmp(c[i], c[j]) })
-	case []int64:
-		slices.SortStableFunc(r.sorted, func(i, j int32) int { return util.Cmp(c[i], c[j]) })
-	case []uint8:
-		slices.SortStableFunc(r.sorted, func(i, j int32) int { return util.Cmp(c[i], c[j]) })
-	case []uint16:
-		slices.SortStableFunc(r.sorted, func(i, j int32) int { return util.Cmp(c[i], c[j]) })
-	case []uint32:
-		slices.SortStableFunc(r.sorted, func(i, j int32) int { return util.Cmp(c[i], c[j]) })
-	case []uint64:
-		slices.SortStableFunc(r.sorted, func(i, j int32) int { return util.Cmp(c[i], c[j]) })
-	case []float32:
-		slices.SortStableFunc(r.sorted, func(i, j int32) int { return util.Cmp(c[i], c[j]) })
-	case []float64:
-		slices.SortStableFunc(r.sorted, func(i, j int32) int { return util.Cmp(c[i], c[j]) })
-	case [][]byte:
-		slices.SortStableFunc(r.sorted, func(i, j int32) int { return bytes.Compare(c[i], c[j]) })
-	case []string:
-		switch order {
-		case types.OrderAscCaseInsensitive, types.OrderDescCaseInsensitive:
-			slices.SortStableFunc(r.sorted, func(i, j int32) int { return util.CmpCaseInsensitive(c[i], c[j]) })
-		default:
-			slices.SortStableFunc(r.sorted, func(i, j int32) int { return strings.Compare(c[i], c[j]) })
-		}
-	case []time.Time:
-		slices.SortStableFunc(r.sorted, func(i, j int32) int { return util.CmpTime(c[i], c[j]) })
-	case []num.Int128:
-		slices.SortStableFunc(r.sorted, func(i, j int32) int { return c[i].Cmp(c[j]) })
-	case []num.Int256:
-		slices.SortStableFunc(r.sorted, func(i, j int32) int { return c[i].Cmp(c[j]) })
-	case num.Decimal32Slice:
-		slices.SortStableFunc(r.sorted, func(i, j int32) int { return util.Cmp(c.Int32[i], c.Int32[j]) })
-	case num.Decimal64Slice:
-		slices.SortStableFunc(r.sorted, func(i, j int32) int { return util.Cmp(c.Int64[i], c.Int64[j]) })
-	case num.Decimal128Slice:
-		slices.SortStableFunc(r.sorted, func(i, j int32) int { return c.Int128[i].Cmp(c.Int128[j]) })
-	case num.Decimal256Slice:
-		slices.SortStableFunc(r.sorted, func(i, j int32) int { return c.Int256[i].Cmp(c.Int256[j]) })
-	}
+	pack.NewPackageSorter([]int{idx}, []types.OrderType{order}).Sort(r.pkg)
 }
 
 func (r *Result) Iterator() iter.Seq2[int, engine.QueryRow] {
@@ -223,48 +208,24 @@ func (r *Result) Iterator() iter.Seq2[int, engine.QueryRow] {
 	}
 }
 
-// QueryResultConsumer interface
-func (r *Result) Append(buf []byte, isZeroCopy bool) error {
-	if isZeroCopy {
-		buf = bytes.Clone(buf)
-	}
-	r.offsets = append(r.offsets, int32(len(r.values)))
-	r.values = append(r.values, buf...)
-	return nil
+func (r *Result) Value(row, col int) any {
+	return r.pkg.Block(col).Get(row)
 }
 
-// not public
-func (r *Result) Column(name string) (any, error) {
-	if !r.IsValid() {
-		return nil, ErrResultClosed
-	}
-	idx, ok := r.schema.FieldIndexByName(name)
-	if !ok {
-		return nil, engine.ErrNoField
-	}
-	view := schema.NewView(r.schema)
-	var vals any
-	for i := range r.offsets {
-		view.Reset(r.EncodeRecord(i))
-		vals = view.Append(vals, idx)
-	}
-	return vals, nil
-}
-
+// Pack row
 type Row struct {
-	res  *Result
-	row  int
-	conv *schema.Converter
-	dec  *schema.Decoder
-	view *schema.View
+	res    *Result        // result including query result schema
+	row    int            // row offset in result package
+	schema *schema.Schema // decode target struct schema (i.e. with Go interfaces)
+	maps   []int          // field mapping from result schema to struct schema
 }
 
 func (r *Row) Schema() *schema.Schema {
-	return r.res.Schema()
+	return r.res.pkg.Schema()
 }
 
-func (r *Row) Encode() []byte {
-	return r.res.EncodeRecord(r.row)
+func (r *Row) Record() []byte {
+	return r.res.Record(r.row)
 }
 
 func (r *Row) Decode(val any) error {
@@ -277,48 +238,130 @@ func (r *Row) Decode(val any) error {
 	if err != nil {
 		return err
 	}
-	if r.conv == nil || r.conv.Schema() != s {
-		r.conv = schema.NewConverter(r.res.schema, s, binary.NativeEndian)
-		r.dec = schema.NewDecoder(s.WithEnums(r.res.schema.Enums()))
+	if r.schema == nil || r.schema != s {
+		maps, err := r.res.Schema().MapTo(s)
+		if err != nil {
+			return err
+		}
+		r.maps = maps
+		r.schema = s.WithEnums(r.res.Schema().Enums())
 	}
-
-	return r.dec.Decode(r.conv.Extract(r.res.EncodeRecord(r.row)), val)
+	return r.res.pkg.ReadStruct(r.row, val, r.schema, r.maps)
 }
 
-func (r *Row) Field(name string) (any, error) {
-	if !r.res.IsValid() {
-		return nil, ErrResultClosed
-	}
-	f, ok := r.res.schema.FieldByName(name)
-	if !ok {
-		return nil, schema.ErrInvalidField
-	}
-	if r.view == nil {
-		r.view = schema.NewView(r.res.schema)
-	}
-	r.view.Reset(r.Encode())
-	val, ok := r.view.Get(int(f.Id()))
-	if !ok {
-		return nil, schema.ErrInvalidField
-	}
-	return val, nil
+// debug only
+// func (r *Row) Field(name string) (any, error) {
+//  if !r.res.IsValid() {
+//      return nil, ErrResultClosed
+//  }
+//  f, ok := r.res.Schema().FieldByName(name)
+//  if !ok {
+//      return nil, schema.ErrInvalidField
+//  }
+//  return r.res.pkg.ReadValue(int(f.Id()), r.row, f.Type(), f.Scale()), nil
+// }
+
+func (r *Row) Get(i int) any {
+	return r.res.pkg.Block(i).Get(r.row)
 }
 
-func (r *Row) Index(i int) (any, error) {
-	if !r.res.IsValid() {
-		return nil, ErrResultClosed
-	}
-	f, ok := r.res.schema.FieldById(uint16(i))
+func (r *Row) Uint64(col int) uint64 {
+	return r.res.pkg.Uint64(col, r.row)
+}
+
+func (r *Row) Uint32(col int) uint32 {
+	return r.res.pkg.Uint32(col, r.row)
+}
+
+func (r *Row) Uint16(col int) uint16 {
+	return r.res.pkg.Uint16(col, r.row)
+}
+
+func (r *Row) Uint8(col int) uint8 {
+	return r.res.pkg.Uint8(col, r.row)
+}
+
+func (r *Row) Int256(col int) num.Int256 {
+	return r.res.pkg.Int256(col, r.row)
+}
+
+func (r *Row) Int128(col int) num.Int128 {
+	return r.res.pkg.Int128(col, r.row)
+}
+
+func (r *Row) Int64(col int) int64 {
+	return r.res.pkg.Int64(col, r.row)
+}
+
+func (r *Row) Int32(col int) int32 {
+	return r.res.pkg.Int32(col, r.row)
+}
+
+func (r *Row) Int16(col int) int16 {
+	return r.res.pkg.Int16(col, r.row)
+}
+
+func (r *Row) Int8(col int) int8 {
+	return r.res.pkg.Int8(col, r.row)
+}
+
+func (r *Row) Decimal256(col int) num.Decimal256 {
+	return r.res.pkg.Decimal256(col, r.row)
+}
+
+func (r *Row) Decimal128(col int) num.Decimal128 {
+	return r.res.pkg.Decimal128(col, r.row)
+}
+
+func (r *Row) Decimal64(col int) num.Decimal64 {
+	return r.res.pkg.Decimal64(col, r.row)
+}
+
+func (r *Row) Decimal32(col int) num.Decimal32 {
+	return r.res.pkg.Decimal32(col, r.row)
+}
+
+func (r *Row) Float64(col int) float64 {
+	return r.res.pkg.Float64(col, r.row)
+}
+
+func (r *Row) Float32(col int) float32 {
+	return r.res.pkg.Float32(col, r.row)
+}
+
+func (r *Row) String(col int) string {
+	return r.res.pkg.String(col, r.row)
+}
+
+func (r *Row) Bytes(col int) []byte {
+	return r.res.pkg.Bytes(col, r.row)
+}
+
+func (r *Row) Bool(col int) bool {
+	return r.res.pkg.Bool(col, r.row)
+}
+
+func (r *Row) Time(col int) time.Time {
+	return r.res.pkg.Time(col, r.row)
+}
+
+func (r *Row) Big(col int) num.Big {
+	return r.res.pkg.Big(col, r.row)
+}
+
+func (r *Row) Enum(col int) string {
+	f, ok := r.schema.FieldByIndex(col)
 	if !ok {
-		return nil, schema.ErrInvalidField
+		return ""
 	}
-	if r.view == nil {
-		r.view = schema.NewView(r.res.schema)
+	enums := r.schema.Enums()
+	if enums == nil {
+		return ""
 	}
-	r.view.Reset(r.Encode())
-	val, ok := r.view.Get(int(f.Id()))
+	enum, ok := enums.Lookup(f.Name())
 	if !ok {
-		return nil, schema.ErrInvalidField
+		return ""
 	}
-	return val, nil
+	val, _ := enum.Value(r.res.pkg.Uint16(col, r.row))
+	return val
 }

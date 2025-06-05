@@ -70,8 +70,9 @@ func (c Condition) FilterString() string {
 }
 
 func (f Filter) String() string {
-	return fmt.Sprintf("%s[%d] %s %s",
+	return fmt.Sprintf("%s[id=%d,ix=%d] %s %s",
 		f.Name,
+		f.Id,
 		f.Index,
 		f.Mode.Symbol(),
 		util.ToString(f.Value),

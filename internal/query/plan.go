@@ -10,7 +10,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/bitmap"
+	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/slicex"
 	"github.com/echa/log"
@@ -319,7 +319,8 @@ func (p *QueryPlan) QueryIndexes(ctx context.Context) error {
 	tmpl := &Filter{
 		Name:  ts.Pk().Name(),
 		Type:  ts.Pk().Type().BlockType(),
-		Index: uint16(ts.PkIndex()),
+		Index: ts.PkIndex(),
+		Id:    ts.PkId(),
 	}
 
 	// Step 2: add IN conditions from aggregate bits at each tree level
@@ -354,7 +355,7 @@ func (p *QueryPlan) decorateIndexNodes(node *FilterTreeNode, tmpl *Filter, isRoo
 	// and all indexes are collision free
 	if isRoot && node.IsProcessed() {
 		// aggregate bitsets
-		var bits bitmap.Bitmap
+		var bits *xroar.Bitmap
 		if node.OrKind {
 			for _, child := range node.Children {
 				if !child.Bits.IsValid() {
@@ -386,7 +387,7 @@ func (p *QueryPlan) decorateIndexNodes(node *FilterTreeNode, tmpl *Filter, isRoo
 			})
 		} else {
 			node.Children = append(node.Children, &FilterTreeNode{
-				Filter: makeFilterFromSet(tmpl, bits.Bitmap),
+				Filter: makeFilterFromSet(tmpl, bits),
 			})
 		}
 
@@ -406,7 +407,7 @@ func (p *QueryPlan) decorateIndexNodes(node *FilterTreeNode, tmpl *Filter, isRoo
 					})
 				} else {
 					node.Children = append(node.Children, &FilterTreeNode{
-						Filter: makeFilterFromSet(tmpl, child.Bits.Bitmap),
+						Filter: makeFilterFromSet(tmpl, child.Bits),
 					})
 				}
 			}
@@ -421,7 +422,7 @@ func (p *QueryPlan) decorateIndexNodes(node *FilterTreeNode, tmpl *Filter, isRoo
 				})
 			} else {
 				node.Children = append(node.Children, &FilterTreeNode{
-					Filter: makeFilterFromSet(tmpl, child.Bits.Bitmap),
+					Filter: makeFilterFromSet(tmpl, child.Bits),
 				})
 			}
 			// continue below, we may need to visit unprocessed grandchildren
@@ -473,7 +474,7 @@ func (p *QueryPlan) queryIndexOr(ctx context.Context, node *FilterTreeNode) (int
 
 	// update the filter condition with a valid bitset
 	if bits != nil {
-		node.Bits = *bits
+		node.Bits = bits
 		node.Skip = !canCollide
 	}
 
@@ -521,7 +522,7 @@ func (p *QueryPlan) queryIndexAnd(ctx context.Context, node *FilterTreeNode) (in
 		}
 
 		// stop on first hit
-		node.Bits = *bits
+		node.Bits = bits
 		node.Skip = !canCollide
 		nHits += bits.Count()
 		break
@@ -564,7 +565,7 @@ func (p *QueryPlan) queryIndexAnd(ctx context.Context, node *FilterTreeNode) (in
 			continue
 		}
 
-		child.Bits = *bits
+		child.Bits = bits
 		child.Skip = !canCollide
 		nHits += bits.Count()
 	}

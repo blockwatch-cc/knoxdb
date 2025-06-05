@@ -9,7 +9,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/filter"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
-	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
 var NoopMatcher = &noopMatcher{}
@@ -157,46 +156,46 @@ func (m noopMatcher) MatchRangeVectors(_, _ *block.Block, bits, mask *bitset.Bit
 	}
 }
 
-func MatchTree(n *FilterTreeNode, v *schema.View) bool {
-	// handle always true conditions
-	if n.IsAnyMatch() {
-		return true
-	}
+// func MatchTree(n *FilterTreeNode, v *schema.View) bool {
+// 	// handle always true conditions
+// 	if n.IsAnyMatch() {
+// 		return true
+// 	}
 
-	// handle always false conditions
-	if n.IsNoMatch() {
-		return false
-	}
+// 	// handle always false conditions
+// 	if n.IsNoMatch() {
+// 		return false
+// 	}
 
-	// match leaf filter
-	if n.IsLeaf() {
-		return MatchFilter(n.Filter, v)
-	}
+// 	// match leaf filter
+// 	if n.IsLeaf() {
+// 		return MatchFilter(n.Filter, v)
+// 	}
 
-	// match and aggregate all children
-	if n.OrKind {
-		for _, c := range n.Children {
-			if MatchTree(c, v) {
-				return true
-			}
-		}
-		return false
-	} else {
-		for _, c := range n.Children {
-			if !MatchTree(c, v) {
-				return false
-			}
-		}
-		return true
-	}
-}
+// 	// match and aggregate all children
+// 	if n.OrKind {
+// 		for _, c := range n.Children {
+// 			if MatchTree(c, v) {
+// 				return true
+// 			}
+// 		}
+// 		return false
+// 	} else {
+// 		for _, c := range n.Children {
+// 			if !MatchTree(c, v) {
+// 				return false
+// 			}
+// 		}
+// 		return true
+// 	}
+// }
 
-func MatchFilter(f *Filter, view *schema.View) bool {
-	// get data value as interface
-	v, ok := view.Get(int(f.Index))
-	if !ok {
-		return false
-	}
-	// compare against condition value
-	return f.Matcher.MatchValue(v)
-}
+// func MatchFilter(f *Filter, view *schema.View) bool {
+// 	// get data value as interface
+// 	v, ok := view.Get(int(f.Index))
+// 	if !ok {
+// 		return false
+// 	}
+// 	// compare against condition value
+// 	return f.Matcher.MatchValue(v)
+// }

@@ -298,7 +298,8 @@ func makeNode(field schema.Field, mode FilterMode, value any) *FilterTreeNode {
 	f := &Filter{
 		Name:    field.Name(),
 		Mode:    mode,
-		Index:   field.Id() - 1,
+		Index:   int(field.Id() - 1), // index = id - 1 (for regular fields)
+		Id:      field.Id(),
 		Type:    blockType,
 		Value:   value,
 		Matcher: newFactory(blockType).New(mode),

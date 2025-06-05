@@ -8,7 +8,7 @@
 // - make all results streamable, allow push to downstream pipeline stages
 // - apply limit at last stage, push back EndStream through stages
 
-package query
+package join
 
 import (
 	"bytes"
@@ -17,13 +17,29 @@ import (
 	"strings"
 	"time"
 
+	"blockwatch.cc/knoxdb/internal/arena"
+	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/engine"
+	"blockwatch.cc/knoxdb/internal/operator/filter"
+	"blockwatch.cc/knoxdb/internal/pack"
+	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"github.com/echa/log"
 )
 
-type JoinType = types.JoinType
+type (
+	QueryFlags          = query.QueryFlags
+	QueryPlan           = query.QueryPlan
+	QueryStats          = query.QueryStats
+	Filter              = query.Filter
+	FilterTreeNode      = query.FilterTreeNode
+	FilterMode          = types.FilterMode
+	JoinType            = types.JoinType
+	QueryResult         = engine.QueryResult
+	QueryResultConsumer = engine.QueryResultConsumer
+)
 
 type JoinOrder byte
 
@@ -53,13 +69,13 @@ type JoinPlan struct {
 func NewJoinPlan() *JoinPlan {
 	return &JoinPlan{
 		Log:   log.Disabled,
-		Stats: NewQueryStats(),
+		Stats: query.NewQueryStats(),
 	}
 }
 
 func (p *JoinPlan) Close() {
 	p.Finalize()
-	if p.Flags.IsStats() || p.Runtime() > QueryLogMinDuration {
+	if p.Flags.IsStats() || p.Runtime() > query.QueryLogMinDuration {
 		p.Log.Infof("J> %s: %s", p.Tag, p.Stats)
 	}
 	p.Tag = ""
@@ -70,11 +86,7 @@ func (p *JoinPlan) Close() {
 }
 
 func (p *JoinPlan) Runtime() time.Duration {
-	_, ok := p.Stats.runtime[TOTAL_TIME_KEY]
-	if !ok {
-		p.Finalize()
-	}
-	return p.Stats.runtime[TOTAL_TIME_KEY]
+	return p.Stats.GetRuntime(query.TOTAL_TIME_KEY)
 }
 
 func (p *JoinPlan) Finalize() {
@@ -156,12 +168,13 @@ type JoinTable struct {
 	Where  *FilterTreeNode // optional filter conditions for each table
 	Select *schema.Schema  // target output schema (fields from each table)
 	On     *schema.Field   // predicate
-	Typ    types.BlockType // predicate plock type for cmp
+	Typ    types.BlockType // predicate block type for cmp
 	As     []string        // alias names of output fields, in order
 	Limit  uint32          // individual table scan limit
 	Plan   *QueryPlan      // executable query plan, used/updated stepwise
 	Filter *Filter         // updatable query filter for each step
-	PkId   uint16          // id of primary key field (0 == not exist)
+	PkIdx  int             // schema/block index of primary key field (0 == not exist)
+	OnIdx  int             // schema/block index of the predicate `on` column
 }
 
 func (j JoinTable) Validate(kind string) error {
@@ -219,7 +232,7 @@ func (p *JoinPlan) Schema() *schema.Schema {
 }
 
 func (p *JoinPlan) IsEquiJoin() bool {
-	return p.Mode == FilterModeEqual
+	return p.Mode == types.FilterModeEqual
 }
 
 func (p *JoinPlan) Validate() error {
@@ -230,9 +243,9 @@ func (p *JoinPlan) Validate() error {
 
 	// join condition fields exist
 	switch p.Mode {
-	case FilterModeEqual, FilterModeNotEqual,
-		FilterModeGt, FilterModeGe,
-		FilterModeLt, FilterModeLe:
+	case types.FilterModeEqual, types.FilterModeNotEqual,
+		types.FilterModeGt, types.FilterModeGe,
+		types.FilterModeLt, types.FilterModeLe:
 	default:
 		return fmt.Errorf("unsupported join predicate mode '%s'", p.Mode)
 	}
@@ -271,10 +284,12 @@ func (p *JoinPlan) Compile(ctx context.Context) error {
 	p.schema = schema.NewSchema().WithName(p.Name())
 
 	// set pk field (optimization) and remember block type
-	p.Left.PkId = ltab.Pk().Id()
-	p.Right.PkId = rtab.Pk().Id()
+	p.Left.PkIdx = ltab.PkIndex()
+	p.Right.PkIdx = rtab.PkIndex()
 	p.Left.Typ = p.Left.On.Type().BlockType()
 	p.Right.Typ = p.Right.On.Type().BlockType()
+	p.Left.OnIdx, _ = ltab.FieldIndexById(p.Left.On.Id())
+	p.Right.OnIdx, _ = ltab.FieldIndexById(p.Right.On.Id())
 
 	// default names {table_name}.{field_name}
 	for i, field := range p.Left.Select.Fields() {
@@ -315,7 +330,7 @@ func (p *JoinPlan) Compile(ctx context.Context) error {
 	p.buf = bytes.NewBuffer(make([]byte, 0, p.schema.WireSize()))
 
 	// construct and compile query plans, run index scans
-	p.Left.Plan = NewQueryPlan().
+	p.Left.Plan = query.NewQueryPlan().
 		WithTag(p.schema.Name()).
 		WithTable(p.Left.Table).
 		WithSchema(p.Left.Select).
@@ -329,7 +344,7 @@ func (p *JoinPlan) Compile(ctx context.Context) error {
 		return err
 	}
 
-	p.Right.Plan = NewQueryPlan().
+	p.Right.Plan = query.NewQueryPlan().
 		WithTag(p.schema.Name()).
 		WithTable(p.Right.Table).
 		WithSchema(p.Right.Select).
@@ -378,12 +393,13 @@ func (p *JoinPlan) Compile(ctx context.Context) error {
 	// pk cursor on large side
 	pkField := x.Table.Schema().Pk()
 	pkBlockTyp := pkField.Type().BlockType()
-	matcher := newFactory(pkBlockTyp).New(FilterModeGt)
+	matcher := query.NewFactory(pkField.Type()).New(types.FilterModeGt)
 	x.Filter = &Filter{
 		Name:    pkField.Name(),
 		Type:    pkBlockTyp,
-		Mode:    FilterModeGt,
-		Index:   pkField.Id() - 1,
+		Mode:    types.FilterModeGt,
+		Index:   x.PkIdx,
+		Id:      pkField.Id(),
 		Matcher: matcher, // zero
 		Value:   matcher.Value(),
 	}
@@ -396,12 +412,13 @@ func (p *JoinPlan) Compile(ctx context.Context) error {
 	if p.IsEquiJoin() {
 		joinField := y.On
 		joinBlockType := joinField.Type().BlockType()
-		matcher = newFactory(joinBlockType).New(FilterModeIn)
+		matcher = query.NewFactory(joinField.Type()).New(types.FilterModeIn)
 		y.Filter = &Filter{
 			Name:    joinField.Name(),
 			Type:    joinBlockType,
-			Mode:    FilterModeIn,
-			Index:   joinField.Id() - 1,
+			Mode:    types.FilterModeIn,
+			Index:   y.OnIdx,
+			Id:      joinField.Id(),
 			Matcher: matcher, // updated during processing
 			Value:   nil,     // updated during processing
 		}
@@ -416,7 +433,7 @@ func (p *JoinPlan) Stream(ctx context.Context, fn func(r engine.QueryRow) error)
 		return err
 	}
 
-	res := NewStreamResult(p.schema, fn)
+	res := query.NewStreamResult(fn)
 
 	err := p.doJoin(ctx, res)
 	if err != nil && err != types.EndStream {
@@ -426,12 +443,17 @@ func (p *JoinPlan) Stream(ctx context.Context, fn func(r engine.QueryRow) error)
 	return nil
 }
 
-func (p *JoinPlan) Query(ctx context.Context) (engine.QueryResult, error) {
+func (p *JoinPlan) Query(ctx context.Context) (QueryResult, error) {
 	if err := p.Compile(ctx); err != nil {
 		return nil, err
 	}
 
-	res := NewResult(p.schema, int(p.Limit))
+	res := query.NewResult(
+		pack.New().
+			WithMaxRows(int(p.Limit)).
+			WithSchema(p.schema).
+			Alloc(),
+	)
 	if err := p.doJoin(ctx, res); err != nil {
 		if err != types.EndStream {
 			res.Close()
@@ -450,11 +472,16 @@ func (p *JoinPlan) doJoin(ctx context.Context, out QueryResultConsumer) error {
 	// out is the final result to be returned, agg is an intermediate result
 	// to collect potential candidate rows for post filtering
 	var (
-		agg  *Result
+		agg  *query.Result
 		wrap QueryResultConsumer
 	)
 	if p.Where != nil {
-		agg = NewResult(p.schema, int(p.Limit))
+		agg = query.NewResult(
+			pack.New().
+				WithMaxRows(int(p.Limit)).
+				WithSchema(p.schema).
+				Alloc(),
+		)
 		defer agg.Close()
 		wrap = agg
 	} else {
@@ -475,7 +502,7 @@ func (p *JoinPlan) doJoin(ctx context.Context, out QueryResultConsumer) error {
 	// query to complete.
 
 	var (
-		lRes, rRes engine.QueryResult
+		lRes, rRes QueryResult
 		err        error
 	)
 	defer func() {
@@ -555,35 +582,30 @@ func (p *JoinPlan) doJoin(ctx context.Context, out QueryResultConsumer) error {
 		if p.Where != nil {
 			p.Log.Debugf("J> %s: post-filter %d result rows with: %s", p.Tag, agg.Len(), p.Where)
 
-			// walk result and append
-			var n uint32
-			view := schema.NewView(p.schema)
-			if err := agg.Err(); err != nil {
+			// match result pack against extra filter
+			pkg := agg.Pack()
+			bits := filter.MatchTree(p.Where, pkg, nil, bitset.New(pkg.Len()))
+			sel := bits.Indexes(nil)
+
+			// apply limit
+			if p.Limit > 0 {
+				n := int(p.Limit) - out.Len()
+				sel = sel[:min(len(sel), n)]
+			}
+
+			// forward matches to out stream
+			if err := out.Append(pkg, sel); err != nil {
 				return err
 			}
-			for _, r := range agg.Iterator() {
-				buf := r.Encode()
 
-				// result record must match conditions
-				if !MatchTree(p.Where, view.Reset(buf)) {
-					return nil
-				}
-
-				// forward to out (can zero-copy because row records are independnt allocs)
-				if err := out.Append(buf, true); err != nil {
-					return err
-				}
-
-				if p.Limit > 0 && n >= p.Limit {
-					return types.EndStream
-				}
-				return nil
-			}
-			if err != nil {
-				break
-			}
+			// free temp resources and reset aggregation result
+			bits.Close()
+			arena.Free(sel)
 			agg.Reset()
-		} else if p.Limit > 0 && out.Len() >= int(p.Limit) {
+		}
+
+		// check limit
+		if p.Limit > 0 && out.Len() >= int(p.Limit) {
 			p.Log.Debugf("J> %s: FINAL result with limit %d", p.Tag, out.Len())
 			break
 		}
@@ -592,7 +614,7 @@ func (p *JoinPlan) doJoin(ctx context.Context, out QueryResultConsumer) error {
 	return err
 }
 
-func (p *JoinPlan) doQuery(ctx context.Context, x, y JoinTable) (xRes engine.QueryResult, yRes engine.QueryResult, err error) {
+func (p *JoinPlan) doQuery(ctx context.Context, x, y JoinTable) (xRes QueryResult, yRes QueryResult, err error) {
 	// fetch names once for debugging
 	xname, yname := x.Table.Schema().Name(), y.Table.Schema().Name()
 
@@ -610,28 +632,26 @@ func (p *JoinPlan) doQuery(ctx context.Context, x, y JoinTable) (xRes engine.Que
 	p.Log.Debugf("J> %s: %s result %d rows", p.Tag, xname, xRes.Len())
 
 	// update pk cursor on first side
-	var pk any
-	pk, err = xRes.Row(xRes.Len() - 1).Index(int(x.PkId) - 1)
-	if err != nil {
-		err = fmt.Errorf("%s: missing pk column in %s query result: %v", p.Tag, xname, err)
+	pk := xRes.Value(xRes.Len()-1, x.PkIdx)
+	if pk == nil {
+		err = fmt.Errorf("%s: missing pk column in %s query result", p.Tag, xname)
 		return
 	}
 
 	// update plan
 	x.Filter.Matcher.WithValue(pk)
-	// x.Filter.Value = pk
 
 	// 2  query second side
 
-	// equi-joins: override IN condition with matches from x
-	if y.Filter != nil {
-		predicateColumn, err2 := xRes.Column(x.On.Name())
-		if err2 != nil {
-			err = fmt.Errorf("%s: missing predicate column in %s query result: %v", p.Tag, xname, err)
-			return
+	// equi-joins: override IN condition with matches from predicate column x
+	if p.IsEquiJoin() {
+		// Note: xRes is in row layout here
+		set := xroar.New()
+		for _, row := range xRes.Iterator() {
+			u64, _ := types.Cast[uint64](row.Get(x.OnIdx))
+			set.Set(u64)
 		}
-		y.Filter.Matcher.WithSlice(predicateColumn)
-		// y.Filter.Value = predicateColumn
+		y.Filter.Matcher.WithSet(set)
 	}
 
 	if p.Flags.IsDebug() {
@@ -648,44 +668,48 @@ func (p *JoinPlan) doQuery(ctx context.Context, x, y JoinTable) (xRes engine.Que
 	return
 }
 
-func (p *JoinPlan) matchAt(a engine.QueryResult, ra int, b engine.QueryResult, rb int) bool {
-	v1, _ := a.Row(ra).Index(int(p.Left.On.Id()) - 1)
-	v2, _ := b.Row(rb).Index(int(p.Right.On.Id()) - 1)
+func (p *JoinPlan) matchAt(a QueryResult, ra int, b QueryResult, rb int) bool {
+	v1 := a.Value(ra, p.Left.OnIdx)
+	v2 := b.Value(rb, p.Right.OnIdx)
 	return p.Left.Typ.Match(p.Mode, v1, v2)
 }
 
-func (p *JoinPlan) compareAt(a engine.QueryResult, ra int, b engine.QueryResult, rb int) int {
-	v1, _ := a.Row(ra).Index(int(p.Left.On.Id()) - 1)
-	v2, _ := b.Row(rb).Index(int(p.Right.On.Id()) - 1)
+func (p *JoinPlan) compareAt(a QueryResult, ra int, b QueryResult, rb int) int {
+	v1 := a.Value(ra, p.Left.OnIdx)
+	v2 := b.Value(rb, p.Right.OnIdx)
 	return p.Left.Typ.Cmp(v1, v2)
 }
 
-func (p *JoinPlan) appendResult(out QueryResultConsumer, left engine.QueryResult, l int, right engine.QueryResult, r int) error {
+func (p *JoinPlan) appendResult(out QueryResultConsumer, left QueryResult, l int, right QueryResult, r int) error {
 	// merge/append and forward into result type, when row number is negative
 	// fill with zero value data
-	p.buf.Reset()
-	if l >= 0 {
-		p.buf.Write(left.EncodeRecord(l))
-	} else {
-		p.buf.Write(bytes.Repeat([]byte{0}, left.Schema().WireSize()))
-	}
-	if r >= 0 {
-		p.buf.Write(right.EncodeRecord(r))
-	} else {
-		p.buf.Write(bytes.Repeat([]byte{0}, right.Schema().WireSize()))
-	}
-	return out.Append(p.buf.Bytes(), false)
+
+	// TODO: merge left and right columns into join result pack
+
+	// p.buf.Reset()
+	// if l >= 0 {
+	// 	p.buf.Write(left.Record(l))
+	// } else {
+	// 	p.buf.Write(bytes.Repeat([]byte{0}, left.Schema().WireSize()))
+	// }
+	// if r >= 0 {
+	// 	p.buf.Write(right.Record(r))
+	// } else {
+	// 	p.buf.Write(bytes.Repeat([]byte{0}, right.Schema().WireSize()))
+	// }
+	// return out.Append(p.buf.Bytes(), false)
+	return nil
 }
 
 // non-equi joins
-func loopJoinInner(p *JoinPlan, left, right engine.QueryResult, out QueryResultConsumer) error {
+func loopJoinInner(p *JoinPlan, left, right QueryResult, out QueryResultConsumer) error {
 	// build cartesian product (O(n^2)) with
 	p.Log.Debugf("J> %s: inner loop join on %d/%d rows", p.Tag, left.Len(), right.Len())
-	for i, il := 0, left.Len(); i < il; i++ {
+	for i := range left.Len() {
 		// TODO: use bloom filter from build-stage to skip predicates that are not
 		// in right result (i.e. prevents running the inner loop when its clear that
 		// no match can exists). note predicates can be declared for any field, not just pk!
-		for j, jl := 0, right.Len(); j < jl; j++ {
+		for j := range right.Len() {
 			if p.matchAt(left, i, right, j) {
 				// merge result and append to out package
 				if err := p.appendResult(out, left, i, right, j); err != nil {
@@ -703,7 +727,7 @@ func loopJoinInner(p *JoinPlan, left, right engine.QueryResult, out QueryResultC
 
 // equi-joins only, |l| ~ |r| (close set sizes)
 // TODO: never match NULL values (i.e. pkg.IsZeroAt(index,pos) == true)
-func mergeJoinInner(p *JoinPlan, left, right engine.QueryResult, out QueryResultConsumer) error {
+func mergeJoinInner(p *JoinPlan, left, right QueryResult, out QueryResultConsumer) error {
 	// The algorithm works as follows
 	//
 	// for every left-side row find all matching right-side rows
@@ -801,18 +825,18 @@ func mergeJoinInner(p *JoinPlan, left, right engine.QueryResult, out QueryResult
 
 // equi-joins only, |l| << >> |r| (widely different set sizes)
 // func hashJoinInner(p *JoinPlan, left, right engine.QueryResult, _ QueryResultConsumer) error {
-// 	p.Log.Debugf("J> %s: inner hash join on %d/%d rows", p.Tag, left.Len(), right.Len())
-// 	return engine.ErrNotImplemented
+//  p.Log.Debugf("J> %s: inner hash join on %d/%d rows", p.Tag, left.Len(), right.Len())
+//  return engine.ErrNotImplemented
 // }
 
 // TODO: never match NULL values (i.e. pkg.IsZeroAt(index,pos) == true)
-func loopJoinLeft(p *JoinPlan, left, right engine.QueryResult, _ QueryResultConsumer) error {
+func loopJoinLeft(p *JoinPlan, left, right QueryResult, _ QueryResultConsumer) error {
 	p.Log.Debugf("J> %s: left loop join on %d/%d rows", p.Tag, left.Len(), right.Len())
 	return engine.ErrNotImplemented
 }
 
 // TODO: never match NULL values (i.e. pkg.IsZeroAt(index,pos) == true)
-func mergeJoinLeft(p *JoinPlan, left, right engine.QueryResult, out QueryResultConsumer) error {
+func mergeJoinLeft(p *JoinPlan, left, right QueryResult, out QueryResultConsumer) error {
 	// The algorithm works as follows
 	//
 	// for every left-side row find all matching right-side rows
@@ -912,31 +936,31 @@ func mergeJoinLeft(p *JoinPlan, left, right engine.QueryResult, out QueryResultC
 
 // TODO: need hash table to remember whether a row was joined already
 // process inner join first, then add missing left, then missing right rows
-func loopJoinRight(p *JoinPlan, left, right engine.QueryResult, _ QueryResultConsumer) error {
+func loopJoinRight(p *JoinPlan, left, right QueryResult, _ QueryResultConsumer) error {
 	p.Log.Debugf("J> %s: right loop join on %d/%d rows", p.Tag, left.Len(), right.Len())
 	return engine.ErrNotImplemented
 }
 
-func mergeJoinRight(p *JoinPlan, left, right engine.QueryResult, _ QueryResultConsumer) error {
+func mergeJoinRight(p *JoinPlan, left, right QueryResult, _ QueryResultConsumer) error {
 	p.Log.Debugf("J> %s: right merge join on %d/%d rows", p.Tag, left.Len(), right.Len())
 	return engine.ErrNotImplemented
 }
 
-// func loopJoinFull(p *JoinPlan, left, right engine.QueryResult, _ QueryResultConsumer) error {
-// 	p.Log.Debugf("J> %s: full loop join on %d/%d rows", p.Tag, left.Len(), right.Len())
-// 	return engine.ErrNotImplemented
+// func loopJoinFull(p *JoinPlan, left, right QueryResult, _ QueryResultConsumer) error {
+//  p.Log.Debugf("J> %s: full loop join on %d/%d rows", p.Tag, left.Len(), right.Len())
+//  return engine.ErrNotImplemented
 // }
 
-// func mergeJoinFull(p *JoinPlan, left, right engine.QueryResult, _ QueryResultConsumer) error {
-// 	p.Log.Debugf("J> %s: full join on %d/%d rows using merge", p.Tag, left.Len(), right.Len())
-// 	return engine.ErrNotImplemented
+// func mergeJoinFull(p *JoinPlan, left, right QueryResult, _ QueryResultConsumer) error {
+//  p.Log.Debugf("J> %s: full join on %d/%d rows using merge", p.Tag, left.Len(), right.Len())
+//  return engine.ErrNotImplemented
 // }
 
-func loopJoinCross(p *JoinPlan, left, right engine.QueryResult, out QueryResultConsumer) error {
+func loopJoinCross(p *JoinPlan, left, right QueryResult, out QueryResultConsumer) error {
 	p.Log.Debugf("J> %s: cross loop join on %d/%d rows", p.Tag, left.Len(), right.Len())
 	// build cartesian product (O(n^2))
-	for i, il := 0, left.Len(); i < il; i++ {
-		for j, jl := 0, right.Len(); j < jl; j++ {
+	for i := range left.Len() {
+		for j := range right.Len() {
 			// merge result and append to out package
 			if err := p.appendResult(out, left, i, right, j); err != nil {
 				return err

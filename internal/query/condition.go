@@ -160,7 +160,8 @@ func (c Condition) Compile(s *schema.Schema) (*FilterTreeNode, error) {
 						Name:    s.Pk().Name(),
 						Type:    s.Pk().Type().BlockType(),
 						Mode:    FilterModeTrue,
-						Index:   uint16(s.PkIndex()),
+						Index:   s.PkIndex(),
+						Id:      s.PkId(),
 						Value:   nil,
 						Matcher: &noopMatcher{},
 					},
@@ -177,7 +178,7 @@ func (c Condition) Compile(s *schema.Schema) (*FilterTreeNode, error) {
 		if !ok {
 			return nil, fmt.Errorf("unknown column %q", c.Name)
 		}
-		fid, ok := s.FieldIndexById(field.Id())
+		fx, ok := s.FieldIndexById(field.Id())
 		if !ok {
 			return nil, fmt.Errorf("unknown column %q", c.Name)
 		}
@@ -228,7 +229,8 @@ func (c Condition) Compile(s *schema.Schema) (*FilterTreeNode, error) {
 							Name:    c.Name,
 							Type:    typ.BlockType(),
 							Mode:    mode,
-							Index:   uint16(fid),
+							Index:   fx,
+							Id:      field.Id(),
 							Value:   val,
 							Matcher: matcher,
 						},
@@ -277,7 +279,8 @@ func (c Condition) Compile(s *schema.Schema) (*FilterTreeNode, error) {
 							Name:    c.Name,
 							Type:    typ.BlockType(),
 							Mode:    c.Mode,
-							Index:   uint16(fid),
+							Index:   fx,
+							Id:      field.Id(),
 							Value:   c.Value,
 							Matcher: matcher,
 						},

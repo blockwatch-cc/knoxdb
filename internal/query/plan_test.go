@@ -78,7 +78,7 @@ func NewMockIndex(s *schema.Schema, result bitmap.Bitmap) engine.QueryableIndex 
 }
 
 func makeIndex(pks ...uint64) engine.QueryableIndex {
-	return NewMockIndex(testIndexSchema, bitmap.NewFromArray(pks))
+	return NewMockIndex(testIndexSchema, *bitmap.NewFromIndexes(pks))
 }
 
 func (idx *MockIndex) Schema() *schema.Schema {
