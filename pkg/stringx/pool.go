@@ -82,11 +82,11 @@ func (p *StringPool) Cap() int {
 }
 
 func (p *StringPool) Size() int {
-	return 48 + cap(p.buf) + cap(p.ptr)*8
+	return len(p.buf)
 }
 
-func (p *StringPool) DataSize() int {
-	return len(p.buf)
+func (p *StringPool) HeapSize() int {
+	return 48 + cap(p.buf) + cap(p.ptr)*8
 }
 
 // Compares strings at index i and j and returns

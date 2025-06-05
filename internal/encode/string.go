@@ -66,13 +66,13 @@ type StringContext struct {
 	NumUnique  int            // vector cardinality (hint, may not be precise)
 	NumValues  int            // vector length
 	UniqueSize int            // size of unique strings in bytes
-	Unique     map[uint64]int // unique values hash map to id (optional)
+	UniqueMap  map[uint64]int // unique values hash map to id (optional)
 	Dups       []int32        // <0 = unique string, >=0 position of original
 }
 
 func (c *StringContext) Close() {
-	if c.Unique != nil {
-		clear(c.Unique)
+	if c.UniqueMap != nil {
+		clear(c.UniqueMap)
 	}
 	if c.Dups != nil {
 		arena.Free(c.Dups)
@@ -92,14 +92,18 @@ func (c *StringContext) MinMax() (any, any) {
 	return bytes.Clone(c.Min), bytes.Clone(c.Max)
 }
 
+func (c *StringContext) Unique() int {
+	return c.NumUnique
+}
+
 var emptyHash uint64 = 11400714785074694791 // xxhash64 prime1 used as AES hash seed
 
 // AnalyzeString produces statistics about []byte vectors.
 func AnalyzeString(vals types.StringAccessor) *StringContext {
 	c := newStringContext()
 	c.NumValues = vals.Len()
-	if c.Unique == nil {
-		c.Unique = make(map[uint64]int, c.NumValues)
+	if c.UniqueMap == nil {
+		c.UniqueMap = make(map[uint64]int, c.NumValues)
 	}
 	if cap(c.Dups) < c.NumValues {
 		arena.Free(c.Dups)
@@ -125,10 +129,10 @@ func AnalyzeString(vals types.StringAccessor) *StringContext {
 			if vlen > 0 {
 				h = hash.MemHash(v, emptyHash)
 			}
-			if j, ok := c.Unique[h]; ok {
+			if j, ok := c.UniqueMap[h]; ok {
 				c.Dups[i] = int32(j)
 			} else {
-				c.Unique[h] = c.NumUnique
+				c.UniqueMap[h] = c.NumUnique
 				c.Dups[i] = -1
 				c.NumUnique++
 				c.UniqueSize += vlen

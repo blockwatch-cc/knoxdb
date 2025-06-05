@@ -265,12 +265,9 @@ func (it *CompactStringIterator) fill(base int) int {
 		i += 16
 	}
 	for i < n {
-		if l := len[i]; l == 0 {
-			it.chunk[i] = nil
-		} else {
-			o := ofs[i]
-			it.chunk[i] = it.buf[o : o+l : o+l]
-		}
+		l := len[i]
+		o := ofs[i]
+		it.chunk[i] = it.buf[o : o+l : o+l]
 		i++
 	}
 

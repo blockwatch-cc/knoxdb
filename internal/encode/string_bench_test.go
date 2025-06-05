@@ -21,7 +21,7 @@ func BenchmarkStringAnalyze(b *testing.B) {
 	for _, c := range tests.MakeStringBenchmarks() {
 		b.Run(c.Name, func(b *testing.B) {
 			b.ReportAllocs()
-			b.SetBytes(int64(c.Data.DataSize()))
+			b.SetBytes(int64(c.Data.Size()))
 			for b.Loop() {
 				ctx := AnalyzeString(c.Data)
 				ctx.Close()
@@ -44,7 +44,7 @@ func BenchmarkStringEncode(b *testing.B) {
 			once := etests.ShowInfo
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
 				b.ReportAllocs()
-				b.SetBytes(int64(data.DataSize()))
+				b.SetBytes(int64(data.Size()))
 				var sz int
 				for b.Loop() {
 					enc := NewString(scheme).Encode(ctx, data)
@@ -76,7 +76,7 @@ func BenchmarkStringEncodeAndStore(b *testing.B) {
 			once := etests.ShowInfo
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
 				b.ReportAllocs()
-				b.SetBytes(int64(data.DataSize()))
+				b.SetBytes(int64(data.Size()))
 				var sz int
 				for b.Loop() {
 					ctx := AnalyzeString(data)
@@ -104,7 +104,7 @@ func BenchmarkStringEncodeBest(b *testing.B) {
 		once := etests.ShowInfo
 		b.Run(c.Name, func(b *testing.B) {
 			b.ReportAllocs()
-			b.SetBytes(int64(c.Data.DataSize()))
+			b.SetBytes(int64(c.Data.Size()))
 			var sz int
 			for b.Loop() {
 				enc := EncodeString(nil, c.Data)
@@ -166,7 +166,7 @@ func BenchmarkStringCmp(b *testing.B) {
 			bits := bitset.New(c.N)
 			b.Log(enc.Info())
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
-				b.SetBytes(int64(data.DataSize()))
+				b.SetBytes(int64(data.Size()))
 				for b.Loop() {
 					enc.MatchEqual(data.Get(0), bits, nil)
 				}
