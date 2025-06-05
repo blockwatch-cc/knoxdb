@@ -9,7 +9,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/bitmap"
+	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
@@ -17,7 +17,7 @@ type (
 	Context    = context.Context
 	Schema     = schema.Schema
 	View       = schema.View
-	Bitmap     = bitmap.Bitmap
+	Bitmap     = xroar.Bitmap
 	OrderType  = types.OrderType
 	FilterMode = types.FilterMode
 	Package    = pack.Package
@@ -81,7 +81,7 @@ const (
 
 type TableReader interface {
 	WithQuery(QueryPlan) TableReader
-	WithMask([]uint64, ReadMode) TableReader
+	WithMask(*Bitmap, ReadMode) TableReader
 	WithFields([]uint16) TableReader
 	Read(Context, uint32) (*Package, error)
 	Next(Context) (*Package, error)
@@ -129,24 +129,34 @@ type QueryableTable interface {
 	Stream(Context, QueryPlan, func(QueryRow) error) error
 }
 
+type QueryResultConsumer interface {
+	Append(*Package, []uint32) error
+	AppendRange(*Package, int, int) error
+	Len() int
+}
+
 type QueryResult interface {
 	Schema() *Schema
+	Pack() *Package
 	Len() int
 	Row(n int) QueryRow
-	EncodeRecord(n int) []byte
+	Record(n int) []byte
 	Close()
 	Encode() []byte
 	SortBy(name string, order OrderType)
 	Iterator() iter.Seq2[int, QueryRow]
-	Column(name string) (any, error)
+	Value(int, int) any
+	// Column(name string) (any, error)
+	// TODO: Chunk and Vector access
 }
 
 type QueryRow interface {
 	Schema() *Schema
-	Encode() []byte
+	Record() []byte
 	Decode(any) error
-	Field(string) (any, error)
-	Index(int) (any, error)
+	Get(int) any
+	// Field(string) (any, error)
+	// Index(int) (any, error)
 }
 
 type IndexKind string
@@ -214,7 +224,7 @@ type StoreEngine interface {
 }
 
 type ConditionMatcher interface {
-	MatchView(*View) bool
+	// MatchView(*View) bool
 	Overlaps(ConditionMatcher) bool
 }
 

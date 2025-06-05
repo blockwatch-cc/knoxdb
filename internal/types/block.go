@@ -749,8 +749,8 @@ func (t BlockType) Difference(a, b any) any {
 // max are present, i.e. the set is complete.
 func (t BlockType) Range(set any) (minv any, maxv any, isContinuous bool) {
 	if bs, ok := set.(*xroar.Bitmap); ok {
-		minU64 := bs.Minimum()
-		maxU64 := bs.Maximum()
+		minU64 := bs.Min()
+		maxU64 := bs.Max()
 		isContinuous = maxU64-minU64+1 == uint64(bs.Count())
 		minv, _ = t.Cast(minU64)
 		maxv, _ = t.Cast(maxU64)
