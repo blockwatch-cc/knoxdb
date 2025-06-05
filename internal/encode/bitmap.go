@@ -41,6 +41,13 @@ func (c *BitmapContext) MinMax() (any, any) {
 	return c.Min, c.Max
 }
 
+func (c *BitmapContext) Unique() int {
+	if c.Min != c.Max {
+		return 2
+	}
+	return 1
+}
+
 // TBitmap
 type BitmapContainer struct {
 	readOnlyContainer[bool]
@@ -132,12 +139,12 @@ func (c *BitmapContainer) Get(n int) bool {
 	case TBitmapOne:
 		return true
 	case TBitmapDense:
-		b := bitset.NewFromBuffer(c.Buf, c.N)
+		b := bitset.NewFromBytes(c.Buf, c.N)
 		ok := b.Contains(n)
 		b.Close()
 		return ok
 	case TBitmapSparse:
-		return xroar.NewFromBuffer(c.Buf).Contains(uint64(n))
+		return xroar.NewFromBytes(c.Buf).Contains(uint64(n))
 	default:
 		return false
 	}
@@ -150,12 +157,12 @@ func (c *BitmapContainer) All() bool {
 	case TBitmapOne:
 		return true
 	case TBitmapDense:
-		b := bitset.NewFromBuffer(c.Buf, c.N)
+		b := bitset.NewFromBytes(c.Buf, c.N)
 		ok := b.All()
 		b.Close()
 		return ok
 	case TBitmapSparse:
-		return xroar.NewFromBuffer(c.Buf).Count() == c.N
+		return xroar.NewFromBytes(c.Buf).Count() == c.N
 	default:
 		return false
 	}
@@ -168,12 +175,12 @@ func (c *BitmapContainer) Any() bool {
 	case TBitmapOne:
 		return true
 	case TBitmapDense:
-		b := bitset.NewFromBuffer(c.Buf, c.N)
+		b := bitset.NewFromBytes(c.Buf, c.N)
 		ok := b.Any()
 		b.Close()
 		return ok
 	case TBitmapSparse:
-		return xroar.NewFromBuffer(c.Buf).Count() > 0
+		return xroar.NewFromBytes(c.Buf).Count() > 0
 	default:
 		return false
 	}
@@ -193,12 +200,12 @@ func (c *BitmapContainer) AppendTo(dst *bitset.Bitset, sel []uint32) {
 			dst.Grow(c.N).SetRange(start, start+c.N)
 		case TBitmapDense:
 			// don't grow, append already extends dst
-			b := bitset.NewFromBuffer(c.Buf, c.N)
+			b := bitset.NewFromBytes(c.Buf, c.N)
 			dst.AppendRange(b, 0, c.N)
 			b.Close()
 		case TBitmapSparse:
 			dst.Grow(c.N)
-			it := xroar.NewFromBuffer(c.Buf).NewIterator()
+			it := xroar.NewFromBytes(c.Buf).NewIterator()
 			for {
 				i, ok := it.Next()
 				if !ok {
@@ -216,7 +223,7 @@ func (c *BitmapContainer) AppendTo(dst *bitset.Bitset, sel []uint32) {
 		case TBitmapOne:
 			dst.SetRange(start, start+len(sel))
 		case TBitmapDense:
-			b := bitset.NewFromBuffer(c.Buf, c.N)
+			b := bitset.NewFromBytes(c.Buf, c.N)
 			for i, v := range sel {
 				if b.Contains(int(v)) {
 					dst.Set(start + i)
@@ -224,7 +231,7 @@ func (c *BitmapContainer) AppendTo(dst *bitset.Bitset, sel []uint32) {
 			}
 			b.Close()
 		case TBitmapSparse:
-			b := xroar.NewFromBuffer(c.Buf)
+			b := xroar.NewFromBytes(c.Buf)
 			for i, v := range sel {
 				if b.Contains(uint64(v)) {
 					dst.Set(start + i)
@@ -247,7 +254,7 @@ func (c *BitmapContainer) Encode(ctx *BitmapContext, vals *bitset.Bitset) *Bitma
 	case n*2 < c.N/8:
 		c.Typ = TBitmapSparse
 		keys := vals.Indexes(arena.Alloc[uint32](n))
-		c.Buf = xroar.NewFromSortedList(keys).ToBuffer()
+		c.Buf = xroar.NewFromSorted(keys).Bytes()
 		arena.Free(keys)
 	default:
 		c.Typ = TBitmapDense
@@ -267,11 +274,11 @@ func (c *BitmapContainer) Iterator() iter.Seq[int] {
 			}
 		}
 	case TBitmapDense:
-		b := bitset.NewFromBuffer(c.Buf, c.N)
+		b := bitset.NewFromBytes(c.Buf, c.N)
 		return b.Iterator()
 	case TBitmapSparse:
 		return func(fn func(int) bool) {
-			it := xroar.NewFromBuffer(c.Buf).NewIterator()
+			it := xroar.NewFromBytes(c.Buf).NewIterator()
 			for {
 				n, ok := it.Next()
 				if !ok {
@@ -293,10 +300,10 @@ func (c *BitmapContainer) Chunks() bitset.BitmapIterator {
 	case TBitmapOne:
 		return &oneBitmapIterator{size: c.N, last: -1}
 	case TBitmapDense:
-		b := bitset.NewFromBuffer(c.Buf, c.N)
+		b := bitset.NewFromBytes(c.Buf, c.N)
 		return b.Chunks()
 	case TBitmapSparse:
-		return &xroarBitmapIterator{it: xroar.NewFromBuffer(c.Buf).NewIterator()}
+		return &xroarBitmapIterator{it: xroar.NewFromBytes(c.Buf).NewIterator()}
 	default:
 		// TBitmapZero
 		return &zeroBitmapIterator{}
@@ -335,7 +342,7 @@ func (c *BitmapContainer) MatchEqual(val bool, bits, _ *Bitset) {
 			bits.Neg()
 		}
 	case TBitmapSparse:
-		it := xroar.NewFromBuffer(c.Buf).NewIterator()
+		it := xroar.NewFromBytes(c.Buf).NewIterator()
 		if val {
 			for {
 				i, ok := it.Next()

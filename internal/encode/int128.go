@@ -38,6 +38,10 @@ func (c *Int128Context) MinMax() (any, any) {
 	return c.Min, c.Max
 }
 
+func (c *Int128Context) Unique() int {
+	return -1
+}
+
 type Int128Container struct {
 	readOnlyContainer[num.Int128]
 	X0 NumberContainer[int64]

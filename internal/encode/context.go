@@ -20,6 +20,7 @@ import (
 
 type ContextExporter interface {
 	MinMax() (any, any)
+	Unique() int
 	Close()
 }
 
@@ -330,6 +331,10 @@ func runEndCosts(n, r, w int) int {
 
 func (c *Context[T]) MinMax() (any, any) {
 	return c.Min, c.Max
+}
+
+func (c *Context[T]) Unique() int {
+	return c.NumUnique
 }
 
 func (c *Context[T]) Close() {
