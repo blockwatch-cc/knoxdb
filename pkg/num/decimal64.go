@@ -288,6 +288,14 @@ loop:
 	return nil
 }
 
+func MustParseDecimal64(s string) Decimal64 {
+	d, err := ParseDecimal64(s)
+	if err != nil {
+		panic(err)
+	}
+	return d
+}
+
 func ParseDecimal64(s string) (Decimal64, error) {
 	var dec Decimal64
 	err := dec.UnmarshalText([]byte(s))

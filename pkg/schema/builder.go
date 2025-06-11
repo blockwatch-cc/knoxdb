@@ -4,343 +4,194 @@
 package schema
 
 import (
-	"bytes"
-	"encoding/binary"
-	"math"
-	"math/big"
-	"time"
+	"strconv"
 
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/num"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
-// Constructs wire encoded messages from typed values.
+type BuilderOption func(*Builder)
+
+func Fixed[T int | uint16](n T) BuilderOption {
+	return func(b *Builder) {
+		b.currentField().fixed = uint16(n)
+	}
+}
+
+func Scale[T int | uint8](n T) BuilderOption {
+	return func(b *Builder) {
+		b.currentField().scale = uint8(n)
+	}
+}
+
+func Index(i types.IndexType) BuilderOption {
+	return func(b *Builder) {
+		b.currentField().index = i
+	}
+}
+
+func Compression(c types.BlockCompression) BuilderOption {
+	return func(b *Builder) {
+		b.currentField().compress = c
+	}
+}
+
+func Primary() BuilderOption {
+	return func(b *Builder) {
+		b.currentField().flags |= types.FieldFlagPrimary
+	}
+}
+
+func Nullable() BuilderOption {
+	return func(b *Builder) {
+		b.currentField().flags |= types.FieldFlagNullable
+	}
+}
+
+func Id(id uint16) BuilderOption {
+	return func(b *Builder) {
+		b.currentField().id = id
+	}
+}
+
 type Builder struct {
-	schema      *Schema        // target schema
-	buf         []byte         // wire size encoded message buffer (min/fixed sizes)
-	ofs         []int          // field offsets in wire encoding (as if all fields were fixed)
-	len         []int          // field lengths in wire encoding
-	dyn         map[int][]byte // data for variable length fields
-	internal    bool           // flag indicating to output internal fields
-	firstDyn    int            // position of first dynamic field (optimization)
-	minWireSize int            // min size with or without internal fields
-	layout      binary.ByteOrder
+	s *Schema
 }
 
-func NewBuilder(s *Schema, layout binary.ByteOrder) *Builder {
-	b := &Builder{layout: layout}
-	return b.initFromSchema(s)
+func NewBuilder() *Builder {
+	return &Builder{
+		s: NewSchema(),
+	}
 }
 
-func NewInternalBuilder(s *Schema, layout binary.ByteOrder) *Builder {
-	b := &Builder{
-		layout:   layout,
-		internal: true,
-	}
-	return b.initFromSchema(s)
+func (b *Builder) Validate() error {
+	return b.s.Validate()
 }
 
-func (b Builder) Len() int {
-	sz := b.minWireSize
-	for _, v := range b.dyn {
-		sz += len(v)
-	}
-	return sz
-}
-
-func (b *Builder) initFromSchema(s *Schema) *Builder {
-	b.schema = s
-	b.firstDyn = -1
-	b.ofs = make([]int, len(s.fields))
-	b.len = make([]int, len(s.fields))
-	if !s.isFixedSize {
-		b.dyn = make(map[int][]byte)
-	}
-	var ofs int
-	for i, f := range s.fields {
-		// skip deleted fields
-		if !f.IsActive() {
-			b.ofs[i] = -1
-			continue
-		}
-		// skip internal fields unless requested
-		if f.IsInternal() && !b.internal {
-			b.ofs[i] = -1
-			continue
-		}
-		sz := f.typ.Size()
-		if f.fixed > 0 {
-			sz = int(f.fixed)
-		}
-		b.minWireSize += sz
-		if !f.IsFixedSize() && b.firstDyn < 0 {
-			b.firstDyn = i
-		}
-		b.ofs[i] = ofs
-		b.len[i] = sz
-		ofs += sz
-	}
-	b.buf = make([]byte, b.minWireSize)
+func (b *Builder) Finalize() *Builder {
+	b.s.Finalize()
 	return b
 }
 
-func (b *Builder) Reset() {
-	if b.dyn != nil {
-		clear(b.dyn)
-	}
-	clear(b.buf)
+func (b *Builder) Schema() *Schema {
+	return b.s
 }
 
-func (b *Builder) Write(i int, val any) error {
-	// sanity checks
-	if val == nil {
-		return ErrNilValue
-	}
-	if i < 0 || i >= len(b.ofs) {
-		return ErrInvalidField
-	}
-
-	// init write offset
-	x, y := b.ofs[i], b.ofs[i]+b.len[i]
-	field := &b.schema.fields[i]
-
-	// skip hidden fields
-	if x < 0 {
-		return nil
-	}
-
-	var err error
-	switch field.typ {
-	case types.FieldTypeUint64:
-		if u64, ok := val.(uint64); ok {
-			b.layout.PutUint64(b.buf[x:y], u64)
-		} else {
-			err = ErrInvalidValueType
-		}
-
-	case types.FieldTypeString, types.FieldTypeBytes:
-		var buf []byte
-		switch v := val.(type) {
-		case []byte:
-			buf = v
-		case string:
-			buf = util.UnsafeGetBytes(v)
-		default:
-			err = ErrInvalidValueType
-		}
-		if field.IsFixedSize() {
-			// fixed size
-			if len(buf) == int(field.fixed) {
-				copy(b.buf[x:y], buf)
-			} else {
-				err = ErrShortValue
-			}
-		} else {
-			// variable size
-			b.dyn[i] = bytes.Clone(buf)
-		}
-
-	case types.FieldTypeDatetime:
-		switch tm := val.(type) {
-		case time.Time:
-			b.layout.PutUint64(b.buf[x:y], uint64(TimeScale(field.scale).ToUnix(tm)))
-		case int64:
-			b.layout.PutUint64(b.buf[x:y], uint64(tm))
-		default:
-			err = ErrInvalidValueType
-		}
-
-	case types.FieldTypeInt64:
-		if i64, ok := val.(int64); ok {
-			b.layout.PutUint64(b.buf[x:y], uint64(i64))
-		} else {
-			err = ErrInvalidValueType
-		}
-
-	case types.FieldTypeFloat64:
-		if f64, ok := val.(float64); ok {
-			b.layout.PutUint64(b.buf[x:y], math.Float64bits(f64))
-		} else {
-			err = ErrInvalidValueType
-		}
-
-	case types.FieldTypeFloat32:
-		if f32, ok := val.(float32); ok {
-			b.layout.PutUint32(b.buf[x:y], math.Float32bits(f32))
-		} else {
-			err = ErrInvalidValueType
-		}
-
-	case types.FieldTypeBoolean:
-		if v, ok := val.(bool); ok {
-			if v {
-				b.buf[x] = 1
-			} else {
-				b.buf[x] = 0
-			}
-		} else {
-			err = ErrInvalidValueType
-		}
-
-	case types.FieldTypeInt32:
-		if i32, ok := val.(int32); ok {
-			b.layout.PutUint32(b.buf[x:y], uint32(i32))
-		} else {
-			err = ErrInvalidValueType
-		}
-
-	case types.FieldTypeInt16:
-		if i16, ok := val.(int16); ok {
-			b.layout.PutUint16(b.buf[x:y], uint16(i16))
-		} else {
-			err = ErrInvalidValueType
-		}
-
-	case types.FieldTypeInt8:
-		if i8, ok := val.(int8); ok {
-			b.buf[x] = uint8(i8)
-		} else {
-			err = ErrInvalidValueType
-		}
-
-	case types.FieldTypeUint32:
-		if u32, ok := val.(uint32); ok {
-			b.layout.PutUint32(b.buf[x:y], u32)
-		} else {
-			err = ErrInvalidValueType
-		}
-
-	case types.FieldTypeUint16:
-		if u16, ok := val.(uint16); ok {
-			b.layout.PutUint16(b.buf[x:y], u16)
-		} else {
-			err = ErrInvalidValueType
-		}
-
-	case types.FieldTypeUint8:
-		if u8, ok := val.(uint8); ok {
-			b.buf[x] = u8
-		} else {
-			err = ErrInvalidValueType
-		}
-
-	case types.FieldTypeInt256:
-		if i256, ok := val.(num.Int256); ok {
-			copy(b.buf[x:y], i256.Bytes())
-		} else {
-			err = ErrInvalidValueType
-		}
-
-	case types.FieldTypeInt128:
-		if i128, ok := val.(num.Int128); ok {
-			copy(b.buf[x:y], i128.Bytes())
-		} else {
-			err = ErrInvalidValueType
-		}
-
-	case types.FieldTypeDecimal256:
-		switch v := val.(type) {
-		case num.Decimal256:
-			copy(b.buf[x:y], v.Int256().Bytes())
-		case num.Int256:
-			copy(b.buf[x:y], v.Bytes())
-		default:
-			err = ErrInvalidValueType
-		}
-
-	case types.FieldTypeDecimal128:
-		switch v := val.(type) {
-		case num.Decimal128:
-			copy(b.buf[x:y], v.Int128().Bytes())
-		case num.Int128:
-			copy(b.buf[x:y], v.Bytes())
-		default:
-			err = ErrInvalidValueType
-		}
-
-	case types.FieldTypeDecimal64:
-		switch v := val.(type) {
-		case num.Decimal64:
-			b.layout.PutUint64(b.buf[x:y], uint64(v.Int64()))
-		case int64:
-			b.layout.PutUint64(b.buf[x:y], uint64(v))
-		default:
-			err = ErrInvalidValueType
-		}
-
-	case types.FieldTypeDecimal32:
-		switch v := val.(type) {
-		case num.Decimal32:
-			b.layout.PutUint32(b.buf[x:y], uint32(v.Int64()))
-		case int64:
-			b.layout.PutUint32(b.buf[x:y], uint32(v))
-		default:
-			err = ErrInvalidValueType
-		}
-
-	case types.FieldTypeBigint:
-		var buf []byte
-		switch v := val.(type) {
-		case num.Big:
-			buf = v.Bytes()
-		case *big.Int:
-			buf = v.Bytes()
-		default:
-			err = ErrInvalidValueType
-		}
-		// variable size (already in new allocated []byte)
-		b.dyn[i] = buf
-
-	default:
-		err = ErrInvalidField
-	}
-
-	return err
+func (b *Builder) WithName(s string) *Builder {
+	b.s.WithName(s)
+	return b
 }
 
-func (b *Builder) Bytes() []byte {
-	// fast path for fixed length schemas
-	if b.dyn == nil {
-		return bytes.Clone(b.buf)
+func (b *Builder) WithVersion(v uint32) *Builder {
+	b.s.WithVersion(v)
+	return b
+}
+
+func (b *Builder) currentField() *Field {
+	return &b.s.fields[len(b.s.fields)-1]
+}
+
+func (b *Builder) addField(typ types.FieldType, name string, opts ...BuilderOption) *Builder {
+	if name == "" {
+		name = "F" + strconv.Itoa(len(b.s.fields))
 	}
-
-	// count variable len bytes
-	var sz int
-	for _, v := range b.dyn {
-		sz += len(v)
+	b.s.WithField(NewField(typ).WithName(name))
+	for _, o := range opts {
+		o(b)
 	}
+	return b
+}
 
-	// alloc output buffer
-	buf := bytes.NewBuffer(make([]byte, 0, b.minWireSize+sz))
+func (b *Builder) AddField(name string, typ types.FieldType, opts ...BuilderOption) *Builder {
+	return b.addField(typ, name, opts...)
+}
 
-	// write data up to first variable length field
-	n := b.firstDyn
-	buf.Write(b.buf[:b.ofs[n]])
-
-	// write remaining fields one by one
-	for _, f := range b.schema.fields[n:] {
-		// skip hidden fields
-		if b.ofs[n] < 0 {
-			n++
-			continue
-		}
-
-		// write next visible field
-		if f.IsFixedSize() {
-			// write fixed size field
-			buf.Write(b.buf[b.ofs[n] : b.ofs[n]+b.len[n]])
-		} else {
-			// write dynamic field
-			val := b.dyn[n]
-			var l [4]byte
-			LE.PutUint32(l[:], uint32(len(val)))
-			buf.Write(l[:])
-			buf.Write(val)
-		}
-		n++
+func (b *Builder) SetFieldOpts(opts ...BuilderOption) *Builder {
+	for _, o := range opts {
+		o(b)
 	}
+	return b
+}
 
-	// return buffer contents
-	return buf.Bytes()
+func (b *Builder) Int64(name string, opts ...BuilderOption) *Builder {
+	return b.addField(types.FieldTypeInt64, name, opts...)
+}
+
+func (b *Builder) Int32(name string, opts ...BuilderOption) *Builder {
+	return b.addField(types.FieldTypeInt32, name, opts...)
+}
+
+func (b *Builder) Int16(name string, opts ...BuilderOption) *Builder {
+	return b.addField(types.FieldTypeInt16, name, opts...)
+}
+
+func (b *Builder) Int8(name string, opts ...BuilderOption) *Builder {
+	return b.addField(types.FieldTypeInt8, name, opts...)
+}
+
+func (b *Builder) Uint64(name string, opts ...BuilderOption) *Builder {
+	return b.addField(types.FieldTypeUint64, name, opts...)
+}
+
+func (b *Builder) Uint32(name string, opts ...BuilderOption) *Builder {
+	return b.addField(types.FieldTypeUint32, name, opts...)
+}
+
+func (b *Builder) Uint16(name string, opts ...BuilderOption) *Builder {
+	return b.addField(types.FieldTypeUint16, name, opts...)
+}
+
+func (b *Builder) Uint8(name string, opts ...BuilderOption) *Builder {
+	return b.addField(types.FieldTypeUint8, name, opts...)
+}
+
+func (b *Builder) Datetime(name string, opts ...BuilderOption) *Builder {
+	return b.addField(types.FieldTypeDatetime, name, opts...)
+}
+
+func (b *Builder) Float64(name string, opts ...BuilderOption) *Builder {
+	return b.addField(types.FieldTypeFloat64, name, opts...)
+}
+
+func (b *Builder) Float32(name string, opts ...BuilderOption) *Builder {
+	return b.addField(types.FieldTypeFloat32, name, opts...)
+}
+
+func (b *Builder) Bool(name string, opts ...BuilderOption) *Builder {
+	return b.addField(types.FieldTypeBoolean, name, opts...)
+}
+
+func (b *Builder) String(name string, opts ...BuilderOption) *Builder {
+	return b.addField(types.FieldTypeString, name, opts...)
+}
+
+func (b *Builder) Bytes(name string, opts ...BuilderOption) *Builder {
+	return b.addField(types.FieldTypeBytes, name, opts...)
+}
+
+func (b *Builder) Int128(name string, opts ...BuilderOption) *Builder {
+	return b.addField(types.FieldTypeInt128, name, opts...)
+}
+
+func (b *Builder) Int256(name string, opts ...BuilderOption) *Builder {
+	return b.addField(types.FieldTypeInt256, name, opts...)
+}
+
+func (b *Builder) Decimal32(name string, opts ...BuilderOption) *Builder {
+	return b.addField(types.FieldTypeDecimal32, name, opts...)
+}
+
+func (b *Builder) Decimal64(name string, opts ...BuilderOption) *Builder {
+	return b.addField(types.FieldTypeDecimal64, name, opts...)
+}
+
+func (b *Builder) Decimal128(name string, opts ...BuilderOption) *Builder {
+	return b.addField(types.FieldTypeDecimal128, name, opts...)
+}
+
+func (b *Builder) Decimal256(name string, opts ...BuilderOption) *Builder {
+	return b.addField(types.FieldTypeDecimal256, name, opts...)
+}
+
+func (b *Builder) Bigint(name string, opts ...BuilderOption) *Builder {
+	return b.addField(types.FieldTypeBigint, name, opts...)
 }

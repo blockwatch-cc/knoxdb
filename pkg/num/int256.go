@@ -266,7 +266,7 @@ func (x Int256) String() string {
 	if x.IsZero() {
 		return "0"
 	}
-	buf := []byte(i256str)
+	buf := []byte(i256str) // copy
 	var b strings.Builder
 	b.Grow(80)
 	if x.Sign() < 0 {
@@ -283,6 +283,29 @@ func (x Int256) String() string {
 		if q.IsZero() {
 			b.Write(buf[i-n:])
 			return b.String()
+		}
+		x = q
+	}
+}
+
+func (x Int256) Append(buf []byte) []byte {
+	if x.IsZero() {
+		return append(buf, '0')
+	}
+	scratch := []byte(i256str) // copy
+	if x.Sign() < 0 {
+		buf = append(buf, '-')
+		x = x.Neg()
+	}
+	for i := len(scratch); ; i -= 19 {
+		q, r := x.uQuoRem64(1e19) // largest power of 10 that fits in a uint64
+		var n int
+		for ; r != 0; r /= 10 {
+			n++
+			scratch[i-n] += byte(r % 10)
+		}
+		if q.IsZero() {
+			return append(buf, scratch[i-n:]...)
 		}
 		x = q
 	}

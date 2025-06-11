@@ -299,6 +299,14 @@ loop:
 	return nil
 }
 
+func MustParseDecimal32(s string) Decimal32 {
+	d, err := ParseDecimal32(s)
+	if err != nil {
+		panic(err)
+	}
+	return d
+}
+
 func ParseDecimal32(s string) (Decimal32, error) {
 	var dec Decimal32
 	err := dec.UnmarshalText([]byte(s))

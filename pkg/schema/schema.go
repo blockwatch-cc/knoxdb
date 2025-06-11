@@ -15,6 +15,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/hash/xxhash64"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 const (
@@ -775,6 +776,9 @@ func (s *Schema) Finalize() *Schema {
 	}
 	s.schemaHash = h.Sum64()
 	s.encode, s.decode = compileCodecs(s)
+	if s.name == "" {
+		s.name = util.U64String(s.schemaHash).String()
+	}
 
 	// export all fields
 	s.exports = make([]*ExportedField, len(s.fields))
@@ -787,6 +791,7 @@ func (s *Schema) Finalize() *Schema {
 			Compress:   s.fields[i].compress,
 			Index:      s.fields[i].index,
 			IsVisible:  s.fields[i].IsVisible(),
+			IsNullable: s.fields[i].IsNullable(),
 			IsInternal: s.fields[i].IsInternal(),
 			IsArray:    s.fields[i].isArray,
 			IsEnum:     s.fields[i].IsEnum(),

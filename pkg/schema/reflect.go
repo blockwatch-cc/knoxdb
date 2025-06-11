@@ -43,6 +43,10 @@ func MustSchemaOf(m any) *Schema {
 }
 
 func SchemaOf(m any) (*Schema, error) {
+	return SchemaOfTag(m, TAG_NAME)
+}
+
+func SchemaOfTag(m any, tag string) (*Schema, error) {
 	// interface must not be nil
 	if m == nil {
 		return nil, ErrNilValue
@@ -96,12 +100,12 @@ func SchemaOf(m any) (*Schema, error) {
 	for _, f := range reflect.VisibleFields(typ) {
 		// skip private fields and embedded structs, promoted embedded fields
 		// fields are still processed, only the anon struct itself is skipped
-		if !f.IsExported() || f.Anonymous || f.Tag.Get(TAG_NAME) == "-" {
+		if !f.IsExported() || f.Anonymous || f.Tag.Get(tag) == "-" {
 			continue
 		}
 
 		// analyze field
-		field, err := reflectStructField(f)
+		field, err := reflectStructField(f, tag)
 		if err != nil {
 			return nil, err
 		}
@@ -133,6 +137,102 @@ func SchemaOf(m any) (*Schema, error) {
 	return s, nil
 }
 
+// Produces a dynamic struct type only using native types like int64 for Decimal64
+// [2]uint64 for Int128, etc.
+func (s *Schema) NativeStructType() reflect.Type {
+	var sfields []reflect.StructField
+	for _, f := range s.fields {
+		if !f.IsVisible() {
+			continue
+		}
+		var rtyp reflect.Type
+		switch f.typ {
+		case types.FieldTypeDatetime, types.FieldTypeInt64, types.FieldTypeDecimal64:
+			rtyp = reflect.TypeFor[int64]()
+		case types.FieldTypeUint64:
+			rtyp = reflect.TypeFor[uint64]()
+		case types.FieldTypeFloat64:
+			rtyp = reflect.TypeFor[float64]()
+		case types.FieldTypeBoolean:
+			rtyp = reflect.TypeFor[bool]()
+		case types.FieldTypeString:
+			rtyp = reflect.TypeFor[string]()
+		case types.FieldTypeBytes, types.FieldTypeBigint:
+			if f.fixed > 0 {
+				rtyp = reflect.ArrayOf(int(f.fixed), reflect.TypeFor[byte]())
+			} else {
+				rtyp = reflect.TypeFor[[]byte]()
+			}
+		case types.FieldTypeInt32, types.FieldTypeDecimal32:
+			rtyp = reflect.TypeFor[int32]()
+		case types.FieldTypeInt16:
+			rtyp = reflect.TypeFor[int16]()
+		case types.FieldTypeInt8:
+			rtyp = reflect.TypeFor[int8]()
+		case types.FieldTypeUint32:
+			rtyp = reflect.TypeFor[uint32]()
+		case types.FieldTypeUint16:
+			rtyp = reflect.TypeFor[uint16]()
+		case types.FieldTypeUint8:
+			rtyp = reflect.TypeFor[uint8]()
+		case types.FieldTypeFloat32:
+			rtyp = reflect.TypeFor[float32]()
+		case types.FieldTypeInt256, types.FieldTypeDecimal256:
+			rtyp = reflect.TypeFor[[4]uint64]()
+		case types.FieldTypeInt128, types.FieldTypeDecimal128:
+			rtyp = reflect.TypeFor[[2]uint64]()
+		default:
+			continue
+		}
+		sfields = append(sfields, reflect.StructField{
+			Name: util.ToTitle(f.name),
+			Type: rtyp,
+		})
+	}
+	return reflect.StructOf(sfields)
+}
+
+// Produces a dynamic struct type compatible with SchemaOf which uses custom types
+// for large numeric values (num.Int128) and decimals (num.Decimal64).
+func (s *Schema) StructType() reflect.Type {
+	var sfields []reflect.StructField
+	for _, f := range s.fields {
+		if !f.IsVisible() {
+			continue
+		}
+		tag := fmt.Sprintf(`knox:"%s,id=%d`, f.name, f.id)
+		if f.IsPrimary() {
+			tag += ",pk"
+		}
+		if f.IsEnum() {
+			tag += ",enum"
+		}
+		if f.IsFixedSize() {
+			tag += fmt.Sprintf(",fixed=%d", f.fixed)
+		}
+		if f.IsIndexed() {
+			tag += fmt.Sprintf(",index=%s", f.index)
+		}
+		if f.scale > 0 {
+			if f.index == types.IndexTypeBloom {
+				tag += ":"
+			} else {
+				tag += strconv.Itoa(int(f.scale))
+			}
+		}
+		if f.IsCompressed() {
+			tag += ",zip=" + f.compress.String()
+		}
+		tag += `"`
+		sfields = append(sfields, reflect.StructField{
+			Name: util.ToTitle(f.name),
+			Type: reflect.TypeOf(f.typ.Zero()),
+			Tag:  reflect.StructTag(tag),
+		})
+	}
+	return reflect.StructOf(sfields)
+}
+
 var (
 	textUnmarshalerType   = reflect.TypeOf((*encoding.TextUnmarshaler)(nil)).Elem()
 	textMarshalerType     = reflect.TypeOf((*encoding.TextMarshaler)(nil)).Elem()
@@ -143,8 +243,8 @@ var (
 	modelType             = reflect.TypeOf((*Model)(nil)).Elem()
 )
 
-func reflectStructField(f reflect.StructField) (field Field, err error) {
-	tag := f.Tag.Get(TAG_NAME)
+func reflectStructField(f reflect.StructField, tagName string) (field Field, err error) {
+	tag := f.Tag.Get(tagName)
 	field.name = f.Name
 
 	// extract alias name
@@ -496,6 +596,10 @@ func (f *Field) ParseTag(tag string) error {
 				return fmt.Errorf("invalid field id %q: %v", val, err)
 			}
 			f.id = uint16(num)
+		case "null":
+			flags |= types.FieldFlagNullable
+		case "notnull":
+			flags &^= types.FieldFlagNullable
 		default:
 			return fmt.Errorf("unsupported struct tag '%s'", key)
 		}

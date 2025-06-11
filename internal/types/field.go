@@ -152,11 +152,12 @@ const (
 	FieldFlagEnum
 	FieldFlagDeleted
 	FieldFlagInternal
+	FieldFlagNullable
 )
 
 var (
-	fieldFlagNames = "primary_indexed_enum_deleted_internal"
-	fieldFlagIdx   = [...]int{0, 8, 16, 21, 29, 38}
+	fieldFlagNames = "primary_indexed_enum_deleted_internal_nullable"
+	fieldFlagIdx   = [...]int{0, 8, 16, 21, 29, 38, 47}
 )
 
 func (i FieldFlags) Is(f FieldFlags) bool {
@@ -168,7 +169,7 @@ func (i FieldFlags) String() string {
 		return ""
 	}
 	var b strings.Builder
-	for p, k := 0, FieldFlags(1); p < 6; p, k = p+1, k<<1 {
+	for p, k := 0, FieldFlags(1); p < 7; p, k = p+1, k<<1 {
 		if i.Is(k) {
 			start, end := fieldFlagIdx[p], len(fieldFlagNames)
 			if k < FieldFlagInternal {

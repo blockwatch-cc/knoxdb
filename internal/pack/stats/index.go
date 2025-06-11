@@ -193,7 +193,7 @@ type Index struct {
 	px           int                   // index of the data pack's primary key column
 	nmax         int                   // max data pack size
 	view         *schema.View          // helper to extract tree node data from wire format
-	build        *schema.Builder       // wire format builder (writer only)
+	wr           *schema.Writer        // wire format builder (writer only)
 	use          Features              // index features
 	bytesRead    int64                 // io metrics
 	bytesWritten int64                 // io metrics
@@ -233,7 +233,7 @@ func NewIndex(db store.DB, s *schema.Schema, nmax int) *Index {
 		px:     px,
 		nmax:   nmax,
 		view:   schema.NewView(ss),
-		build:  schema.NewBuilder(ss, binary.LittleEndian),
+		wr:     schema.NewWriter(ss, binary.LittleEndian),
 		use:    FeatBloomFilter | FeatFuseFilter | FeatBitsFilter,
 	}
 }
@@ -250,7 +250,7 @@ func (idx Index) Clone() *Index {
 		px:     idx.px,
 		nmax:   idx.nmax,
 		view:   schema.NewView(idx.schema), // create a private view state
-		build:  idx.build,                  // link builder, its only accessed during updates
+		wr:     idx.wr,                     // link builder, its only accessed during updates
 		use:    idx.use,
 	}
 }
@@ -295,7 +295,7 @@ func (idx *Index) Close() {
 	idx.inodes = nil
 	idx.snodes = nil
 	idx.view = nil
-	idx.build = nil
+	idx.wr = nil
 	idx.rx = 0
 	idx.px = 0
 	idx.nmax = 0
@@ -548,7 +548,7 @@ func (idx *Index) AddPack(ctx context.Context, pkg *pack.Package) error {
 	// add data pack statistics to node
 	if node.AppendPack(pkg) {
 		// update spack meta statistics on change
-		if node.BuildMetaStats(idx.view, idx.build) {
+		if node.BuildMetaStats(idx.view, idx.wr) {
 			// update meta statistics towards the root on change
 			idx.updatePathToRoot(i)
 		}
@@ -575,7 +575,7 @@ func (idx *Index) UpdatePack(ctx context.Context, pkg *pack.Package) error {
 	// update data pack statistics record
 	if node.UpdatePack(pkg) {
 		// update spack meta statistics on change
-		if node.BuildMetaStats(idx.view, idx.build) {
+		if node.BuildMetaStats(idx.view, idx.wr) {
 			// update meta statistics towards the root on change
 			idx.updatePathToRoot(i)
 		}
@@ -607,7 +607,7 @@ func (idx *Index) DeletePack(ctx context.Context, pkg *pack.Package) error {
 	// handle tree change
 	if ok && !node.IsEmpty() {
 		// update spack meta statistics on change
-		if node.BuildMetaStats(idx.view, idx.build) {
+		if node.BuildMetaStats(idx.view, idx.wr) {
 			// update inodes all the way to root when meta stats have changed
 			idx.updatePathToRoot(i)
 		}
@@ -1063,15 +1063,15 @@ func (idx *Index) updatePathToRoot(i int) {
 		// we are the left child
 		if i == slen-1 {
 			// we are the last child
-			ok = parent.Update(idx.view, idx.build, node, nil)
+			ok = parent.Update(idx.view, idx.wr, node, nil)
 		} else {
 			// there is a right child behind us
-			ok = parent.Update(idx.view, idx.build, node, idx.snodes[i+1])
+			ok = parent.Update(idx.view, idx.wr, node, idx.snodes[i+1])
 		}
 	} else {
 		// we are the right child, so pick the left which is guaranteed to
 		// exist in front of us
-		ok = parent.Update(idx.view, idx.build, idx.snodes[i-1], node)
+		ok = parent.Update(idx.view, idx.wr, idx.snodes[i-1], node)
 	}
 
 	// stop when we're already at root or nothing changed
@@ -1089,9 +1089,9 @@ func (idx *Index) updatePathToRoot(i int) {
 		// does not compare with nil because its type is non nil. See
 		// https://go.dev/doc/faq#nil_error
 		if right == nil {
-			ok = idx.inodes[p].Update(idx.view, idx.build, left, nil)
+			ok = idx.inodes[p].Update(idx.view, idx.wr, left, nil)
 		} else {
-			ok = idx.inodes[p].Update(idx.view, idx.build, left, right)
+			ok = idx.inodes[p].Update(idx.view, idx.wr, left, right)
 		}
 	}
 }
@@ -1129,7 +1129,7 @@ func (idx *Index) rebuildInodeTree() {
 
 		// create new inode and build merged meta statistics
 		idx.inodes[n] = NewINode()
-		idx.inodes[n].Update(idx.view, idx.build, left, right)
+		idx.inodes[n].Update(idx.view, idx.wr, left, right)
 	}
 
 	// all upper inode levels have inodes as children
@@ -1150,7 +1150,7 @@ func (idx *Index) rebuildInodeTree() {
 
 		// create new inode and build merged meta statistics
 		idx.inodes[n] = NewINode()
-		idx.inodes[n].Update(idx.view, idx.build, left, right)
+		idx.inodes[n].Update(idx.view, idx.wr, left, right)
 	}
 }
 

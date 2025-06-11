@@ -375,28 +375,6 @@ type InternalFields struct {
 }
 
 const (
-	FT_TIME   = types.FieldTypeDatetime
-	FT_I64    = types.FieldTypeInt64
-	FT_U64    = types.FieldTypeUint64
-	FT_F64    = types.FieldTypeFloat64
-	FT_BOOL   = types.FieldTypeBoolean
-	FT_STRING = types.FieldTypeString
-	FT_BYTES  = types.FieldTypeBytes
-	FT_I32    = types.FieldTypeInt32
-	FT_I16    = types.FieldTypeInt16
-	FT_I8     = types.FieldTypeInt8
-	FT_U32    = types.FieldTypeUint32
-	FT_U16    = types.FieldTypeUint16
-	FT_U8     = types.FieldTypeUint8
-	FT_F32    = types.FieldTypeFloat32
-	FT_I256   = types.FieldTypeInt256
-	FT_I128   = types.FieldTypeInt128
-	FT_D256   = types.FieldTypeDecimal256
-	FT_D128   = types.FieldTypeDecimal128
-	FT_D64    = types.FieldTypeDecimal64
-	FT_D32    = types.FieldTypeDecimal32
-	FT_BIGINT = types.FieldTypeBigint
-
 	OC_I8        = OpCodeInt8
 	OC_I16       = OpCodeInt16
 	OC_I32       = OpCodeInt32
@@ -432,10 +410,10 @@ const (
 
 var (
 	// arch dependent, only used for tests
-	FT_INT  = [2]types.FieldType{types.FieldTypeInt32, types.FieldTypeInt64}[bits.UintSize/32-1]
-	FT_UINT = [2]types.FieldType{types.FieldTypeUint32, types.FieldTypeUint64}[bits.UintSize/32-1]
-	OC_INT  = [2]OpCode{OpCodeInt32, OpCodeInt64}[bits.UintSize/32-1]
-	OC_UINT = [2]OpCode{OpCodeUint32, OpCodeUint64}[bits.UintSize/32-1]
+	FT_INT  = [2]types.FieldType{FT_I32, FT_I64}[bits.UintSize/32-1]
+	FT_UINT = [2]types.FieldType{FT_U32, FT_U64}[bits.UintSize/32-1]
+	OC_INT  = [2]OpCode{OC_I32, OC_I64}[bits.UintSize/32-1]
+	OC_UINT = [2]OpCode{OC_U32, OC_U64}[bits.UintSize/32-1]
 )
 
 // Testcase Definition
@@ -1001,7 +979,7 @@ func TestSchemaIsValid(t *testing.T) {
 	s := NewSchema().WithName("test")
 	require.False(t, s.IsValid())
 
-	s.WithField(Field{name: "field1", typ: types.FieldTypeInt64})
+	s.WithField(Field{name: "field1", typ: FT_I64})
 	require.False(t, s.IsValid())
 
 	s.Finalize()
@@ -1012,7 +990,7 @@ func TestSchemaIsValid(t *testing.T) {
 // the correct capacity based on the schema's maxWireSize.
 func TestSchemaNewBuffer(t *testing.T) {
 	s := NewSchema().WithName("test").
-		WithField(Field{name: "field1", typ: types.FieldTypeInt64}).
+		WithField(Field{name: "field1", typ: FT_I64}).
 		Finalize()
 
 	buf := s.NewBuffer(10)
@@ -1024,8 +1002,8 @@ func TestSchemaNewBuffer(t *testing.T) {
 // number of fields in the schema.
 func TestSchemaNumFields(t *testing.T) {
 	s := NewSchema().WithName("test").
-		WithField(Field{name: "field1", typ: types.FieldTypeInt64}).
-		WithField(Field{name: "field2", typ: types.FieldTypeString}).
+		WithField(Field{name: "field1", typ: FT_I64}).
+		WithField(Field{name: "field2", typ: FT_STRING}).
 		Finalize()
 
 	require.Equal(t, 2, s.NumFields())
@@ -1037,21 +1015,21 @@ func TestSchemaFieldVisibility(t *testing.T) {
 	s := NewSchema().WithName("test").
 		WithField(Field{
 			name: "field1",
-			typ:  types.FieldTypeInt64,
+			typ:  FT_I64,
 		}).
 		WithField(Field{
 			name:  "field2",
-			typ:   types.FieldTypeString,
+			typ:   FT_STRING,
 			flags: types.FieldFlagInternal,
 		}).
 		WithField(Field{
 			name:  "field3",
-			typ:   types.FieldTypeUint64,
+			typ:   FT_U64,
 			flags: types.FieldFlagDeleted,
 		}).
 		WithField(Field{
 			name:  "field4",
-			typ:   types.FieldTypeUint64,
+			typ:   FT_U64,
 			flags: types.FieldFlagInternal | types.FieldFlagDeleted,
 		}).
 		Finalize()
@@ -1111,21 +1089,21 @@ func TestSchemaCanMatchFields(t *testing.T) {
 	s := NewSchema().WithName("test").
 		WithField(Field{
 			name: "field1",
-			typ:  types.FieldTypeInt64,
+			typ:  FT_I64,
 		}).
 		WithField(Field{
 			name:  "field2",
-			typ:   types.FieldTypeString,
+			typ:   FT_STRING,
 			flags: types.FieldFlagInternal,
 		}).
 		WithField(Field{
 			name:  "field3",
-			typ:   types.FieldTypeUint64,
+			typ:   FT_U64,
 			flags: types.FieldFlagDeleted,
 		}).
 		WithField(Field{
 			name:  "field4",
-			typ:   types.FieldTypeUint64,
+			typ:   FT_U64,
 			flags: types.FieldFlagInternal | types.FieldFlagDeleted,
 		}).
 		Finalize()
@@ -1141,56 +1119,56 @@ func TestSchemaCanSelect(t *testing.T) {
 	s := NewSchema().WithName("test").
 		WithField(Field{
 			name: "field1",
-			typ:  types.FieldTypeInt64,
+			typ:  FT_I64,
 		}).
 		WithField(Field{
 			name:  "field2",
-			typ:   types.FieldTypeString,
+			typ:   FT_STRING,
 			flags: types.FieldFlagInternal,
 		}).
 		WithField(Field{
 			name:  "field3",
-			typ:   types.FieldTypeUint64,
+			typ:   FT_U64,
 			flags: types.FieldFlagDeleted,
 		}).
 		WithField(Field{
 			name:  "field4",
-			typ:   types.FieldTypeUint64,
+			typ:   FT_U64,
 			flags: types.FieldFlagInternal | types.FieldFlagDeleted,
 		}).
 		Finalize()
 
 	// active field
 	s1 := NewSchema().WithName("test1").
-		WithField(Field{name: "field1", typ: types.FieldTypeInt64}).
+		WithField(Field{name: "field1", typ: FT_I64}).
 		Finalize()
 
 	require.NoError(t, s.CanSelect(s1))
 
 	// active internal field
 	s2 := NewSchema().WithName("test2").
-		WithField(Field{name: "field2", typ: types.FieldTypeString}).
+		WithField(Field{name: "field2", typ: FT_STRING}).
 		Finalize()
 
 	require.NoError(t, s.CanSelect(s2))
 
 	// deleted field
 	s3 := NewSchema().WithName("test3").
-		WithField(Field{name: "field3", typ: types.FieldTypeUint64}).
+		WithField(Field{name: "field3", typ: FT_U64}).
 		Finalize()
 
 	require.Error(t, s.CanSelect(s3))
 
 	// deleted internal field
 	s4 := NewSchema().WithName("test4").
-		WithField(Field{name: "field4", typ: types.FieldTypeUint64}).
+		WithField(Field{name: "field4", typ: FT_U64}).
 		Finalize()
 
 	require.Error(t, s.CanSelect(s4))
 
 	// non existing field
 	s5 := NewSchema().WithName("test5").
-		WithField(Field{name: "field5", typ: types.FieldTypeUint64}).
+		WithField(Field{name: "field5", typ: FT_U64}).
 		Finalize()
 
 	require.Error(t, s.CanSelect(s5))
@@ -1200,8 +1178,8 @@ func TestSchemaCanSelect(t *testing.T) {
 // of the schema alphabetically by name.
 func TestSchemaSort(t *testing.T) {
 	s := NewSchema().WithName("test").
-		WithField(Field{name: "field2", typ: types.FieldTypeString}).
-		WithField(Field{name: "field1", typ: types.FieldTypeInt64}).
+		WithField(Field{name: "field2", typ: FT_STRING}).
+		WithField(Field{name: "field1", typ: FT_I64}).
 		Finalize()
 
 	// The fields should already be sorted by ID after Finalize()
@@ -1221,29 +1199,29 @@ func TestSchemaMapTo(t *testing.T) {
 	s := NewSchema().WithName("test").
 		WithField(Field{
 			name: "field1",
-			typ:  types.FieldTypeInt64,
+			typ:  FT_I64,
 		}).
 		WithField(Field{
 			name:  "field2",
-			typ:   types.FieldTypeString,
+			typ:   FT_STRING,
 			flags: types.FieldFlagInternal,
 		}).
 		WithField(Field{
 			name:  "field3",
-			typ:   types.FieldTypeUint64,
+			typ:   FT_U64,
 			flags: types.FieldFlagDeleted,
 		}).
 		WithField(Field{
 			name:  "field4",
-			typ:   types.FieldTypeUint64,
+			typ:   FT_U64,
 			flags: types.FieldFlagInternal | types.FieldFlagDeleted,
 		}).
 		Finalize()
 
 	// active fields
 	s1 := NewSchema().WithName("test1").
-		WithField(Field{name: "field3", typ: types.FieldTypeUint64}).
-		WithField(Field{name: "field1", typ: types.FieldTypeInt64}).
+		WithField(Field{name: "field3", typ: FT_U64}).
+		WithField(Field{name: "field1", typ: FT_I64}).
 		Finalize()
 
 	// inactive fields are hidden
@@ -1253,10 +1231,10 @@ func TestSchemaMapTo(t *testing.T) {
 
 	// deleted fields are ignored
 	s2 := NewSchema().WithName("test2").
-		WithField(Field{name: "field2", typ: types.FieldTypeString}).
-		WithField(Field{name: "field4", typ: types.FieldTypeUint64}).
-		WithField(Field{name: "field3", typ: types.FieldTypeUint64}).
-		WithField(Field{name: "field1", typ: types.FieldTypeInt64}).
+		WithField(Field{name: "field2", typ: FT_STRING}).
+		WithField(Field{name: "field4", typ: FT_U64}).
+		WithField(Field{name: "field3", typ: FT_U64}).
+		WithField(Field{name: "field1", typ: FT_I64}).
 		Finalize()
 
 	mapping, err = s.MapTo(s2)

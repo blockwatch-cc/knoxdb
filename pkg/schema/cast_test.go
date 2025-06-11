@@ -205,26 +205,26 @@ func TestCastNewCaster(t *testing.T) {
 		fieldType types.FieldType
 		expected  any
 	}{
-		{"Datetime", types.FieldTypeDatetime, TimeCaster{}},
-		{"Boolean", types.FieldTypeBoolean, BoolCaster{}},
-		{"String", types.FieldTypeString, StringCaster{}},
-		{"Bytes", types.FieldTypeBytes, BytesCaster{}},
-		{"Int8", types.FieldTypeInt8, IntCaster[int8]{}},
-		{"Int16", types.FieldTypeInt16, IntCaster[int16]{}},
-		{"Int32", types.FieldTypeInt32, IntCaster[int32]{}},
-		{"Int64", types.FieldTypeInt64, IntCaster[int64]{}},
-		{"Uint8", types.FieldTypeUint8, UintCaster[uint8]{}},
-		{"Uint16", types.FieldTypeUint16, UintCaster[uint16]{}},
-		{"Uint32", types.FieldTypeUint32, UintCaster[uint32]{}},
-		{"Uint64", types.FieldTypeUint64, UintCaster[uint64]{}},
-		{"Float32", types.FieldTypeFloat32, FloatCaster[float32]{}},
-		{"Float64", types.FieldTypeFloat64, FloatCaster[float64]{}},
-		{"Int128", types.FieldTypeInt128, I128Caster{}},
-		{"Int256", types.FieldTypeInt256, I256Caster{}},
-		{"Decimal32", types.FieldTypeDecimal32, IntCaster[int32]{}},
-		{"Decimal64", types.FieldTypeDecimal64, IntCaster[int64]{}},
-		{"Decimal128", types.FieldTypeDecimal128, I128Caster{}},
-		{"Decimal256", types.FieldTypeDecimal256, I256Caster{}},
+		{"Datetime", FT_TIME, TimeCaster{}},
+		{"Boolean", FT_BOOL, BoolCaster{}},
+		{"String", FT_STRING, StringCaster{}},
+		{"Bytes", FT_BYTES, BytesCaster{}},
+		{"Int8", FT_I8, IntCaster[int8]{}},
+		{"Int16", FT_I16, IntCaster[int16]{}},
+		{"Int32", FT_I32, IntCaster[int32]{}},
+		{"Int64", FT_I64, IntCaster[int64]{}},
+		{"Uint8", FT_U8, UintCaster[uint8]{}},
+		{"Uint16", FT_U16, UintCaster[uint16]{}},
+		{"Uint32", FT_U32, UintCaster[uint32]{}},
+		{"Uint64", FT_U64, UintCaster[uint64]{}},
+		{"Float32", FT_F32, FloatCaster[float32]{}},
+		{"Float64", FT_F64, FloatCaster[float64]{}},
+		{"Int128", FT_I128, I128Caster{}},
+		{"Int256", FT_I256, I256Caster{}},
+		{"Decimal32", FT_D32, IntCaster[int32]{}},
+		{"Decimal64", FT_D64, IntCaster[int64]{}},
+		{"Decimal128", FT_D128, I128Caster{}},
+		{"Decimal256", FT_D256, I256Caster{}},
 		{"BigInt", types.FieldTypeBigint, BigIntCaster{}},
 	}
 
@@ -534,7 +534,7 @@ func (c CustomBinaryMarshaler) MarshalBinary() ([]byte, error) {
 // TestCastBytesCaster tests the BytesCaster to ensure it correctly casts various
 // input types to []byte and handles edge cases and errors appropriately.
 func TestCastBytesCaster(t *testing.T) {
-	caster := NewCaster(types.FieldTypeBytes, 0, nil)
+	caster := NewCaster(FT_BYTES, 0, nil)
 
 	t.Run("CastValue", func(t *testing.T) {
 		tests := []struct {
@@ -661,7 +661,7 @@ func TestCastI128Caster(t *testing.T) {
 // TestCastI256Caster tests the I256Caster to ensure it correctly casts various
 // input types to num.Int256 and handles edge cases and errors appropriately.
 func TestCastI256Caster(t *testing.T) {
-	caster := NewCaster(types.FieldTypeInt256, 0, nil)
+	caster := NewCaster(FT_I256, 0, nil)
 
 	t.Run("CastValue", func(t *testing.T) {
 		tests := []struct {

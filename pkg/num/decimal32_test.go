@@ -304,7 +304,7 @@ func TestDecimal32Quantize(t *testing.T) {
 		}
 		switch {
 		case test.isover:
-			if got, want := res.Scale(), MaxDecimal32Precision; got != want {
+			if got, want := res.Scale(), uint8(MaxDecimal32Precision); got != want {
 				t.Errorf("%s: scale error exp %d, got %d", test.name, want, got)
 			}
 		case test.isunder:

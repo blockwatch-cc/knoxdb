@@ -262,6 +262,12 @@ func (p *StringPool) Get(i int) []byte {
 	return p.buf[ofs : ofs+sz : ofs+sz]
 }
 
+// GetString returns element at position i as shared string.
+// Panics if i is out of bounds.
+func (p *StringPool) GetString(i int) string {
+	return util.UnsafeGetString(p.Get(i))
+}
+
 // Set replaces element at position i with a new string. The new string
 // is added to the buffer (without duplicate check) and the previous
 // string becomes garbage. Panics if i is out of bounds.

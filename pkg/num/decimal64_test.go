@@ -352,7 +352,7 @@ func TestDecimal64Quantize(t *testing.T) {
 		}
 		switch {
 		case test.isover:
-			if got, want := res.Scale(), MaxDecimal64Precision; got != want {
+			if got, want := res.Scale(), uint8(MaxDecimal64Precision); got != want {
 				t.Errorf("%s: scale error exp %d, got %d", test.name, want, got)
 			}
 		case test.isunder:

@@ -258,6 +258,13 @@ func ContainsString(s string, list []string) bool {
 	return false
 }
 
+func ToTitle(src string) string {
+	if len(src) == 0 {
+		return src
+	}
+	return strings.ToUpper(src[:1]) + src[1:]
+}
+
 func ToCamelCase(src, sep string) string {
 	chunks := strings.Split(src, sep)
 	for idx, val := range chunks {

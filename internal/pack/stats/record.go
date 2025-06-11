@@ -87,11 +87,11 @@ func NewRecordFromPack(pkg *pack.Package, n int) *Record {
 		view:     schema.NewView(s),
 	}
 	pstats := pkg.Stats()
-	build := schema.NewBuilder(s, binary.LittleEndian)
-	build.Write(STATS_ROW_KEY, pkg.Key())
-	build.Write(STATS_ROW_SCHEMA, pkg.Schema().Hash())
-	build.Write(STATS_ROW_NVALS, int64(pkg.Len()))
-	build.Write(STATS_ROW_SIZE, pstats.SizeDiff())
+	wr := schema.NewWriter(s, binary.LittleEndian)
+	wr.Write(STATS_ROW_KEY, pkg.Key())
+	wr.Write(STATS_ROW_SCHEMA, pkg.Schema().Hash())
+	wr.Write(STATS_ROW_NVALS, int64(pkg.Len()))
+	wr.Write(STATS_ROW_SIZE, pstats.SizeDiff())
 
 	for i, b := range pkg.Blocks() {
 		var minv, maxv any
@@ -109,21 +109,21 @@ func NewRecordFromPack(pkg *pack.Package, n int) *Record {
 		minx, maxx := minColIndex(i), maxColIndex(i)
 
 		// append statistics values
-		build.Write(minx, minv)
-		build.Write(maxx, maxv)
+		wr.Write(minx, minv)
+		wr.Write(maxx, maxv)
 	}
-	rec.view.Reset(build.Bytes())
-	build.Reset()
+	rec.view.Reset(wr.Bytes())
+	wr.Reset()
 	return rec
 }
 
 func (r *Record) Update(pkg *pack.Package) {
 	pstats := pkg.Stats()
-	build := schema.NewBuilder(r.view.Schema(), binary.LittleEndian)
-	build.Write(STATS_ROW_KEY, pkg.Key())
-	build.Write(STATS_ROW_SCHEMA, pkg.Schema().Hash())
-	build.Write(STATS_ROW_NVALS, int64(pkg.Len()))
-	build.Write(STATS_ROW_SIZE, r.DiskSize+pstats.SizeDiff())
+	wr := schema.NewWriter(r.view.Schema(), binary.LittleEndian)
+	wr.Write(STATS_ROW_KEY, pkg.Key())
+	wr.Write(STATS_ROW_SCHEMA, pkg.Schema().Hash())
+	wr.Write(STATS_ROW_NVALS, int64(pkg.Len()))
+	wr.Write(STATS_ROW_SIZE, r.DiskSize+pstats.SizeDiff())
 
 	for i, b := range pkg.Blocks() {
 		// calculate data column positions inside statistics schema
@@ -146,9 +146,9 @@ func (r *Record) Update(pkg *pack.Package) {
 		}
 
 		// append statistics values
-		build.Write(minx, minv)
-		build.Write(maxx, maxv)
+		wr.Write(minx, minv)
+		wr.Write(maxx, maxv)
 	}
-	r.view.Reset(build.Bytes())
-	build.Reset()
+	r.view.Reset(wr.Bytes())
+	wr.Reset()
 }
