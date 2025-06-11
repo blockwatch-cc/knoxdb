@@ -38,10 +38,10 @@ func TestFieldNew(t *testing.T) {
 		fieldType types.FieldType
 		expected  Field
 	}{
-		{"Int32", types.FieldTypeInt32, Field{typ: types.FieldTypeInt32, wireSize: 4}},
-		{"String", types.FieldTypeString, Field{typ: types.FieldTypeString, wireSize: 4}},
-		{"DateTime", types.FieldTypeDatetime, Field{typ: types.FieldTypeDatetime, wireSize: 8}},
-		{"Boolean", types.FieldTypeBoolean, Field{typ: types.FieldTypeBoolean, wireSize: 1}},
+		{"Int32", FT_I32, Field{typ: FT_I32, wireSize: 4}},
+		{"String", FT_STRING, Field{typ: FT_STRING, wireSize: 4}},
+		{"DateTime", FT_TIME, Field{typ: FT_TIME, wireSize: 8}},
+		{"Boolean", FT_BOOL, Field{typ: FT_BOOL, wireSize: 1}},
 	}
 
 	for _, tc := range testCases {
@@ -54,7 +54,7 @@ func TestFieldNew(t *testing.T) {
 
 // TestFieldWithMethods ensures that Field methods correctly set and return field properties.
 func TestFieldWithMethods(t *testing.T) {
-	baseField := NewField(types.FieldTypeInt32).WithName("test_field")
+	baseField := NewField(FT_I32).WithName("test_field")
 
 	t.Run("WithName", func(t *testing.T) {
 		field := baseField.WithName("new_name")
@@ -67,12 +67,12 @@ func TestFieldWithMethods(t *testing.T) {
 	})
 
 	t.Run("WithFixed", func(t *testing.T) {
-		field := NewField(types.FieldTypeString).WithFixed(10)
+		field := NewField(FT_STRING).WithFixed(10)
 		assert.Equal(t, uint16(10), field.Fixed())
 	})
 
 	t.Run("WithScale", func(t *testing.T) {
-		field := NewField(types.FieldTypeDecimal64).WithScale(2)
+		field := NewField(FT_D64).WithScale(2)
 		assert.Equal(t, uint8(2), field.Scale())
 	})
 
@@ -94,8 +94,8 @@ func TestFieldReflectField(t *testing.T) {
 	structType := reflect.TypeOf(testStruct)
 
 	t.Run("Int32Field", func(t *testing.T) {
-		// field := NewField(types.FieldTypeInt32)
-		field, err := reflectStructField(structType.Field(0))
+		// field := NewField(FT_I32)
+		field, err := reflectStructField(structType.Field(0), TAG_NAME)
 		require.NoError(t, err)
 		assert.Equal(t, uint16(4), field.wireSize)
 		assert.Equal(t, []int{0}, field.Path())
@@ -103,8 +103,8 @@ func TestFieldReflectField(t *testing.T) {
 	})
 
 	t.Run("StringField", func(t *testing.T) {
-		// field := NewField(types.FieldTypeString)
-		field, err := reflectStructField(structType.Field(1))
+		// field := NewField(FT_STRING)
+		field, err := reflectStructField(structType.Field(1), TAG_NAME)
 		require.NoError(t, err)
 		assert.Equal(t, []int{1}, field.Path())
 		assert.Equal(t, uint16(4), field.wireSize)
@@ -120,42 +120,42 @@ func TestFieldValidation(t *testing.T) {
 	}{
 		{
 			name:      "Valid int32 field",
-			field:     NewField(types.FieldTypeInt32).WithName("test_field"),
+			field:     NewField(FT_I32).WithName("test_field"),
 			expectErr: false,
 		},
 		{
 			name:      "Invalid scale on non-decimal field",
-			field:     NewField(types.FieldTypeInt32).WithName("test_field").WithScale(2),
+			field:     NewField(FT_I32).WithName("test_field").WithScale(2),
 			expectErr: true,
 		},
 		{
 			name:      "Valid decimal field with scale",
-			field:     NewField(types.FieldTypeDecimal64).WithName("test_field").WithScale(2),
+			field:     NewField(FT_D64).WithName("test_field").WithScale(2),
 			expectErr: false,
 		},
 		{
 			name:      "Invalid fixed on non-string/bytes field",
-			field:     NewField(types.FieldTypeInt32).WithName("test_field").WithFixed(10),
+			field:     NewField(FT_I32).WithName("test_field").WithFixed(10),
 			expectErr: true,
 		},
 		{
 			name:      "Valid string field with fixed",
-			field:     NewField(types.FieldTypeString).WithName("test_field").WithFixed(10),
+			field:     NewField(FT_STRING).WithName("test_field").WithFixed(10),
 			expectErr: false,
 		},
 		{
 			name:      "Invalid index kind",
-			field:     NewField(types.FieldTypeInt32).WithName("test_field").WithIndex(types.IndexType(100)),
+			field:     NewField(FT_I32).WithName("test_field").WithIndex(types.IndexType(100)),
 			expectErr: true,
 		},
 		{
 			name:      "Valid int field with int index",
-			field:     NewField(types.FieldTypeInt32).WithName("test_field").WithIndex(types.IndexTypeInt),
+			field:     NewField(FT_I32).WithName("test_field").WithIndex(types.IndexTypeInt),
 			expectErr: false,
 		},
 		{
 			name:      "Invalid int index on non-int field",
-			field:     NewField(types.FieldTypeString).WithName("test_field").WithIndex(types.IndexTypeInt),
+			field:     NewField(FT_STRING).WithName("test_field").WithIndex(types.IndexTypeInt),
 			expectErr: true,
 		},
 	}
@@ -179,26 +179,26 @@ func TestFieldCodecMapping(t *testing.T) {
 		field    Field
 		expected OpCode
 	}{
-		{"Datetime", NewField(types.FieldTypeDatetime), OpCodeDateTime},
-		{"Int64", NewField(types.FieldTypeInt64), OpCodeInt64},
-		{"Int32", NewField(types.FieldTypeInt32), OpCodeInt32},
-		{"Int16", NewField(types.FieldTypeInt16), OpCodeInt16},
-		{"Int8", NewField(types.FieldTypeInt8), OpCodeInt8},
-		{"Uint64", NewField(types.FieldTypeUint64), OpCodeUint64},
-		{"Uint32", NewField(types.FieldTypeUint32), OpCodeUint32},
-		{"Uint16", NewField(types.FieldTypeUint16), OpCodeUint16},
-		{"Uint8", NewField(types.FieldTypeUint8), OpCodeUint8},
-		{"Float64", NewField(types.FieldTypeFloat64), OpCodeFloat64},
-		{"Float32", NewField(types.FieldTypeFloat32), OpCodeFloat32},
-		{"Boolean", NewField(types.FieldTypeBoolean), OpCodeBool},
-		{"String", NewField(types.FieldTypeString), OpCodeString},
-		{"Bytes", NewField(types.FieldTypeBytes), OpCodeBytes},
-		{"Int256", NewField(types.FieldTypeInt256), OpCodeInt256},
-		{"Int128", NewField(types.FieldTypeInt128), OpCodeInt128},
-		{"Decimal256", NewField(types.FieldTypeDecimal256), OpCodeDecimal256},
-		{"Decimal128", NewField(types.FieldTypeDecimal128), OpCodeDecimal128},
-		{"Decimal64", NewField(types.FieldTypeDecimal64), OpCodeDecimal64},
-		{"Decimal32", NewField(types.FieldTypeDecimal32), OpCodeDecimal32},
+		{"Datetime", NewField(FT_TIME), OC_TIME},
+		{"Int64", NewField(FT_I64), OC_I64},
+		{"Int32", NewField(FT_I32), OC_I32},
+		{"Int16", NewField(FT_I16), OC_I16},
+		{"Int8", NewField(FT_I8), OC_I8},
+		{"Uint64", NewField(FT_U64), OC_U64},
+		{"Uint32", NewField(FT_U32), OC_U32},
+		{"Uint16", NewField(FT_U16), OC_U16},
+		{"Uint8", NewField(FT_U8), OC_U8},
+		{"Float64", NewField(FT_F64), OC_F64},
+		{"Float32", NewField(FT_F32), OC_F32},
+		{"Boolean", NewField(FT_BOOL), OC_BOOL},
+		{"String", NewField(FT_STRING), OC_STRING},
+		{"Bytes", NewField(FT_BYTES), OC_BYTES},
+		{"Int256", NewField(FT_I256), OC_I256},
+		{"Int128", NewField(FT_I128), OC_I128},
+		{"Decimal256", NewField(FT_D256), OC_D256},
+		{"Decimal128", NewField(FT_D128), OC_D128},
+		{"Decimal64", NewField(FT_D64), OC_D64},
+		{"Decimal32", NewField(FT_D32), OC_D32},
 	}
 
 	for _, tc := range testCases {
@@ -256,10 +256,10 @@ func TestFieldStructValueRetrieval(t *testing.T) {
 	rval := reflect.ValueOf(value)
 
 	rvalTypeOf := reflect.TypeOf(value)
-	IntField, err := reflectStructField(rvalTypeOf.Field(0))
+	IntField, err := reflectStructField(rvalTypeOf.Field(0), TAG_NAME)
 	require.NoError(t, err)
 
-	StringField, err := reflectStructField(rvalTypeOf.Field(1))
+	StringField, err := reflectStructField(rvalTypeOf.Field(1), TAG_NAME)
 	require.NoError(t, err)
 
 	testCases := []struct {
@@ -311,35 +311,35 @@ func TestFieldEncodingDecoding(t *testing.T) {
 		value    any
 		expected any
 	}{
-		{"Int8_Zero", NewField(types.FieldTypeInt8), int8(0), int8(0)},
-		{"Int8_Max", NewField(types.FieldTypeInt8), int8(math.MaxInt8), int8(math.MaxInt8)},
-		{"Int16_Zero", NewField(types.FieldTypeInt16), int16(0), int16(0)},
-		{"Int16_Max", NewField(types.FieldTypeInt16), int16(math.MaxInt16), int16(math.MaxInt16)},
-		{"Int32_Zero", NewField(types.FieldTypeInt32), int32(0), int32(0)},
-		{"Int32_Max", NewField(types.FieldTypeInt32), int32(math.MaxInt32), int32(math.MaxInt32)},
-		{"Int64_Zero", NewField(types.FieldTypeInt64), int64(0), int64(0)},
-		{"Int64_Max", NewField(types.FieldTypeInt64), int64(math.MaxInt64), int64(math.MaxInt64)},
-		{"Uint8_Zero", NewField(types.FieldTypeUint8), uint8(0), uint8(0)},
-		{"Uint8_Max", NewField(types.FieldTypeUint8), uint8(math.MaxUint8), uint8(math.MaxUint8)},
-		{"Uint16_Zero", NewField(types.FieldTypeUint16), uint16(0), uint16(0)},
-		{"Uint16_Max", NewField(types.FieldTypeUint16), uint16(math.MaxUint16), uint16(math.MaxUint16)},
-		{"Uint32_Zero", NewField(types.FieldTypeUint32), uint32(0), uint32(0)},
-		{"Uint32_Max", NewField(types.FieldTypeUint32), uint32(math.MaxUint32), uint32(math.MaxUint32)},
-		{"Uint64_Zero", NewField(types.FieldTypeUint64), uint64(0), uint64(0)},
-		{"Uint64_Max", NewField(types.FieldTypeUint64), uint64(math.MaxUint64), uint64(math.MaxUint64)},
-		{"Float32_Zero", NewField(types.FieldTypeFloat32), float32(0), float32(0)},
-		{"Float32_Max", NewField(types.FieldTypeFloat32), float32(math.MaxFloat32), float32(math.MaxFloat32)},
-		{"Float64_Zero", NewField(types.FieldTypeFloat64), float64(0), float64(0)},
-		{"Float64_Max", NewField(types.FieldTypeFloat64), float64(math.MaxFloat64), float64(math.MaxFloat64)},
-		{"Boolean_True", NewField(types.FieldTypeBoolean), true, true},
-		{"Boolean_False", NewField(types.FieldTypeBoolean), false, false},
-		{"DateTime_Now", NewField(types.FieldTypeDatetime), time.Now().UTC(), time.Now().UTC()},
+		{"Int8_Zero", NewField(FT_I8), int8(0), int8(0)},
+		{"Int8_Max", NewField(FT_I8), int8(math.MaxInt8), int8(math.MaxInt8)},
+		{"Int16_Zero", NewField(FT_I16), int16(0), int16(0)},
+		{"Int16_Max", NewField(FT_I16), int16(math.MaxInt16), int16(math.MaxInt16)},
+		{"Int32_Zero", NewField(FT_I32), int32(0), int32(0)},
+		{"Int32_Max", NewField(FT_I32), int32(math.MaxInt32), int32(math.MaxInt32)},
+		{"Int64_Zero", NewField(FT_I64), int64(0), int64(0)},
+		{"Int64_Max", NewField(FT_I64), int64(math.MaxInt64), int64(math.MaxInt64)},
+		{"Uint8_Zero", NewField(FT_U8), uint8(0), uint8(0)},
+		{"Uint8_Max", NewField(FT_U8), uint8(math.MaxUint8), uint8(math.MaxUint8)},
+		{"Uint16_Zero", NewField(FT_U16), uint16(0), uint16(0)},
+		{"Uint16_Max", NewField(FT_U16), uint16(math.MaxUint16), uint16(math.MaxUint16)},
+		{"Uint32_Zero", NewField(FT_U32), uint32(0), uint32(0)},
+		{"Uint32_Max", NewField(FT_U32), uint32(math.MaxUint32), uint32(math.MaxUint32)},
+		{"Uint64_Zero", NewField(FT_U64), uint64(0), uint64(0)},
+		{"Uint64_Max", NewField(FT_U64), uint64(math.MaxUint64), uint64(math.MaxUint64)},
+		{"Float32_Zero", NewField(FT_F32), float32(0), float32(0)},
+		{"Float32_Max", NewField(FT_F32), float32(math.MaxFloat32), float32(math.MaxFloat32)},
+		{"Float64_Zero", NewField(FT_F64), float64(0), float64(0)},
+		{"Float64_Max", NewField(FT_F64), float64(math.MaxFloat64), float64(math.MaxFloat64)},
+		{"Boolean_True", NewField(FT_BOOL), true, true},
+		{"Boolean_False", NewField(FT_BOOL), false, false},
+		{"DateTime_Now", NewField(FT_TIME), time.Now().UTC(), time.Now().UTC()},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			decoded := encodeDecodeField(t, tc.field, tc.value)
-			if tc.field.Type() == types.FieldTypeDatetime {
+			if tc.field.Type() == FT_TIME {
 				assert.WithinDuration(t, tc.expected.(time.Time), decoded.(time.Time), time.Millisecond)
 			} else {
 				assert.Equal(t, tc.expected, decoded)
@@ -350,7 +350,7 @@ func TestFieldEncodingDecoding(t *testing.T) {
 
 // TestFieldSerializationRoundTrip verifies that Field can be serialized and deserialized correctly, preserving all properties.
 func TestFieldSerializationRoundTrip(t *testing.T) {
-	original := NewField(types.FieldTypeString).
+	original := NewField(FT_STRING).
 		WithName("test_field").
 		WithFlags(types.FieldFlagIndexed).
 		WithIndex(types.IndexTypeHash).
@@ -385,14 +385,14 @@ func TestFieldRangeAndOverflow(t *testing.T) {
 		max        any
 		isUnsigned bool
 	}{
-		{types.FieldTypeInt8, reflect.TypeOf(int8(0)), int8(0), int8(math.MinInt8), int8(math.MaxInt8), false},
-		{types.FieldTypeInt16, reflect.TypeOf(int16(0)), int16(0), int16(math.MinInt16), int16(math.MaxInt16), false},
-		{types.FieldTypeInt32, reflect.TypeOf(int32(0)), int32(0), int32(math.MinInt32), int32(math.MaxInt32), false},
-		{types.FieldTypeInt64, reflect.TypeOf(int64(0)), int64(0), int64(math.MinInt64), int64(math.MaxInt64), false},
-		{types.FieldTypeUint8, reflect.TypeOf(uint8(0)), uint8(0), uint8(0), uint8(math.MaxUint8), true},
-		{types.FieldTypeUint16, reflect.TypeOf(uint16(0)), uint16(0), uint16(0), uint16(math.MaxUint16), true},
-		{types.FieldTypeUint32, reflect.TypeOf(uint32(0)), uint32(0), uint32(0), uint32(math.MaxUint32), true},
-		{types.FieldTypeUint64, reflect.TypeOf(uint64(0)), uint64(0), uint64(0), uint64(math.MaxUint64), true},
+		{FT_I8, reflect.TypeOf(int8(0)), int8(0), int8(math.MinInt8), int8(math.MaxInt8), false},
+		{FT_I16, reflect.TypeOf(int16(0)), int16(0), int16(math.MinInt16), int16(math.MaxInt16), false},
+		{FT_I32, reflect.TypeOf(int32(0)), int32(0), int32(math.MinInt32), int32(math.MaxInt32), false},
+		{FT_I64, reflect.TypeOf(int64(0)), int64(0), int64(math.MinInt64), int64(math.MaxInt64), false},
+		{FT_U8, reflect.TypeOf(uint8(0)), uint8(0), uint8(0), uint8(math.MaxUint8), true},
+		{FT_U16, reflect.TypeOf(uint16(0)), uint16(0), uint16(0), uint16(math.MaxUint16), true},
+		{FT_U32, reflect.TypeOf(uint32(0)), uint32(0), uint32(0), uint32(math.MaxUint32), true},
+		{FT_U64, reflect.TypeOf(uint64(0)), uint64(0), uint64(0), uint64(math.MaxUint64), true},
 	}
 
 	for _, targetType := range intTypes {
@@ -413,7 +413,7 @@ func TestFieldRangeAndOverflow(t *testing.T) {
 
 	// Test case for datetime fields to ensure proper handling of time values
 	t.Run("TimeCaster", func(t *testing.T) {
-		field := NewField(types.FieldTypeDatetime)
+		field := NewField(FT_TIME)
 		now := time.Now().UTC()
 		decoded := encodeDecodeField(t, field, now)
 		assert.Equal(t, now, decoded.(time.Time).UTC())
@@ -431,103 +431,103 @@ func TestFieldEncode(t *testing.T) {
 	testCases := []TestCase{
 		{
 			Name:            "MinInt8",
-			FieldType:       types.FieldTypeInt8,
+			FieldType:       FT_I8,
 			Value:           int8(math.MinInt8),
 			IsErrorExpected: false,
 		},
 		{
 			Name:            "MaxInt8",
-			FieldType:       types.FieldTypeInt8,
+			FieldType:       FT_I8,
 			Value:           int8(math.MaxInt8),
 			IsErrorExpected: false,
 		},
 		{
 			Name:            "MinInt16",
-			FieldType:       types.FieldTypeInt16,
+			FieldType:       FT_I16,
 			Value:           int16(math.MinInt16),
 			IsErrorExpected: false,
 		},
 		{
 			Name:            "MaxInt16",
-			FieldType:       types.FieldTypeInt16,
+			FieldType:       FT_I16,
 			Value:           int16(math.MaxInt16),
 			IsErrorExpected: false,
 		},
 		{
 			Name:            "MinInt32",
-			FieldType:       types.FieldTypeInt32,
+			FieldType:       FT_I32,
 			Value:           int32(math.MinInt32),
 			IsErrorExpected: false,
 		},
 		{
 			Name:            "MaxInt32",
-			FieldType:       types.FieldTypeInt32,
+			FieldType:       FT_I32,
 			Value:           int32(math.MaxInt32),
 			IsErrorExpected: false,
 		},
 		{
 			Name:            "MinInt64",
-			FieldType:       types.FieldTypeInt64,
+			FieldType:       FT_I64,
 			Value:           int64(math.MinInt64),
 			IsErrorExpected: false,
 		},
 		{
 			Name:            "MaxInt64",
-			FieldType:       types.FieldTypeInt64,
+			FieldType:       FT_I64,
 			Value:           int64(math.MaxInt64),
 			IsErrorExpected: false,
 		},
 		{
 			Name:            "MaxUint8",
-			FieldType:       types.FieldTypeUint8,
+			FieldType:       FT_U8,
 			Value:           uint8(math.MaxUint8),
 			IsErrorExpected: false,
 		},
 		{
 			Name:            "MaxUint16",
-			FieldType:       types.FieldTypeUint16,
+			FieldType:       FT_U16,
 			Value:           uint16(math.MaxUint16),
 			IsErrorExpected: false,
 		},
 		{
 			Name:            "MaxUint32",
-			FieldType:       types.FieldTypeUint32,
+			FieldType:       FT_U32,
 			Value:           uint32(math.MaxUint32),
 			IsErrorExpected: false,
 		},
 		{
 			Name:            "MaxUint64",
-			FieldType:       types.FieldTypeUint64,
+			FieldType:       FT_U64,
 			Value:           uint64(math.MaxUint64),
 			IsErrorExpected: false,
 		},
 		{
 			Name:            "Zero",
-			FieldType:       types.FieldTypeUint8,
+			FieldType:       FT_U8,
 			Value:           uint8(0),
 			IsErrorExpected: false,
 		},
 		{
 			Name:            "Overflow for int32",
-			FieldType:       types.FieldTypeInt32,
+			FieldType:       FT_I32,
 			Value:           int64(math.MaxInt64),
 			IsErrorExpected: true,
 		},
 		{
 			Name:            "Overflow for int8",
-			FieldType:       types.FieldTypeInt8,
+			FieldType:       FT_I8,
 			Value:           int32(300),
 			IsErrorExpected: true,
 		},
 		{
 			Name:            "Overflow for negative int8",
-			FieldType:       types.FieldTypeInt8,
+			FieldType:       FT_I8,
 			Value:           int32(-300),
 			IsErrorExpected: true,
 		},
 		{
 			Name:            "In Range for negative int8",
-			FieldType:       types.FieldTypeInt8,
+			FieldType:       FT_I8,
 			Value:           int8(-120),
 			IsErrorExpected: false,
 		},
@@ -553,11 +553,11 @@ func TestFieldEncode(t *testing.T) {
 // TestFieldUtilityMethods verifies the correctness of various utility methods on the Field struct.
 func TestFieldUtilityMethods(t *testing.T) {
 	marshalTypeOf := reflect.TypeOf(MarshalerTypes{})
-	interfaceField, err := reflectStructField(marshalTypeOf.Field(2))
+	interfaceField, err := reflectStructField(marshalTypeOf.Field(2), TAG_NAME)
 	require.NoError(t, err)
 
 	allTypeOf := reflect.TypeOf(AllTypes{})
-	arrayField, err := reflectStructField(allTypeOf.Field(20))
+	arrayField, err := reflectStructField(allTypeOf.Field(20), TAG_NAME)
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -571,7 +571,7 @@ func TestFieldUtilityMethods(t *testing.T) {
 	}{
 		{
 			name:            "Valid and visible field",
-			field:           NewField(types.FieldTypeInt32).WithName("test"),
+			field:           NewField(FT_I32).WithName("test"),
 			expectedValid:   true,
 			expectedVisible: true,
 			expectedFixed:   true,
@@ -580,7 +580,7 @@ func TestFieldUtilityMethods(t *testing.T) {
 		},
 		{
 			name:            "Invalid field (no name)",
-			field:           NewField(types.FieldTypeInt32),
+			field:           NewField(FT_I32),
 			expectedValid:   false,
 			expectedVisible: true,
 			expectedFixed:   true,
@@ -589,7 +589,7 @@ func TestFieldUtilityMethods(t *testing.T) {
 		},
 		{
 			name:            "Invisible field",
-			field:           NewField(types.FieldTypeInt32).WithName("test").WithFlags(types.FieldFlagDeleted),
+			field:           NewField(FT_I32).WithName("test").WithFlags(types.FieldFlagDeleted),
 			expectedValid:   true,
 			expectedVisible: false,
 			expectedFixed:   true,
@@ -598,7 +598,7 @@ func TestFieldUtilityMethods(t *testing.T) {
 		},
 		{
 			name:            "Variable-size field",
-			field:           NewField(types.FieldTypeString).WithName("test"),
+			field:           NewField(FT_STRING).WithName("test"),
 			expectedValid:   true,
 			expectedVisible: true,
 			expectedFixed:   false,
@@ -634,7 +634,7 @@ func TestFieldUtilityMethods(t *testing.T) {
 		},
 		{
 			name:            "String",
-			field:           NewField(types.FieldTypeString).WithName("string"),
+			field:           NewField(FT_STRING).WithName("string"),
 			expectedValid:   true,
 			expectedVisible: true,
 			expectedFixed:   false,
@@ -643,7 +643,7 @@ func TestFieldUtilityMethods(t *testing.T) {
 		},
 		{
 			name:            "Bytes",
-			field:           NewField(types.FieldTypeBytes).WithName("bytes"),
+			field:           NewField(FT_BYTES).WithName("bytes"),
 			expectedValid:   true,
 			expectedVisible: true,
 			expectedFixed:   false,
@@ -652,7 +652,7 @@ func TestFieldUtilityMethods(t *testing.T) {
 		},
 		{
 			name:            "FixedBytes",
-			field:           NewField(types.FieldTypeBytes).WithName("fixed_bytes").WithFixed(10),
+			field:           NewField(FT_BYTES).WithName("fixed_bytes").WithFixed(10),
 			expectedValid:   true,
 			expectedVisible: true,
 			expectedFixed:   true,
@@ -679,7 +679,7 @@ func TestFieldUtilityMethods(t *testing.T) {
 		},
 		{
 			name:            "Float64",
-			field:           NewField(types.FieldTypeFloat64).WithName("float64"),
+			field:           NewField(FT_F64).WithName("float64"),
 			expectedValid:   true,
 			expectedVisible: true,
 			expectedFixed:   true,
@@ -702,18 +702,18 @@ func TestFieldUtilityMethods(t *testing.T) {
 // TestFieldCodecSpecialCases verifies that Field correctly handles special codec cases.
 func TestFieldCodecSpecialCases(t *testing.T) {
 	marshalTypeOf := reflect.TypeOf(MarshalerTypes{})
-	byterField, err := reflectStructField(marshalTypeOf.Field(2))
+	byterField, err := reflectStructField(marshalTypeOf.Field(2), TAG_NAME)
 	require.NoError(t, err)
 
-	marshalField, err := reflectStructField(marshalTypeOf.Field(1))
+	marshalField, err := reflectStructField(marshalTypeOf.Field(1), TAG_NAME)
 	require.NoError(t, err)
 
 	allTypeOf := reflect.TypeOf(AllTypes{})
-	arrayField, err := reflectStructField(allTypeOf.Field(20))
+	arrayField, err := reflectStructField(allTypeOf.Field(20), TAG_NAME)
 	require.NoError(t, err)
 
 	personTypeOf := reflect.TypeOf(Person{})
-	stringerField, err := reflectStructField(personTypeOf.Field(0))
+	stringerField, err := reflectStructField(personTypeOf.Field(0), TAG_NAME)
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -721,12 +721,12 @@ func TestFieldCodecSpecialCases(t *testing.T) {
 		field    Field
 		expected OpCode
 	}{
-		{"FixedString", NewField(types.FieldTypeString).WithFixed(10), OpCodeFixedString},
-		{"Enum", NewField(types.FieldTypeUint16).WithFlags(types.FieldFlagEnum), OpCodeEnum},
-		{"TextMarshaler", marshalField, OpCodeMarshalText},
-		{"Stringer", stringerField, OpCodeStringer},
-		{"BinaryMarshaler", byterField, OpCodeMarshalBinary},
-		{"FixedArray", arrayField, OpCodeFixedArray},
+		{"FixedString", NewField(FT_STRING).WithFixed(10), OC_FIXSTRING},
+		{"Enum", NewField(FT_U16).WithFlags(types.FieldFlagEnum), OC_ENUM},
+		{"TextMarshaler", marshalField, OC_MSHTXT},
+		{"Stringer", stringerField, OC_MSHSTR},
+		{"BinaryMarshaler", byterField, OC_MSHBIN},
+		{"FixedArray", arrayField, OC_FIXARRAY},
 	}
 
 	for _, tt := range tests {
@@ -749,10 +749,10 @@ func TestFieldStructValueComplexCases(t *testing.T) {
 	}
 
 	valueTypeOf := reflect.TypeOf(value)
-	intField, err := reflectStructField(valueTypeOf.Field(0))
+	intField, err := reflectStructField(valueTypeOf.Field(0), TAG_NAME)
 	require.NoError(t, err)
 
-	stringField, err := reflectStructField(valueTypeOf.Field(1))
+	stringField, err := reflectStructField(valueTypeOf.Field(1), TAG_NAME)
 	require.NoError(t, err)
 
 	rval := reflect.ValueOf(value)
@@ -787,7 +787,7 @@ func TestFieldStructValueComplexCases(t *testing.T) {
 
 // TestFieldExported verifies that ExportedField correctly represents and handles Field properties, and can retrieve values from structs.
 func TestFieldExported(t *testing.T) {
-	originalField := NewField(types.FieldTypeUint16).
+	originalField := NewField(FT_U16).
 		WithName("test_field").
 		WithFlags(types.FieldFlagIndexed | types.FieldFlagEnum).
 		WithIndex(types.IndexTypeHash)

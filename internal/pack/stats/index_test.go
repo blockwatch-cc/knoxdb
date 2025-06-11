@@ -204,7 +204,7 @@ func TestIndexAddSingle(t *testing.T) {
 
 	// snode api
 	assert.Equal(t, uint32(0), snode.Key(), "snode key")
-	assert.LessOrEqual(t, idx.build.Len(), len(snode.Bytes()), "snode bytes")
+	assert.LessOrEqual(t, idx.wr.Len(), len(snode.Bytes()), "snode bytes")
 	assert.False(t, snode.IsEmpty(), "snode empty")
 	assert.True(t, snode.IsWritable(), "snode writable")
 	assert.Equal(t, 1, snode.NPacks(), "snode num data packs")
@@ -300,7 +300,7 @@ func TestIndexUpdate(t *testing.T) {
 
 	// snode api
 	assert.Equal(t, uint32(0), snode.Key(), "snode key")
-	assert.LessOrEqual(t, idx.build.Len(), len(snode.Bytes()), "snode bytes")
+	assert.LessOrEqual(t, idx.wr.Len(), len(snode.Bytes()), "snode bytes")
 	assert.False(t, snode.IsEmpty(), "snode empty")
 	assert.True(t, snode.IsWritable(), "snode writable")
 	assert.Equal(t, 1, snode.NPacks(), "snode num data packs")

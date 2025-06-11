@@ -71,7 +71,7 @@ func (n INode) Get(view *schema.View, i int) (any, bool) {
 	return val, ok
 }
 
-func (n *INode) Update(view *schema.View, build *schema.Builder, left, right Node) bool {
+func (n *INode) Update(view *schema.View, wr *schema.Writer, left, right Node) bool {
 	// update min/max/sum statistics from left and right children
 	// note right may be nil
 	if right == nil {
@@ -86,11 +86,11 @@ func (n *INode) Update(view *schema.View, build *schema.Builder, left, right Nod
 
 	// allocate meta buffer when nil
 	if n.meta == nil {
-		n.meta = make([]byte, build.Len())
+		n.meta = make([]byte, wr.Len())
 	}
 
 	// merge left and right data when changed
-	build.Reset()
+	wr.Reset()
 
 	for i, f := range view.Schema().Exported() {
 		typ := f.Type.BlockType()
@@ -102,7 +102,7 @@ func (n *INode) Update(view *schema.View, build *schema.Builder, left, right Nod
 			// handle data pack key
 			// min key is the left subtree's min key
 			n.dirty = n.dirty || !typ.EQ(lval, vval)
-			build.Write(i, lval)
+			wr.Write(i, lval)
 
 		case STATS_ROW_SCHEMA, STATS_ROW_NVALS, STATS_ROW_SIZE:
 			// 1: sum data pack count (in u64 field)
@@ -110,7 +110,7 @@ func (n *INode) Update(view *schema.View, build *schema.Builder, left, right Nod
 			// 3: sum of disk sizes
 			val := typ.Add(lval, rval)
 			n.dirty = n.dirty || !typ.EQ(val, vval)
-			build.Write(i, val)
+			wr.Write(i, val)
 
 		default:
 			// data column statistics
@@ -118,12 +118,12 @@ func (n *INode) Update(view *schema.View, build *schema.Builder, left, right Nod
 				// min fields
 				minVal := typ.Min(lval, rval)
 				n.dirty = n.dirty || !typ.EQ(minVal, vval)
-				build.Write(i, minVal)
+				wr.Write(i, minVal)
 			} else {
 				// max fields
 				maxVal := typ.Max(lval, rval)
 				n.dirty = n.dirty || !typ.EQ(maxVal, vval)
-				build.Write(i, maxVal)
+				wr.Write(i, maxVal)
 			}
 		}
 	}
@@ -133,9 +133,9 @@ func (n *INode) Update(view *schema.View, build *schema.Builder, left, right Nod
 
 	// use new wire encoded buffer
 	if n.dirty {
-		n.meta = build.Bytes()
+		n.meta = wr.Bytes()
 	}
-	build.Reset()
+	wr.Reset()
 
 	return n.dirty
 }

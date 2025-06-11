@@ -382,15 +382,15 @@ func (n *SNode) Query(it *Iterator) error {
 	})
 }
 
-func (n *SNode) BuildMetaStats(view *schema.View, build *schema.Builder) bool {
+func (n *SNode) BuildMetaStats(view *schema.View, wr *schema.Writer) bool {
 	// allocate meta buffer when nil
 	if n.meta == nil {
-		n.meta = make([]byte, build.Len())
+		n.meta = make([]byte, wr.Len())
 	}
 
 	// use current statistics as baseline
 	view.Reset(n.meta)
-	build.Reset()
+	wr.Reset()
 
 	// aggregate across all statistics columns
 	var dirty bool
@@ -435,7 +435,7 @@ func (n *SNode) BuildMetaStats(view *schema.View, build *schema.Builder) bool {
 		dirty = dirty || !b.Type().EQ(curr, val)
 
 		// write val to builder (even if not changed)
-		build.Write(i, val)
+		wr.Write(i, val)
 	}
 
 	// reset view to release buffer reference
@@ -443,9 +443,9 @@ func (n *SNode) BuildMetaStats(view *schema.View, build *schema.Builder) bool {
 
 	// on change, get new wire encoded data from builder
 	if dirty {
-		n.meta = build.Bytes()
+		n.meta = wr.Bytes()
 	}
-	build.Reset()
+	wr.Reset()
 
 	return dirty
 }
