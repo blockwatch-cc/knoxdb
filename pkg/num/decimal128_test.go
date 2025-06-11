@@ -487,7 +487,7 @@ func TestDecimal128Quantize(t *testing.T) {
 		}
 		switch {
 		case test.isover:
-			if got, want := res.Scale(), MaxDecimal128Precision; got != want {
+			if got, want := res.Scale(), uint8(MaxDecimal128Precision); got != want {
 				t.Errorf("%s: scale error exp %d, got %d", test.name, want, got)
 			}
 		case test.isunder:

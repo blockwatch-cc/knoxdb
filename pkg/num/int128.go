@@ -260,6 +260,29 @@ func (x Int128) String() string {
 	}
 }
 
+func (x Int128) Append(buf []byte) []byte {
+	if x.IsZero() {
+		return append(buf, '0')
+	}
+	scratch := []byte(i128str)
+	if x.Sign() < 0 {
+		buf = append(buf, '-')
+		x = x.Neg()
+	}
+	for i := len(scratch); ; i -= 19 {
+		q, r := x.uQuoRem64(1e19) // largest power of 10 that fits in a uint64
+		var n int
+		for ; r != 0; r /= 10 {
+			n++
+			scratch[i-n] += byte(r % 10)
+		}
+		if q.IsZero() {
+			return append(buf, scratch[i-n:]...)
+		}
+		x = q
+	}
+}
+
 func ParseInt128(s string) (Int128, error) {
 	if len(s) == 0 {
 		return ZeroInt128, ErrInvalidNumber

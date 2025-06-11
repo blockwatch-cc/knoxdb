@@ -108,6 +108,15 @@ var dateOnly = StringList{
 	"2006",
 }
 
+func ParseTimeFormat(s string) (string, error) {
+	for _, f := range TimeFormats {
+		if _, err := time.Parse(f, s); err == nil {
+			return f, nil
+		}
+	}
+	return "", fmt.Errorf("unknown time format %q", s)
+}
+
 func (f Time) Time() time.Time {
 	return f.tm
 }
@@ -136,6 +145,14 @@ func (t *Time) SetFormat(f TimeFormat) *Time {
 
 func NewTimeFrom(ts int64, res time.Duration) Time {
 	return Time{tm: time.Unix(0, ts*int64(res))}
+}
+
+func MustParseTime(v string) Time {
+	tm, err := ParseTime(v)
+	if err != nil {
+		panic(err)
+	}
+	return tm
 }
 
 func ParseTime(value string) (Time, error) {

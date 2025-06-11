@@ -1,143 +1,121 @@
-Go CSV Encoder
-==============
+# Go CSV Encoder
 
-A [Go](http://golang.org/) package for encoding and decoding CSV-structured textfiles to/from arbitrary Go types.
+A [Go](http://golang.org/) package for encoding and decoding CSV-structured textfiles to/from Knox schema using static Go types or dynamic reflect struct types. The main purpose of this package is the import and export of CSV data into KnoxDB tables. As such it is based on KnoxDB schema definitions and handles only supported data types.
 
-Features
---------
+The code is separated into the following models
+- `Sniffer` detects CSV features and data types, can produce dynamic type schema
+- `Reader` reads CSV streams, splits lines and fields
+- `Decoder` decodes CSV records into static/dynamic Go structs
+- `Encoder` writes CSV streams from static/dynamic Go structs
 
-- [RFC 4180](https://tools.ietf.org/rfc/rfc4180.txt) compliant CSV reader and writer
-- MarshalCSV/UnmarshalCSV interfaces
-- mapping to strings, integers, floats and boolean values
-- bulk or stream processing
-- custom separator and comment characters
+An important feature of encoders and decoders is that they work with dynamic Go types (i.e. structs that do not have a static struct definition in a Go program). This allows to work with arbitrary CVS files and user defined schemas. Internally the decoder uses `reflect.MakeStruct` and `reflect.New` to produce a dynamic Go type. One limitation of this type is that it does not have a type name (although fields have correct names) and it cannot be used as Go generic (it does not exist at compile time).
+
+## Features
+
+- [RFC 4180](https://tools.ietf.org/rfc/rfc4180.txt) compliant and robust to broken quotes
+- support for all KnoxDB data types (strings, integers, floats, boolean, decimals, time)
+- supports bulk and stream processing
+- custom separator, comment, eol characters
 - optional whitespace trimming for headers and string values
-- `any` support for reading unknown CSV fields
+- detects timestamp format, allows custom timestamp formats
 
-Examples
---------
+Supported data types
+- int (8, 16, 32, 64, 128, 256 bit and bigint) signd and unsigned
+- float (32, 64) bit
+- decimal (32, 64, 128, 256 bit)
+- strings
+- byte blobs and fixed length byte arrays (hex encoded, optionally 0x prefixed)
 
-### Reading a well defined CSV file
+Sniffer detects
+- separator character
+- number of fields
+- time format for timestamp fields
+- if a header is present
+- if text fields contain trimmable whitespace
+- if the file uses quotes and escaped quotes
+- if null fields are present
+- data type and names of fields
 
-This example assumes your CSV file contains a header who's values match the struct tags defined on the Go type FrameInfo. CSV fields that are undefined in the type are ignored.
+
+## Limitations
+
+- no support for Go types `int`, `uint`, `complex`
+- no custom marshaler interfaces (`BinaryMarshaler`, `TextMarshaler`)
+
+## Examples
+
+### Detecting CSV schema
+
+Use Sniffer to detect structure and field types of a CVS file. Sniffer analyzes text lines, determines types and type features, and creates a KnoxDB compatible schema.
 
 ```go
 import "blockwatch.cc/knoxdb/pkg/csv"
 
-type FrameInfo struct {
-	ActiveImageHeight  int      `csv:"Active Image Height"`
-	ActiveImageLeft    int      `csv:"Active Image Left"`
-	ActiveImageTop     int      `csv:"Active Image Top"`
-	ActiveImageWidth   int      `csv:"Active Image Width"`
-	CameraClipName     string   `csv:"Camera Clip Name"`
-	CameraRoll         float32  `csv:"Camera Roll"`
-	CameraTilt         float32  `csv:"Camera Tilt"`
-	MasterTC           string   `csv:"Master TC"`
-	MasterTCFrameCount int      `csv:"Master TC Frame Count"`
-	SensorFPS          float32  `csv:"Sensor FPS"`
-}
-
-type FrameSequence []*FrameInfo
-
-func ReadFile(path string) (FrameSequence, error) {
-	b, err := ioutil.ReadFile(path)
+func DetectFile(path string) error {
+	f, err := os.Open(path)
 	if err != nil {
-		return nil, err
-    	}
-	seq := make(FrameSequence, 0)
-	if err := csv.Unmarshal(b, &seq); err != nil {
-		return nil, err
+		return err
 	}
-	return seq, nil
+	defer f.Close()
+
+	// sniff 100 random lines (including header, leading comments, first line)
+	sniff := csv.NewSniffer(f, 100)
+	if err := sniff.Sniff(); err != nil {
+		return err
+	}
+
+	// obtain sniff result and KnoxDB schema
+	res := sniff.Result()
+	s := sniff.Schema()
+
+	// rewind f and use sniffer to create and configure a decoder
+	f.Seek(0, 0)
+	dec := sniff.NewDecoder(f)
+
+	// use decoder ...
 }
+
 ```
 
-### Fail when encountering unknown CSV fields
+### Reading with a pre-defined static type
+
+Although uncommon for KnoxDB use cases it is possible to decode CSV with a static Go type through `GenericDecoder`. However you need to define a matching pair of logical and physical types. The CSV decoder uses native (physical) storage layout, hence returned values are of the physical type. The logical type is required to define features for custom KnoxDB types like time scale and decimal scale.
+
 ```go
-func ReadFileUnknown(path string) (FrameSequence, error) {
+import "blockwatch.cc/knoxdb/pkg/csv"
+
+type LogType struct {
+	Id     int64         `knox:"id,pk"`
+	Time   time.Time     `knox:"time,scale=ms"`
+	Amount num.Decimal64 `knox:"amount,scale=5"`
+}
+
+type PhyType struct {
+	Id     int64 `csv:"id"`
+	Time   int64 `csv:"time"`
+	Amount int64 `csv:"amount"`
+}
+
+func ReadFile(path string) ([]*PhyType, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
-    	defer f.Close()
-	dec := csv.NewDecoder(f).SkipUnknown(false)
-	c := make(FrameSequence, 0)
-	if err := dec.Decode(&c); err != nil {
-		return nil, err
-    	}
-	return c, nil
-}
-```
+	defer f.Close()
 
-### Parsing an unknown CSV file into a slice of maps
-```go
-type GenericRecord struct {
-	Record map[string]string `csv:,any`
-}
-
-type GenericCSV []GenericRecord
-
-func ReadFileIntoMap(path string) (GenericCSV, error) {
-	f, err := os.Open(path)
-	if err != nil {
-	    return nil, err
-    	}
-    	defer f.Close()
-	dec := csv.NewDecoder(f)
-	c := make(GenericCSV, 0)
-	if err := dec.Decode(&c); err != nil {
-	    return nil, err
-    	}
-	return c, nil
-}
-```
-
-### Stream-process CSV input
-```go
-func ReadStream(r io.Reader) error {
-	dec := csv.NewDecoder(r)
-
-	// read and decode the file header
-	line, err := dec.ReadLine()
-	if err != nil {
-		return err
-	}
-	if err = dec.DecodeHeader(line); err != nil {
-		return err
-	}
-
-	// loop until EOF (i.e. dec.ReadLine returns an empty line and nil error);
-	// any other error during read will result in a non-nil error
+    dec := csv.NewGenericDecoder[LogType, PhyType](f)
+	res := make([]*PhyType, 0)
 	for {
-		// read the next line from stream
-		line, err = dec.ReadLine()
-
-		// check for read errors other than EOF
+		val, err := dec.Decode()
 		if err != nil {
+			if err == io.EOF {
+				break
+			}
 			return err
 		}
-
-		// check for EOF condition
-		if line == "" {
-			break
-		}
-
-		// decode the record
-		v := &FrameInfo{}
-		if err = dec.DecodeRecord(v, line); err != nil {
-			return err
-		}
-
-		// process the record here
-		Process(v)
+		res = append(res, val)
 	}
-	return nil
+	return res, nil
 }
 ```
-
-
-License
--------
-
-Originally (c) Alexander Eichhorn, available under the [Apache License, Version 2.0](http://www.apache.org/licenses/LICENSE-2.0.html).
 

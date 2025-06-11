@@ -39,14 +39,20 @@ func (a Accuracy) String() string {
 // var decimalRegexp = regexp.MustCompile("^[+-]?([0-9]*[.])?[0-9]+$")
 
 const (
-	MinDecimal32Precision  uint8 = 1
-	MaxDecimal32Precision  uint8 = 9
-	MinDecimal64Precision  uint8 = 10
-	MaxDecimal64Precision  uint8 = 18
-	MinDecimal128Precision uint8 = 19
-	MaxDecimal128Precision uint8 = 38
-	MinDecimal256Precision uint8 = 39
-	MaxDecimal256Precision uint8 = 76
+	MinDecimal32Precision  = 1
+	MaxDecimal32Precision  = 9
+	MinDecimal64Precision  = 10
+	MaxDecimal64Precision  = 18
+	MinDecimal128Precision = 19
+	MaxDecimal128Precision = 38
+	MinDecimal256Precision = 39
+	MaxDecimal256Precision = 76
+	MaxInt8Precision       = 2  // one char less to be safe
+	MaxInt16Precision      = 4  // one char less to be safe
+	MaxInt32Precision      = 9  // one char less to be safe
+	MaxInt64Precision      = 18 // one char less to be safe
+	MaxInt128Precision     = 38 // one char less to be safe
+	MaxInt256Precision     = 77 // one char less to be safe
 )
 
 const zeros = "000000000000000000000000000000000000000000000000000000000000000000000000000000"
