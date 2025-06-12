@@ -108,9 +108,9 @@ var fieldTests = []fieldTest{
 func TestFieldDetect(t *testing.T) {
 	for _, c := range fieldTests {
 		t.Run(c.name, func(t *testing.T) {
-			f := newField([]byte(c.src[0]))
+			f := newField([]byte(c.src[0]), "")
 			for _, v := range c.src[1:] {
-				f.update([]byte(v))
+				f.update([]byte(v), "")
 			}
 			require.Equal(t, c.len, f.len)
 			require.Equal(t, c.flag, f.flag, "want=%s have=%s", c.flag, f.flag)
@@ -265,6 +265,19 @@ var sniffTests = []sniffTest{
 			FT_STRING, FT_STRING, FT_STRING, FT_STRING, FT_STRING,
 		},
 		[]string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y"},
+	},
+	{
+		"custome-time",
+		"text,2024-01-01 00:00:00 UTC",
+		SnifferResult{
+			NumFields:  2,
+			Sep:        ',',
+			HasHeader:  false,
+			HasTime:    true,
+			TimeFormat: "2006-01-02 15:04:05 UTC",
+		},
+		[]types.FieldType{FT_STRING, FT_TIME},
+		[]string{"f_0", "f_1"},
 	},
 }
 
