@@ -4,7 +4,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/encode"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/internal/xroar"
 )
 
 // export definitions to use by external tooling
@@ -15,6 +14,7 @@ type (
 	ContextInt64   = encode.Context[int64]
 	ContextFloat64 = encode.Context[float64]
 	ContextString  = encode.StringContext
+	ContextBitmap  = encode.BitmapContext
 
 	ContainerInt64   = encode.NumberContainer[int64]
 	ContainerFloat64 = encode.NumberContainer[float64]
@@ -66,8 +66,8 @@ var (
 	NewString     = encode.NewString
 	EncodeString  = encode.EncodeString
 
-	NewBitset      = bitset.New
-	NewBitmap      = encode.NewBitmap
-	EncodeBitmap   = encode.EncodeBitmap
-	NewXroarBitmap = xroar.New
+	NewBitset     = bitset.New
+	NewBitmap     = encode.NewBitmap
+	AnalyzeBitmap = encode.AnalyzeBitmap
+	EncodeBitmap  = encode.EncodeBitmap
 )
