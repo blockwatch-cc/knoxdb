@@ -107,7 +107,11 @@ func (s *Sniffer) Schema() *schema.Schema {
 	for i, f := range s.fields {
 		b.AddField(s.head[i], f.Type())
 		if f.is(fFixed) {
-			b.SetFieldOpts(schema.Fixed(uint16(f.len)))
+			l := uint16(f.len)
+			if f.is(fHex) {
+				l /= 2
+			}
+			b.SetFieldOpts(schema.Fixed(l))
 		}
 	}
 	return b.Finalize().Schema()
