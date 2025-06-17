@@ -279,6 +279,19 @@ var sniffTests = []sniffTest{
 		[]types.FieldType{FT_STRING, FT_TIME},
 		[]string{"f_0", "f_1"},
 	},
+	{
+		"sui",
+		"object_id,type_,checkpoint,epoch,timestamp_ms,timestamp,owner_type,owner_address,object_status,previous_transaction,coin_balance,coin_type\n0x17779c308d62c710e11d1fa7001fed3f35a08a7dd513f70058e6038ed89fdcfe,0x2::coin::Coin<0x2::sui::SUI>,22438697,264,1704146400476,2024-01-01 22:00:00.476 UTC,AddressOwner,0xb9ae47efc627fc4ba4b873bc57f07a473ec78a527d311074b740c010d1f26387,Mutated,JEDDEA5j6ioZmHaST67XFWhrYnboXhQmSjCvc57dF1q8,52123668497,0x2::sui::SUI",
+		SnifferResult{
+			NumFields:  12,
+			Sep:        ',',
+			HasHeader:  true,
+			HasTime:    true,
+			TimeFormat: "2006-01-02 15:04:05 UTC",
+		},
+		[]types.FieldType{FT_BYTES, FT_STRING, FT_U32, FT_U16, FT_U64, FT_TIME, FT_STRING, FT_BYTES, FT_STRING, FT_STRING, FT_U64, FT_STRING},
+		[]string{"object_id", "type_", "checkpoint", "epoch", "timestamp_ms", "timestamp", "owner_type", "owner_address", "object_status", "previous_transaction", "coin_balance", "coin_type"},
+	},
 }
 
 func TestSniffer(t *testing.T) {

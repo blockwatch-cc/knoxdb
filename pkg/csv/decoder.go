@@ -399,7 +399,7 @@ func (d *Decoder) decode(base unsafe.Pointer, line []string) error {
 			if f.Fixed > 0 {
 				if len(buf) != int(f.Fixed)*2 {
 					return &DecodeError{d.r.lineNo, i, f.Name,
-						fmt.Errorf("binary array [%d]byte overflow", f.Fixed)}
+						fmt.Errorf("binary array [%d]byte mismatched hex len %d", f.Fixed, len(buf))}
 				}
 				_, err := hex.Decode(unsafe.Slice((*byte)(ptr), f.Fixed), buf)
 				if err != nil {

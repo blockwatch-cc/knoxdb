@@ -369,8 +369,7 @@ func (f field) not(flag fieldFlag) bool {
 }
 
 func (f field) isHeader() bool {
-	return f.not(fEmpty) && f.not(fNum) && f.not(fNull) &&
-		(f.is(fQuoted) || f.is(fOther) || f.is(fHex) || f.is(fDecimal) || f.is(fBool))
+	return f.not(fEmpty) && f.not(fNum) && f.not(fNull)
 }
 
 func (f field) isFloat() bool {
@@ -530,6 +529,8 @@ func (f *field) update(buf []byte, tfm string) {
 				f.flag |= fDecimal
 			} else if (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') {
 				f.flag |= fHex
+			} else {
+				f.flag |= fOther
 			}
 		}
 		buf = buf[1:]
@@ -722,6 +723,7 @@ func (s *Sniffer) sampleRandom(rs io.ReadSeeker) error {
 	if size == 0 {
 		return nil
 	}
+	rs.Seek(0, io.SeekStart)
 
 	rng := rand.New(rand.NewSource(42)) // Use a deterministic seed for reproducibility
 
