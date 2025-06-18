@@ -97,6 +97,14 @@ func (s *Sniffer) WithTimeFormat(f string) *Sniffer {
 	return s
 }
 
+func (s *Sniffer) WithBufferSize(sz int) *Sniffer {
+	if sz <= 0 {
+		return s
+	}
+	s.buf = make([]byte, 0, sz)
+	return s
+}
+
 func (s *Sniffer) Result() SnifferResult {
 	return s.res
 }
@@ -123,7 +131,8 @@ func (s *Sniffer) NewDecoder(r io.Reader) *Decoder {
 		WithHeader(s.res.HasHeader).
 		WithTrim(s.res.NeedsTrim).
 		WithTimeFormat(s.res.TimeFormat).
-		WithStrictSchema(true)
+		WithStrictSchema(true).
+		WithBuffer(s.buf)
 }
 
 func (s *Sniffer) Sniff() error {
