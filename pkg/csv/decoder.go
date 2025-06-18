@@ -392,21 +392,21 @@ func (d *Decoder) decode(base unsafe.Pointer, line []string) error {
 
 		case types.FieldTypeBytes:
 			// decode hex to binary
-			buf := util.UnsafeGetBytes(line[i])
-			if strings.HasPrefix(line[i], "0x") {
-				buf = buf[2:]
+			s := line[i]
+			if strings.HasPrefix(s, "0x") {
+				s = s[2:]
 			}
 			if f.Fixed > 0 {
-				if len(buf) != int(f.Fixed)*2 {
+				if len(s) != int(f.Fixed)*2 {
 					return &DecodeError{d.r.lineNo, i, f.Name,
-						fmt.Errorf("binary array [%d]byte mismatched hex len %d", f.Fixed, len(buf))}
+						fmt.Errorf("binary array [%d]byte mismatched hex len %d", f.Fixed, len(s))}
 				}
-				_, err := hex.Decode(unsafe.Slice((*byte)(ptr), f.Fixed), buf)
+				_, err := hex.Decode(unsafe.Slice((*byte)(ptr), f.Fixed), util.UnsafeGetBytes(s))
 				if err != nil {
 					return &DecodeError{d.r.lineNo, i, f.Name, err}
 				}
 			} else {
-				res, err := hex.DecodeString(line[i])
+				res, err := hex.DecodeString(s)
 				if err != nil {
 					return &DecodeError{d.r.lineNo, i, f.Name, err}
 				}
