@@ -10,7 +10,6 @@ import (
 	"math/big"
 	"time"
 
-	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
@@ -112,14 +111,14 @@ func (b *Writer) Write(i int, val any) error {
 
 	var err error
 	switch field.typ {
-	case types.FieldTypeUint64:
+	case FT_U64:
 		if u64, ok := val.(uint64); ok {
 			b.layout.PutUint64(b.buf[x:y], u64)
 		} else {
 			err = ErrInvalidValueType
 		}
 
-	case types.FieldTypeString, types.FieldTypeBytes:
+	case FT_STRING, FT_BYTES:
 		var buf []byte
 		switch v := val.(type) {
 		case []byte:
@@ -141,7 +140,7 @@ func (b *Writer) Write(i int, val any) error {
 			b.dyn[i] = bytes.Clone(buf)
 		}
 
-	case types.FieldTypeDatetime:
+	case FT_TIMESTAMP:
 		switch tm := val.(type) {
 		case time.Time:
 			b.layout.PutUint64(b.buf[x:y], uint64(TimeScale(field.scale).ToUnix(tm)))
@@ -151,28 +150,28 @@ func (b *Writer) Write(i int, val any) error {
 			err = ErrInvalidValueType
 		}
 
-	case types.FieldTypeInt64:
+	case FT_I64:
 		if i64, ok := val.(int64); ok {
 			b.layout.PutUint64(b.buf[x:y], uint64(i64))
 		} else {
 			err = ErrInvalidValueType
 		}
 
-	case types.FieldTypeFloat64:
+	case FT_F64:
 		if f64, ok := val.(float64); ok {
 			b.layout.PutUint64(b.buf[x:y], math.Float64bits(f64))
 		} else {
 			err = ErrInvalidValueType
 		}
 
-	case types.FieldTypeFloat32:
+	case FT_F32:
 		if f32, ok := val.(float32); ok {
 			b.layout.PutUint32(b.buf[x:y], math.Float32bits(f32))
 		} else {
 			err = ErrInvalidValueType
 		}
 
-	case types.FieldTypeBoolean:
+	case FT_BOOL:
 		if v, ok := val.(bool); ok {
 			if v {
 				b.buf[x] = 1
@@ -183,63 +182,63 @@ func (b *Writer) Write(i int, val any) error {
 			err = ErrInvalidValueType
 		}
 
-	case types.FieldTypeInt32:
+	case FT_I32:
 		if i32, ok := val.(int32); ok {
 			b.layout.PutUint32(b.buf[x:y], uint32(i32))
 		} else {
 			err = ErrInvalidValueType
 		}
 
-	case types.FieldTypeInt16:
+	case FT_I16:
 		if i16, ok := val.(int16); ok {
 			b.layout.PutUint16(b.buf[x:y], uint16(i16))
 		} else {
 			err = ErrInvalidValueType
 		}
 
-	case types.FieldTypeInt8:
+	case FT_I8:
 		if i8, ok := val.(int8); ok {
 			b.buf[x] = uint8(i8)
 		} else {
 			err = ErrInvalidValueType
 		}
 
-	case types.FieldTypeUint32:
+	case FT_U32:
 		if u32, ok := val.(uint32); ok {
 			b.layout.PutUint32(b.buf[x:y], u32)
 		} else {
 			err = ErrInvalidValueType
 		}
 
-	case types.FieldTypeUint16:
+	case FT_U16:
 		if u16, ok := val.(uint16); ok {
 			b.layout.PutUint16(b.buf[x:y], u16)
 		} else {
 			err = ErrInvalidValueType
 		}
 
-	case types.FieldTypeUint8:
+	case FT_U8:
 		if u8, ok := val.(uint8); ok {
 			b.buf[x] = u8
 		} else {
 			err = ErrInvalidValueType
 		}
 
-	case types.FieldTypeInt256:
+	case FT_I256:
 		if i256, ok := val.(num.Int256); ok {
 			copy(b.buf[x:y], i256.Bytes())
 		} else {
 			err = ErrInvalidValueType
 		}
 
-	case types.FieldTypeInt128:
+	case FT_I128:
 		if i128, ok := val.(num.Int128); ok {
 			copy(b.buf[x:y], i128.Bytes())
 		} else {
 			err = ErrInvalidValueType
 		}
 
-	case types.FieldTypeDecimal256:
+	case FT_D256:
 		switch v := val.(type) {
 		case num.Decimal256:
 			copy(b.buf[x:y], v.Int256().Bytes())
@@ -249,7 +248,7 @@ func (b *Writer) Write(i int, val any) error {
 			err = ErrInvalidValueType
 		}
 
-	case types.FieldTypeDecimal128:
+	case FT_D128:
 		switch v := val.(type) {
 		case num.Decimal128:
 			copy(b.buf[x:y], v.Int128().Bytes())
@@ -259,7 +258,7 @@ func (b *Writer) Write(i int, val any) error {
 			err = ErrInvalidValueType
 		}
 
-	case types.FieldTypeDecimal64:
+	case FT_D64:
 		switch v := val.(type) {
 		case num.Decimal64:
 			b.layout.PutUint64(b.buf[x:y], uint64(v.Int64()))
@@ -269,7 +268,7 @@ func (b *Writer) Write(i int, val any) error {
 			err = ErrInvalidValueType
 		}
 
-	case types.FieldTypeDecimal32:
+	case FT_D32:
 		switch v := val.(type) {
 		case num.Decimal32:
 			b.layout.PutUint32(b.buf[x:y], uint32(v.Int64()))
@@ -279,7 +278,7 @@ func (b *Writer) Write(i int, val any) error {
 			err = ErrInvalidValueType
 		}
 
-	case types.FieldTypeBigint:
+	case FT_BIGINT:
 		var buf []byte
 		switch v := val.(type) {
 		case num.Big:

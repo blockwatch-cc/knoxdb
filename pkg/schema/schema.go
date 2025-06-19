@@ -476,7 +476,7 @@ func (s *Schema) RenameField(id uint16, name string) (*Schema, error) {
 func (s *Schema) ResetPk(id uint16) (*Schema, bool) {
 	oldPkIdx := s.PkIndex()
 	newPkIdx, ok := s.FieldIndexById(id)
-	if !ok || s.fields[newPkIdx].typ != types.FieldTypeUint64 {
+	if !ok || s.fields[newPkIdx].typ != FT_U64 {
 		return s, false
 	}
 	// flip primary key flag

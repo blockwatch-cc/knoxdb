@@ -113,85 +113,93 @@ func (b *Builder) SetFieldOpts(opts ...BuilderOption) *Builder {
 }
 
 func (b *Builder) Int64(name string, opts ...BuilderOption) *Builder {
-	return b.addField(types.FieldTypeInt64, name, opts...)
+	return b.addField(FT_I64, name, opts...)
 }
 
 func (b *Builder) Int32(name string, opts ...BuilderOption) *Builder {
-	return b.addField(types.FieldTypeInt32, name, opts...)
+	return b.addField(FT_I32, name, opts...)
 }
 
 func (b *Builder) Int16(name string, opts ...BuilderOption) *Builder {
-	return b.addField(types.FieldTypeInt16, name, opts...)
+	return b.addField(FT_I16, name, opts...)
 }
 
 func (b *Builder) Int8(name string, opts ...BuilderOption) *Builder {
-	return b.addField(types.FieldTypeInt8, name, opts...)
+	return b.addField(FT_I8, name, opts...)
 }
 
 func (b *Builder) Uint64(name string, opts ...BuilderOption) *Builder {
-	return b.addField(types.FieldTypeUint64, name, opts...)
+	return b.addField(FT_U64, name, opts...)
 }
 
 func (b *Builder) Uint32(name string, opts ...BuilderOption) *Builder {
-	return b.addField(types.FieldTypeUint32, name, opts...)
+	return b.addField(FT_U32, name, opts...)
 }
 
 func (b *Builder) Uint16(name string, opts ...BuilderOption) *Builder {
-	return b.addField(types.FieldTypeUint16, name, opts...)
+	return b.addField(FT_U16, name, opts...)
 }
 
 func (b *Builder) Uint8(name string, opts ...BuilderOption) *Builder {
-	return b.addField(types.FieldTypeUint8, name, opts...)
+	return b.addField(FT_U8, name, opts...)
 }
 
-func (b *Builder) Datetime(name string, opts ...BuilderOption) *Builder {
-	return b.addField(types.FieldTypeDatetime, name, opts...)
+func (b *Builder) Timestamp(name string, opts ...BuilderOption) *Builder {
+	return b.addField(FT_TIMESTAMP, name, opts...)
 }
 
 func (b *Builder) Float64(name string, opts ...BuilderOption) *Builder {
-	return b.addField(types.FieldTypeFloat64, name, opts...)
+	return b.addField(FT_F64, name, opts...)
 }
 
 func (b *Builder) Float32(name string, opts ...BuilderOption) *Builder {
-	return b.addField(types.FieldTypeFloat32, name, opts...)
+	return b.addField(FT_F32, name, opts...)
 }
 
 func (b *Builder) Bool(name string, opts ...BuilderOption) *Builder {
-	return b.addField(types.FieldTypeBoolean, name, opts...)
+	return b.addField(FT_BOOL, name, opts...)
 }
 
 func (b *Builder) String(name string, opts ...BuilderOption) *Builder {
-	return b.addField(types.FieldTypeString, name, opts...)
+	return b.addField(FT_STRING, name, opts...)
 }
 
 func (b *Builder) Bytes(name string, opts ...BuilderOption) *Builder {
-	return b.addField(types.FieldTypeBytes, name, opts...)
+	return b.addField(FT_BYTES, name, opts...)
 }
 
 func (b *Builder) Int128(name string, opts ...BuilderOption) *Builder {
-	return b.addField(types.FieldTypeInt128, name, opts...)
+	return b.addField(FT_I128, name, opts...)
 }
 
 func (b *Builder) Int256(name string, opts ...BuilderOption) *Builder {
-	return b.addField(types.FieldTypeInt256, name, opts...)
+	return b.addField(FT_I256, name, opts...)
 }
 
 func (b *Builder) Decimal32(name string, opts ...BuilderOption) *Builder {
-	return b.addField(types.FieldTypeDecimal32, name, opts...)
+	return b.addField(FT_D32, name, opts...)
 }
 
 func (b *Builder) Decimal64(name string, opts ...BuilderOption) *Builder {
-	return b.addField(types.FieldTypeDecimal64, name, opts...)
+	return b.addField(FT_D64, name, opts...)
 }
 
 func (b *Builder) Decimal128(name string, opts ...BuilderOption) *Builder {
-	return b.addField(types.FieldTypeDecimal128, name, opts...)
+	return b.addField(FT_D128, name, opts...)
 }
 
 func (b *Builder) Decimal256(name string, opts ...BuilderOption) *Builder {
-	return b.addField(types.FieldTypeDecimal256, name, opts...)
+	return b.addField(FT_D256, name, opts...)
 }
 
 func (b *Builder) Bigint(name string, opts ...BuilderOption) *Builder {
-	return b.addField(types.FieldTypeBigint, name, opts...)
+	return b.addField(FT_BIGINT, name, opts...)
+}
+
+func (b *Builder) Date(name string, opts ...BuilderOption) *Builder {
+	return b.addField(FT_DATE, name, opts...)
+}
+
+func (b *Builder) Time(name string, opts ...BuilderOption) *Builder {
+	return b.addField(FT_TIME, name, opts...)
 }

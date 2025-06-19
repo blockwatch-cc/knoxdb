@@ -147,39 +147,39 @@ func (s *Schema) NativeStructType() reflect.Type {
 		}
 		var rtyp reflect.Type
 		switch f.typ {
-		case types.FieldTypeDatetime, types.FieldTypeInt64, types.FieldTypeDecimal64:
+		case FT_TIMESTAMP, FT_TIME, FT_DATE, FT_I64, FT_D64:
 			rtyp = reflect.TypeFor[int64]()
-		case types.FieldTypeUint64:
+		case FT_U64:
 			rtyp = reflect.TypeFor[uint64]()
-		case types.FieldTypeFloat64:
+		case FT_F64:
 			rtyp = reflect.TypeFor[float64]()
-		case types.FieldTypeBoolean:
+		case FT_BOOL:
 			rtyp = reflect.TypeFor[bool]()
-		case types.FieldTypeString:
+		case FT_STRING:
 			rtyp = reflect.TypeFor[string]()
-		case types.FieldTypeBytes, types.FieldTypeBigint:
+		case FT_BYTES, FT_BIGINT:
 			if f.fixed > 0 {
 				rtyp = reflect.ArrayOf(int(f.fixed), reflect.TypeFor[byte]())
 			} else {
 				rtyp = reflect.TypeFor[[]byte]()
 			}
-		case types.FieldTypeInt32, types.FieldTypeDecimal32:
+		case FT_I32, FT_D32:
 			rtyp = reflect.TypeFor[int32]()
-		case types.FieldTypeInt16:
+		case FT_I16:
 			rtyp = reflect.TypeFor[int16]()
-		case types.FieldTypeInt8:
+		case FT_I8:
 			rtyp = reflect.TypeFor[int8]()
-		case types.FieldTypeUint32:
+		case FT_U32:
 			rtyp = reflect.TypeFor[uint32]()
-		case types.FieldTypeUint16:
+		case FT_U16:
 			rtyp = reflect.TypeFor[uint16]()
-		case types.FieldTypeUint8:
+		case FT_U8:
 			rtyp = reflect.TypeFor[uint8]()
-		case types.FieldTypeFloat32:
+		case FT_F32:
 			rtyp = reflect.TypeFor[float32]()
-		case types.FieldTypeInt256, types.FieldTypeDecimal256:
+		case FT_I256, FT_D256:
 			rtyp = reflect.TypeFor[[32]byte]()
-		case types.FieldTypeInt128, types.FieldTypeDecimal128:
+		case FT_I128, FT_D128:
 			rtyp = reflect.TypeFor[[16]byte]()
 		default:
 			continue
@@ -329,62 +329,62 @@ func (f *Field) ParseType(r reflect.StructField) error {
 
 	case reflect.Int:
 		if bits.UintSize == 64 {
-			typ = types.FieldTypeInt64
+			typ = FT_I64
 		} else {
-			typ = types.FieldTypeInt32
+			typ = FT_I32
 		}
 	case reflect.Int64:
-		typ = types.FieldTypeInt64
+		typ = FT_I64
 	case reflect.Int32:
-		typ = types.FieldTypeInt32
+		typ = FT_I32
 	case reflect.Int16:
-		typ = types.FieldTypeInt16
+		typ = FT_I16
 	case reflect.Int8:
-		typ = types.FieldTypeInt8
+		typ = FT_I8
 	case reflect.Uint:
 		if bits.UintSize == 64 {
-			typ = types.FieldTypeUint64
+			typ = FT_U64
 		} else {
-			typ = types.FieldTypeUint32
+			typ = FT_U32
 		}
 	case reflect.Uint64:
-		typ = types.FieldTypeUint64
+		typ = FT_U64
 	case reflect.Uint32:
-		typ = types.FieldTypeUint32
+		typ = FT_U32
 	case reflect.Uint16:
-		typ = types.FieldTypeUint16
+		typ = FT_U16
 	case reflect.Uint8:
-		typ = types.FieldTypeUint8
+		typ = FT_U8
 	case reflect.Float64:
-		typ = types.FieldTypeFloat64
+		typ = FT_F64
 	case reflect.Float32:
-		typ = types.FieldTypeFloat32
+		typ = FT_F32
 	case reflect.String:
 		if r.Type.String() == "schema.Enum" {
-			typ = types.FieldTypeUint16
+			typ = FT_U16
 			flags = types.FieldFlagEnum
 		} else {
-			typ = types.FieldTypeString
+			typ = FT_STRING
 		}
 	case reflect.Bool:
-		typ = types.FieldTypeBoolean
+		typ = FT_BOOL
 	case reflect.Map:
 		switch {
 		case iface.Is(types.IfaceBinaryMarshaler):
-			typ = types.FieldTypeBytes
+			typ = FT_BYTES
 		case iface.Is(types.IfaceTextMarshaler) || iface.Is(types.IfaceStringer):
-			typ = types.FieldTypeString
+			typ = FT_STRING
 		default:
 			return fmt.Errorf("unsupported map type %s, should implement BinaryMarshaler", r.Type)
 		}
 	case reflect.Slice:
 		switch {
 		case iface.Is(types.IfaceBinaryMarshaler):
-			typ = types.FieldTypeBytes
+			typ = FT_BYTES
 		case iface.Is(types.IfaceTextMarshaler) || iface.Is(types.IfaceStringer):
-			typ = types.FieldTypeString
+			typ = FT_STRING
 		case r.Type == byteSliceType:
-			typ = types.FieldTypeBytes
+			typ = FT_BYTES
 		default:
 			return fmt.Errorf("unsupported slice type %s, should implement BinaryMarshaler", r.Type)
 		}
@@ -392,28 +392,28 @@ func (f *Field) ParseType(r reflect.StructField) error {
 		// string-check is much quicker
 		switch r.Type.String() {
 		case "time.Time":
-			typ = types.FieldTypeDatetime
+			typ = FT_TIMESTAMP
 			scale = TIME_SCALE_NANO.AsUint()
 		case "num.Decimal32":
-			typ = types.FieldTypeDecimal32
+			typ = FT_D32
 			scale = num.MaxDecimal32Precision
 		case "num.Decimal64":
-			typ = types.FieldTypeDecimal64
+			typ = FT_D64
 			scale = num.MaxDecimal64Precision
 		case "num.Decimal128":
-			typ = types.FieldTypeDecimal128
+			typ = FT_D128
 			scale = num.MaxDecimal128Precision
 		case "num.Decimal256":
-			typ = types.FieldTypeDecimal256
+			typ = FT_D256
 			scale = num.MaxDecimal256Precision
 		case "num.Big":
-			typ = types.FieldTypeBigint
+			typ = FT_BIGINT
 		default:
 			switch {
 			case iface.Is(types.IfaceBinaryMarshaler):
-				typ = types.FieldTypeBytes
+				typ = FT_BYTES
 			case iface.Is(types.IfaceTextMarshaler) || iface.Is(types.IfaceStringer):
-				typ = types.FieldTypeString
+				typ = FT_STRING
 			default:
 				return fmt.Errorf("unsupported nested struct type %s, should implement BinaryMarshaler", r.Type)
 			}
@@ -422,17 +422,17 @@ func (f *Field) ParseType(r reflect.StructField) error {
 		// string-check is much quicker
 		switch r.Type.String() {
 		case "num.Int128":
-			typ = types.FieldTypeInt128
+			typ = FT_I128
 		case "num.Int256":
-			typ = types.FieldTypeInt256
+			typ = FT_I256
 		default:
 			switch {
 			case iface.Is(types.IfaceBinaryMarshaler):
-				typ = types.FieldTypeBytes
+				typ = FT_BYTES
 			case iface.Is(types.IfaceTextMarshaler) || iface.Is(types.IfaceStringer):
-				typ = types.FieldTypeString
+				typ = FT_STRING
 			case r.Type.Elem().Kind() == reflect.Uint8:
-				typ = types.FieldTypeBytes
+				typ = FT_BYTES
 				fixed = uint16(r.Type.Len())
 				isArray = true
 			default:
@@ -488,8 +488,7 @@ func (f *Field) ParseTag(tag string) error {
 				index = types.IndexTypeHash
 			case "int":
 				switch f.typ {
-				case types.FieldTypeInt64, types.FieldTypeInt32, types.FieldTypeInt16, types.FieldTypeInt8,
-					types.FieldTypeUint64, types.FieldTypeUint32, types.FieldTypeUint16, types.FieldTypeUint8:
+				case FT_I64, FT_I32, FT_I16, FT_I8, FT_U64, FT_U32, FT_U16, FT_U8:
 				default:
 					return fmt.Errorf("integer index unsupported on type %s", f.typ)
 				}
@@ -538,7 +537,7 @@ func (f *Field) ParseTag(tag string) error {
 			}
 		case "fixed":
 			switch f.typ {
-			case types.FieldTypeBytes, types.FieldTypeString:
+			case FT_BYTES, FT_STRING:
 			// only compatible with:
 			// - arrays: fixed length
 			// - byte slices, strings: fixed length
@@ -559,8 +558,7 @@ func (f *Field) ParseTag(tag string) error {
 			// - decimal types
 			// - datetime
 			switch f.typ {
-			case types.FieldTypeDecimal32, types.FieldTypeDecimal64,
-				types.FieldTypeDecimal128, types.FieldTypeDecimal256:
+			case FT_D32, FT_D64, FT_D128, FT_D256:
 				if ok {
 					sc, err := parseInt(val, "scale", 0, int(maxScale))
 					if err != nil {
@@ -570,7 +568,7 @@ func (f *Field) ParseTag(tag string) error {
 				} else {
 					return fmt.Errorf("missing value for scale tag")
 				}
-			case types.FieldTypeDatetime:
+			case FT_TIMESTAMP, FT_TIME:
 				s, ok := ParseTimeScale(val)
 				if !ok {
 					return fmt.Errorf("invalid time scale value %q", val)
@@ -581,10 +579,10 @@ func (f *Field) ParseTag(tag string) error {
 			}
 		case "enum":
 			switch f.typ {
-			case types.FieldTypeString, types.FieldTypeUint16:
+			case FT_STRING, FT_U16:
 				// ok
 				flags |= types.FieldFlagEnum
-				f.typ = types.FieldTypeUint16
+				f.typ = FT_U16
 			default:
 				return fmt.Errorf("unsupported enum type %s", f.typ)
 			}
@@ -600,6 +598,15 @@ func (f *Field) ParseTag(tag string) error {
 			flags |= types.FieldFlagNullable
 		case "notnull":
 			flags &^= types.FieldFlagNullable
+		case "timestamp":
+			f.typ = FT_TIMESTAMP
+			scale = TIME_SCALE_NANO.AsUint()
+		case "date":
+			f.typ = FT_DATE
+			scale = TIME_SCALE_DAY.AsUint()
+		case "time":
+			f.typ = FT_TIME
+			scale = TIME_SCALE_SECOND.AsUint()
 		default:
 			return fmt.Errorf("unsupported struct tag '%s'", key)
 		}
@@ -634,47 +641,53 @@ func compileCodecs(s *Schema) (enc []OpCode, dec []OpCode) {
 		f := &s.fields[i]
 		ec, dc := OpCodeSkip, OpCodeSkip
 		switch f.typ {
-		case types.FieldTypeDatetime:
-			dc, ec = OpCodeDateTime, OpCodeDateTime
+		case FT_TIMESTAMP:
+			dc, ec = OpCodeTimestamp, OpCodeTimestamp
 
-		case types.FieldTypeInt64:
+		case FT_DATE:
+			dc, ec = OpCodeDate, OpCodeDate
+
+		case FT_TIME:
+			dc, ec = OpCodeTime, OpCodeTime
+
+		case FT_I64:
 			dc, ec = OpCodeInt64, OpCodeInt64
 
-		case types.FieldTypeInt32:
+		case FT_I32:
 			dc, ec = OpCodeInt32, OpCodeInt32
 
-		case types.FieldTypeInt16:
+		case FT_I16:
 			dc, ec = OpCodeInt16, OpCodeInt16
 
-		case types.FieldTypeInt8:
+		case FT_I8:
 			dc, ec = OpCodeInt8, OpCodeInt8
 
-		case types.FieldTypeUint64:
+		case FT_U64:
 			dc, ec = OpCodeUint64, OpCodeUint64
 
-		case types.FieldTypeUint32:
+		case FT_U32:
 			dc, ec = OpCodeUint32, OpCodeUint32
 
-		case types.FieldTypeUint16:
+		case FT_U16:
 			if f.flags.Is(types.FieldFlagEnum) {
 				dc, ec = OpCodeEnum, OpCodeEnum
 			} else {
 				dc, ec = OpCodeUint16, OpCodeUint16
 			}
 
-		case types.FieldTypeUint8:
+		case FT_U8:
 			dc, ec = OpCodeUint8, OpCodeUint8
 
-		case types.FieldTypeFloat64:
+		case FT_F64:
 			dc, ec = OpCodeFloat64, OpCodeFloat64
 
-		case types.FieldTypeFloat32:
+		case FT_F32:
 			dc, ec = OpCodeFloat32, OpCodeFloat32
 
-		case types.FieldTypeBoolean:
+		case FT_BOOL:
 			dc, ec = OpCodeBool, OpCodeBool
 
-		case types.FieldTypeString:
+		case FT_STRING:
 			// encoder side
 			switch {
 			case f.fixed > 0:
@@ -697,7 +710,7 @@ func compileCodecs(s *Schema) (enc []OpCode, dec []OpCode) {
 				dc = OpCodeString
 			}
 
-		case types.FieldTypeBytes:
+		case FT_BYTES:
 			// encoder side
 			switch {
 			case f.Can(types.IfaceBinaryMarshaler):
@@ -722,25 +735,25 @@ func compileCodecs(s *Schema) (enc []OpCode, dec []OpCode) {
 				dc = OpCodeBytes
 			}
 
-		case types.FieldTypeInt256:
+		case FT_I256:
 			dc, ec = OpCodeInt256, OpCodeInt256
 
-		case types.FieldTypeInt128:
+		case FT_I128:
 			dc, ec = OpCodeInt128, OpCodeInt128
 
-		case types.FieldTypeDecimal256:
+		case FT_D256:
 			dc, ec = OpCodeDecimal256, OpCodeDecimal256
 
-		case types.FieldTypeDecimal128:
+		case FT_D128:
 			dc, ec = OpCodeDecimal128, OpCodeDecimal128
 
-		case types.FieldTypeDecimal64:
+		case FT_D64:
 			dc, ec = OpCodeDecimal64, OpCodeDecimal64
 
-		case types.FieldTypeDecimal32:
+		case FT_D32:
 			dc, ec = OpCodeDecimal32, OpCodeDecimal32
 
-		case types.FieldTypeBigint:
+		case FT_BIGINT:
 			dc, ec = OpCodeBigInt, OpCodeBigInt
 		}
 

@@ -25,7 +25,7 @@ const (
 	OpCodeFixedBytes                    // 0xE  14
 	OpCodeString                        // 0xF  15
 	OpCodeBytes                         // 0x10 16
-	OpCodeDateTime                      // 0x11 17
+	OpCodeTimestamp                     // 0x11 17
 	OpCodeInt128                        // 0x12 18
 	OpCodeInt256                        // 0x13 19
 	OpCodeDecimal32                     // 0x14 20
@@ -40,10 +40,12 @@ const (
 	OpCodeEnum                          // 0x1D 29
 	OpCodeSkip                          // 0x1E 30
 	OpCodeBigInt                        // 0x1F 31
+	OpCodeTime                          // 0x20 32
+	OpCodeDate                          // 0x21 33
 )
 
 var (
-	opCodeStrings = "__i8_i16_i32_i64_u8_u16_u32_u64_f32_f64_bool_fixarr_fixstr_fixbyte_str_byte_dtime_i128_i256_d32_d64_d128_d256_mshbin_mshtxt_mshstr_ushbin_ushtxt_enum_skip_bigint"
+	opCodeStrings = "__i8_i16_i32_i64_u8_u16_u32_u64_f32_f64_bool_fixarr_fixstr_fixbyte_str_byte_dtime_i128_i256_d32_d64_d128_d256_mshbin_mshtxt_mshstr_ushbin_ushtxt_enum_skip_bigint_time_date"
 	opCodeIdx     = [...]int{
 		0,                           // invalid
 		2, 5, 9, 13, 17, 20, 24, 28, // int/uint
@@ -59,7 +61,9 @@ var (
 		145, // enum
 		150, // skip
 		155, // bigint
-		162, // end-of-string
+		162, // time
+		167, // date
+		172, // end-of-string
 	}
 )
 

@@ -229,7 +229,7 @@ func (d *Decoder) Read(r io.Reader, val any) error {
 				err = ri.(encoding.TextUnmarshaler).UnmarshalText(d.buf.Next(int(l)))
 			}
 
-		case OpCodeDateTime:
+		case OpCodeTimestamp, OpCodeTime, OpCodeDate:
 			ts := int64(LE.Uint64(d.buf.Next(8)))
 			*(*time.Time)(ptr) = TimeScale(field.scale).FromUnix(ts)
 
@@ -443,7 +443,7 @@ func readField(code OpCode, field *Field, ptr unsafe.Pointer, buf []byte, enums 
 			buf = buf[l:]
 		}
 
-	case OpCodeDateTime:
+	case OpCodeTimestamp, OpCodeTime, OpCodeDate:
 		ts := int64(LE.Uint64(buf))
 		*(*time.Time)(ptr) = TimeScale(field.scale).FromUnix(ts)
 		buf = buf[8:]

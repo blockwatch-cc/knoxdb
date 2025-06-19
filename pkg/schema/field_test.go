@@ -40,7 +40,7 @@ func TestFieldNew(t *testing.T) {
 	}{
 		{"Int32", FT_I32, Field{typ: FT_I32, wireSize: 4}},
 		{"String", FT_STRING, Field{typ: FT_STRING, wireSize: 4}},
-		{"DateTime", FT_TIME, Field{typ: FT_TIME, wireSize: 8}},
+		{"DateTime", FT_TIMESTAMP, Field{typ: FT_TIMESTAMP, wireSize: 8}},
 		{"Boolean", FT_BOOL, Field{typ: FT_BOOL, wireSize: 1}},
 	}
 
@@ -179,7 +179,9 @@ func TestFieldCodecMapping(t *testing.T) {
 		field    Field
 		expected OpCode
 	}{
-		{"Datetime", NewField(FT_TIME), OC_TIME},
+		{"Datetime", NewField(FT_TIMESTAMP), OC_TIMESTAMP},
+		{"Date", NewField(FT_DATE), OC_DATE},
+		{"Time", NewField(FT_TIME), OC_TIME},
 		{"Int64", NewField(FT_I64), OC_I64},
 		{"Int32", NewField(FT_I32), OC_I32},
 		{"Int16", NewField(FT_I16), OC_I16},
@@ -199,6 +201,7 @@ func TestFieldCodecMapping(t *testing.T) {
 		{"Decimal128", NewField(FT_D128), OC_D128},
 		{"Decimal64", NewField(FT_D64), OC_D64},
 		{"Decimal32", NewField(FT_D32), OC_D32},
+		{"Bigint", NewField(FT_BIGINT), OC_BIGINT},
 	}
 
 	for _, tc := range testCases {
@@ -333,13 +336,13 @@ func TestFieldEncodingDecoding(t *testing.T) {
 		{"Float64_Max", NewField(FT_F64), float64(math.MaxFloat64), float64(math.MaxFloat64)},
 		{"Boolean_True", NewField(FT_BOOL), true, true},
 		{"Boolean_False", NewField(FT_BOOL), false, false},
-		{"DateTime_Now", NewField(FT_TIME), time.Now().UTC(), time.Now().UTC()},
+		{"DateTime_Now", NewField(FT_TIMESTAMP), time.Now().UTC(), time.Now().UTC()},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			decoded := encodeDecodeField(t, tc.field, tc.value)
-			if tc.field.Type() == FT_TIME {
+			if tc.field.Type() == FT_TIMESTAMP {
 				assert.WithinDuration(t, tc.expected.(time.Time), decoded.(time.Time), time.Millisecond)
 			} else {
 				assert.Equal(t, tc.expected, decoded)
@@ -413,7 +416,7 @@ func TestFieldRangeAndOverflow(t *testing.T) {
 
 	// Test case for datetime fields to ensure proper handling of time values
 	t.Run("TimeCaster", func(t *testing.T) {
-		field := NewField(FT_TIME)
+		field := NewField(FT_TIMESTAMP)
 		now := time.Now().UTC()
 		decoded := encodeDecodeField(t, field, now)
 		assert.Equal(t, now, decoded.(time.Time).UTC())

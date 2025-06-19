@@ -40,51 +40,53 @@ func castError(val any, kind string) error {
 
 func NewCaster(typ types.FieldType, scale uint8, enum *EnumDictionary) ValueCaster {
 	switch typ {
-	case types.FieldTypeDatetime:
+	case FT_TIMESTAMP, FT_TIME:
 		return TimeCaster{scale: TimeScale(scale)}
-	case types.FieldTypeBoolean:
+	case FT_DATE:
+		return DateCaster{}
+	case FT_BOOL:
 		return BoolCaster{}
-	case types.FieldTypeString:
+	case FT_STRING:
 		return StringCaster{} // MarshalText, stringer, ToString
-	case types.FieldTypeBytes:
+	case FT_BYTES:
 		return BytesCaster{} // MarshalBinary
-	case types.FieldTypeInt8:
+	case FT_I8:
 		return IntCaster[int8]{}
-	case types.FieldTypeInt16:
+	case FT_I16:
 		return IntCaster[int16]{}
-	case types.FieldTypeInt32:
+	case FT_I32:
 		return IntCaster[int32]{}
-	case types.FieldTypeInt64:
+	case FT_I64:
 		return IntCaster[int64]{}
-	case types.FieldTypeUint8:
+	case FT_U8:
 		return UintCaster[uint8]{}
-	case types.FieldTypeUint16:
+	case FT_U16:
 		if enum == nil {
 			return UintCaster[uint16]{}
 		} else {
 			return enum
 		}
-	case types.FieldTypeUint32:
+	case FT_U32:
 		return UintCaster[uint32]{}
-	case types.FieldTypeUint64:
+	case FT_U64:
 		return UintCaster[uint64]{}
-	case types.FieldTypeFloat32:
+	case FT_F32:
 		return FloatCaster[float32]{}
-	case types.FieldTypeFloat64:
+	case FT_F64:
 		return FloatCaster[float64]{}
-	case types.FieldTypeInt128:
+	case FT_I128:
 		return I128Caster{}
-	case types.FieldTypeInt256:
+	case FT_I256:
 		return I256Caster{}
-	case types.FieldTypeDecimal32:
+	case FT_D32:
 		return IntCaster[int32]{}
-	case types.FieldTypeDecimal64:
+	case FT_D64:
 		return IntCaster[int64]{}
-	case types.FieldTypeDecimal128:
+	case FT_D128:
 		return I128Caster{}
-	case types.FieldTypeDecimal256:
+	case FT_D256:
 		return I256Caster{}
-	case types.FieldTypeBigint:
+	case FT_BIGINT:
 		return BigIntCaster{}
 	default:
 		panic(fmt.Errorf("caster: unsupported field type %s %d", typ, typ))
@@ -831,6 +833,33 @@ func (c TimeCaster) CastSlice(val any) (res any, err error) {
 		r := make([]int64, len(v))
 		for i := range v {
 			r[i] = c.scale.ToUnix(v[i])
+		}
+		res = r
+	}
+	return
+}
+
+// date caster
+type DateCaster struct{}
+
+func (c DateCaster) CastValue(val any) (res any, err error) {
+	v, ok := val.(time.Time)
+	if !ok {
+		err = castError(val, "time")
+	} else {
+		res = UnixDays(v)
+	}
+	return
+}
+
+func (c DateCaster) CastSlice(val any) (res any, err error) {
+	v, ok := val.([]time.Time)
+	if !ok {
+		err = castError(val, "time")
+	} else {
+		r := make([]int64, len(v))
+		for i := range v {
+			r[i] = UnixDays(v[i])
 		}
 		res = r
 	}

@@ -1,4 +1,4 @@
-// Copyright (c) 2014 Blockwatch Data Inc.
+// Copyright (c) 2024-2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package schema
@@ -23,51 +23,55 @@ type ValueParser interface {
 
 func NewParser(typ types.FieldType, scale uint8, enum *EnumDictionary) ValueParser {
 	switch typ {
-	case types.FieldTypeDatetime:
-		return TimeParser{scale: TimeScale(scale)}
-	case types.FieldTypeBoolean:
+	case FT_TIMESTAMP:
+		return TimeParser{scale: TimeScale(scale), isTimeOnly: false}
+	case FT_TIME:
+		return TimeParser{scale: TimeScale(scale), isTimeOnly: true}
+	case FT_DATE:
+		return TimeParser{scale: TIME_SCALE_DAY, isTimeOnly: false}
+	case FT_BOOL:
 		return BoolParser{}
-	case types.FieldTypeString:
+	case FT_STRING:
 		return StringParser{}
-	case types.FieldTypeBytes:
+	case FT_BYTES:
 		return BytesParser{}
-	case types.FieldTypeInt8:
+	case FT_I8:
 		return IntParser[int8]{8}
-	case types.FieldTypeInt16:
+	case FT_I16:
 		return IntParser[int16]{16}
-	case types.FieldTypeInt32:
+	case FT_I32:
 		return IntParser[int32]{32}
-	case types.FieldTypeInt64:
+	case FT_I64:
 		return IntParser[int64]{64}
-	case types.FieldTypeUint8:
+	case FT_U8:
 		return UintParser[uint8]{8}
-	case types.FieldTypeUint16:
+	case FT_U16:
 		if enum == nil {
 			return UintParser[uint16]{16}
 		} else {
 			return enum
 		}
-	case types.FieldTypeUint32:
+	case FT_U32:
 		return UintParser[uint32]{32}
-	case types.FieldTypeUint64:
+	case FT_U64:
 		return UintParser[uint64]{64}
-	case types.FieldTypeFloat32:
+	case FT_F32:
 		return FloatParser[float32]{32}
-	case types.FieldTypeFloat64:
+	case FT_F64:
 		return FloatParser[float64]{64}
-	case types.FieldTypeInt128:
+	case FT_I128:
 		return I128Parser{}
-	case types.FieldTypeInt256:
+	case FT_I256:
 		return I256Parser{}
-	case types.FieldTypeDecimal32:
+	case FT_D32:
 		return D32Parser{scale}
-	case types.FieldTypeDecimal64:
+	case FT_D64:
 		return D64Parser{scale}
-	case types.FieldTypeDecimal128:
+	case FT_D128:
 		return D128Parser{scale}
-	case types.FieldTypeDecimal256:
+	case FT_D256:
 		return D256Parser{scale}
-	case types.FieldTypeBigint:
+	case FT_BIGINT:
 		return BigIntParser{}
 	default:
 		panic(fmt.Errorf("parser: unsupported field type %s %d", typ, typ))
@@ -320,26 +324,23 @@ func (_ BytesParser) ParseSlice(s string) (any, error) {
 
 // time parser
 type TimeParser struct {
-	scale TimeScale
+	scale      TimeScale
+	isTimeOnly bool
 }
 
 func (p TimeParser) ParseValue(s string) (any, error) {
-	tm, err := util.ParseTime(s)
-	if err != nil {
-		return nil, err
-	}
-	return p.scale.ToUnix(tm.Time()), nil
+	return p.scale.Parse(s, p.isTimeOnly)
 }
 
 func (p TimeParser) ParseSlice(s string) (any, error) {
 	vv := strings.Split(s, ",")
 	slice := make([]int64, len(vv))
 	for i, v := range vv {
-		tm, err := util.ParseTime(v)
+		tm, err := p.scale.Parse(v, p.isTimeOnly)
 		if err != nil {
 			return nil, err
 		}
-		slice[i] = p.scale.ToUnix(tm.Time())
+		slice[i] = tm
 	}
 	return slice, nil
 }

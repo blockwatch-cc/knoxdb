@@ -35,16 +35,18 @@ const (
 	FieldTypeDecimal64
 	FieldTypeDecimal32
 	FieldTypeBigint
+	FieldTypeDate
+	FieldTypeTime
 )
 
 var (
-	fieldTypeString  = "__datetime_int64_uint64_float64_boolean_string_bytes_int32_int16_int8_uint32_uint16_uint8_float32_int256_int128_decimal256_decimal128_decimal64_decimal32_bigint"
-	fieldTypeIdx     = [...]int{0, 2, 11, 17, 24, 32, 40, 47, 53, 59, 65, 70, 77, 84, 90, 98, 105, 112, 123, 134, 144, 154, 161}
+	fieldTypeString  = "__datetime_int64_uint64_float64_boolean_string_bytes_int32_int16_int8_uint32_uint16_uint8_float32_int256_int128_decimal256_decimal128_decimal64_decimal32_bigint_date_time"
+	fieldTypeIdx     = [...]int{0, 2, 11, 17, 24, 32, 40, 47, 53, 59, 65, 70, 77, 84, 90, 98, 105, 112, 123, 134, 144, 154, 161, 166, 171}
 	fieldTypeReverse = map[string]FieldType{}
 
 	fieldTypeWireSize = [...]int{
 		FieldTypeInvalid:    0,
-		FieldTypeDatetime:   8,
+		FieldTypeDatetime:   8, // i64
 		FieldTypeInt64:      8,
 		FieldTypeUint64:     8,
 		FieldTypeFloat64:    8,
@@ -65,6 +67,8 @@ var (
 		FieldTypeDecimal64:  8,
 		FieldTypeDecimal32:  4,
 		FieldTypeBigint:     4, // stored as var bytes
+		FieldTypeDate:       8, // i64
+		FieldTypeTime:       8, // i64
 	}
 )
 
@@ -84,7 +88,7 @@ func (t FieldType) String() string {
 
 func (t FieldType) Zero() any {
 	switch t {
-	case FieldTypeDatetime:
+	case FieldTypeDatetime, FieldTypeDate, FieldTypeTime:
 		var t time.Time
 		return t.UTC()
 	case FieldTypeInt64:

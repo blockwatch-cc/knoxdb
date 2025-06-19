@@ -31,7 +31,7 @@ func NewSnapshot(xid, xmin, xmax uint64) *Snapshot {
 	s.Xaci = 0
 	s.Xact = nil
 	s.Safe = true
-	if sz := int(xid - xmin); sz > bits.UintSize {
+	if sz := int(xmax - xmin); sz > bits.UintSize {
 		s.Xact = bitset.New(sz)
 	}
 	return s
@@ -46,13 +46,14 @@ func (s *Snapshot) Close() {
 }
 
 // we only add writable tx here
-func (s *Snapshot) AddActive(xid uint64) {
+func (s *Snapshot) AddActive(xid uint64) *Snapshot {
 	if s.Xact == nil {
 		s.Xaci |= 1 << (xid - s.Xmin)
 	} else {
 		s.Xact.Set(int(xid - s.Xmin))
 	}
 	s.Safe = false
+	return s
 }
 
 // IsVisible returns true when records updated by this xid
@@ -69,7 +70,7 @@ func (s *Snapshot) IsVisible(xid uint64) bool {
 		return true
 	}
 
-	// safe snapshots can see anything < xmax and
+	// safe snapshots can see anything < xmax
 	if s.Safe && xid < s.Xmax {
 		return true
 	}

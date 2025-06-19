@@ -35,7 +35,15 @@ func TestSingleValueParsing(t *testing.T) {
 		{"Bool", NewParser(FT_BOOL, 0, nil), "true", true},
 		{"String", NewParser(FT_STRING, 0, nil), "hello world", []byte("hello world")},
 		{"Bytes", NewParser(FT_BYTES, 0, nil), "0x68656c6c6f", []byte("hello")},
-		{"Time", NewParser(FT_TIME, 0, nil), "2023-05-17T12:34:56Z", time.Date(2023, 5, 17, 12, 34, 56, 0, time.UTC).UnixNano()},
+		{"Timestamp_s", NewParser(FT_TIMESTAMP, 3, nil), "2023-05-17 12:34:56 UTC", time.Date(2023, 5, 17, 12, 34, 56, 0, time.UTC).Unix()},
+		{"Timestamp_ms", NewParser(FT_TIMESTAMP, 2, nil), "2023-05-17 12:34:56.001 UTC", time.Date(2023, 5, 17, 12, 34, 56, 1000000, time.UTC).UnixMilli()},
+		{"Timestamp_us", NewParser(FT_TIMESTAMP, 1, nil), "2023-05-17 12:34:56.000001 UTC", time.Date(2023, 5, 17, 12, 34, 56, 1000, time.UTC).UnixMicro()},
+		{"Timestamp_ns", NewParser(FT_TIMESTAMP, 0, nil), "2023-05-17 12:34:56.000000001 UTC", time.Date(2023, 5, 17, 12, 34, 56, 1, time.UTC).UnixNano()},
+		{"Time_s", NewParser(FT_TIME, 3, nil), "12:34:56", time.Date(1970, 1, 1, 12, 34, 56, 0, time.UTC).Unix()},
+		{"Time_ms", NewParser(FT_TIME, 2, nil), "12:34:56.001", time.Date(1970, 1, 1, 12, 34, 56, 1000000, time.UTC).UnixMilli()},
+		{"Time_us", NewParser(FT_TIME, 1, nil), "12:34:56.000001", time.Date(1970, 1, 1, 12, 34, 56, 1000, time.UTC).UnixMicro()},
+		{"Time_ns", NewParser(FT_TIME, 0, nil), "12:34:56.000000001", time.Date(1970, 1, 1, 12, 34, 56, 1, time.UTC).UnixNano()},
+		{"Date", NewParser(FT_DATE, 4, nil), "2023-05-17", UnixDays(time.Date(2023, 5, 17, 0, 0, 0, 0, time.UTC))},
 		{"Int128", NewParser(FT_I128, 0, nil), "170141183460469231731687303715884105727", func() num.Int128 { i, _ := num.ParseInt128("170141183460469231731687303715884105727"); return i }()},
 		{"Int256", NewParser(FT_I256, 0, nil), "57896044618658097711785492504343953926634992332820282019728792003956564819967", func() num.Int256 {
 			i, _ := num.ParseInt256("57896044618658097711785492504343953926634992332820282019728792003956564819967")
@@ -75,9 +83,25 @@ func TestSliceParsing(t *testing.T) {
 		{"BoolSlice", NewParser(FT_BOOL, 0, nil), "true,false,true", []bool{true, false, true}},
 		{"StringSlice", NewParser(FT_STRING, 0, nil), "a,b,c", [][]byte{[]byte("a"), []byte("b"), []byte("c")}},
 		{"BytesSlice", NewParser(FT_BYTES, 0, nil), "0x68,0x65,0x6c", [][]byte{{0x68}, {0x65}, {0x6c}}},
-		{"TimeSlice", NewParser(FT_TIME, 0, nil), "2023-05-17T12:34:56Z,2023-05-18T12:34:56Z", []int64{
-			time.Date(2023, 5, 17, 12, 34, 56, 0, time.UTC).UnixNano(),
-			time.Date(2023, 5, 18, 12, 34, 56, 0, time.UTC).UnixNano(),
+		{"TimeSlice_sec", NewParser(FT_TIMESTAMP, 3, nil), "2023-05-17 12:34:56 UTC,2023-05-18 12:34:56 UTC", []int64{
+			time.Date(2023, 5, 17, 12, 34, 56, 0, time.UTC).Unix(),
+			time.Date(2023, 5, 18, 12, 34, 56, 0, time.UTC).Unix(),
+		}},
+		{"TimeSlice_ms", NewParser(FT_TIMESTAMP, 2, nil), "2023-05-17 12:34:56.001 UTC,2023-05-18 12:34:56.002 UTC", []int64{
+			time.Date(2023, 5, 17, 12, 34, 56, 1000000, time.UTC).UnixMilli(),
+			time.Date(2023, 5, 18, 12, 34, 56, 2000000, time.UTC).UnixMilli(),
+		}},
+		{"TimeSlice_us", NewParser(FT_TIMESTAMP, 1, nil), "2023-05-17 12:34:56.000001 UTC,2023-05-18 12:34:56.000002 UTC", []int64{
+			time.Date(2023, 5, 17, 12, 34, 56, 1000, time.UTC).UnixMicro(),
+			time.Date(2023, 5, 18, 12, 34, 56, 2000, time.UTC).UnixMicro(),
+		}},
+		{"TimeSlice_ns", NewParser(FT_TIMESTAMP, 0, nil), "2023-05-17 12:34:56.000000001 UTC,2023-05-18 12:34:56.000000002 UTC", []int64{
+			time.Date(2023, 5, 17, 12, 34, 56, 1, time.UTC).UnixNano(),
+			time.Date(2023, 5, 18, 12, 34, 56, 2, time.UTC).UnixNano(),
+		}},
+		{"DateSlice", NewParser(FT_DATE, 4, nil), "2023-05-17,2023-05-18", []int64{
+			UnixDays(time.Date(2023, 5, 17, 0, 0, 0, 0, time.UTC)),
+			UnixDays(time.Date(2023, 5, 18, 0, 0, 0, 0, time.UTC)),
 		}},
 		{"Decimal64Slice", NewParser(FT_D64, 2, nil), "-123.45,0,678.90", []int64{-12345, 0, 67890}},
 	}
@@ -102,7 +126,7 @@ func TestErrorHandling(t *testing.T) {
 		{"InvalidInt", NewParser(FT_I32, 0, nil), "not_a_number", "strconv.ParseInt: parsing \"not_a_number\": invalid syntax"},
 		{"InvalidFloat", NewParser(FT_F64, 0, nil), "not_a_float", "strconv.ParseFloat: parsing \"not_a_float\": invalid syntax"},
 		{"InvalidBool", NewParser(FT_BOOL, 0, nil), "not_a_bool", "strconv.ParseBool: parsing \"not_a_bool\": invalid syntax"},
-		{"InvalidTime", NewParser(FT_TIME, 0, nil), "not_a_time", "time: parsing"},
+		{"InvalidTime", NewParser(FT_TIMESTAMP, 0, nil), "not_a_time", "parsing time"},
 		{"InvalidHex", NewParser(FT_BYTES, 0, nil), "0xnothex", "encoding/hex: invalid byte: U+006E 'n'"},
 	}
 

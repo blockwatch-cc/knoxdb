@@ -192,6 +192,18 @@ type NativeTypes struct {
 	Uint uint `knox:"uint"`
 }
 
+type TimeTypes struct {
+	TimestampNs time.Time `knox:"tsn,timestamp,scale=ns"`
+	TimestampUs time.Time `knox:"tsu,timestamp,scale=us"`
+	TimestampMs time.Time `knox:"tsm,timestamp,scale=ms"`
+	TimestampS  time.Time `knox:"tss,timestamp,scale=s"`
+	TimeNs      time.Time `knox:"tmn,time,scale=ns"`
+	TimeUs      time.Time `knox:"tmu,time,scale=us"`
+	TimeMs      time.Time `knox:"tmm,time,scale=ms"`
+	TimeS       time.Time `knox:"tms,time,scale=s"`
+	Date        time.Time `knox:"dt,date"`
+}
+
 type MarshalerTypes struct {
 	BaseModel
 	Stringer Stringer `knox:"stringer"`
@@ -391,7 +403,7 @@ const (
 	OC_FIXBYTES  = OpCodeFixedBytes
 	OC_STRING    = OpCodeString
 	OC_BYTES     = OpCodeBytes
-	OC_TIME      = OpCodeDateTime
+	OC_TIMESTAMP = OpCodeTimestamp
 	OC_I128      = OpCodeInt128
 	OC_I256      = OpCodeInt256
 	OC_D32       = OpCodeDecimal32
@@ -406,6 +418,8 @@ const (
 	OC_ENUM      = OpCodeEnum
 	OC_SKIP      = OpCodeSkip
 	OC_BIGINT    = OpCodeBigInt
+	OC_DATE      = OpCodeDate
+	OC_TIME      = OpCodeTime
 )
 
 var (
@@ -541,13 +555,13 @@ var schemaTestCases = []schemaTest{
 		name:    "all_types",
 		build:   GenericSchema[AllTypes],
 		fields:  "id,i64,i32,i16,i8,u64,u32,u16,u8,f64,f32,d32,d64,d128,d256,i128,i256,bool,time,bytes,array[2],string,my_enum,big",
-		typs:    []types.FieldType{FT_U64, FT_I64, FT_I32, FT_I16, FT_I8, FT_U64, FT_U32, FT_U16, FT_U8, FT_F64, FT_F32, FT_D32, FT_D64, FT_D128, FT_D256, FT_I128, FT_I256, FT_BOOL, FT_TIME, FT_BYTES, FT_BYTES, FT_STRING, FT_U16, FT_BIGINT},
+		typs:    []types.FieldType{FT_U64, FT_I64, FT_I32, FT_I16, FT_I8, FT_U64, FT_U32, FT_U16, FT_U8, FT_F64, FT_F32, FT_D32, FT_D64, FT_D128, FT_D256, FT_I128, FT_I256, FT_BOOL, FT_TIMESTAMP, FT_BYTES, FT_BYTES, FT_STRING, FT_U16, FT_BIGINT},
 		flags:   []types.FieldFlags{types.FieldFlagPrimary, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, types.FieldFlagEnum, 0},
 		scales:  []uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 15, 18, 24, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 		fixed:   []uint16{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0},
 		isFixed: false,
-		encode:  []OpCode{OC_U64, OC_I64, OC_I32, OC_I16, OC_I8, OC_U64, OC_U32, OC_U16, OC_U8, OC_F64, OC_F32, OC_D32, OC_D64, OC_D128, OC_D256, OC_I128, OC_I256, OC_BOOL, OC_TIME, OC_BYTES, OC_FIXARRAY, OC_STRING, OC_ENUM, OC_BIGINT},
-		decode:  []OpCode{OC_U64, OC_I64, OC_I32, OC_I16, OC_I8, OC_U64, OC_U32, OC_U16, OC_U8, OC_F64, OC_F32, OC_D32, OC_D64, OC_D128, OC_D256, OC_I128, OC_I256, OC_BOOL, OC_TIME, OC_BYTES, OC_FIXARRAY, OC_STRING, OC_ENUM, OC_BIGINT},
+		encode:  []OpCode{OC_U64, OC_I64, OC_I32, OC_I16, OC_I8, OC_U64, OC_U32, OC_U16, OC_U8, OC_F64, OC_F32, OC_D32, OC_D64, OC_D128, OC_D256, OC_I128, OC_I256, OC_BOOL, OC_TIMESTAMP, OC_BYTES, OC_FIXARRAY, OC_STRING, OC_ENUM, OC_BIGINT},
+		decode:  []OpCode{OC_U64, OC_I64, OC_I32, OC_I16, OC_I8, OC_U64, OC_U32, OC_U16, OC_U8, OC_F64, OC_F32, OC_D32, OC_D64, OC_D128, OC_D256, OC_I128, OC_I256, OC_BOOL, OC_TIMESTAMP, OC_BYTES, OC_FIXARRAY, OC_STRING, OC_ENUM, OC_BIGINT},
 	},
 
 	// fixed bytes and string
@@ -618,6 +632,20 @@ var schemaTestCases = []schemaTest{
 		isFixed: true,
 		encode:  []OpCode{OC_U64, OC_INT, OC_UINT},
 		decode:  []OpCode{OC_U64, OC_INT, OC_UINT},
+	},
+
+	// date/time/timestamp
+	{
+		name:    "time_types",
+		build:   GenericSchema[TimeTypes],
+		fields:  "tsn,tsu,tsm,tss,tmn,tmu,tmm,tms,dt",
+		typs:    []types.FieldType{FT_TIMESTAMP, FT_TIMESTAMP, FT_TIMESTAMP, FT_TIMESTAMP, FT_TIME, FT_TIME, FT_TIME, FT_TIME, FT_DATE},
+		flags:   []types.FieldFlags{0, 0, 0, 0, 0, 0, 0, 0, 0},
+		scales:  []uint8{0, 1, 2, 3, 0, 1, 2, 3, 4},
+		fixed:   []uint16{0, 0, 0, 0, 0, 0, 0, 0, 0},
+		isFixed: true,
+		encode:  []OpCode{OC_TIMESTAMP, OC_TIMESTAMP, OC_TIMESTAMP, OC_TIMESTAMP, OC_TIME, OC_TIME, OC_TIME, OC_TIME, OC_DATE},
+		decode:  []OpCode{OC_TIMESTAMP, OC_TIMESTAMP, OC_TIMESTAMP, OC_TIMESTAMP, OC_TIME, OC_TIME, OC_TIME, OC_TIME, OC_DATE},
 	},
 
 	// error: unsupported struct type without marshaler
@@ -899,16 +927,16 @@ func TestSchemaDetect(t *testing.T) {
 				require.NoError(t, s.Validate())
 			}
 			// schema name
-			require.Equal(t, s.name, c.name, "schema name")
+			require.Equal(t, c.name, s.name, "schema name")
 			// field names
-			require.ElementsMatch(t, s.AllFieldNames(), strings.Split(c.fields, ","), "field names")
+			require.ElementsMatch(t, strings.Split(c.fields, ","), s.AllFieldNames(), "field names")
 			// field types
 			for i := range s.fields {
-				require.Equal(t, s.fields[i].typ, c.typs[i], "field types for "+s.fields[i].name)
+				require.Equal(t, c.typs[i], s.fields[i].typ, "field types for "+s.fields[i].name)
 			}
 			// field flags
 			for i := range s.fields {
-				require.Equal(t, s.fields[i].flags, c.flags[i], "field flags for "+s.fields[i].name)
+				require.Equal(t, c.flags[i], s.fields[i].flags, "field flags for "+s.fields[i].name)
 			}
 			if len(c.idxfields) > 0 {
 				allIndexNames := strings.Split(c.idxfields, ",")
@@ -923,23 +951,24 @@ func TestSchemaDetect(t *testing.T) {
 					// index name is expected
 					require.Contains(t, allIndexNames, f.name, "index unexpected for "+f.name)
 					// index types
-					require.Equal(t, f.index, c.idxtyps[i], "index type for "+f.name)
+					require.Equal(t, c.idxtyps[i], f.index, "index type for "+f.name)
 				}
 			}
 			// scale values
 			for i := range s.fields {
-				require.Equal(t, s.fields[i].scale, c.scales[i], "scale for"+s.fields[i].name)
+				require.Equal(t, c.scales[i], s.fields[i].scale, "scale for "+s.fields[i].name)
 			}
+
 			// fixed values
 			for i := range s.fields {
-				require.Equal(t, s.fields[i].fixed, c.fixed[i], "fixed for"+s.fields[i].name)
+				require.Equal(t, c.fixed[i], s.fields[i].fixed, "fixed for "+s.fields[i].name)
 			}
 			// is fixed
-			require.Equal(t, s.isFixedSize, c.isFixed, "is_fixed")
+			require.Equal(t, c.isFixed, s.isFixedSize, "is_fixed")
 			// encoder opcodes
-			require.ElementsMatch(t, s.encode, c.encode, "encoders")
+			require.ElementsMatch(t, c.encode, s.encode, "encoders")
 			// decoder opcodes
-			require.ElementsMatch(t, s.decode, c.decode, "decoders")
+			require.ElementsMatch(t, c.decode, s.decode, "decoders")
 		})
 	}
 }

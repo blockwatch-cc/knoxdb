@@ -205,7 +205,7 @@ func TestCastNewCaster(t *testing.T) {
 		fieldType types.FieldType
 		expected  any
 	}{
-		{"Datetime", FT_TIME, TimeCaster{}},
+		{"Datetime", FT_TIMESTAMP, TimeCaster{}},
 		{"Boolean", FT_BOOL, BoolCaster{}},
 		{"String", FT_STRING, StringCaster{}},
 		{"Bytes", FT_BYTES, BytesCaster{}},

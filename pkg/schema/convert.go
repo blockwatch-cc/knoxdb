@@ -7,8 +7,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-
-	"blockwatch.cc/knoxdb/internal/types"
 )
 
 // Extracts wire encoded messages into raw byte strings. Useful for search
@@ -79,33 +77,31 @@ func NewConverter(parent, child *Schema, layout binary.ByteOrder) *Converter {
 
 			// allocate exact number of bytes
 			switch field.typ {
-			case types.FieldTypeDatetime, types.FieldTypeInt64, types.FieldTypeUint64,
-				types.FieldTypeFloat64, types.FieldTypeDecimal64:
+			case FT_TIMESTAMP, FT_DATE, FT_TIME, FT_I64, FT_U64, FT_F64, FT_D64:
 				var b [8]byte
 				c.parts[i] = b[:]
 
-			case types.FieldTypeInt32, types.FieldTypeUint32, types.FieldTypeFloat32,
-				types.FieldTypeDecimal32:
+			case FT_I32, FT_U32, FT_F32, FT_D32:
 				var b [4]byte
 				c.parts[i] = b[:]
 
-			case types.FieldTypeInt16, types.FieldTypeUint16:
+			case FT_I16, FT_U16:
 				var b [2]byte
 				c.parts[i] = b[:]
 
-			case types.FieldTypeBoolean, types.FieldTypeInt8, types.FieldTypeUint8:
+			case FT_BOOL, FT_I8, FT_U8:
 				var b [1]byte
 				c.parts[i] = b[:]
 
-			case types.FieldTypeInt256, types.FieldTypeDecimal256:
+			case FT_I256, FT_D256:
 				var b [32]byte
 				c.parts[i] = b[:]
 
-			case types.FieldTypeInt128, types.FieldTypeDecimal128:
+			case FT_I128, FT_D128:
 				var b [16]byte
 				c.parts[i] = b[:]
 
-			case types.FieldTypeString, types.FieldTypeBytes, types.FieldTypeBigint:
+			case FT_STRING, FT_BYTES, FT_BIGINT:
 				if field.fixed > 0 {
 					c.parts[i] = make([]byte, field.fixed)
 				} else {
@@ -209,35 +205,33 @@ func extractFixed(c *Converter, buf []byte) []byte {
 
 		// copy data to output
 		switch field.typ {
-		case types.FieldTypeDatetime, types.FieldTypeInt64, types.FieldTypeUint64,
-			types.FieldTypeFloat64, types.FieldTypeDecimal64:
+		case FT_TIMESTAMP, FT_DATE, FT_TIME, FT_I64, FT_U64, FT_F64, FT_D64:
 			c.layout.PutUint64(res[ofs:], LE.Uint64(buf))
 			buf = buf[8:]
 
-		case types.FieldTypeInt32, types.FieldTypeUint32, types.FieldTypeFloat32,
-			types.FieldTypeDecimal32:
+		case FT_I32, FT_U32, FT_F32, FT_D32:
 			c.layout.PutUint32(res[ofs:], LE.Uint32(buf))
 			buf = buf[4:]
 
-		case types.FieldTypeInt16, types.FieldTypeUint16:
+		case FT_I16, FT_U16:
 			c.layout.PutUint16(res[ofs:], LE.Uint16(buf))
 			buf = buf[2:]
 
-		case types.FieldTypeBoolean, types.FieldTypeInt8, types.FieldTypeUint8:
+		case FT_BOOL, FT_I8, FT_U8:
 			res[ofs] = buf[0]
 			buf = buf[1:]
 
-		case types.FieldTypeInt256, types.FieldTypeDecimal256:
+		case FT_I256, FT_D256:
 			// static big-endian encoding
 			copy(res[ofs:], buf[:32])
 			buf = buf[32:]
 
-		case types.FieldTypeInt128, types.FieldTypeDecimal128:
+		case FT_I128, FT_D128:
 			// static big-endian encoding
 			copy(res[ofs:], buf[:16])
 			buf = buf[16:]
 
-		case types.FieldTypeString, types.FieldTypeBytes, types.FieldTypeBigint:
+		case FT_STRING, FT_BYTES, FT_BIGINT:
 			// only fixed length string/byte data here
 			copy(res[ofs:], buf[:field.fixed])
 			buf = buf[field.fixed:]
@@ -287,7 +281,7 @@ func extractVariableInorder(c *Converter, buf []byte) []byte {
 
 		// read dynamic size when field is present in wire encoding
 		switch field.typ {
-		case types.FieldTypeString, types.FieldTypeBytes, types.FieldTypeBigint:
+		case FT_STRING, FT_BYTES, FT_BIGINT:
 			if field.fixed == 0 {
 				u := LE.Uint32(buf)
 				if c.skipLen {
@@ -307,25 +301,19 @@ func extractVariableInorder(c *Converter, buf []byte) []byte {
 
 		// reference or convert when field is in child schema
 		switch field.typ {
-		case types.FieldTypeDatetime, types.FieldTypeInt64, types.FieldTypeUint64,
-			types.FieldTypeFloat64, types.FieldTypeDecimal64:
+		case FT_TIMESTAMP, FT_DATE, FT_TIME, FT_I64, FT_U64, FT_F64, FT_D64:
 			c.layout.PutUint64(b[:], LE.Uint64(buf))
 			res.Write(b[:])
 
-		case types.FieldTypeInt32, types.FieldTypeUint32, types.FieldTypeFloat32,
-			types.FieldTypeDecimal32:
+		case FT_I32, FT_U32, FT_F32, FT_D32:
 			c.layout.PutUint32(b[:], LE.Uint32(buf))
 			res.Write(b[:4])
 
-		case types.FieldTypeInt16, types.FieldTypeUint16:
+		case FT_I16, FT_U16:
 			c.layout.PutUint16(b[:], LE.Uint16(buf))
 			res.Write(b[:2])
 
-		case types.FieldTypeBoolean, types.FieldTypeInt8, types.FieldTypeUint8,
-			types.FieldTypeInt256, types.FieldTypeDecimal256,
-			types.FieldTypeInt128, types.FieldTypeDecimal128,
-			types.FieldTypeString, types.FieldTypeBytes:
-
+		case FT_BOOL, FT_I8, FT_U8, FT_I256, FT_D256, FT_I128, FT_D128, FT_STRING, FT_BYTES:
 			// reference buffer using pre-determined size
 			res.Write(buf[:sz])
 		}
@@ -381,7 +369,7 @@ func extractVariableReorder(c *Converter, buf []byte) []byte {
 
 		// read dynamic size when field is present in wire encoding
 		switch field.typ {
-		case types.FieldTypeString, types.FieldTypeBytes, types.FieldTypeBigint:
+		case FT_STRING, FT_BYTES, FT_BIGINT:
 			if field.fixed == 0 {
 				u := LE.Uint32(buf)
 				if c.skipLen {
@@ -400,23 +388,19 @@ func extractVariableReorder(c *Converter, buf []byte) []byte {
 
 		// reference or convert when field is in child schema
 		switch field.typ {
-		case types.FieldTypeDatetime, types.FieldTypeInt64, types.FieldTypeUint64,
-			types.FieldTypeFloat64, types.FieldTypeDecimal64:
+		case FT_TIMESTAMP, FT_DATE, FT_TIME, FT_I64, FT_U64, FT_F64, FT_D64:
 			c.layout.PutUint64(c.parts[pos], LE.Uint64(buf))
 
-		case types.FieldTypeInt32, types.FieldTypeUint32, types.FieldTypeFloat32,
-			types.FieldTypeDecimal32:
+		case FT_I32, FT_U32, FT_F32, FT_D32:
 			c.layout.PutUint32(c.parts[pos], LE.Uint32(buf))
 
-		case types.FieldTypeInt16, types.FieldTypeUint16:
+		case FT_I16, FT_U16:
 			c.layout.PutUint16(c.parts[pos], LE.Uint16(buf))
 
-		case types.FieldTypeBoolean, types.FieldTypeInt8, types.FieldTypeUint8,
-			types.FieldTypeInt256, types.FieldTypeDecimal256,
-			types.FieldTypeInt128, types.FieldTypeDecimal128:
+		case FT_BOOL, FT_I8, FT_U8, FT_I256, FT_D256, FT_I128, FT_D128:
 			copy(c.parts[pos], buf[:sz])
 
-		case types.FieldTypeString, types.FieldTypeBytes:
+		case FT_STRING, FT_BYTES:
 			if field.fixed > 0 {
 				copy(c.parts[pos], buf[:sz])
 			} else {

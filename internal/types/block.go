@@ -107,6 +107,8 @@ var (
 		FieldTypeDecimal64:  BlockInt64,
 		FieldTypeDecimal32:  BlockInt32,
 		FieldTypeBigint:     BlockBytes,
+		FieldTypeDate:       BlockInt64,
+		FieldTypeTime:       BlockInt64,
 	}
 )
 
@@ -186,6 +188,15 @@ func (t BlockType) IsUnsigned() bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func (t BlockType) CanUseAsSet() bool {
+	switch t {
+	case BlockFloat64, BlockFloat32, BlockBool, BlockInt128, BlockInt256:
+		return false
+	default:
+		return true
 	}
 }
 
