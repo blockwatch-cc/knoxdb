@@ -443,10 +443,10 @@ func (f *field) update(buf []byte, tfm string) {
 		f.flag |= fQuoted
 	case '-':
 		f.flag |= fSign
-		l-- // don't count optinal sign for fixed decimal point numbers
+		l-- // don't count optional sign for fixed decimal point numbers
 	case '+':
 		f.flag |= fSign
-		l-- // don't count optinal sign for fixed decimal point numbers
+		l-- // don't count optional sign for fixed decimal point numbers
 	case 'n', 'N':
 		if bytes.Equal(buf, null) {
 			f.flag |= fNull

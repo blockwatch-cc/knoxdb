@@ -418,28 +418,28 @@ func (d *Decoder) decode(base unsafe.Pointer, line []string) error {
 			if err != nil {
 				return &DecodeError{d.r.lineNo, i, f.Name, err}
 			}
-			*(*[4]uint64)(ptr) = i256
+			*(*[32]byte)(ptr) = i256.Bytes32()
 
 		case types.FieldTypeInt128:
 			i128, err := num.ParseInt128(line[i])
 			if err != nil {
 				return &DecodeError{d.r.lineNo, i, f.Name, err}
 			}
-			*(*[2]uint64)(ptr) = i128
+			*(*[16]byte)(ptr) = i128.Bytes16()
 
 		case types.FieldTypeDecimal256:
 			d256, err := num.ParseDecimal256(line[i])
 			if err != nil {
 				return &DecodeError{d.r.lineNo, i, f.Name, err}
 			}
-			*(*[4]uint64)(ptr) = d256.Quantize(f.Scale).Int256()
+			*(*[32]byte)(ptr) = d256.Quantize(f.Scale).Int256().Bytes32()
 
 		case types.FieldTypeDecimal128:
 			d128, err := num.ParseDecimal128(line[i])
 			if err != nil {
 				return &DecodeError{d.r.lineNo, i, f.Name, err}
 			}
-			*(*[2]uint64)(ptr) = d128.Quantize(f.Scale).Int128()
+			*(*[16]byte)(ptr) = d128.Quantize(f.Scale).Int128().Bytes16()
 
 		case types.FieldTypeDecimal64:
 			d64, err := num.ParseDecimal64(line[i])

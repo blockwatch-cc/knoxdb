@@ -51,28 +51,28 @@ type SchemaB struct {
 
 // all supported types expressed by native Go types
 type NativeB struct {
-	Int64   int64     `knox:"i64"`
-	Int32   int32     `knox:"i32"`
-	Int16   int16     `knox:"i16"`
-	Int8    int8      `knox:"i8"`
-	Uint64  uint64    `knox:"u64"`
-	Uint32  uint32    `knox:"u32"`
-	Uint16  uint16    `knox:"u16"`
-	Uint8   uint8     `knox:"u8"`
-	Float64 float64   `knox:"f64"`
-	Float32 float32   `knox:"f32"`
-	D32     int32     `knox:"d32,scale=5"`
-	D64     int64     `knox:"d64,scale=15"`
-	D128    [2]uint64 `knox:"d128,scale=18"`
-	D256    [4]uint64 `knox:"d256,scale=24"`
-	I128    [2]uint64 `knox:"i128"`
-	I256    [4]uint64 `knox:"i256"`
-	Bool    bool      `knox:"bool"`
-	Time    int64     `knox:"time,scale=s"`
-	Hash    []byte    `knox:"bytes"`
-	Array   [2]byte   `knox:"array2"`
-	String  string    `knox:"string"`
-	Big     []byte    `knox:"big"`
+	Int64   int64    `knox:"i64"`
+	Int32   int32    `knox:"i32"`
+	Int16   int16    `knox:"i16"`
+	Int8    int8     `knox:"i8"`
+	Uint64  uint64   `knox:"u64"`
+	Uint32  uint32   `knox:"u32"`
+	Uint16  uint16   `knox:"u16"`
+	Uint8   uint8    `knox:"u8"`
+	Float64 float64  `knox:"f64"`
+	Float32 float32  `knox:"f32"`
+	D32     int32    `knox:"d32,scale=5"`
+	D64     int64    `knox:"d64,scale=15"`
+	D128    [16]byte `knox:"d128,scale=18"`
+	D256    [32]byte `knox:"d256,scale=24"`
+	I128    [16]byte `knox:"i128"`
+	I256    [32]byte `knox:"i256"`
+	Bool    bool     `knox:"bool"`
+	Time    int64    `knox:"time,scale=s"`
+	Hash    []byte   `knox:"bytes"`
+	Array   [2]byte  `knox:"array2"`
+	String  string   `knox:"string"`
+	Big     []byte   `knox:"big"`
 }
 
 var (
@@ -93,10 +93,10 @@ var (
 		Float32: 1.1,
 		D32:     100001,
 		D64:     1000000000000001,
-		D128:    num.Int128FromInt64(1000000000000000001),
-		D256:    num.MustParseDecimal256("1.000000000000000000000001").Int256(),
-		I128:    num.Int128FromInt64(1),
-		I256:    num.Int256FromInt64(1),
+		D128:    num.Int128FromInt64(1000000000000000001).Bytes16(),
+		D256:    num.MustParseDecimal256("1.000000000000000000000001").Int256().Bytes32(),
+		I128:    num.Int128FromInt64(1).Bytes16(),
+		I256:    num.Int256FromInt64(1).Bytes32(),
 		Bool:    true,
 		Time:    util.MustParseTime("2026-06-07T02:00:01Z").Unix(),
 		Hash:    []byte{0x78, 0x78, 0x78},

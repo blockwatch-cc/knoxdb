@@ -248,17 +248,17 @@ func (e *Encoder) encode(base unsafe.Pointer) error {
 			}
 
 		case types.FieldTypeInt256:
-			e.buf = (*(*num.Int256)(ptr)).Append(e.buf)
+			e.buf = num.Int256FromBytes(unsafe.Slice((*byte)(ptr), 32)).Append(e.buf)
 
 		case types.FieldTypeInt128:
-			e.buf = (*(*num.Int128)(ptr)).Append(e.buf)
+			e.buf = num.Int128FromBytes(unsafe.Slice((*byte)(ptr), 16)).Append(e.buf)
 
 		case types.FieldTypeDecimal256:
-			s := num.NewDecimal256(*(*num.Int256)(ptr), f.Scale).String()
+			s := num.NewDecimal256(num.Int256FromBytes(unsafe.Slice((*byte)(ptr), 32)), f.Scale).String()
 			e.buf = append(e.buf, util.UnsafeGetBytes(s)...)
 
 		case types.FieldTypeDecimal128:
-			s := num.NewDecimal128(*(*num.Int128)(ptr), f.Scale).String()
+			s := num.NewDecimal128(num.Int128FromBytes(unsafe.Slice((*byte)(ptr), 16)), f.Scale).String()
 			e.buf = append(e.buf, util.UnsafeGetBytes(s)...)
 
 		case types.FieldTypeDecimal64:

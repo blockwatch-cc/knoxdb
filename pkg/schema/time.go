@@ -14,12 +14,20 @@ const (
 	TIME_SCALE_SECOND                  // 3
 )
 
-var timeScaleFactor = [...]int64{
-	1,          // nanosecond
-	1000,       // microsecond
-	1000000,    // millisecond
-	1000000000, // second
-}
+var (
+	timeScaleFactor = [...]int64{
+		1,          // nanosecond
+		1000,       // microsecond
+		1000000,    // millisecond
+		1000000000, // second
+	}
+	timeScaleFormats = [...]string{
+		"2006-01-02 15:04:05.000000000 UTC",
+		"2006-01-02 15:04:05.000000 UTC",
+		"2006-01-02 15:04:05.000 UTC",
+		"2006-01-02 15:04:05 UTC",
+	}
+)
 
 func ParseTimeScale(s string) (TimeScale, bool) {
 	switch s {
@@ -64,4 +72,8 @@ func (s TimeScale) FromUnix(v int64) time.Time {
 
 func (s TimeScale) AsUint() uint8 {
 	return uint8(s)
+}
+
+func (s TimeScale) Format(t time.Time) string {
+	return t.Format(timeScaleFormats[s])
 }

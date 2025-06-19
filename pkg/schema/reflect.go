@@ -138,7 +138,7 @@ func SchemaOfTag(m any, tag string) (*Schema, error) {
 }
 
 // Produces a dynamic struct type only using native types like int64 for Decimal64
-// [2]uint64 for Int128, etc.
+// [16]byte for Int128, etc.
 func (s *Schema) NativeStructType() reflect.Type {
 	var sfields []reflect.StructField
 	for _, f := range s.fields {
@@ -178,9 +178,9 @@ func (s *Schema) NativeStructType() reflect.Type {
 		case types.FieldTypeFloat32:
 			rtyp = reflect.TypeFor[float32]()
 		case types.FieldTypeInt256, types.FieldTypeDecimal256:
-			rtyp = reflect.TypeFor[[4]uint64]()
+			rtyp = reflect.TypeFor[[32]byte]()
 		case types.FieldTypeInt128, types.FieldTypeDecimal128:
-			rtyp = reflect.TypeFor[[2]uint64]()
+			rtyp = reflect.TypeFor[[16]byte]()
 		default:
 			continue
 		}
