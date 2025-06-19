@@ -89,13 +89,19 @@ func SanitizeFieldName(name string, i int) string {
 	name = strings.Trim(name, `"`)
 	name = strings.TrimSpace(name)
 
+	// Replace invalid characters
+	name = rx.ReplaceAllString(name, "_")
+
+	// Replace multiple __ with single _
+	name = strings.ReplaceAll(name, "__", "_")
+
+	// Trim leading and trailing _
+	name = strings.Trim(name, "_")
+
 	// Handle empty result
 	if name == "" {
 		return "f_" + strconv.Itoa(i)
 	}
-
-	// Replace invalid characters
-	name = rx.ReplaceAllString(name, "_")
 
 	// Ensure name starts with a letter
 	if !unicode.IsLetter(rune(name[0])) {

@@ -290,7 +290,7 @@ var sniffTests = []sniffTest{
 			TimeFormat: "2006-01-02 15:04:05 UTC",
 		},
 		[]types.FieldType{FT_BYTES, FT_STRING, FT_U32, FT_U16, FT_U64, FT_TIME, FT_STRING, FT_BYTES, FT_STRING, FT_STRING, FT_U64, FT_STRING},
-		[]string{"object_id", "type_", "checkpoint", "epoch", "timestamp_ms", "timestamp", "owner_type", "owner_address", "object_status", "previous_transaction", "coin_balance", "coin_type"},
+		[]string{"object_id", "type", "checkpoint", "epoch", "timestamp_ms", "timestamp", "owner_type", "owner_address", "object_status", "previous_transaction", "coin_balance", "coin_type"},
 	},
 }
 
