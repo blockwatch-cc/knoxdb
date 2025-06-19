@@ -280,7 +280,7 @@ func (d *Decoder) validateHeader(line []string) error {
 		if !f.IsVisible {
 			continue
 		}
-		if line[i] != f.Name {
+		if SanitizeFieldName(line[i], i) != f.Name {
 			return fmt.Errorf("csv: mismatched field[%d] header name %q, expected %q",
 				i+1, line[i], f.Name)
 		}
