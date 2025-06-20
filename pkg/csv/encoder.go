@@ -28,7 +28,8 @@ type Encoder struct {
 	flags  EncoderFlags
 	typ    reflect.Type
 	ofs    []uintptr // field offsets in dynamic native struct
-	timeAs string    // timestamp format
+	timeAs string    // timestamp format override
+	dateAs string    // date format override
 	buf    []byte    // record write buffer
 }
 
@@ -85,6 +86,11 @@ func (e *Encoder) WithEol(eol []byte) *Encoder {
 
 func (e *Encoder) WithTimeFormat(f string) *Encoder {
 	e.timeAs = f
+	return e
+}
+
+func (e *Encoder) WithDateFormat(f string) *Encoder {
+	e.dateAs = f
 	return e
 }
 
@@ -189,9 +195,32 @@ func (e *Encoder) encode(base unsafe.Pointer) error {
 		}
 		ptr := unsafe.Add(base, e.ofs[i])
 		switch f.Type {
-		case types.FieldTypeDatetime:
-			tm := schema.TimeScale(f.Scale).FromUnix(*(*int64)(ptr))
-			e.buf = tm.AppendFormat(e.buf, e.timeAs)
+		case types.FieldTypeTimestamp:
+			s := schema.TimeScale(f.Scale)
+			tm := s.FromUnix(*(*int64)(ptr))
+			if e.timeAs == "" {
+				e.buf = tm.AppendFormat(e.buf, s.DateTimeFormat())
+			} else {
+				e.buf = tm.AppendFormat(e.buf, e.timeAs)
+			}
+
+		case types.FieldTypeDate:
+			s := schema.TimeScale(f.Scale)
+			tm := s.FromUnix(*(*int64)(ptr))
+			if e.dateAs == "" {
+				e.buf = tm.AppendFormat(e.buf, s.DateTimeFormat())
+			} else {
+				e.buf = tm.AppendFormat(e.buf, e.dateAs)
+			}
+
+		case types.FieldTypeTime:
+			s := schema.TimeScale(f.Scale)
+			tm := s.FromUnix(*(*int64)(ptr))
+			if e.timeAs == "" {
+				e.buf = tm.AppendFormat(e.buf, s.TimeOnlyFormat())
+			} else {
+				e.buf = tm.AppendFormat(e.buf, e.timeAs)
+			}
 
 		case types.FieldTypeInt64:
 			e.buf = strconv.AppendInt(e.buf, *(*int64)(ptr), 10)

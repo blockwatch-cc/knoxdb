@@ -51,6 +51,7 @@ type SnifferResult struct {
 	HasNull     bool   // some fields are nullable
 	HasTime     bool   // time field present
 	TimeFormat  string // detected time format
+	DateFormat  string // detected date format
 }
 
 type Sniffer struct {
@@ -64,6 +65,7 @@ type Sniffer struct {
 	head     []string            // header/field names (if present)
 	fields   []field             // detected field properties
 	userTime string              // user-defined time format (optional)
+	userDate string              // user-defined date format (optional)
 }
 
 // Creates a new sniffer instance to analyze a CSV stream from r. If r is seekable
@@ -97,6 +99,11 @@ func (s *Sniffer) WithTimeFormat(f string) *Sniffer {
 	return s
 }
 
+func (s *Sniffer) WithDateFormat(f string) *Sniffer {
+	s.userDate = f
+	return s
+}
+
 func (s *Sniffer) WithBufferSize(sz int) *Sniffer {
 	if sz <= 0 {
 		return s
@@ -121,6 +128,9 @@ func (s *Sniffer) Schema() *schema.Schema {
 			}
 			b.SetFieldOpts(schema.Fixed(l))
 		}
+		if f.isDateTime() {
+			b.SetFieldOpts(schema.Scale(f.scale))
+		}
 	}
 	return b.Finalize().Schema()
 }
@@ -131,6 +141,7 @@ func (s *Sniffer) NewDecoder(r io.Reader) *Decoder {
 		WithHeader(s.res.HasHeader).
 		WithTrim(s.res.NeedsTrim).
 		WithTimeFormat(s.res.TimeFormat).
+		WithDateFormat(s.res.DateFormat).
 		WithStrictSchema(true).
 		WithBuffer(s.buf)
 }
@@ -257,9 +268,9 @@ const (
 	fExp     // 12 float exponent {e|E}{+|-}, nan, {+|-}inf (float)
 
 	// global features
-	fTimestamp // 13 parses as timestamp with less than 1s resolution
-	fTime      // 14 parses as datetime with at most second resolution
-	fDate      // 15 parses as date
+	fTimestamp // 13 parses as date and time with optional below 1s resolution
+	fTime      // 14 parses as time only with optional below 1s resolution
+	fDate      // 15 parses as date only
 	fFixed     // 16 fixed length across records
 )
 
@@ -289,17 +300,18 @@ func (f fieldFlag) String() string {
 
 // field features
 type field struct {
-	len  int       // max field length including quotes but without outer space
-	dot  int       // dot position (from right)
-	flag fieldFlag // flags
-	tfm  string    // time format
+	len   int       // max field length including quotes but without outer space
+	dot   int       // dot position (from right)
+	flag  fieldFlag // flags
+	tfm   string    // time format
+	scale int       // time scale
 }
 
-func newField(buf []byte, tfm string) field {
+func newField(buf []byte, tfm, dfm string) field {
 	f := field{
 		flag: defaultFlags,
 	}
-	f.update(buf, tfm)
+	f.update(buf, tfm, dfm)
 	return f
 }
 
@@ -359,8 +371,12 @@ func (f field) Type() types.FieldType {
 		}
 	case f.isFloat():
 		return types.FieldTypeFloat64
-	case f.isDateTime():
-		return types.FieldTypeDatetime
+	case f.is(fDate):
+		return types.FieldTypeDate
+	case f.is(fTime):
+		return types.FieldTypeTime
+	case f.is(fTimestamp):
+		return types.FieldTypeTimestamp
 	case f.isBytes():
 		return types.FieldTypeBytes
 	default:
@@ -417,7 +433,7 @@ func (f field) isBytes() bool {
 
 func (f field) maybeDateTime() bool {
 	return f.not(fQuoted) && f.not(fSign) && f.not(fExp) && f.not(fZerox) &&
-		f.is(fNum) && f.is(fDecimal) && f.is(fDash)
+		f.is(fNum) && f.is(fDecimal) && f.is(fFixed) && (f.is(fDash) || f.is(fOther))
 }
 
 func (f field) isDateTime() bool {
@@ -428,7 +444,7 @@ func (f field) done() bool {
 	return f.is(fDate) || f.is(fTime) || f.is(fTimestamp) || f.is(fOther) || f.is(fQuoted)
 }
 
-func (f *field) update(buf []byte, tfm string) {
+func (f *field) update(buf []byte, tfm, dfm string) {
 	// empty and null fields are allowed for fixed length types
 	l := len(buf)
 	if l == 0 {
@@ -564,9 +580,10 @@ func (f *field) update(buf []byte, tfm string) {
 
 		// try time parsing (expensive, so only do this for the first non-null non-empty string)
 		if f.maybeDateTime() {
-			flag, format := tryTime(src, tfm)
+			flag, format, scale := tryTime(src, tfm, dfm)
 			f.flag |= flag
 			f.tfm = format
+			f.scale = scale
 		}
 	}
 	if f.dot != dotPos {
@@ -578,23 +595,36 @@ func (f *field) update(buf []byte, tfm string) {
 	}
 }
 
-func tryTime(buf []byte, tfm string) (fieldFlag, string) {
+func tryTime(buf []byte, tfm, dfm string) (fieldFlag, string, int) {
 	s := string(buf)
 	if tfm != "" {
 		if _, err := time.Parse(tfm, s); err == nil {
-			return fTime, tfm
+			return fTimestamp, tfm, 0
 		}
 	}
-	if _, err := time.Parse(time.DateOnly, s); err == nil {
-		return fDate, time.DateOnly
+	if dfm != "" {
+		if _, err := time.Parse(dfm, s); err == nil {
+			return fDate, dfm, int(schema.TIME_SCALE_DAY)
+		}
 	}
-	if _, err := time.Parse(time.TimeOnly, s); err == nil {
-		return fTime, time.TimeOnly
+
+	// try knoxdb standard formats
+	f, scale, timeOnly, ok := schema.DetectTimeFormat(s)
+	if ok {
+		if timeOnly {
+			return fTime, f, int(scale)
+		}
+		if scale == schema.TIME_SCALE_DAY {
+			return fDate, f, int(scale)
+		}
+		return fTimestamp, f, int(scale)
 	}
-	if f, err := util.ParseTimeFormat(s); err == nil {
-		return fTimestamp, f
+
+	// try other formats
+	if f, err := util.DetectTimeFormat(s); err == nil {
+		return fTimestamp, f, 0
 	}
-	return 0, ""
+	return 0, "", 0
 }
 
 func (s *Sniffer) analyzeHeader() {
@@ -610,7 +640,7 @@ func (s *Sniffer) analyzeHeader() {
 			if s.res.NeedsTrim {
 				buf = bytes.TrimSpace(buf)
 			}
-			f := newField(buf, s.userTime)
+			f := newField(buf, s.userTime, s.userDate)
 			if f.isHeader() {
 				if f.is(fQuoted) {
 					buf = buf[1 : len(buf)-1]
@@ -655,7 +685,7 @@ func (s *Sniffer) analyzeTypes() {
 				if s.res.NeedsTrim {
 					buf = bytes.TrimSpace(buf)
 				}
-				s.fields = append(s.fields, newField(buf, s.userTime))
+				s.fields = append(s.fields, newField(buf, s.userTime, s.userDate))
 			}
 		} else {
 			// update with each following record
@@ -666,7 +696,7 @@ func (s *Sniffer) analyzeTypes() {
 				if s.res.NeedsTrim {
 					buf = bytes.TrimSpace(buf)
 				}
-				s.fields[i].update(buf, s.userTime)
+				s.fields[i].update(buf, s.userTime, s.userDate)
 			}
 		}
 	}
@@ -674,7 +704,7 @@ func (s *Sniffer) analyzeTypes() {
 	// edge case when only a header is present
 	if len(s.fields) == 0 {
 		for range s.res.NumFields {
-			s.fields = append(s.fields, newField(nil, ""))
+			s.fields = append(s.fields, newField(nil, "", ""))
 		}
 	}
 
@@ -684,7 +714,12 @@ func (s *Sniffer) analyzeTypes() {
 			continue
 		}
 		s.res.HasTime = true
-		s.res.TimeFormat = f.tfm
+		if f.is(fTime) || f.is(fTimestamp) {
+			s.res.TimeFormat = f.tfm
+		}
+		if f.is(fDate) {
+			s.res.DateFormat = f.tfm
+		}
 		break
 	}
 }

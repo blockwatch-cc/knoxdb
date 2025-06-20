@@ -86,7 +86,7 @@ var (
 
 	BlockTypes = [...]BlockType{
 		FieldTypeInvalid:    BlockInvalid,
-		FieldTypeDatetime:   BlockInt64,
+		FieldTypeTimestamp:  BlockInt64,
 		FieldTypeInt64:      BlockInt64,
 		FieldTypeUint64:     BlockUint64,
 		FieldTypeFloat64:    BlockFloat64,

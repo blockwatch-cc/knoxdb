@@ -148,6 +148,14 @@ func (b *Builder) Timestamp(name string, opts ...BuilderOption) *Builder {
 	return b.addField(FT_TIMESTAMP, name, opts...)
 }
 
+func (b *Builder) Date(name string, opts ...BuilderOption) *Builder {
+	return b.addField(FT_DATE, name, opts...)
+}
+
+func (b *Builder) Time(name string, opts ...BuilderOption) *Builder {
+	return b.addField(FT_TIME, name, opts...)
+}
+
 func (b *Builder) Float64(name string, opts ...BuilderOption) *Builder {
 	return b.addField(FT_F64, name, opts...)
 }
@@ -194,12 +202,4 @@ func (b *Builder) Decimal256(name string, opts ...BuilderOption) *Builder {
 
 func (b *Builder) Bigint(name string, opts ...BuilderOption) *Builder {
 	return b.addField(FT_BIGINT, name, opts...)
-}
-
-func (b *Builder) Date(name string, opts ...BuilderOption) *Builder {
-	return b.addField(FT_DATE, name, opts...)
-}
-
-func (b *Builder) Time(name string, opts ...BuilderOption) *Builder {
-	return b.addField(FT_TIME, name, opts...)
 }

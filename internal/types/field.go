@@ -14,7 +14,7 @@ type FieldType byte
 
 const (
 	FieldTypeInvalid FieldType = iota
-	FieldTypeDatetime
+	FieldTypeTimestamp
 	FieldTypeInt64
 	FieldTypeUint64
 	FieldTypeFloat64
@@ -40,13 +40,13 @@ const (
 )
 
 var (
-	fieldTypeString  = "__datetime_int64_uint64_float64_boolean_string_bytes_int32_int16_int8_uint32_uint16_uint8_float32_int256_int128_decimal256_decimal128_decimal64_decimal32_bigint_date_time"
-	fieldTypeIdx     = [...]int{0, 2, 11, 17, 24, 32, 40, 47, 53, 59, 65, 70, 77, 84, 90, 98, 105, 112, 123, 134, 144, 154, 161, 166, 171}
+	fieldTypeString  = "__timestamp_int64_uint64_float64_boolean_string_bytes_int32_int16_int8_uint32_uint16_uint8_float32_int256_int128_decimal256_decimal128_decimal64_decimal32_bigint_date_time"
+	fieldTypeIdx     = [...]int{0, 2, 12, 18, 25, 33, 41, 48, 54, 60, 66, 71, 78, 85, 91, 99, 106, 113, 124, 135, 145, 155, 162, 167, 172}
 	fieldTypeReverse = map[string]FieldType{}
 
 	fieldTypeWireSize = [...]int{
 		FieldTypeInvalid:    0,
-		FieldTypeDatetime:   8, // i64
+		FieldTypeTimestamp:  8, // i64
 		FieldTypeInt64:      8,
 		FieldTypeUint64:     8,
 		FieldTypeFloat64:    8,
@@ -73,13 +73,13 @@ var (
 )
 
 func init() {
-	for t := FieldTypeInvalid; t <= FieldTypeDecimal32; t++ {
+	for t := FieldTypeInvalid; t <= FieldTypeTime; t++ {
 		fieldTypeReverse[t.String()] = t
 	}
 }
 
 func (t FieldType) IsValid() bool {
-	return t > FieldTypeInvalid && t <= FieldTypeDecimal32
+	return t > FieldTypeInvalid && t <= FieldTypeTime
 }
 
 func (t FieldType) String() string {
@@ -88,7 +88,7 @@ func (t FieldType) String() string {
 
 func (t FieldType) Zero() any {
 	switch t {
-	case FieldTypeDatetime, FieldTypeDate, FieldTypeTime:
+	case FieldTypeTimestamp, FieldTypeDate, FieldTypeTime:
 		var t time.Time
 		return t.UTC()
 	case FieldTypeInt64:

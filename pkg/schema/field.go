@@ -19,7 +19,7 @@ import (
 type FieldType = types.FieldType
 
 const (
-	FT_TIMESTAMP = types.FieldTypeDatetime
+	FT_TIMESTAMP = types.FieldTypeTimestamp
 	FT_I8        = types.FieldTypeInt8
 	FT_I16       = types.FieldTypeInt16
 	FT_I32       = types.FieldTypeInt32

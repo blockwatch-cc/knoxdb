@@ -35,8 +35,8 @@ type Decoder struct {
 	typ    reflect.Type
 	pool   *stringx.StringPool
 	ofs    []uintptr // offsets in dynamic native struct
-	dateAs string    // date format
-	timeAs string    // timestamp format
+	dateAs string    // date format override (optional)
+	timeAs string    // timestamp format override (optional)
 	buf    []byte    // user provided scan buffer
 }
 
@@ -301,13 +301,48 @@ func (d *Decoder) decode(base unsafe.Pointer, line []string) error {
 		}
 		ptr := unsafe.Add(base, d.ofs[i])
 		switch f.Type {
-		case types.FieldTypeDatetime:
-			tm, err := time.Parse(d.timeAs, line[i])
-			if err != nil {
-				return &DecodeError{d.r.lineNo, i, f.Name, err}
+		case types.FieldTypeTimestamp:
+			if d.timeAs == "" {
+				tm, err := schema.TimeScale(f.Scale).Parse(line[i], false)
+				if err != nil {
+					return &DecodeError{d.r.lineNo, i, f.Name, err}
+				}
+				*(*int64)(ptr) = tm
+			} else {
+				tm, err := time.Parse(d.timeAs, line[i])
+				if err != nil {
+					return &DecodeError{d.r.lineNo, i, f.Name, err}
+				}
+				*(*int64)(ptr) = schema.TimeScale(f.Scale).ToUnix(tm)
 			}
-			*(*int64)(ptr) = schema.TimeScale(f.Scale).ToUnix(tm)
-
+		case types.FieldTypeDate:
+			if d.dateAs == "" {
+				tm, err := schema.TimeScale(f.Scale).Parse(line[i], false)
+				if err != nil {
+					return &DecodeError{d.r.lineNo, i, f.Name, err}
+				}
+				*(*int64)(ptr) = tm
+			} else {
+				tm, err := time.Parse(d.dateAs, line[i])
+				if err != nil {
+					return &DecodeError{d.r.lineNo, i, f.Name, err}
+				}
+				*(*int64)(ptr) = schema.TimeScale(f.Scale).ToUnix(tm)
+			}
+		case types.FieldTypeTime:
+			if d.timeAs == "" {
+				tm, err := schema.TimeScale(f.Scale).Parse(line[i], true)
+				if err != nil {
+					return &DecodeError{d.r.lineNo, i, f.Name, err}
+				}
+				*(*int64)(ptr) = tm
+			} else {
+				tm, err := time.Parse(d.timeAs, line[i])
+				if err != nil {
+					return &DecodeError{d.r.lineNo, i, f.Name, err}
+				}
+				*(*int64)(ptr) = schema.TimeScale(f.Scale).ToUnix(tm)
+			}
 		case types.FieldTypeInt64:
 			val, err := strconv.ParseInt(line[i], 10, 64)
 			if err != nil {

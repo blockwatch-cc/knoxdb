@@ -3,7 +3,11 @@
 
 package schema
 
-import "time"
+import (
+	"time"
+
+	"blockwatch.cc/knoxdb/pkg/util"
+)
 
 type TimeScale byte
 
@@ -49,7 +53,7 @@ func ParseTimeScale(s string) (TimeScale, bool) {
 		return TIME_SCALE_MILLI, true
 	case "s", "sec", "second":
 		return TIME_SCALE_SECOND, true
-	case "d", "day", "days":
+	case "d", "day":
 		return TIME_SCALE_DAY, true
 	default:
 		return 0, false
@@ -117,6 +121,24 @@ func (s TimeScale) Parse(v string, isTimeOnly bool) (int64, error) {
 		}
 		return s.ToUnix(tm), nil
 	}
+}
+
+// returns format string, scale factor, time only flag and ok flag
+func DetectTimeFormat(s string) (string, TimeScale, bool, bool) {
+	for i, f := range timeScaleFormats {
+		if _, err := time.Parse(f, s); err == nil {
+			return f, TimeScale(i), false, true
+		}
+	}
+	for i, f := range timeOnlyFormats {
+		if _, err := time.Parse(f, s); err == nil {
+			return f, TimeScale(i), true, true
+		}
+	}
+	if f, err := util.DetectTimeFormat(s); err == nil {
+		return f, TIME_SCALE_NANO, false, true
+	}
+	return "", 0, false, false
 }
 
 func UnixDays(t time.Time) int64 {
