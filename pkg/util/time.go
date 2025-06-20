@@ -109,7 +109,7 @@ var dateOnly = StringList{
 	"2006",
 }
 
-func ParseTimeFormat(s string) (string, error) {
+func DetectTimeFormat(s string) (string, error) {
 	for _, f := range TimeFormats {
 		if _, err := time.Parse(f, s); err == nil {
 			return f, nil
@@ -410,6 +410,10 @@ func UnixNanoNonZero(t time.Time) int64 {
 		return 0
 	}
 	return t.UnixNano()
+}
+
+func UnixDays(t time.Time) int {
+	return int(t.Sub(time.Unix(0, 0)) / (24 * time.Hour))
 }
 
 func (t Time) Format(layout string) string {
