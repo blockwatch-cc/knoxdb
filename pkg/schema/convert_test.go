@@ -38,13 +38,13 @@ type SubTypesReordered struct {
 
 type FixedSubTypes struct {
 	BaseModel            // 0
-	FixedArray  [20]byte `knox:"fixed_array"`           // 1
-	FixedString string   `knox:"fixed_string,fixed=20"` // 3
+	FixedBytes  [20]byte `knox:"fixed_bytes"`           // 1
+	FixedString string   `knox:"fixed_string,fixed=20"` // 2
 }
 
 type FixedSubTypesReordered struct {
-	FixedBytes []byte   `knox:"fixed_bytes,fixed=20"` // 2
-	FixedArray [20]byte `knox:"fixed_array"`          // 1
+	FixedString string   `knox:"fixed_string,fixed=20"` // 2
+	FixedBytes  [20]byte `knox:"fixed_bytes"`           // 1
 }
 
 func NewSubTypes(i int64) SubTypes {
@@ -180,7 +180,7 @@ func TestSchemaConvert(t *testing.T) {
 			err = fixDec.Decode(buf2, &sub)
 			require.NoError(t, err)
 			assert.Equal(t, base.Id, sub.Id)
-			assert.Equal(t, base.FixedArray, sub.FixedArray)
+			assert.Equal(t, base.FixedBytes, sub.FixedBytes)
 			assert.Equal(t, base.FixedString, sub.FixedString)
 		}
 	})
@@ -207,7 +207,7 @@ func TestSchemaConvert(t *testing.T) {
 			var sub FixedSubTypesReordered
 			err = fixDec.Decode(buf2, &sub)
 			require.NoError(t, err)
-			assert.Equal(t, base.FixedArray, sub.FixedArray)
+			assert.Equal(t, base.FixedString, sub.FixedString)
 			assert.Equal(t, base.FixedBytes, sub.FixedBytes)
 			runtime.KeepAlive(buf2)
 		}
@@ -317,7 +317,7 @@ func TestSchemaConvertWithVisibility(t *testing.T) {
 			err = fixDec.Decode(buf2, &sub)
 			require.NoError(t, err)
 			assert.Equal(t, base.Id, sub.Id)
-			assert.Equal(t, [20]byte{}, sub.FixedArray) // deleted field
+			assert.Equal(t, [20]byte{}, sub.FixedBytes) // deleted field
 			assert.Equal(t, base.FixedString, sub.FixedString)
 		}
 	})
@@ -345,8 +345,8 @@ func TestSchemaConvertWithVisibility(t *testing.T) {
 			var sub FixedSubTypesReordered
 			err = fixDec.Decode(buf2, &sub)
 			require.NoError(t, err)
-			assert.Equal(t, [20]byte{}, sub.FixedArray) // deleted field
-			assert.Equal(t, base.FixedBytes, sub.FixedBytes)
+			assert.Equal(t, [20]byte{}, sub.FixedBytes) // deleted field
+			assert.Equal(t, base.FixedString, sub.FixedString)
 			runtime.KeepAlive(buf2)
 		}
 	})

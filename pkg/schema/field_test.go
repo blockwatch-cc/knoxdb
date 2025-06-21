@@ -570,7 +570,6 @@ func TestFieldUtilityMethods(t *testing.T) {
 		expectedVisible bool
 		expectedFixed   bool
 		expectedIface   bool
-		expectedArray   bool
 	}{
 		{
 			name:            "Valid and visible field",
@@ -579,7 +578,6 @@ func TestFieldUtilityMethods(t *testing.T) {
 			expectedVisible: true,
 			expectedFixed:   true,
 			expectedIface:   false,
-			expectedArray:   false,
 		},
 		{
 			name:            "Invalid field (no name)",
@@ -588,7 +586,6 @@ func TestFieldUtilityMethods(t *testing.T) {
 			expectedVisible: true,
 			expectedFixed:   true,
 			expectedIface:   false,
-			expectedArray:   false,
 		},
 		{
 			name:            "Invisible field",
@@ -597,7 +594,6 @@ func TestFieldUtilityMethods(t *testing.T) {
 			expectedVisible: false,
 			expectedFixed:   true,
 			expectedIface:   false,
-			expectedArray:   false,
 		},
 		{
 			name:            "Variable-size field",
@@ -606,7 +602,6 @@ func TestFieldUtilityMethods(t *testing.T) {
 			expectedVisible: true,
 			expectedFixed:   false,
 			expectedIface:   false,
-			expectedArray:   false,
 		},
 		{
 			name:            "Interface field",
@@ -615,7 +610,6 @@ func TestFieldUtilityMethods(t *testing.T) {
 			expectedVisible: true,
 			expectedFixed:   false,
 			expectedIface:   true,
-			expectedArray:   false,
 		},
 		{
 			name:            "Array field",
@@ -624,7 +618,6 @@ func TestFieldUtilityMethods(t *testing.T) {
 			expectedVisible: true,
 			expectedFixed:   true,
 			expectedIface:   false,
-			expectedArray:   true,
 		},
 		{
 			name:            "Array field with fixed size",
@@ -633,7 +626,6 @@ func TestFieldUtilityMethods(t *testing.T) {
 			expectedVisible: true,
 			expectedFixed:   true,
 			expectedIface:   false,
-			expectedArray:   true,
 		},
 		{
 			name:            "String",
@@ -642,7 +634,6 @@ func TestFieldUtilityMethods(t *testing.T) {
 			expectedVisible: true,
 			expectedFixed:   false,
 			expectedIface:   false,
-			expectedArray:   false,
 		},
 		{
 			name:            "Bytes",
@@ -651,7 +642,6 @@ func TestFieldUtilityMethods(t *testing.T) {
 			expectedVisible: true,
 			expectedFixed:   false,
 			expectedIface:   false,
-			expectedArray:   false,
 		},
 		{
 			name:            "FixedBytes",
@@ -660,7 +650,6 @@ func TestFieldUtilityMethods(t *testing.T) {
 			expectedVisible: true,
 			expectedFixed:   true,
 			expectedIface:   false,
-			expectedArray:   false,
 		},
 		{
 			name:            "BytesArray",
@@ -669,7 +658,6 @@ func TestFieldUtilityMethods(t *testing.T) {
 			expectedVisible: true,
 			expectedFixed:   true,
 			expectedIface:   false,
-			expectedArray:   true,
 		},
 		{
 			name:            "FixedBytesArray",
@@ -678,7 +666,6 @@ func TestFieldUtilityMethods(t *testing.T) {
 			expectedVisible: true,
 			expectedFixed:   true,
 			expectedIface:   false,
-			expectedArray:   true,
 		},
 		{
 			name:            "Float64",
@@ -687,7 +674,6 @@ func TestFieldUtilityMethods(t *testing.T) {
 			expectedVisible: true,
 			expectedFixed:   true,
 			expectedIface:   false,
-			expectedArray:   false,
 		},
 	}
 
@@ -697,7 +683,6 @@ func TestFieldUtilityMethods(t *testing.T) {
 			assert.Equal(t, tt.expectedVisible, tt.field.IsVisible())
 			assert.Equal(t, tt.expectedFixed, tt.field.IsFixedSize())
 			assert.Equal(t, tt.expectedIface, tt.field.IsInterface())
-			assert.Equal(t, tt.expectedArray, tt.field.IsArray())
 		})
 	}
 }
@@ -729,7 +714,7 @@ func TestFieldCodecSpecialCases(t *testing.T) {
 		{"TextMarshaler", marshalField, OC_MSHTXT},
 		{"Stringer", stringerField, OC_MSHSTR},
 		{"BinaryMarshaler", byterField, OC_MSHBIN},
-		{"FixedArray", arrayField, OC_FIXARRAY},
+		{"FixedBytes", arrayField, OC_FIXBYTES},
 	}
 
 	for _, tt := range tests {
@@ -803,7 +788,6 @@ func TestFieldExported(t *testing.T) {
 		Compress:  originalField.Compress(),
 		Index:     originalField.Index(),
 		IsVisible: originalField.IsVisible(),
-		IsArray:   originalField.IsArray(),
 		Iface:     originalField.iface,
 		Scale:     originalField.Scale(),
 		Fixed:     originalField.Fixed(),
@@ -819,7 +803,6 @@ func TestFieldExported(t *testing.T) {
 		assert.Equal(t, originalField.Compress(), exported.Compress)
 		assert.Equal(t, originalField.Index(), exported.Index)
 		assert.Equal(t, originalField.IsVisible(), exported.IsVisible)
-		assert.Equal(t, originalField.IsArray(), exported.IsArray)
 		assert.Equal(t, originalField.iface, exported.Iface)
 		assert.Equal(t, originalField.Scale(), exported.Scale)
 		assert.Equal(t, originalField.Fixed(), exported.Fixed)

@@ -20,50 +20,47 @@ const (
 	OpCodeFloat32                       // 0x9  9
 	OpCodeFloat64                       // 0xA  10
 	OpCodeBool                          // 0xB  11
-	OpCodeFixedArray                    // 0xC  12
+	OpCodeFixedBytes                    // 0xC  12
 	OpCodeFixedString                   // 0xD  13
-	OpCodeFixedBytes                    // 0xE  14
-	OpCodeString                        // 0xF  15
-	OpCodeBytes                         // 0x10 16
-	OpCodeTimestamp                     // 0x11 17
-	OpCodeInt128                        // 0x12 18
-	OpCodeInt256                        // 0x13 19
-	OpCodeDecimal32                     // 0x14 20
-	OpCodeDecimal64                     // 0x15 21
-	OpCodeDecimal128                    // 0x16 22
-	OpCodeDecimal256                    // 0x17 23
-	OpCodeMarshalBinary                 // 0x18 24
-	OpCodeMarshalText                   // 0x19 25
-	OpCodeStringer                      // 0x1A 26
-	OpCodeUnmarshalBinary               // 0x1B 27
-	OpCodeUnmarshalText                 // 0x1C 28
-	OpCodeEnum                          // 0x1D 29
-	OpCodeSkip                          // 0x1E 30
-	OpCodeBigInt                        // 0x1F 31
-	OpCodeTime                          // 0x20 32
-	OpCodeDate                          // 0x21 33
+	OpCodeString                        // 0xE  14
+	OpCodeBytes                         // 0xF  15
+	OpCodeTimestamp                     // 0x10 16
+	OpCodeTime                          // 0x11 17
+	OpCodeDate                          // 0x12 18
+	OpCodeInt128                        // 0x13 19
+	OpCodeInt256                        // 0x14 20
+	OpCodeDecimal32                     // 0x15 21
+	OpCodeDecimal64                     // 0x16 22
+	OpCodeDecimal128                    // 0x17 23
+	OpCodeDecimal256                    // 0x18 24
+	OpCodeMarshalBinary                 // 0x19 25
+	OpCodeMarshalText                   // 0x1A 26
+	OpCodeStringer                      // 0x1B 27
+	OpCodeUnmarshalBinary               // 0x1C 28
+	OpCodeUnmarshalText                 // 0x1D 29
+	OpCodeEnum                          // 0x1E 30
+	OpCodeSkip                          // 0x1F 31
+	OpCodeBigInt                        // 0x20 32
 )
 
 var (
-	opCodeStrings = "__i8_i16_i32_i64_u8_u16_u32_u64_f32_f64_bool_fixarr_fixstr_fixbyte_str_byte_dtime_i128_i256_d32_d64_d128_d256_mshbin_mshtxt_mshstr_ushbin_ushtxt_enum_skip_bigint_time_date"
+	opCodeStrings = "__i8_i16_i32_i64_u8_u16_u32_u64_f32_f64_bool_fixbyte_fixstr_str_byte_timestamp_time_date_i128_i256_d32_d64_d128_d256_mshbin_mshtxt_mshstr_ushbin_ushtxt_enum_skip_bigint"
 	opCodeIdx     = [...]int{
 		0,                           // invalid
 		2, 5, 9, 13, 17, 20, 24, 28, // int/uint
 		32, 36, // float
-		40,         // bool
-		45, 52, 59, // fixed
-		67, 71, // string, bytes
-		76,     // datetime
-		82, 87, // i128/256
-		92, 96, 100, 105, // decimals
-		110, 117, 124, // marshalers
-		131, 138, // unmarshalers
-		145, // enum
-		150, // skip
-		155, // bigint
-		162, // time
-		167, // date
-		172, // end-of-string
+		40,     // bool
+		45, 53, // fixed
+		60, 64, // string, bytes
+		69, 79, 84, // datetime
+		89, 94, // i128/256
+		98, 103, 107, 112, // decimals
+		117, 124, 131, // marshalers
+		138, 145, // unmarshalers
+		152, // enum
+		157, // skip
+		162, // bigint
+		169, // end-of-string
 	}
 )
 

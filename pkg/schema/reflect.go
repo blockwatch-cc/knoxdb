@@ -226,7 +226,7 @@ func (s *Schema) StructType() reflect.Type {
 		tag += `"`
 		sfields = append(sfields, reflect.StructField{
 			Name: util.ToTitle(f.name),
-			Type: reflect.TypeOf(f.typ.Zero()),
+			Type: f.GoType(),
 			Tag:  reflect.StructTag(tag),
 		})
 	}
@@ -291,12 +291,11 @@ func reflectStructField(f reflect.StructField, tagName string) (field Field, err
 
 func (f *Field) ParseType(r reflect.StructField) error {
 	var (
-		iface   types.IfaceFlags
-		typ     types.FieldType
-		flags   types.FieldFlags
-		fixed   uint16
-		scale   uint8
-		isArray bool
+		iface types.IfaceFlags
+		typ   types.FieldType
+		flags types.FieldFlags
+		fixed uint16
+		scale uint8
 	)
 
 	// detect marshaler types
@@ -434,7 +433,6 @@ func (f *Field) ParseType(r reflect.StructField) error {
 			case r.Type.Elem().Kind() == reflect.Uint8:
 				typ = FT_BYTES
 				fixed = uint16(r.Type.Len())
-				isArray = true
 			default:
 				return fmt.Errorf("unsupported array type %s, should implement BinaryMarshaler", r.Type)
 			}
@@ -448,7 +446,6 @@ func (f *Field) ParseType(r reflect.StructField) error {
 	f.flags = flags
 	f.fixed = fixed
 	f.scale = scale
-	f.isArray = isArray
 
 	return nil
 }
@@ -469,10 +466,6 @@ func (f *Field) ParseTag(tag string) error {
 		compress types.BlockCompression
 		index    types.IndexType
 	)
-
-	if f.isArray {
-		maxFixed = f.fixed
-	}
 
 	for _, flag := range tokens[1:] {
 		key, val, ok := strings.Cut(strings.TrimSpace(flag), "=")
@@ -536,12 +529,8 @@ func (f *Field) ParseTag(tag string) error {
 				return fmt.Errorf("unsupported compression type %q", val)
 			}
 		case "fixed":
-			switch f.typ {
-			case FT_BYTES, FT_STRING:
-			// only compatible with:
-			// - arrays: fixed length
-			// - byte slices, strings: fixed length
-			default:
+			// only compatible with strings, bytes must use [n]byte arrays):
+			if f.typ != FT_STRING {
 				return fmt.Errorf("fixed tag unsupported on type %s", f.typ)
 			}
 			if ok {
@@ -715,8 +704,6 @@ func compileCodecs(s *Schema) (enc []OpCode, dec []OpCode) {
 			switch {
 			case f.Can(types.IfaceBinaryMarshaler):
 				ec = OpCodeMarshalBinary
-			case f.isArray:
-				ec = OpCodeFixedArray
 			case f.fixed > 0:
 				ec = OpCodeFixedBytes
 			default:
@@ -727,8 +714,6 @@ func compileCodecs(s *Schema) (enc []OpCode, dec []OpCode) {
 			switch {
 			case f.Can(types.IfaceBinaryUnmarshaler):
 				dc = OpCodeUnmarshalBinary
-			case f.isArray:
-				dc = OpCodeFixedArray
 			case f.fixed > 0:
 				dc = OpCodeFixedBytes
 			default:

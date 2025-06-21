@@ -28,6 +28,63 @@ func (p *Package) ReadWire(row int) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// Extract a change set from selected columns, used in WAL update mode.
+func (p *Package) ReadWireFields(buf *bytes.Buffer, row int, cols []int) error {
+	for _, v := range cols {
+		var (
+			b   = p.blocks[v]
+			f   = p.schema.Field(v)
+			x   [8]byte
+			err error
+		)
+		switch b.Type() {
+		case types.BlockUint64, types.BlockInt64, types.BlockFloat64:
+			LE.PutUint64(x[:], b.Uint64().Get(row))
+			_, err = buf.Write(x[:])
+		case types.BlockUint32, types.BlockInt32, types.BlockFloat32:
+			LE.PutUint32(x[:], b.Uint32().Get(row))
+			_, err = buf.Write(x[:4])
+		case types.BlockUint16, types.BlockInt16:
+			LE.PutUint16(x[:], b.Uint16().Get(row))
+			_, err = buf.Write(x[:2])
+		case types.BlockUint8, types.BlockInt8:
+			_, err = buf.Write([]byte{b.Uint8().Get(row)})
+		case types.BlockBool:
+			v := b.Bool().Get(row)
+			err = buf.WriteByte(*(*byte)(unsafe.Pointer(&v)))
+		case types.BlockBytes:
+			if fixed := f.Fixed(); fixed > 0 {
+				_, err = buf.Write(b.Bytes().Get(row)[:fixed])
+			} else {
+				v := b.Bytes().Get(row)
+				LE.PutUint32(x[:], uint32(len(v)))
+				_, err = buf.Write(x[:4])
+				if err == nil {
+					_, err = buf.Write(v)
+				}
+			}
+		case types.BlockInt256:
+			_, err = buf.Write(b.Int256().Get(row).Bytes())
+		case types.BlockInt128:
+			_, err = buf.Write(b.Int128().Get(row).Bytes())
+		default:
+			// oh, its a type we don't support yet
+			assert.Unreachable("unhandled field type",
+				"typeid", int(f.Type()),
+				"type", b.Type().String(),
+				"field", f.Name(),
+				"pack", p.key,
+				"schema", p.schema.Name(),
+				"version", p.schema.Version(),
+			)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 var (
 	zeros [32]byte
 	LE    = binary.LittleEndian // values
@@ -183,7 +240,7 @@ func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, maps []
 		case types.FieldTypeInt8, types.FieldTypeUint8:
 			*(*uint8)(fptr) = b.Uint8().Get(row)
 
-		case types.FieldTypeDatetime:
+		case types.FieldTypeTimestamp, types.FieldTypeDate, types.FieldTypeTime:
 			(*(*time.Time)(fptr)) = schema.TimeScale(field.Scale).FromUnix(b.Int64().Get(row))
 
 		case types.FieldTypeBoolean:
@@ -194,7 +251,7 @@ func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, maps []
 			case field.Iface&types.IfaceBinaryUnmarshaler > 0:
 				rfield := field.StructValue(rval)
 				err = rfield.Addr().Interface().(encoding.BinaryUnmarshaler).UnmarshalBinary(b.Bytes().Get(row))
-			case field.IsArray:
+			case field.Fixed > 0:
 				copy(unsafe.Slice((*byte)(fptr), field.Fixed), b.Bytes().Get(row))
 			default:
 				b := b.Bytes().Get(row)

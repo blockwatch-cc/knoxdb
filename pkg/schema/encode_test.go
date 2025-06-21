@@ -50,7 +50,7 @@ type Hash [32]byte
 type encodeTestStruct struct {
 	Id        uint64         `knox:"id,pk"`
 	Time      time.Time      `knox:"time"`
-	Hash      []byte         `knox:"hash,fixed=20,index=bloom=3"`
+	HashArray [20]byte       `knox:"hash,index=bloom=3"`
 	HashFixed Hash           `knox:"hash_fixed,index=bloom,zip=snappy"`
 	String    string         `knox:"str"`
 	Stringer  Stringer       `knox:"strlist"`
@@ -80,7 +80,7 @@ func makeTestData(sz int) (res []encodeTestStruct) {
 		res = append(res, encodeTestStruct{
 			Id:        0,
 			Time:      time.Now().UTC(),
-			Hash:      randBytes(20),
+			HashArray: [20]byte(randBytes(20)),
 			HashFixed: randFixed[Hash](),
 			String:    hex.EncodeToString(randBytes(4)),
 			Stringer:  strings.SplitAfter(hex.EncodeToString(randBytes(32)), "a"),
@@ -270,7 +270,7 @@ var encodeBenchmarkSizes = []struct {
 type encodeBenchStruct struct {
 	Id      uint64         `knox:"id,pk"`
 	Time    time.Time      `knox:"time"`
-	Hash    []byte         `knox:"hash,fixed=20,index=bloom=3"`
+	Hash    [20]byte       `knox:"hash,index=bloom=3"`
 	String  string         `knox:"str"`
 	Bool    bool           `knox:"bool"`
 	Enum    MyEnum         `knox:"my_enum,enum"`
@@ -298,7 +298,7 @@ func makeBenchData(sz int) (res []encodeBenchStruct, size int64) {
 		res = append(res, encodeBenchStruct{
 			Id:      0,
 			Time:    time.Now().UTC(),
-			Hash:    randBytes(20),
+			Hash:    [20]byte(randBytes(20)),
 			String:  hex.EncodeToString(randBytes(4)),
 			Bool:    true,
 			Enum:    MyEnum(myEnum.MustValue(uint16(i%4 + 1))),

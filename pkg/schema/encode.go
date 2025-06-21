@@ -293,16 +293,12 @@ func writeField(buf *bytes.Buffer, code OpCode, field *Field, ptr unsafe.Pointer
 		// int, uint, float, bool
 		_, err = buf.Write(unsafe.Slice((*byte)(ptr), field.wireSize))
 
-	case OpCodeFixedArray:
+	case OpCodeFixedBytes:
 		_, err = buf.Write(unsafe.Slice((*byte)(ptr), field.fixed))
 
 	case OpCodeFixedString:
 		s := *(*string)(ptr)
 		_, err = buf.Write(unsafe.Slice(unsafe.StringData(s), field.fixed))
-
-	case OpCodeFixedBytes:
-		b := *(*[]byte)(ptr)
-		_, err = buf.Write(b[:field.fixed])
 
 	case OpCodeString:
 		s := *(*string)(ptr)

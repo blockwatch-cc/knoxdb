@@ -14,19 +14,19 @@ import (
 // Reads a single row into a slice of interfaces.
 // Used for debug only.
 func (p *Package) ReadRow(row int, dst []any) []any {
-	assert.Always(row >= 0 && row < p.nRows, "invalid row",
-		"row", row,
-		"pack", p.key,
-		"schema", p.schema.Name(),
-		"version", p.schema.Version(),
-	)
-	assert.Always(len(p.blocks) == p.schema.NumFields(), "block mismatch",
-		"pack", p.key,
-		"schema", p.schema.Name(),
-		"version", p.schema.Version(),
-		"nFields", p.schema.NumFields(),
-		"nBlocks", len(p.blocks),
-	)
+	// assert.Always(row >= 0 && row < p.nRows, "invalid row",
+	// 	"row", row,
+	// 	"pack", p.key,
+	// 	"schema", p.schema.Name(),
+	// 	"version", p.schema.Version(),
+	// )
+	// assert.Always(len(p.blocks) == p.schema.NumFields(), "block mismatch",
+	// 	"pack", p.key,
+	// 	"schema", p.schema.Name(),
+	// 	"version", p.schema.Version(),
+	// 	"nFields", p.schema.NumFields(),
+	// 	"nBlocks", len(p.blocks),
+	// )
 	// copy one full row of values
 	maxFields := p.schema.NumFields()
 	if cap(dst) < maxFields {
@@ -34,21 +34,22 @@ func (p *Package) ReadRow(row int, dst []any) []any {
 	} else {
 		dst = dst[:maxFields]
 	}
-	for i, field := range p.schema.Exported() {
-		// skip deleted and internal fields
-		if !field.IsVisible {
+	for i := range p.schema.NumFields() {
+		f := p.schema.Field(i)
+		// skip deleted fields
+		if !f.IsActive() {
 			continue
 		}
 
 		// insert zero value when block is not available (e.g. after schema change)
 		b := p.blocks[i]
 		if b == nil {
-			dst = append(dst, field.Type.Zero())
+			dst = append(dst, f.Type().Zero())
 			continue
 		}
 
 		// add to result
-		dst = append(dst, p.ReadValue(i, row, field.Type, field.Scale))
+		dst = append(dst, p.ReadValue(i, row, f.Type(), f.Scale()))
 	}
 	return dst
 }
@@ -92,7 +93,7 @@ func (p *Package) ReadValue(col, row int, typ types.FieldType, scale uint8) any 
 		return b.Float64().Get(row)
 	case types.FieldTypeFloat32:
 		return b.Float32().Get(row)
-	case types.FieldTypeDatetime:
+	case types.FieldTypeTimestamp, types.FieldTypeDate, types.FieldTypeTime:
 		if ts := b.Int64().Get(row); ts > 0 {
 			return schema.TimeScale(scale).FromUnix(ts)
 		} else {

@@ -56,7 +56,6 @@ type Field struct {
 	scale    uint8                  // 0..255 fixed point scale, time scale, bloom error probability 1/x (1..4)
 
 	// encoder values for INSERT, UPDATE, QUERY
-	isArray  bool             // field is a fixed size array
 	path     []int            // reflect struct nested positions
 	offset   uintptr          // struct field offset from reflect
 	wireSize uint16           // wire encoding field size in bytes, min size for []byte & string
@@ -75,7 +74,6 @@ type ExportedField struct {
 	IsVisible  bool
 	IsInternal bool
 	IsNullable bool
-	IsArray    bool
 	IsEnum     bool
 	Iface      types.IfaceFlags
 	Scale      uint8
@@ -173,7 +171,7 @@ func (f *Field) IsEnum() bool {
 
 func (f *Field) IsFixedSize() bool {
 	switch f.typ {
-	case FT_STRING, types.FieldTypeBytes:
+	case FT_STRING, FT_BYTES:
 		return f.fixed > 0
 	default:
 		return true
@@ -182,10 +180,6 @@ func (f *Field) IsFixedSize() bool {
 
 func (f *Field) IsInterface() bool {
 	return f.iface != 0
-}
-
-func (f *Field) IsArray() bool {
-	return f.isArray
 }
 
 func (f *Field) IsCompressed() bool {
@@ -211,6 +205,13 @@ func (f *Field) TimeFormat() string {
 	default:
 		return ""
 	}
+}
+
+func (f *Field) GoType() reflect.Type {
+	if f.typ == FT_BYTES && f.fixed > 0 {
+		return reflect.ArrayOf(int(f.fixed), reflect.TypeFor[byte]())
+	}
+	return reflect.TypeOf(f.typ.Zero())
 }
 
 // WithXXX methods do not use pointer receivers and always return a
@@ -397,8 +398,6 @@ func (f *Field) Codec() OpCode {
 		switch {
 		case f.Can(types.IfaceBinaryMarshaler):
 			return OpCodeMarshalBinary
-		case f.isArray:
-			return OpCodeFixedArray
 		case f.fixed > 0:
 			return OpCodeFixedBytes
 		default:
@@ -445,8 +444,7 @@ func (f *Field) Encode(w io.Writer, val any, layout binary.ByteOrder) (err error
 	default:
 		err = EncodeInt(w, code, val, layout)
 
-	case OpCodeFixedArray,
-		OpCodeFixedString,
+	case OpCodeFixedString,
 		OpCodeFixedBytes,
 		OpCodeString,
 		OpCodeStringer,
@@ -776,6 +774,9 @@ func (f *Field) ReadFrom(buf *bytes.Buffer) (err error) {
 
 	// scale: u8
 	binary.Read(buf, LE, &f.scale)
+
+	// init related properties
+	f.wireSize = uint16(f.typ.Size())
 
 	return f.Validate()
 }

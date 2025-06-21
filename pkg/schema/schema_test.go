@@ -169,8 +169,7 @@ func NewAllTypes(i int64) AllTypes {
 
 type FixedTypes struct {
 	BaseModel
-	FixedArray  [20]byte `knox:"fixed_array"`
-	FixedBytes  []byte   `knox:"fixed_bytes,fixed=20"`
+	FixedBytes  [20]byte `knox:"fixed_bytes"`
 	FixedString string   `knox:"fixed_string,fixed=20"`
 }
 
@@ -180,8 +179,7 @@ func NewFixedTypes(i int64) FixedTypes {
 		BaseModel: BaseModel{
 			Id: uint64(i),
 		},
-		FixedArray:  [20]byte(buf),
-		FixedBytes:  buf,
+		FixedBytes:  [20]byte(buf),
 		FixedString: hex.EncodeToString(buf[:10]),
 	}
 }
@@ -342,7 +340,7 @@ type InvalidScaleTooLarge struct {
 
 type HashIndex struct {
 	BaseModel
-	Hash []byte `knox:"hash,index=hash,fixed=32"`
+	Hash [32]byte `knox:"hash,index=hash"`
 }
 
 type IntegerIndex struct {
@@ -398,7 +396,6 @@ const (
 	OC_F32       = OpCodeFloat32
 	OC_F64       = OpCodeFloat64
 	OC_BOOL      = OpCodeBool
-	OC_FIXARRAY  = OpCodeFixedArray
 	OC_FIXSTRING = OpCodeFixedString
 	OC_FIXBYTES  = OpCodeFixedBytes
 	OC_STRING    = OpCodeString
@@ -560,22 +557,22 @@ var schemaTestCases = []schemaTest{
 		scales:  []uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 15, 18, 24, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 		fixed:   []uint16{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0},
 		isFixed: false,
-		encode:  []OpCode{OC_U64, OC_I64, OC_I32, OC_I16, OC_I8, OC_U64, OC_U32, OC_U16, OC_U8, OC_F64, OC_F32, OC_D32, OC_D64, OC_D128, OC_D256, OC_I128, OC_I256, OC_BOOL, OC_TIMESTAMP, OC_BYTES, OC_FIXARRAY, OC_STRING, OC_ENUM, OC_BIGINT},
-		decode:  []OpCode{OC_U64, OC_I64, OC_I32, OC_I16, OC_I8, OC_U64, OC_U32, OC_U16, OC_U8, OC_F64, OC_F32, OC_D32, OC_D64, OC_D128, OC_D256, OC_I128, OC_I256, OC_BOOL, OC_TIMESTAMP, OC_BYTES, OC_FIXARRAY, OC_STRING, OC_ENUM, OC_BIGINT},
+		encode:  []OpCode{OC_U64, OC_I64, OC_I32, OC_I16, OC_I8, OC_U64, OC_U32, OC_U16, OC_U8, OC_F64, OC_F32, OC_D32, OC_D64, OC_D128, OC_D256, OC_I128, OC_I256, OC_BOOL, OC_TIMESTAMP, OC_BYTES, OC_FIXBYTES, OC_STRING, OC_ENUM, OC_BIGINT},
+		decode:  []OpCode{OC_U64, OC_I64, OC_I32, OC_I16, OC_I8, OC_U64, OC_U32, OC_U16, OC_U8, OC_F64, OC_F32, OC_D32, OC_D64, OC_D128, OC_D256, OC_I128, OC_I256, OC_BOOL, OC_TIMESTAMP, OC_BYTES, OC_FIXBYTES, OC_STRING, OC_ENUM, OC_BIGINT},
 	},
 
 	// fixed bytes and string
 	{
 		name:    "fixed_types",
 		build:   GenericSchema[FixedTypes],
-		fields:  "id,fixed_array,fixed_bytes,fixed_string",
-		typs:    []types.FieldType{FT_U64, FT_BYTES, FT_BYTES, FT_STRING},
-		flags:   []types.FieldFlags{types.FieldFlagPrimary, 0, 0, 0},
-		scales:  []uint8{0, 0, 0, 0},
-		fixed:   []uint16{0, 20, 20, 20},
+		fields:  "id,fixed_bytes,fixed_string",
+		typs:    []types.FieldType{FT_U64, FT_BYTES, FT_STRING},
+		flags:   []types.FieldFlags{types.FieldFlagPrimary, 0, 0},
+		scales:  []uint8{0, 0, 0},
+		fixed:   []uint16{0, 20, 20},
 		isFixed: true,
-		encode:  []OpCode{OC_U64, OC_FIXARRAY, OC_FIXBYTES, OC_FIXSTRING},
-		decode:  []OpCode{OC_U64, OC_FIXARRAY, OC_FIXBYTES, OC_FIXSTRING},
+		encode:  []OpCode{OC_U64, OC_FIXBYTES, OC_FIXSTRING},
+		decode:  []OpCode{OC_U64, OC_FIXBYTES, OC_FIXSTRING},
 	},
 
 	// struct with binary & text (un)marshaler

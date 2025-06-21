@@ -663,7 +663,7 @@ func (s *Schema) Validate() error {
 }
 
 func (s Schema) MarshalBinary() ([]byte, error) {
-	buf := bytes.NewBuffer(make([]byte, 0, 32*len(s.fields)+8+len(s.name)))
+	buf := bytes.NewBuffer(make([]byte, 0, 32*len(s.fields)+12+len(s.name)))
 
 	// version: u32
 	binary.Write(buf, LE, s.version)
@@ -793,7 +793,6 @@ func (s *Schema) Finalize() *Schema {
 			IsVisible:  s.fields[i].IsVisible(),
 			IsNullable: s.fields[i].IsNullable(),
 			IsInternal: s.fields[i].IsInternal(),
-			IsArray:    s.fields[i].isArray,
 			IsEnum:     s.fields[i].IsEnum(),
 			Iface:      s.fields[i].iface,
 			Scale:      s.fields[i].scale,
@@ -819,7 +818,7 @@ func (s *Schema) String() string {
 	)
 	for i := range s.fields {
 		f := &s.fields[i]
-		fmt.Fprintf(&b, "\n  Field #%d: id=%d %s %s flags=%08b index=%d fixed=%d scale=%d arr=%t sz=%d iface=%08b enc=%s dec=%s",
+		fmt.Fprintf(&b, "\n  Field #%d: id=%d %s %s flags=%08b index=%d fixed=%d scale=%d sz=%d iface=%08b enc=%s dec=%s",
 			i,
 			f.id,
 			f.name,
@@ -828,7 +827,6 @@ func (s *Schema) String() string {
 			f.index,
 			f.fixed,
 			f.scale,
-			f.isArray,
 			f.wireSize,
 			f.iface,
 			s.encode[i],
