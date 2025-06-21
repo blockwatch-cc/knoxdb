@@ -54,10 +54,12 @@ func (v *View) buildFromSchema() *View {
 	var ofs int
 	for i, f := range v.schema.fields {
 		if !f.IsActive() {
+			// deleted fields do not appear in wire format
 			v.ofs[i] = -2
 			continue
 		}
 		if f.IsInternal() && !v.internal {
+			// internal fields do not appear in wire format
 			v.ofs[i] = -2
 			continue
 		}
@@ -461,7 +463,7 @@ func (v *View) Reset(buf []byte) *View {
 				continue
 			}
 			if f.IsFixedSize() && skip {
-				ofs += v.len[i] + int(f.fixed)
+				ofs += v.len[i]
 				continue
 			}
 			skip = false

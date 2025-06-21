@@ -211,6 +211,9 @@ func (f *Field) GoType() reflect.Type {
 	if f.typ == FT_BYTES && f.fixed > 0 {
 		return reflect.ArrayOf(int(f.fixed), reflect.TypeFor[byte]())
 	}
+	if f.typ == FT_U16 && f.IsEnum() {
+		return reflect.TypeFor[string]()
+	}
 	return reflect.TypeOf(f.typ.Zero())
 }
 

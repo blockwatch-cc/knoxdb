@@ -90,6 +90,23 @@ func (s TimeScale) FromUnix(v int64) time.Time {
 	}
 }
 
+func (s TimeScale) ShortName() string {
+	switch s {
+	case TIME_SCALE_NANO:
+		return "ns"
+	case TIME_SCALE_MICRO:
+		return "us"
+	case TIME_SCALE_MILLI:
+		return "ms"
+	case TIME_SCALE_SECOND:
+		return "s"
+	case TIME_SCALE_DAY:
+		return "d"
+	default:
+		return ""
+	}
+}
+
 func (s TimeScale) AsUint() uint8 {
 	return uint8(s)
 }

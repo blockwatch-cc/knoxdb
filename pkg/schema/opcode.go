@@ -54,7 +54,7 @@ var (
 		60, 64, // string, bytes
 		69, 79, 84, // datetime
 		89, 94, // i128/256
-		98, 103, 107, 112, // decimals
+		99, 103, 107, 112, // decimals
 		117, 124, 131, // marshalers
 		138, 145, // unmarshalers
 		152, // enum

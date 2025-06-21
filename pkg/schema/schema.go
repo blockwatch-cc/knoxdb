@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"reflect"
 	"slices"
 	"sort"
 	"strconv"
@@ -739,6 +740,13 @@ func (s *Schema) Finalize() *Schema {
 	LE.PutUint32(b[:], s.version)
 	h.Write(b[:])
 
+	// check if we need to generate strcut layout info
+	var styp reflect.Type
+	needLayout := s.fields[0].path == nil
+	if needLayout {
+		styp = s.StructType()
+	}
+
 	for i := range s.fields {
 		// collect sizes from visible fields
 		if s.fields[i].IsVisible() {
@@ -757,6 +765,13 @@ func (s *Schema) Finalize() *Schema {
 
 			// cache whether we need interface access
 			s.isInterface = s.isInterface || s.fields[i].IsInterface()
+
+			// fill struct type info
+			if needLayout {
+				sf := styp.Field(i)
+				s.fields[i].path = sf.Index
+				s.fields[i].offset = sf.Offset
+			}
 		}
 
 		// try lookup enum from global registry using tag '0' or generate new enum
@@ -807,30 +822,65 @@ func (s *Schema) Finalize() *Schema {
 
 func (s *Schema) String() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "schema: %s minSz=%d maxSz=%d fixed=%t iface=%t enc/dec=%d/%d",
-		s.name,
-		s.minWireSize,
-		s.maxWireSize,
-		s.isFixedSize,
-		s.isInterface,
-		len(s.encode),
-		len(s.decode),
-	)
+	if s.isFixedSize {
+		fmt.Fprintf(&b, "%q fields=%d sz=%d (fixed)", s.name, len(s.fields), s.minWireSize)
+	} else {
+		fmt.Fprintf(&b, "%q fields=%d sz_min=%d sz_max=%d",
+			s.name,
+			len(s.fields),
+			s.minWireSize,
+			s.maxWireSize,
+		)
+	}
+	var maxNameLen int
+	for i := range s.fields {
+		maxNameLen = max(maxNameLen, len(s.fields[i].name))
+	}
+	fmt.Fprintf(&b, "\n#  ID   %[1]*[2]s %-15s Flags", -maxNameLen-1, "Name", "Type")
 	for i := range s.fields {
 		f := &s.fields[i]
-		fmt.Fprintf(&b, "\n  Field #%d: id=%d %s %s flags=%08b index=%d fixed=%d scale=%d sz=%d iface=%08b enc=%s dec=%s",
+		var (
+			typ  string
+			flag []string
+		)
+		switch f.typ {
+		case FT_TIME, FT_TIMESTAMP:
+			typ = f.typ.String() + "(" + TimeScale(f.scale).ShortName() + ")"
+		case FT_D32, FT_D64, FT_D128, FT_D256:
+			typ = f.typ.String() + "(" + strconv.Itoa(int(f.scale)) + ")"
+		case FT_STRING, FT_BYTES:
+			if f.fixed > 0 {
+				typ = "[" + strconv.Itoa(int(f.fixed)) + "]" + f.typ.String()
+			}
+		}
+		if typ == "" {
+			typ = f.typ.String()
+		}
+		if f.IsPrimary() {
+			flag = append(flag, "primary")
+		}
+		if f.IsEnum() {
+			flag = append(flag, "enum")
+		}
+		if f.IsNullable() {
+			flag = append(flag, "null")
+		}
+		if f.IsInternal() {
+			flag = append(flag, "internal")
+		}
+		if f.index > 0 {
+			flag = append(flag, "indexed:"+f.index.String()+":"+strconv.Itoa(int(f.scale)))
+		}
+		if len(flag) == 0 {
+			flag = []string{"--"}
+		}
+		fmt.Fprintf(&b, "\n%02d F#%02d %[3]*[4]s %-15s %s",
 			i,
 			f.id,
+			-maxNameLen-1,
 			f.name,
-			f.typ,
-			f.flags,
-			f.index,
-			f.fixed,
-			f.scale,
-			f.wireSize,
-			f.iface,
-			s.encode[i],
-			s.decode[i],
+			typ,
+			strings.Join(flag, ","),
 		)
 	}
 	return b.String()
