@@ -42,11 +42,11 @@ func (t *hashTable[T]) Init() *hashTable[T] {
 	return t
 }
 
-// Prevent underallocation due to cardinality estimation errors (<25%).
+// Prevent underallocation due to cardinality estimation errors (<50%).
 // Arena allocation already rounds to next pow2.
 func safeDictLen(n int) int {
-	// increase size by error boundary (1/16th)
-	n += n >> 4
+	// increase size by error boundary (1/2th)
+	n += n >> 1
 
 	// round to multiples of 256
 	return (n + 255) &^ 255
