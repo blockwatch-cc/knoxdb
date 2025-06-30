@@ -17,7 +17,6 @@ import (
 	"strings"
 	"time"
 
-	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/operator/filter"
@@ -33,8 +32,8 @@ type (
 	QueryFlags          = query.QueryFlags
 	QueryPlan           = query.QueryPlan
 	QueryStats          = query.QueryStats
-	Filter              = query.Filter
-	FilterTreeNode      = query.FilterTreeNode
+	Filter              = filter.Filter
+	FilterNode          = filter.Node
 	FilterMode          = types.FilterMode
 	JoinType            = types.JoinType
 	QueryResult         = engine.QueryResult
@@ -60,7 +59,7 @@ type JoinPlan struct {
 	Log   log.Logger
 	Flags QueryFlags
 	Stats QueryStats
-	Where *FilterTreeNode // optional post-processing filter on result
+	Where *FilterNode // optional post-processing filter on result
 
 	schema *schema.Schema // result schema (mixed between tables, renamed fields)
 	buf    *bytes.Buffer  // staging buffer for result merge
@@ -132,7 +131,7 @@ func (p *JoinPlan) WithTables(l, r engine.QueryableTable) *JoinPlan {
 	return p
 }
 
-func (p *JoinPlan) WithFilters(l, r *FilterTreeNode) *JoinPlan {
+func (p *JoinPlan) WithFilters(l, r *FilterNode) *JoinPlan {
 	p.Left.Where = l
 	p.Right.Where = r
 	return p
@@ -165,7 +164,7 @@ func (p *JoinPlan) WithOn(f1, f2 *schema.Field, mode FilterMode) *JoinPlan {
 
 type JoinTable struct {
 	Table  engine.QueryableTable
-	Where  *FilterTreeNode // optional filter conditions for each table
+	Where  *FilterNode     // optional filter conditions for each table
 	Select *schema.Schema  // target output schema (fields from each table)
 	On     *schema.Field   // predicate
 	Typ    types.BlockType // predicate block type for cmp
@@ -393,7 +392,7 @@ func (p *JoinPlan) Compile(ctx context.Context) error {
 	// pk cursor on large side
 	pkField := x.Table.Schema().Pk()
 	pkBlockTyp := pkField.Type().BlockType()
-	matcher := query.NewFactory(pkField.Type()).New(types.FilterModeGt)
+	matcher := filter.NewFactory(pkField.Type()).New(types.FilterModeGt)
 	x.Filter = &Filter{
 		Name:    pkField.Name(),
 		Type:    pkBlockTyp,
@@ -403,7 +402,7 @@ func (p *JoinPlan) Compile(ctx context.Context) error {
 		Matcher: matcher, // zero
 		Value:   matcher.Value(),
 	}
-	x.Where.Children = append(x.Where.Children, &FilterTreeNode{Filter: x.Filter})
+	x.Where.Children = append(x.Where.Children, &FilterNode{Filter: x.Filter})
 
 	// add limit to large side
 	x.Plan.WithLimit(p.Limit)
@@ -412,7 +411,7 @@ func (p *JoinPlan) Compile(ctx context.Context) error {
 	if p.IsEquiJoin() {
 		joinField := y.On
 		joinBlockType := joinField.Type().BlockType()
-		matcher = query.NewFactory(joinField.Type()).New(types.FilterModeIn)
+		matcher = filter.NewFactory(joinField.Type()).New(types.FilterModeIn)
 		y.Filter = &Filter{
 			Name:    joinField.Name(),
 			Type:    joinBlockType,
@@ -422,7 +421,7 @@ func (p *JoinPlan) Compile(ctx context.Context) error {
 			Matcher: matcher, // updated during processing
 			Value:   nil,     // updated during processing
 		}
-		y.Where.Children = append(y.Where.Children, &FilterTreeNode{Filter: y.Filter})
+		y.Where.Children = append(y.Where.Children, &FilterNode{Filter: y.Filter})
 	}
 
 	return nil
@@ -584,7 +583,7 @@ func (p *JoinPlan) doJoin(ctx context.Context, out QueryResultConsumer) error {
 
 			// match result pack against extra filter
 			pkg := agg.Pack()
-			bits := filter.MatchTree(p.Where, pkg, nil, bitset.New(pkg.Len()))
+			bits := filter.Match(p.Where, pkg, nil, bitset.New(pkg.Len()))
 			sel := bits.Indexes(nil)
 
 			// apply limit
@@ -592,15 +591,15 @@ func (p *JoinPlan) doJoin(ctx context.Context, out QueryResultConsumer) error {
 				n := int(p.Limit) - out.Len()
 				sel = sel[:min(len(sel), n)]
 			}
+			pkg.WithSelection(sel)
 
 			// forward matches to out stream
-			if err := out.Append(pkg, sel); err != nil {
+			if err := out.Append(ctx, pkg); err != nil {
 				return err
 			}
 
 			// free temp resources and reset aggregation result
 			bits.Close()
-			arena.Free(sel)
 			agg.Reset()
 		}
 
