@@ -192,7 +192,7 @@ func (ra *Bitmap) Size() int {
 }
 
 func (ra *Bitmap) Bytes() []byte {
-	if ra.IsEmpty() {
+	if ra.None() {
 		return nil
 	}
 	return toByteSlice(ra.data)
@@ -222,7 +222,11 @@ func (ra *Bitmap) Reset() {
 	ra.keys.setNumKeys(1)
 }
 
-func (ra *Bitmap) IsEmpty() bool {
+func (ra *Bitmap) Any() bool {
+	return !ra.None()
+}
+
+func (ra *Bitmap) None() bool {
 	if ra == nil {
 		return true
 	}
@@ -337,7 +341,7 @@ func (ra *Bitmap) ContainsRange(lo, hi uint64) bool {
 		panic("lo should not be more than hi")
 	}
 
-	if ra.IsEmpty() {
+	if ra.None() {
 		return false
 	}
 

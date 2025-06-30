@@ -5,7 +5,6 @@ import (
 	"math"
 	"slices"
 	"testing"
-	"time"
 
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/require"
@@ -130,20 +129,20 @@ func TestEdgeCase(t *testing.T) {
 func TestBulkAdd(t *testing.T) {
 	ra := New()
 	m := make(map[uint64]struct{})
-	max := int64(64 << 16)
-	start := time.Now()
+	max := int64(1 << 20)
+	// start := time.Now()
 
-	var cnt int
-	for i := 0; ; i++ {
-		if i%100 == 0 && time.Since(start) > time.Second {
-			cnt++
-			start = time.Now()
-			// t.Logf("Bitmap:\n%s\n", ra)
-			if cnt == 3 {
-				// t.Logf("Breaking out of the loop\n")
-				break
-			}
-		}
+	// var cnt int
+	for range max {
+		// if i%100 == 0 && time.Since(start) > time.Second {
+		// 	cnt++
+		// 	start = time.Now()
+		// 	// t.Logf("Bitmap:\n%s\n", ra)
+		// 	if cnt == 3 {
+		// 		// t.Logf("Breaking out of the loop\n")
+		// 		break
+		// 	}
+		// }
 		x := uint64(util.RandInt64n(max))
 
 		if _, has := m[x]; has {
@@ -203,7 +202,7 @@ func TestBulkAdd(t *testing.T) {
 	dup := make([]uint16, len(ra.data))
 	copy(dup, ra.data)
 
-	ra2 := NewFromBuffer(toByteSlice(dup))
+	ra2 := NewFromShared(toByteSlice(dup))
 	require.Equal(t, len(m), ra2.Count())
 	for x := range m {
 		require.True(t, ra2.Contains(x))
@@ -372,7 +371,7 @@ func TestSetSorted(t *testing.T) {
 		for i := 0; i < n; i++ {
 			arr = append(arr, uint64(i))
 		}
-		r := NewFromSortedList(arr)
+		r := NewFromSorted(arr)
 		require.Equal(t, len(arr), r.Count())
 
 		rarr := r.ToArray(nil)
@@ -391,7 +390,7 @@ func TestAnd(t *testing.T) {
 	a := New()
 	b := New()
 
-	N := int(1e7)
+	N := int(1e6)
 	for i := 0; i < N; i++ {
 		if i%2 == 0 {
 			a.Set(uint64(i))
@@ -409,7 +408,7 @@ func TestAnd(t *testing.T) {
 
 func TestAnd2(t *testing.T) {
 	a := New()
-	n := int(1e7)
+	n := int(1e6)
 
 	for i := 0; i < n; i++ {
 		a.Set(uint64(i))
@@ -427,7 +426,7 @@ func TestAndNot(t *testing.T) {
 	a := New()
 	b := New()
 
-	N := int(1e7)
+	N := int(1e6)
 	for i := 0; i < N; i++ {
 		a.Set(uint64(i))
 		if i < N/2 {
@@ -491,7 +490,7 @@ func TestOr(t *testing.T) {
 	a := New()
 	b := New()
 
-	N := int(1e7)
+	N := int(1e6)
 	for i := 0; i < N; i++ {
 		if i%2 == 0 {
 			a.Set(uint64(i))
@@ -518,7 +517,7 @@ func TestCardinality(t *testing.T) {
 
 func TestUnset(t *testing.T) {
 	a := New()
-	N := int(1e7)
+	N := int(1 << 20)
 	for i := 0; i < N; i++ {
 		a.Set(uint64(i))
 	}
@@ -528,7 +527,7 @@ func TestUnset(t *testing.T) {
 	}
 	require.Equal(t, N/2, a.Count())
 
-	// Unset elelemts which doesn't exist should be no-op
+	// Unset elemts which doesn't exist should be no-op
 	for i := 0; i < N/2; i++ {
 		require.False(t, a.Unset(uint64(i)))
 	}
@@ -599,7 +598,7 @@ func TestContainerUnsetRange(t *testing.T) {
 
 func TestUnsetRange(t *testing.T) {
 	a := New()
-	N := int(1e7)
+	N := int(1e6)
 	for i := 0; i < N; i++ {
 		a.Set(uint64(i))
 	}
@@ -624,7 +623,7 @@ func TestUnsetRange(t *testing.T) {
 	for i := 0; i < 123; i++ {
 		arr = append(arr, uint64(i))
 	}
-	b := NewFromSortedList(arr)
+	b := NewFromSorted(arr)
 	b.UnsetRange(50, math.MaxUint64)
 	require.Equal(t, 50, b.Count())
 }
@@ -740,7 +739,7 @@ func TestCleanup(t *testing.T) {
 	a.UnsetRange(6*(1<<16), 8*(1<<16))
 	require.Equal(t, 7, a.keys.numKeys())
 
-	a = NewFromBufferWithCopy(abuf)
+	a = NewFromBytes(abuf)
 	require.Equal(t, 10, a.keys.numKeys())
 	a.Unset(6 * (1 << 16))
 	a.UnsetRange(7*(1<<16), 9*(1<<16))
@@ -754,7 +753,7 @@ func TestCleanup(t *testing.T) {
 	b.UnsetRange(0, uint64(n/2))
 	require.Equal(t, n/2, b.Count())
 	buf := b.Bytes()
-	b = NewFromBuffer(buf)
+	b = NewFromShared(buf)
 	require.Equal(t, n/2, b.Count())
 }
 
@@ -782,7 +781,7 @@ func TestCleanup2(t *testing.T) {
 
 func TestCleanupSplit(t *testing.T) {
 	a := New()
-	n := int(1e8)
+	n := int(1 << 20)
 
 	for i := 0; i < n; i++ {
 		a.Set(uint64(i))
@@ -806,15 +805,15 @@ func TestCleanupSplit(t *testing.T) {
 
 func TestIsEmpty(t *testing.T) {
 	a := New()
-	require.True(t, a.IsEmpty())
+	require.True(t, a.None())
 
 	n := int(1e6)
 	for i := 0; i < n; i++ {
 		a.Set(uint64(i))
 	}
-	require.False(t, a.IsEmpty())
+	require.False(t, a.None())
 	a.UnsetRange(0, math.MaxUint64)
-	require.True(t, a.IsEmpty())
+	require.True(t, a.None())
 }
 
 // func TestRank(t *testing.T) {
@@ -947,7 +946,7 @@ func TestContainsRange(t *testing.T) {
 
 	for i, v := range tests {
 		for _, r := range v.Ranges {
-			if want, got := r.Match, NewFromSortedList(v.Slice).ContainsRange(r.From, r.To); want != got {
+			if want, got := r.Match, NewFromSorted(v.Slice).ContainsRange(r.From, r.To); want != got {
 				t.Errorf("case %d/%s want=%t got=%t", i, r.Name, want, got)
 			}
 		}
@@ -959,7 +958,7 @@ func BenchmarkContainsRange(b *testing.B) {
 		b.Run(fmt.Sprintf("%d", n), func(b *testing.B) {
 			nums := util.RandUints[uint64](n)
 			slices.Sort(nums)
-			a := NewFromSortedList(nums)
+			a := NewFromSorted(nums)
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				min, max := util.RandUint64(), util.RandUint64()

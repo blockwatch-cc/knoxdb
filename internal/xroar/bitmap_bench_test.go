@@ -75,7 +75,7 @@ func BenchmarkIntersectionRoaring(b *testing.B) {
 }
 
 func BenchmarkSet(b *testing.B) {
-	sz := uint64(1000000)
+	sz := uint64(1e6)
 	s := New()
 	for b.Loop() {
 		s.Set(util.RandUint64n(sz))
@@ -166,7 +166,7 @@ func BenchmarkUnsetRange(b *testing.B) {
 	})
 }
 
-func BenchmarkSelectSroar(b *testing.B) {
+func BenchmarkSelect(b *testing.B) {
 	bm := New()
 	N := uint64(1e5)
 	for i := uint64(0); i < N; i++ {
