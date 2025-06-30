@@ -5,6 +5,7 @@ package block
 
 import (
 	"errors"
+	"fmt"
 	"iter"
 	"slices"
 	"unsafe"
@@ -22,20 +23,24 @@ var (
 	ErrBlockNotMaterialized = errors.New("block: not materialized")
 
 	// ensure we implement required interfaces
-	_ types.NumberAccessor[int64] = (*BlockAccessor[int64])(nil)
+	_ types.NumberAccessor[int64] = (*Accessor[int64])(nil)
 )
 
-// BlockAccessor provides typed access to materialized block contents.
+// Accessor provides typed access to materialized block contents.
 // A materialized block is a byte array cast to the correct numeric type,
 // hence this accessor is a slim wrapper around this array.
-type BlockAccessor[T types.Number] struct {
+type Accessor[T types.Number] struct {
 	block *Block
 }
 
-func NewBlockAccessor[T types.Number](b *Block) BlockAccessor[T] {
-	return BlockAccessor[T]{
+func NewAccessor[T types.Number](b *Block) Accessor[T] {
+	return Accessor[T]{
 		block: b,
 	}
+}
+
+func GetMatcher[T types.Number](b *Block) types.NumberMatcher[T] {
+	return b.any.(types.NumberMatcher[T])
 }
 
 // -------------------------------
@@ -46,13 +51,13 @@ func NewBlockAccessor[T types.Number](b *Block) BlockAccessor[T] {
 // for materialized blocks since query.Matcher functions handle all cases
 // with less overhead (avoid func table lookups for each block). Keeping
 // this implementation for reference and completeness.
-func (a BlockAccessor[T]) Matcher() types.NumberMatcher[T] {
+func (a Accessor[T]) Matcher() types.NumberMatcher[T] {
 	assert.Always(a.block != nil, "slice: nil block")
 	assert.Always(a.block.IsMaterialized(), "matcher: block not materialized")
 	return cmp.NewMatcher[T](a.Slice())
 }
 
-func (_ BlockAccessor[T]) Close() {
+func (_ Accessor[T]) Close() {
 	// keep struct receiver access across all funcs, close cannot write
 	// a.block = nil
 }
@@ -61,15 +66,15 @@ func (_ BlockAccessor[T]) Close() {
 // NumberReader interface
 //
 
-func (a BlockAccessor[T]) Len() int {
+func (a Accessor[T]) Len() int {
 	return a.block.Len()
 }
 
-func (a BlockAccessor[T]) Size() int {
+func (a Accessor[T]) Size() int {
 	return a.block.Size()
 }
 
-func (a BlockAccessor[T]) Get(n int) (t T) {
+func (a Accessor[T]) Get(n int) (t T) {
 	assert.Always(a.block != nil, "get: nil block")
 	assert.Always(n < int(a.block.len), "get: block bounds out of range", "n", n, "len", a.block.len)
 	if n >= int(a.block.len) {
@@ -79,13 +84,13 @@ func (a BlockAccessor[T]) Get(n int) (t T) {
 	return *(*T)(ptr)
 }
 
-func (a BlockAccessor[T]) Slice() []T {
+func (a Accessor[T]) Slice() []T {
 	assert.Always(a.block != nil, "slice: nil block")
 	assert.Always(a.block.IsMaterialized(), "slice: block not materialized")
-	return unsafe.Slice((*T)(unsafe.Pointer(a.block.buf)), a.block.len)
+	return unsafe.Slice((*T)(unsafe.Pointer(a.block.buf)), a.block.cap)[:a.block.len]
 }
 
-func (a BlockAccessor[T]) Iterator() iter.Seq2[int, T] {
+func (a Accessor[T]) Iterator() iter.Seq2[int, T] {
 	return func(fn func(int, T) bool) {
 		ptr := unsafe.Pointer(a.block.buf)
 		for i := range a.block.len {
@@ -96,11 +101,11 @@ func (a BlockAccessor[T]) Iterator() iter.Seq2[int, T] {
 	}
 }
 
-func (a BlockAccessor[T]) Chunks() types.NumberIterator[T] {
+func (a Accessor[T]) Chunks() types.NumberIterator[T] {
 	return NewBlockIterator[T](a.block)
 }
 
-func (a BlockAccessor[T]) AppendTo(dst []T, sel []uint32) []T {
+func (a Accessor[T]) AppendTo(dst []T, sel []uint32) []T {
 	assert.Always(a.block != nil, "appendTo: nil block")
 	assert.Always(a.block.IsMaterialized(), "appendTo: block not materialized")
 	ptr := unsafe.Pointer(a.block.buf)
@@ -115,11 +120,11 @@ func (a BlockAccessor[T]) AppendTo(dst []T, sel []uint32) []T {
 	return dst
 }
 
-func (a BlockAccessor[T]) MinMax() (T, T) {
+func (a Accessor[T]) MinMax() (T, T) {
 	return util.MinMax[T](unsafe.Slice((*T)(unsafe.Pointer(a.block.buf)), a.block.len)...)
 }
 
-func (a BlockAccessor[T]) Cmp(i, j int) int {
+func (a Accessor[T]) Cmp(i, j int) int {
 	assert.Always(a.block != nil, "cmp: nil block")
 	len := int(a.block.len)
 	assert.Always(i < len, "cmp: block bounds out of range", "i", i, "len", a.block.len)
@@ -144,12 +149,12 @@ func (a BlockAccessor[T]) Cmp(i, j int) int {
 // NumberWriter interface
 //
 
-func (a BlockAccessor[T]) Append(v T) {
+func (a Accessor[T]) Append(v T) {
 	assert.Always(a.block != nil, "append: nil block")
 	assert.Always(a.block.IsMaterialized(), "append: block not materialized")
 	assert.Always(a.block.len < a.block.cap, "append: block capacity exhausted", "len", a.block.len, "cap", a.block.cap)
 	if a.block.len >= a.block.cap {
-		panic(ErrBlockOutOfBounds)
+		panic(fmt.Errorf("append: out of bounds block access [:%d:%d]", a.block.len, a.block.cap))
 	}
 	ptr := unsafe.Add(unsafe.Pointer(a.block.buf), a.block.len*uint32(a.block.sz))
 	*(*T)(ptr) = v
@@ -157,19 +162,19 @@ func (a BlockAccessor[T]) Append(v T) {
 	a.block.SetDirty()
 }
 
-func (a BlockAccessor[T]) Set(n int, v T) {
+func (a Accessor[T]) Set(n int, v T) {
 	assert.Always(a.block != nil, "set: nil block")
 	assert.Always(a.block.IsMaterialized(), "set: block not materialized")
 	assert.Always(n < int(a.block.len), "set: block bounds out of range", "n", n, "len", a.block.len)
 	if n >= int(a.block.len) {
-		panic(ErrBlockOutOfBounds)
+		panic(fmt.Errorf("set: out of bounds block access %d [:%d:%d]", n, a.block.len, a.block.cap))
 	}
 	ptr := unsafe.Add(unsafe.Pointer(a.block.buf), n*int(a.block.sz))
 	*(*T)(ptr) = v
 	a.block.SetDirty()
 }
 
-func (a BlockAccessor[T]) Delete(i, j int) {
+func (a Accessor[T]) Delete(i, j int) {
 	_ = slices.Delete(a.block.buffer(), i*int(a.block.sz), j*int(a.block.sz))
 	a.block.len -= uint32(j - i)
 	a.block.SetDirty()
@@ -181,70 +186,70 @@ func (a BlockAccessor[T]) Delete(i, j int) {
 
 func (b *Block) Int64() types.NumberAccessor[int64] {
 	if b.IsMaterialized() {
-		return NewBlockAccessor[int64](b)
+		return NewAccessor[int64](b)
 	}
 	return b.any.(types.NumberAccessor[int64])
 }
 
 func (b *Block) Int32() types.NumberAccessor[int32] {
 	if b.IsMaterialized() {
-		return NewBlockAccessor[int32](b)
+		return NewAccessor[int32](b)
 	}
 	return b.any.(types.NumberAccessor[int32])
 }
 
 func (b *Block) Int16() types.NumberAccessor[int16] {
 	if b.IsMaterialized() {
-		return NewBlockAccessor[int16](b)
+		return NewAccessor[int16](b)
 	}
 	return b.any.(types.NumberAccessor[int16])
 }
 
 func (b *Block) Int8() types.NumberAccessor[int8] {
 	if b.IsMaterialized() {
-		return NewBlockAccessor[int8](b)
+		return NewAccessor[int8](b)
 	}
 	return b.any.(types.NumberAccessor[int8])
 }
 
 func (b *Block) Uint64() types.NumberAccessor[uint64] {
 	if b.IsMaterialized() {
-		return NewBlockAccessor[uint64](b)
+		return NewAccessor[uint64](b)
 	}
 	return b.any.(types.NumberAccessor[uint64])
 }
 
 func (b *Block) Uint32() types.NumberAccessor[uint32] {
 	if b.IsMaterialized() {
-		return NewBlockAccessor[uint32](b)
+		return NewAccessor[uint32](b)
 	}
 	return b.any.(types.NumberAccessor[uint32])
 }
 
 func (b *Block) Uint16() types.NumberAccessor[uint16] {
 	if b.IsMaterialized() {
-		return NewBlockAccessor[uint16](b)
+		return NewAccessor[uint16](b)
 	}
 	return b.any.(types.NumberAccessor[uint16])
 }
 
 func (b *Block) Uint8() types.NumberAccessor[uint8] {
 	if b.IsMaterialized() {
-		return NewBlockAccessor[uint8](b)
+		return NewAccessor[uint8](b)
 	}
 	return b.any.(types.NumberAccessor[uint8])
 }
 
 func (b *Block) Float64() types.NumberAccessor[float64] {
 	if b.IsMaterialized() {
-		return NewBlockAccessor[float64](b)
+		return NewAccessor[float64](b)
 	}
 	return b.any.(types.NumberAccessor[float64])
 }
 
 func (b *Block) Float32() types.NumberAccessor[float32] {
 	if b.IsMaterialized() {
-		return NewBlockAccessor[float32](b)
+		return NewAccessor[float32](b)
 	}
 	return b.any.(types.NumberAccessor[float32])
 }

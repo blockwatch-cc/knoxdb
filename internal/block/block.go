@@ -259,7 +259,6 @@ func (b *Block) Clone(sz int) *Block {
 		sz = int(b.cap)
 	}
 	c := New(b.typ, sz)
-	c.len = uint32(b.Len())
 	switch b.typ {
 	case BlockInt64:
 		b.Int64().AppendTo(c.Int64().Slice(), nil)
@@ -290,6 +289,7 @@ func (b *Block) Clone(sz int) *Block {
 	case BlockInt256:
 		b.Int256().AppendTo(c.Int256(), nil)
 	}
+	c.len = uint32(b.Len())
 	c.SetDirty()
 	return c
 }
@@ -469,9 +469,11 @@ func (b *Block) AppendRange(src *Block, i, j int) {
 // AppendTo appends all (sel = nil) or selected elements to dst. Dst
 // must be materialized and src may be compressed.
 func (b *Block) AppendTo(dst *Block, sel []uint32) {
-	var n int
-	if sel == nil {
-		n = b.Len()
+	// prevent dst overflow
+	n := min(b.Len(), dst.Cap()-dst.Len())
+	if sel != nil {
+		n = min(len(sel), n)
+		sel = sel[:n]
 	}
 	assert.Always(b != nil, "appendTo: nil block, potential use after free")
 	assert.Always(dst != nil, "appendTo: nil dst block, potential use after free")
@@ -507,7 +509,7 @@ func (b *Block) AppendTo(dst *Block, sel []uint32) {
 	case BlockInt256:
 		b.Int256().AppendTo(dst.Int256(), sel)
 	}
-	dst.len += uint32(len(sel))
+	dst.len += uint32(n)
 	dst.SetDirty()
 }
 
