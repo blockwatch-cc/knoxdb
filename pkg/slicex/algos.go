@@ -14,6 +14,35 @@ type Number interface {
 	Integer | Float
 }
 
+// assumes src and rem are sorted
+func remove[T constraints.Ordered](src, rem []T) []T {
+	if len(src) == 0 || len(rem) == 0 {
+		return src
+	}
+
+	var i, j, k int
+
+	for i < len(src) && j < len(rem) {
+		if src[i] < rem[j] {
+			src[k] = src[i]
+			k++
+			i++
+		} else if src[i] > rem[j] {
+			j++
+		} else {
+			i++
+			j++
+		}
+	}
+
+	for ; i < len(src); i++ {
+		src[k] = src[i]
+		k++
+	}
+
+	return src[:k]
+}
+
 func removeZeros[T constraints.Ordered](s []T) ([]T, int) {
 	var (
 		n    int

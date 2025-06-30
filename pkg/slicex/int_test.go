@@ -6,6 +6,7 @@ package slicex
 import (
 	"fmt"
 	"math/rand"
+	"slices"
 	"testing"
 
 	"blockwatch.cc/knoxdb/pkg/util"
@@ -352,7 +353,7 @@ func TestOrderedIntegersContainsRange(t *testing.T) {
 
 	for i, v := range tests {
 		for _, r := range v.Ranges {
-			if want, got := r.Match, NewOrderedIntegers(v.Slice).ContainsRange(r.From, r.To); want != got {
+			if want, got := r.Match, NewOrderedIntegers(slices.Clone(v.Slice)).ContainsRange(r.From, r.To); want != got {
 				t.Errorf("case %d/%s want=%t got=%t", i, r.Name, want, got)
 			}
 		}
@@ -372,6 +373,88 @@ func BenchmarkOrderedIntegersContainsRange(b *testing.B) {
 				a.ContainsRange(min, max)
 			}
 		})
+	}
+}
+
+func TestOrderedIntegersRemove(t *testing.T) {
+	type TestList struct {
+		Name     string
+		List     []int
+		Expected []int
+	}
+
+	type Testcase struct {
+		Slice []int
+		Lists []TestList
+	}
+
+	var tests = []Testcase{
+		// nil slice
+		{
+			Slice: nil,
+			Lists: []TestList{
+				{Name: "NIL", List: []int{}, Expected: []int{}},
+			},
+		},
+		// empty slice
+		{
+			Slice: []int{},
+			Lists: []TestList{
+				{Name: "EMPTY", List: []int{0, 1, 2}, Expected: []int{}},
+			},
+		},
+		// 1-element slice
+		{
+			Slice: []int{3},
+			Lists: []TestList{
+				{Name: "A", List: []int{0, 1, 2}, Expected: []int{3}},   // Case A
+				{Name: "B1", List: []int{1, 2, 3}, Expected: []int{}},   // Case B.1, D1
+				{Name: "B3", List: []int{3, 4}, Expected: []int{}},      // Case B.3, D3
+				{Name: "E", List: []int{15, 16}, Expected: []int{3}},    // Case E
+				{Name: "F", List: []int{1, 2, 3, 4}, Expected: []int{}}, // Case F
+			},
+		},
+		// 1-element slice, from == to
+		{
+			Slice: []int{3},
+			Lists: []TestList{
+				{Name: "BCD", List: []int{3}, Expected: []int{}}, // Case B.3, C.1, D.1
+			},
+		},
+		// N-element slice
+		{
+			Slice: []int{3, 5, 7, 11, 13},
+			Lists: []TestList{
+				{Name: "A", List: []int{0, 1, 2}, Expected: []int{3, 5, 7, 11, 13}},                                    // Case A
+				{Name: "B1a", List: []int{1, 2, 3}, Expected: []int{5, 7, 11, 13}},                                     // Case B.1
+				{Name: "B1b", List: []int{3}, Expected: []int{5, 7, 11, 13}},                                           // Case B.1
+				{Name: "B2a", List: []int{1, 2, 3, 4}, Expected: []int{5, 7, 11, 13}},                                  // Case B.2
+				{Name: "B2b", List: []int{1, 2, 3, 4, 5}, Expected: []int{7, 11, 13}},                                  // Case B.2
+				{Name: "B3a", List: []int{3, 4}, Expected: []int{5, 7, 11, 13}},                                        // Case B.3
+				{Name: "B3b", List: []int{3, 4, 5}, Expected: []int{7, 11, 13}},                                        // Case B.3
+				{Name: "C1a", List: []int{4, 5}, Expected: []int{3, 7, 11, 13}},                                        // Case C.1
+				{Name: "C1b", List: []int{4, 5, 6}, Expected: []int{3, 7, 11, 13}},                                     // Case C.1
+				{Name: "C1c", List: []int{4, 5, 6, 7}, Expected: []int{3, 11, 13}},                                     // Case C.1
+				{Name: "C1d", List: []int{5}, Expected: []int{3, 7, 11, 13}},                                           // Case C.1
+				{Name: "C2a", List: []int{8}, Expected: []int{3, 5, 7, 11, 13}},                                        // Case C.2
+				{Name: "C2b", List: []int{8, 9, 10}, Expected: []int{3, 5, 7, 11, 13}},                                 // Case C.2
+				{Name: "D1a", List: []int{11, 12, 13}, Expected: []int{3, 5, 7}},                                       // Case D.1
+				{Name: "D1b", List: []int{12, 13}, Expected: []int{3, 5, 7, 11}},                                       // Case D.1
+				{Name: "D2", List: []int{12, 13, 14}, Expected: []int{3, 5, 7, 11}},                                    // Case D.2
+				{Name: "D3a", List: []int{13}, Expected: []int{3, 5, 7, 11}},                                           // Case D.3
+				{Name: "D3b", List: []int{13, 14}, Expected: []int{3, 5, 7, 11}},                                       // Case D.3
+				{Name: "E", List: []int{15, 16}, Expected: []int{3, 5, 7, 11, 13}},                                     // Case E
+				{Name: "Fa", List: []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}, Expected: []int{}}, // Case F
+				{Name: "Fb", List: []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}, Expected: []int{}},             // Case F
+				{Name: "Fc", List: []int{3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}, Expected: []int{}},                      // Case F
+			},
+		},
+	}
+
+	for _, v := range tests {
+		for _, r := range v.Lists {
+			assert.Equal(t, r.Expected, NewOrderedIntegers(slices.Clone(v.Slice)).Remove(r.List...).Values, r.Name)
+		}
 	}
 }
 
@@ -453,7 +536,7 @@ func TestOrderedIntegersRemoveRange(t *testing.T) {
 
 	for _, v := range tests {
 		for _, r := range v.Ranges {
-			assert.Equal(t, r.Expected, NewOrderedIntegers(v.Slice).RemoveRange(r.From, r.To).Values, r.Name)
+			assert.Equal(t, r.Expected, NewOrderedIntegers(slices.Clone(v.Slice)).RemoveRange(r.From, r.To).Values, r.Name)
 		}
 	}
 }
@@ -536,7 +619,7 @@ func TestOrderedIntegersIntersectRange(t *testing.T) {
 
 	for _, v := range tests {
 		for _, r := range v.Ranges {
-			assert.Equal(t, r.Expected, NewOrderedIntegers(v.Slice).IntersectRange(r.From, r.To).Values, r.Name)
+			assert.Equal(t, r.Expected, NewOrderedIntegers(slices.Clone(v.Slice)).IntersectRange(r.From, r.To).Values, r.Name)
 		}
 	}
 }

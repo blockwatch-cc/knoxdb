@@ -30,9 +30,27 @@ func NewOrderedIntegers[T Integer](s []T) *OrderedIntegers[T] {
 	}
 }
 
+func Contains[T Integer](s []T, v T) bool {
+	return contains(s, v, false)
+}
+
 func Unique[T Integer](s []T) []T {
 	util.Sort(s, 0)
 	return removeDuplicates(s)
+}
+
+func UniqueSorted[T Integer](s []T) []T {
+	return removeDuplicates(s)
+}
+
+func Remove[T Integer](s []T, t []T) []T {
+	util.Sort(s, 0)
+	util.Sort(t, 0)
+	return remove(s, t)
+}
+
+func RemoveSorted[T Integer](s []T, t []T) []T {
+	return remove(s, t)
 }
 
 func Shuffle[T Integer](s []T) []T {
@@ -120,20 +138,7 @@ func (o *OrderedIntegers[T]) Insert(val ...T) *OrderedIntegers[T] {
 }
 
 func (o *OrderedIntegers[T]) Remove(val ...T) *OrderedIntegers[T] {
-	if len(val) == 0 {
-		return o
-	}
-	slices.Sort(val)
-	var j, k int
-	for _, v := range o.Values {
-		if v == val[k] {
-			k++
-			continue
-		}
-		o.Values[j] = v
-		j++
-	}
-	o.Values = o.Values[:j]
+	o.Values = remove(o.Values, val)
 	return o
 }
 
