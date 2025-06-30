@@ -3,9 +3,22 @@
 
 package types
 
-var InvalidRange = Range{0, 1<<32 - 1}
+import "blockwatch.cc/knoxdb/internal/arena"
 
-// index range within a pack used for scans
+const maxSeq = 1 << 17 // 128k
+
+var (
+	InvalidRange = Range{0, 1<<32 - 1}
+	constRange   = make([]uint32, maxSeq) // 128k const selection vector
+)
+
+func init() {
+	for i := range uint32(maxSeq) {
+		constRange[i] = i
+	}
+}
+
+// index range within a pack used for scans as [a,b)
 type Range [2]uint32
 
 func NewRange[T Integer | int | uint](a, b T) Range {
@@ -46,10 +59,47 @@ func (r Range) Intersect(s Range) Range {
 }
 
 func (r Range) AsSelection() []uint32 {
-	n := r[1] - r[0] + 1
-	sel := make([]uint32, n)
-	for i := range n {
-		sel[i] = r[0] + i
+	return MakeSelection(r[0], r[1])
+}
+
+func MakeSelection[T uint32 | uint64 | int | uint](a, b T) []uint32 {
+	n := b - a
+	sel := arena.AllocUint32(int(n))[:n]
+	if b <= T(maxSeq) {
+		copy(sel, constRange[a:])
+	} else {
+		for i := range uint32(n) {
+			sel[i] = uint32(a) + i
+		}
 	}
 	return sel
+}
+
+func NegateSelection(s []uint32, sz int) []uint32 {
+	if s == nil {
+		return []uint32{} // nil = all -> neg = empty
+	}
+	if len(s) == 0 {
+		return MakeSelection(0, sz) // empty = none -> neg = all
+	}
+	sz -= len(s)
+	neg := arena.AllocUint32(sz)[:sz]
+	var (
+		i uint32
+		j int
+	)
+	for _, v := range s {
+		for i < v {
+			neg[j] = i
+			j++
+			i++
+		}
+		i++
+	}
+	for j < sz {
+		neg[j] = i
+		j++
+		i++
+	}
+	return neg
 }
