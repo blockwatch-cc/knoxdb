@@ -228,7 +228,7 @@ func (c *TwoQueueCache[K, V]) ContainsOrAddLocked(key K, value V) (ok, evicted b
 	if c.recent.Contains(key) {
 		return true, false
 	}
-	_, evicted = c.Add(key, value)
+	_, evicted = c.AddLocked(key, value)
 	return false, evicted
 }
 
