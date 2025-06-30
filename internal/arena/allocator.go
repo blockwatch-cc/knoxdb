@@ -13,25 +13,29 @@ type Allocator interface {
 	Free(any, int)
 }
 
-// 1k (10) .. 128k (17) .. 32M (25) = 16 sync.Pools
+// 1k (10) .. 128k (17) = 8 sync.Pools
 type allocator[T any] struct {
-	pools [16]*sync.Pool
+	pools [8]*sync.Pool
 }
 
 const (
 	minAllocClass = 10
-	maxAllocClass = 25
+	maxAllocClass = 17
 )
 
 func newAllocator[T any]() *allocator[T] {
-	a := &allocator[T]{}
-	for i := range a.pools {
-		sz := 1 << (minAllocClass + i)
-		a.pools[i] = &sync.Pool{
+	return &allocator[T]{}
+}
+
+func (a *allocator[T]) pool(class int) *sync.Pool {
+	idx := class - minAllocClass
+	if a.pools[idx] == nil {
+		sz := 1 << class
+		a.pools[idx] = &sync.Pool{
 			New: func() any { return make([]T, 0, sz) },
 		}
 	}
-	return a
+	return a.pools[idx]
 }
 
 func (a *allocator[T]) Alloc(sz int) any {
@@ -42,8 +46,7 @@ func (a *allocator[T]) Alloc(sz int) any {
 	if class < minAllocClass || class > maxAllocClass {
 		return make([]T, 0, sz)
 	}
-	idx := class - minAllocClass
-	return a.pools[idx].Get()
+	return a.pool(class).Get()
 }
 
 func (a *allocator[T]) Free(val any, sz int) {
@@ -52,6 +55,5 @@ func (a *allocator[T]) Free(val any, sz int) {
 	if class < minAllocClass || class > maxAllocClass || bits.OnesCount(uint(sz)) > 1 {
 		return
 	}
-	idx := class - minAllocClass
-	a.pools[idx].Put(val)
+	a.pool(class).Put(val)
 }
