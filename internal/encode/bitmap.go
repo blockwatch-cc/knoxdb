@@ -28,7 +28,7 @@ type BitmapContext struct {
 func AnalyzeBitmap(v *bitset.Bitset) *BitmapContext {
 	cnt, len := v.Count(), v.Len()
 	return &BitmapContext{
-		Min:       cnt < len,
+		Min:       cnt == len,
 		Max:       cnt > 0,
 		NumValues: len,
 		Count:     cnt,

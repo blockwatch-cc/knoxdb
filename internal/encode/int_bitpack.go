@@ -124,6 +124,9 @@ func (c *BitpackContainer[T]) Load(buf []byte) ([]byte, error) {
 }
 
 func (c *BitpackContainer[T]) Get(n int) T {
+	if n > c.N {
+		panic(fmt.Errorf("bitpack: index out of range [%d] with length %d", n, c.N))
+	}
 	return c.dec.DecodeValue(n)
 }
 

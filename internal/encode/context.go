@@ -114,12 +114,15 @@ func AnalyzeInt[T types.Integer](vals []T, checkUnique bool) *Context[T] {
 	doCountUnique := checkUnique && c.Min != c.Max && c.Delta == 0
 	c.NumUnique = min(c.NumRuns, int(c.Max)-int(c.Min)+1)
 	c.UseBits = types.Log2Range(c.Min, c.Max)
+	if c.NumUnique < 0 {
+		c.NumUnique = c.NumRuns
+	}
 
 	if doCountUnique {
 		switch c.PhyBits {
 		case 64:
 			// use array when c.Max-c.Min < 64k
-			sz := int(c.Max) - int(c.Min) + 1
+			sz := uint64(c.Max) - uint64(c.Min) + 1
 			if sz <= 1<<16 {
 				c.NumUnique = c.buildUniqueArray(vals)
 			} else {
@@ -139,6 +142,7 @@ func AnalyzeInt[T types.Integer](vals []T, checkUnique bool) *Context[T] {
 			c.NumUnique = c.buildUniqueArray(vals)
 		}
 	}
+
 	return c
 }
 
@@ -200,7 +204,7 @@ func (c *Context[T]) estimateCardinality(vals []T) int {
 
 func (c *Context[T]) buildUniqueArray(vals []T) int {
 	// we only need enough space for our data range
-	sz := int64(c.Max) - int64(c.Min) + 1
+	sz := uint64(c.Max) - uint64(c.Min) + 1
 	if cap(c.UniqueArray) < int(sz) {
 		c.UniqueArray = make([]T, sz)
 	}
@@ -208,7 +212,7 @@ func (c *Context[T]) buildUniqueArray(vals []T) int {
 
 	// mark existing values
 	for _, v := range vals {
-		c.UniqueArray[int64(v)-int64(c.Min)] = T(1)
+		c.UniqueArray[uint64(v)-uint64(c.Min)] = T(1)
 	}
 
 	// count unique values and assign codewords (+1 to distinguish empty slots)
