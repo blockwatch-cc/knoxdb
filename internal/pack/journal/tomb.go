@@ -1,11 +1,10 @@
-// Copyright (c) 2024 Blockwatch Data Inc.
+// Copyright (c) 2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package journal
 
 import (
 	"bytes"
-	"container/heap"
 	"context"
 	"encoding/binary"
 	"io"
@@ -21,42 +20,29 @@ import (
 type Tomb struct {
 	rids   *xroar.Bitmap // rids with tombstones (updated or deleted records)
 	stones Tombstones    // list of tombstones sorted by xid
-	maxsz  int           // max number of tombstones
+	sz     int           // max number of tombstones
+	xmax   uint64        // max xid, used to determine sort/insertion policy
 	dirty  bool
 }
 
 type Tombstone struct {
-	Xid uint64 // transaction that deleted this record
-	Rid uint64 // unique row id the deleted record
+	Xid   uint64 // transaction that deleted this record
+	Rid   uint64 // unique row id of the deleted record
+	IsDel bool   // whether the tomstone is for a true delete or update
 }
 
-// implements container/heap interface to keep list sorted by xid
+// kept sorted by xid
 type Tombstones []Tombstone
 
-func (l Tombstones) Len() int           { return len(l) }
-func (l Tombstones) Less(i, j int) bool { return l[i].Xid < l[j].Xid }
-func (l Tombstones) Swap(i, j int)      { l[i], l[j] = l[j], l[i] }
-
-func (h *Tombstones) Push(x any) {
-	*h = append(*h, x.(Tombstone))
-}
-
-func (h *Tombstones) Pop() any {
-	old := *h
-	n := len(old)
-	x := old[n-1]
-	*h = old[0 : n-1]
-	return x
-}
-
-func newTomb(maxsz int) *Tomb {
-	return &Tomb{maxsz: maxsz}
+func newTomb(sz int) *Tomb {
+	return &Tomb{sz: sz}
 }
 
 func (t *Tomb) Clear() {
 	t.rids = nil
 	t.stones = nil
 	t.dirty = false
+	t.xmax = 0
 }
 
 func (t *Tomb) Reset() {
@@ -65,10 +51,15 @@ func (t *Tomb) Reset() {
 	}
 	t.stones = t.stones[:0]
 	t.dirty = false
+	t.xmax = 0
 }
 
 func (t *Tomb) Len() int {
 	return len(t.stones)
+}
+
+func (t *Tomb) IsFull() bool {
+	return len(t.stones) >= t.sz
 }
 
 func (t *Tomb) RowIds() *xroar.Bitmap {
@@ -83,13 +74,25 @@ func (t *Tomb) Size() int {
 	return 16*len(t.stones) + t.rids.Size() + 44
 }
 
-func (t *Tomb) Append(xid, rid uint64) {
-	stone := Tombstone{Xid: xid, Rid: rid}
+func (t *Tomb) Append(xid, rid uint64, isDelete bool) {
 	if t.rids == nil {
 		t.rids = xroar.New()
-		t.stones = make([]Tombstone, 0, t.maxsz)
+		t.stones = make(Tombstones, 0, t.sz)
 	}
-	heap.Push(&t.stones, stone)
+	if len(t.stones) > 0 && xid < t.xmax {
+		// insert
+		i := len(t.stones) - 1
+		for i > 0 && t.stones[i].Xid > xid {
+			i--
+		}
+		t.stones = append(t.stones, Tombstone{})
+		copy(t.stones[i+1:], t.stones[i:])
+		t.stones[i] = Tombstone{Xid: xid, Rid: rid, IsDel: isDelete}
+	} else {
+		// append
+		t.stones = append(t.stones, Tombstone{Xid: xid, Rid: rid, IsDel: isDelete})
+	}
+	t.xmax = max(t.xmax, xid)
 	t.rids.Set(rid)
 	t.dirty = true
 }
@@ -98,93 +101,129 @@ func (t *Tomb) CommitTx(xid uint64) {
 	// noop
 }
 
-func (t *Tomb) AbortTx(xid uint64) int {
+func (t *Tomb) AbortTx(xid uint64) (int, int) {
 	l := len(t.stones)
 	idx := sort.Search(l, func(i int) bool {
 		return t.stones[i].Xid >= xid
 	})
 	if idx == l {
-		return 0
+		return 0, 0
 	}
-	var n int
+	var n, d int
 	for i := range t.stones[idx:] {
-		s := &t.stones[i]
+		s := &t.stones[idx+i]
 		if s.Xid != xid {
 			break
 		}
 		s.Xid = 0
 		t.rids.Unset(s.Rid)
 		n++
+		if s.IsDel {
+			d++
+		}
 	}
 
-	// fix heap and remove aborted entries
+	// remove aborted stones
 	if n > 0 {
-		heap.Init(&t.stones)
-		copy(t.stones, t.stones[n:])
+		copy(t.stones[idx:], t.stones[idx+n:])
 		t.stones = t.stones[:len(t.stones)-n]
-		t.dirty = len(t.stones) > 0
+		if l := len(t.stones); l > 0 {
+			t.dirty = true
+			t.xmax = t.stones[l-1].Xid
+		} else {
+			t.dirty = false
+			t.xmax = 0
+		}
 	}
-	return n
+
+	// return number or aborted true deletes and total number of aborted tombstones
+	return n, d
 }
 
-func (t *Tomb) AbortActiveTx(xact *xroar.Bitmap) int {
+func (t *Tomb) AbortActiveTx(xid uint64) (int, int) {
 	var (
-		n, i int
-		l    = len(t.stones)
+		n, d, i int
+		l       = len(t.stones)
 	)
-	it := xact.NewIterator()
-	for {
-		xid, ok := it.Next()
-		if !ok || i == l {
-			break
-		}
+	// skip non-matching stones
+	for i < l && t.stones[i].Xid < xid {
+		i++
+	}
 
-		// skip non-matching stones
-		for i < l && t.stones[i].Xid < xid {
-			i++
-		}
-
-		// reset matching stones
-		for i < l && t.stones[i].Xid == xid {
-			t.stones[i].Xid = 0
-			t.rids.Unset(t.stones[i].Rid)
-			i++
-			n++
+	// reset matching stones
+	for i < l && t.stones[i].Xid == xid {
+		t.stones[i].Xid = 0
+		t.rids.Unset(t.stones[i].Rid)
+		i++
+		n++
+		if t.stones[i].IsDel {
+			d++
 		}
 	}
 
-	// fix heap and remove aborted entries
+	// remove aborted stones
 	if n > 0 {
-		heap.Init(&t.stones)
-		copy(t.stones, t.stones[n:])
+		var j int
+		for i, v := range t.stones {
+			if v.Xid == 0 {
+				continue
+			}
+			t.stones[j] = t.stones[i]
+			j++
+		}
 		t.stones = t.stones[:len(t.stones)-n]
-		t.dirty = len(t.stones) > 0
+		if l := len(t.stones); l > 0 {
+			t.dirty = true
+			t.xmax = t.stones[l-1].Xid
+		} else {
+			t.dirty = false
+			t.xmax = 0
+		}
 	}
 
-	return n
+	return n, d
 }
 
 func (t *Tomb) MergeVisible(set *xroar.Bitmap, snap *types.Snapshot) {
 	if len(t.stones) == 0 {
 		return
 	}
-	for _, s := range t.stones {
-		// future tx are invisible
-		if s.Xid > snap.Xmax {
-			continue
+
+	// are no tombstones visible to this tx?
+	if t.stones[0].Xid >= snap.Xmax {
+		return
+	}
+
+	// add all deleted rids
+	set.Or(t.rids)
+
+	// are all tombstones visible to this tx?
+	if t.xmax < snap.Xmin || snap.Safe {
+		return
+	}
+
+	// otherwise walk stones backwards to unset invisible rids checking
+	// each xid once against snapshot
+	var (
+		last uint64
+		skip bool
+	)
+	for i := len(t.stones) - 1; i >= 0; i-- {
+		s := t.stones[i]
+
+		// stop when xid is behind snapshot horizon
+		if s.Xid < snap.Xmin {
+			break
 		}
 
-		// past tx before horizon and own tx are visible
-		if s.Xid == snap.Xown || s.Xid < snap.Xmin {
-			set.Set(s.Rid)
-			continue
+		if s.Xid != last {
+			// full visibility check, once per each xid
+			skip = snap.IsVisible(s.Xid)
+			last = s.Xid
 		}
 
-		// TODO: benchmark if we can just use the full check without shortcuts
-
-		// full visibility check
-		if snap.IsVisible(s.Xid) {
-			set.Set(s.Rid)
+		if !skip {
+			set.Unset(s.Rid)
 		}
 	}
 }
@@ -193,7 +232,7 @@ func (t *Tomb) Load(ctx context.Context, bucket store.Bucket, id uint32) error {
 	if bucket == nil {
 		return store.ErrNoBucket
 	}
-	buf := bucket.Get(pack.EncodeBlockKey(id, TombKey))
+	buf := bucket.Get(pack.EncodeBlockKey(id, 0, TombKey))
 	if buf == nil {
 		return nil
 	}
@@ -207,7 +246,7 @@ func (t *Tomb) Store(ctx context.Context, bucket store.Bucket, id uint32) error 
 	if bucket == nil {
 		return store.ErrNoBucket
 	}
-	key := pack.EncodeBlockKey(id, TombKey)
+	key := pack.EncodeBlockKey(id, 0, TombKey)
 
 	// don't store empty tombs
 	if t.Len() == 0 {
@@ -218,14 +257,19 @@ func (t *Tomb) Store(ctx context.Context, bucket store.Bucket, id uint32) error 
 	if err != nil {
 		return err
 	}
-	return bucket.Put(key, buf)
+	err = bucket.Put(key, buf)
+	if err != nil {
+		return err
+	}
+	t.dirty = false
+	return nil
 }
 
 func (t *Tomb) Remove(ctx context.Context, bucket store.Bucket, id uint32) error {
 	if bucket == nil {
 		return store.ErrNoBucket
 	}
-	return bucket.Delete(pack.EncodeBlockKey(id, TombKey))
+	return bucket.Delete(pack.EncodeBlockKey(id, 0, TombKey))
 }
 
 func (t *Tomb) MarshalBinary() ([]byte, error) {
@@ -294,6 +338,11 @@ func (t *Tomb) UnmarshalBinary(buf []byte) error {
 		if n == 0 {
 			return io.ErrShortBuffer
 		}
+	}
+	t.rids.Cleanup()
+
+	if l := len(t.stones); l > 0 {
+		t.xmax = t.stones[l-1].Xid
 	}
 
 	return nil

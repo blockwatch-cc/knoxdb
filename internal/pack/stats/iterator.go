@@ -8,27 +8,29 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/bitset"
-	"blockwatch.cc/knoxdb/internal/query"
+	"blockwatch.cc/knoxdb/internal/engine"
+	"blockwatch.cc/knoxdb/internal/operator/filter"
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/pkg/assert"
 )
 
 // stats iterator
 type Iterator struct {
 	ctx     context.Context
-	idx     *Index                // back reference to index
-	flt     *query.FilterTreeNode // ptr to current query conditions
-	use     Features              // flags indicating which filter to use
-	smatch  *bitset.Bitset        // snode matches
-	vmatch  *bitset.Bitset        // spack matches
-	sx      int                   // current snode index
-	snode   *SNode                // current matching snode
-	match   []uint32              // row matches in current stats pack
-	n       int                   // current offset inside match rows
-	reverse bool                  // iteration order
+	idx     *Index         // back reference to index
+	flt     *filter.Node   // ptr to current query conditions
+	use     Features       // flags indicating which filter to use
+	smatch  *bitset.Bitset // snode matches
+	vmatch  *bitset.Bitset // spack matches
+	sx      int            // current snode index
+	snode   *SNode         // current matching snode
+	match   []uint32       // row matches in current stats pack
+	n       int            // current offset inside match rows
+	reverse bool           // iteration order
 }
 
-var _ Reader = (*Iterator)(nil)
+var _ engine.StatsReader = (*Iterator)(nil)
 
 func (it *Iterator) Close() {
 	if it == nil {
@@ -53,6 +55,18 @@ func (it *Iterator) IsValid() bool {
 	return it != nil && it.snode != nil
 }
 
+// returns key, version, nvalues in a single call
+func (it *Iterator) PackInfo() (uint32, uint32, int) {
+	if it.snode == nil {
+		return 0, 0, 0
+	}
+	pos := int(it.match[it.n])
+	k := it.snode.spack.Uint32(STATS_ROW_KEY, pos)
+	v := it.snode.spack.Uint32(STATS_ROW_VERSION, pos)
+	n := it.snode.spack.Uint64(STATS_ROW_NVALS, pos)
+	return k, v, int(n)
+}
+
 // query, merge
 func (it *Iterator) Key() uint32 {
 	if it.snode == nil {
@@ -61,12 +75,20 @@ func (it *Iterator) Key() uint32 {
 	return it.snode.spack.Uint32(STATS_ROW_KEY, int(it.match[it.n]))
 }
 
+// query, merge
+func (it *Iterator) Version() uint32 {
+	if it.snode == nil {
+		return 0
+	}
+	return it.snode.spack.Uint32(STATS_ROW_VERSION, int(it.match[it.n]))
+}
+
 // merge
 func (it *Iterator) IsFull() bool {
 	if it.snode == nil {
 		return false
 	}
-	nvals := it.snode.spack.Int64(STATS_ROW_NVALS, int(it.match[it.n]))
+	nvals := it.snode.spack.Uint64(STATS_ROW_NVALS, int(it.match[it.n]))
 	return int(nvals) == it.idx.nmax
 }
 
@@ -86,7 +108,7 @@ func (it *Iterator) NValues() int {
 	if it.snode == nil {
 		return 0
 	}
-	nvals := it.snode.spack.Int64(STATS_ROW_NVALS, int(it.match[it.n]))
+	nvals := it.snode.spack.Uint64(STATS_ROW_NVALS, int(it.match[it.n]))
 	return int(nvals)
 }
 
@@ -97,7 +119,7 @@ func (it *Iterator) ReadWire() []byte {
 	}
 	buf, err := it.snode.spack.ReadWire(int(it.match[it.n]))
 	if err != nil {
-		panic(err)
+		assert.Unreachable("invalid snode wire layout", err)
 	}
 	return buf
 }
@@ -137,13 +159,13 @@ func (it *Iterator) next() bool {
 			}
 			it.snode = it.idx.snodes[it.sx]
 
-			// TODO: we could rewind the iterator if we did not clear bits here
+			// Note: we could rewind the iterator if we did not clear bits here
 			it.smatch.Unset(it.sx)
 
 			// query snode statistics pack and filters
 			if err := it.snode.Query(it); err != nil {
-				// what to do?
-				panic(err)
+				// it.idx.log.Errorf("it: query failed: %v", err)
+				assert.Unreachable("snode query failed", err)
 			}
 			if len(it.match) > 0 {
 				break
@@ -174,13 +196,13 @@ func (it *Iterator) prev() bool {
 			}
 			it.snode = it.idx.snodes[it.sx]
 
-			// TODO: we could rewind the iterator if we did not clear bits here
+			// Note: we could rewind the iterator if we did not clear bits here
 			it.smatch.Unset(it.sx)
 
 			// query snode statistics pack and filters
 			if err := it.snode.Query(it); err != nil {
-				// what to do?
-				panic(err)
+				// it.idx.log.Errorf("it: query failed: %v", err)
+				assert.Unreachable("snode query failed", err)
 			}
 			if l := len(it.match); l > 0 {
 				it.n = l - 1
@@ -202,13 +224,14 @@ func (it *Iterator) Range() types.Range {
 		return types.Range{0, uint32(nRows)}
 	}
 
-	// lookup data pack key
+	// lookup data pack key and version
 	key := it.Key()
+	ver := it.Version()
 
 	// run inside storage tx
 	var rg types.Range
 	it.idx.db.View(func(tx store.Tx) error {
-		rg = it.combinedRange(it.idx.rangeBucket(tx), key, it.flt, nRows)
+		rg = it.combinedRange(it.idx.rangeBucket(tx), key, ver, it.flt, nRows)
 		return nil
 	})
 
@@ -217,10 +240,10 @@ func (it *Iterator) Range() types.Range {
 
 // query and aggregate range filters for all integer columns
 // stop early when max range i.e. full pack (OR) or empty range (AND) is reached
-func (it *Iterator) combinedRange(b store.Bucket, key uint32, n *query.FilterTreeNode, nRows int) types.Range {
+func (it *Iterator) combinedRange(b store.Bucket, key, ver uint32, n *filter.Node, nRows int) types.Range {
 	if n.IsLeaf() {
 		// load range index data
-		idx := RangeIndexFromBytes(b.Get(filterKey(key, n.Filter.Id)))
+		idx := RangeIndexFromBytes(b.Get(encodeFilterKey(key, ver, n.Filter.Id)))
 		defer idx.Close()
 
 		// ignore errors
@@ -236,15 +259,15 @@ func (it *Iterator) combinedRange(b store.Bucket, key uint32, n *query.FilterTre
 	}
 
 	rg := types.InvalidRange
-	for _, v := range n.Children {
+	for _, node := range n.Children {
 		if n.OrKind {
-			rg = rg.Union(it.combinedRange(b, key, v, nRows))
+			rg = rg.Union(it.combinedRange(b, key, ver, node, nRows))
 			// stop early
 			if rg.IsFull(nRows) {
 				break
 			}
 		} else {
-			rg = rg.Intersect(it.combinedRange(b, key, v, nRows))
+			rg = rg.Intersect(it.combinedRange(b, key, ver, node, nRows))
 			// stop early
 			if !rg.IsValid() {
 				break

@@ -36,6 +36,7 @@ var (
 	ErrEnumExists        = errors.New("enum already exists")
 	ErrEnumInUse         = errors.New("enum is referenced")
 	ErrResultClosed      = errors.New("result already closed")
+	ErrResultOverflow    = errors.New("result overflow")
 	ErrInvalidObjectType = errors.New("invalid object type")
 	ErrInvalidId         = errors.New("invalid object id")
 	ErrTableDropWithRefs = errors.New("table is referenced")
@@ -49,4 +50,5 @@ var (
 	ErrShortMessage   = errors.New("short message buffer")
 	ErrTooManyTasks   = errors.New("too many running tasks")
 	ErrNotImplemented = errors.New("feature not implemented")
+	ErrAgain          = errors.New("try again")
 )

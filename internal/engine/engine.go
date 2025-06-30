@@ -36,8 +36,9 @@ type Engine struct {
 	stores   *util.LockFreeMap[uint64, StoreEngine]
 	indexes  *util.LockFreeMap[uint64, IndexEngine]
 	enums    schema.EnumRegistry
-	txs      TxList
 	opts     DatabaseOptions
+	txs      TxList
+	xact     uint64 // single active write tx (none when 0)
 	xmin     uint64 // xid horizon (minimum active xid)
 	xnext    uint64 // next txid for read/write tx
 	vnext    uint64 // virtual xid for read-only tx
@@ -113,9 +114,10 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 		indexes: util.NewLockFreeMap[uint64, IndexEngine](),
 		enums:   schema.NewEnumRegistry(),
 		txs:     make(TxList, 0),
+		xact:    0,
 		xmin:    0,
 		xnext:   0,
-		vnext:   0 + ReadTxOffset,
+		vnext:   ReadTxOffset,
 		dbId:    types.TaggedHash(types.ObjectTagDatabase, name),
 		opts:    opts,
 		cat:     NewCatalog(name),
@@ -125,6 +127,9 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 	}
 	e.tasks.WithContext(WithEngine(ctx, e))
 	e.shutdown.Store(false)
+
+	// start services
+	e.tasks.Start()
 
 	if opts.Logger != nil {
 		e.log = opts.Logger
@@ -192,27 +197,26 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 		return nil, err
 	}
 
-	// start services
-	e.tasks.Start()
-
 	return e, nil
 }
 
 func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, error) {
+	opts = DefaultDatabaseOptions.Merge(opts)
 	e := &Engine{
 		path: filepath.Join(opts.Path, name),
 		cache: CacheManager{
 			blocks:  block.NewCache(0),
 			buffers: NewBufferCache(0),
 		},
-		// tables:  make(map[uint64]TableEngine),
 		tables:  util.NewLockFreeMap[uint64, TableEngine](),
 		stores:  util.NewLockFreeMap[uint64, StoreEngine](),
 		indexes: util.NewLockFreeMap[uint64, IndexEngine](),
 		enums:   schema.NewEnumRegistry(),
 		txs:     make(TxList, 0),
+		xact:    0,
 		xmin:    0,
-		xnext:   1,
+		xnext:   0,
+		vnext:   ReadTxOffset,
 		dbId:    types.TaggedHash(types.ObjectTagDatabase, name),
 		cat:     NewCatalog(name),
 		log:     log.Disabled,
@@ -237,8 +241,12 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 		e.flock = lock
 	}
 
-	// start transaction (for wal recovery we may need a write tx)
-	ctx, _, commit, abort, err := e.WithTransaction(ctx)
+	// start services before potential recovery
+	e.tasks.Start()
+
+	// start transaction (for catalog access and recovery we need a write tx,
+	// but we don't want it to write wal records)
+	ctx, _, commit, abort, err := e.WithTransaction(ctx, TxFlagsNoWal)
 	if err != nil {
 		e.Close(ctx)
 		return nil, err
@@ -249,11 +257,12 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 		if err == nil {
 			return
 		}
+		// tx.Fail(err)
 		if err := abort(); err != nil {
-			e.log.Error(err)
+			e.log.Errorf("abort: %v", err)
 		}
 		if err := e.Close(ctx); err != nil {
-			e.log.Error(err)
+			e.log.Error("close: %v", err)
 		}
 	}()
 
@@ -280,7 +289,8 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 		RecoveryMode:   e.opts.WalRecoveryMode,
 		Logger:         e.log,
 	}
-	e.log.Debugf("Opening wal at %q", wopts.Path)
+
+	e.log.Debugf("Opening wal at %q lsn 0x%x", wopts.Path, e.cat.Checkpoint())
 	e.wal, err = wal.Open(e.cat.Checkpoint(), wopts)
 	if err != nil {
 		return nil, err
@@ -288,9 +298,18 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 	e.cat.WithWal(e.wal)
 
 	// recover missing catalog changes from wal, potentially clean up files from
-	// failed transactions
-	if err = e.cat.Recover(ctx); err != nil {
-		return nil, err
+	// failed transactions, we can skip this step if we had a clean shutdown, ie.
+	// db checkpoint == last wal record
+	if e.cat.Checkpoint() < e.wal.Last() {
+		// recover catalog object changes
+		if err = e.cat.Recover(ctx); err != nil {
+			return nil, err
+		}
+
+		// sync wal explicitly (because we work without wal support in tx)
+		if err := e.wal.Sync(); err != nil {
+			return nil, err
+		}
 	}
 
 	// init caches
@@ -312,16 +331,16 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 		return nil, err
 	}
 
-	// init virtual xid for read-only
+	// init virtual xid for read-only tx
 	e.vnext = e.xnext + ReadTxOffset
 
-	// close tx (we commit here because crash recovery may have rewritten journals and state)
+	// close tx (we commit here because crash recovery may have rewritten
+	// catalog state)
 	if err = commit(); err != nil {
 		return nil, err
 	}
 
-	// start services
-	e.tasks.Start()
+	e.log.Debugf("engine started with xid=%d vxid=%d", e.xnext, e.vnext)
 
 	return e, nil
 }
@@ -339,7 +358,7 @@ func (e *Engine) Close(ctx context.Context) error {
 	// TODO: shutdown user sessions (close wire protocol server)
 	// - should cancel contexts
 
-	// cancel all pending transactions
+	// cancel pending transaction
 	// TODO: find another way, maybe cancel session contexts + define an explicit
 	// session for sdk usage
 	for _, tx := range e.txs {
@@ -387,7 +406,6 @@ func (e *Engine) Close(ctx context.Context) error {
 		if err := t.Close(ctx); err != nil {
 			e.log.Errorf("Closing table %s: %v", name, err)
 		}
-		// delete(e.tables, n)
 	}
 	e.tables.Clear()
 
@@ -591,6 +609,10 @@ func (e *Engine) AbortTx(ctx context.Context, oid, xid uint64) error {
 		return nil
 	}
 	return t.AbortTx(ctx, xid)
+}
+
+func (e *Engine) Schedule(t *Task) bool {
+	return e.tasks.Submit(t)
 }
 
 func (e *Engine) UpdateTxHorizon(xid uint64) {

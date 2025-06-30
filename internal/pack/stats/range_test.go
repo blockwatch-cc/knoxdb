@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/block"
-	"blockwatch.cc/knoxdb/internal/query"
+	"blockwatch.cc/knoxdb/internal/operator/filter"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/require"
@@ -46,14 +46,14 @@ func newBlock[T constraints.Integer](vals ...uint) *block.Block {
 	return b
 }
 
-func newFilter(b *block.Block, m string, val ...any) *query.Filter {
+func newFilter(b *block.Block, m string, val ...any) *filter.Filter {
 	var v any
 	if len(val) == 2 {
-		v = query.RangeValue{val[0], val[1]}
+		v = filter.RangeValue{val[0], val[1]}
 	} else {
 		v = val[0]
 	}
-	return &query.Filter{
+	return &filter.Filter{
 		Type:  b.Type(),
 		Value: v,
 		Mode:  types.ParseFilterMode(m),
@@ -241,7 +241,7 @@ func BenchmarkRangeIndexQuery(b *testing.B) {
 		minVal, maxVal := block.MinMax()
 		idx, err := BuildRangeIndex(block, minVal, maxVal)
 		b.Run(m.String(), func(b *testing.B) {
-			flt := &query.Filter{
+			flt := &filter.Filter{
 				Type:  block.Type(),
 				Value: util.RandInt64n(1<<32 - 1),
 				Mode:  m,

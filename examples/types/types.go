@@ -11,7 +11,6 @@ import (
 	"os"
 	"runtime/pprof"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/echa/log"
@@ -21,17 +20,6 @@ import (
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
-
-type Stringer []string
-
-func (s Stringer) MarshalText() ([]byte, error) {
-	return []byte(strings.Join(s, ",")), nil
-}
-
-func (s *Stringer) UnmarshalText(b []byte) error {
-	*s = strings.Split(string(b), ",")
-	return nil
-}
 
 type MyEnum string
 
@@ -47,9 +35,9 @@ var myEnums = []string{MyEnumOne, MyEnumTwo, MyEnumThree, MyEnumFour}
 type Types struct {
 	Id        uint64         `knox:"id,pk"`
 	Timestamp time.Time      `knox:"time"`
-	Hash      []byte         `knox:"hash,index=bloom:3"`
+	Date      time.Time      `knox:"date,date"`
+	Hash      [32]byte       `knox:"hash,index=bloom:3"`
 	String    string         `knox:"string"`
-	Stringer  Stringer       `knox:"string_list"`
 	Bool      bool           `knox:"bool"`
 	MyEnum    MyEnum         `knox:"my_enum,enum"`
 	Int64     int64          `knox:"int64"`
@@ -70,15 +58,16 @@ type Types struct {
 	D256      num.Decimal256 `knox:"decimal256,scale=24"`
 	I128      num.Int128     `knox:"int128"`
 	I256      num.Int256     `knox:"int256"`
+	Big       num.Big        `knox:"big"`
 }
 
 const (
 	TypesCacheSize            = 128 // MB
-	TypesPackSizeLog2         = 16  // 32k packs ~6M
-	TypesJournalSizeLog2      = 18  // 128k
+	TypesPackSizeLog2         = 15  // 32k packs ~6M
+	TypesJournalSizeLog2      = 17  // 128k
 	TypesFillLevel            = 1.0
 	TypesIndexPackSizeLog2    = 11 // 2k packs
-	TypesIndexJournalSizeLog2 = 18 // 128k journal
+	TypesIndexJournalSizeLog2 = 17 // 128k journal
 	TypesIndexFillLevel       = 1.0
 )
 
@@ -97,7 +86,7 @@ func init() {
 	flags.BoolVar(&verbose, "v", false, "be verbose")
 	flags.BoolVar(&debug, "vv", false, "enable debug mode")
 	flags.BoolVar(&trace, "vvv", false, "enable trace mode")
-	flags.BoolVar(&profile, "profile", false, "enable CPU profiling")
+	flags.BoolVar(&profile, "p", false, "enable CPU profiling")
 	flags.StringVar(&dbname, "db", "", "database")
 }
 
@@ -134,7 +123,7 @@ func run() error {
 	log.SetLevel(lvl)
 
 	if profile {
-		f, err := os.Create("types.prof")
+		f, err := os.Create("cpu.prof")
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -158,6 +147,20 @@ func run() error {
 		}
 	}
 	defer db.Close(ctx)
+
+	// enc := schema.NewEncoder(table.Schema())
+	// buf, err := enc.Encode(NewRandomTypes(1), nil)
+	// if err != nil {
+	// 	return err
+	// }
+	// view := schema.NewView(enc.Schema())
+	// fmt.Println(hex.Dump(buf))
+	// var ok bool
+	// view, buf, ok = view.Cut(buf)
+	// if !ok || len(buf) != 0 {
+	// 	return fmt.Errorf("view problem ok=%t l=%d", ok, len(buf))
+	// }
+	// return nil
 
 	// Step 1
 	//
@@ -191,14 +194,16 @@ func run() error {
 		WithTag("three_million_records").
 		WithLimit(3000000).
 		WithStats(true).
-		Stream(ctx, func(t *Types) error {
+		// WithDebug(true).
+		Stream(ctx, func(_ *Types) error {
 			count++
 			return nil
 		})
 	if err != nil {
 		log.Errorf("Decode: %v", err)
 	} else {
-		log.Infof("Decoded %d records in %s", count, time.Since(start))
+		dur := time.Since(start)
+		log.Infof("Decoded %d records in %s (%d/s)", count, dur, count*1000000000/int(dur))
 	}
 
 	// read a single entry
@@ -223,14 +228,15 @@ func run() error {
 		WithTag("no_condition_limit").
 		WithLimit(10).
 		WithStats(true).
+		// WithDebug(true).
 		Execute(ctx, &multi)
 	if err != nil {
 		return fmt.Errorf("Multi: %v", err)
 	}
 	log.Infof("%d Multi values", len(multi))
-	for i, v := range multi {
-		log.Infof("%d int64=%d pk=%d", i, v.Int64, v.Id)
-	}
+	// for i, v := range multi {
+	// 	log.Tracef("%d int64=%d pk=%d", i, v.Int64, v.Id)
+	// }
 
 	// Step 3
 	//
@@ -239,6 +245,7 @@ func run() error {
 		WithTag("delete").
 		WithTable(table).
 		AndLt("int64", 1024).
+		// WithDebug(true).
 		Delete(ctx)
 	if err != nil {
 		log.Errorf("Decode: %v", err)
@@ -296,8 +303,9 @@ func Create(ctx context.Context) (db knox.Database, table knox.Table, err error)
 	if err != nil {
 		return
 	}
+	ts := table.Schema()
 
-	s, err = s.SelectFields("hash", "id")
+	s, err = ts.SelectFields("hash", "$rid")
 	if err != nil {
 		return
 	}
@@ -345,9 +353,9 @@ func NewRandomTypes(i int) *Types {
 	return &Types{
 		Id:        0, // empty, will be set by insert
 		Timestamp: time.Now().UTC(),
-		Hash:      util.RandBytes(20),
+		Date:      time.Now().UTC(),
+		Hash:      [32]byte(util.RandBytes(32)),
 		String:    hex.EncodeToString(util.RandBytes(4)),
-		Stringer:  strings.SplitAfter(hex.EncodeToString(util.RandBytes(4)), "a"),
 		Bool:      true,
 		MyEnum:    MyEnum(myEnums[i%4]),
 		// typed ints
@@ -358,20 +366,21 @@ func NewRandomTypes(i int) *Types {
 		// int to typed int
 		Int_64: i,
 		// typed uints
-		Uint64: uint64(i * 1000000),
-		Uint32: uint32(i * 1000000),
+		Uint64: uint64(i),
+		Uint32: uint32(i),
 		Uint16: uint16(i),
 		Uint8:  uint8(i),
 		// uint to typed uint
 		Uint_64: uint(i),
-		Float32: float32(i / 1000000),
-		Float64: float64(i / 1000000),
+		Float32: float32(i),
+		Float64: float64(i),
 		// decimals
-		D32:  num.NewDecimal32(int32(100123456789-i), 5),
-		D64:  num.NewDecimal64(1123456789123456789-int64(i), 15),
+		D32:  num.NewDecimal32(int32(i)*100000, 5),
+		D64:  num.NewDecimal64(int64(i)*1000000000000, 15),
 		D128: num.NewDecimal128(num.MustParseInt128(strconv.Itoa(i)+"00000000000000000000"), 18),
 		D256: num.NewDecimal256(num.MustParseInt256(strconv.Itoa(i)+"0000000000000000000000000000000000000000"), 24),
 		I128: num.MustParseInt128(strconv.Itoa(i) + "000000000000000000000000000000"),
 		I256: num.MustParseInt256(strconv.Itoa(i) + "000000000000000000000000000000000000000000000000000000000000"),
+		Big:  num.NewBig(int64(i)),
 	}
 }

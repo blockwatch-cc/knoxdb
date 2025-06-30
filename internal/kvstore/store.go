@@ -92,10 +92,11 @@ func (kv *KVStore) Create(ctx context.Context, s *schema.Schema, opts engine.Sto
 	kv.isZeroCopy = kv.db.IsZeroCopyRead()
 
 	// init store
-	tx, err := engine.GetTransaction(ctx).StoreTx(kv.db, true)
+	tx, err := kv.db.Begin(true)
 	if err != nil {
 		return err
 	}
+	defer tx.Rollback()
 	bucket := tx.Bucket(kv.key)
 	if bucket != nil {
 		return engine.ErrStoreExists
@@ -111,7 +112,7 @@ func (kv *KVStore) Create(ctx context.Context, s *schema.Schema, opts engine.Sto
 	}
 
 	kv.log.Debugf("Created store %s", typ)
-	return nil
+	return tx.Commit()
 }
 
 func (kv *KVStore) Open(ctx context.Context, s *schema.Schema, opts engine.StoreOptions) error {
@@ -159,15 +160,15 @@ func (kv *KVStore) Open(ctx context.Context, s *schema.Schema, opts engine.Store
 	}
 	kv.isZeroCopy = kv.db.IsZeroCopyRead()
 
-	tx, err := engine.GetTransaction(ctx).StoreTx(kv.db, false)
+	tx, err := kv.db.Begin(false)
 	if err != nil {
 		return err
 	}
+	defer tx.Rollback()
 
 	// load state
 	if err := kv.state.Load(ctx, tx); err != nil {
 		kv.log.Error("missing table state: %v", err)
-		tx.Rollback()
 		kv.Close(ctx)
 		return engine.ErrDatabaseCorrupt
 	}
@@ -175,7 +176,6 @@ func (kv *KVStore) Open(ctx context.Context, s *schema.Schema, opts engine.Store
 	// init metrics
 	bucket := tx.Bucket(kv.key)
 	if bucket == nil {
-		tx.Rollback()
 		kv.Close(ctx)
 		return engine.ErrDatabaseCorrupt
 	}
@@ -237,10 +237,11 @@ func (kv *KVStore) Drop(ctx context.Context) error {
 	typ := kv.schema.TypeLabel(kv.engine.Namespace())
 	if kv.noClose {
 		kv.log.Debugf("dropping store %s", typ)
-		tx, err := engine.GetTransaction(ctx).StoreTx(kv.db, true)
+		tx, err := kv.db.Begin(true)
 		if err != nil {
 			return err
 		}
+		defer tx.Rollback()
 		if err := tx.Root().DeleteBucket(kv.key); err != nil {
 			return err
 		}

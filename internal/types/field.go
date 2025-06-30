@@ -175,12 +175,9 @@ func (i FieldFlags) String() string {
 	var b strings.Builder
 	for p, k := 0, FieldFlags(1); p < 7; p, k = p+1, k<<1 {
 		if i.Is(k) {
-			start, end := fieldFlagIdx[p], len(fieldFlagNames)
-			if k < FieldFlagInternal {
-				end = fieldFlagIdx[p+1] - 1
-			}
+			start, end := fieldFlagIdx[p], fieldFlagIdx[p+1]-1
 			if b.Len() > 0 {
-				b.WriteString(", ")
+				b.WriteString(",")
 			}
 			b.WriteString(fieldFlagNames[start:end])
 		}

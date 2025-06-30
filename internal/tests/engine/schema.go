@@ -8,21 +8,22 @@ import (
 	"fmt"
 	"time"
 
-	"blockwatch.cc/knoxdb/internal/query"
+	"blockwatch.cc/knoxdb/internal/operator/filter"
+	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 var (
-	EQ = query.FilterModeEqual
-	IN = query.FilterModeIn
-	NI = query.FilterModeNotIn
-	LE = query.FilterModeLe
-	LT = query.FilterModeLt
-	GE = query.FilterModeGe
-	GT = query.FilterModeGt
-	RG = query.FilterModeRange
+	EQ = types.FilterModeEqual
+	IN = types.FilterModeIn
+	NI = types.FilterModeNotIn
+	LE = types.FilterModeLe
+	LT = types.FilterModeLt
+	GE = types.FilterModeGe
+	GT = types.FilterModeGt
+	RG = types.FilterModeRange
 )
 
 var myEnums = []string{"one", "two", "three", "four"}
@@ -137,41 +138,39 @@ func NewSecurity(i int) Security {
 	}
 }
 
-func makeFilter(s *schema.Schema, name string, mode query.FilterMode, val, val2 any) *query.FilterTreeNode {
+func makeFilter(s *schema.Schema, name string, mode types.FilterMode, val, val2 any) *filter.Node {
 	field, ok := s.FieldByName(name)
 	if !ok {
 		panic(fmt.Errorf("missing field %s in schema %s", name, s))
 	}
 	idx, _ := s.FieldIndexById(field.Id())
-	m := query.NewFactory(field.Type()).New(mode)
+	m := filter.NewFactory(field.Type()).New(mode)
 	c := schema.NewCaster(field.Type(), field.Scale(), nil)
 	switch mode {
-	case query.FilterModeRange:
+	case types.FilterModeRange:
 		val, _ = c.CastValue(val)
 		val2, _ = c.CastValue(val2)
-		rg := query.RangeValue{val, val2}
+		rg := filter.RangeValue{val, val2}
 		val = rg
-	case query.FilterModeIn, query.FilterModeNotIn:
+	case types.FilterModeIn, types.FilterModeNotIn:
 		val, _ = c.CastSlice(val)
 	default:
 		val, _ = c.CastValue(val)
 	}
 	m.WithValue(val)
-	return &query.FilterTreeNode{
-		Filter: &query.Filter{
-			Name:    field.Name(),
-			Type:    field.Type().BlockType(),
-			Mode:    mode,
-			Index:   idx,
-			Id:      field.Id(),
-			Value:   val,
-			Matcher: m,
-		},
-	}
+	return filter.NewNode().AddLeaf(&filter.Filter{
+		Name:    field.Name(),
+		Type:    field.Type().BlockType(),
+		Mode:    mode,
+		Index:   idx,
+		Id:      field.Id(),
+		Value:   val,
+		Matcher: m,
+	})
 }
 
-func makeTree(f ...*query.FilterTreeNode) *query.FilterTreeNode {
-	return &query.FilterTreeNode{
-		Children: f,
-	}
+func makeTree(f ...*filter.Node) *filter.Node {
+	n := filter.NewNode()
+	n.Children = f
+	return n
 }

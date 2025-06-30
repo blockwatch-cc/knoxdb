@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"testing"
 
+	"blockwatch.cc/knoxdb/internal/operator/filter"
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
@@ -58,6 +58,7 @@ func makeTestData(sz int, pk uint64) (res []TestStruct) {
 func makeTestPackage(t testing.TB, key int, pk uint64) *pack.Package {
 	pkg := pack.New().
 		WithKey(uint32(key)).
+		WithVersion(1).
 		WithSchema(TestSchema).
 		WithMaxRows(TEST_PKG_SIZE).
 		WithStats().
@@ -77,24 +78,24 @@ func makeTestPackage(t testing.TB, key int, pk uint64) *pack.Package {
 	return pkg
 }
 
-func makeFilter(name string, mode query.FilterMode, val, val2 any) *query.FilterTreeNode {
+func makeFilter(name string, mode types.FilterMode, val, val2 any) *filter.Node {
 	field, ok := TestSchema.FieldByName(name)
 	if !ok {
 		panic(fmt.Errorf("missing field %s in schema %s", name, TestSchema))
 	}
-	m := query.NewFactory(field.Type()).New(mode)
+	m := filter.NewFactory(field.Type()).New(mode)
 	c := schema.NewCaster(field.Type(), field.Scale(), nil)
 	var err error
 	switch mode {
-	case query.FilterModeRange:
+	case types.FilterModeRange:
 		val, err = c.CastValue(val)
 		if err != nil {
 			panic(err)
 		}
 		val2, err = c.CastValue(val2)
-		rg := query.RangeValue{val, val2}
+		rg := filter.RangeValue{val, val2}
 		val = rg
-	case query.FilterModeIn, query.FilterModeNotIn:
+	case types.FilterModeIn, types.FilterModeNotIn:
 		val, err = c.CastSlice(val)
 	default:
 		val, err = c.CastValue(val)
@@ -103,8 +104,8 @@ func makeFilter(name string, mode query.FilterMode, val, val2 any) *query.Filter
 		panic(err)
 	}
 	m.WithValue(val)
-	return &query.FilterTreeNode{
-		Filter: &query.Filter{
+	return &filter.Node{
+		Filter: &filter.Filter{
 			Name:    field.Name(),
 			Type:    field.Type().BlockType(),
 			Mode:    mode,
@@ -117,15 +118,15 @@ func makeFilter(name string, mode query.FilterMode, val, val2 any) *query.Filter
 }
 
 // silence golangci-lint unparam
-var _ = makeFilter("i32", query.FilterModeEqual, 1, nil)
+var _ = makeFilter("i32", types.FilterModeEqual, 1, nil)
 
 // TODO: test complex filter conditions
-// func makeAndFilter(a, b *query.FilterTreeNode) *query.FilterTreeNode {
-// 	return &query.FilterTreeNode{Children: []*query.FilterTreeNode{a, b}}
+// func makeAndFilter(a, b *filter.Node) *filter.Node {
+// 	return &filter.Node{Children: []*filter.Node{a, b}}
 // }
 
-// func makeOrFilter(a, b *query.FilterTreeNode) *query.FilterTreeNode {
-// 	return &query.FilterTreeNode{OrKind: true, Children: []*query.FilterTreeNode{a, b}}
+// func makeOrFilter(a, b *filter.Node) *filter.Node {
+// 	return &filter.Node{OrKind: true, Children: []*filter.Node{a, b}}
 // }
 
 // -------------------------------------------------------------
@@ -155,7 +156,7 @@ func TestIndexCreate(t *testing.T) {
 	db, err := store.Create("mem", "stats")
 	require.NoError(t, err)
 	defer db.Close()
-	idx := NewIndex(db, TestSchema, TEST_PKG_SIZE)
+	idx := NewIndex().WithDB(db).WithSchema(TestSchema).WithMaxSize(TEST_PKG_SIZE)
 	defer idx.Close()
 	// t.Log(idx.schema)
 	assert.Equal(t, 0, idx.Len(), "num data packs")
@@ -185,10 +186,12 @@ func TestIndexAddSingle(t *testing.T) {
 	db, err := store.Create("mem", "stats")
 	require.NoError(t, err)
 	defer db.Close()
-	idx := NewIndex(db, TestSchema, TEST_PKG_SIZE)
+	idx := NewIndex().WithDB(db).WithSchema(TestSchema).WithMaxSize(TEST_PKG_SIZE)
 	defer idx.Close()
 	pkg := makeTestPackage(t, 0, 1)
 	require.NoError(t, idx.AddPack(ctx, pkg))
+
+	t.Log(idx.schema)
 
 	// index internals
 	require.Len(t, idx.inodes, 2, "idx inodes")
@@ -227,7 +230,7 @@ func TestIndexAddMany(t *testing.T) {
 	db, err := store.Create("mem", "stats")
 	require.NoError(t, err)
 	defer db.Close()
-	idx := NewIndex(db, TestSchema, TEST_PKG_SIZE)
+	idx := NewIndex().WithDB(db).WithSchema(TestSchema).WithMaxSize(TEST_PKG_SIZE)
 	defer idx.Close()
 
 	// num snodes we expect to attach
@@ -265,7 +268,7 @@ func TestIndexUpdate(t *testing.T) {
 	db, err := store.Create("mem", "stats")
 	require.NoError(t, err)
 	defer db.Close()
-	idx := NewIndex(db, TestSchema, TEST_PKG_SIZE)
+	idx := NewIndex().WithDB(db).WithSchema(TestSchema).WithMaxSize(TEST_PKG_SIZE)
 	defer idx.Close()
 	pkg := makeTestPackage(t, 0, 1)
 	require.NoError(t, idx.AddPack(ctx, pkg))
@@ -323,7 +326,7 @@ func TestIndexDeleteSingle(t *testing.T) {
 	db, err := store.Create("mem", "stats")
 	require.NoError(t, err)
 	defer db.Close()
-	idx := NewIndex(db, TestSchema, TEST_PKG_SIZE)
+	idx := NewIndex().WithDB(db).WithSchema(TestSchema).WithMaxSize(TEST_PKG_SIZE)
 	defer idx.Close()
 	require.NoError(t, idx.AddPack(ctx, makeTestPackage(t, 0, 1)))
 	require.NoError(t, idx.AddPack(ctx, makeTestPackage(t, 1, TEST_PKG_SIZE+1)))
@@ -358,7 +361,7 @@ func TestIndexDeleteMany(t *testing.T) {
 	db, err := store.Create("mem", "stats")
 	require.NoError(t, err)
 	defer db.Close()
-	idx := NewIndex(db, TestSchema, TEST_PKG_SIZE)
+	idx := NewIndex().WithDB(db).WithSchema(TestSchema).WithMaxSize(TEST_PKG_SIZE)
 	defer idx.Close()
 
 	sz := 5
@@ -411,7 +414,7 @@ func TestIndexStore(t *testing.T) {
 	db, err := store.Create("mem", "stats")
 	require.NoError(t, err)
 	defer db.Close()
-	src := NewIndex(db, TestSchema, TEST_PKG_SIZE)
+	src := NewIndex().WithDB(db).WithSchema(TestSchema).WithMaxSize(TEST_PKG_SIZE)
 
 	sz := 5
 	for n := 0; n < sz; n++ {
@@ -422,6 +425,13 @@ func TestIndexStore(t *testing.T) {
 		}
 	}
 
+	assert.Equal(t, sz*STATS_PACK_SIZE, src.Len(), "num data packs")
+	assert.Equal(t, sz*STATS_PACK_SIZE*TEST_PKG_SIZE, src.Count(), "num data rows")
+	assert.Equal(t, uint32(sz*STATS_PACK_SIZE), src.NextKey(), "next key")
+	assert.Equal(t, true, src.IsTailFull(), "full tail")
+	assert.Equal(t, uint64(1), src.GlobalMinRid(), "global min rid")
+	assert.Equal(t, uint64(sz*STATS_PACK_SIZE*TEST_PKG_SIZE), src.GlobalMaxRid(), "global max rid")
+
 	tx, err := src.db.Begin(true)
 	require.NoError(t, err)
 	require.NoError(t, src.Store(ctx, tx))
@@ -429,7 +439,7 @@ func TestIndexStore(t *testing.T) {
 	src.Close()
 
 	// load 2nd index
-	idx := NewIndex(db, TestSchema, TEST_PKG_SIZE)
+	idx := NewIndex().WithDB(db).WithSchema(TestSchema).WithMaxSize(TEST_PKG_SIZE)
 	defer idx.Close()
 	tx, err = idx.db.Begin(false)
 	require.NoError(t, err)
@@ -446,7 +456,7 @@ func TestIndexStore(t *testing.T) {
 	assert.Equal(t, sz*STATS_PACK_SIZE, idx.Len(), "num data packs")
 	assert.Equal(t, sz*STATS_PACK_SIZE*TEST_PKG_SIZE, idx.Count(), "num data rows")
 	assert.Equal(t, uint32(sz*STATS_PACK_SIZE), idx.NextKey(), "next key")
-	assert.Equal(t, true, idx.IsTailFull(), "fill tail")
+	assert.Equal(t, true, idx.IsTailFull(), "full tail")
 	assert.Equal(t, uint64(1), idx.GlobalMinRid(), "global min rid")
 	assert.Equal(t, uint64(sz*STATS_PACK_SIZE*TEST_PKG_SIZE), idx.GlobalMaxRid(), "global max rid")
 }
@@ -456,7 +466,7 @@ func TestIndexStoreAndAdd(t *testing.T) {
 	db, err := store.Create("mem", "stats")
 	require.NoError(t, err)
 	defer db.Close()
-	idx := NewIndex(db, TestSchema, TEST_PKG_SIZE)
+	idx := NewIndex().WithDB(db).WithSchema(TestSchema).WithMaxSize(TEST_PKG_SIZE)
 
 	// fill half
 	for k := 0; k < STATS_PACK_SIZE/2; k++ {
@@ -487,7 +497,11 @@ func TestIndexQueryEqual(t *testing.T) {
 	db, err := store.Create("mem", "stats")
 	require.NoError(t, err)
 	defer db.Close()
-	idx := NewIndex(db, TestSchema, TEST_PKG_SIZE).WithFeatures(FeatRangeFilter)
+	idx := NewIndex().
+		WithDB(db).
+		WithSchema(TestSchema).
+		WithMaxSize(TEST_PKG_SIZE).
+		WithFeatures(FeatRangeFilter)
 	defer idx.Close()
 
 	sz := 5
@@ -500,7 +514,7 @@ func TestIndexQueryEqual(t *testing.T) {
 	}
 
 	// equal filter: matches first record in second snode
-	f := makeFilter("id", query.FilterModeEqual, uint64(STATS_PACK_SIZE*TEST_PKG_SIZE+1), nil)
+	f := makeFilter("id", types.FilterModeEqual, uint64(STATS_PACK_SIZE*TEST_PKG_SIZE+1), nil)
 	it, ok := idx.Query(ctx, f, types.OrderAsc)
 	defer it.Close()
 	require.True(t, ok, "found match")
@@ -522,7 +536,11 @@ func TestIndexQueryAll(t *testing.T) {
 	db, err := store.Create("mem", "stats")
 	require.NoError(t, err)
 	defer db.Close()
-	idx := NewIndex(db, TestSchema, TEST_PKG_SIZE).WithFeatures(FeatRangeFilter)
+	idx := NewIndex().
+		WithDB(db).
+		WithSchema(TestSchema).
+		WithMaxSize(TEST_PKG_SIZE).
+		WithFeatures(FeatRangeFilter)
 	defer idx.Close()
 
 	sz := 5
@@ -567,7 +585,11 @@ func TestIndexQueryLess(t *testing.T) {
 	db, err := store.Create("mem", "stats")
 	require.NoError(t, err)
 	defer db.Close()
-	idx := NewIndex(db, TestSchema, TEST_PKG_SIZE).WithFeatures(FeatRangeFilter)
+	idx := NewIndex().
+		WithDB(db).
+		WithSchema(TestSchema).
+		WithMaxSize(TEST_PKG_SIZE).
+		WithFeatures(FeatRangeFilter)
 	defer idx.Close()
 
 	sz := 1
@@ -580,7 +602,7 @@ func TestIndexQueryLess(t *testing.T) {
 	}
 
 	// equal filter: matches first and second record in first snode
-	f := makeFilter("id", query.FilterModeLe, uint64(TEST_PKG_SIZE+1), nil)
+	f := makeFilter("id", types.FilterModeLe, uint64(TEST_PKG_SIZE+1), nil)
 	it, ok := idx.Query(ctx, f, types.OrderAsc)
 	defer it.Close()
 	require.True(t, ok, "found match")
@@ -615,7 +637,11 @@ func TestIndexQueryRange(t *testing.T) {
 	db, err := store.Create("mem", "stats")
 	require.NoError(t, err)
 	defer db.Close()
-	idx := NewIndex(db, TestSchema, TEST_PKG_SIZE).WithFeatures(FeatRangeFilter)
+	idx := NewIndex().
+		WithDB(db).
+		WithSchema(TestSchema).
+		WithMaxSize(TEST_PKG_SIZE).
+		WithFeatures(FeatRangeFilter)
 	defer idx.Close()
 
 	sz := 1
@@ -628,7 +654,7 @@ func TestIndexQueryRange(t *testing.T) {
 	}
 
 	// equal filter: matches first and second record in first snode
-	f := makeFilter("id", query.FilterModeRange, uint64(1), uint64(TEST_PKG_SIZE+1))
+	f := makeFilter("id", types.FilterModeRange, uint64(1), uint64(TEST_PKG_SIZE+1))
 	it, ok := idx.Query(ctx, f, types.OrderAsc)
 	defer it.Close()
 	require.True(t, ok, "found match")
@@ -662,7 +688,11 @@ func TestIndexFindPk(t *testing.T) {
 	db, err := store.Create("mem", "stats")
 	require.NoError(t, err)
 	defer db.Close()
-	idx := NewIndex(db, TestSchema, TEST_PKG_SIZE).WithFeatures(FeatRangeFilter)
+	idx := NewIndex().
+		WithDB(db).
+		WithSchema(TestSchema).
+		WithMaxSize(TEST_PKG_SIZE).
+		WithFeatures(FeatRangeFilter)
 	defer idx.Close()
 
 	// fill half
@@ -693,7 +723,7 @@ func TestIndexFindPkEnd(t *testing.T) {
 	db, err := store.Create("mem", "stats")
 	require.NoError(t, err)
 	defer db.Close()
-	idx := NewIndex(db, TestSchema, TEST_PKG_SIZE)
+	idx := NewIndex().WithDB(db).WithSchema(TestSchema).WithMaxSize(TEST_PKG_SIZE)
 	defer idx.Close()
 
 	// fill half (last data pack is full, so no more room for this pk)
@@ -720,7 +750,7 @@ func TestIndexFindPkEndWithSpace(t *testing.T) {
 	db, err := store.Create("mem", "stats")
 	require.NoError(t, err)
 	defer db.Close()
-	idx := NewIndex(db, TestSchema, TEST_PKG_SIZE)
+	idx := NewIndex().WithDB(db).WithSchema(TestSchema).WithMaxSize(TEST_PKG_SIZE)
 	defer idx.Close()
 
 	// fill half
@@ -759,7 +789,7 @@ func BenchmarkIndexQueryEqual(b *testing.B) {
 		ctx := context.Background()
 		db, err := store.Create("mem", "stats")
 		require.NoError(b, err)
-		idx := NewIndex(db, TestSchema, TEST_PKG_SIZE)
+		idx := NewIndex().WithDB(db).WithSchema(TestSchema).WithMaxSize(TEST_PKG_SIZE)
 
 		// insert Nx2048 data packs
 		for n := 0; n < sz; n++ {
@@ -769,7 +799,7 @@ func BenchmarkIndexQueryEqual(b *testing.B) {
 				require.NoError(b, idx.AddPack(ctx, makeTestPackage(b, key, pk)))
 			}
 		}
-		f := makeFilter("id", query.FilterModeEqual, uint64(STATS_PACK_SIZE*TEST_PKG_SIZE+1), nil)
+		f := makeFilter("id", types.FilterModeEqual, uint64(STATS_PACK_SIZE*TEST_PKG_SIZE+1), nil)
 
 		b.Run(fmt.Sprintf("tree-%dx2048", sz), func(b *testing.B) {
 			b.ReportAllocs()
@@ -792,7 +822,7 @@ func BenchmarkIndexQueryAll(b *testing.B) {
 		ctx := context.Background()
 		db, err := store.Create("mem", "stats")
 		require.NoError(b, err)
-		idx := NewIndex(db, TestSchema, TEST_PKG_SIZE)
+		idx := NewIndex().WithDB(db).WithSchema(TestSchema).WithMaxSize(TEST_PKG_SIZE)
 
 		// insert Nx2048 data packs
 		for n := 0; n < sz; n++ {

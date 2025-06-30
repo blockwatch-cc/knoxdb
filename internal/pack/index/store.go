@@ -5,8 +5,6 @@ package index
 
 import (
 	"encoding/binary"
-	"encoding/hex"
-	"fmt"
 
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/hash/xxhash64"
@@ -17,7 +15,7 @@ import (
 var BE = binary.BigEndian
 
 func (idx *Index) dataBucket(tx store.Tx) store.Bucket {
-	key := append([]byte(idx.schema.Name()), engine.DataKeySuffix...)
+	key := append([]byte(idx.name), engine.DataKeySuffix...)
 	b := tx.Bucket(key)
 	if b != nil {
 		b.FillPercent(idx.opts.PageFill)
@@ -43,18 +41,18 @@ func (idx *Index) encodePackKey(ik, pk uint64, id int) []byte {
 func (idx *Index) decodePackKey(buf []byte) (ik, pk uint64, id int) {
 	var n int
 	ik, n = num.Uvarint(buf)
-	if n == 0 {
-		panic(fmt.Errorf("invalid key %s", hex.EncodeToString(buf)))
-	}
+	// if n == 0 {
+	// 	panic(fmt.Errorf("invalid key %s", hex.EncodeToString(buf)))
+	// }
 	buf = buf[n:]
 	pk, n = num.Uvarint(buf)
-	if n == 0 {
-		panic(fmt.Errorf("invalid key %s", hex.EncodeToString(buf)))
-	}
-	v, n := num.Uvarint(buf[n:])
-	if n == 0 {
-		panic(fmt.Errorf("invalid key %s", hex.EncodeToString(buf)))
-	}
+	// if n == 0 {
+	// 	panic(fmt.Errorf("invalid key %s", hex.EncodeToString(buf)))
+	// }
+	v, _ := num.Uvarint(buf[n:])
+	// if n == 0 {
+	// 	panic(fmt.Errorf("invalid key %s", hex.EncodeToString(buf)))
+	// }
 	id = int(v)
 	return
 }

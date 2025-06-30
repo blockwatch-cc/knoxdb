@@ -370,10 +370,7 @@ func (s *Bitset) Resize(size int) *Bitset {
 	} else if size < s.size && s.cnt != 0 {
 		// clear trailing bytes
 		if len(s.buf) > sz {
-			s.buf[sz] = 0
-			for bp := 1; sz+bp < len(s.buf); bp *= 2 {
-				copy(s.buf[sz+bp:], s.buf[sz:sz+bp])
-			}
+			clear(s.buf[sz:])
 		}
 		// clear trailing bits
 		if sz > 0 {
@@ -390,6 +387,7 @@ func (s *Bitset) Resize(size int) *Bitset {
 func (s *Bitset) Grow(size int) *Bitset {
 	return s.Resize(s.size + size)
 }
+
 func (s *Bitset) And(r *Bitset) *Bitset {
 	if s.size == r.size && s.size > 0 {
 		if s.cnt == 0 {

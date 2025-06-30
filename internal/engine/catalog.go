@@ -17,6 +17,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/wal"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/util"
+	"github.com/echa/log"
 )
 
 // TODO Design
@@ -122,6 +123,7 @@ type Catalog struct {
 	wal        *wal.Wal            // copy of wal managed by engine
 	checkpoint wal.LSN             // latest wal checkpoint that is safe in db
 	pending    map[uint64][]Object // active txids pending updates waiting for commit/abort
+	log        log.Logger          // logger handle
 }
 
 func NewCatalog(name string) *Catalog {
@@ -129,6 +131,7 @@ func NewCatalog(name string) *Catalog {
 		name:    name,
 		id:      types.TaggedHash(types.ObjectTagDatabase, name),
 		pending: make(map[uint64][]Object),
+		log:     log.Disabled,
 	}
 }
 
@@ -138,8 +141,9 @@ func (c *Catalog) WithWal(w *wal.Wal) *Catalog {
 }
 
 func (c *Catalog) Create(ctx context.Context, opts DatabaseOptions) error {
+	c.log = opts.Logger
 	path := filepath.Join(opts.Path, c.name, CATALOG_NAME)
-	opts.Logger.Debugf("Creating catalog at %s", path)
+	c.log.Debugf("Creating catalog at %s", path)
 	db, err := store.Create(opts.Driver, path, opts.ToDriverOpts())
 	if err != nil {
 		if store.IsError(err, store.ErrDbExists) {
@@ -191,32 +195,33 @@ func (c *Catalog) Create(ctx context.Context, opts DatabaseOptions) error {
 func (c *Catalog) Open(ctx context.Context, opts DatabaseOptions) error {
 	opts = DefaultDatabaseOptions.Merge(opts)
 	path := filepath.Join(opts.Path, c.name, CATALOG_NAME)
+	c.log = opts.Logger
 
-	opts.Logger.Debugf("Opening catalog at %s", path)
+	c.log.Debugf("Opening catalog at %s", path)
 	db, err := store.Open(opts.Driver, path, opts.ToDriverOpts())
 	if err != nil {
 		if store.IsError(err, store.ErrDbDoesNotExist) {
 			return ErrNoDatabase
 		}
-		opts.Logger.Errorf("opening catalog %s: %v", c.name, err)
+		c.log.Errorf("opening catalog %s: %v", c.name, err)
 		return ErrDatabaseCorrupt
 	}
 
 	mft, err := db.Manifest()
 	if err != nil {
-		opts.Logger.Errorf("missing manifest: %v", err)
+		c.log.Errorf("missing manifest: %v", err)
 		db.Close()
 		return ErrDatabaseCorrupt
 	}
 	err = mft.Validate(c.name, "*", CATALOG_TYPE, CATALOG_VERSION)
 	if err != nil {
-		opts.Logger.Errorf("schema mismatch: %v", err)
+		c.log.Errorf("schema mismatch: %v", err)
 		db.Close()
 		return schema.ErrSchemaMismatch
 	}
 	c.path = filepath.Join(opts.Path, c.name)
 
-	// load checkpoint
+	// load catalog checkpoint
 	err = db.View(func(tx store.Tx) error {
 		c.checkpoint = wal.LSN(BE.Uint64(tx.Bucket(databaseKey).Get(checkpointKey)))
 		return nil
@@ -243,16 +248,16 @@ func (c *Catalog) Close(ctx context.Context) error {
 	var err error
 	if c.wal != nil {
 		err = c.doCheckpoint(ctx)
-		if err != nil {
-			return err
-		}
-		c.wal = nil
 	}
 
+	// close db
 	if err2 := c.db.Close(); err2 != nil && err == nil {
 		err = err2
 	}
 	c.db = nil
+	c.wal = nil
+	c.log = nil
+
 	return err
 }
 
@@ -265,9 +270,13 @@ func (c *Catalog) ForceClose() error {
 	clear(c.pending)
 	err := c.db.Close()
 	c.db = nil
+	c.wal = nil
+	c.log = nil
+
 	return err
 }
 
+// returns catalog checkpoint position in WAL
 func (c *Catalog) Checkpoint() wal.LSN {
 	return c.checkpoint
 }
@@ -913,6 +922,12 @@ func (c *Catalog) doCheckpoint(ctx context.Context) error {
 		return nil
 	}
 
+	// only checkpoint when a managed tx is not failed
+	tx := GetTransaction(ctx)
+	if tx != nil && tx.Err() != nil {
+		return nil
+	}
+
 	// write checkpoint record to wal
 	lsn, err := c.wal.Write(&wal.Record{
 		Type:   wal.RecordTypeCheckpoint,
@@ -923,24 +938,23 @@ func (c *Catalog) doCheckpoint(ctx context.Context) error {
 		return err
 	}
 
-	// store checkpoint in catalog db (without managed tx this writes
-	// directly to catalog db storage)
+	// store checkpoint in catalog db
 	if err = c.PutCheckpoint(ctx, lsn); err != nil {
 		return err
 	}
 
-	// ensure changes are safe in catalog db
-	tx := GetTransaction(ctx)
-	if tx != nil && tx.catTx != nil && tx.catTx.IsWriteable() {
-		// until this commit succeeds changes are not durable,
-		// but when it does the previous wal checkpoint will be
-		// referenced at next startup
-		err := tx.catTx.Commit()
-		if err != nil {
-			return err
-		}
-		tx.catTx = nil
-	}
+	// // ensure changes are safe in catalog db
+	// if tx != nil && tx.catTx != nil && tx.catTx.IsWriteable() {
+	// 	// until this commit succeeds changes are not durable,
+	// 	// but when it does the previous wal checkpoint will be
+	// 	// referenced at next startup
+	// 	err := tx.catTx.Commit()
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	tx.catTx = nil
+	// 	tx.flags &^= TxFlagsCatalog
+	// }
 
 	return nil
 }
@@ -983,6 +997,8 @@ func (c *Catalog) runCommitActions(ctx context.Context, pending []Object) error 
 
 // requires transaction in context
 func (c *Catalog) Recover(ctx context.Context) error {
+	c.log.Debug("catalog: run wal recovery from lsn 0x%x", c.checkpoint)
+
 	// read all wal records, of any record exists it must be rolled back
 	// unless its txid is committed
 	r := c.wal.NewReader()
@@ -1064,6 +1080,8 @@ func (c *Catalog) Recover(ctx context.Context) error {
 
 	// update engine horizon
 	GetEngine(ctx).UpdateTxHorizon(xmax)
+
+	c.log.Debug("catalog: recovery done, writing new checkpoint")
 
 	return c.doCheckpoint(ctx)
 }

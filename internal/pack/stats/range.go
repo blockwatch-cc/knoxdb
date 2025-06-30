@@ -15,7 +15,7 @@ import (
 	"math/bits"
 
 	"blockwatch.cc/knoxdb/internal/block"
-	"blockwatch.cc/knoxdb/internal/query"
+	"blockwatch.cc/knoxdb/internal/operator/filter"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"golang.org/x/exp/constraints"
@@ -113,7 +113,7 @@ func (idx RangeIndex) Range(val, minVal int) types.Range {
 // out of range upper bound on range/in/greater queries would not perfectly
 // be detected as out of bounds. Given the imprecise nature for large values
 // in general this is still acceptable.
-func (idx RangeIndex) Query(flt *query.Filter, minVal any, nRows int) types.Range {
+func (idx RangeIndex) Query(flt *filter.Filter, minVal any, nRows int) types.Range {
 	switch flt.Mode {
 	case types.FilterModeEqual:
 		slot, ok := getSlotTyped(flt.Type, flt.Value, minVal)
@@ -155,7 +155,7 @@ func (idx RangeIndex) Query(flt *query.Filter, minVal any, nRows int) types.Rang
 		return idx.mergeRange(startSlot, idx.NumSlots()-1, uint32(nRows))
 
 	case types.FilterModeRange:
-		rv := flt.Value.(query.RangeValue)
+		rv := flt.Value.(filter.RangeValue)
 		startSlot, ok := getSlotTyped(flt.Type, rv[0], minVal)
 		if ok && startSlot >= len(idx.lower) {
 			return types.InvalidRange

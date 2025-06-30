@@ -24,7 +24,7 @@ func (idx *Index) ViewStats(i int) *stats.Record {
 	default:
 		pkg, n, err := idx.loadPack(i)
 		if err != nil {
-			idx.log.Debugf("%s %s index: pack %d: %v", idx.schema.Name(), idx.opts.Type, i, err)
+			idx.log.Debugf("index[%s]: pack %d: %v", idx.idxSchema.Name(), i, err)
 			return nil
 		}
 		defer pkg.Release()
@@ -41,7 +41,7 @@ func (idx *Index) ViewPackage(ctx context.Context, i int) *pack.Package {
 	default:
 		pkg, _, err := idx.loadPack(i)
 		if err != nil {
-			idx.log.Debugf("%s %s index: pack %d: %v", idx.schema.Name(), idx.opts.Type, i, err)
+			idx.log.Debugf("index[%s]: pack %d: %v", idx.idxSchema.Name(), i, err)
 			return nil
 		}
 		return pkg
@@ -77,7 +77,7 @@ func (idx *Index) loadPack(i int) (*pack.Package, int, error) {
 			return engine.ErrNoKey
 		}
 		ik, pk, _ := idx.decodePackKey(cur.Key())
-		f1, _ := idx.schema.FieldByIndex(0)
+		f1, _ := idx.idxSchema.FieldByIndex(0)
 		blk1, err := block.Decode(f1.Type().BlockType(), cur.Value())
 		if err != nil {
 			return fmt.Errorf("loading block 0x%08x:%08x:%d: %v", ik, pk, 0, err)
@@ -86,7 +86,7 @@ func (idx *Index) loadPack(i int) (*pack.Package, int, error) {
 		if !cur.Next() {
 			return fmt.Errorf("loading block 0x%08x:%08x:%d: %v", ik, pk, 1, engine.ErrDatabaseCorrupt)
 		}
-		f2, _ := idx.schema.FieldByIndex(1)
+		f2, _ := idx.idxSchema.FieldByIndex(1)
 		blk2, err := block.Decode(f2.Type().BlockType(), cur.Value())
 		if err != nil {
 			return fmt.Errorf("loading block 0x%08x:%08x:%d: %v", ik, pk, 1, err)
@@ -94,7 +94,7 @@ func (idx *Index) loadPack(i int) (*pack.Package, int, error) {
 		nBytes += len(cur.Value())
 		pkg = pack.New().
 			WithKey(uint32(i)).
-			WithSchema(idx.schema).
+			WithSchema(idx.idxSchema).
 			WithMaxRows(blk1.Cap()).
 			WithBlock(0, blk1).
 			WithBlock(1, blk2)

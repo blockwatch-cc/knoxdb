@@ -24,7 +24,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/pack/stats"
 	pt "blockwatch.cc/knoxdb/internal/pack/table"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/bitmap"
+	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/knox"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/util"
@@ -140,16 +140,16 @@ func run() (err error) {
 	case "schema":
 		PrintSchema(getTableOrIndexSchema(db, desc.Table), out)
 	case "stats":
-		PrintMetadata(getTableOrIndexStatsView(db, desc.Table), desc.PackId, out)
+		PrintMetadata(getTableOrIndexStatsView(db, desc.Table), desc, out)
 	case "detail":
-		PrintMetadataDetail(getTableOrIndexStatsView(db, desc.Table), desc.PackId, out)
+		PrintMetadataDetail(getTableOrIndexStatsView(db, desc.Table), desc, out)
 	case "content":
 		ctx, _, abort, err := db.Begin(ctx)
 		if err != nil {
 			return err
 		}
 		defer abort()
-		PrintContent(ctx, getTableOrIndexPackView(db, desc.Table), desc.PackId, out)
+		PrintContent(ctx, getTableOrIndexPackView(db, desc.Table), desc, out)
 
 	default:
 		return fmt.Errorf("unsupported command %s", cmd)
@@ -171,7 +171,7 @@ func getTableOrIndexSchema(db knox.Database, name string) *schema.Schema {
 
 type ContentViewer interface {
 	ViewPackage(context.Context, int) *pack.Package
-	ViewTomb() bitmap.Bitmap
+	ViewTomb() *xroar.Bitmap
 	Schema() *schema.Schema
 }
 
@@ -208,10 +208,11 @@ func getTableOrIndexStatsView(db knox.Database, name string) StatsViewer {
 // returns path, name of the database, name of a table and an
 // array of optional pack descriptors
 type TableDescriptor struct {
-	Dir    string
-	Name   string
-	Table  string
-	PackId int
+	Dir        string
+	Name       string
+	Table      string
+	PackId     int
+	HavePackId bool
 }
 
 func (d TableDescriptor) IsValid() bool {
@@ -225,16 +226,18 @@ func separateTarget(s string) TableDescriptor {
 		Dir:    filepath.Dir(filepath.Clean(dbPath)),
 		Name:   filepath.Base(filepath.Clean(dbPath)),
 		Table:  strings.TrimSuffix(filepath.Base(fileName), ".db"),
-		PackId: -1,
+		PackId: 0,
 	}
 	switch {
 	case extra == "journal":
 		desc.PackId = -1
-	case extra == "tomb":
-		desc.PackId = -2
+		desc.HavePackId = true
+	// case extra == "tomb":
+	// 	desc.PackId = -2
 	default:
 		if n, err := strconv.ParseInt(extra, 0, 64); err == nil {
 			desc.PackId = int(n)
+			desc.HavePackId = true
 		}
 	}
 	return desc
@@ -244,39 +247,55 @@ func PrintSchema(s *schema.Schema, w io.Writer) {
 	t := table.NewWriter()
 	t.SetOutputMirror(w)
 	t.SetTitle("Schema %s [0x%x] - %d fields - %d bytes", s.Name(), s.Hash(), s.NumFields(), s.WireSize())
-	t.AppendHeader(table.Row{"#", "Name", "Type", "Flags", "Index", "Visible", "Array", "Scale", "Size", "Fixed", "Compress"})
-	for _, field := range s.Exported() {
+	t.AppendHeader(table.Row{"#", "Name", "Type", "Flags", "Index", "Size", "Compress"})
+	for _, f := range s.Exported() {
+		var (
+			typ    string
+			findex string
+		)
+		switch f.Type {
+		case schema.FT_TIME, schema.FT_TIMESTAMP:
+			typ = f.Type.String() + "(" + schema.TimeScale(f.Scale).ShortName() + ")"
+		case schema.FT_D32, schema.FT_D64, schema.FT_D128, schema.FT_D256:
+			typ = f.Type.String() + "(" + strconv.Itoa(int(f.Scale)) + ")"
+		case schema.FT_STRING, schema.FT_BYTES:
+			if f.Fixed > 0 {
+				typ = "[" + strconv.Itoa(int(f.Fixed)) + "]" + f.Type.String()
+			}
+		}
+		if typ == "" {
+			typ = f.Type.String()
+		}
+		if f.Index > 0 {
+			findex = f.Index.String() + ":" + strconv.Itoa(int(f.Scale))
+		}
 		t.AppendRow([]any{
-			field.Id,
-			field.Name,
-			field.Type,
-			field.Flags,
-			field.Index,
-			field.IsVisible,
-			field.IsArray,
-			field.Scale,
-			field.Type.Size(),
-			field.Fixed,
-			field.Compress,
+			f.Id,
+			f.Name,
+			typ,
+			f.Flags.String(),
+			findex,
+			f.Type.Size(),
+			f.Compress,
 		})
 	}
 	t.Render()
 }
 
-func PrintMetadata(view StatsViewer, id int, w io.Writer) {
+func PrintMetadata(view StatsViewer, desc TableDescriptor, w io.Writer) {
 	s := view.Schema()
-	pki := s.PkIndex()
+	rx := s.RowIdIndex()
 	t := table.NewWriter()
 	t.SetPageSize(headRepeat)
 	t.SetOutputMirror(w)
-	t.SetTitle("%s - %d fields", s.Name(), s.NumFields())
-	t.AppendHeader(table.Row{"#", "Key", "Blocks", "Records", "MinPk", "MaxPk", "Size"})
+	t.SetTitle("%s - %d fields - #%016x", s.Name(), s.NumFields(), s.Hash())
+	t.AppendHeader(table.Row{"#", "Key", "Version", "Records", "RID min", "RID max", "Size"})
 	var (
 		i, n      int
 		stopAfter bool
 	)
-	if id >= 0 {
-		i = id
+	if desc.HavePackId {
+		i = desc.PackId
 		stopAfter = true
 	}
 	for {
@@ -287,10 +306,10 @@ func PrintMetadata(view StatsViewer, id int, w io.Writer) {
 		t.AppendRow([]any{
 			n + 1,
 			fmt.Sprintf("%08x", md.Key),
-			md.NColumns,
+			md.Version,
 			md.NValues,
-			md.Min(pki),
-			md.Max(pki),
+			md.Min(rx),
+			md.Max(rx),
 			util.ByteSize(md.DiskSize),
 		})
 		i++
@@ -302,18 +321,18 @@ func PrintMetadata(view StatsViewer, id int, w io.Writer) {
 	t.Render()
 }
 
-func PrintMetadataDetail(view StatsViewer, id int, w io.Writer) {
+func PrintMetadataDetail(view StatsViewer, desc TableDescriptor, w io.Writer) {
 	s := view.Schema()
 	t := table.NewWriter()
 	fields := s.Exported()
 	t.SetOutputMirror(w)
-	t.AppendHeader(table.Row{"#", "Name", "Type", "Cardinality", "Min", "Max", "Size"})
+	t.AppendHeader(table.Row{"#", "Name", "Type", "Min", "Max"})
 	var (
 		i         int
 		stopAfter bool
 	)
-	if id >= 0 {
-		i = id
+	if desc.HavePackId {
+		i = desc.PackId
 		stopAfter = true
 	}
 	for {
@@ -321,22 +340,20 @@ func PrintMetadataDetail(view StatsViewer, id int, w io.Writer) {
 		if md == nil {
 			break
 		}
-		t.SetTitle("%s - Pack 0x%08x (%d) - %s records - Size %s",
+		t.SetTitle("%s - Pack 0x%08x[v%d] - %s records - Size %s",
 			s.Name(),
 			md.Key,
-			md.Key,
+			md.Version,
 			util.PrettyInt(int(md.NValues)),
 			util.ByteSize(md.DiskSize),
 		)
-		for id := range md.NColumns {
+		for i := range s.NumFields() {
 			t.AppendRow([]any{
-				id + 1,
-				fields[id].Name,
-				s.Exported()[id].Type,
-				"?", // util.PrettyInt(-1),
-				util.LimitStringEllipsis(util.ToString(md.Min(int(id))), 33),
-				util.LimitStringEllipsis(util.ToString(md.Max(int(id))), 33),
-				"?", // util.ByteSize(-1),
+				fields[i].Id,
+				fields[i].Name,
+				fields[i].Type,
+				util.LimitStringEllipsis(util.ToString(md.Min(i)), 33),
+				util.LimitStringEllipsis(util.ToString(md.Max(i)), 33),
 			})
 		}
 		t.Render()
@@ -348,7 +365,7 @@ func PrintMetadataDetail(view StatsViewer, id int, w io.Writer) {
 	}
 }
 
-func PrintContent(ctx context.Context, view ContentViewer, id int, w io.Writer) {
+func PrintContent(ctx context.Context, view ContentViewer, desc TableDescriptor, w io.Writer) {
 	t := table.NewWriter()
 	t.SetOutputMirror(w)
 	t.SetPageSize(headRepeat)
@@ -386,8 +403,8 @@ func PrintContent(ctx context.Context, view ContentViewer, id int, w io.Writer) 
 
 	// handle journal separate (add deleted column)
 	var res []any
-	if id == -1 {
-		pkg := view.ViewPackage(ctx, id)
+	if desc.PackId < 0 {
+		pkg := view.ViewPackage(ctx, desc.PackId)
 		tomb := view.ViewTomb()
 		pki := s.PkIndex()
 		t.AppendHeader(append(table.Row{"DEL"}, util.StringList(s.AllFieldNames()).AsInterface()...))
@@ -410,8 +427,8 @@ func PrintContent(ctx context.Context, view ContentViewer, id int, w io.Writer) 
 		i         int
 		stopAfter bool
 	)
-	if id >= 0 {
-		i = id
+	if desc.HavePackId {
+		i = desc.PackId
 		stopAfter = true
 	}
 	t.AppendHeader(util.StringList(s.AllFieldNames()).AsInterface())
@@ -419,7 +436,7 @@ func PrintContent(ctx context.Context, view ContentViewer, id int, w io.Writer) 
 		pkg := view.ViewPackage(ctx, i)
 		if pkg == nil {
 			if stopAfter {
-				panic(fmt.Errorf("pack %d not found", id))
+				panic(fmt.Errorf("pack %d not found", i))
 			}
 			break
 		}

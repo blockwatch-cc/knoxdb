@@ -31,10 +31,7 @@ func (s *PackageSorter) Sort(pkg *Package) {
 	// sort selected rows only
 	// if nil, create a full selection vector
 	if pkg.selected == nil {
-		pkg.selected = make([]uint32, pkg.nRows)
-		for i := range pkg.selected {
-			pkg.selected[i] = uint32(i)
-		}
+		pkg.selected = types.NewRange(0, pkg.nRows).AsSelection()
 	}
 
 	// link pkg so we can use sort's interface based API on PackageSorter

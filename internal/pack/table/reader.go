@@ -16,9 +16,11 @@ import (
 	"blockwatch.cc/knoxdb/internal/pack/stats"
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/store"
+	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/util"
+	"github.com/echa/log"
 )
 
 // TableReader
@@ -60,7 +62,7 @@ type Reader struct {
 	table     *Table                    // table back-reference
 	stats     *stats.Index              // active of statistics index
 	it        *stats.Iterator           // statistics iterator
-	query     *query.QueryPlan          // related query plan
+	query     *query.QueryPlan          // related query plan may be empty
 	rx        int                       // row id vector position
 	reqFields []uint16                  // query field ids for matching
 	resFields []uint16                  // result field ids (all when nil)
@@ -70,22 +72,26 @@ type Reader struct {
 	bits      *bitset.Bitset            // selection bitset
 	bcache    block.BlockCachePartition // block cache reference
 	mode      engine.ReadMode           // exclude or include masked row ids
-	useCache  bool                      // use cache
+	log       log.Logger
+	name      string // table name (for logging)
+	useCache  bool   // use cache
 }
 
 func (t *Table) NewReader() engine.TableReader {
 	rx := t.schema.RowIdIndex()
 	return &Reader{
 		table: t,
-		stats: t.stats.Load().(*stats.Index),
+		stats: t.stats.Retain(),
 		rx:    rx,
 		query: &query.QueryPlan{
 			Filters: makeRxFilter(rx),
 			Log:     t.log,
 		},
-		reqFields: []uint16{schema.MetaRid, schema.MetaXmin, schema.MetaXmin},
+		reqFields: []uint16{schema.MetaRid, schema.MetaXmin, schema.MetaXmax},
 		hits:      arena.AllocUint32(t.opts.PackSize),
 		bits:      bitset.New(t.opts.PackSize),
+		log:       t.log,
+		name:      t.schema.Name(),
 		useCache:  true,
 	}
 }
@@ -93,8 +99,11 @@ func (t *Table) NewReader() engine.TableReader {
 func (r *Reader) WithQuery(p engine.QueryPlan) engine.TableReader {
 	r.query = p.(*query.QueryPlan)
 	r.useCache = !r.query.Flags.IsNoCache()
-	r.reqFields = r.query.RequestSchema.ActiveFieldIds()
+	r.reqFields = r.query.RequestSchema.AllFieldIds()
 	r.resFields = r.query.ResultSchema.ActiveFieldIds()
+	// r.log.Warnf("Reader REQ schema %s", r.query.RequestSchema)
+	// r.log.Warnf("Using REQ fields %v", r.reqFields)
+	r.log = r.query.Log
 	return r
 }
 
@@ -113,6 +122,10 @@ func (r *Reader) Schema() *schema.Schema {
 	return r.table.schema
 }
 
+func (r *Reader) Epoch() uint32 {
+	return r.stats.Epoch()
+}
+
 func (r *Reader) Reset() {
 	if r.pack != nil {
 		r.pack.Release()
@@ -126,11 +139,12 @@ func (r *Reader) Reset() {
 		Filters: makeRxFilter(r.rx),
 		Log:     r.table.log,
 	}
-	r.reqFields = []uint16{schema.MetaRid, schema.MetaXmin, schema.MetaXmin}
+	r.reqFields = []uint16{schema.MetaRid, schema.MetaXmin, schema.MetaXmax}
 	r.resFields = nil
 	r.mask = nil
 	r.bcache = nil
 	r.mode = 0
+	r.log = r.table.log
 	r.useCache = false
 }
 
@@ -143,24 +157,33 @@ func (r *Reader) Close() {
 		r.it.Close()
 		r.it = nil
 	}
+	if r.stats != nil {
+		r.stats.Release(false)
+		r.stats = nil
+	}
+	if r.hits != nil {
+		arena.Free(r.hits[:0])
+		r.hits = nil
+	}
+	if r.bits != nil {
+		r.bits.Close()
+		r.bits = nil
+	}
 	r.table = nil
-	r.stats = nil
 	r.query = nil
 	r.reqFields = nil
 	r.resFields = nil
 	r.mask = nil
-	arena.Free(r.hits[:0])
-	r.hits = nil
-	r.bits.Close()
-	r.bits = nil
 	r.bcache = nil
 	r.useCache = false
+	r.log = nil
 	r.mode = 0
 }
 
 func (r *Reader) Next(ctx context.Context) (*pack.Package, error) {
-	// release last pack
+	// release last pack, but clear selection vector first to prevent early free
 	if r.pack != nil {
+		r.pack.WithSelection(nil)
 		r.pack.Release()
 		r.pack = nil
 	}
@@ -199,16 +222,42 @@ func (r *Reader) nextLookupMatch(ctx context.Context) (*pack.Package, error) {
 	// obtain max row id and remove mask entries within this pack
 	// assumes table is sorted by rid (not applicable to history tables)
 	rmin, rmax := r.it.MinMaxRid()
-	r.mask.UnsetRange(rmin, rmax+1)
+	// r.log.Warnf("lookup del match: epoch=%d rmin=%d rmax=%d for maskMin=%d",
+	// 	r.stats.Epoch(), rmin, rmax, r.mask.Min())
 
 	// load pack from it
-	err := r.loadPack(ctx, r.it.Key(), r.it.NValues(), r.resFields)
+	k, v, n := r.it.PackInfo()
+	// r.log.Warnf("lookup del pack info: key=%d ver=%d n=%d", k, v, n)
+	err := r.loadPack(ctx, k, v, n, r.resFields)
 
-	// close it
+	// close statistics it
 	r.it.Close()
 	r.it = nil
 
-	// return pack without selection vector
+	// create selection vector
+	var (
+		p    int
+		rids = r.pack.RowIds()
+		it   = r.mask.NewIterator()
+		sel  = arena.AllocUint32(n)
+	)
+	for {
+		n, ok := it.Next()
+		if !ok || n > rmax {
+			break
+		}
+		for rids.Get(p) < n {
+			p++
+		}
+		sel = append(sel, uint32(p))
+		p++
+	}
+	r.pack.WithSelection(sel)
+
+	// clear mask range
+	r.mask.UnsetRange(rmin, rmax+1)
+
+	// return pack with selection vector
 	return r.pack, err
 }
 
@@ -243,12 +292,15 @@ func (r *Reader) nextQueryMatch(ctx context.Context) (*pack.Package, error) {
 		}
 
 		// load match columns only
-		if err := r.loadPack(ctx, r.it.Key(), r.it.NValues(), r.reqFields); err != nil {
+		k, v, n := r.it.PackInfo()
+		// rmin, rmax := r.it.MinMaxRid()
+		// r.log.Warnf("query found pack info: key=%d ver=%d n=%d rmin=%d rmax=%d", k, v, n, rmin, rmax)
+		if err := r.loadPack(ctx, k, v, n, r.reqFields); err != nil {
 			return nil, err
 		}
 
 		// find actual matches (zero bits before checking a pack)
-		filter.MatchTree(r.query.Filters, r.pack, r.it, r.bits.Zero())
+		filter.Match(r.query.Filters, r.pack, r.it, r.bits.Resize(n).Zero())
 		r.query.Stats.Count(PACKS_SCHEDULED_KEY, 1)
 
 		// handle false positive metadata matches
@@ -336,50 +388,56 @@ func (r *Reader) nextQueryMatch(ctx context.Context) (*pack.Package, error) {
 		}
 
 		// load remaining columns here
-		if err := r.loadPack(ctx, r.it.Key(), r.it.NValues(), r.resFields); err != nil {
+		if err := r.loadPack(ctx, k, v, n, r.resFields); err != nil {
 			return nil, err
 		}
 
-		r.query.Log.Debugf("read: %s pack=%08x with %d/%d matches",
-			r.table.schema.Name(), r.it.Key(), len(r.hits), r.it.NValues())
+		// pmin, pmax := r.bits.MinMax()
+		// r.log.Debugf("table[%s]: read pack %08x[v%d] with %d/%d matches between [%d:%d]",
+		// 	r.name, r.pack.Key(), r.pack.Version(), r.bits.Count(), r.pack.Len(), pmin, pmax)
 
 		// set pack selection vector
 		r.pack.WithSelection(r.bits.Indexes(r.hits))
+
+		// validate selection vector
+		// l := r.pack.Len()
+		// for _, v := range r.pack.Selected() {
+		// 	if int(v) >= l {
+		// 		r.log.Debugf("Bad selector %d l=%d\n", v, l)
+		// 	}
+		// }
+
+		// operator.NewLogOperator(os.Stdout, 10).Process(context.Background(), r.pack)
 
 		return r.pack, nil
 	}
 }
 
-func makeRxFilter(rx int) *query.FilterTreeNode {
-	return &query.FilterTreeNode{
-		Children: []*query.FilterTreeNode{
-			{
-				Filter: &query.Filter{
-					Name:    "$rid",
-					Type:    query.BlockUint64,
-					Mode:    query.FilterModeTrue,
-					Index:   rx,
-					Id:      schema.MetaRid,
-					Value:   nil,
-					Matcher: query.NoopMatcher,
-				},
-			},
-		},
-	}
+func makeRxFilter(rx int) *filter.Node {
+	return filter.NewNode().AddLeaf(&filter.Filter{
+		Name:    "$rid",
+		Type:    types.BlockUint64,
+		Mode:    types.FilterModeTrue,
+		Index:   rx,
+		Id:      schema.MetaRid,
+		Value:   nil,
+		Matcher: filter.NoopMatcher,
+	})
 }
 
-func (r *Reader) Read(ctx context.Context, key uint32) (*pack.Package, error) {
-	err := r.loadPack(ctx, key, 0, nil)
+func (r *Reader) Read(ctx context.Context, key, ver uint32) (*pack.Package, error) {
+	err := r.loadPack(ctx, key, ver, 0, nil)
 	return r.pack, err
 }
 
-func (r *Reader) loadPack(ctx context.Context, key uint32, nval int, fids []uint16) error {
-	r.query.Log.Debugf("read: %s loading pack=%08x rows=%d", r.table.schema.Name(), key, nval)
+func (r *Reader) loadPack(ctx context.Context, key, ver uint32, nval int, fids []uint16) error {
+	// r.log.Debugf("table[%s]: loading pack=%08x[v%d] len=%d fields=%v", r.name, key, ver, nval, fids)
 
 	// prepare an empty pack without block storage
 	if r.pack == nil {
 		r.pack = pack.New().
 			WithKey(key).
+			WithVersion(ver).
 			WithSchema(r.table.schema).
 			WithMaxRows(util.NonZero(nval, r.table.opts.PackSize))
 	}
@@ -389,7 +447,7 @@ func (r *Reader) loadPack(ctx context.Context, key uint32, nval int, fids []uint
 		// count number of expected blocks
 		nBlocks := len(fids)
 		if fids == nil {
-			nBlocks = r.table.schema.NumActiveFields()
+			nBlocks = r.table.schema.NumFields()
 		}
 
 		// stop early when all requested blocks are found
@@ -413,6 +471,20 @@ func (r *Reader) loadPack(ctx context.Context, key uint32, nval int, fids []uint
 		r.pack = nil
 		return err
 	}
+
+	// -- debug
+	// var lmin, lmax int = 1<<32 - 1, 0
+	// ld := make([]int, 0)
+	// for i, b := range r.pack.Blocks() {
+	// 	if b == nil {
+	// 		continue
+	// 	}
+	// 	ld = append(ld, i)
+	// 	lmin = min(lmin, b.Len())
+	// 	lmax = max(lmax, b.Len())
+	// }
+	// r.log.Debugf("reader loaded blocks %v, lmin=%d lmax=%d pkglen=%d", ld, lmin, lmax, r.pack.Len())
+	// -- debug
 
 	// add loaded blocks to cache
 	if r.useCache {

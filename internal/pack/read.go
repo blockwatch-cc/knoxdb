@@ -8,6 +8,7 @@ import (
 	"encoding"
 	"encoding/binary"
 	"fmt"
+	"math"
 	"reflect"
 	"time"
 	"unsafe"
@@ -38,17 +39,34 @@ func (p *Package) ReadWireFields(buf *bytes.Buffer, row int, cols []int) error {
 			err error
 		)
 		switch b.Type() {
-		case types.BlockUint64, types.BlockInt64, types.BlockFloat64:
+		case types.BlockUint64:
 			LE.PutUint64(x[:], b.Uint64().Get(row))
 			_, err = buf.Write(x[:])
-		case types.BlockUint32, types.BlockInt32, types.BlockFloat32:
+		case types.BlockInt64:
+			LE.PutUint64(x[:], uint64(b.Int64().Get(row)))
+			_, err = buf.Write(x[:])
+		case types.BlockFloat64:
+			LE.PutUint64(x[:], math.Float64bits(b.Float64().Get(row)))
+			_, err = buf.Write(x[:])
+		case types.BlockUint32:
 			LE.PutUint32(x[:], b.Uint32().Get(row))
 			_, err = buf.Write(x[:4])
-		case types.BlockUint16, types.BlockInt16:
+		case types.BlockInt32:
+			LE.PutUint32(x[:], uint32(b.Int32().Get(row)))
+			_, err = buf.Write(x[:4])
+		case types.BlockFloat32:
+			LE.PutUint32(x[:], math.Float32bits(b.Float32().Get(row)))
+			_, err = buf.Write(x[:4])
+		case types.BlockUint16:
 			LE.PutUint16(x[:], b.Uint16().Get(row))
 			_, err = buf.Write(x[:2])
-		case types.BlockUint8, types.BlockInt8:
+		case types.BlockInt16:
+			LE.PutUint16(x[:], uint16(b.Int16().Get(row)))
+			_, err = buf.Write(x[:2])
+		case types.BlockUint8:
 			_, err = buf.Write([]byte{b.Uint8().Get(row)})
+		case types.BlockInt8:
+			_, err = buf.Write([]byte{uint8(b.Int8().Get(row))})
 		case types.BlockBool:
 			v := b.Bool().Get(row)
 			err = buf.WriteByte(*(*byte)(unsafe.Pointer(&v)))
@@ -120,17 +138,34 @@ func (p *Package) ReadWireBuffer(buf *bytes.Buffer, row int) error {
 		// encoding is based on field type
 		var x [8]byte
 		switch b.Type() {
-		case types.BlockUint64, types.BlockInt64, types.BlockFloat64:
+		case types.BlockUint64:
 			LE.PutUint64(x[:], b.Uint64().Get(row))
 			_, err = buf.Write(x[:])
-		case types.BlockUint32, types.BlockInt32, types.BlockFloat32:
+		case types.BlockInt64:
+			LE.PutUint64(x[:], uint64(b.Int64().Get(row)))
+			_, err = buf.Write(x[:])
+		case types.BlockFloat64:
+			LE.PutUint64(x[:], math.Float64bits(b.Float64().Get(row)))
+			_, err = buf.Write(x[:])
+		case types.BlockUint32:
 			LE.PutUint32(x[:], b.Uint32().Get(row))
 			_, err = buf.Write(x[:4])
-		case types.BlockUint16, types.BlockInt16:
+		case types.BlockInt32:
+			LE.PutUint32(x[:], uint32(b.Int32().Get(row)))
+			_, err = buf.Write(x[:4])
+		case types.BlockFloat32:
+			LE.PutUint32(x[:], math.Float32bits(b.Float32().Get(row)))
+			_, err = buf.Write(x[:4])
+		case types.BlockUint16:
 			LE.PutUint16(x[:], b.Uint16().Get(row))
 			_, err = buf.Write(x[:2])
-		case types.BlockUint8, types.BlockInt8:
+		case types.BlockInt16:
+			LE.PutUint16(x[:], uint16(b.Int16().Get(row)))
+			_, err = buf.Write(x[:2])
+		case types.BlockUint8:
 			_, err = buf.Write([]byte{b.Uint8().Get(row)})
+		case types.BlockInt8:
+			_, err = buf.Write([]byte{uint8(b.Int8().Get(row))})
 		case types.BlockBool:
 			v := b.Bool().Get(row)
 			err = buf.WriteByte(*(*byte)(unsafe.Pointer(&v)))
@@ -212,11 +247,23 @@ func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, maps []
 		}
 
 		switch field.Type {
-		case types.FieldTypeInt64, types.FieldTypeUint64, types.FieldTypeFloat64:
+		case types.FieldTypeInt64:
+			*(*int64)(fptr) = b.Int64().Get(row)
+
+		case types.FieldTypeUint64:
 			*(*uint64)(fptr) = b.Uint64().Get(row)
 
-		case types.FieldTypeInt32, types.FieldTypeUint32, types.FieldTypeFloat32:
+		case types.FieldTypeFloat64:
+			*(*float64)(fptr) = b.Float64().Get(row)
+
+		case types.FieldTypeInt32:
+			*(*int32)(fptr) = b.Int32().Get(row)
+
+		case types.FieldTypeUint32:
 			*(*uint32)(fptr) = b.Uint32().Get(row)
+
+		case types.FieldTypeFloat32:
+			*(*float32)(fptr) = b.Float32().Get(row)
 
 		case types.FieldTypeInt16:
 			*(*int16)(fptr) = b.Int16().Get(row)
@@ -237,7 +284,10 @@ func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, maps []
 				*(*uint16)(fptr) = b.Uint16().Get(row)
 			}
 
-		case types.FieldTypeInt8, types.FieldTypeUint8:
+		case types.FieldTypeInt8:
+			*(*int8)(fptr) = b.Int8().Get(row)
+
+		case types.FieldTypeUint8:
 			*(*uint8)(fptr) = b.Uint8().Get(row)
 
 		case types.FieldTypeTimestamp, types.FieldTypeDate, types.FieldTypeTime:

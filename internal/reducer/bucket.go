@@ -32,7 +32,8 @@ type Bucket interface {
 
 func NewBucket(typ types.FieldType) Bucket {
 	switch typ {
-	case types.FieldTypeDatetime: // required for time column
+	case types.FieldTypeDatetime, types.FieldTypeDate, types.FieldTypeTime:
+		// required for time column
 		return NewTimeBucket()
 
 	case types.FieldTypeBytes: // requires an aggregator type, use WithTypeOf(&MyType{})

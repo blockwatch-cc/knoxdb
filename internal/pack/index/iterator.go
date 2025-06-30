@@ -15,7 +15,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/operator/filter"
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/assert"
@@ -163,7 +162,7 @@ func (it *LookupIterator) loadNextPack(ctx context.Context) (bool, error) {
 
 		// we're at the correct pack now, load blocks into package
 		it.pack = pack.New().
-			WithSchema(it.idx.schema).
+			WithSchema(it.idx.idxSchema).
 			WithMaxRows(it.idx.opts.PackSize)
 
 		// try load block pair from cache
@@ -186,7 +185,7 @@ func (it *LookupIterator) loadNextPack(ctx context.Context) (bool, error) {
 			// decode when not already found in cache
 			if it.pack.Block(i) == nil {
 				// it.idx.log.Infof("Loading block 0x%016x:%016x:%d", bik, bpk, i)
-				f, ok := it.idx.schema.FieldByIndex(i)
+				f, ok := it.idx.idxSchema.FieldByIndex(i)
 				assert.Always(ok, "missing schema field", "idx", i)
 				b, err := block.Decode(f.Type().BlockType(), it.cur.Value())
 				if err != nil {
@@ -228,14 +227,14 @@ type ScanIterator struct {
 	cur      store.Cursor
 	from     []byte
 	to       []byte
-	node     *query.FilterTreeNode
+	node     *filter.Node
 	hits     []uint32
 	pack     *pack.Package
 	bits     *bitset.Bitset
 	useCache bool
 }
 
-func NewScanIterator(idx *Index, node *query.FilterTreeNode, useCache bool) *ScanIterator {
+func NewScanIterator(idx *Index, node *filter.Node, useCache bool) *ScanIterator {
 	return &ScanIterator{
 		node:     node,
 		idx:      idx,
@@ -291,7 +290,7 @@ func (it *ScanIterator) Next(ctx context.Context) (*pack.Package, []uint32, erro
 		// find actual matches, zero bits before
 		// it.idx.log.Infof("Run filter %s %T %v idx=%d",
 		// it.node, it.node.Filter.Matcher, it.node.Filter.Matcher.Value(), it.node.Filter.Index)
-		it.bits = filter.MatchTree(it.node, it.pack, nil, it.bits.Zero())
+		it.bits = filter.Match(it.node, it.pack, nil, it.bits.Zero())
 
 		// skip this pack when no matches were found
 		if it.bits.None() {
@@ -391,8 +390,8 @@ func (it *ScanIterator) initRange() {
 
 	case types.FilterModeRange:
 		// RG    => scan(from, to)
-		it.from = makePrefix(it.node.Filter.Type, it.node.Filter.Value.(query.RangeValue)[0])
-		it.to = makePrefix(it.node.Filter.Type, it.node.Filter.Value.(query.RangeValue)[1])
+		it.from = makePrefix(it.node.Filter.Type, it.node.Filter.Value.(filter.RangeValue)[0])
+		it.to = makePrefix(it.node.Filter.Type, it.node.Filter.Value.(filter.RangeValue)[1])
 	}
 }
 
@@ -403,7 +402,7 @@ func (it *ScanIterator) loadPack(ctx context.Context) error {
 
 	// load pack
 	it.pack = pack.New().
-		WithSchema(it.idx.schema).
+		WithSchema(it.idx.idxSchema).
 		WithMaxRows(it.idx.opts.PackSize)
 
 	// try load block pair from cache
@@ -421,7 +420,7 @@ func (it *ScanIterator) loadPack(ctx context.Context) error {
 	for i := range []int{0, 1} {
 		if it.pack.Block(i) == nil {
 			// it.idx.log.Infof("Loading block 0x%016x:%016x:%d", ik, pk, i)
-			f, ok := it.idx.schema.FieldByIndex(i)
+			f, ok := it.idx.idxSchema.FieldByIndex(i)
 			assert.Always(ok, "missing schema field", "idx", i)
 			b, err := block.Decode(f.Type().BlockType(), it.cur.Value())
 			if err != nil {

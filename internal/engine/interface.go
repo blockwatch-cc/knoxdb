@@ -54,6 +54,7 @@ type TableEngine interface {
 	// data egress
 	Query(Context, QueryPlan) (QueryResult, error)
 	Count(Context, QueryPlan) (uint64, error)
+	Update(Context, QueryPlan) (uint64, error)
 	Delete(Context, QueryPlan) (uint64, error)
 	Stream(Context, QueryPlan, func(QueryRow) error) error
 
@@ -68,7 +69,7 @@ type TableEngine interface {
 
 	// data handling
 	NewReader() TableReader
-	NewWriter() TableWriter
+	NewWriter(uint32) TableWriter
 }
 
 type ReadMode byte
@@ -79,22 +80,30 @@ const (
 	ReadModeExcludeMask
 )
 
+type StatsReader interface {
+	MinMax(int) (any, any)
+}
+
 type TableReader interface {
 	WithQuery(QueryPlan) TableReader
 	WithMask(*Bitmap, ReadMode) TableReader
 	WithFields([]uint16) TableReader
-	Read(Context, uint32) (*Package, error)
+	Read(Context, uint32, uint32) (*Package, error)
 	Next(Context) (*Package, error)
 	Reset()
 	Close()
 	Schema() *Schema
+	Epoch() uint32
 }
 
 type TableWriter interface {
 	Append(Context, *Package, WriteMode) error
 	Replace(Context, *Package, WriteMode) error
-	Finalize(Context) error
+	AppendIndexes(Context, *Package, WriteMode) error
+	DeleteIndexes(Context, *Package, WriteMode) error
+	Finalize(Context, ObjectState) error
 	Close()
+	Epoch() uint32
 }
 
 type QueryPlan interface {
@@ -130,8 +139,7 @@ type QueryableTable interface {
 }
 
 type QueryResultConsumer interface {
-	Append(*Package, []uint32) error
-	AppendRange(*Package, int, int) error
+	Append(Context, *Package) error
 	Len() int
 }
 

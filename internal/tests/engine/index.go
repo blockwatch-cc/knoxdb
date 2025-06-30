@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/engine"
+	"blockwatch.cc/knoxdb/internal/operator/filter"
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
@@ -142,7 +142,7 @@ func FillIndex(t *testing.T, e *engine.Engine, ti engine.IndexEngine) *pack.Pack
 	return pkg
 }
 
-func QueryIndex(t *testing.T, ctx context.Context, idx engine.IndexEngine, f *query.FilterTreeNode, cnt int) {
+func QueryIndex(t *testing.T, ctx context.Context, idx engine.IndexEngine, f *filter.Node, cnt int) {
 	t.Helper()
 	res, _, err := idx.Query(ctx, f)
 	require.NoError(t, err)
@@ -150,7 +150,7 @@ func QueryIndex(t *testing.T, ctx context.Context, idx engine.IndexEngine, f *qu
 	require.Equal(t, cnt, res.Count())
 }
 
-func QueryIndexFail(t *testing.T, ctx context.Context, idx engine.IndexEngine, f *query.FilterTreeNode, cnt int) {
+func QueryIndexFail(t *testing.T, ctx context.Context, idx engine.IndexEngine, f *filter.Node, cnt int) {
 	t.Helper()
 	res, _, err := idx.Query(ctx, f)
 	require.Error(t, err)

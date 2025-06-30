@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 
 	"blockwatch.cc/knoxdb/internal/engine"
-	"blockwatch.cc/knoxdb/internal/query"
+	"blockwatch.cc/knoxdb/internal/operator/filter"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
 )
@@ -19,7 +19,7 @@ import (
 // - hash: EQ, IN, NI (single or composite EQ)
 // - int:  EQ, IN, NI, LT, LE GT, GE, RG (single condition)
 func (idx *Index) CanMatch(c engine.QueryCondition) bool {
-	node, ok := c.(*query.FilterTreeNode)
+	node, ok := c.(*filter.Node)
 	if !ok {
 		return false
 	}
@@ -37,8 +37,8 @@ func (idx *Index) CanMatch(c engine.QueryCondition) bool {
 
 	// check composite case first (all fields must have matching EQ conditions)
 	// but order does not matter; compare all but last schema field (= pk)
-	nfields := idx.schema.NumFields()
-	for _, field := range idx.schema.Exported()[:nfields-1] {
+	nfields := idx.srcSchema.NumFields()
+	for _, field := range idx.srcSchema.Exported()[:nfields-1] {
 		var canMatchField bool
 		for _, c := range node.Children {
 			if !c.IsLeaf() {
@@ -56,8 +56,8 @@ func (idx *Index) CanMatch(c engine.QueryCondition) bool {
 	return true
 }
 
-func (idx *Index) canMatchFilter(f *query.Filter) bool {
-	if !idx.schema.CanMatchFields(f.Name) {
+func (idx *Index) canMatchFilter(f *filter.Filter) bool {
+	if !idx.srcSchema.CanMatchFields(f.Name) {
 		return false
 	}
 	switch f.Mode {
@@ -77,7 +77,7 @@ func (idx *Index) canMatchFilter(f *query.Filter) bool {
 }
 
 func (idx *Index) Query(ctx context.Context, c engine.QueryCondition) (*xroar.Bitmap, bool, error) {
-	node, ok := c.(*query.FilterTreeNode)
+	node, ok := c.(*filter.Node)
 	if !ok {
 		return nil, false, fmt.Errorf("invalid condition type %T", c)
 	}
@@ -115,7 +115,7 @@ func (idx *Index) Query(ctx context.Context, c engine.QueryCondition) (*xroar.Bi
 }
 
 func (idx *Index) QueryComposite(ctx context.Context, c engine.QueryCondition) (*xroar.Bitmap, bool, error) {
-	node, ok := c.(*query.FilterTreeNode)
+	node, ok := c.(*filter.Node)
 	if !ok {
 		return nil, false, fmt.Errorf("invalid condition type %T", c)
 	}
@@ -139,7 +139,7 @@ func (idx *Index) QueryComposite(ctx context.Context, c engine.QueryCondition) (
 }
 
 // Range scans for LE, LT, GE, GT, RG (int type only)
-func (idx *Index) queryKeys(ctx context.Context, node *query.FilterTreeNode) (*xroar.Bitmap, error) {
+func (idx *Index) queryKeys(ctx context.Context, node *filter.Node) (*xroar.Bitmap, error) {
 	var (
 		bits = xroar.New()
 		it   = NewScanIterator(idx, node, true)

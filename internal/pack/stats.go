@@ -50,3 +50,16 @@ func (p *Package) WithStats() *Package {
 	}
 	return p
 }
+
+func (p *Package) BuildStats() *Package {
+	if p.stats == nil {
+		p.WithStats()
+		for i, b := range p.blocks {
+			if b == nil {
+				continue
+			}
+			p.stats.MinMax[i][0], p.stats.MinMax[i][1] = b.MinMax()
+		}
+	}
+	return p
+}

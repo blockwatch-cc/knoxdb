@@ -8,16 +8,16 @@ import (
 	"context"
 	"sync/atomic"
 
-	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
 )
 
 func (kv *KVStore) Range(ctx context.Context, prefix []byte, fn func(ctx context.Context, k, v []byte) error) error {
-	tx, err := engine.GetTransaction(ctx).StoreTx(kv.db, false)
+	tx, err := kv.db.Begin(false)
 	if err != nil {
 		return err
 	}
+	defer tx.Rollback()
 	bucket := tx.Bucket(kv.key)
 	if bucket == nil {
 		return store.ErrNoBucket
@@ -40,10 +40,11 @@ func (kv *KVStore) Range(ctx context.Context, prefix []byte, fn func(ctx context
 }
 
 func (kv *KVStore) Scan(ctx context.Context, from, to []byte, fn func(ctx context.Context, k, v []byte) error) error {
-	tx, err := engine.GetTransaction(ctx).StoreTx(kv.db, false)
+	tx, err := kv.db.Begin(false)
 	if err != nil {
 		return err
 	}
+	defer tx.Rollback()
 	bucket := tx.Bucket(kv.key)
 	if bucket == nil {
 		return store.ErrNoBucket

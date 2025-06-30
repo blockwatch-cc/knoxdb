@@ -38,15 +38,15 @@ func NewStoreMetrics(name string) StoreMetrics {
 type TableMetrics struct {
 	// global statistics
 	Name              string `json:"name,omitempty"`
-	LastFlushTime     int64  `json:"last_flush_time"`
-	LastFlushDuration int64  `json:"last_flush_duration"`
+	LastMergeTime     int64  `json:"last_merge_time"`
+	LastMergeDuration int64  `json:"last_merge_duration"`
 
 	// tuple statistics
 	TupleCount     int64 `json:"tuples_count"`
 	InsertedTuples int64 `json:"tuples_inserted"`
 	UpdatedTuples  int64 `json:"tuples_updated"`
 	DeletedTuples  int64 `json:"tuples_deleted"`
-	FlushedTuples  int64 `json:"tuples_flushed"`
+	MergedTuples   int64 `json:"tuples_merged"`
 	QueriedTuples  int64 `json:"tuples_queried"`
 	StreamedTuples int64 `json:"tuples_streamed"`
 
@@ -54,7 +54,7 @@ type TableMetrics struct {
 	InsertCalls int64 `json:"calls_insert"`
 	UpdateCalls int64 `json:"calls_update"`
 	DeleteCalls int64 `json:"calls_delete"`
-	FlushCalls  int64 `json:"calls_flush"`
+	MergeCalls  int64 `json:"calls_merge"`
 	QueryCalls  int64 `json:"calls_query"`
 	StreamCalls int64 `json:"calls_stream"`
 
@@ -64,33 +64,18 @@ type TableMetrics struct {
 	MetaSize         int64 `json:"meta_size"`
 
 	// journal statistics
-	JournalSize            int64 `json:"journal_size"`
-	JournalDiskSize        int64 `json:"journal_disk_size"`
-	JournalTuplesCount     int64 `json:"journal_tuples_count"`
-	JournalTuplesThreshold int64 `json:"journal_tuples_threshold"`
-	JournalTuplesCapacity  int64 `json:"journal_tuples_capacity"`
-	JournalPacksStored     int64 `json:"journal_packs_stored"`
-	JournalTuplesFlushed   int64 `json:"journal_tuples_flushed"`
-	JournalBytesWritten    int64 `json:"journal_bytes_written"`
-
-	// tombstone statistics
-	TombstoneSize            int64 `json:"tomb_size"`
-	TombstoneDiskSize        int64 `json:"tomb_disk_size"`
-	TombstoneTuplesCount     int64 `json:"tomb_tuples_count"`
-	TombstoneTuplesThreshold int64 `json:"tomb_tuples_threshold"`
-	TombstoneTuplesCapacity  int64 `json:"tomb_tuples_capacity"`
-	TombstonePacksStored     int64 `json:"tomb_packs_stored"`
-	TombstoneTuplesFlushed   int64 `json:"tomb_tuples_flushed"`
-	TombstoneBytesWritten    int64 `json:"tomb_bytes_written"`
+	JournalSize       int64 `json:"journal_size"`
+	JournalSegments   int64 `json:"journal_segments"`
+	JournalTuples     int64 `json:"journal_tuples"`
+	JournalCapacity   int64 `json:"journal_capacity"`
+	JournalTombstones int64 `json:"journal_tombstones"`
 
 	// pack statistics
-	PacksCount    int64 `json:"packs_count"`
-	PacksAlloc    int64 `json:"packs_alloc"`
-	PacksRecycled int64 `json:"packs_recycled"`
-	PacksLoaded   int64 `json:"packs_loaded"`
-	PacksStored   int64 `json:"packs_stored"`
-	BlocksLoaded  int64 `json:"blocks_loaded"`
-	BlocksStored  int64 `json:"blocks_stored"`
+	PacksCount   int64 `json:"packs_count"`
+	PacksLoaded  int64 `json:"packs_loaded"`
+	PacksStored  int64 `json:"packs_stored"`
+	BlocksLoaded int64 `json:"blocks_loaded"`
+	BlocksStored int64 `json:"blocks_stored"`
 
 	// I/O statistics
 	BytesRead    int64 `json:"bytes_read"`
@@ -115,15 +100,15 @@ func NewTableMetrics(name string) TableMetrics {
 
 func (s *TableMetrics) Clone() (c TableMetrics) {
 	c.Name = s.Name
-	c.LastFlushTime = atomic.LoadInt64(&s.LastFlushTime)
-	c.LastFlushDuration = atomic.LoadInt64(&s.LastFlushDuration)
+	c.LastMergeTime = atomic.LoadInt64(&s.LastMergeTime)
+	c.LastMergeDuration = atomic.LoadInt64(&s.LastMergeDuration)
 
 	// tuple statistics
 	c.TupleCount = atomic.LoadInt64(&s.TupleCount)
 	c.InsertedTuples = atomic.LoadInt64(&s.InsertedTuples)
 	c.UpdatedTuples = atomic.LoadInt64(&s.UpdatedTuples)
 	c.DeletedTuples = atomic.LoadInt64(&s.DeletedTuples)
-	c.FlushedTuples = atomic.LoadInt64(&s.FlushedTuples)
+	c.MergedTuples = atomic.LoadInt64(&s.MergedTuples)
 	c.QueriedTuples = atomic.LoadInt64(&s.QueriedTuples)
 	c.StreamedTuples = atomic.LoadInt64(&s.StreamedTuples)
 
@@ -131,7 +116,7 @@ func (s *TableMetrics) Clone() (c TableMetrics) {
 	c.InsertCalls = atomic.LoadInt64(&s.InsertCalls)
 	c.UpdateCalls = atomic.LoadInt64(&s.UpdateCalls)
 	c.DeleteCalls = atomic.LoadInt64(&s.DeleteCalls)
-	c.FlushCalls = atomic.LoadInt64(&s.FlushCalls)
+	c.MergeCalls = atomic.LoadInt64(&s.MergeCalls)
 	c.QueryCalls = atomic.LoadInt64(&s.QueryCalls)
 	c.StreamCalls = atomic.LoadInt64(&s.StreamCalls)
 
@@ -142,28 +127,13 @@ func (s *TableMetrics) Clone() (c TableMetrics) {
 
 	// journal statistics
 	c.JournalSize = atomic.LoadInt64(&s.JournalSize)
-	c.JournalDiskSize = atomic.LoadInt64(&s.JournalDiskSize)
-	c.JournalTuplesCount = atomic.LoadInt64(&s.JournalTuplesCount)
-	c.JournalTuplesThreshold = atomic.LoadInt64(&s.JournalTuplesThreshold)
-	c.JournalTuplesCapacity = atomic.LoadInt64(&s.JournalTuplesCapacity)
-	c.JournalPacksStored = atomic.LoadInt64(&s.JournalPacksStored)
-	c.JournalTuplesFlushed = atomic.LoadInt64(&s.JournalTuplesFlushed)
-	c.JournalBytesWritten = atomic.LoadInt64(&s.JournalBytesWritten)
-
-	// tombstone statistics
-	c.TombstoneSize = atomic.LoadInt64(&s.TombstoneSize)
-	c.TombstoneDiskSize = atomic.LoadInt64(&s.TombstoneDiskSize)
-	c.TombstoneTuplesCount = atomic.LoadInt64(&s.TombstoneTuplesCount)
-	c.TombstoneTuplesThreshold = atomic.LoadInt64(&s.TombstoneTuplesThreshold)
-	c.TombstoneTuplesCapacity = atomic.LoadInt64(&s.TombstoneTuplesCapacity)
-	c.TombstonePacksStored = atomic.LoadInt64(&s.TombstonePacksStored)
-	c.TombstoneTuplesFlushed = atomic.LoadInt64(&s.TombstoneTuplesFlushed)
-	c.TombstoneBytesWritten = atomic.LoadInt64(&s.TombstoneBytesWritten)
+	c.JournalSegments = atomic.LoadInt64(&s.JournalSegments)
+	c.JournalTuples = atomic.LoadInt64(&s.JournalTuples)
+	c.JournalCapacity = atomic.LoadInt64(&s.JournalCapacity)
+	c.JournalTombstones = atomic.LoadInt64(&s.JournalTombstones)
 
 	// pack statistics
 	c.PacksCount = atomic.LoadInt64(&s.PacksCount)
-	c.PacksAlloc = atomic.LoadInt64(&s.PacksAlloc)
-	c.PacksRecycled = atomic.LoadInt64(&s.PacksRecycled)
 	c.PacksLoaded = atomic.LoadInt64(&s.PacksLoaded)
 	c.PacksStored = atomic.LoadInt64(&s.PacksStored)
 
@@ -187,8 +157,8 @@ func (s *TableMetrics) Clone() (c TableMetrics) {
 type IndexMetrics struct {
 	// global statistics
 	Name              string `json:"name,omitempty"`
-	LastFlushTime     int64  `json:"last_flush_time"`
-	LastFlushDuration int64  `json:"last_flush_duration"`
+	LastMergeTime     int64  `json:"last_merge_time"`
+	LastMergeDuration int64  `json:"last_merge_duration"`
 
 	// tuple statistics
 	TupleCount     int64 `json:"tuples_count"`
@@ -217,32 +187,3 @@ func NewIndexMetrics(name string) IndexMetrics {
 		Name: name,
 	}
 }
-
-// func (t *Table) Metrics() []TableMetrics {
-// 	s := t.stats.Clone()
-
-// 	// update from journal and tomb (reading here may be more efficient than
-// 	// update on change, but creates a data race)
-// 	s.JournalTuplesCount = int64(t.journal.data.Len())
-// 	s.JournalTuplesCapacity = int64(t.journal.data.Cap())
-// 	s.JournalSize = int64(t.journal.data.HeapSize())
-
-// 	s.TombstoneTuplesCount = int64(len(t.journal.tomb))
-// 	s.TombstoneTuplesCapacity = int64(cap(t.journal.tomb))
-// 	s.TombstoneSize = s.TombstoneTuplesCount * 8
-
-// 	// copy cache stats
-// 	cs := t.bcache.Metrics()
-// 	s.CacheHits = cs.Hits
-// 	s.CacheMisses = cs.Misses
-// 	s.CacheInserts = cs.Inserts
-// 	s.CacheEvictions = cs.Evictions
-// 	s.CacheCount = cs.Count
-// 	s.CacheSize = cs.Size
-
-// 	resp := []TableMetrics{s}
-// 	for _, idx := range t.indexes {
-// 		resp = append(resp, idx.Metrics())
-// 	}
-// 	return resp
-// }

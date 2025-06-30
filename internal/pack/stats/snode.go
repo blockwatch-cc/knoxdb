@@ -12,8 +12,8 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/engine"
+	"blockwatch.cc/knoxdb/internal/operator/filter"
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/pkg/assert"
 	"blockwatch.cc/knoxdb/pkg/schema"
@@ -31,6 +31,7 @@ func NewSNode(key uint32, s *schema.Schema, alloc bool) *SNode {
 	node := &SNode{
 		spack: pack.New().
 			WithKey(key).
+			WithVersion(1).
 			WithMaxRows(STATS_PACK_SIZE).
 			WithSchema(s),
 		meta: make([]byte, s.WireSize()),
@@ -51,6 +52,24 @@ func (n *SNode) Clear() {
 
 func (n *SNode) Key() uint32 {
 	return n.spack.Key()
+}
+
+func (n *SNode) Version() uint32 {
+	return n.spack.Version()
+}
+
+func (n *SNode) LoadVersion(view *schema.View) {
+	v, ok := view.Reset(n.meta).GetPhy(STATS_ROW_VERSION)
+	view.Reset(nil)
+	if ok {
+		n.spack.WithVersion(v.(uint32))
+	}
+}
+
+func (n *SNode) SetVersion(view *schema.View, ver uint32) {
+	view.Reset(n.meta).Set(STATS_ROW_VERSION, ver)
+	view.Reset(nil)
+	n.spack.WithVersion(ver)
 }
 
 func (n *SNode) Bytes() []byte {
@@ -77,28 +96,43 @@ func (n *SNode) MinKey() uint32 {
 }
 
 func (n *SNode) MaxKey() uint32 {
+	var k uint32
 	if l := n.spack.Len(); l > 0 {
-		return n.spack.Uint32(STATS_ROW_KEY, l-1)
-	} else {
-		return 0
+		k = n.spack.Uint32(STATS_ROW_KEY, l-1)
 	}
+	// fmt.Printf("Snode %d[v%d] %p max key at pos %d is %d\n",
+	// 	n.Key(), n.Version(), n, n.spack.Len(), k)
+
+	// operator.NewLogOperator(os.Stdout, 30).Process(context.Background(), n.spack)
+
+	return k
 }
 
 func (n *SNode) LastNValues() int {
 	if l := n.spack.Len(); l > 0 {
-		return int(n.spack.Int64(STATS_ROW_NVALS, l-1))
-	} else {
-		return 0
+		return int(n.spack.Uint64(STATS_ROW_NVALS, l-1))
 	}
+	return 0
+}
+
+func (n *SNode) LastInfo() (uint32, uint32, int) {
+	l := n.spack.Len()
+	if l == 0 {
+		return 0, 0, 0
+	}
+	k := n.spack.Uint32(STATS_ROW_KEY, l-1)
+	v := n.spack.Uint32(STATS_ROW_VERSION, l-1)
+	s := n.spack.Uint64(STATS_ROW_NVALS, l-1)
+	return k, v, int(s)
 }
 
 func (n *SNode) FindKey(key uint32) (int, bool) {
 	// find pack offset (spack is sorted by data pack key)
-	keys := n.spack.Block(STATS_ROW_KEY).Uint32().Slice()
-	i := sort.Search(len(keys), func(i int) bool { return keys[i] >= key })
+	keys := n.spack.Block(STATS_ROW_KEY).Uint32()
+	i := sort.Search(n.spack.Len(), func(i int) bool { return keys.Get(i) >= key })
 
 	// unlikely, should not happen
-	if i == len(keys) || keys[i] != key {
+	if i == keys.Len() || keys.Get(i) != key {
 		return -1, false
 	}
 
@@ -108,9 +142,13 @@ func (n *SNode) FindKey(key uint32) (int, bool) {
 func (n *SNode) AppendPack(pkg *pack.Package) bool {
 	// append meta statistics
 	n.spack.Block(STATS_ROW_KEY).Uint32().Append(pkg.Key())
+	n.spack.Block(STATS_ROW_VERSION).Uint32().Append(pkg.Version())
 	n.spack.Block(STATS_ROW_SCHEMA).Uint64().Append(pkg.Schema().Hash())
-	n.spack.Block(STATS_ROW_NVALS).Int64().Append(int64(pkg.Len()))
+	n.spack.Block(STATS_ROW_NVALS).Uint64().Append(uint64(pkg.Len()))
 	n.spack.Block(STATS_ROW_SIZE).Int64().Append(pkg.Stats().SizeDiff())
+
+	// fmt.Printf("append snode %d from pack 0x%08x[v%d]\n",
+	// 	n.Key(), pkg.Key(), pkg.Version())
 
 	pstats := pkg.Stats()
 	for i, b := range pkg.Blocks() {
@@ -134,6 +172,12 @@ func (n *SNode) AppendPack(pkg *pack.Package) bool {
 	}
 	n.spack.UpdateLen()
 	n.dirty = true
+
+	// fmt.Printf("snode: %x[v%d] append from %x[v%d] len=%d\n",
+	// 	n.Key(), n.Version(), pkg.Key(), pkg.Version(), n.spack.Len())
+
+	// operator.NewLogOperator(os.Stdout, 30).Process(context.Background(), n.spack)
+
 	return n.dirty
 }
 
@@ -141,8 +185,12 @@ func (n *SNode) UpdatePack(pkg *pack.Package) bool {
 	k, ok := n.FindKey(pkg.Key())
 	if !ok {
 		// unlikely, should not happen
+		assert.Unreachable("update unknown spack")
 		return false
 	}
+
+	// fmt.Printf("update snode %d[v%d] from pack 0x%08x[v%d] at pos=%d\n",
+	// 	n.Key(), n.Version(), pkg.Key(), pkg.Version(), k)
 
 	// update data statistics on change
 	pstats := pkg.Stats()
@@ -165,28 +213,36 @@ func (n *SNode) UpdatePack(pkg *pack.Package) bool {
 
 		// set min/max when different
 		if !b.Type().EQ(mino, minv) {
+			// fmt.Printf("> F#%d min[%d] %v -> %v\n", i, minx, mino, minv)
 			n.spack.Block(minx).Set(k, minv)
 			n.dirty = true
 		}
 		if !b.Type().EQ(maxo, maxv) {
+			// fmt.Printf("> F#%d max[%d] %v -> %v\n", i, maxx, maxo, maxv)
 			n.spack.Block(maxx).Set(k, maxv)
 			n.dirty = true
 		}
 	}
 
 	// update pack statistics on change
+	if vid := n.spack.Uint32(STATS_ROW_VERSION, k); vid != pkg.Version() {
+		n.spack.Block(STATS_ROW_VERSION).Set(k, pkg.Version())
+		n.dirty = true
+	}
 	if sid := n.spack.Uint64(STATS_ROW_SCHEMA, k); sid != pkg.Schema().Hash() {
 		n.spack.Block(STATS_ROW_SCHEMA).Set(k, pkg.Schema().Hash())
 		n.dirty = true
 	}
-	if svals := n.spack.Int64(STATS_ROW_NVALS, k); svals != int64(pkg.Len()) {
-		n.spack.Block(STATS_ROW_NVALS).Set(k, int64(pkg.Len()))
+	if nvals := n.spack.Uint64(STATS_ROW_NVALS, k); nvals != uint64(pkg.Len()) {
+		n.spack.Block(STATS_ROW_NVALS).Set(k, uint64(pkg.Len()))
 		n.dirty = true
 	}
 	if diff, sz := n.spack.Int64(STATS_ROW_SIZE, k), pstats.SizeDiff(); diff != 0 {
 		n.spack.Block(STATS_ROW_SIZE).Set(k, sz+diff)
 		n.dirty = true
 	}
+
+	// operator.NewLogOperator(os.Stdout, 30).Process(context.Background(), n.spack)
 
 	// data may not have changed
 	return n.dirty
@@ -199,14 +255,14 @@ func (n *SNode) DeletePack(pkg *pack.Package) bool {
 
 	// unlikely, should not happen
 	if i == len(keys) || keys[i] != pkg.Key() {
-		assert.Unreachable("delete non existing stats pack")
+		assert.Unreachable("delete unknown spack")
 		return false
 	}
 
 	// remove statistics row
 	err := n.spack.Delete(i, i+1)
 	if err != nil {
-		assert.Unreachable("delete", err)
+		assert.Unreachable("delete unknown spack", err)
 	}
 	n.dirty = true
 
@@ -223,7 +279,10 @@ func (n *SNode) PrepareWrite(ctx context.Context, b store.Bucket) (*SNode, error
 		dirty:    true,
 	}
 
-	// load missing blocks
+	// fmt.Printf("snode: %x[v%d] %p -> %p prepare write len=%d\n",
+	// 	n.Key(), n.Version(), n, clone, n.spack.Len())
+
+	// load missing blocks (previous version)
 	_, err := clone.spack.LoadFromDisk(ctx, b, nil, 0)
 	if err != nil {
 		return nil, err
@@ -236,7 +295,7 @@ func (n *SNode) PrepareWrite(ctx context.Context, b store.Bucket) (*SNode, error
 	return clone, nil
 }
 
-func (n *SNode) Match(flt *query.FilterTreeNode, view *schema.View) bool {
+func (n *SNode) Match(flt *filter.Node, view *schema.View) bool {
 	view.Reset(n.meta)
 	defer view.Reset(nil)
 	return Match(flt, &ViewReader{view})
@@ -247,17 +306,21 @@ func (n *SNode) Query(it *Iterator) error {
 	var loadBlocks []uint16
 
 	if !n.spack.IsComplete() {
-		// we always need data pack keys and num values
+		// we always need data pack keys, versions and num values
 		if n.spack.Block(STATS_ROW_KEY) == nil {
 			// translate index to field id
-			loadBlocks = append(loadBlocks, STATS_ROW_KEY+1, STATS_ROW_NVALS+1)
+			loadBlocks = append(loadBlocks,
+				STATS_ROW_KEY+1,
+				STATS_ROW_VERSION+1,
+				STATS_ROW_NVALS+1,
+			)
 		}
 
 		// translate filter indexes (field schema positions zero-based) into
 		// spack columns identifiers (uint16, 1-based)
 		if it.flt != nil {
 			uniqueFields := make(map[uint16]struct{})
-			it.flt.ForEach(func(f *query.Filter) error {
+			it.flt.ForEach(func(f *filter.Filter) error {
 				// skip already processed fields
 				if _, ok := uniqueFields[f.Id]; ok {
 					return nil
@@ -348,14 +411,8 @@ func (n *SNode) Query(it *Iterator) error {
 
 		// init filter buckets if required
 		buckets := make(map[int]store.Bucket)
-		if it.use.Is(FeatBloomFilter) {
-			buckets[STATS_BLOOM_KEY] = it.idx.bloomBucket(tx)
-		}
-		if it.use.Is(FeatFuseFilter) {
-			buckets[STATS_FUSE_KEY] = it.idx.fuseBucket(tx)
-		}
-		if it.use.Is(FeatBitsFilter) {
-			buckets[STATS_BITS_KEY] = it.idx.bitsBucket(tx)
+		if it.use.HasFilter() {
+			buckets[STATS_FILTER_KEY] = it.idx.filterBucket(tx)
 		}
 
 		// run vectorized queries for filter types, load & check bloom,
@@ -404,11 +461,20 @@ func (n *SNode) BuildMetaStats(view *schema.View, wr *schema.Writer) bool {
 		case STATS_ROW_KEY: // min key
 			val = b.Uint32().Get(0)
 
+		case STATS_ROW_VERSION: // use spack version
+			val = n.spack.Version()
+
 		case STATS_ROW_SCHEMA: // sum data packs
 			val = uint64(n.spack.Len())
 
-		case STATS_ROW_NVALS, STATS_ROW_SIZE:
+		case STATS_ROW_NVALS:
 			// sum data pack rows
+			var sum uint64
+			for _, v := range b.Uint64().Slice() {
+				sum += v
+			}
+			val = sum
+		case STATS_ROW_SIZE:
 			// sum data pack sizes
 			var sum int64
 			for _, v := range b.Int64().Slice() {
@@ -419,7 +485,7 @@ func (n *SNode) BuildMetaStats(view *schema.View, wr *schema.Writer) bool {
 		default:
 			// calculate data column stats when changed
 			if b != nil && b.IsDirty() {
-				if i%2 == 0 {
+				if (i-STATS_DATA_COL_OFFSET)%2 == 0 {
 					// min fields -> min of min
 					val = b.Min()
 				} else {

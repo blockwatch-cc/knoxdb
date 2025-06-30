@@ -160,6 +160,7 @@ func InsertData(t *testing.T, e *engine.Engine, tab engine.TableEngine) {
 		abort()
 		cnt++
 	}
+	t.Logf("Inserted %d rows", cnt)
 	require.Equal(t, len(data), cnt)
 }
 
@@ -283,6 +284,9 @@ func QueryTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts
 		WithSchema(tab.Schema()).
 		WithLimit(10).
 		WithTable(tab)
+	if testing.Verbose() {
+		plan.WithFlags(query.QueryFlagDebug)
+	}
 	defer plan.Close()
 	require.NoError(t, plan.Validate())
 	require.NoError(t, plan.Compile(ctx))
@@ -307,6 +311,9 @@ func CountTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts
 		WithSchema(tab.Schema()).
 		WithLimit(10).
 		WithTable(tab)
+	if testing.Verbose() {
+		plan.WithFlags(query.QueryFlagDebug)
+	}
 	defer plan.Close()
 	require.NoError(t, plan.Validate())
 	require.NoError(t, plan.Compile(ctx))
@@ -330,6 +337,9 @@ func DeleteTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opt
 		WithSchema(tab.Schema()).
 		WithLimit(10).
 		WithTable(tab)
+	if testing.Verbose() {
+		plan.WithFlags(query.QueryFlagDebug)
+	}
 	defer plan.Close()
 	require.NoError(t, plan.Validate())
 	require.NoError(t, plan.Compile(ctx))
@@ -353,6 +363,9 @@ func StreamTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opt
 		WithSchema(tab.Schema()).
 		WithLimit(10).
 		WithTable(tab)
+	if testing.Verbose() {
+		plan.WithFlags(query.QueryFlagDebug)
+	}
 	defer plan.Close()
 	require.NoError(t, plan.Validate())
 	require.NoError(t, plan.Compile(ctx))

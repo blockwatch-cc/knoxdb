@@ -6,15 +6,13 @@ package table
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
 	"sync/atomic"
 
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/internal/wal"
-	"blockwatch.cc/knoxdb/pkg/num"
-	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
 type QueryResultConsumer = engine.QueryResultConsumer
@@ -142,163 +140,39 @@ func (t *Table) Count(ctx context.Context, q engine.QueryPlan) (uint64, error) {
 	return res.Count(), nil
 }
 
-func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (uint64, error) {
-	// unpack query plan
-	plan, ok := q.(*query.QueryPlan)
-	if !ok {
-		return 0, fmt.Errorf("invalid query plan type %T", q)
-	}
-
-	// check table state
-	if t.opts.ReadOnly {
-		return 0, engine.ErrTableReadOnly
-	}
-
-	// obtain shared table lock
-	tx := engine.GetTransaction(ctx)
-	err := tx.RLock(ctx, t.id)
-	if err != nil {
-		return 0, err
-	}
-
-	// amend query plan to only output pk and rid fields
-	rs, err := t.schema.SelectFieldIds(t.schema.PkId(), schema.MetaRid)
-	if err != nil {
-		return 0, err
-	}
-	plan.ResultSchema = rs.WithName("delete")
-
-	// register table for commit/abort callbacks
-	tx.Touch(t.id)
-
-	// execute the query to find all matching pk/rid rows (db rows and journal rows)
-	var (
-		px   = t.schema.PkIndex()
-		rx   = t.schema.RowIdIndex()
-		jcap = t.journal.Capacity()
-		msg  = make([]byte, 0, t.journal.MaxSize()*num.MaxVarintLen64)
-		n    uint64
-	)
-
-	// TODO
-	// - convert to a DeleteResultConsumer
-	// - vectorize, i.e consume pack & selection vector
-	// - handle offset/limit in result
-	res := query.NewStreamResult(func(row engine.QueryRow) error {
-		// collect pk/rid until journal segment is full
-		msg = num.AppendUvarint(msg, row.(*query.Row).Uint64(rx))
-		msg = num.AppendUvarint(msg, row.(*query.Row).Uint64(px))
-		jcap--
-		n++
-
-		// write wal and journal
-		if jcap == 0 {
-			if tx.UseWal() {
-				// write wal batch
-				_, err := t.engine.Wal().Write(&wal.Record{
-					Type:   wal.RecordTypeDelete,
-					Tag:    types.ObjectTagTable,
-					Entity: t.id,
-					TxID:   tx.Id(),
-					Data:   [][]byte{msg},
-				})
-				if err != nil {
-					return err
-				}
-			}
-
-			// protect journal write access
-			t.mu.Lock()
-			defer t.mu.Unlock()
-			buf := msg
-			for len(buf) > 0 {
-				rid, n := num.Uvarint(buf)
-				buf = buf[n:]
-				pk, n := num.Uvarint(buf)
-				buf = buf[n:]
-				t.journal.Delete(tx.Id(), rid, pk)
-				t.state.NRows--
-			}
-
-			// once a journal segment is full
-			// - rotate segment, flush to disk
-			// - flush other dirty segment's xmeta to disk
-			// - write checkpoint record
-			if t.journal.Active().IsFull() {
-				err = t.flushJournal(ctx)
-				if err != nil {
-					return err
-				}
-			}
-
-			// reset and continue
-			msg = msg[:0]
-			jcap = t.journal.Capacity()
-		}
-		return nil
-	})
-
-	// run the query
-	err = t.doQueryAsc(ctx, plan, res)
-	if err != nil {
-		return n, err
-	}
-
-	// delete tail (matched list may not be empty here)
-	if len(msg) > 0 {
-		// protect journal write access
-		t.mu.Lock()
-		defer t.mu.Unlock()
-		buf := msg
-		for len(buf) > 0 {
-			rid, n := num.Uvarint(buf)
-			buf = buf[n:]
-			pk, n := num.Uvarint(buf)
-			buf = buf[n:]
-			t.journal.Delete(tx.Id(), rid, pk)
-			t.state.NRows--
-		}
-
-		// once a journal segment is full
-		// - rotate segment, flush to disk
-		// - flush other dirty segment's xmeta to disk
-		// - write checkpoint record
-		if t.journal.Active().IsFull() {
-			err = t.flushJournal(ctx)
-			if err != nil {
-				return n, err
-			}
-		}
-	}
-	msg = nil
-
-	atomic.AddInt64(&t.metrics.DeletedTuples, int64(n))
-	atomic.AddInt64(&t.metrics.DeleteCalls, 1)
-
-	return n, nil
-}
-
 func (t *Table) doQueryAsc(ctx context.Context, plan *query.QueryPlan, res QueryResultConsumer) error {
 	var (
 		nRowsScanned, nRowsMatched int
+		err                        error
 	)
 
 	// cleanup and log on exit
 	defer func() {
+		if e := recover(); e != nil {
+			t.log.Error(e)
+			debug.PrintStack()
+			err = fmt.Errorf("query execution failed")
+		}
 		plan.Stats.Tick(query.SCAN_TIME_KEY)
 		plan.Stats.Count(query.ROWS_SCANNED_KEY, nRowsScanned)
 		plan.Stats.Count(query.ROWS_MATCHED_KEY, nRowsMatched)
 		atomic.AddInt64(&t.metrics.QueriedTuples, int64(nRowsMatched))
 	}()
 
-	// query journal first to apply mvcc isolation and avoid side-effects
-	// of index pk condition(s), otherwise recent records that are only in
-	// journal are missing
-	jres := t.journal.Query(plan.Filters, plan.Snap)
+	// init table reader to lock storage merge epoch
+	r := t.NewReader()
+	defer r.Close()
+
+	// query journal before merging index result into query plan
+	// (index IN condition would hide journal-only records)
+	jres := t.journal.Query(plan, r.Epoch())
 	defer jres.Close()
-	nRowsScanned += t.journal.Len()
+	nRowsScanned += t.journal.NumTuples()
 	plan.Stats.Tick(JOURNAL_TIME_KEY)
 	plan.Log.Debugf("%d journal results in %s", jres.Len(), plan.Stats.GetRuntime(JOURNAL_TIME_KEY))
+
+	// l := operator.NewLogOperator(plan.Log.Logger().Writer(), 10)
+	// l.Process(ctx, t.journal.Tip().Data())
 
 	// run index query
 	if err := plan.QueryIndexes(ctx); err != nil {
@@ -307,26 +181,24 @@ func (t *Table) doQueryAsc(ctx context.Context, plan *query.QueryPlan, res Query
 
 	// early return
 	if jres.IsEmpty() && plan.IsNoMatch() {
+		// plan.Log.Debugf("empty match")
 		return nil
 	}
 
 	// PACK SCAN
 	if !plan.IsNoMatch() {
-		// pack iterator manages selection, load and scan of packs including snapshot isolation
-		// (note: long-running read queries may see data from future tx during table scans
-		// when completed journal segments have been merged concurrently)
-		r := t.NewReader().WithQuery(plan).WithMask(jres.TombMask(), engine.ReadModeExcludeMask)
-		defer r.Close()
+		// init table reader with query filter and snapshot isolation info
+		r.WithQuery(plan).WithMask(jres.TombMask(), engine.ReadModeExcludeMask)
 
-		// packloop:
 		for {
 			// check context
-			if err := ctx.Err(); err != nil {
+			if err = ctx.Err(); err != nil {
 				return err
 			}
 
 			// load next pack with real matches
-			pkg, err := r.Next(ctx)
+			var pkg *pack.Package
+			pkg, err = r.Next(ctx)
 			if err != nil {
 				return err
 			}
@@ -336,6 +208,7 @@ func (t *Table) doQueryAsc(ctx context.Context, plan *query.QueryPlan, res Query
 				break
 			}
 			nRowsScanned += pkg.Len()
+			// plan.Log.Debugf("Found matching pack id %d", pkg.Key())
 
 			// TODO: vectorize pack & journal merge, no more need to preserve order
 			// - fast path when journal result has no overlap with pack result
@@ -351,13 +224,8 @@ func (t *Table) doQueryAsc(ctx context.Context, plan *query.QueryPlan, res Query
 			// Move limit/offset into result, count there and skip what is appended, return
 			// EndOfStream signal
 
-			sel := pkg.Selected()
-			if sel != nil {
-				nRowsMatched += len(sel)
-			} else {
-				nRowsMatched += pkg.Len()
-			}
-			if err := res.Append(pkg, sel); err != nil {
+			nRowsMatched += pkg.NumSelected()
+			if err = res.Append(ctx, pkg); err != nil {
 				return err
 			}
 
@@ -418,14 +286,10 @@ func (t *Table) doQueryAsc(ctx context.Context, plan *query.QueryPlan, res Query
 		// 	return nil
 		// }
 
-		// emit record
-		sel := pkg.Selected()
-		if sel != nil {
-			nRowsMatched += len(sel)
-		} else {
-			nRowsMatched += pkg.Len()
-		}
-		if err := res.Append(pkg, sel); err != nil {
+		// emit
+		plan.Log.Debugf("journal segment %d with %d matches", pkg.Key(), pkg.NumSelected())
+		nRowsMatched += pkg.NumSelected()
+		if err = res.Append(ctx, pkg); err != nil {
 			return err
 		}
 
@@ -440,7 +304,6 @@ func (t *Table) doQueryAsc(ctx context.Context, plan *query.QueryPlan, res Query
 func (t *Table) doQueryDesc(ctx context.Context, plan *query.QueryPlan, res QueryResultConsumer) error {
 	var (
 		nRowsScanned, nRowsMatched int
-		snap                       = engine.GetTransaction(ctx).Snapshot()
 	)
 
 	// cleanup and log on exit
@@ -451,10 +314,13 @@ func (t *Table) doQueryDesc(ctx context.Context, plan *query.QueryPlan, res Quer
 		atomic.AddInt64(&t.metrics.QueriedTuples, int64(nRowsMatched))
 	}()
 
-	// query journal first to apply mvcc isolation and avoid side-effects
-	// of index pk condition(s), otherwise recent records that are only in
-	// journal are missing
-	jres := t.journal.Query(plan.Filters, snap)
+	// init table reader to lock storage merge epoch
+	r := t.NewReader()
+	defer r.Close()
+
+	// query journal before merging index result into query plan
+	// (index IN condition would hide journal-only records)
+	jres := t.journal.Query(plan, r.Epoch())
 	defer jres.Close()
 	nRowsScanned += t.journal.Len()
 	plan.Stats.Tick(JOURNAL_TIME_KEY)
@@ -470,13 +336,7 @@ func (t *Table) doQueryDesc(ctx context.Context, plan *query.QueryPlan, res Quer
 		return nil
 	}
 
-	// find max pk across all saved packs (we assume any journal entry greater than this max
-	// is new and hasn't been saved before; this assumption holds true because we disallow
-	// user-defined pk values
-	// maxStoredPk := t.stats.Load().(*stats.Index).GlobalMaxPk()
-
-	// before table scan, emit 'new' journal-only records (i.e. pk > max) in desc order
-	// Note: deleted journal records are not present in this list
+	// before table scan, emit 'new' journal-only records in desc order
 	for pkg := range jres.ReverseIterator() {
 		// // stop on first pk that is merged into table data
 		// pk := pkg.Pk(idx)
@@ -491,13 +351,8 @@ func (t *Table) doQueryDesc(ctx context.Context, plan *query.QueryPlan, res Quer
 		// }
 
 		// forward pack with matches
-		sel := pkg.Selected()
-		if sel != nil {
-			nRowsMatched += len(sel)
-		} else {
-			nRowsMatched += pkg.Len()
-		}
-		if err := res.Append(pkg, sel); err != nil {
+		nRowsMatched += pkg.NumSelected()
+		if err := res.Append(ctx, pkg); err != nil {
 			return err
 		}
 
@@ -523,10 +378,8 @@ func (t *Table) doQueryDesc(ctx context.Context, plan *query.QueryPlan, res Quer
 	}
 
 	// PACK SCAN (reverse-scan)
-	// pack iterator manages selection, load and scan of packs including snapshot isolation
-	// (note: long-running read queries may see data from future tx during table scans
-	// when completed journal segments have been merged concurrently)
-	r := t.NewReader().WithQuery(plan).WithMask(jres.TombMask(), engine.ReadModeExcludeMask)
+	// init table reader with query filter and snapshot isolation info
+	r.WithQuery(plan).WithMask(jres.TombMask(), engine.ReadModeExcludeMask)
 	defer r.Close()
 
 	// packloop:
@@ -549,13 +402,8 @@ func (t *Table) doQueryDesc(ctx context.Context, plan *query.QueryPlan, res Quer
 		nRowsScanned += pkg.Len()
 
 		// forward pack with matches
-		sel := pkg.Selected()
-		if sel != nil {
-			nRowsMatched += len(sel)
-		} else {
-			nRowsMatched += pkg.Len()
-		}
-		if err := res.Append(pkg, sel); err != nil {
+		nRowsMatched += pkg.NumSelected()
+		if err := res.Append(ctx, pkg); err != nil {
 			return err
 		}
 

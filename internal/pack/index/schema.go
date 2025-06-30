@@ -36,12 +36,14 @@ func convertSchema(s, ts *schema.Schema, typ types.IndexType) (*schema.Schema, C
 		if s.NumFields() > 2 {
 			return nil, nil, fmt.Errorf("too many schema fields for hash index")
 		}
-		ixs := schema.NewSchema().
+		ixs := schema.NewBuilder().
 			WithName(s.Name()).
 			WithVersion(s.Version()).
-			WithField(schema.NewField(types.FieldTypeUint64).WithName("hash")).
-			WithField(pkf).
-			Finalize()
+			Uint64("hash").
+			Uint64(pkf.Name()).
+			Finalize().
+			Schema()
+
 		c := &SimpleHashConverter{
 			schema: s,
 		}
@@ -67,7 +69,9 @@ func convertSchema(s, ts *schema.Schema, typ types.IndexType) (*schema.Schema, C
 		switch f.Type() {
 		default:
 			return nil, nil, fmt.Errorf("invalid field type %s for integer index", f.Type())
-		case types.FieldTypeDatetime,
+		case types.FieldTypeTimestamp,
+			types.FieldTypeDate,
+			types.FieldTypeTime,
 			types.FieldTypeInt64,
 			types.FieldTypeUint64,
 			types.FieldTypeInt32,
@@ -77,12 +81,13 @@ func convertSchema(s, ts *schema.Schema, typ types.IndexType) (*schema.Schema, C
 			types.FieldTypeUint16,
 			types.FieldTypeUint8:
 
-			ixs := schema.NewSchema().
+			ixs := schema.NewBuilder().
 				WithName(s.Name()).
 				WithVersion(s.Version()).
-				WithField(schema.NewField(types.FieldTypeUint64).WithName("int")).
-				WithField(pkf).
-				Finalize()
+				Uint64("int").
+				Uint64(pkf.Name()).
+				Finalize().
+				Schema()
 
 			c := &RelinkConverter{
 				schema: s,
@@ -98,12 +103,13 @@ func convertSchema(s, ts *schema.Schema, typ types.IndexType) (*schema.Schema, C
 		// supports any number of source columns >= 1
 		// first column: hash value (uint64)
 		// second column: rid
-		ixs := schema.NewSchema().
+		ixs := schema.NewBuilder().
 			WithName(s.Name()).
 			WithVersion(s.Version()).
-			WithField(schema.NewField(types.FieldTypeUint64).WithName("hash")).
-			WithField(pkf).
-			Finalize()
+			Uint64("hash").
+			Uint64(pkf.Name()).
+			Finalize().
+			Schema()
 
 		c := &CompositeHashConverter{
 			schema: s,

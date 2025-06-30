@@ -10,8 +10,8 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/hash/xxhash64"
+	"blockwatch.cc/knoxdb/internal/operator/filter"
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/assert"
 	"blockwatch.cc/knoxdb/pkg/schema"
@@ -20,8 +20,8 @@ import (
 
 type Converter interface {
 	ConvertPack(pkg *pack.Package, mode pack.WriteMode) *pack.Package
-	QueryKeys(node *query.FilterTreeNode) []uint64
-	QueryNode(node *query.FilterTreeNode) *query.FilterTreeNode
+	QueryKeys(node *filter.Node) []uint64
+	QueryNode(node *filter.Node) *filter.Node
 }
 
 type RelinkConverter struct {
@@ -29,19 +29,19 @@ type RelinkConverter struct {
 	srcBlocks []int // ordered list of src blocks to link
 }
 
-func (_ *RelinkConverter) QueryKeys(_ *query.FilterTreeNode) []uint64 {
+func (_ *RelinkConverter) QueryKeys(_ *filter.Node) []uint64 {
 	// unused (hash index only)
 	return nil
 }
 
-func (c *RelinkConverter) QueryNode(node *query.FilterTreeNode) *query.FilterTreeNode {
+func (c *RelinkConverter) QueryNode(node *filter.Node) *filter.Node {
 	// rewrite filter node to match the index pack structure
 	// Note: index storage is u64
 	f0 := c.schema.Fields()[0]
 	flt := node.Filter
 	if f0.Type() == types.FieldTypeUint64 {
-		return &query.FilterTreeNode{
-			Filter: &query.Filter{
+		return &filter.Node{
+			Filter: &filter.Filter{
 				Name:    "int",
 				Type:    flt.Type,
 				Mode:    flt.Mode,
@@ -55,23 +55,21 @@ func (c *RelinkConverter) QueryNode(node *query.FilterTreeNode) *query.FilterTre
 		if err != nil {
 			panic(fmt.Errorf("cast index query value %T to u64: %v", flt.Value, err))
 		}
-		matcher := query.NewFactory(f0.Type()).New(flt.Mode)
+		matcher := filter.NewFactory(f0.Type()).New(flt.Mode)
 		matcher.WithValue(val)
-		return &query.FilterTreeNode{
-			Filter: &query.Filter{
-				Name:    "int",
-				Type:    flt.Type,
-				Mode:    flt.Mode,
-				Index:   0,
-				Value:   val,
-				Matcher: matcher,
-			},
-		}
+		return filter.NewNode().AddLeaf(&filter.Filter{
+			Name:    "int",
+			Type:    flt.Type,
+			Mode:    flt.Mode,
+			Index:   0,
+			Value:   val,
+			Matcher: matcher,
+		})
 	}
 }
 
 func (c *RelinkConverter) ConvertPack(pkg *pack.Package, mode pack.WriteMode) *pack.Package {
-	ipkg := pack.New().WithSchema(c.schema)
+	ipkg := pack.New().WithSchema(c.schema).WithMaxRows(pkg.Cap())
 	for i, v := range c.srcBlocks {
 		b := pkg.Block(v)
 
@@ -125,7 +123,7 @@ type SimpleHashConverter struct {
 }
 
 func (c *SimpleHashConverter) ConvertPack(pkg *pack.Package, mode pack.WriteMode) *pack.Package {
-	ipkg := pack.New().WithSchema(c.schema)
+	ipkg := pack.New().WithSchema(c.schema).WithMaxRows(pkg.Cap())
 	ipkg.WithBlock(0, pkg.Block(c.hashBlock).Hash())
 	for i, v := range c.srcBlocks {
 		b := pkg.Block(v)
@@ -133,11 +131,10 @@ func (c *SimpleHashConverter) ConvertPack(pkg *pack.Package, mode pack.WriteMode
 		ipkg.WithBlock(i+1, b)
 	}
 	ipkg.UpdateLen()
-
 	return ipkg
 }
 
-func (c *SimpleHashConverter) QueryKeys(node *query.FilterTreeNode) []uint64 {
+func (c *SimpleHashConverter) QueryKeys(node *filter.Node) []uint64 {
 	// produce output hash (uint64) from query filter value encoded to LE wire format
 	// use schema field encoding helper to translate Go types from query
 	f0 := c.schema.Fields()[0]
@@ -171,7 +168,7 @@ func (c *SimpleHashConverter) QueryKeys(node *query.FilterTreeNode) []uint64 {
 	}
 }
 
-func (_ *SimpleHashConverter) QueryNode(_ *query.FilterTreeNode) *query.FilterTreeNode {
+func (_ *SimpleHashConverter) QueryNode(_ *filter.Node) *filter.Node {
 	// unused (range index scans only)
 	return nil
 }
@@ -184,7 +181,7 @@ type CompositeHashConverter struct {
 
 func (c *CompositeHashConverter) ConvertPack(pkg *pack.Package, mode pack.WriteMode) *pack.Package {
 	// construct a new package
-	ipkg := pack.New().WithSchema(c.schema)
+	ipkg := pack.New().WithSchema(c.schema).WithMaxRows(pkg.Cap())
 
 	// use a new allocated hash block
 	hashBlock := block.New(block.BlockUint64, pkg.Len())
@@ -253,9 +250,9 @@ func (c *CompositeHashConverter) ConvertPack(pkg *pack.Package, mode pack.WriteM
 	return ipkg
 }
 
-func (c *CompositeHashConverter) QueryKeys(node *query.FilterTreeNode) []uint64 {
+func (c *CompositeHashConverter) QueryKeys(node *filter.Node) []uint64 {
 	// identify eligible conditions for constructing multi-field lookups
-	eq := make(map[string]*query.FilterTreeNode) // all equal child conditions
+	eq := make(map[string]*filter.Node) // all equal child conditions
 	for _, child := range node.Children {
 		if child.Filter.Mode == types.FilterModeEqual {
 			eq[child.Filter.Name] = child
@@ -283,7 +280,7 @@ func (c *CompositeHashConverter) QueryKeys(node *query.FilterTreeNode) []uint64 
 	return []uint64{xxhash64.Sum64(buf.Bytes())}
 }
 
-func (_ *CompositeHashConverter) QueryNode(_ *query.FilterTreeNode) *query.FilterTreeNode {
+func (_ *CompositeHashConverter) QueryNode(_ *filter.Node) *filter.Node {
 	// unused (range index scans only)
 	return nil
 }

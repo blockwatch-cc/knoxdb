@@ -4,9 +4,9 @@
 package pack
 
 import (
-	"reflect"
 	"sync"
 	"time"
+	"unsafe"
 
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/block"
@@ -16,40 +16,43 @@ import (
 )
 
 var (
-	// allocation pool
-	packagePool = sync.Pool{
-		New: func() any { return &Package{} },
-	}
-
+	pool      = sync.Pool{New: func() any { return &Package{} }}
 	zeroTime  = time.Time{}
-	szPackage = int(reflect.TypeOf(Package{}).Size())
+	szPackage = int(unsafe.Sizeof(Package{}))
 )
 
 type Package struct {
 	key      uint32         // identity
-	nRows    int            // current number or rows
+	version  uint32         // version epoch (set on write, only 16 bits used on storage)
+	nRows    int            // current number of rows
 	maxRows  int            // max number of rows (== block allocation size)
 	px       int            // primary key index (position in schema)
 	rx       int            // row id index (position in schema)
-	schema   *schema.Schema // logical data types for column vectors
+	schema   *schema.Schema // logical data types for column vectors (required)
 	blocks   []*block.Block // physical column vectors, maybe nil when unsued
-	stats    *Stats         // vector and encoder statistics for metadata index
-	selected []uint32       // selection vector used in operator pipelines
+	stats    *Stats         // vector and encoder statistics for metadata index (optional)
+	selected []uint32       // selection vector used in operator pipelines (optional)
 }
 
 func New() *Package {
-	return packagePool.Get().(*Package)
+	return pool.Get().(*Package)
 }
 
 func NewFrom(src *Package) *Package {
 	return New().
 		WithKey(src.Key()).
+		WithVersion(src.version).
 		WithMaxRows(src.maxRows).
 		WithSchema(src.schema)
 }
 
 func (p *Package) WithKey(k uint32) *Package {
 	p.key = k
+	return p
+}
+
+func (p *Package) WithVersion(v uint32) *Package {
+	p.version = v
 	return p
 }
 
@@ -83,6 +86,10 @@ func (p *Package) WithSelection(sel []uint32) *Package {
 
 func (p *Package) Key() uint32 {
 	return p.key
+}
+
+func (p Package) Version() uint32 {
+	return p.version
 }
 
 func (p Package) Schema() *schema.Schema {
@@ -153,11 +160,16 @@ func (p *Package) Alloc() *Package {
 // block storage. The capacity of the clone is defined in sz and may be
 // larger than the length of the source pack.
 func (p *Package) Clone(sz int) *Package {
-	clone := New().
-		WithKey(p.key).
-		WithSchema(p.schema).
-		WithMaxRows(sz)
+	clone := New()
 	clone.nRows = p.nRows
+	clone.key = p.key
+	clone.version = p.version
+	clone.nRows = p.nRows
+	clone.maxRows = p.maxRows
+	clone.px = p.px
+	clone.rx = p.rx
+	clone.schema = p.schema
+	clone.blocks = make([]*block.Block, len(p.blocks))
 	for i, b := range p.blocks {
 		if b == nil {
 			continue
@@ -172,14 +184,14 @@ func (p *Package) Clone(sz int) *Package {
 func (p *Package) Copy() *Package {
 	cp := New().
 		WithKey(p.key).
+		WithVersion(p.version).
 		WithSchema(p.schema).
-		WithMaxRows(p.maxRows).
-		WithSelection(p.selected)
+		WithMaxRows(p.maxRows)
 	cp.nRows = p.nRows
 	for i, b := range p.blocks {
-		cp.blocks[i] = b
 		if b != nil {
-			p.blocks[i].Ref()
+			b.Ref()
+			cp.blocks[i] = b
 		}
 	}
 	return cp
@@ -209,7 +221,10 @@ func (p *Package) Clear() {
 		p.stats = nil
 	}
 	p.nRows = 0
-	p.selected = nil
+	if p.selected != nil {
+		arena.Free(p.selected[:0])
+		p.selected = nil
+	}
 }
 
 // Release frees package and drops block references.
@@ -231,13 +246,14 @@ func (p *Package) Release() {
 		p.selected = nil
 	}
 	p.key = 0
+	p.version = 0
 	p.nRows = 0
 	p.maxRows = 0
 	p.px = 0
 	p.rx = 0
 	p.schema = nil
 	p.blocks = p.blocks[:0]
-	packagePool.Put(p)
+	pool.Put(p)
 }
 
 // convert block containers to writable form in-place
@@ -250,6 +266,16 @@ func (p *Package) Materialize() *Package {
 		b.Deref()
 		p.blocks[i] = clone
 	}
+	return p
+}
+
+func (p *Package) MaterializeBlock(i int) *Package {
+	if i < 0 || i >= len(p.blocks) || p.blocks[i] == nil {
+		return p
+	}
+	clone := p.blocks[i].Clone(p.maxRows)
+	p.blocks[i].Deref()
+	p.blocks[i] = clone
 	return p
 }
 

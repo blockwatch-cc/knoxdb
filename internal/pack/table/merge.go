@@ -5,25 +5,45 @@ package table
 
 import (
 	"context"
+	"sync/atomic"
+	"time"
 
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/pack/journal"
+	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/pkg/schema"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
-// Merge processes updates from a journal segment writing them back into table backend
-// storage and indexes. Merge is idempotent, it can crash, get interrupted and restarted.
-// The merged journal segment is only discarded when all data has been successfully written
-// eventually. Due to journal contents masking table data it is save to merge a segment
-// into on disk data vectors step-wise without explicit syncronization or logging.
+// Merge processes updates from a journal segment writing them back into table
+// backend storage and indexes. Merge is idempotent, it can crash, get
+// interrupted and restarted. The merged journal segment is only discarded
+// when all data has been successfully written eventually.
 //
-// To prevent inconsistent backend data on crash, Merge uses short-lived backend
-// transactions for atomically updating all column vectors for a given pack.
+// The merge process works in multiple stages
+// 1. set journal segment state merging
+// 2. create table writers for main and optional history tables
+// 3. process all deleted records
+//    - append to history when enabled (patch xmax metadata from tombstones)
+//    - add to history indexes
+//    - drop from main indexes
+//    - rewrite main table packs
+// 4. process all new records
+//    - append to main table
+//    - add to main indexes
 //
-// Merge appends new record versions from insert/update operations at the end of
+// Storage writes use micro-transactions for each pack written which makes
+// changes gradually visible as merge progresses. To protect consistency of
+// concurrent queries all queries use MVCC metadata and journal merge-on-query
+// to mask issues (TODO: verify). No explicit syncronization or logging is
+// performed. Inconsistent backend data on crash is prevented by micro-transactions
+// which guarantee atomic updates to all column vectors of any given pack.
+//
+// Merge appends new row versions from insert/update operations at the end of
 // a table's data vectors and removes old row versions replaced by update/delete.
-// When a history table is available, pre-images of old record versions are moved there.
+// When history is enabled, pre-images of old rows are moved to history table packs.
 //
 // Merge does not block readers or writers (other than by very short-lived exclusive
 // backend write transactions) but it is not concurrency safe itself. Callers to merge
@@ -31,8 +51,8 @@ import (
 // journal segments are merged in order.
 //
 // Invariants
-// - unique pk: main table contains at most one record per pk
-// - unique rid: main and history tables contain at most one record with the same rid
+// - unique pk: main table contains at most one record per primary key
+// - unique rid: main and history tables contain at most one record with the same row id
 // - sorted rid: main table is sorted by rid (append only)
 //
 // History Table Merge Strategy (unique rid, sorted by xmax)
@@ -49,12 +69,13 @@ import (
 // - updates table statistics (single-writer private copy, copy-on-write updates)
 //   - writes to a private stats index clone during merge
 //   - all stats index changes are copy-on-write (re-uses tree and pack structure)
-//   - when done, atomically replaces stats index ptr in table
+//   - when done, atomically replaces stats index ptr in table in TableWriter.Finalize()
 // - updates indexes
 // - replaces stored data blocks on disk
 //   - atomic backend write of all blocks in a single pack
 //   - followed by cache flush of all blocks (under cache and tx locks)
-//   - concurrent readers always see a consistent pack version
+//   - concurrent readers always see a consistent pack version, but will see
+//     pack updates as merge progresses
 //
 // Design considerations for background merge
 //
@@ -62,59 +83,107 @@ import (
 // - merges one journal segment at a time
 // - no database engine (user) transaction exists
 // - uses short-lived backend write transactions to atomically write pack blocks
-// - readers are only blocked while a single pack is written at a time
+// - readers are only blocked during pack backend writes (with boltdb storage engine)
 // - may stall on I/O while holding backend tx locks
 // - merge may get interrupted (context cancel, crash)
 // - journal data and tombstone remain authoritative source (overlay pack data)
+//   until merge is confirmed
 // - MVCC still works for merged data (record metadata remains available to queries)
+//
+// Protocol
+//   1. write new table data, update indexes, register tombstones
+//   2. write epoch + LSN to table state (normative end of merge)
+//   3. swap meta index ptr (only afterwards its safe to drop merged segment)
+//   4. drop merged segment from journal
+//   5. GC
+// - notes
+//   - crash recovery after step 2 skips already merged journal segment
+//   - must filter journal query by meta epoch to prevent duplicates
 
+// Merge is called as background task and operates concurrent to journal
+// writes and query readers. If another segment from the same journal
+// is currently in merging state, the tasks yields to other tasks and
+// retries.
 func (t *Table) Merge(ctx context.Context) error {
-	t.mu.RLock()
-	// get next segment and mark as merge in progress
-	seg := t.journal.MergeNext()
-	if seg != nil {
-		seg.SetState(journal.SegmentStateMerging)
-	}
-	t.mu.RUnlock()
-
-	for seg != nil {
-		err := t.mergeJournal(ctx, seg)
-		if err != nil {
-			t.mu.Lock()
-			seg.SetState(journal.SegmentStateComplete)
-			t.mu.Unlock()
-			return err
-		} else {
-			// TODO: find a way to remove merged segments earlier (or ignore them for queries)
-			t.mu.Lock()
-			// set segment done (can be garbage collected later)
-			seg.SetState(journal.SegmentStateMerged)
-			seg = t.journal.MergeNext()
-			t.mu.Unlock()
+	var (
+		seg      *journal.Segment
+		err      error
+		nRetries = 3
+	)
+	for {
+		// get next segment, will mark segment as merge in progress
+		t.mu.RLock()
+		seg, err = t.journal.NextMergable()
+		t.mu.RUnlock()
+		if err == nil || nRetries < 0 {
+			break
+		}
+		nRetries--
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+			// wait a bit
 		}
 	}
 
-	return nil
+	// nothing to do (unlikely)
+	if seg == nil {
+		return nil
+	}
+
+	// run concurrent merge
+	err = t.mergeJournal(ctx, seg)
+	if err != nil {
+		// notify journal, will keep segment in memory and retry
+		t.log.Errorf("table[%s]: merge epoch %d: %v", t.schema.Name(), seg.Id(), err)
+		t.mu.Lock()
+		t.journal.AbortMerged(seg)
+		t.mu.Unlock()
+	} else {
+		// gc journal segment
+		t.mu.Lock()
+		t.journal.ConfirmMerged(ctx, seg)
+		t.mu.Unlock()
+	}
+
+	return err
 }
 
 func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
+	// metrics
+	var (
+		start      = time.Now()
+		nStones    int
+		nPacks     int
+		nAdd, nDel int
+		nHeap      int = seg.Size()
+		nBytes         = atomic.LoadInt64(&t.metrics.BytesWritten)
+	)
+
 	// init table writer
-	tab := t.NewWriter()
-	defer tab.Close()
+	table := t.NewWriter(seg.Id())
+	defer table.Close()
+
+	// t.log.Debugf("table[%s]: merge epoch %d", t.schema.Name(), seg.Id())
 
 	// init history writer
 	var hist engine.TableWriter
 	if ht, err := engine.GetEngine(ctx).UseTable(t.schema.Name() + "_history"); err == nil {
-		hist = ht.NewWriter()
+		hist = ht.NewWriter(seg.Id())
 		defer hist.Close()
 	}
 
-	// TODO: alloc & reuse tomb map & mask
+	// Phase 1 - move deleted rows to history, rewrite table packs
+	stones := seg.Tomb().Stones() // non-aborted deletes (within and outside the segment)
+	mask := seg.Tomb().RowIds()   // row id bitmap of all deletes, nil when empty
+	aborted := seg.Aborted()      // bitset of aborted records, nil when empty
+	nStones = len(stones)
 
-	// Phase 1 - move deleted table rows to history, rewrite table packs
-	tombStones, tombMask, inJournalDeletes := seg.PrepareMerge()
-	if tombMask != nil {
-		src := t.NewReader().WithMask(tombMask, engine.ReadModeIncludeMask)
+	if mask != nil && mask.Any() {
+		// t.log.Debugf("table[%s]: merge phase 1: %d/%d tombstones: some=%v",
+		// 	t.schema.Name(), mask.Count(), len(stones), stones[:min(32, len(stones))])
+		src := t.NewReader().WithMask(mask, engine.ReadModeIncludeMask)
 		defer src.Close()
 		for {
 			pkg, err := src.Next(ctx)
@@ -124,154 +193,140 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 			if pkg == nil {
 				break
 			}
+			nPacks++
+			nDel++
+			// t.log.Debugf("table[%s]: merge pack %08x[v%d] with %d tombs",
+			// 	t.schema.Name(), pkg.Key(), pkg.Version(), len(pkg.Selected()))
 
 			if hist != nil {
-				// FIXME: patch xmax in history pack (which is writable)
+				// TODO: patch xmax in history pack (which is writable)
 
-				// set xmax for deleted rows
-				// pkg.Xmaxs().Materialize()
-				xmaxs := pkg.Xmaxs().Slice()
-				for _, v := range pkg.Selected() {
-					xmaxs[int(v)] = tombStones[0].Xid
-					tombStones = tombStones[1:]
+				// set xmax for deleted/replaced rows, set del flag for deleted rows
+				xmaxId, ok := pkg.Schema().FieldIndexById(schema.MetaXmax)
+				delId, ok2 := pkg.Schema().FieldIndexById(schema.MetaDel)
+				if ok && ok2 {
+					pkg.MaterializeBlock(xmaxId)
+					pkg.MaterializeBlock(delId)
+					xmaxs := pkg.Xmaxs().Slice()
+					dels := pkg.Dels().Writer()
+					for _, v := range pkg.Selected() {
+						xmaxs[int(v)] = stones[0].Xid
+						if stones[0].IsDel {
+							dels.Set(int(v))
+						}
+						stones = stones[1:]
+					}
+					pkg.Block(xmaxId).SetDirty()
+					pkg.Block(delId).SetDirty()
 				}
 
 				// insert deleted rows into history
 				if err := hist.Append(ctx, pkg, pack.WriteModeIncludeSelected); err != nil {
 					return err
 				}
+			}
 
-				// TODO: update history indexes
+			// update indexes, mark deleted rows for deletion
+			if err := table.DeleteIndexes(ctx, pkg, pack.WriteModeIncludeSelected); err != nil {
+				return err
 			}
 
 			// rewrite table pack excluding deleted rows
-			if err := tab.Replace(ctx, pkg, pack.WriteModeExcludeSelected); err != nil {
+			sel := pkg.Selected()
+			neg := types.NegateSelection(sel, pkg.Len())
+			// t.log.Debugf("table[%s]: merge neg sel %d+%d=%d(%d) body=%v",
+			// 	t.schema.Name(), len(sel), len(neg), len(sel)+len(neg), pkg.Len(),
+			// 	neg[:min(32, len(neg))],
+			// )
+			pkg.WithSelection(neg)
+			if err := table.Replace(ctx, pkg, pack.WriteModeIncludeSelected); err != nil {
 				return err
 			}
-
-			// update indexes, drop deleted rows
-			if err := t.delFromIndexes(ctx, pkg, pack.WriteModeIncludeSelected); err != nil {
-				return err
-			}
+			pkg.WithSelection(sel)
+			arena.Free(neg)
 		}
 
 		// close source reader
 		src.Close()
-		src = nil
+
+		// write in-segment deleted records to history
+		if hist != nil {
+			// copy journal segment pack and attach private selection vector
+			pkg := seg.Data().Copy()
+
+			// produce selection vector for all in-segment deleted records
+			dbits := pkg.Dels().Writer()
+			sel := dbits.Indexes(arena.AllocUint32(dbits.Count()))
+			pkg.WithSelection(sel)
+
+			// append to history and indexes
+			if err := hist.Append(ctx, pkg, pack.WriteModeIncludeSelected); err != nil {
+				return err
+			}
+
+			// free copy
+			pkg.Release()
+		}
 	}
 
-	// Phase 2 - move journal data to table and history
+	// Phase 2 - move journal data to table and history, exclude aborted records
 	if seg.Data().Len() > 0 {
-		if inJournalDeletes {
-			// create selection vector excluding deleted records
-			sel := arena.AllocUint32(seg.Data().Len())
-			// TODO: is it more efficient to chain cmp.Equal + bitset.Indexes?
-			// plus, seg may be compressed, so Slice() is not available,
-			// -> use matcher instead
-			for i, v := range seg.Data().Xmaxs().Slice() {
-				if v == 0 {
-					sel = append(sel, uint32(i))
-				}
-			}
+		if aborted != nil {
+			// copy journal segment pack and attach private selection vector
+			pkg := seg.Data().Copy()
 
-			// copy journal segment pack and attach selection vector
-			// (required because segment is shared with readers, reference blocks only)
-			pkg := seg.Data().Copy().WithSelection(sel)
+			// create selection vector for all non-deleted non-aborted records
+			live := aborted.Clone().Or(pkg.Dels().Writer()).Neg()
+			pkg.WithSelection(live.Indexes(arena.AllocUint32(live.Count())))
+			nAdd += live.Count()
+			nPacks += (live.Count() + t.opts.PackSize - 1) / t.opts.PackSize
+			live.Close()
 
-			// append deleted records to history
-			if hist != nil {
-				if err := hist.Append(ctx, pkg, pack.WriteModeExcludeSelected); err != nil {
-					return err
-				}
-
-				// TODO: update history indexes
-			}
-
-			// append active records to table
-			if err := tab.Append(ctx, pkg, pack.WriteModeIncludeSelected); err != nil {
+			// append active records to table and indexes
+			if err := table.Append(ctx, pkg, pack.WriteModeIncludeSelected); err != nil {
 				return err
 			}
 
-			// update indexes, insert new records
-			if err := t.addToIndexes(ctx, pkg, pack.WriteModeIncludeSelected); err != nil {
-				return err
-			}
-
-			// free resources
+			// free copy
 			pkg.Release()
-			arena.Free(sel)
 
 		} else {
+			// no deletes, no aborts, all records are valid post-images
 			pkg := seg.Data()
+			nAdd += pkg.Len()
+			nPacks += (pkg.Len() + t.opts.PackSize - 1) / t.opts.PackSize
 
-			// fast-path (journal contains only post-images)
-			if err := tab.Append(ctx, pkg, pack.WriteModeAll); err != nil {
-				return err
-			}
-
-			// update indexes, insert new records
-			if err := t.addToIndexes(ctx, pkg, pack.WriteModeAll); err != nil {
+			// fast-path (journal contains only valid post-images)
+			if err := table.Append(ctx, pkg, pack.WriteModeAll); err != nil {
 				return err
 			}
 		}
 	}
 
-	// finalize writers will flush remaining data to disk and update table stats
-	if err := tab.Finalize(ctx); err != nil {
-		return err
-	}
-
-	// TODO: maybe merge index writes into table writer, then sync on finalize
-
-	// flush indexes
-	if err := t.syncIndexes(ctx); err != nil {
-		return err
-	}
-
+	// finalize writers will flush remaining data to disk, update table state
+	// and make new epoch visible
 	if hist != nil {
-		if err := hist.Finalize(ctx); err != nil {
+		// FIXME: howto track history table state?
+		if err := hist.Finalize(ctx, seg.State()); err != nil {
 			return err
 		}
+	}
 
-		// TODO: flush history indexes
+	if err := table.Finalize(ctx, seg.State()); err != nil {
+		return err
 	}
 
 	// collect metrics
-	// atomic.AddInt64(&t.metrics.FlushCalls, 1)
-	// atomic.AddInt64(&t.metrics.FlushedTuples, int64(t.journal.Len()))
-	// atomic.StoreInt64(&t.metrics.LastFlushTime, start.UnixNano())
-	// dur := time.Since(start)
-	// atomic.StoreInt64(&t.stats.LastFlushDuration, int64(dur))
-	// t.log.Debugf("flush: %s table %d packs add=%d del=%d heap=%s stored=%s comp=%.2f%% in %s",
-	// 	t.schema.Name(), nParts, nAdd, nDel, util.ByteSize(nHeap), util.ByteSize(nBytes),
-	// 	float64(nBytes)*100/float64(nHeap), dur)
+	dur := time.Since(start)
+	atomic.AddInt64(&t.metrics.MergeCalls, 1)
+	atomic.AddInt64(&t.metrics.MergedTuples, int64(seg.Len()))
+	atomic.StoreInt64(&t.metrics.LastMergeTime, start.UnixNano())
+	atomic.StoreInt64(&t.metrics.LastMergeDuration, int64(dur))
+	nBytes = atomic.LoadInt64(&t.metrics.BytesWritten) - nBytes
 
-	return nil
-}
+	t.log.Debugf("table[%s]: merged packs=%d records=%d tombs=%d heap=%s stored=%s comp=%.2f%% in %s",
+		t.schema.Name(), nPacks, nAdd, nStones, util.ByteSize(nHeap), util.ByteSize(nBytes),
+		float64(nBytes)*100/float64(nHeap), dur)
 
-func (t *Table) delFromIndexes(ctx context.Context, pkg *pack.Package, mode engine.WriteMode) error {
-	for _, idx := range t.indexes {
-		if err := idx.(engine.IndexEngine).DelPack(ctx, pkg, mode); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (t *Table) addToIndexes(ctx context.Context, pkg *pack.Package, mode engine.WriteMode) error {
-	for _, idx := range t.indexes {
-		if err := idx.(engine.IndexEngine).AddPack(ctx, pkg, mode); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (t *Table) syncIndexes(ctx context.Context) error {
-	for _, idx := range t.indexes {
-		if err := idx.(engine.IndexEngine).Sync(ctx); err != nil {
-			return err
-		}
-	}
 	return nil
 }

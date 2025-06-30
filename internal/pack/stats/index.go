@@ -4,11 +4,9 @@
 package stats
 
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
-	"math/bits"
 	"slices"
 	"sort"
 	"strings"
@@ -16,16 +14,136 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/bitset"
-	"blockwatch.cc/knoxdb/internal/engine"
+	"blockwatch.cc/knoxdb/internal/operator/filter"
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/num"
+	"blockwatch.cc/knoxdb/pkg/assert"
 	"blockwatch.cc/knoxdb/pkg/schema"
-	"golang.org/x/exp/constraints"
+	"github.com/echa/log"
 )
 
+// Index implements efficient and scalable pack statistics management storing
+// statistics about every data vector as compressed column vectors.
+//
+// For every data pack these statistics include
+// - min/max statistics about each column vector a.k.a zone maps
+// - bloom/fuse/bit filters for column vectors (optional, user controlled in schema)
+// - range filters for integer columns (optional, integer type data only)
+//
+// Statistics are used for two major purposes
+// - query execution: decide which data packs (ranges) to skip during table scans
+// - journal merge: decide which records and tombstones to merge into data packs
+//   based on primary key (a.k.a. row_id)
+//
+// Design considerations
+// - index for metadata about pack-oriented tables, history tables and indexes
+// - copy-on-write, version controlled contents, delayed garbage collection
+// - readers retain references to stable versions, writer produces new version
+// - multiple old versions exist as long as readers live, GC with watermark
+// - table writers register replaced data packs for GC
+// - data packs have a fixed maximum length
+// - data packs are referenced by key ([4]byte = big endian uint32)
+// - data pack keys are assigned sequentially, sequence may contain gaps post deletion
+// - blocks (column vectors) are referenced by schema field id (uint16)
+// - row ids are uint64 (`rid` field on main & history tables)
+// - row id zero (0) is invalid
+// - row ids are auto-generated (users can define an extra primary key field)
+// - row ids are not reused after deletion
+// - rid min-max ranges never overlap on main tables
+// - rid min-max ranges have the same order as pack ids on main tables
+// - rid ranges on history tables may overlap (sequenced by record update/delete order)
+// - history tables are append only (no deleted/update)
+// - main table packs are removed when empty
+// - table compaction does a full index rewrite
+// - large block deletion/updates may cause full tree rewrites
+//
+// Data Placement
+//
+// Records are assigned to data packs based on sequential row ids. Each data pack
+// stores a unique non-overlapping range of row ids (main tables only). Rid reuse
+// post deletion and out-of-order insert are probibited. Hence we can easily find
+// the closest data pack for record placement based on rid column min/max statistics.
+//
+// The challenging part is that data packs can be removed when empty so we cannot
+// directly compute pack id from row id. We need efficient lookup of packs from rids
+// (during merge) and efficient search/filter capabilities for scans (during queries).
+//
+//
+// Data Organization
+//
+// Because the amount of data packs can grow very large (e.g. 15k+ for 1B records
+// at pack size 64k) we optimize for efficient lookup and filter operations.
+//
+// This index design makes two important choices:
+// - data pack statistics (min/max) are stored as 2048 long groups of column
+//   vectors enabling vectorized scans and compression
+// - statistic packs are further organized into an n-ary tree where each node
+//   contains aggregated meta-statistics about child statistics column groups
+//   (higher order min/max ranges, root node stores full range)
+//
+// The root node of the tree stores aggregate total ranges for each
+// data column and total aggregate sum/count statistics about all data packs.
+//
+// Meta statistics are stored and updated in wire-encoded format (row storage)
+// interleaving min and max values. The statistics schema is directly derived
+// from the table schema (every column is duplicated for min & max). We add
+// additional statistics columns for extra metadata like data pack key, version,
+// sizes and value counts.
+//
+// Query performance benefits from search space pruning, i.e queries can skip
+// metadata branches when column values are clustered. For non-clustered columns,
+// the user can request bloom/fuse filters for probabilistic pruning.
+//
+// Versioning
+//
+// As the set and contents of data packs changes during table merge and the
+// metadata index is updated concurrently by the merge writer, all readers must
+// retain a consistent view on the index version and data packs they originally
+// started with. The index is therefore reference counted and is atomically
+// replaced after a merge operation completes. Readers hold a reference to
+// the index version they started reading from and through that, implicitly,
+// on all data pack versions referenced by it.
+//
+// Note there is a distinction between the global index version/epoch (counting
+// in merge operation ticks, driven by journal segment ids) and the versions of
+// data packs, spacks and tree nodes on disk (counting individually +1 as updates
+// happen, encoded in on-disk keys). For efficient GC we keep lists of replaced
+// on-disk objects' keys in a tombstone and eventually delete those keys when the
+// global index version/epoch watermark increases. This means data packs, filters,
+// tree nodes and spacks from different index epochs can co-exist on disk as long
+// as a reader holds a reference to an old index. When the last reader finishes
+// the index epoch becomes ready for garbage collection, however, we can only GC
+// when the epoch watermark increases as well.
+//
+//
+// Tree Algorithm Design
+//
+// The index tree consists of two node types, internal nodes (inodes) with
+// meta-statistics about a sub-tree and leaf nodes (snodes) with meta-statistics
+// about a single statistics vector pack and a reference to this pack (spack).
+//
+// Tree node indexes are zero-based (root = 0) and assigned in breadth-order
+// so that nodes can be addressed without pointers, i.e. child and parent
+// indexes are directly computed from a node's index.
+//
+// Data pack statistics are appended in sequential order (with increasing data pack
+// key) and may be updated or deleted in arbitrary order. Hence the tree always
+// grows to the right side only and may shrink anywhere on snode deletions.
+//
+// To avoid costly re-calculation of meta-statistics in inodes when a new tree
+// level is added we use a depth balanced tree such that all leaf nodes
+// are at the same lowestmost level, hence their order remains stable. This
+// choice also allows us to split the tree into two separate arrays, one for
+// inodes and one for snodes. On growth snodes are simply appended to the
+// snode array and on level expansion the inode array is reshuffled but
+// does not require recomputation. Removal of snodes, however, leads to a
+// compaction of the snode list. We rebuild the entire inode tree in this case
+// (its the least error prone and on average the most efficient method compared
+// to a complex tree reorganization).
+//
+
+// ----------------------------------------------------------------------------
 // TODO
 // - debug features, packview integration
 // - spack append/update
@@ -54,27 +172,7 @@ import (
 const (
 	STATS_PACK_SIZE       = 2048 // max size of statistics package
 	STATS_STRING_MAX_LEN  = 8    // max prefix bytes for string/byte statistics
-	STATS_DATA_COL_OFFSET = 4    // start of the first data column in index schema
-	STATS_BUCKETS         = 6
-)
-
-const (
-	STATS_BLOCK_KEY = iota
-	STATS_TREE_KEY
-	STATS_BLOOM_KEY
-	STATS_RANGE_KEY
-	STATS_BITS_KEY
-	STATS_FUSE_KEY
-)
-
-var (
-	StatsKeySuffix   = engine.StatsKeySuffix
-	VectorsKeySuffix = []byte("_block") // stats vector bucket
-	TreeKeySuffix    = []byte("_tree")  // stats tree bucket
-	BloomKeySuffix   = []byte("_bloom") // bloom filter bucket
-	RangeKeySuffix   = []byte("_range") // range filter bucket
-	BitsKeySuffix    = []byte("_bits")  // bits filter bucket
-	FuseKeySuffix    = []byte("_fuse")  // fuse filter bucket
+	STATS_DATA_COL_OFFSET = 5    // start of the first data column in index schema
 )
 
 type Features byte
@@ -87,172 +185,109 @@ const (
 	FeatUseCache
 )
 
-var FilterMask Features = 0xf
+const FilterMask Features = 0xf
 
 func (f Features) Is(x Features) bool {
 	return f&x > 0
 }
 
-// Index implements efficient and scalable pack statistics management storing
-// statistics as compressed column vectors.
-//
-// For every data pack these statistics include
-// - min/max statistics about each column vector a.k.a zone maps
-// - bloom/fuse filters for certain columns when requested by the user (optional)
-// - range filters for integer columns (optional, integer type data only)
-//
-// Statistics are used for two major purposes
-// - query execution: decide which data packs (and vector ranges) to skip
-// - journal merge: decide which records and tombstones to merge into a data pack
-//   based on primary key (a.k.a. row_id)
-//
-// Design considerations
-//   - data packs have a fixed maximum length
-//   - data packs are referenced by key ([4]byte = big endian uint32)
-//   - blocks (column vectors) are referenced by schema field id (uint16)
-//   - row ids are uint64 (`rid` field on main & history tables)
-//   - row id zero (0) is invalid
-//   - row ids are auto-generated (users can define an extra primary key field)
-//   - row ids are not reused after deletion
-//   - rid min-max ranges never overlap on main tables
-//   - rid min-max ranges have the same order as pack ids on main tables
-//   - rid ranges on history tables may overlap (sequenced by record update/delete order)
-//   - history tables are append only (no deleted/update) hence no need for fast rid lookup
-//   - main table packs may be removed after all their content has been deleted
-//   - compaction re-compresses rid ranges into full packs and generates
-//     new gap-free pack ids
-//   - main tables, history tables and indexes explicitly (un)register their data packs
-//
-// Data Placement
-//
-// Records are assigned to data packs based on sequential row ids. Each data pack
-// stores a unique non-overlapping range of row ids (main tables only). Rid reuse
-// post deletion and out-of-order insert are probibited. Hence we can easily find
-// the closest data pack for record placement based on rid column min/max statistics.
-//
-// The challenging part is that data packs can be removed when empty so we cannot
-// directly compute pack id from primary key. We have to actually scan for the pack
-// to merge a key into.
-//
-//
-// Data Organization
-//
-// Because the amount of data packs can grow very large (e.g. 15k+ for 1B records
-// at pack size 64k) we optimize the amount of lookup and comparison operations.
-//
-// This index design makes two important choices:
-// - data pack statistics (min/max) are stored as groups of column vectors
-//   to enable vectorized range scans and data compression
-// - statistic packs are further organized into an n-ary tree where each node
-//   contains aggregated meta-statistics about child statistics column groups
-//   (higher order min/max ranges, root node stores full range)
-//
-// The root node of the tree stores aggregate total ranges for each
-// data column and total aggregate sum/count statistics about all data packs.
-//
-// Meta statistics are stored and updated in wire-encoded format (row storage)
-// interleaving min and max values. The statistics schema is directly derived
-// from the table schema (every column is duplicated for min & max). We add
-// some additional statistics columns for extra metadata like data pack key,
-// sizes and value counts.
-//
-// Query performance benefits from search space pruning, i.e queries can skipping
-// entire branches when column values form clusters. For non-clustered columns,
-// the user can configure probabilistic bloom/fuse filters for improved pruning.
-//
-//
-// Tree Algorithm Design
-//
-// The statistics tree consists of two node types, internal nodes (inodes) with
-// meta-statistics about a sub-tree and leaf nodes (snodes) with meta-statistics
-// about a single statistics vector group and a reference to this group.
-//
-// Data pack statistics are appended in sequential order (with increasing key) and
-// may be updated or deleted in arbitrary order. Hence the tree always grows
-// to the right side only and may shrink anywhere on snode deletions.
-//
-// To avoid costly re-calculation of meta-statistics in inodes when a new tree
-// level is added we use a depth balanced tree such that all leaf nodes
-// are at the same lowestmost level, hence their order remains stable. This
-// choice also allows us to split the tree into two separate arrays, one for
-// inodes and one for snodes. On growth snodes are simply appended to the
-// snode array and on level expansion the inode array is reshuffled but
-// does not require recomputation.
-//
-// Tree node indexes are zero-based (root = 0) and assigned in breadth-order
-// so that nodes can be addressed without pointers, i.e. child and parent
-// indexes are directly computed from a node's index.
+func (f Features) HasFilter() bool {
+	return f&FilterMask > 0
+}
 
 type Index struct {
+	rc           uint32                // reference count
+	epoch        uint32                // epoch sequence number
 	schema       *schema.Schema        // statistics schema (meta + min + max)
+	view         *schema.View          // helper to extract tree node data from wire format
+	wr           *schema.Writer        // wire format builder (writer only)
+	rx           int                   // index of the data pack's rowid column
+	px           int                   // index of the data pack's primary key column
+	nmax         int                   // max data pack size
+	tomb         *Tomb                 // per-version tombstone
 	db           store.DB              // backend reference for pulling more data
 	keys         [STATS_BUCKETS][]byte // statistics bucket keys
 	inodes       []*INode              // inner nodes of the binary tree as array
 	snodes       []*SNode              // leaf nodes of the binary tree as array
-	rx           int                   // index of the data pack's rowid column
-	px           int                   // index of the data pack's primary key column
-	nmax         int                   // max data pack size
-	view         *schema.View          // helper to extract tree node data from wire format
-	wr           *schema.Writer        // wire format builder (writer only)
-	use          Features              // index features
+	log          log.Logger            // logger instance
 	bytesRead    int64                 // io metrics
 	bytesWritten int64                 // io metrics
+	use          Features              // index features
+	clean        bool                  // no GC required
 
 	// card   []*loglogbeta.LogLogBeta // HLL cardinality estimators [n_columns]
-
-	// load other index data on demand (maybe use LRU cache, but requires data copy)
-	// - bloom filters: when configured, composite key (pack id + block id)
-	// - range indexes: all integer blocks, composite key (pack id + block id)
 }
 
-func NewIndex(db store.DB, s *schema.Schema, nmax int) *Index {
-	inodes := make([]*INode, 0)
-	snodes := make([]*SNode, 0)
-	ss := MakeSchema(s)
-	makekey := func(k []byte) []byte {
-		return bytes.Join([][]byte{[]byte(ss.Name()), k}, nil)
-	}
-	rx, px := s.RowIdIndex(), s.PkIndex()
-	if rx < 0 {
-		rx = px
-	}
+func NewIndex() *Index {
 	return &Index{
-		schema: ss,
-		db:     db,
-		keys: [STATS_BUCKETS][]byte{
-			makekey(VectorsKeySuffix),
-			makekey(TreeKeySuffix),
-			makekey(BloomKeySuffix),
-			makekey(RangeKeySuffix),
-			makekey(BitsKeySuffix),
-			makekey(FuseKeySuffix),
-		},
-		inodes: inodes,
-		snodes: snodes,
-		rx:     rx,
-		px:     px,
-		nmax:   nmax,
-		view:   schema.NewView(ss),
-		wr:     schema.NewWriter(ss, binary.LittleEndian),
+		rc:     1,
+		epoch:  0,
+		inodes: make([]*INode, 0),
+		snodes: make([]*SNode, 0),
+		tomb:   NewTomb().WithEpoch(0),
+		log:    log.Disabled,
 		use:    FeatBloomFilter | FeatFuseFilter | FeatBitsFilter,
+		clean:  true,
 	}
 }
 
 // create a private copy used to update the index during background merge
-func (idx Index) Clone() *Index {
+func (idx *Index) Clone() *Index {
 	return &Index{
-		schema: idx.schema,
-		db:     idx.db,
-		keys:   idx.keys,
-		inodes: slices.Clone(idx.inodes),
-		snodes: slices.Clone(idx.snodes),
-		rx:     idx.rx,
-		px:     idx.px,
-		nmax:   idx.nmax,
-		view:   schema.NewView(idx.schema), // create a private view state
-		wr:     idx.wr,                     // link builder, its only accessed during updates
-		use:    idx.use,
+		rc:           1,                          // start with refcount of 1
+		epoch:        idx.epoch,                  // same epoch, writer can set
+		schema:       idx.schema,                 // schema is read-only
+		view:         schema.NewView(idx.schema), // need private view state
+		wr:           idx.wr,                     // writer is stateful, only used during merge
+		rx:           idx.rx,                     // config is read-only
+		px:           idx.px,                     // config is read-only
+		nmax:         idx.nmax,                   // config is read-only
+		tomb:         idx.tomb,                   // tomb is read-only
+		db:           idx.db,                     // db remains the same
+		keys:         idx.keys,                   // bucket keys are read-only
+		inodes:       slices.Clone(idx.inodes),   // tree is copy-on-write
+		snodes:       slices.Clone(idx.snodes),   // tree is copy-on-write
+		log:          idx.log,                    // log is shared and thread-safe
+		use:          idx.use,                    // flags are read only
+		bytesRead:    idx.bytesRead,              // track metrics across versions
+		bytesWritten: idx.bytesWritten,           // track metrics across versions
+		clean:        idx.clean,                  // GC required status
 	}
+}
+
+func (idx *Index) WithDB(db store.DB) *Index {
+	idx.db = db
+	idx.tomb.WithDB(db)
+	return idx
+}
+
+func (idx *Index) WithSchema(s *schema.Schema) *Index {
+	idx.schema = MakeSchema(s)
+	idx.keys = makeStorageKeys([]byte(idx.schema.Name()))
+	idx.rx, idx.px = s.RowIdIndex(), s.PkIndex()
+	if idx.rx < 0 {
+		idx.rx = idx.px
+	}
+	idx.view = schema.NewView(idx.schema)
+	idx.wr = schema.NewWriter(idx.schema, binary.LittleEndian)
+	idx.tomb.WithSchema(s, idx.schema, idx.use).WithBucketKey(idx.keys[STATS_TOMB_KEY])
+	return idx
+}
+
+func (idx *Index) WithEpoch(v uint32) *Index {
+	idx.epoch = v
+	idx.tomb.WithEpoch(v - 1) // track tombs at parent epoch (reclaim by watermark)
+	return idx
+}
+
+func (idx *Index) WithMaxSize(nmax int) *Index {
+	idx.nmax = nmax
+	return idx
+}
+
+func (idx *Index) WithLogger(l log.Logger) *Index {
+	idx.log = l
+	return idx
 }
 
 func (idx *Index) WithCache(use bool) *Index {
@@ -273,23 +308,57 @@ func (idx *Index) WithFeatures(f Features) *Index {
 	return idx
 }
 
-func (idx *Index) Clear() {
-	for _, v := range idx.snodes {
-		v.Clear()
-	}
-	clear(idx.snodes)
-	clear(idx.inodes)
-	idx.inodes = idx.inodes[:0]
-	idx.snodes = idx.snodes[:0]
+func (idx *Index) AtomicPtr() *AtomicPointer {
+	return NewAtomicPtr(idx)
 }
 
-func (idx *Index) Close() {
-	for _, v := range idx.snodes {
-		v.Clear()
+func (idx *Index) Release(withGC bool) {
+	for {
+		rc := atomic.LoadUint32(&idx.rc)
+		if rc == 0 {
+			return // already cleaned
+		}
+		if rc == 1 {
+			// try clean
+			if atomic.CompareAndSwapUint32(&idx.rc, 1, 0) {
+				if err := idx.cleanup(withGC); err != nil {
+					idx.log.Errorf("stats: cleanup failed: %v", err)
+				}
+				idx.Free()
+				return
+			}
+			continue
+		}
+		// Normal decrement
+		if atomic.CompareAndSwapUint32(&idx.rc, rc, rc-1) {
+			return
+		}
 	}
+}
+
+func (idx *Index) cleanup(withGC bool) error {
+	return idx.db.Update(func(tx store.Tx) error {
+		// drop self
+		if err := idx.dropEpoch(tx); err != nil {
+			return err
+		}
+
+		// run GC when requested
+		if withGC {
+			return idx.RunGC(tx)
+		}
+		return nil
+	})
+}
+
+func (idx *Index) Free() {
+	// idx.log.Warnf("free idx epoch=%d rc=%d", idx.epoch, idx.rc)
 	clear(idx.snodes)
 	clear(idx.inodes)
 	clear(idx.keys[:])
+	idx.tomb = nil
+	idx.rc = 0
+	idx.epoch = 0
 	idx.schema = nil
 	idx.db = nil
 	idx.inodes = nil
@@ -302,198 +371,73 @@ func (idx *Index) Close() {
 	idx.use = 0
 }
 
-// store and load
-func (idx *Index) Store(ctx context.Context, tx store.Tx) error {
-	// identify empty snodes for drop
-	empty := make([]*SNode, 0)
-	for _, n := range idx.snodes {
-		if n.IsEmpty() {
-			empty = append(empty, n)
-		}
+func (idx *Index) Clear() {
+	// idx.log.Warnf("clear idx epoch=%d rc=%d", idx.epoch, idx.rc)
+	for _, v := range idx.snodes {
+		v.Clear()
 	}
-
-	if len(empty) > 0 {
-		// remove nodes from list
-		idx.snodes = slices.DeleteFunc(idx.snodes, func(n *SNode) bool { return n.IsEmpty() })
-
-		// rebuild the inode tree (its less complex to rebuild all inodes and stats)
-		idx.rebuildInodeTree()
-	}
-
-	// clear tree bucket after rebuild
-	if len(empty) > 0 {
-		if err := tx.Root().DeleteBucket(idx.keys[STATS_TREE_KEY]); err != nil {
-			return err
-		}
-	}
-
-	// create stats buckets if not exist
-	for k := 0; k < STATS_BUCKETS; k++ {
-		_, err := tx.Root().CreateBucketIfNotExists(idx.keys[k])
-		if err != nil {
-			return err
-		}
-	}
-
-	// store inode meta stats when dirty
-	tree := idx.treeBucket(tx)
-	if tree == nil {
-		return store.ErrNoBucket
-	}
-	for i, inode := range idx.inodes {
-		if inode == nil || !inode.dirty {
-			continue
-		}
-		// key is tree node id (u32) + 0
-		var key [2 * num.MaxVarintLen32]byte
-		n := num.PutUvarint(key[:], uint64(i))
-		n += num.PutUvarint(key[n:], uint64(0))
-		err := tree.Put(key[:n], inode.meta)
-		if err != nil {
-			return err
-		}
-		inode.dirty = false
-		idx.bytesWritten += int64(len(inode.meta))
-	}
-
-	blocks := idx.statsBucket(tx)
-	if blocks == nil {
-		return store.ErrNoBucket
-	}
-
-	// drop empty snode blocks
-	for _, snode := range empty {
-		err := snode.spack.RemoveFromDisk(ctx, blocks)
-		if err != nil {
-			return err
-		}
-		snode.Clear()
-	}
-
-	// store snodes when dirty
-	li := len(idx.inodes) - 1
-	for i, snode := range idx.snodes {
-		if len(empty) == 0 && !snode.dirty {
-			continue
-		}
-		// key is tree node id (u32) + spack key (u32)
-		var key [2 * num.MaxVarintLen32]byte
-		n := num.PutUvarint(key[:], uint64(li+i))
-		n += num.PutUvarint(key[n:], uint64(snode.Key()))
-		err := tree.Put(key[:n], snode.meta)
-		if err != nil {
-			return err
-		}
-		idx.bytesWritten += int64(len(snode.meta))
-
-		// package blocks
-		snode.disksize, err = snode.spack.StoreToDisk(ctx, blocks)
-		if err != nil {
-			return err
-		}
-		snode.dirty = false
-		idx.bytesWritten += int64(snode.disksize)
-	}
-	clear(empty)
-
-	return nil
+	clear(idx.snodes)
+	clear(idx.inodes)
+	idx.inodes = idx.inodes[:0]
+	idx.snodes = idx.snodes[:0]
 }
 
-func (idx *Index) Load(ctx context.Context, tx store.Tx) error {
-	// load tree
-	tree := idx.treeBucket(tx)
-	if tree == nil {
-		return store.ErrNoBucket
+func (idx *Index) Close() {
+	// idx.log.Warnf("close idx epoch=%d rc=%d", idx.epoch, idx.rc)
+	for _, v := range idx.snodes {
+		v.Clear()
 	}
-	blocks := idx.statsBucket(tx)
-	if blocks == nil {
-		return store.ErrNoBucket
+	clear(idx.snodes)
+	clear(idx.inodes)
+	clear(idx.keys[:])
+	if idx.tomb != nil {
+		idx.tomb.Close()
+		idx.tomb = nil
 	}
-
-	// walk reverse finds snode entries first
-	c := tree.Cursor(store.ReverseCursor)
-	defer c.Close()
-	for ok := c.Last(); ok; ok = c.Prev() {
-		// read tree node id and snode key
-		buf := c.Key()
-		v, n := num.Uvarint(buf)
-		id := int(v)
-		v, _ = num.Uvarint(buf[n:])
-		key := uint32(v)
-
-		// init node index calculations
-		ilen := len(idx.inodes)
-
-		// init tree sizes from highest snode key id on storage
-		if ilen == 0 {
-			ilen = 1 << log2(id+1) // num inodes is the full inode tree plus 1 extra
-			slen := id - ilen + 2  // num snodes is exact count
-			idx.inodes = slices.Grow(idx.inodes, ilen)
-			idx.inodes = idx.inodes[:ilen]
-			idx.snodes = slices.Grow(idx.snodes, slen)
-			idx.snodes = idx.snodes[:slen]
-		}
-
-		// identify node kind from id and create node
-		if id >= ilen-1 {
-			// snode
-			node := NewSNode(key, idx.schema, false)
-			node.meta = bytes.Clone(c.Value())
-			idx.snodes[id-ilen+1] = node
-			idx.bytesRead += int64(len(c.Value()))
-
-			// load key and nvals columns
-			n, err := node.spack.LoadFromDisk(
-				ctx,
-				blocks, // bucket
-				[]uint16{STATS_ROW_KEY + 1, STATS_ROW_NVALS + 1}, // field ids!!
-				0, // len from store
-			)
-			if err != nil {
-				return err
-			}
-			idx.bytesRead += int64(n)
-
-		} else {
-			// inode
-			idx.inodes[id] = NewINode()
-			idx.inodes[id].meta = bytes.Clone(c.Value())
-			idx.bytesRead += int64(len(c.Value()))
-		}
-	}
-
-	return nil
-}
-
-func (idx *Index) Delete(ctx context.Context, tx store.Tx) error {
-	idx.Clear()
-	for _, k := range idx.keys {
-		_ = tx.Root().DeleteBucket(k)
-	}
-	return nil
+	idx.rc = 0
+	idx.epoch = 0
+	idx.schema = nil
+	idx.db = nil
+	idx.inodes = nil
+	idx.snodes = nil
+	idx.view = nil
+	idx.wr = nil
+	idx.rx = 0
+	idx.px = 0
+	idx.nmax = 0
+	idx.use = 0
 }
 
 // introspect
 
+func (idx *Index) Epoch() uint32 {
+	return idx.epoch
+}
+
 // num data packs
-func (idx Index) Len() int {
+func (idx *Index) Len() int {
 	return idx.root().NPacks(idx.view)
 }
 
 // num data rows
-func (idx Index) Count() int {
+func (idx *Index) Count() int {
 	return int(idx.root().NValues(idx.view))
 }
 
+// true if epoch list is clean
+func (idx *Index) IsClean() bool {
+	return idx.clean
+}
+
 // index i/o metrics
-func (idx Index) Metrics() (bytesRead int64, bytesWritten int64) {
+func (idx *Index) Metrics() (bytesRead int64, bytesWritten int64) {
 	r := atomic.LoadInt64(&idx.bytesRead)
 	w := atomic.LoadInt64(&idx.bytesWritten)
 	return r, w
 }
 
 // index heap usage in bytes
-func (idx Index) HeapSize() int {
+func (idx *Index) HeapSize() int {
 	var sz int
 	for _, v := range idx.inodes {
 		if v == nil {
@@ -508,12 +452,12 @@ func (idx Index) HeapSize() int {
 }
 
 // total on-disk table size in bytes (sum of data pack sizes)
-func (idx Index) TableSize() int {
+func (idx *Index) TableSize() int {
 	return int(idx.root().Size(idx.view))
 }
 
 // total on-disk index size in bytes (index packs, bloom, range indexes)
-func (idx Index) IndexSize() int {
+func (idx *Index) IndexSize() int {
 	// TODO: bloom and range index sizes
 	// TODO: disksize is not yet stored/loaded
 	var sz int
@@ -563,7 +507,7 @@ func (idx *Index) UpdatePack(ctx context.Context, pkg *pack.Package) error {
 	node, i, ok := idx.findSNode(pkg.Key())
 	if !ok {
 		// should not happen
-		panic(fmt.Errorf("stats: missing record for pack key %d", pkg.Key()))
+		return fmt.Errorf("stats: missing record for pack %08x[v%d]", pkg.Key(), pkg.Version())
 	}
 
 	// ensure all stats blocks are loaded and materialized
@@ -590,7 +534,7 @@ func (idx *Index) DeletePack(ctx context.Context, pkg *pack.Package) error {
 	node, i, ok := idx.findSNode(pkg.Key())
 	if !ok {
 		// should not happen
-		panic(fmt.Errorf("stats: missing record for pack key %d", pkg.Key()))
+		return fmt.Errorf("stats: missing record for pack %08x[v%d]", pkg.Key(), pkg.Version())
 	}
 
 	// ensure all stats blocks are loaded and materialized
@@ -617,15 +561,24 @@ func (idx *Index) DeletePack(ctx context.Context, pkg *pack.Package) error {
 	return idx.dropFilters(pkg)
 }
 
-// merge
-func (idx Index) NextKey() uint32 {
-	if l := len(idx.snodes); l > 0 {
-		return idx.snodes[l-1].MaxKey() + 1
-	}
-	return 0
+// external tomb access for scheduling pack deletion
+func (idx *Index) Tomb() *Tomb {
+	return idx.tomb
 }
 
-func (idx Index) GlobalMinRid() uint64 {
+// The following functions are called by a single background merge thread.
+// Access is not shared with concurrent readers.
+
+func (idx *Index) NextKey() uint32 {
+	var k uint32
+	if l := len(idx.snodes); l > 0 {
+		k = idx.snodes[l-1].MaxKey() + 1
+	}
+	// idx.log.Warnf("Stats epoch %d next key @snode=%d is %d", idx.epoch, len(idx.snodes)-1, k)
+	return k
+}
+
+func (idx *Index) GlobalMinRid() uint64 {
 	val, ok := idx.root().Get(idx.view, minColIndex(idx.rx))
 	if !ok {
 		return 0
@@ -633,7 +586,7 @@ func (idx Index) GlobalMinRid() uint64 {
 	return val.(uint64)
 }
 
-func (idx Index) GlobalMaxRid() uint64 {
+func (idx *Index) GlobalMaxRid() uint64 {
 	val, ok := idx.root().Get(idx.view, maxColIndex(idx.rx))
 	if !ok {
 		return 0
@@ -641,7 +594,7 @@ func (idx Index) GlobalMaxRid() uint64 {
 	return val.(uint64)
 }
 
-func (idx Index) GlobalMinPk() uint64 {
+func (idx *Index) GlobalMinPk() uint64 {
 	val, ok := idx.root().Get(idx.view, minColIndex(idx.px))
 	if !ok {
 		return 0
@@ -649,7 +602,7 @@ func (idx Index) GlobalMinPk() uint64 {
 	return val.(uint64)
 }
 
-func (idx Index) GlobalMaxPk() uint64 {
+func (idx *Index) GlobalMaxPk() uint64 {
 	val, ok := idx.root().Get(idx.view, maxColIndex(idx.px))
 	if !ok {
 		return 0
@@ -657,11 +610,18 @@ func (idx Index) GlobalMaxPk() uint64 {
 	return val.(uint64)
 }
 
-func (idx Index) IsTailFull() bool {
+func (idx *Index) IsTailFull() bool {
 	if idx.Len() == 0 {
-		return false
+		return true
 	}
 	return idx.snodes[len(idx.snodes)-1].LastNValues() == idx.nmax
+}
+
+func (idx *Index) TailInfo() (uint32, uint32, int) {
+	if idx.Len() == 0 {
+		return 0, 0, 0
+	}
+	return idx.snodes[len(idx.snodes)-1].LastInfo()
 }
 
 func (idx *Index) Get(key uint32) (*Record, bool) {
@@ -686,7 +646,7 @@ func (idx *Index) Get(key uint32) (*Record, bool) {
 	// load missing fields but don't run an spack query (flt = nil)
 	if err := it.snode.Query(it); err != nil {
 		// what to do?
-		panic(err)
+		assert.Unreachable("snode query failed", err)
 	}
 	defer it.Close()
 
@@ -707,9 +667,9 @@ func (idx *Index) FindRid(ctx context.Context, rid uint64) (*Iterator, bool) {
 	// create an equal filter condition which will be used to find
 	// the matching data pack for this rowid based on min/max statistics
 	// this filter ensures the spack min/max rowid columns are loaded
-	// other required columns: STATS_ROW_KEY and STATS_ROW_NVALS are
-	// auto-loaded by iterator queries
-	flt := idx.makeRidFilter(query.FilterModeEqual, rid)
+	// other required columns: STATS_ROW_KEY, STATS_ROW_VERSION and
+	// STATS_ROW_NVALS are auto-loaded by iterator queries
+	flt := idx.makeRidFilter(types.FilterModeEqual, rid)
 
 	// return an iterator for the last data pack in the last spack
 	// unless this data pack is full (requires pack order == rid order
@@ -745,8 +705,11 @@ func (idx *Index) FindRid(ctx context.Context, rid uint64) (*Iterator, bool) {
 	return idx.Query(ctx, flt, types.OrderAsc)
 }
 
-// query (use Iterator.Next() to iterate)
-func (idx *Index) Query(ctx context.Context, flt *query.FilterTreeNode, dir types.OrderType) (*Iterator, bool) {
+// Query is used by concurrent TableReaders to produce a private iterator
+// for scanning table contents. It efficiently selects all snodes with potential
+// query filter matches. The actual spack vector and filter matching is done
+// by Iterator.Next() while it progresses through snodes.
+func (idx *Index) Query(ctx context.Context, flt *filter.Node, dir types.OrderType) (*Iterator, bool) {
 	// Walk inode tree and build a queue of snodes to visit.
 	// Each round we pick the next eligible inode and check
 	// whether its children match. On match we insert a child's
@@ -765,7 +728,7 @@ func (idx *Index) Query(ctx context.Context, flt *query.FilterTreeNode, dir type
 	// all snodes that have matched. We use this result to initialize
 	// an iterator which will later run vector comparisons inside
 	// the snode's statistics packs to find data pack matches.
-	view := schema.NewView(idx.schema)
+	view := schema.NewView(idx.schema) // private view for concurrent readers
 	maxInodes := len(idx.inodes) - 1
 	slen := len(idx.snodes)
 	nodeBits := bitset.New(slen + 1)
@@ -777,7 +740,7 @@ func (idx *Index) Query(ctx context.Context, flt *query.FilterTreeNode, dir type
 
 	// use catch all filter when nil
 	if flt == nil {
-		flt = idx.makeRidFilter(query.FilterModeGt, 0)
+		flt = idx.makeRidFilter(types.FilterModeGt, 0)
 	}
 
 	for n := 0; n < maxInodes; n++ {
@@ -828,14 +791,14 @@ func (idx *Index) Query(ctx context.Context, flt *query.FilterTreeNode, dir type
 	// identify if query would benefit from loading any filters
 	var use Features
 	if idx.use&FilterMask > 0 {
-		flt.ForEach(func(f *query.Filter) error {
+		flt.ForEach(func(f *filter.Filter) error {
 			// range filters work in integer type columns only
 			if f.Type.IsInt() {
 				use |= FeatRangeFilter
 			}
 
 			switch f.Mode {
-			case query.FilterModeEqual, query.FilterModeIn:
+			case types.FilterModeEqual, types.FilterModeIn:
 				// bloom filters work only for these modes
 			default:
 				return nil
@@ -874,6 +837,9 @@ func (idx *Index) Query(ctx context.Context, flt *query.FilterTreeNode, dir type
 		reverse: dir.IsReverse(),
 	}
 
+	// a, b := nodeBits.MinMax()
+	// idx.log.Warnf("New IT smatch=%d snodes [%d-%d]", nodeBits.Count(), a, b)
+
 	// start at last bit in snode bitset
 	if it.reverse {
 		_, last := nodeBits.MinMax()
@@ -885,68 +851,15 @@ func (idx *Index) Query(ctx context.Context, flt *query.FilterTreeNode, dir type
 }
 
 // root node access
-func (idx Index) root() *INode {
+func (idx *Index) root() *INode {
 	if len(idx.inodes) == 0 {
 		return NewINode()
 	}
 	return idx.inodes[0]
 }
 
-// stats block vectors
-func (idx Index) statsBucket(tx store.Tx) store.Bucket {
-	return idx.bucket(tx, STATS_BLOCK_KEY)
-}
-
-// meta stats
-func (idx Index) treeBucket(tx store.Tx) store.Bucket {
-	return idx.bucket(tx, STATS_TREE_KEY)
-}
-
-// bloom filters, key = pack key << 32 || field index
-func (idx Index) bloomBucket(tx store.Tx) store.Bucket {
-	return idx.bucket(tx, STATS_BLOOM_KEY)
-}
-
-// range filters, key = pack key << 32 || field index
-func (idx Index) rangeBucket(tx store.Tx) store.Bucket {
-	return idx.bucket(tx, STATS_RANGE_KEY)
-}
-
-func (idx Index) bitsBucket(tx store.Tx) store.Bucket {
-	return idx.bucket(tx, STATS_BITS_KEY)
-}
-
-func (idx Index) fuseBucket(tx store.Tx) store.Bucket {
-	return idx.bucket(tx, STATS_FUSE_KEY)
-}
-
-func (idx Index) bucket(tx store.Tx, id int) store.Bucket {
-	b := tx.Bucket(idx.keys[id])
-	if b != nil {
-		b.FillPercent(1.0)
-	}
-	return b
-}
-
-func (idx Index) prepareWrite(ctx context.Context, node *SNode, i int) (*SNode, error) {
-	if node.IsWritable() {
-		return node, nil
-	}
-	err := idx.db.View(func(tx store.Tx) error {
-		clone, err := node.PrepareWrite(ctx, idx.statsBucket(tx))
-		if err != nil {
-			return err
-		}
-		// replace existing node with clone
-		idx.snodes[i] = clone
-		node = clone
-		return nil
-	})
-	return node, err
-}
-
 // finds snode where key exists or suggests node to place a new key
-func (idx Index) findSNode(key uint32) (*SNode, int, bool) {
+func (idx *Index) findSNode(key uint32) (*SNode, int, bool) {
 	l := len(idx.snodes)
 	// binary search for the first match (this and all following snodes
 	// return true for the condition below)
@@ -1100,8 +1013,9 @@ func (idx *Index) updatePathToRoot(i int) {
 // level by level starting at the lowest tree level and working upwards
 // to the root. Inodes are numberd 0 (root) .. N in breadth-first order,
 // hence we can simply walk the inode array backwards. Careful since not
-// all snodes and inodes may exist.
-func (idx *Index) rebuildInodeTree() {
+// all snodes and inodes may exist. All inodes are tagged with version
+// ver which is the highest current version +1.
+func (idx *Index) rebuildInodeTree(ver uint32) {
 	// clear the inode tree first
 	clear(idx.inodes)
 
@@ -1130,6 +1044,7 @@ func (idx *Index) rebuildInodeTree() {
 		// create new inode and build merged meta statistics
 		idx.inodes[n] = NewINode()
 		idx.inodes[n].Update(idx.view, idx.wr, left, right)
+		idx.inodes[n].SetVersion(idx.view, ver)
 	}
 
 	// all upper inode levels have inodes as children
@@ -1151,20 +1066,21 @@ func (idx *Index) rebuildInodeTree() {
 		// create new inode and build merged meta statistics
 		idx.inodes[n] = NewINode()
 		idx.inodes[n].Update(idx.view, idx.wr, left, right)
+		idx.inodes[n].SetVersion(idx.view, ver)
 	}
 }
 
-func (idx Index) makeRidFilter(mode query.FilterMode, rid uint64) *query.FilterTreeNode {
+func (idx *Index) makeRidFilter(mode types.FilterMode, rid uint64) *filter.Node {
 	// when schema has no metadata (px == rx) fall back to pk field
 	field, _ := idx.schema.FieldByIndex(minColIndex(idx.rx))
-	m := query.NewFactory(types.FieldTypeUint64).New(mode)
+	m := filter.NewFactory(types.FieldTypeUint64).New(mode)
 	m.WithValue(rid)
 	id := schema.MetaRid
 	if idx.rx == idx.px {
 		id = uint16(idx.px + 1)
 	}
-	return &query.FilterTreeNode{
-		Filter: &query.Filter{
+	return &filter.Node{
+		Filter: &filter.Filter{
 			Name:    strings.TrimPrefix(field.Name(), "min_"),
 			Type:    types.BlockUint64,
 			Mode:    mode,
@@ -1174,79 +1090,4 @@ func (idx Index) makeRidFilter(mode query.FilterMode, rid uint64) *query.FilterT
 			Matcher: m,
 		},
 	}
-}
-
-// Construct a union schema over pack stats and table min/max.
-// The schema has no primary key. It starts with four pack
-// metadata columns (see Record) and continues with pairs
-// of min/max columns in order of table schema s. This guarantees
-// that when the table is extended we always add new statistics columns
-// at the end. Stats column positions can be calculated from the original
-// data schema column position as follows:
-//
-// I_min_col_x = I_col_x * 2 + STATS_DATA_COL_OFFSET
-// I_max_col_x = I_col_x * 2 + STATS_DATA_COL_OFFSET +1
-//
-// The statistics schema ignores (i.e. removes) all flags and enums
-// from the original table schema except FieldFlagDeleted which may be
-// used to skip/remove statistics when columns are marked as deleted.
-func MakeSchema(s *schema.Schema) *schema.Schema {
-	statsSchema := schema.NewSchema().
-		WithName(s.Name() + string(engine.StatsKeySuffix)).
-		WithVersion(s.Version())
-
-	// add pack stats fields
-	for _, f := range schema.MustSchemaOf(&Record{}).Fields() {
-		statsSchema.WithField(f)
-	}
-
-	// add min/max fields interleaved
-	for _, src := range s.Fields() {
-		// generate clean field from source
-		f := schema.NewField(src.Type()).
-			WithName("min_" + src.Name()).
-			WithScale(src.Scale()).
-			WithFixed(src.Fixed()).
-			WithFlags(src.Flags() & types.FieldFlagDeleted). // only keep deleted flag
-			WithIndex(src.Index())                           // keep index (in case its bloom)
-		statsSchema.WithField(f)
-		statsSchema.WithField(f.WithName("max_" + src.Name()))
-	}
-
-	return statsSchema.Finalize()
-}
-
-func minColIndex[T constraints.Signed | constraints.Unsigned](i T) T {
-	return 2*i + STATS_DATA_COL_OFFSET
-}
-
-func maxColIndex[T constraints.Signed | constraints.Unsigned](i T) T {
-	return 2*i + STATS_DATA_COL_OFFSET + 1
-}
-
-func leftChildIndex(i int) int {
-	return 2*i + 1
-}
-
-func rightChildIndex(i int) int {
-	return 2*i + 2
-}
-
-func parentIndex(i int) int {
-	if i == 0 {
-		return -1
-	}
-	return (i - 1) / 2
-}
-
-func log2(i int) int {
-	return bits.UintSize - bits.LeadingZeros(uint(i)) - 1
-}
-
-func log2ceil(i int) int {
-	v := log2(i)
-	if i&(i-1) > 0 {
-		v++
-	}
-	return v
 }

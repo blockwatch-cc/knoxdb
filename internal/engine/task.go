@@ -127,6 +127,7 @@ func (m *TaskService) Start() {
 	m.once.Do(func() {
 		m.tasks = make(chan *Task, m.maxQueue)
 		m.workers = make(chan *Worker, m.maxWorkers)
+		m.log.Debugf("starting task service with queue=%d workers=%d", m.maxQueue, m.maxWorkers)
 		for range m.maxWorkers {
 			w := NewWorker(m.ctx, m.workers)
 			go w.Run()
@@ -137,6 +138,8 @@ func (m *TaskService) Start() {
 }
 
 func (m *TaskService) Stop() {
+	m.log.Debugf("stopping task service")
+
 	// signal shutdown to all running goroutines
 	m.cancel()
 
@@ -164,6 +167,7 @@ func (m *TaskService) Stop() {
 }
 
 func (m *TaskService) Kill() {
+	m.log.Debugf("killing task service")
 	m.cancel()
 }
 

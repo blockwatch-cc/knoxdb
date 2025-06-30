@@ -1,82 +1,120 @@
-// Copyright (c) 2024 Blockwatch Data Inc.
+// Copyright (c) 2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package journal
 
 import (
 	"context"
-	"encoding/binary"
 	"fmt"
 	"slices"
 
 	"blockwatch.cc/knoxdb/internal/bitset"
-	"blockwatch.cc/knoxdb/internal/pack"
+	"blockwatch.cc/knoxdb/internal/engine"
+	"blockwatch.cc/knoxdb/internal/pack/stats"
 	"blockwatch.cc/knoxdb/internal/query"
-	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/internal/wal"
+	"blockwatch.cc/knoxdb/internal/xroar"
+	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/schema"
+	"github.com/echa/log"
 )
 
-// TODO
-// - split and roll segements automatically, return to caller with (n, ok?, err)
-// - refactor segment.PrepareMerge
-// - design when/how to store a segment and replace it with loaded/compressed blocks
-
-// Outside caller must split message batches into individual operations and
-// must break logical operations into physical append-only updates:
+// In-memory journal for table insert, update and delete
+// - journal acts as overlay to table storage
+// - fix max size segments with data pack and tomb
+// - row-id centric (each row-id represents a unique record version, updates produce new row ids)
 //
-// Insert: append record (xmin = xid)
-// Update: append delete record (old rid: xmax = xid)
-//         append insert record (new rid: xmin = xid, xref)
-//	       - same xid update after insert/update: replace new rid insert on merge
-// Delete: append delete record (old rid) xmax = xid
-//	       - same xid delete after insert/update: xmin = xmax = xid => can skip/clear
+// Queries
+// - merge-on-query: merge journal data and tomb with table query result
+// - uses snapshot isolation to hide invisible records and deletes
+// - journal query produces a journal result which is a list of segment packs with selection
+//   vectors
 //
-// Special case handling (same tx merge not yet implemented)
+// Merge
+// - only full segments and with no open tx can be merged
+// takes to oldest mergable segmet
 //
-// FIXME: this comment is no longer correct:
-// Any sequence of insert/update/delete to the same pk in the same tx
-// is minified on merge combining all updates into a single event:
-//
-// - ins+del becomes a noop
-// - ins+upd becomes an insert of the last updated row version
-// - upd+upd becomes a single update using the lastest row version.
-
-var LE = binary.LittleEndian
+// Recover
+// - journal data is saved to WAL and replayed on startup
 
 type Journal struct {
-	name    string
-	schema  *schema.Schema // data schema
-	view    *schema.View   // data view
-	active  *Segment       // active head segment used for writing
-	passive []*Segment     // immutable tail segments waiting for completion and flush
-	maxsz   int            // max number of records before segment freeze
-	maxseg  int            // max number of immutable segments
+	schema *schema.Schema // data schema
+	wal    *wal.Wal       // wal reference
+	key    []byte         // storage bucket name
+	id     uint64         // table id (tagged hash)
+	tip    *Segment       // active head segment used for writing
+	tail   []*Segment     // immutable tail segments waiting for completion and flush
+	maxsz  int            // max number of records before segment freeze
+	maxseg int            // max number of immutable segments // TODO: unused, refactor
+	log    log.Logger     // journal logger instance
 }
 
 func NewJournal(s *schema.Schema, maxsz, maxseg int) *Journal {
 	return &Journal{
-		name:    s.Name() + "_journal",
-		schema:  s,
-		view:    schema.NewView(s),
-		active:  newSegment(s, 0, maxsz),
-		passive: make([]*Segment, 0, maxseg),
-		maxsz:   maxsz,
-		maxseg:  maxseg,
+		schema: s,
+		key:    []byte(s.Name() + "_journal"),
+		id:     s.TaggedHash(types.ObjectTagTable),
+		tip:    newSegment(s, 0, maxsz),
+		tail:   make([]*Segment, 0, maxseg),
+		maxsz:  maxsz,
+		maxseg: maxseg,
+		log:    log.Disabled,
 	}
 }
 
+func (j *Journal) WithWal(w *wal.Wal) *Journal {
+	j.wal = w
+	return j
+}
+
+func (j *Journal) WithState(s engine.ObjectState) *Journal {
+	s.Epoch++
+	j.tip.WithState(s)
+	j.tip.data.WithVersion(uint32(s.Epoch)).WithKey(uint32(s.Epoch))
+	return j
+}
+
+func (j *Journal) WithLogger(l log.Logger) *Journal {
+	j.log = l
+	return j
+}
+
 func (j *Journal) Len() int {
-	n := j.active.Len()
-	for _, v := range j.passive {
+	n := j.tip.Len()
+	for _, v := range j.tail {
 		n += v.Len()
+	}
+	return n
+}
+
+func (j *Journal) NumSegments() int {
+	return 1 + len(j.tail)
+}
+
+func (j *Journal) NumTuples() int {
+	n := j.tip.data.Len()
+	for _, v := range j.tail {
+		n += v.data.Len()
+	}
+	return n
+}
+
+func (j *Journal) NumTombstones() int {
+	n := j.tip.tomb.Len()
+	for _, v := range j.tail {
+		n += v.tomb.Len()
 	}
 	return n
 }
 
 // number of records that can be inserted before active segment runs full
 func (j *Journal) Capacity() int {
-	return j.maxsz - j.active.Len()
+	return j.maxsz - j.tip.data.Len()
+}
+
+func (j *Journal) TombCapacity() int {
+	return j.maxsz - j.tip.tomb.Len()
 }
 
 func (j *Journal) MaxSize() int {
@@ -87,272 +125,274 @@ func (j *Journal) Schema() *schema.Schema {
 	return j.schema
 }
 
-func (j *Journal) Active() *Segment {
-	return j.active
+func (j *Journal) Tip() *Segment {
+	return j.tip
 }
 
 func (j *Journal) Segments() []*Segment {
-	return append([]*Segment{j.active}, j.passive...)
+	return append([]*Segment{j.tip}, j.tail...)
 }
 
 func (j *Journal) Size() (sz int) {
-	sz = j.active.Size()
-	for _, v := range j.passive {
+	sz = j.tip.Size()
+	for _, v := range j.tail {
 		sz += v.Size()
 	}
 	return
 }
 
 func (j *Journal) Reset() {
-	j.active.Reset()
-	for _, v := range j.passive {
+	j.tip.Reset()
+	for _, v := range j.tail {
 		v.Close()
 	}
-	clear(j.passive)
-	j.passive = j.passive[:0]
+	clear(j.tail)
+	j.tail = j.tail[:0]
 }
 
 func (j *Journal) Close() {
 	j.schema = nil
-	j.view = nil
-	j.active.Close()
-	j.active = nil
-	for i := range j.passive {
-		j.passive[i].Close()
-		j.passive[i] = nil
+	j.tip.Close()
+	j.tip = nil
+	for i := range j.tail {
+		j.tail[i].Close()
+		j.tail[i] = nil
 	}
-	j.passive = j.passive[:0]
-	j.passive = nil
+	j.tail = j.tail[:0]
+	j.tail = nil
+	j.wal = nil
 }
 
-// appends single record, WAL replay requires batch size matches segment capacity
-func (j *Journal) Insert(xid, rid uint64, buf []byte) {
-	// insert rid
-	j.active.Insert(xid, rid, buf)
-	if j.active.IsFull() {
-		j.active.SetState(SegmentStateFlushing)
-	}
-}
-
-func (j *Journal) Update(xid, rid, pk, ref uint64, buf []byte) {
-	// insert rid and delete ref
-	j.active.Update(pk, xid, rid, ref, buf)
-
-	// update xmax when replaced record (pk/ref) is in active journal
-	// don't write passive segments to prevent state and merge conflicts
-	if j.active.ContainsRid(ref) {
-		j.active.SetXmax(ref, xid)
-	}
-
-	if j.active.IsFull() {
-		j.active.SetState(SegmentStateFlushing)
-	}
-}
-
-func (j *Journal) Delete(xid, rid, pk uint64) {
-	j.active.Delete(pk, xid, rid)
-
-	// update xmax when deleted record (pk/rid) is in active journal
-	// don't write passive segments to prevent state and merge conflicts
-	if j.active.ContainsRid(rid) {
-		j.active.SetXmax(rid, xid)
-	}
-
-	if j.active.IsFull() {
-		j.active.SetState(SegmentStateFlushing)
-	}
-}
-
-// returns the next journal segment that is ready to merge
-func (j *Journal) MergeNext() *Segment {
-	if len(j.passive) > 0 && j.passive[0].state == SegmentStateComplete {
-		j.passive[0].SetState(SegmentStateMerging)
-		return j.passive[0]
-	}
-	return nil
-}
-
-func (j *Journal) Flush(ctx context.Context, tx store.Tx) error {
-	bucket := tx.Bucket([]byte(j.name))
-	if bucket == nil {
-		return store.ErrNoBucket
-	}
-	bucket.FillPercent(1.0)
-
-	// flush passive segments with dirty data
-	for _, s := range j.passive {
-		if err := s.Store(ctx, bucket); err != nil {
-			return err
-		}
-	}
-
-	// remove empty and merged segments
-	j.passive = slices.DeleteFunc(j.passive, func(s *Segment) bool {
-		switch s.state {
-		case SegmentStateEmpty, SegmentStateMerged:
-			s.Close()
-			return true
-		default:
-			return false
-		}
-	})
-
-	// rotate active segment if it contains data
-	if !j.active.IsEmpty() {
-		// store active segment
-		if err := j.active.Store(ctx, bucket); err != nil {
-			return err
-		}
-
-		// TODO: free unused memory
-		// - tombstones-only: can we safely release data pack here?
-		// - data-only: can we safely relese tomb memory here?
-
-		// append active segment to immutable list
-		j.passive = append(j.passive, j.active)
-
-		// create new active segment
-		j.active = newSegment(j.schema, j.active.Id()+1, j.maxsz)
-	}
-
-	return nil
-}
-
-func (j *Journal) CommitTx(xid uint64) {
-	if j.active.ContainsTx(xid) {
-		j.active.CommitTx(xid)
-	}
-	for _, v := range j.passive {
-		if !v.ContainsTx(xid) {
-			continue
-		}
-		v.CommitTx(xid)
-
-		// update segment state
-		if v.IsDone() && v.state == SegmentStateFlushed {
-			if v.IsEmpty() {
-				v.SetState(SegmentStateEmpty)
-			} else {
-				v.SetState(SegmentStateCompleting)
-			}
-		}
-	}
-}
-
-func (j *Journal) AbortTx(xid uint64) {
-	if j.active.ContainsTx(xid) {
-		j.active.AbortTx(xid)
-	}
-	for _, v := range j.passive {
-		if !v.ContainsTx(xid) {
-			continue
-		}
-		v.AbortTx(xid)
-
-		// update segment state
-		if v.IsDone() && v.state == SegmentStateFlushed {
-			if v.IsEmpty() {
-				v.SetState(SegmentStateEmpty)
-			} else {
-				v.SetState(SegmentStateCompleting)
-			}
-		}
-	}
-}
-
-func (j *Journal) AbortActiveTx() (n int) {
-	j.active.AbortActiveTx()
-	for _, v := range j.passive {
-		n += v.AbortActiveTx()
-		if v.state == SegmentStateFlushed {
-			if v.IsEmpty() {
-				v.SetState(SegmentStateEmpty)
-			} else {
-				v.SetState(SegmentStateCompleting)
-			}
-		}
-	}
-	return
-}
-
-// Loads all journal segments found on disk
-func (j *Journal) Load(ctx context.Context, tx store.Tx) error {
-	bucket := tx.Bucket([]byte(j.name))
-	if bucket == nil {
-		return store.ErrNoBucket
-	}
-
-	// identify segment ids to load from all keys in bucket
-	segIds := make([]uint32, 0)
-	var last uint32
-	err := bucket.ForEach(func(k, v []byte) error {
-		id, _ := pack.DecodeBlockKey(k)
-		if id == last {
-			return nil
-		}
-		segIds = append(segIds, id)
-		last = id
+func (j *Journal) rotateAndCheckpoint() error {
+	// rotate segment when full
+	if !j.rotate() {
 		return nil
+	}
+
+	// write WAL checkpoint
+	lsn, err := j.wal.Write(&wal.Record{
+		Type:   wal.RecordTypeCheckpoint,
+		Tag:    types.ObjectTagTable,
+		Entity: j.id,
 	})
 	if err != nil {
 		return err
 	}
 
-	// load segments from disk
-	for _, id := range segIds {
-		seg, err := loadSegment(ctx, j.schema, bucket, id, j.maxsz)
-		if err != nil {
-			return fmt.Errorf("loading journal segment %d: %v", id, err)
-		}
-		seg.SetState(SegmentStateFlushed)
-		j.passive = append(j.passive, seg)
-	}
-
-	// update active segment id
-	j.active.data.WithKey(last + 1)
+	// store checkpoint in segment
+	j.tip.WithLSN(lsn)
 
 	return nil
 }
 
-// Matches all journal segments against the query and applies snapshot isolation
-// rules to find the last visible version of each matching record for the current
-// transaction. Returns a stable read-only result snapshot pointing to matching records
-// across journal segments. This result can be used concurrently with insert/update/delete
-// calls as such calls append new journal records but don't change existing records
-// or their order.
-func (j *Journal) Query(node *query.FilterTreeNode, snap *types.Snapshot) *Result {
+func (j *Journal) rotate() bool {
+	if !j.tip.IsFull() {
+		return false
+	}
+
+	j.log.Debugf("journal rotate segment %d with %d records %d tombstones",
+		j.tip.Id(), j.tip.data.Len(), j.tip.tomb.Len())
+
+	// change state
+	j.tip.setState(SegmentStateWaiting)
+
+	// generate metadata
+	j.tip.stats = stats.NewRecordFromPack(j.tip.data.BuildStats(), 0)
+
+	// append to immutable list
+	j.tail = append(j.tail, j.tip)
+
+	// create new segment and link to parent
+	j.tip = newSegment(j.schema, j.tip.Id()+1, j.maxsz).WithParent(j.tip).WithState(j.tip.tstate)
+
+	return true
+}
+
+// NextMergable returns the next journal segment that is ready to merge.
+// If another segment is currently merging, error ErrAgain is returned.
+func (j *Journal) NextMergable() (*Segment, error) {
+	for i, v := range j.tail {
+		if v.is(SegmentStateMerging) {
+			return nil, engine.ErrAgain
+		}
+		if v.is(SegmentStateComplete) {
+			// flip state
+			v.setState(SegmentStateMerging)
+
+			// determine follower segment's checkpoint
+			if i < len(j.tail)-1 {
+				v.setCheckpoint(j.tail[i+1].lsn)
+			} else {
+				v.setCheckpoint(j.tip.lsn)
+			}
+			return v, nil
+		}
+	}
+	return nil, nil
+}
+
+// Removes the merged segment from lists. Query results may still reference
+// the segment's vector blocks, but the segment itself can be closed.
+func (j *Journal) ConfirmMerged(ctx context.Context, s *Segment) {
+	// set segment state
+	s.setState(SegmentStateMerged)
+
+	id := s.Id()
+	j.log.Debugf("journal: removing merged segment %d", id)
+
+	// remove empty and merged segments, concurrent readers hold a copy
+	j.tail = slices.DeleteFunc(j.tail, func(s *Segment) bool {
+		ok := s.canDrop()
+		if ok {
+			s.Close()
+		}
+		return ok
+	})
+
+	// unlink tail segment's parent
+	if len(j.tail) > 0 {
+		j.tail[0].parent = nil
+	} else {
+		j.tip.parent = nil
+	}
+}
+
+func (j *Journal) AbortMerged(s *Segment) {
+	// reset segment state
+	s.setState(SegmentStateComplete)
+}
+
+func (j *Journal) CommitTx(xid uint64) bool {
+	if j.tip.ContainsTx(xid) {
+		j.tip.CommitTx(xid)
+	}
+
+	// commit tx across segments
+	for _, v := range j.tail {
+		if v.is(SegmentStateWaiting) && v.ContainsTx(xid) {
+			v.CommitTx(xid)
+		}
+	}
+
+	return j.compact()
+}
+
+func (j *Journal) AbortTx(xid uint64) bool {
+	// update tip
+	if j.tip.ContainsTx(xid) {
+		j.tip.AbortTx(xid)
+	}
+
+	// abort tx across segments
+	for _, v := range j.tail {
+		if v.is(SegmentStateWaiting) && v.ContainsTx(xid) {
+			v.AbortTx(xid)
+		}
+	}
+
+	return j.compact()
+}
+
+// called once to finalize wal replay
+func (j *Journal) AbortActiveTx() (int, bool) {
+	n := j.tip.AbortActiveTx()
+
+	for _, v := range j.tail {
+		if v.is(SegmentStateWaiting) {
+			n += v.AbortActiveTx()
+		}
+	}
+
+	return n, j.compact()
+}
+
+func (j *Journal) compact() bool {
+	// remove empty segments and prepare merge for complete segments
+	var (
+		k            int
+		haveMergable bool
+	)
+	for i, s := range j.tail {
+		if s.canDrop() {
+			s.Close()
+			j.tail[i] = nil
+			continue
+		}
+
+		// advance wait state to complete
+		if s.is(SegmentStateWaiting) && s.IsDone() {
+			s.setState(SegmentStateComplete)
+			haveMergable = true
+		} else {
+			haveMergable = haveMergable || s.is(SegmentStateComplete)
+		}
+		j.tail[k] = s
+		k++
+	}
+	clear(j.tail[k:])
+	j.tail = j.tail[:k]
+
+	return haveMergable
+}
+
+// Merges results from a chain of journal segments under snapshot isolation
+// rules. Guarantees to find the last visible version of each matching record
+// or excludes the record when deleted. An epoch id (from table state,
+// TableReader or IndexReader) ensures merged segments are skipped.
+//
+// Returns a stable read-only result containing (a) private copies of matching
+// segment data packs with added selection vectors and (b) a global view
+// of the tombstone. The tomb view is used during query processing to
+// exclude deleted records from TableReader scans. The segment data pack
+// matches function like regular table scan matches.
+//
+// The merge result is concurrency safe, i.e. readers can process a query
+// without additional locks while a concurrent writer can add new data the
+// journal in insert/update/delete calls.
+func (j *Journal) Query(plan *query.QueryPlan, epoch uint32) *Result {
 	// TODO: lock-free segment walk
 	// - ideally only active segment requires lock
 	// - use linked list for passive segments and optimistic locks
 	// - requires max size array and rotation (is this desirable?)
-	// - walk conflicts with segment rotation and free after merge (SegmentStateMerged)
+	// - walk may conflict with rotation and free after merge (SegmentStateMerged)
 	// j.mu.RLock()
 	// defer j.mu.RUnlock()
 
 	// alloc result and match bitset
 	res := NewResult()
 	bits := bitset.New(j.maxsz)
+	node := plan.Filters
+	snap := plan.Snap
 
-	// Walk segments in LIFO order starting at active segment, this ensures we
-	// find all deleted records (row ids) with the effect that we only keep the
-	// most recent visible update of a record in the query result set.
-	for _, seg := range slices.Backward(append(j.passive, j.active)) {
-		// First, identify deleted records under snapshot isolation by merging visible
-		// tombstones across all segments. This ensures we know which journal records
-		// are actually active for a given xid and which records have been deleted
-		// even if deletion happened in a younger segments. We will use this info to
-		// exclude deleted row ids from table scans and exclude them from the current
-		// and from older journal segments' match results. Recall, (a) we walk the journal
-		// backwards in time and (b) passive/immutable segments will not have xmax set
-		// if an update/delete happend after a segment was frozen. Because xmax is
-		// not written in such cases, a regular SI visibility check alone is insufficient.
+	// Single-pass merge
+	// Walk segments in backwards order starting at tip. This ensures we first
+	// find all snapshot visible tombstones (row ids) and use them to hide
+	// deleted/replaced records from the query result as we walk segments.
+	seg := j.tip
+	for seg != nil {
+		// skip merged and empty segments
+		if seg.Id() <= epoch || seg.canDrop() {
+			// plan.Log.Infof("skip journal query segment %d: %#v", seg.Id(), seg)
+			seg = seg.parent
+			continue
+		}
+
+		// plan.Log.Infof("query journal segment %d", seg.Id())
+
+		// step 1: identify deleted records
 		seg.MergeDeleted(res.tomb, snap)
 
-		// match filters & apply snapshot visibility and tomb
+		// step 2: match filters, apply snapshot visibility roles and tomb
 		seg.Match(node, snap, res.tomb, bits.Zero())
 
 		// add segment to result if it has any match
-		res.Append(seg, bits)
+		if bits.Any() {
+			// plan.Log.Debugf("using journal segment %d", seg.Id())
+			res.Append(seg, bits)
+		}
+
+		// next segment in history order
+		seg = seg.parent
 	}
 
 	// free scratch
@@ -360,3 +400,277 @@ func (j *Journal) Query(node *query.FilterTreeNode, snap *types.Snapshot) *Resul
 
 	return res
 }
+
+func (j *Journal) ReplayWalRecord(ctx context.Context, rec *wal.Record, rd engine.TableReader) error {
+	switch rec.Type {
+	case wal.RecordTypeCommit:
+		j.CommitTx(rec.TxID)
+
+	case wal.RecordTypeAbort:
+		j.AbortTx(rec.TxID)
+
+	case wal.RecordTypeCheckpoint:
+		// each segment starts with a checkpoint
+		j.log.Debugf("journal: apply %s", rec)
+		j.tip.WithLSN(rec.Lsn)
+
+	case wal.RecordTypeInsert:
+		j.log.Debugf("journal: apply %s", rec)
+		// read data header (first rid)
+		buf := rec.Data[0]
+		rid, n := num.Uvarint(buf)
+		buf = buf[n:]
+		var (
+			count    uint64
+			expectPk uint64 = j.tip.tstate.NextPk
+		)
+
+		// split buf into wire messages
+		view, buf, _ := schema.NewView(j.schema).Cut(buf)
+		for view.IsValid() {
+			// check pk is correct
+			pk := view.GetPk()
+			if pk != expectPk {
+				return fmt.Errorf("insert: unexpected pk=%d, expected=%d", pk, expectPk)
+			}
+			expectPk++
+
+			// fail on overlow, should not happen
+			if j.Capacity() == 0 {
+				return fmt.Errorf("insert: journal overflow")
+			}
+			j.tip.InsertRecord(rec.TxID, rid, view.Bytes())
+			rid++
+			count++
+			view, buf, _ = view.Cut(buf)
+		}
+		view.Reset(nil)
+		if len(buf) > 0 {
+			return fmt.Errorf("decode wal record: %d extra bytes", len(buf))
+		}
+		j.tip.tstate.NextPk = expectPk
+		j.tip.tstate.NextRid = rid + 1
+		j.tip.tstate.NRows += count
+
+	case wal.RecordTypeUpdate:
+		j.log.Debugf("journal: apply %s", rec)
+		buf := rec.Data[0]
+
+		// changeset bitset
+		csize := (j.schema.NumFields() + 7) / 8
+		cset := bitset.NewFromBytes(buf[:csize], j.schema.NumFields())
+		buf = buf[csize:]
+
+		// first rowid
+		rid, n := num.Uvarint(buf)
+		buf = buf[n:]
+
+		// sanity check row id
+		if j.tip.tstate.NextRid != rid {
+			// should not happen
+			return fmt.Errorf("update: state rid %d does not match WAL record %d",
+				j.tip.tstate.NextRid, rid)
+		}
+
+		// make change schema (for parsing change records)
+		cids := make([]uint16, 0, cset.Count())
+		cols := make([]int, 0, cset.Count())
+		for i := range cset.Iterator() {
+			cids = append(cids, j.schema.Field(i).Id())
+			cols = append(cols, i)
+		}
+		cschema, err := j.schema.SelectFieldIds(cids...)
+		if err != nil {
+			// should not happen
+			return fmt.Errorf("update: make change schema: %v", err)
+		}
+
+		// decode refs from WAL record and construct a query mask
+		var (
+			tmp  = buf
+			refs = xroar.New()
+			recs = make(map[uint64]int)
+			view = schema.NewView(cschema)
+			c    int
+		)
+		for len(buf) > 0 {
+			ref, n := num.Uvarint(buf)
+			buf = buf[n:]
+			c += n
+			refs.Set(ref)
+			recs[ref] = c
+			view, buf, _ = view.Cut(buf)
+			c += view.Len()
+		}
+		buf = tmp
+
+		// ensure amount of updates fits into current journal tip
+		if len(recs) > j.Capacity() {
+			// should not happen
+			return fmt.Errorf("update: num updates %d is larger than journal capacity %d",
+				len(recs), j.Capacity())
+		}
+
+		// run query visiting all packs with matches
+		rd.WithMask(refs, engine.ReadModeIncludeMask)
+		for {
+			pkg, err := rd.Next(ctx)
+			if err != nil {
+				return err
+			}
+			if pkg == nil {
+				break
+			}
+
+			// materialize columns in the change set
+			for _, col := range cols {
+				pkg.MaterializeBlock(col)
+			}
+
+			// patch records
+			for _, row := range pkg.Selected() {
+				rid := pkg.RowId(int(row))
+				ofs, ok := recs[rid]
+				if !ok {
+					// should not happen
+					return fmt.Errorf("update: found invalid original rid=%d", rid)
+				}
+
+				// set values
+				view.Reset(buf[ofs:])
+				for i, col := range cols {
+					val, _ := view.Get(i)
+					pkg.Block(col).Set(int(row), val)
+				}
+
+				// remove patched update
+				delete(recs, rid)
+			}
+
+			// append changed records to journal (will set new rowid, xid, ref)
+			_, err = j.updatePackNoWal(pkg, rec.TxID)
+			if err != nil {
+				return fmt.Errorf("replay update: %v", err)
+			}
+		}
+
+		// sanity check we have applied changes to all records found in WAL
+		if len(recs) > 0 {
+			// should not happen
+			return fmt.Errorf("update: %d unhandled records", len(recs))
+		}
+
+	case wal.RecordTypeDelete:
+		j.log.Debugf("journal: apply %s", rec)
+		buf := rec.Data[0]
+		var nRows uint64
+		for len(buf) > 0 && j.Capacity() > 0 {
+			rid, n := num.Uvarint(buf)
+			buf = buf[n:]
+
+			// append to tomb, set xmax on rid when in tip segment
+			j.tip.NotifyDelete(rec.TxID, rid)
+
+			nRows++
+		}
+
+		// fail on overlow, should not happen
+		if len(buf) > 0 {
+			return fmt.Errorf("delete: journal overflow")
+		}
+
+		j.tip.tstate.NRows -= nRows
+	}
+
+	// try rotate segment once full
+	j.rotate()
+
+	return nil
+}
+
+// func (j *Journal) Flush(ctx context.Context, tx store.Tx) error {
+// 	bucket := tx.Bucket(j.key)
+// 	if bucket == nil {
+// 		return store.ErrNoBucket
+// 	}
+// 	bucket.FillPercent(1.0)
+
+// 	// flush passive segments with dirty data
+// 	for _, s := range j.tail {
+// 		if err := s.Store(ctx, bucket); err != nil {
+// 			return err
+// 		}
+// 	}
+
+// 	// remove empty and merged segments
+// 	j.tail = slices.DeleteFunc(j.tail, func(s *Segment) bool {
+// 		switch s.state {
+// 		case SegmentStateEmpty, SegmentStateMerged:
+// 			s.Close()
+// 			return true
+// 		default:
+// 			return false
+// 		}
+// 	})
+
+// 	// FIXME: refactor process
+
+// 	// rotate active segment if it contains data
+// 	if !j.tip.IsEmpty() {
+// 		// store active segment
+// 		if err := j.tip.Store(ctx, bucket); err != nil {
+// 			return err
+// 		}
+
+// 		// TODO: free unused memory
+// 		// - tombstones-only: can we safely release data pack here?
+// 		// - data-only: can we safely relese tomb memory here?
+
+// 		// append active segment to immutable list
+// 		j.tail = append(j.tail, j.tip)
+
+// 		// create new active segment
+// 		j.tip = newSegment(j.schema, j.tip.Id()+1, j.maxsz)
+// 	}
+
+// 	return nil
+// }
+
+// // Loads all journal segments found on disk
+// func (j *Journal) Load(ctx context.Context, tx store.Tx) error {
+// 	bucket := tx.Bucket(j.key)
+// 	if bucket == nil {
+// 		return store.ErrNoBucket
+// 	}
+
+// 	// identify segment ids to load from all keys in bucket
+// 	segIds := make([]uint32, 0)
+// 	var last uint32
+// 	err := bucket.ForEach(func(k, v []byte) error {
+// 		id, _ := pack.DecodeBlockKey(k)
+// 		if id == last {
+// 			return nil
+// 		}
+// 		segIds = append(segIds, id)
+// 		last = id
+// 		return nil
+// 	})
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	// load segments from disk
+// 	for _, id := range segIds {
+// 		seg, err := loadSegment(ctx, j.schema, bucket, id, j.maxsz)
+// 		if err != nil {
+// 			return fmt.Errorf("loading journal segment %d: %v", id, err)
+// 		}
+// 		seg.SetState(SegmentStateWaiting)
+// 		j.tail = append(j.tail, seg)
+// 	}
+
+// 	// update active segment id
+// 	j.tip.data.WithKey(last + 1)
+
+// 	return nil
+// }

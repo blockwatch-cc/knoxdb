@@ -7,10 +7,10 @@ import (
 	"encoding"
 	"fmt"
 	"reflect"
-	"runtime/debug"
 	"time"
 	"unsafe"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/assert"
 	"blockwatch.cc/knoxdb/pkg/num"
@@ -21,15 +21,15 @@ import (
 // AppendWire appends a new row of values from a wire protocol message. The caller must
 // ensure the message matches the currrent package schema.
 func (p *Package) AppendWire(buf []byte, meta *schema.Meta) {
-	assert.Always(p.CanGrow(1), "pack: overflow on wire append",
-		"pack", p.key,
-		"len", p.nRows,
-		"cap", p.maxRows,
-	)
-	assert.Always(len(buf) >= p.schema.WireSize(), "pack: short buffer",
-		"len", len(buf),
-		"wiresz", p.schema.WireSize(),
-	)
+	// assert.Always(p.CanGrow(1), "pack: overflow on wire append",
+	// 	"pack", p.key,
+	// 	"len", p.nRows,
+	// 	"cap", p.maxRows,
+	// )
+	// assert.Always(len(buf) >= p.schema.WireSize(), "pack: short buffer",
+	// 	"len", len(buf),
+	// 	"wiresz", p.schema.WireSize(),
+	// )
 	for i, field := range p.schema.Exported() {
 		// skip missing blocks (e.g. after schema change)
 		b := p.blocks[i]
@@ -50,7 +50,7 @@ func (p *Package) AppendWire(buf []byte, meta *schema.Meta) {
 				case schema.MetaXmax:
 					b.Uint64().Append(meta.Xmax)
 				case schema.MetaDel:
-					b.Bool().Append(meta.Xmax > 0)
+					b.Bool().Append(meta.IsDel)
 				}
 			} else {
 				switch field.Type {
@@ -60,6 +60,7 @@ func (p *Package) AppendWire(buf []byte, meta *schema.Meta) {
 					b.Bool().Append(false)
 				}
 			}
+			b.SetDirty()
 			continue
 		}
 
@@ -126,45 +127,45 @@ func (p *Package) AppendWire(buf []byte, meta *schema.Meta) {
 // SetValue overwrites a single value at a given col/row offset. The caller must
 // ensure strict type match as no additional check, cast or conversion is done.
 func (p *Package) SetValue(col, row int, val any) error {
-	f, ok := p.schema.FieldByIndex(col)
-	assert.Always(ok, "invalid field id",
-		"id", col,
-		"pack", p.key,
-		"schema", p.schema.Name(),
-		"version", p.schema.Version(),
-		"nFields", p.schema.NumFields(),
-		"nBlocks", len(p.blocks),
-	)
-	assert.Always(f.IsVisible(), "field is invisble",
-		"id", col,
-		"pack", p.key,
-		"schema", p.schema.Name(),
-		"version", p.schema.Version(),
-	)
-	assert.Always(col >= 0 && col < len(p.blocks), "invalid block id",
-		"id", col,
-		"pack", p.key,
-		"schema", p.schema.Name(),
-		"version", p.schema.Version(),
-		"nFields", p.schema.NumFields(),
-		"nBlocks", len(p.blocks),
-	)
-	assert.Always(row >= 0 && row < p.nRows, "invalid row",
-		"row", row,
-		"pack", p.key,
-		"schema", p.schema.Name(),
-		"version", p.schema.Version(),
-	)
+	// f, ok := p.schema.FieldByIndex(col)
+	// assert.Always(ok, "invalid field id",
+	// 	"id", col,
+	// 	"pack", p.key,
+	// 	"schema", p.schema.Name(),
+	// 	"version", p.schema.Version(),
+	// 	"nFields", p.schema.NumFields(),
+	// 	"nBlocks", len(p.blocks),
+	// )
+	// assert.Always(f.IsVisible(), "field is invisble",
+	// 	"id", col,
+	// 	"pack", p.key,
+	// 	"schema", p.schema.Name(),
+	// 	"version", p.schema.Version(),
+	// )
+	// assert.Always(col >= 0 && col < len(p.blocks), "invalid block id",
+	// 	"id", col,
+	// 	"pack", p.key,
+	// 	"schema", p.schema.Name(),
+	// 	"version", p.schema.Version(),
+	// 	"nFields", p.schema.NumFields(),
+	// 	"nBlocks", len(p.blocks),
+	// )
+	// assert.Always(row >= 0 && row < p.nRows, "invalid row",
+	// 	"row", row,
+	// 	"pack", p.key,
+	// 	"schema", p.schema.Name(),
+	// 	"version", p.schema.Version(),
+	// )
 
 	b := p.blocks[col]
-	assert.Always(b != nil, "nil block",
-		"id", col,
-		"pack", p.key,
-		"schema", p.schema.Name(),
-		"version", p.schema.Version(),
-		"nFields", p.schema.NumFields(),
-		"nBlocks", len(p.blocks),
-	)
+	// assert.Always(b != nil, "nil block",
+	// 	"id", col,
+	// 	"pack", p.key,
+	// 	"schema", p.schema.Name(),
+	// 	"version", p.schema.Version(),
+	// 	"nFields", p.schema.NumFields(),
+	// 	"nBlocks", len(p.blocks),
+	// )
 	if b == nil {
 		return nil
 	}
@@ -199,6 +200,7 @@ func (p *Package) SetValue(col, row int, val any) error {
 		if v.IsZero() {
 			b.Int64().Set(row, 0)
 		} else {
+			f := p.schema.Field(col)
 			b.Int64().Set(row, schema.TimeScale(f.Scale()).ToUnix(v))
 		}
 	case bool:
@@ -217,12 +219,16 @@ func (p *Package) SetValue(col, row int, val any) error {
 		b.Int128().Set(row, v)
 	case num.Decimal256:
 		// re-quantize nums to allow table joins, etc
+		f := p.schema.Field(col)
 		b.Int256().Set(row, v.Quantize(f.Scale()).Int256())
 	case num.Decimal128:
+		f := p.schema.Field(col)
 		b.Int128().Set(row, v.Quantize(f.Scale()).Int128())
 	case num.Decimal64:
+		f := p.schema.Field(col)
 		b.Int64().Set(row, v.Quantize(f.Scale()).Int64())
 	case num.Decimal32:
+		f := p.schema.Field(col)
 		b.Int32().Set(row, v.Quantize(f.Scale()).Int32())
 	case num.Big:
 		b.Bytes().Set(row, v.Bytes())
@@ -251,6 +257,7 @@ func (p *Package) SetValue(col, row int, val any) error {
 			// this is unlikely due to the internal use of this feature
 			// but allows for future extension of DB internals like
 			// aggregators, reducers, etc
+			f := p.schema.Field(col)
 			switch {
 			case f.Can(types.IfaceBinaryMarshaler):
 				buf, err := val.(encoding.BinaryMarshaler).MarshalBinary()
@@ -290,12 +297,12 @@ func (p *Package) SetValue(col, row int, val any) error {
 // a wire protocol message. The caller must ensure strict type match
 // as no additional check, cast or conversion is done.
 func (p *Package) SetWire(row int, buf []byte) {
-	assert.Always(row >= 0 && row < p.nRows, "set: invalid row",
-		"pack", p.key,
-		"row", row,
-		"len", p.nRows,
-		"cap", p.maxRows,
-	)
+	// assert.Always(row >= 0 && row < p.nRows, "set: invalid row",
+	// 	"pack", p.key,
+	// 	"row", row,
+	// 	"len", p.nRows,
+	// 	"cap", p.maxRows,
+	// )
 
 	for i, field := range p.schema.Exported() {
 		// deleted and internal fields are invisible
@@ -370,33 +377,33 @@ func (p *Package) SetWire(row int, buf []byte) {
 // interval [i,j) similar to Go slices. Panics on failed bounds checks
 // and overflow.
 func (p *Package) AppendRange(src *Package, i, j int) {
-	assert.Always(
-		src.schema.Hash() == p.schema.Hash(),
-		"append: schema mismatch",
-		"src", src.schema.Name(), "dst", p.schema.Name(),
-	)
-	assert.Always(i <= j, "append: src out of bounds", "i", i, "j", j)
-	assert.Always(src.nRows > i, "append: src out of bounds", "i", i, "rows", src.nRows)
-	assert.Always(src.nRows >= j, "append: src out of bounds", "j", j, "rows", src.nRows)
 	n := j - i
-	assert.Always(p.CanGrow(n), "append: overflow",
-		"rows", n,
-		"pack", p.key,
-		"len", p.nRows,
-		"cap", p.maxRows,
-		"blockLen", p.blocks[0].Len(),
-		"blockCap", p.blocks[0].Cap(),
-	)
+	// assert.Always(
+	// 	src.schema.Hash() == p.schema.Hash(),
+	// 	"append: schema mismatch",
+	// 	"src", src.schema.Name(), "dst", p.schema.Name(),
+	// )
+	// assert.Always(i <= j, "append: src out of bounds", "i", i, "j", j)
+	// assert.Always(src.nRows > i, "append: src out of bounds", "i", i, "rows", src.nRows)
+	// assert.Always(src.nRows >= j, "append: src out of bounds", "j", j, "rows", src.nRows)
+	// assert.Always(p.CanGrow(n), "append: overflow",
+	// 	"rows", n,
+	// 	"pack", p.key,
+	// 	"len", p.nRows,
+	// 	"cap", p.maxRows,
+	// 	"blockLen", p.blocks[0].Len(),
+	// 	"blockCap", p.blocks[0].Cap(),
+	// )
 
 	// debug
-	defer func() {
-		if e := recover(); e != nil {
-			fmt.Printf("AppendRange: %v\n", e)
-			fmt.Printf("REQ: src[%d:%d]\n", i, j)
-			fmt.Printf("%s\n", string(debug.Stack()))
-			panic(e)
-		}
-	}()
+	// defer func() {
+	// 	if e := recover(); e != nil {
+	// 		fmt.Printf("AppendRange: %v\n", e)
+	// 		fmt.Printf("REQ: src[%d:%d]\n", i, j)
+	// 		debug.PrintStack()
+	// 		panic(e)
+	// 	}
+	// }()
 
 	for k, b := range p.blocks {
 		if b == nil {
@@ -411,33 +418,34 @@ func (p *Package) AppendRange(src *Package, i, j int) {
 // overflowing dst and returns how many entries were appended.
 // Both packages must have the same schema and block order.
 func (p *Package) AppendTo(dst *Package, sel []uint32) int {
-	assert.Always(
-		dst.schema.Hash() == p.schema.Hash(),
-		"append: schema mismatch",
-		"src", p.schema.Name(),
-		"dst", dst.schema.Name(),
-	)
+	// assert.Always(
+	// 	dst.schema.Hash() == p.schema.Hash(),
+	// 	"append: schema mismatch",
+	// 	"src", p.schema.Name(),
+	// 	"dst", dst.schema.Name(),
+	// )
 	// don't overflow dst
 	n := min(p.nRows, dst.maxRows-dst.nRows)
 	if sel != nil {
 		n = min(len(sel), n)
+		sel = sel[:n]
 	}
-	defer func() {
-		if e := recover(); e != nil {
-			fmt.Printf("AppendTo: %v\n", e)
-			fmt.Printf("REQ: p[%d:%d:%d] => dst[%d:%d:%d]\n",
-				0, n, p.maxRows, dst.nRows, dst.nRows+n, dst.maxRows)
-			fmt.Printf("%s\n", string(debug.Stack()))
-			panic(e)
-		}
-	}()
+	// defer func() {
+	// 	if e := recover(); e != nil {
+	// 		fmt.Printf("AppendTo: %v\n", e)
+	// 		fmt.Printf("REQ: p[%d:%d:%d] => dst[%d:%d:%d]\n",
+	// 			0, n, p.maxRows, dst.nRows, dst.nRows+n, dst.maxRows)
+	// 		fmt.Printf("%s\n", string(debug.Stack()))
+	// 		panic(e)
+	// 	}
+	// }()
 	for k, b := range p.blocks {
 		if b == nil {
 			continue
 		}
-		b.AppendTo(dst.blocks[k], sel[:n])
+		b.AppendTo(dst.blocks[k], sel)
 	}
-	p.nRows += n
+	dst.nRows += n
 	return n
 }
 
@@ -468,7 +476,7 @@ func (p *Package) UpdateLen() {
 type WriteMode byte
 
 const (
-	WriteModeAll = iota
+	WriteModeAll WriteMode = iota
 	WriteModeIncludeSelected
 	WriteModeExcludeSelected
 )
@@ -502,24 +510,30 @@ func (s AppendState) More() bool {
 //			break
 //		}
 //	}
-func (p *Package) AppendSelected(src *Package, mode WriteMode, state AppendState) AppendState {
+func (p *Package) AppendSelected(src *Package, mode WriteMode, state AppendState) (int, AppendState) {
 	switch mode {
 	case WriteModeAll:
-		var sel []uint32
-		if state.srcOffset > 0 {
-			// create selection vector when src offs > 0
-			// i.e. src is split between multiple target packs
-			n := src.nRows - state.srcOffset
-			sel = types.NewRange(state.srcOffset, state.srcOffset+n).AsSelection()
+		var (
+			sel  []uint32
+			free = p.maxRows - p.nRows
+			n    = src.nRows - state.srcOffset
+		)
+		if state.srcOffset > 0 || free < n {
+			// create selection vector when src offs > 0 or src would overflow p
+			// i.e. src will be split across multiple target packs
+			sel = types.NewRange(state.srcOffset, state.srcOffset+min(free, n)).AsSelection()
+			// fmt.Printf("Made sel range [%d:%d] len=%d/%d\n",
+			// 	state.srcOffset, state.srcOffset+min(free, n),
+			// 	len(sel), min(free, n))
 		}
 
 		// copy at most n records from src until p is full
-		n := src.AppendTo(p, sel)
+		n = src.AppendTo(p, sel)
 
 		// update state
 		state.srcOffset += n
 		state.hasMore = src.nRows > state.srcOffset
-		return state
+		return n, state
 
 	case WriteModeIncludeSelected:
 		// append selected vector data while keeping selection order
@@ -530,50 +544,58 @@ func (p *Package) AppendSelected(src *Package, mode WriteMode, state AppendState
 
 		// update state
 		state.selOffset += n
-		state.hasMore = len(sel) > n
-		return state
+		state.hasMore = len(sel) > state.selOffset
+		return n, state
 
 	case WriteModeExcludeSelected:
 		// append unselected vector data (i.e. gaps in the selection vector)
-		// requires sorted selection vector
+		// assumes sorted selection vector
 		sel := src.selected[state.selOffset:]
 		last := uint32(state.srcOffset)
-		tcap := p.maxRows
+		free := p.maxRows - p.nRows
+		neg := arena.AllocUint32(free)
+
 		for {
 			// find the next gap
-			for tcap > 0 && len(sel) > 0 && last == sel[0] {
+			for free > 0 && len(sel) > 0 && last == sel[0] {
 				last++
 				sel = sel[1:]
 				state.selOffset++
-				tcap--
+				free--
 			}
 
 			// calculate gap size
-			var n int
+			var k int
 			if len(sel) > 0 {
-				n = int(sel[0] - last)
+				k = int(sel[0] - last)
 			} else {
-				n = min(tcap, src.Len()-int(last))
-				tcap -= n
+				k = min(free, src.Len()-int(last))
+				free -= k
 			}
 
-			// copy n records
-			if n > 0 {
-				// FIXME: replace by AppendTo because src can be compressed
-				p.AppendRange(src, int(last), int(last)+n)
-				last += uint32(n)
+			// add k positions
+			for range k {
+				neg = append(neg, last)
+				last++
 			}
 
 			// stop when tail is full or all src data was copied
-			if tcap == 0 || len(sel) == 0 {
+			if free == 0 || len(sel) == 0 {
 				break
 			}
 		}
+
+		// copy at most n records from src until p is full
+		n := src.AppendTo(p, neg)
+
+		// update state
+		arena.Free(neg)
 		state.srcOffset = int(last)
 		state.hasMore = src.nRows > state.srcOffset
-		return state
+		return n, state
 
 	default:
-		panic(fmt.Errorf("invalid write mode %d", mode))
+		assert.Unreachable("invalid write mode", mode)
+		return 0, state
 	}
 }

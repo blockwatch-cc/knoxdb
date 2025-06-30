@@ -27,10 +27,11 @@ func (kv *KVStore) Get(ctx context.Context, key []byte) ([]byte, error) {
 		atomic.AddInt64(&kv.metrics.CacheMisses, 1)
 	}
 
-	tx, err := engine.GetTransaction(ctx).StoreTx(kv.db, false)
+	tx, err := kv.db.Begin(false)
 	if err != nil {
 		return nil, err
 	}
+	defer tx.Rollback()
 	bucket := tx.Bucket(kv.key)
 	if bucket == nil {
 		return nil, store.ErrNoBucket
@@ -56,10 +57,11 @@ func (kv *KVStore) Get(ctx context.Context, key []byte) ([]byte, error) {
 
 func (kv *KVStore) Put(ctx context.Context, key, val []byte) error {
 	prevSize := -1
-	tx, err := engine.GetTransaction(ctx).StoreTx(kv.db, true)
+	tx, err := kv.db.Begin(true)
 	if err != nil {
 		return err
 	}
+	defer tx.Rollback()
 	bucket := tx.Bucket(kv.key)
 	if bucket == nil {
 		return store.ErrNoBucket
@@ -94,15 +96,16 @@ func (kv *KVStore) Put(ctx context.Context, key, val []byte) error {
 		atomic.AddInt64(&kv.metrics.TotalSize, sz)
 	}
 	atomic.AddInt64(&kv.metrics.BytesWritten, sz)
-	return nil
+	return tx.Commit()
 }
 
 func (kv *KVStore) Del(ctx context.Context, key []byte) error {
 	prevSize := -1
-	tx, err := engine.GetTransaction(ctx).StoreTx(kv.db, true)
+	tx, err := kv.db.Begin(true)
 	if err != nil {
 		return err
 	}
+	defer tx.Rollback()
 	bucket := tx.Bucket(kv.key)
 	if bucket == nil {
 		return store.ErrNoBucket
@@ -127,7 +130,7 @@ func (kv *KVStore) Del(ctx context.Context, key []byte) error {
 		atomic.AddInt64(&kv.metrics.TotalSize, -int64(prevSize))
 	}
 
-	return nil
+	return tx.Commit()
 }
 
 func (kv *KVStore) ApplyWalRecord(ctx context.Context, rec *wal.Record) error {

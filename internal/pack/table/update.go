@@ -1,24 +1,38 @@
-// Copyright (c) 2024 Blockwatch Data Inc.
+// Copyright (c) 2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package table
 
 import (
 	"context"
+	"fmt"
+	"sync/atomic"
 
 	"blockwatch.cc/knoxdb/internal/engine"
+	"blockwatch.cc/knoxdb/internal/pack"
+	"blockwatch.cc/knoxdb/internal/pack/journal"
+	"blockwatch.cc/knoxdb/internal/query"
 )
 
 // TODO: refactor update
-// - UpsertRows: [List Pks] -> [Index Lookup] -> [Update Journal]
 // - Update[query]: [Query] -> [Apply Expr] -> [Update Journal]
+// - UpsertRows: [Rows] -> [List Pks] -> [Index Lookup Rids] -> [full pack] -> [Update Journal]
 //
-// # WAL Record encoding
-//
-// | rid1 | sz | ref1 | ref2 | .. | wire1 | wire2 | ... |
-// rid1: row id of first update record
-// refX: row ids replaced by each record
+// WAL Record encoding
+// | changeset | rid1 | ref1 | wire1 | ref2 | wire2 | ... |
 func (t *Table) UpdateRows(ctx context.Context, buf []byte) (uint64, error) {
+	// Upsert = insert (pk = 0) & update (pk != 0)
+	// - same pk can be inserted, then updated multiple times in the same batch
+	// - input in record format with full details except row id (and other metadata)
+	// - challenges
+	//   1. lookup current row id for each updated pk (current tx snapshot visibility)
+	//   2. Pks may be out of order
+	//   3. updates may target earlier in-batch inserts and updates
+	// - concepts
+	//   1. pk -> rid index + in-journal index/lookup (single tx: all journal content is eligible)
+	//   2. execute insterts first, build pack of updates, sort via sel vector
+	//   2. track all pk->rid from this call's inserts & updates as map[u64]u64
+
 	return 0, engine.ErrNotImplemented
 
 	// 	// check message
@@ -162,4 +176,85 @@ func (t *Table) UpdateRows(ctx context.Context, buf []byte) (uint64, error) {
 	// 	}
 
 	// return uint64(count), nil
+}
+
+// TODO
+// - current interface is not useful (just so code compiles)
+// - need Update(ctx, plan) (where plan contains change col list and ExprVM code)
+// [TableReader+Filter] -> [Expression VM] -> Journal UpdatePack
+
+var _ engine.QueryResultConsumer = (*Updater)(nil)
+
+type Updater struct {
+	// op *operator.UpdateOperator
+	j *journal.Journal
+	n int
+}
+
+func NewUpdater(q engine.QueryPlan, j *journal.Journal) *Updater {
+	// TODO: setup update expr vm
+	return &Updater{j: j}
+}
+
+func (x *Updater) Len() int {
+	return x.n
+}
+
+func (x *Updater) Append(ctx context.Context, src *pack.Package) error {
+	// run update expressions
+	// dst, res := x.op.Process(ctx, src)
+	// if res == operator.ResultError {
+	// 	return x.op.Err()
+	// }
+
+	// forward changed pack to journal
+	n, err := x.j.UpdatePack(ctx, src)
+	x.n += n
+	return err
+}
+
+func (t *Table) Update(ctx context.Context, q engine.QueryPlan) (uint64, error) {
+	// unpack query plan
+	plan, ok := q.(*query.QueryPlan)
+	if !ok {
+		return 0, fmt.Errorf("invalid query plan type %T", q)
+	}
+
+	// check table state
+	if t.opts.ReadOnly {
+		return 0, engine.ErrTableReadOnly
+	}
+	atomic.AddInt64(&t.metrics.UpdateCalls, 1)
+
+	// obtain shared table lock
+	tx := engine.GetTransaction(ctx)
+	err := tx.RLock(ctx, t.id)
+	if err != nil {
+		return 0, err
+	}
+
+	// register state reset callback only once
+	if !tx.Touched(t.id) {
+		prevState := t.state
+		tx.OnAbort(func(_ context.Context) error {
+			t.state = prevState
+			return nil
+		})
+	}
+
+	// register table for commit/abort callbacks
+	tx.Touch(t.id)
+
+	// protect journal access
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	// run the query, forward result to journal update
+	upd := NewUpdater(q, t.journal)
+	if err = t.doQueryAsc(ctx, plan, upd); err != nil {
+		return 0, err
+	}
+	atomic.AddInt64(&t.metrics.UpdatedTuples, int64(upd.Len()))
+
+	return uint64(upd.Len()), nil
 }

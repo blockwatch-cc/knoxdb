@@ -388,7 +388,7 @@ func openDB(dbPath string, opts *bolt.Options, create bool) (store.DB, error) {
 	// bolt will create any non-existing database file automatically
 	bdb, err := bolt.Open(dbPath, 0600, opts)
 	if err != nil {
-		return nil, convertErr("open db", err)
+		return nil, convertErr("open", err)
 	}
 	if create && !dbExists {
 		log.Debug("Initializing database...")
