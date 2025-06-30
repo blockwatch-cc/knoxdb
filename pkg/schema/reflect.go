@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math/bits"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -233,13 +234,24 @@ func (s *Schema) StructType() reflect.Type {
 	return reflect.StructOf(sfields)
 }
 
+var rx = regexp.MustCompile("[^a-zA-Z0-9]+")
+
 func sanitize(s string) string {
 	if len(s) == 0 {
 		return s
 	}
+
+	// Prefix internal field names
 	if s[0] == '$' {
 		s = "X" + s[1:]
 	}
+
+	// Replace invalid characters
+	s = rx.ReplaceAllString(s, "_")
+
+	// Replace multiple __ with single _
+	s = strings.ReplaceAll(s, "__", "_")
+
 	return s
 }
 

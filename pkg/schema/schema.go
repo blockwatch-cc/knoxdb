@@ -740,9 +740,9 @@ func (s *Schema) Finalize() *Schema {
 	LE.PutUint32(b[:], s.version)
 	h.Write(b[:])
 
-	// check if we need to generate strcut layout info
+	// check if we need to generate struct layout info
 	var styp reflect.Type
-	needLayout := s.fields[0].path == nil
+	needLayout := len(s.fields) > 0 && s.fields[0].path == nil
 	if needLayout {
 		styp = s.StructType()
 	}
