@@ -162,6 +162,12 @@ func Uvarint(b []byte) (uint64, int) {
 	return 0, 0 // Invalid b0
 }
 
+func WriteUvarint(w io.Writer, x uint64) (int, error) {
+	var v [MaxVarintLen64]byte
+	n := PutUvarint(v[:], x)
+	return w.Write(v[:n])
+}
+
 func ReadUvarint(r io.ByteReader) (uint64, error) {
 	b, err := r.ReadByte()
 	if err != nil {
