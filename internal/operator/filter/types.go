@@ -1,16 +1,20 @@
-// Copyright (c) 2023 Blockwatch Data Inc.
+// Copyright (c) 2023-2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package query
+package filter
 
 import (
+	"strings"
+
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 type (
 	FilterMode = types.FilterMode
 	BlockType  = block.BlockType
+	FieldType  = types.FieldType
 )
 
 const (
@@ -46,3 +50,15 @@ const (
 	BlockInt128  = types.BlockInt128
 	BlockInt256  = types.BlockInt256
 )
+
+type RangeValue [2]any
+
+func (r RangeValue) String() string {
+	var b strings.Builder
+	b.WriteByte('[')
+	b.WriteString(util.ToString(r[0]))
+	b.WriteByte(',')
+	b.WriteString(util.ToString(r[1]))
+	b.WriteByte(']')
+	return b.String()
+}

@@ -1,14 +1,12 @@
-// Copyright (c) 2023-2024 Blockwatch Data Inc.
+// Copyright (c) 2023-2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package query
+package filter
 
 import (
-	"reflect"
 	"slices"
 	"sort"
 
-	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/slicex"
 )
 
@@ -76,7 +74,7 @@ import (
 //
 // TODO: range and set type modes
 //   - or: RG(A,B) + NE(C) => true iff C ¢ [A,B]
-func (n *FilterTreeNode) Optimize() {
+func (n *Node) Optimize() {
 	// stop at leaf nodes
 	if n.IsLeaf() {
 		return
@@ -87,7 +85,7 @@ func (n *FilterTreeNode) Optimize() {
 		n.Children[i].Optimize()
 	}
 
-	newChilds := make([]*FilterTreeNode, 0, len(n.Children))
+	newChilds := make([]*Node, 0, len(n.Children))
 
 	// remove or lift child nodes
 	for _, child := range n.Children {
@@ -135,9 +133,9 @@ func (n *FilterTreeNode) Optimize() {
 	n.Children = newChilds
 }
 
-func simplifyNodes(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
+func simplifyNodes(nodes []*Node, isOrNode bool) []*Node {
 	// split leafs from nested nodes
-	branches, leafs, ok := slicex.CutFunc(nodes, func(n *FilterTreeNode) bool {
+	branches, leafs, ok := slicex.CutFunc(nodes, func(n *Node) bool {
 		return !n.IsLeaf()
 	})
 
@@ -168,7 +166,7 @@ func simplifyNodes(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 	// simplify AND/OR when always true/false conds are present
 	if isOrNode {
 		// one node true => everything true
-		var trueNode *FilterTreeNode
+		var trueNode *Node
 		for _, n := range nodes {
 			if n.IsLeaf() && n.Filter.Mode == FilterModeTrue {
 				trueNode = n
@@ -176,17 +174,17 @@ func simplifyNodes(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 			}
 		}
 		if trueNode != nil {
-			return []*FilterTreeNode{trueNode}
+			return []*Node{trueNode}
 		}
 		// remove always false nodes unless its last
 		if len(nodes) > 1 {
-			nodes = slices.DeleteFunc(nodes, func(n *FilterTreeNode) bool {
+			nodes = slices.DeleteFunc(nodes, func(n *Node) bool {
 				return n.IsLeaf() && n.Filter.Mode == FilterModeFalse
 			})
 		}
 	} else {
 		// one node false => everything false
-		var falseNode *FilterTreeNode
+		var falseNode *Node
 		for _, n := range nodes {
 			if n.IsLeaf() && n.Filter.Mode == FilterModeFalse {
 				falseNode = n
@@ -194,11 +192,11 @@ func simplifyNodes(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 			}
 		}
 		if falseNode != nil {
-			return []*FilterTreeNode{falseNode}
+			return []*Node{falseNode}
 		}
 		// remove always true nodes unless its last
 		if len(nodes) > 1 {
-			nodes = slices.DeleteFunc(nodes, func(n *FilterTreeNode) bool {
+			nodes = slices.DeleteFunc(nodes, func(n *Node) bool {
 				return n.IsLeaf() && n.Filter.Mode == FilterModeTrue
 			})
 		}
@@ -225,8 +223,8 @@ func simplifyNodes(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 // - any: RG(N,max) => GE(N)
 // - any: RG(N,N) => EQ(N)
 // - any: IN(A,B,C) => RG(A,C)
-func simplifySingle(nodes []*FilterTreeNode, _ bool) []*FilterTreeNode {
-	var res []*FilterTreeNode
+func simplifySingle(nodes []*Node, _ bool) []*Node {
+	var res []*Node
 
 	for _, node := range nodes {
 		f := node.Filter
@@ -236,12 +234,12 @@ func simplifySingle(nodes []*FilterTreeNode, _ bool) []*FilterTreeNode {
 		case FilterModeIn:
 			switch f.Matcher.Len() {
 			case 0:
-				res = append(res, &FilterTreeNode{
-					Filter: makeFalseFilterFrom(f),
+				res = append(res, &Node{
+					Filter: f.AsFalse(),
 				})
 			case 1:
-				res = append(res, &FilterTreeNode{
-					Filter: makeFilterFrom(f, FilterModeEqual, reflectSliceIndex(f.Value, 0)),
+				res = append(res, &Node{
+					Filter: f.As(FilterModeEqual, slicex.Any(f.Value).Index(0)),
 				})
 			default:
 				// convert full set to range for integer types
@@ -249,12 +247,12 @@ func simplifySingle(nodes []*FilterTreeNode, _ bool) []*FilterTreeNode {
 				if isFull && minv != nil {
 					rg := RangeValue{minv, maxv}
 					if isFullDomain(f.Type, rg) {
-						res = append(res, &FilterTreeNode{
-							Filter: makeTrueFilterFrom(f),
+						res = append(res, &Node{
+							Filter: f.AsTrue(),
 						})
 					} else {
-						res = append(res, &FilterTreeNode{
-							Filter: makeFilterFrom(f, FilterModeRange, rg),
+						res = append(res, &Node{
+							Filter: f.As(FilterModeRange, rg),
 						})
 					}
 				} else {
@@ -265,12 +263,12 @@ func simplifySingle(nodes []*FilterTreeNode, _ bool) []*FilterTreeNode {
 		case FilterModeNotIn:
 			switch f.Matcher.Len() {
 			case 0:
-				res = append(res, &FilterTreeNode{
-					Filter: makeTrueFilterFrom(f),
+				res = append(res, &Node{
+					Filter: f.AsTrue(),
 				})
 			case 1:
-				res = append(res, &FilterTreeNode{
-					Filter: makeFilterFrom(f, FilterModeNotEqual, reflectSliceIndex(f.Value, 0)),
+				res = append(res, &Node{
+					Filter: f.As(FilterModeNotEqual, slicex.Any(f.Value).Index(0)),
 				})
 			default:
 				res = append(res, node)
@@ -278,16 +276,16 @@ func simplifySingle(nodes []*FilterTreeNode, _ bool) []*FilterTreeNode {
 			}
 		case FilterModeLt:
 			if f.Type.Cmp(f.Value, f.Type.MinNumericVal()) == 0 {
-				res = append(res, &FilterTreeNode{
-					Filter: makeFalseFilterFrom(f),
+				res = append(res, &Node{
+					Filter: f.AsFalse(),
 				})
 			} else {
 				res = append(res, node)
 			}
 		case FilterModeGt:
 			if f.Type.Cmp(f.Value, f.Type.MaxNumericVal()) == 0 {
-				res = append(res, &FilterTreeNode{
-					Filter: makeFalseFilterFrom(f),
+				res = append(res, &Node{
+					Filter: f.AsFalse(),
 				})
 			} else {
 				res = append(res, node)
@@ -295,12 +293,12 @@ func simplifySingle(nodes []*FilterTreeNode, _ bool) []*FilterTreeNode {
 		case FilterModeLe:
 			switch {
 			case f.Type.Cmp(f.Value, f.Type.MaxNumericVal()) == 0:
-				res = append(res, &FilterTreeNode{
-					Filter: makeTrueFilterFrom(f),
+				res = append(res, &Node{
+					Filter: f.AsTrue(),
 				})
 			case f.Type.Cmp(f.Value, f.Type.MinNumericVal()) == 0:
-				res = append(res, &FilterTreeNode{
-					Filter: makeFilterFrom(f, FilterModeEqual, f.Value),
+				res = append(res, &Node{
+					Filter: f.As(FilterModeEqual, f.Value),
 				})
 			default:
 				res = append(res, node)
@@ -308,12 +306,12 @@ func simplifySingle(nodes []*FilterTreeNode, _ bool) []*FilterTreeNode {
 		case FilterModeGe:
 			switch {
 			case f.Type.Cmp(f.Value, f.Type.MinNumericVal()) == 0:
-				res = append(res, &FilterTreeNode{
-					Filter: makeTrueFilterFrom(f),
+				res = append(res, &Node{
+					Filter: f.AsTrue(),
 				})
 			case f.Type.Cmp(f.Value, f.Type.MaxNumericVal()) == 0:
-				res = append(res, &FilterTreeNode{
-					Filter: makeFilterFrom(f, FilterModeEqual, f.Value),
+				res = append(res, &Node{
+					Filter: f.As(FilterModeEqual, f.Value),
 				})
 			default:
 				res = append(res, node)
@@ -323,24 +321,24 @@ func simplifySingle(nodes []*FilterTreeNode, _ bool) []*FilterTreeNode {
 			c := f.Type.Cmp(rg[0], rg[1])
 			switch {
 			case c > 0:
-				res = append(res, &FilterTreeNode{
-					Filter: makeFalseFilterFrom(f),
+				res = append(res, &Node{
+					Filter: f.AsFalse(),
 				})
 			case c == 0:
-				res = append(res, &FilterTreeNode{
-					Filter: makeFilterFrom(f, FilterModeEqual, rg[0]),
+				res = append(res, &Node{
+					Filter: f.As(FilterModeEqual, rg[0]),
 				})
 			case isFullDomain(f.Type, rg):
-				res = append(res, &FilterTreeNode{
-					Filter: makeTrueFilterFrom(f),
+				res = append(res, &Node{
+					Filter: f.AsTrue(),
 				})
 			case f.Type.Cmp(rg[0], f.Type.MinNumericVal()) == 0:
-				res = append(res, &FilterTreeNode{
-					Filter: makeFilterFrom(f, FilterModeLe, rg[1]),
+				res = append(res, &Node{
+					Filter: f.As(FilterModeLe, rg[1]),
 				})
 			case f.Type.Cmp(rg[1], f.Type.MaxNumericVal()) == 0:
-				res = append(res, &FilterTreeNode{
-					Filter: makeFilterFrom(f, FilterModeGe, rg[0]),
+				res = append(res, &Node{
+					Filter: f.As(FilterModeGe, rg[0]),
 				})
 			default:
 				res = append(res, node)
@@ -354,10 +352,10 @@ func simplifySingle(nodes []*FilterTreeNode, _ bool) []*FilterTreeNode {
 }
 
 // Simplifications for ranges that apply to AND or OR nodes
-func simplifyRanges(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
+func simplifyRanges(nodes []*Node, isOrNode bool) []*Node {
 	var (
-		resultNodes  []*FilterTreeNode
-		sameIdNodes  []*FilterTreeNode
+		resultNodes  []*Node
+		sameIdNodes  []*Node
 		sameIdRanges []RangeValue
 		lastIdx      int
 		eqMode       byte // bit flags: 1 = LE/GE/EQ/RG, 2 = LT/GT, 3 = both
@@ -393,18 +391,18 @@ func simplifyRanges(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 				resultNodes = append(resultNodes, sameIdNodes...)
 			case len(mergedRanges) == 0:
 				// replace with always false node
-				resultNodes = append(resultNodes, &FilterTreeNode{
-					Filter: makeFalseFilterFrom(f),
+				resultNodes = append(resultNodes, &Node{
+					Filter: f.AsFalse(),
 				})
 			case len(mergedRanges) == 1 && isFullDomain(f.Type, mergedRanges[0]):
 				// replace with always true node
-				resultNodes = append(resultNodes, &FilterTreeNode{
-					Filter: makeTrueFilterFrom(f),
+				resultNodes = append(resultNodes, &Node{
+					Filter: f.AsTrue(),
 				})
 			default:
 				// generate nodes
 				for _, rg := range mergedRanges {
-					resultNodes = append(resultNodes, &FilterTreeNode{
+					resultNodes = append(resultNodes, &Node{
 						Filter: makeRangeFilterFrom(f, rg, eqMode),
 					})
 				}
@@ -449,8 +447,8 @@ func simplifyRanges(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 			// check contradiction
 			rg := f.Value.(RangeValue)
 			if f.Type.Cmp(rg[0], rg[1]) > 0 {
-				resultNodes = append(resultNodes, &FilterTreeNode{
-					Filter: makeFalseFilterFrom(f),
+				resultNodes = append(resultNodes, &Node{
+					Filter: f.AsFalse(),
 				})
 				continue
 			}
@@ -461,8 +459,8 @@ func simplifyRanges(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 		case FilterModeLt:
 			// check contradiction (this also happens in simplifySingle)
 			if f.Type.Cmp(f.Value, f.Type.MinNumericVal()) == 0 {
-				resultNodes = append(resultNodes, &FilterTreeNode{
-					Filter: makeFalseFilterFrom(f),
+				resultNodes = append(resultNodes, &Node{
+					Filter: f.AsFalse(),
 				})
 				continue
 			}
@@ -485,8 +483,8 @@ func simplifyRanges(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 		case FilterModeGt:
 			// check contradiction (this also happens in simplifySingle)
 			if f.Type.Cmp(f.Value, f.Type.MaxNumericVal()) == 0 {
-				resultNodes = append(resultNodes, &FilterTreeNode{
-					Filter: makeFalseFilterFrom(f),
+				resultNodes = append(resultNodes, &Node{
+					Filter: f.AsFalse(),
 				})
 				continue
 			}
@@ -556,11 +554,11 @@ func simplifyRanges(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 // - or: IN(A) + NE(B) => true iff B in [A] (set + antiset covers all universe)
 // - any: EQ(A) + EQ(A) => EQ(A) -- same value, duplicate
 // - any: NE(A) + NE(A) => NE(A) -- same value, duplicate
-func simplifySets(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
+func simplifySets(nodes []*Node, isOrNode bool) []*Node {
 	var (
 		ins, nis    any
 		lastIdx     int
-		res         []*FilterTreeNode
+		res         []*Node
 		f           *Filter
 		plus, minus func(any, any) any
 	)
@@ -586,7 +584,7 @@ func simplifySets(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 	postProcess := func() {
 		// produce zero or one combined filter from sets
 		if flt := makeSetFilterFrom(f, ins, nis, isOrNode); flt != nil {
-			res = append(res, &FilterTreeNode{
+			res = append(res, &Node{
 				Filter: flt,
 			})
 		}
@@ -621,9 +619,9 @@ func simplifySets(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 		switch f.Mode {
 		case FilterModeEqual:
 			if ins == nil {
-				ins = makeReflectSlice(f.Value)
+				ins = slicex.MakeAny(f.Value)
 			} else {
-				ins = minus(ins, makeReflectSlice(f.Value))
+				ins = minus(ins, slicex.MakeAny(f.Value))
 			}
 		case FilterModeIn:
 			if ins == nil {
@@ -633,9 +631,9 @@ func simplifySets(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 			}
 		case FilterModeNotEqual:
 			if nis == nil {
-				nis = makeReflectSlice(f.Value)
+				nis = slicex.MakeAny(f.Value)
 			} else {
-				nis = plus(nis, makeReflectSlice(f.Value))
+				nis = plus(nis, slicex.MakeAny(f.Value))
 			}
 		case FilterModeNotIn:
 			if nis == nil {
@@ -676,33 +674,6 @@ func simplifySets(nodes []*FilterTreeNode, isOrNode bool) []*FilterTreeNode {
 	postProcess()
 
 	return res
-}
-
-func reflectSliceLen(s any) int {
-	return reflect.ValueOf(s).Len()
-}
-
-func reflectSliceIndex(slice any, index int) any {
-	return reflect.ValueOf(slice).Index(index).Interface()
-}
-
-// func appendReflectValue(a, b any) any {
-// 	return reflect.Append(reflect.ValueOf(a), reflect.ValueOf(b)).Interface()
-// }
-
-// func appendReflectSlice(a, b any) any {
-// 	return reflect.AppendSlice(reflect.ValueOf(a), reflect.ValueOf(b)).Interface()
-// }
-
-func makeReflectSlice(vals ...any) any {
-	if len(vals) == 0 {
-		return nil
-	}
-	slice := reflect.MakeSlice(reflect.SliceOf(reflect.TypeOf(vals[0])), 0, len(vals))
-	for _, v := range vals {
-		slice = reflect.Append(slice, reflect.ValueOf(v))
-	}
-	return slice.Interface()
 }
 
 func sortRanges(typ BlockType, vals []RangeValue) {
@@ -870,100 +841,48 @@ func makeSetFilterFrom(f *Filter, ins, nis any, isOrNode bool) *Filter {
 		} else {
 			set = f.Type.Difference(ins, nis)
 		}
-		switch reflectSliceLen(set) {
+		switch slicex.Any(set).Len() {
 		case 0:
 			if isOrNode {
-				return makeTrueFilterFrom(f) // tautology
+				return f.AsTrue() // tautology
 			} else {
-				return makeFalseFilterFrom(f) // contradiction
+				return f.AsFalse() // contradiction
 			}
 		case 1:
 			if isOrNode {
-				return makeFilterFrom(f, FilterModeNotEqual, reflectSliceIndex(set, 0))
+				return f.As(FilterModeNotEqual, slicex.Any(set).Index(0))
 			} else {
-				return makeFilterFrom(f, FilterModeEqual, reflectSliceIndex(set, 0))
+				return f.As(FilterModeEqual, slicex.Any(set).Index(0))
 			}
 		default:
 			if isOrNode {
-				return makeFilterFrom(f, FilterModeNotIn, set)
+				return f.As(FilterModeNotIn, set)
 			} else {
-				return makeFilterFrom(f, FilterModeIn, set)
+				return f.As(FilterModeIn, set)
 			}
 		}
 	case ins != nil:
 		// only IN (or EQ) conditions exist
-		switch reflectSliceLen(ins) {
+		switch slicex.Any(ins).Len() {
 		case 0:
-			return makeFalseFilterFrom(f) // contradiction
+			return f.AsFalse() // contradiction
 		case 1:
-			return makeFilterFrom(f, FilterModeEqual, reflectSliceIndex(ins, 0))
+			return f.As(FilterModeEqual, slicex.Any(ins).Index(0))
 		default:
-			return makeFilterFrom(f, FilterModeIn, ins)
+			return f.As(FilterModeIn, ins)
 		}
 	case nis != nil:
 		// only NI (or NE) conditions exist
-		switch reflectSliceLen(nis) {
+		switch slicex.Any(nis).Len() {
 		case 0:
-			return makeTrueFilterFrom(f) // tautology
+			return f.AsTrue() // tautology
 		case 1:
-			return makeFilterFrom(f, FilterModeNotEqual, reflectSliceIndex(nis, 0))
+			return f.As(FilterModeNotEqual, slicex.Any(nis).Index(0))
 		default:
-			return makeFilterFrom(f, FilterModeNotIn, nis)
+			return f.As(FilterModeNotIn, nis)
 		}
 	default:
 		return nil
-	}
-}
-
-func makeFalseFilterFrom(f *Filter) *Filter {
-	return &Filter{
-		Name:    f.Name,
-		Type:    f.Type,
-		Mode:    FilterModeFalse,
-		Index:   f.Index,
-		Id:      f.Id,
-		Matcher: &noopMatcher{},
-		Value:   nil,
-	}
-}
-
-func makeTrueFilterFrom(f *Filter) *Filter {
-	return &Filter{
-		Name:    f.Name,
-		Type:    f.Type,
-		Mode:    FilterModeTrue,
-		Index:   f.Index,
-		Id:      f.Id,
-		Matcher: &noopMatcher{},
-		Value:   nil,
-	}
-}
-
-func makeFilterFrom(f *Filter, mode FilterMode, val any) *Filter {
-	m := newFactory(f.Type).New(mode)
-	m.WithValue(val)
-	return &Filter{
-		Name:    f.Name,
-		Type:    f.Type,
-		Mode:    mode,
-		Index:   f.Index,
-		Id:      f.Id,
-		Matcher: m,
-		Value:   val,
-	}
-}
-
-func makeFilterFromSet(f *Filter, set *xroar.Bitmap) *Filter {
-	m := newFactory(f.Type).New(FilterModeIn)
-	m.WithSet(set)
-	return &Filter{
-		Name:    f.Name,
-		Type:    f.Type,
-		Mode:    FilterModeIn,
-		Index:   f.Index,
-		Id:      f.Id,
-		Matcher: m,
-		Value:   m.Value(), // FIXME: optimizer expects []T which is expensive
 	}
 }
 

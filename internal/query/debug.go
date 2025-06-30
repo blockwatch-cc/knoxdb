@@ -8,19 +8,10 @@ import (
 	"reflect"
 	"strings"
 
+	"blockwatch.cc/knoxdb/internal/operator/filter"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
-
-func (r RangeValue) String() string {
-	var b strings.Builder
-	b.WriteByte('[')
-	b.WriteString(util.ToString(r[0]))
-	b.WriteByte(',')
-	b.WriteString(util.ToString(r[1]))
-	b.WriteByte(']')
-	return b.String()
-}
 
 func (c Condition) String() string {
 	var b strings.Builder
@@ -50,14 +41,14 @@ func (c Condition) dump(level int, w *strings.Builder) {
 
 func (c Condition) FilterString() string {
 	switch c.Mode {
-	case FilterModeRange:
+	case types.FilterModeRange:
 		return fmt.Sprintf("%s %s [%s, %s]",
 			c.Name,
 			c.Mode.Symbol(),
-			util.ToString(c.Value.(RangeValue)[0]),
-			util.ToString(c.Value.(RangeValue)[1]),
+			util.ToString(c.Value.(filter.RangeValue)[0]),
+			util.ToString(c.Value.(filter.RangeValue)[1]),
 		)
-	case FilterModeIn, FilterModeNotIn:
+	case types.FilterModeIn, types.FilterModeNotIn:
 		size := reflect.ValueOf(c.Value).Len()
 		if size > 16 {
 			return fmt.Sprintf("%s %s [%d values]", c.Name, c.Mode.Symbol(), size)
@@ -69,49 +60,10 @@ func (c Condition) FilterString() string {
 	}
 }
 
-func (f Filter) String() string {
-	return fmt.Sprintf("%s[id=%d,ix=%d] %s %s",
-		f.Name,
-		f.Id,
-		f.Index,
-		f.Mode.Symbol(),
-		util.ToString(f.Value),
-	)
-}
-
-func (n FilterTreeNode) String() string {
-	var b strings.Builder
-	n.dump(0, &b)
-	return b.String()
-}
-
-func (n FilterTreeNode) dump(level int, w *strings.Builder) {
-	if n.IsLeaf() {
-		fmt.Fprint(w, n.Filter.String())
-		if n.Skip {
-			fmt.Fprint(w, " [SKIP] ")
-		}
-	}
-	kind := " AND "
-	if n.OrKind {
-		kind = " OR "
-	}
-	if level > 0 && len(n.Children) > 0 {
-		fmt.Fprint(w, " ( ")
-		defer fmt.Fprint(w, " ) ")
-	}
-	for i, v := range n.Children {
-		if i > 0 {
-			fmt.Fprint(w, kind)
-		}
-		v.dump(level+1, w)
-	}
-}
-
 func (q QueryPlan) String() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "SELECT ( %s ) WHERE ", strings.Join(q.ResultSchema.AllFieldNames(), ", "))
-	q.Filters.dump(0, &b)
+	q.Filters.WriteString(0, &b)
 	if q.Order != types.OrderAsc {
 		fmt.Fprintf(&b, " ORDER BY ID %s", strings.ToUpper(q.Order.String()))
 	}

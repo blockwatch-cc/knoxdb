@@ -1,7 +1,7 @@
-// Copyright (c) 2024 Blockwatch Data Inc.
+// Copyright (c) 2024-2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package query
+package filter
 
 import (
 	"slices"
@@ -55,7 +55,7 @@ func (m floatInSetMatcher[T]) MatchFilter(flt filter.Filter) bool {
 
 func (m floatInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
 	// Note: float compression containers do not implement set matching
-	acc := block.NewBlockAccessor[T](b)
+	acc := block.NewAccessor[T](b)
 	if mask != nil {
 		for i := range mask.Iterator() {
 			if m.slice.Contains(acc.Get(i)) {
@@ -118,7 +118,7 @@ func (m floatNotInSetMatcher[T]) MatchFilter(_ filter.Filter) bool {
 
 func (m floatNotInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
 	// Note: float compression containers do not implement set matching
-	acc := block.NewBlockAccessor[T](b)
+	acc := block.NewAccessor[T](b)
 	if mask != nil {
 		for i := range mask.Iterator() {
 			if !m.slice.Contains(acc.Get(i)) {

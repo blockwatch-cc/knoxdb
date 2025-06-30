@@ -1,7 +1,7 @@
-// Copyright (c) 2023 Blockwatch Data Inc.
+// Copyright (c) 2023-2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package query
+package filter
 
 import (
 	"blockwatch.cc/knoxdb/internal/bitset"
@@ -9,14 +9,13 @@ import (
 	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/filter"
 	"blockwatch.cc/knoxdb/internal/filter/bloom"
+	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
 
 	"unsafe"
 )
 
-type Number interface {
-	int64 | int32 | int16 | int8 | uint64 | uint32 | uint16 | uint8 | float64 | float32
-}
+type Number = types.Number
 
 type numMatchFunc[T Number] func(slice []T, val T, bits []byte) int64
 
@@ -344,12 +343,11 @@ func (m numEqualMatcher[T]) MatchFilter(flt filter.Filter) bool {
 }
 
 func (m numEqualMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
-	acc := block.NewBlockAccessor[T](b)
 	if b.IsMaterialized() {
-		n := m.match(acc.Slice(), m.val, bits.Bytes())
+		n := m.match(block.NewAccessor[T](b).Slice(), m.val, bits.Bytes())
 		bits.ResetCount(int(n))
 	} else {
-		acc.Matcher().MatchEqual(m.val, bits, mask)
+		block.GetMatcher[T](b).MatchEqual(m.val, bits, mask)
 	}
 }
 
@@ -384,12 +382,11 @@ func (m numNotEqualMatcher[T]) MatchRange(from, to any) bool {
 }
 
 func (m numNotEqualMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
-	acc := block.NewBlockAccessor[T](b)
 	if b.IsMaterialized() {
-		n := m.match(acc.Slice(), m.val, bits.Bytes())
+		n := m.match(block.NewAccessor[T](b).Slice(), m.val, bits.Bytes())
 		bits.ResetCount(int(n))
 	} else {
-		acc.Matcher().MatchNotEqual(m.val, bits, mask)
+		block.GetMatcher[T](b).MatchNotEqual(m.val, bits, mask)
 	}
 }
 
@@ -418,12 +415,11 @@ func (m numGtMatcher[T]) MatchRange(_, to any) bool {
 }
 
 func (m numGtMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
-	acc := block.NewBlockAccessor[T](b)
 	if b.IsMaterialized() {
-		n := m.match(acc.Slice(), m.val, bits.Bytes())
+		n := m.match(block.NewAccessor[T](b).Slice(), m.val, bits.Bytes())
 		bits.ResetCount(int(n))
 	} else {
-		acc.Matcher().MatchGreater(m.val, bits, mask)
+		block.GetMatcher[T](b).MatchGreater(m.val, bits, mask)
 	}
 }
 
@@ -450,12 +446,11 @@ func (m numGeMatcher[T]) MatchRange(_, to any) bool {
 }
 
 func (m numGeMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
-	acc := block.NewBlockAccessor[T](b)
 	if b.IsMaterialized() {
-		n := m.match(acc.Slice(), m.val, bits.Bytes())
+		n := m.match(block.NewAccessor[T](b).Slice(), m.val, bits.Bytes())
 		bits.ResetCount(int(n))
 	} else {
-		acc.Matcher().MatchGreaterEqual(m.val, bits, mask)
+		block.GetMatcher[T](b).MatchGreaterEqual(m.val, bits, mask)
 	}
 }
 
@@ -482,12 +477,11 @@ func (m numLtMatcher[T]) MatchRange(from, _ any) bool {
 }
 
 func (m numLtMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
-	acc := block.NewBlockAccessor[T](b)
 	if b.IsMaterialized() {
-		n := m.match(acc.Slice(), m.val, bits.Bytes())
+		n := m.match(block.NewAccessor[T](b).Slice(), m.val, bits.Bytes())
 		bits.ResetCount(int(n))
 	} else {
-		acc.Matcher().MatchLess(m.val, bits, mask)
+		block.GetMatcher[T](b).MatchLess(m.val, bits, mask)
 	}
 }
 
@@ -514,12 +508,11 @@ func (m numLeMatcher[T]) MatchRange(from, _ any) bool {
 }
 
 func (m numLeMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
-	acc := block.NewBlockAccessor[T](b)
 	if b.IsMaterialized() {
-		n := m.match(acc.Slice(), m.val, bits.Bytes())
+		n := m.match(block.NewAccessor[T](b).Slice(), m.val, bits.Bytes())
 		bits.ResetCount(int(n))
 	} else {
-		acc.Matcher().MatchLessEqual(m.val, bits, mask)
+		block.GetMatcher[T](b).MatchLessEqual(m.val, bits, mask)
 	}
 }
 
@@ -561,12 +554,11 @@ func (m numRangeMatcher[T]) MatchRange(from, to any) bool {
 }
 
 func (m numRangeMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
-	acc := block.NewBlockAccessor[T](b)
 	if b.IsMaterialized() {
-		n := m.match(acc.Slice(), m.from, m.to, bits.Bytes())
+		n := m.match(block.NewAccessor[T](b).Slice(), m.from, m.to, bits.Bytes())
 		bits.ResetCount(int(n))
 	} else {
-		acc.Matcher().MatchBetween(m.from, m.to, bits, mask)
+		block.GetMatcher[T](b).MatchBetween(m.from, m.to, bits, mask)
 	}
 }
 
@@ -656,7 +648,7 @@ func (m numInSetMatcher[T]) MatchRange(from, to any) bool {
 func (m numInSetMatcher[T]) MatchFilter(flt filter.Filter) bool {
 	switch x := flt.(type) {
 	case *xroar.Bitmap:
-		return !xroar.And(m.set, x).IsEmpty()
+		return xroar.And(m.set, x).Any()
 	case *bloom.Filter:
 		for _, h := range m.hashes {
 			if flt.Contains(h.Uint64()) {
@@ -679,11 +671,11 @@ func (m numInSetMatcher[T]) MatchFilter(flt filter.Filter) bool {
 }
 
 func (m numInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
-	acc := block.NewBlockAccessor[T](b)
 	if !b.IsMaterialized() {
-		acc.Matcher().MatchInSet(m.set, bits, mask)
+		block.GetMatcher[T](b).MatchInSet(m.set, bits, mask)
 		return
 	}
+	acc := block.NewAccessor[T](b)
 	if mask != nil {
 		for i := range mask.Iterator() {
 			if m.set.Contains(uint64(acc.Get(i))) {
@@ -710,8 +702,8 @@ func (m numInSetMatcher[T]) MatchRangeVectors(mins, maxs *block.Block, bits, mas
 	}
 
 	// handle fully materialized blocks with raw number vectors
-	minx := block.NewBlockAccessor[T](mins).Slice()
-	maxx := block.NewBlockAccessor[T](maxs).Slice()
+	minx := block.NewAccessor[T](mins).Slice()
+	maxx := block.NewAccessor[T](maxs).Slice()
 	if mask != nil {
 		for i := range mask.Iterator() {
 			minU64, maxU64 := uint64(minx[i]), uint64(maxx[i])
@@ -788,7 +780,7 @@ func (m numNotInSetMatcher[T]) MatchRange(from, to any) bool {
 func (m numNotInSetMatcher[T]) MatchFilter(flt filter.Filter) bool {
 	switch x := flt.(type) {
 	case *xroar.Bitmap:
-		return !xroar.AndNot(m.set, x).IsEmpty()
+		return xroar.AndNot(m.set, x).Any()
 	default:
 		// we don't know due to false positive probability, so full scan is required
 		return true
@@ -796,11 +788,11 @@ func (m numNotInSetMatcher[T]) MatchFilter(flt filter.Filter) bool {
 }
 
 func (m numNotInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {
-	acc := block.NewBlockAccessor[T](b)
 	if !b.IsMaterialized() {
-		acc.Matcher().MatchNotInSet(m.set, bits, mask)
+		block.GetMatcher[T](b).MatchNotInSet(m.set, bits, mask)
 		return
 	}
+	acc := block.NewAccessor[T](b)
 	if mask != nil {
 		for i := range mask.Iterator() {
 			if !m.set.Contains(uint64(acc.Get(i))) {

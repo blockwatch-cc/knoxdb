@@ -1,7 +1,7 @@
-// Copyright (c) 2024 Blockwatch Data Inc.
+// Copyright (c) 2024-2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package query
+package filter
 
 import (
 	"regexp"
@@ -12,6 +12,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/num"
+	"blockwatch.cc/knoxdb/pkg/slicex"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -214,14 +215,14 @@ func TestMatchSet(t *testing.T) {
 			m := newFactory(gen.Type()).New(FilterModeIn)
 			m.WithSlice(slice)
 			assert.Equal(t, slice, m.Value())
-			assert.Equal(t, reflectSliceLen(slice), m.Len(), "len")
+			assert.Equal(t, slicex.Any(slice).Len(), m.Len(), "len")
 
 			// value matching
-			assert.True(t, m.MatchValue(reflectSliceIndex(slice, 0)), "match-in: %v in %v", reflectSliceIndex(slice, 0), slice)
+			assert.True(t, m.MatchValue(slicex.Any(slice).Index(0)), "match-in: %v in %v", slicex.Any(slice).Index(0), slice)
 			assert.False(t, m.MatchValue(gen.MakeValue(10)), "match-notin: %v nin %v", gen.MakeValue(10), slice)
 
 			// range matching
-			assert.True(t, m.MatchRange(reflectSliceIndex(slice, 0), reflectSliceIndex(slice, 1)), "range-in")
+			assert.True(t, m.MatchRange(slicex.Any(slice).Index(0), slicex.Any(slice).Index(1)), "range-in")
 			assert.False(t, m.MatchRange(gen.MakeValue(10), gen.MakeValue(12)), "range-out")
 
 			// bitmap matching only supported in int types

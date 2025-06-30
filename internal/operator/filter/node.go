@@ -1,11 +1,11 @@
-// Copyright (c) 2023 Blockwatch Data Inc.
+// Copyright (c) 2023-2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package query
+package filter
 
 import (
-	"errors"
 	"fmt"
+	"strings"
 
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/xroar"
@@ -13,76 +13,59 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
-var (
-	ErrNoName    = errors.New("missing field name")
-	ErrNoMode    = errors.New("invalid filter mode")
-	ErrNoMatcher = errors.New("missing matcher")
-	ErrNoValue   = errors.New("missing value")
-)
-
-type Filter struct {
-	Name    string     // schema field name
-	Type    BlockType  // block type (we need for opimizing filter trees)
-	Mode    FilterMode // eq|ne|gt|gte|lt|lte|rg|in|nin|re
-	Index   int        // field index (use with pack.Package.Block() and schema.View.Get())
-	Id      uint16     // field unique id (used as storage key)
-	Matcher Matcher    // encapsulated match data and function
-	Value   any        // direct val for eq|ne|gt|ge|lt|le, [2]any for rg, slice for in|nin, string re
-}
-
-func (f *Filter) Weight() int {
-	return f.Matcher.Weight()
-}
-
-func (f *Filter) Validate() error {
-	if f.Name == "" {
-		return ErrNoName
-	}
-	if !f.Mode.IsValid() {
-		return ErrNoMode
-	}
-	switch f.Mode {
-	case FilterModeTrue, FilterModeFalse:
-		// empty matcher or value ok
-	default:
-		if f.Matcher == nil {
-			return ErrNoMatcher
-		}
-		if f.Value == nil {
-			return ErrNoValue
-		}
-	}
-	return nil
-}
-
 // type FilterFlags byte
 
 // const (
-// 	FilterFlagIsOr  FilterFlags = 1 << iota // or kind
-// 	FilterFlagCanSkip                       // processed, may skip
-// 	FilterFlagIsIndexResult                 // index scan result
-// 	FilterFlagUseBloom                      // leaf node may use bloom filter match
+//  FilterFlagIsOr  FilterFlags = 1 << iota // or kind
+//  FilterFlagCanSkip                       // processed, may skip
+//  FilterFlagIsIndexResult                 // index scan result
+//  FilterFlagUseBloom                      // leaf node may use bloom filter match
 // )
 
 // Invariants
 // - root is always an AND node
 // - root is never a leaf node
 // - root may not be empty (no children)
-type FilterTreeNode struct {
-	Children []*FilterTreeNode // sub filter
-	Filter   *Filter           // ptr to condition
-	Bits     *xroar.Bitmap     // index scan result
-	OrKind   bool              // AND|OR
-	Skip     bool              // sub-tree or leaf filter has been processed already
+type Node struct {
+	Children []*Node       // sub filter
+	Filter   *Filter       // ptr to condition
+	Bits     *xroar.Bitmap // index scan result
+	OrKind   bool          // AND|OR
+	Skip     bool          // sub-tree or leaf filter has been processed already
 
 	// Flags FilterFlags // lifecycle flags
 }
 
-func (n *FilterTreeNode) IsLeaf() bool {
+func NewNode() *Node {
+	return &Node{}
+}
+
+func (n *Node) SetFilter(f *Filter) *Node {
+	n.Filter = f
+	n.Children = nil
+	return n
+}
+
+func (n *Node) AddChild(c *Node) *Node {
+	n.Children = append(n.Children, c)
+	return n
+}
+
+func (n *Node) AddLeaf(f *Filter) *Node {
+	n.Children = append(n.Children, NewNode().SetFilter(f))
+	return n
+}
+
+func (n *Node) SetOr(b bool) *Node {
+	n.OrKind = b
+	return n
+}
+
+func (n *Node) IsLeaf() bool {
 	return n.Filter != nil && len(n.Children) == 0
 }
 
-func (n *FilterTreeNode) IsProcessed() bool {
+func (n *Node) IsProcessed() bool {
 	if n.Skip || n.Bits.IsValid() {
 		return true
 	}
@@ -98,16 +81,16 @@ func (n *FilterTreeNode) IsProcessed() bool {
 }
 
 // filter tree is a tautology, i.e. all possible values match
-func (n *FilterTreeNode) IsAnyMatch() bool {
+func (n *Node) IsAnyMatch() bool {
 	return n.IsLeaf() && n.Filter.Mode == FilterModeTrue
 }
 
 // filter tree is a contradiction (i.e. also when index match was found)
-func (n *FilterTreeNode) IsNoMatch() bool {
+func (n *Node) IsNoMatch() bool {
 	return n.IsLeaf() && n.Filter.Mode == FilterModeFalse
 }
 
-func (n *FilterTreeNode) Validate(pos string) error {
+func (n *Node) Validate(pos string) error {
 	// Check if node is invalid (no children and no filter)
 	if len(n.Children) == 0 && n.Filter == nil {
 		return fmt.Errorf("[%s] invalid leaf node: missing filter", pos)
@@ -132,7 +115,7 @@ func (n *FilterTreeNode) Validate(pos string) error {
 
 // Fields returns a unique ordered list of field names referenced by
 // filters in this tree.
-func (n *FilterTreeNode) Fields() []string {
+func (n *Node) Fields() []string {
 	if n.IsLeaf() {
 		return []string{n.Filter.Name}
 	}
@@ -143,15 +126,27 @@ func (n *FilterTreeNode) Fields() []string {
 	return slicex.UniqueStrings(names)
 }
 
+// returns a unique ordered list of field ids
+func (n *Node) FieldIds() []uint16 {
+	if n.IsLeaf() {
+		return []uint16{n.Filter.Id}
+	}
+	ids := make([]uint16, 0)
+	for _, v := range n.Children {
+		ids = append(ids, v.FieldIds()...)
+	}
+	return slicex.Unique(ids)
+}
+
 // Indexes returns a unique ordered list of field indexes referenced by
 // filters in this tree.
-// func (n *FilterTreeNode) Indexes() []int {
-// 	ord := slicex.NewOrderedIntegers(make([]int, 0)).SetUnique()
-// 	n.collectIndexes(ord)
-// 	return ord.Values
+// func (n *Node) Indexes() []int {
+//  ord := slicex.NewOrderedIntegers(make([]int, 0)).SetUnique()
+//  n.collectIndexes(ord)
+//  return ord.Values
 // }
 
-func (n *FilterTreeNode) collectIndexes(s *slicex.OrderedIntegers[int]) {
+func (n *Node) collectIndexes(s *slicex.OrderedIntegers[int]) {
 	if n.IsLeaf() {
 		s.Insert(n.Filter.Index)
 		return
@@ -162,7 +157,7 @@ func (n *FilterTreeNode) collectIndexes(s *slicex.OrderedIntegers[int]) {
 }
 
 // Size returns the total number of condition leaf nodes
-func (n *FilterTreeNode) Size() int {
+func (n *Node) Size() int {
 	if n.IsLeaf() {
 		return 1
 	}
@@ -174,11 +169,11 @@ func (n *FilterTreeNode) Size() int {
 }
 
 // Depth returns the max number of tree levels
-func (n *FilterTreeNode) Depth() int {
+func (n *Node) Depth() int {
 	return n.depth(0)
 }
 
-func (n *FilterTreeNode) depth(level int) int {
+func (n *Node) depth(level int) int {
 	if n.IsLeaf() {
 		return level
 	}
@@ -190,7 +185,7 @@ func (n *FilterTreeNode) depth(level int) int {
 }
 
 // returns the decision tree size (including sub-conditions)
-func (n *FilterTreeNode) Weight() int {
+func (n *Node) Weight() int {
 	if n.Bits.IsValid() {
 		return 0
 	}
@@ -207,17 +202,17 @@ func (n *FilterTreeNode) Weight() int {
 // returns the subtree execution cost based on the number of rows
 // that may be visited in the given pack for a full scan times the
 // number of comparisons
-func (n *FilterTreeNode) Cost(nValues int) int {
+func (n *Node) Cost(nValues int) int {
 	return n.Weight() * nValues
 }
 
 // engine matcher interface
-// func (n *FilterTreeNode) MatchView(v *schema.View) bool {
-// 	return MatchTree(n, v)
+// func (n *Node) MatchView(v *schema.View) bool {
+//  return MatchTree(n, v)
 // }
 
-func (n *FilterTreeNode) Overlaps(v engine.ConditionMatcher) bool {
-	_, ok := v.(*FilterTreeNode)
+func (n *Node) Overlaps(v engine.ConditionMatcher) bool {
+	_, ok := v.(*Node)
 	if !ok {
 		return false
 	}
@@ -226,7 +221,7 @@ func (n *FilterTreeNode) Overlaps(v engine.ConditionMatcher) bool {
 }
 
 // ForEach visits each filter in the tree
-func (n *FilterTreeNode) ForEach(fn func(*Filter) error) error {
+func (n *Node) ForEach(fn func(*Filter) error) error {
 	if n.IsLeaf() {
 		return fn(n.Filter)
 	}
@@ -237,4 +232,33 @@ func (n *FilterTreeNode) ForEach(fn func(*Filter) error) error {
 		}
 	}
 	return nil
+}
+
+func (n *Node) String() string {
+	var b strings.Builder
+	n.WriteString(0, &b)
+	return b.String()
+}
+
+func (n *Node) WriteString(level int, w *strings.Builder) {
+	if n.IsLeaf() {
+		fmt.Fprint(w, n.Filter.String())
+		if n.Skip {
+			fmt.Fprint(w, " [SKIP] ")
+		}
+	}
+	kind := " AND "
+	if n.OrKind {
+		kind = " OR "
+	}
+	if level > 0 && len(n.Children) > 0 {
+		fmt.Fprint(w, " ( ")
+		defer fmt.Fprint(w, " ) ")
+	}
+	for i, v := range n.Children {
+		if i > 0 {
+			fmt.Fprint(w, kind)
+		}
+		v.WriteString(level+1, w)
+	}
 }

@@ -6,14 +6,18 @@ package query
 import (
 	"bytes"
 	"context"
+	"reflect"
 	"testing"
 	"time"
 
 	"github.com/echa/log"
 
 	"blockwatch.cc/knoxdb/internal/engine"
+	"blockwatch.cc/knoxdb/internal/operator/filter"
+	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/bitmap"
 	"blockwatch.cc/knoxdb/pkg/schema"
+	"blockwatch.cc/knoxdb/pkg/slicex"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -143,7 +147,7 @@ func (t *MockTable) Stream(_ context.Context, _ engine.QueryPlan, fn func(engine
 	return nil
 }
 
-func IsFilterEqual(a, b *FilterTreeNode) bool {
+func IsFilterEqual(a, b *filter.Node) bool {
 	if len(a.Children) != len(b.Children) {
 		return false
 	}
@@ -190,12 +194,12 @@ func IsFilterEqual(a, b *FilterTreeNode) bool {
 
 func TestPlanCompile(t *testing.T) {
 	// define and compile initial filter conditions; the result, a tree of
-	// FilterTreeNode nodes will get optimized and changed during query
+	// filter.Node nodes will get optimized and changed during query
 	// execution steps
 	type TestCase struct {
 		Name      string
 		Condition Condition
-		Expected  *FilterTreeNode
+		Expected  *filter.Node
 	}
 
 	f1, _ := testSchema.FieldByName("id")
@@ -536,7 +540,7 @@ func TestPlanQueryIndexes(t *testing.T) {
 		Name      string
 		Condition Condition
 		Index     engine.QueryableIndex
-		Expected  *FilterTreeNode
+		Expected  *filter.Node
 	}
 
 	f1, _ := testSchema.FieldByName("id")
@@ -632,4 +636,158 @@ func TestPlanQueryIndexes(t *testing.T) {
 			}
 		})
 	}
+}
+
+// makeNode constructs a Node with a specified filter mode, field index, and value, setting up the appropriate matcher.
+func makeNode(field schema.Field, mode types.FilterMode, value any) *filter.Node {
+	tree := filter.NewNode()
+	// Log the initial value and its type
+	// log.Printf("makeNode called with mode: %v, fieldIndex: %d, value: %v (type: %T)", mode, fieldIndex, value, value)
+
+	blockType := field.Type().BlockType()
+	f := &filter.Filter{
+		Name:    field.Name(),
+		Mode:    mode,
+		Index:   int(field.Id() - 1), // index = id - 1 (for regular fields)
+		Id:      field.Id(),
+		Type:    blockType,
+		Value:   value,
+		Matcher: filter.NewFactory(field.Type()).New(mode),
+	}
+
+	caster := schema.NewCaster(field.Type(), field.Scale(), nil)
+
+	// Handle different modes appropriately
+	switch mode {
+	case types.FilterModeTrue, types.FilterModeFalse:
+		// nothing to do
+	case types.FilterModeIn, types.FilterModeNotIn:
+		if reflect.ValueOf(value).Kind() != reflect.Slice {
+			value = slicex.MakeAny(value)
+		}
+		v, err := caster.CastSlice(value)
+		if err != nil {
+			panic(err)
+		}
+		f.Value = blockType.Unique(v)
+		f.Matcher.WithSlice(f.Value)
+	case types.FilterModeRange:
+		rg, ok := value.(filter.RangeValue)
+		if !ok {
+			// make a range out of a single value
+			rg[0] = value
+			rg[1] = value
+		}
+		var err error
+		rg[0], err = caster.CastValue(rg[0])
+		if err != nil {
+			panic(err)
+		}
+		rg[1], err = caster.CastValue(rg[1])
+		if err != nil {
+			panic(err)
+		}
+		f.Value = rg
+		f.Matcher.WithValue(f.Value)
+	default:
+		v, err := caster.CastValue(value)
+		if err != nil {
+			panic(err)
+		}
+		f.Value = v
+		f.Matcher.WithValue(f.Value)
+	}
+
+	// Log the final value and its type after processing
+	// log.Printf("makeNode processed value: %v (type: %T)", f.Value, f.Value)
+
+	tree.Filter = f
+	return tree
+}
+
+// newTestTree constructs a logical tree (AND/OR) Node with specified child nodes.
+func newTestTree(orKind bool, children ...*filter.Node) *filter.Node {
+	if len(children) == 0 {
+		return filter.NewNode()
+	}
+	return &filter.Node{
+		OrKind:   orKind,
+		Children: children,
+	}
+}
+
+const (
+	OR  = true
+	AND = false
+)
+
+// makeAndTree constructs a logical AND tree from the provided child nodes.
+func makeAndTree(children ...*filter.Node) *filter.Node {
+	return newTestTree(AND, children...)
+}
+
+// makeOrTree constructs a logical OR tree from the provided child nodes.
+func makeOrTree(children ...*filter.Node) *filter.Node {
+	return newTestTree(OR, children...)
+}
+
+// makeEqualNode constructs a Node for an equality condition with a specified integer value.
+func makeEqualNode(field schema.Field, val any) *filter.Node {
+	return makeNode(field, types.FilterModeEqual, val)
+}
+
+// makeRangeNode constructs a Node for a range condition between two integer values.
+func makeRangeNode(field schema.Field, from, to any) *filter.Node {
+	return makeNode(field, types.FilterModeRange, filter.RangeValue{from, to})
+}
+
+// makeRegexNode constructs a Node for a regular expression condition with a specified string.
+// makeRegexNode constructs a Node for a regexp conditions.
+func makeRegexNode(field schema.Field, s string) *filter.Node {
+	return makeNode(field, types.FilterModeRegexp, s)
+}
+
+// makeInNode constructs a Node for an IN condition with a list of integer values.
+func makeInNode(field schema.Field, vals any) *filter.Node {
+	return makeNode(field, types.FilterModeIn, vals)
+}
+
+// makeNiNode constructs a Node for an Not IN condition with a list of integer values.
+func makeNotInNode(field schema.Field, vals any) *filter.Node {
+	return makeNode(field, types.FilterModeNotIn, vals)
+}
+
+// makeNotEqualNode constructs a Node for a not-equal condition with a specified integer value.
+func makeNotEqualNode(field schema.Field, val any) *filter.Node {
+	return makeNode(field, types.FilterModeNotEqual, val)
+}
+
+// makeGtNode constructs a Node for a greater-than condition with a specified integer value.
+func makeGtNode(field schema.Field, val any) *filter.Node {
+	return makeNode(field, types.FilterModeGt, val)
+}
+
+// makeLtNode constructs a Node for a less-than condition with a specified integer value.
+func makeLtNode(field schema.Field, val any) *filter.Node {
+	return makeNode(field, types.FilterModeLt, val)
+}
+
+// makeGeNode constructs a Node for a greater-than-or-equal condition with a specified integer value.
+func makeGeNode(field schema.Field, val any) *filter.Node {
+	return makeNode(field, types.FilterModeGe, val)
+}
+
+// makeLeNode constructs a Node for a less-than-or-equal condition with a specified integer value.
+func makeLeNode(field schema.Field, val any) *filter.Node {
+	return makeNode(field, types.FilterModeLe, val)
+}
+
+// makeFalseNode constructs a Node for a false condition.
+func makeFalseNode(field schema.Field) *filter.Node {
+	return makeNode(field, types.FilterModeFalse, nil)
+}
+
+// makeTrueNode constructs a Node for a true condition.
+func makeTrueNode(field schema.Field) *filter.Node {
+	return makeNode(field, types.FilterModeTrue, nil)
 }

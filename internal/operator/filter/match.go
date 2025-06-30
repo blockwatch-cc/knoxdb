@@ -1,17 +1,14 @@
-// Copyright (c) 2024 Blockwatch Data Inc.
+// Copyright (c) 2024-2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package query
+package filter
 
 import (
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/filter"
-	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
 )
-
-var NoopMatcher = &noopMatcher{}
 
 // Matcher defines a common interface for comparison operations regardless
 // of data type and mode.
@@ -83,11 +80,11 @@ type MatcherFactory interface {
 
 // Need custom matchers for
 // Time (maybe, currently int64 internally; if we were to introduce time-zones, then yes)
-func NewFactory(ftyp types.FieldType) MatcherFactory {
+func NewFactory(ftyp FieldType) MatcherFactory {
 	return newFactory(ftyp.BlockType())
 }
 
-func newFactory(typ types.BlockType) MatcherFactory {
+func newFactory(typ BlockType) MatcherFactory {
 	switch typ {
 	case BlockInt64:
 		return NumMatcherFactory[int64]{typ}
@@ -122,6 +119,8 @@ func newFactory(typ types.BlockType) MatcherFactory {
 	}
 }
 
+var NoopMatcher = &noopMatcher{}
+
 // noopMatcher can be used for undefined type/mode combinations,
 // e.g. regexp match on numeric fields
 type noopMatcher struct{}
@@ -155,47 +154,3 @@ func (m noopMatcher) MatchRangeVectors(_, _ *block.Block, bits, mask *bitset.Bit
 		bits.Copy(mask)
 	}
 }
-
-// func MatchTree(n *FilterTreeNode, v *schema.View) bool {
-// 	// handle always true conditions
-// 	if n.IsAnyMatch() {
-// 		return true
-// 	}
-
-// 	// handle always false conditions
-// 	if n.IsNoMatch() {
-// 		return false
-// 	}
-
-// 	// match leaf filter
-// 	if n.IsLeaf() {
-// 		return MatchFilter(n.Filter, v)
-// 	}
-
-// 	// match and aggregate all children
-// 	if n.OrKind {
-// 		for _, c := range n.Children {
-// 			if MatchTree(c, v) {
-// 				return true
-// 			}
-// 		}
-// 		return false
-// 	} else {
-// 		for _, c := range n.Children {
-// 			if !MatchTree(c, v) {
-// 				return false
-// 			}
-// 		}
-// 		return true
-// 	}
-// }
-
-// func MatchFilter(f *Filter, view *schema.View) bool {
-// 	// get data value as interface
-// 	v, ok := view.Get(int(f.Index))
-// 	if !ok {
-// 		return false
-// 	}
-// 	// compare against condition value
-// 	return f.Matcher.MatchValue(v)
-// }

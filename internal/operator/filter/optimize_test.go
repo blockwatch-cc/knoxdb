@@ -1,7 +1,7 @@
-// Copyright (c) 2024 Blockwatch Data Inc.
+// Copyright (c) 2024-2025 Blockwatch Data Inc.
 // Author: oliver@blockwatch.cc
 
-package query
+package filter
 
 import (
 	"fmt"
@@ -11,6 +11,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/pkg/schema"
+	"blockwatch.cc/knoxdb/pkg/slicex"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -33,8 +34,8 @@ func TestOptimize(t *testing.T) {
 		f2, _ := sm.FieldByName("f2")
 		tests := []struct {
 			name      string
-			input     *FilterTreeNode
-			expected  *FilterTreeNode
+			input     *Node
+			expected  *Node
 			comment   string
 			skipTypes []BlockType
 			onlyTypes []BlockType
@@ -288,9 +289,9 @@ func TestOptimizeExtended(t *testing.T) {
 	}
 }
 
-// makeNode constructs a FilterTreeNode with a specified filter mode, field index, and value, setting up the appropriate matcher.
-func makeNode(field schema.Field, mode FilterMode, value any) *FilterTreeNode {
-	tree := &FilterTreeNode{}
+// makeNode constructs a Node with a specified filter mode, field index, and value, setting up the appropriate matcher.
+func makeNode(field schema.Field, mode FilterMode, value any) *Node {
+	tree := &Node{}
 	// Log the initial value and its type
 	// log.Printf("makeNode called with mode: %v, fieldIndex: %d, value: %v (type: %T)", mode, fieldIndex, value, value)
 
@@ -313,7 +314,7 @@ func makeNode(field schema.Field, mode FilterMode, value any) *FilterTreeNode {
 		// nothing to do
 	case FilterModeIn, FilterModeNotIn:
 		if reflect.ValueOf(value).Kind() != reflect.Slice {
-			value = makeReflectSlice(value)
+			value = slicex.MakeAny(value)
 		}
 		v, err := caster.CastSlice(value)
 		if err != nil {
@@ -355,84 +356,89 @@ func makeNode(field schema.Field, mode FilterMode, value any) *FilterTreeNode {
 	return tree
 }
 
-// newTestTree constructs a logical tree (AND/OR) FilterTreeNode with specified child nodes.
-func newTestTree(orKind bool, children ...*FilterTreeNode) *FilterTreeNode {
+// newTestTree constructs a logical tree (AND/OR) Node with specified child nodes.
+func newTestTree(orKind bool, children ...*Node) *Node {
 	if len(children) == 0 {
-		return &FilterTreeNode{}
+		return &Node{}
 	}
-	return &FilterTreeNode{
+	return &Node{
 		OrKind:   orKind,
 		Children: children,
 	}
 }
 
+const (
+	OR  = true
+	AND = false
+)
+
 // makeAndTree constructs a logical AND tree from the provided child nodes.
-func makeAndTree(children ...*FilterTreeNode) *FilterTreeNode {
-	return newTestTree(COND_AND, children...)
+func makeAndTree(children ...*Node) *Node {
+	return newTestTree(AND, children...)
 }
 
 // makeOrTree constructs a logical OR tree from the provided child nodes.
-func makeOrTree(children ...*FilterTreeNode) *FilterTreeNode {
-	return newTestTree(COND_OR, children...)
+func makeOrTree(children ...*Node) *Node {
+	return newTestTree(OR, children...)
 }
 
-// makeEqualNode constructs a FilterTreeNode for an equality condition with a specified integer value.
-func makeEqualNode(field schema.Field, val any) *FilterTreeNode {
+// makeEqualNode constructs a Node for an equality condition with a specified integer value.
+func makeEqualNode(field schema.Field, val any) *Node {
 	return makeNode(field, FilterModeEqual, val)
 }
 
-// makeRangeNode constructs a FilterTreeNode for a range condition between two integer values.
-func makeRangeNode(field schema.Field, from, to any) *FilterTreeNode {
+// makeRangeNode constructs a Node for a range condition between two integer values.
+func makeRangeNode(field schema.Field, from, to any) *Node {
 	return makeNode(field, FilterModeRange, RangeValue{from, to})
 }
 
-// makeRegexNode constructs a FilterTreeNode for a regular expression condition with a specified string.
-// makeRegexNode constructs a FilterTreeNode for a regexp conditions.
-func makeRegexNode(field schema.Field, s string) *FilterTreeNode {
+// makeRegexNode constructs a Node for a regular expression condition with a specified string.
+// makeRegexNode constructs a Node for a regexp conditions.
+func makeRegexNode(field schema.Field, s string) *Node {
 	return makeNode(field, FilterModeRegexp, s)
 }
 
-// makeInNode constructs a FilterTreeNode for an IN condition with a list of integer values.
-func makeInNode(field schema.Field, vals any) *FilterTreeNode {
+// makeInNode constructs a Node for an IN condition with a list of integer values.
+func makeInNode(field schema.Field, vals any) *Node {
 	return makeNode(field, FilterModeIn, vals)
 }
 
-// makeNiNode constructs a FilterTreeNode for an Not IN condition with a list of integer values.
-func makeNotInNode(field schema.Field, vals any) *FilterTreeNode {
+// makeNiNode constructs a Node for an Not IN condition with a list of integer values.
+func makeNotInNode(field schema.Field, vals any) *Node {
 	return makeNode(field, FilterModeNotIn, vals)
 }
 
-// makeNotEqualNode constructs a FilterTreeNode for a not-equal condition with a specified integer value.
-func makeNotEqualNode(field schema.Field, val any) *FilterTreeNode {
+// makeNotEqualNode constructs a Node for a not-equal condition with a specified integer value.
+func makeNotEqualNode(field schema.Field, val any) *Node {
 	return makeNode(field, FilterModeNotEqual, val)
 }
 
-// makeGtNode constructs a FilterTreeNode for a greater-than condition with a specified integer value.
-func makeGtNode(field schema.Field, val any) *FilterTreeNode {
+// makeGtNode constructs a Node for a greater-than condition with a specified integer value.
+func makeGtNode(field schema.Field, val any) *Node {
 	return makeNode(field, FilterModeGt, val)
 }
 
-// makeLtNode constructs a FilterTreeNode for a less-than condition with a specified integer value.
-func makeLtNode(field schema.Field, val any) *FilterTreeNode {
+// makeLtNode constructs a Node for a less-than condition with a specified integer value.
+func makeLtNode(field schema.Field, val any) *Node {
 	return makeNode(field, FilterModeLt, val)
 }
 
-// makeGeNode constructs a FilterTreeNode for a greater-than-or-equal condition with a specified integer value.
-func makeGeNode(field schema.Field, val any) *FilterTreeNode {
+// makeGeNode constructs a Node for a greater-than-or-equal condition with a specified integer value.
+func makeGeNode(field schema.Field, val any) *Node {
 	return makeNode(field, FilterModeGe, val)
 }
 
-// makeLeNode constructs a FilterTreeNode for a less-than-or-equal condition with a specified integer value.
-func makeLeNode(field schema.Field, val any) *FilterTreeNode {
+// makeLeNode constructs a Node for a less-than-or-equal condition with a specified integer value.
+func makeLeNode(field schema.Field, val any) *Node {
 	return makeNode(field, FilterModeLe, val)
 }
 
-// makeFalseNode constructs a FilterTreeNode for a false condition.
-func makeFalseNode(field schema.Field) *FilterTreeNode {
+// makeFalseNode constructs a Node for a false condition.
+func makeFalseNode(field schema.Field) *Node {
 	return makeNode(field, FilterModeFalse, nil)
 }
 
-// makeTrueNode constructs a FilterTreeNode for a true condition.
-func makeTrueNode(field schema.Field) *FilterTreeNode {
+// makeTrueNode constructs a Node for a true condition.
+func makeTrueNode(field schema.Field) *Node {
 	return makeNode(field, FilterModeTrue, nil)
 }

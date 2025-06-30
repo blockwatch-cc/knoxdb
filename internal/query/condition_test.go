@@ -6,6 +6,8 @@ package query
 import (
 	"testing"
 
+	"blockwatch.cc/knoxdb/internal/operator/filter"
+	"blockwatch.cc/knoxdb/internal/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -26,34 +28,75 @@ func TestConditionParse(t *testing.T) {
 		wantErr  bool
 	}{
 		// Basic integer equality - verifies number parsing and type conversion
-		{"Equal Integer", "id", "123", Condition{Name: "id", Mode: FilterModeEqual, Value: uint64(123)}, false},
+		{
+			"Equal Integer", "id", "123",
+			Condition{Name: "id", Mode: types.FilterModeEqual, Value: uint64(123)},
+			false,
+		},
 
 		// Hex integer equality - verifies number parsing and type conversion
-		{"Equal Integer", "id", "0xff", Condition{Name: "id", Mode: FilterModeEqual, Value: uint64(255)}, false},
+		{
+			"Equal Integer", "id", "0xff",
+			Condition{Name: "id", Mode: types.FilterModeEqual, Value: uint64(255)},
+			false,
+		},
 
 		// Float comparison - tests decimal parsing and GT mode
-		{"Greater Than Float", "score.gt", "4.5", Condition{Name: "score", Mode: FilterModeGt, Value: 4.5}, false},
+		{
+			"Greater Than Float", "score.gt", "4.5",
+			Condition{Name: "score", Mode: types.FilterModeGt, Value: 4.5},
+			false,
+		},
 
 		// String pattern matching - validates regexp mode handling
-		{"String Contains", "name.re", "Blockwatch", Condition{Name: "name", Mode: FilterModeRegexp, Value: []byte("Blockwatch")}, false},
+		{
+			"String Contains", "name.re", "Blockwatch",
+			Condition{Name: "name", Mode: types.FilterModeRegexp, Value: []byte("Blockwatch")},
+			false,
+		},
 
 		// Date range - tests date parsing and range mode handling
-		{"Date Range", "created.rg", "2023-01-01,2023-12-31", Condition{Name: "created", Mode: FilterModeRange, Value: RangeValue{int64(1672531200000000000), int64(1703980800000000000)}}, false},
+		{
+			"Date Range", "created.rg", "2023-01-01,2023-12-31",
+			Condition{
+				Name:  "created",
+				Mode:  types.FilterModeRange,
+				Value: filter.RangeValue{int64(1672531200000000000), int64(1703980800000000000)},
+			},
+			false,
+		},
 
 		// Enum in - tests enum parsing and IN mode handling
-		{"Enum In", "status.in", "pending,inactive", Condition{Name: "status", Mode: FilterModeIn, Value: []uint16{1, 2}}, false},
+		{
+			"Enum In", "status.in", "pending,inactive",
+			Condition{Name: "status", Mode: types.FilterModeIn, Value: []uint16{1, 2}},
+			false,
+		},
 
 		// Invalid field - tests error handling for invalid fields
-		{"Invalid Field", "nonexistent", "value", Condition{}, true},
+		{
+			"Invalid Field", "nonexistent", "value", Condition{}, true},
 
 		// Invalid mode - tests error handling for invalid modes
-		{"Invalid Mode", "id.invalid", "123", Condition{}, true},
+		{
+			"Invalid Mode", "id.invalid", "123",
+			Condition{},
+			true,
+		},
 
 		// Empty string - tests empty string handling
-		{"Empty String", "name", "", Condition{Name: "name", Mode: FilterModeEqual, Value: []byte("")}, false},
+		{
+			"Empty String", "name", "",
+			Condition{Name: "name", Mode: types.FilterModeEqual, Value: []byte("")},
+			false,
+		},
 
 		// Boolean value - tests boolean parsing and mode handling
-		{"Boolean Value", "is_active", "true", Condition{Name: "is_active", Mode: FilterModeEqual, Value: true}, false},
+		{
+			"Boolean Value", "is_active", "true",
+			Condition{Name: "is_active", Mode: types.FilterModeEqual, Value: true},
+			false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -100,7 +143,7 @@ func TestConditionValidate(t *testing.T) {
 		{
 			name: "Empty Name",
 			cond: Condition{
-				Mode:  FilterModeEqual,
+				Mode:  types.FilterModeEqual,
 				Value: 1,
 			},
 			wantErr: true,
@@ -109,7 +152,7 @@ func TestConditionValidate(t *testing.T) {
 			name: "Invalid Mode",
 			cond: Condition{
 				Name:  "id",
-				Mode:  FilterMode(255),
+				Mode:  types.FilterMode(255),
 				Value: 1,
 			},
 			wantErr: true,
@@ -118,7 +161,7 @@ func TestConditionValidate(t *testing.T) {
 			name: "Nil Value",
 			cond: Condition{
 				Name: "id",
-				Mode: FilterModeEqual,
+				Mode: types.FilterModeEqual,
 			},
 			wantErr: true,
 		},
@@ -257,7 +300,7 @@ func TestConditionCompile(t *testing.T) {
 			name: "Invalid Mode",
 			cond: Condition{
 				Name:  "test",
-				Mode:  FilterMode(255),
+				Mode:  types.FilterMode(255),
 				Value: 123,
 			},
 			fields:  []string{"test"},
@@ -301,43 +344,43 @@ func TestConditionAdd(t *testing.T) {
 		{
 			name:     "Empty + AND",
 			cond:     Condition{},
-			add:      func(c *Condition) { c.And("id", FilterModeEqual, 123) },
+			add:      func(c *Condition) { c.And("id", types.FilterModeEqual, 123) },
 			expected: "id = 123",
 		},
 		{
 			name:     "AND + AND",
 			cond:     Equal("id", 1),
-			add:      func(c *Condition) { c.And("name", FilterModeEqual, "Blockwatch") },
+			add:      func(c *Condition) { c.And("name", types.FilterModeEqual, "Blockwatch") },
 			expected: "id = 1 AND name = Blockwatch",
 		},
 		{
 			name:     "Empty + OR",
 			cond:     Condition{},
-			add:      func(c *Condition) { c.Or("id", FilterModeEqual, 123) },
+			add:      func(c *Condition) { c.Or("id", types.FilterModeEqual, 123) },
 			expected: "id = 123",
 		},
 		{
 			name:     "AND + OR",
 			cond:     Equal("id", 1),
-			add:      func(c *Condition) { c.Or("name", FilterModeEqual, "Blockwatch") },
+			add:      func(c *Condition) { c.Or("name", types.FilterModeEqual, "Blockwatch") },
 			expected: "id = 1 OR name = Blockwatch",
 		},
 		{
 			name:     "OR + OR",
 			cond:     Or(Equal("id", 1)),
-			add:      func(c *Condition) { c.Or("name", FilterModeEqual, "Blockwatch") },
+			add:      func(c *Condition) { c.Or("name", types.FilterModeEqual, "Blockwatch") },
 			expected: "id = 1 OR name = Blockwatch",
 		},
 		{
 			name:     "OR + AND",
 			cond:     Or(Equal("id", 1)),
-			add:      func(c *Condition) { c.And("name", FilterModeEqual, "Blockwatch") },
+			add:      func(c *Condition) { c.And("name", types.FilterModeEqual, "Blockwatch") },
 			expected: "(id = 1) AND name = Blockwatch",
 		},
 		{
 			name:     "AND* + OR",
 			cond:     And(Equal("id", 1), Equal("id", 2)),
-			add:      func(c *Condition) { c.Or("name", FilterModeEqual, "Blockwatch") },
+			add:      func(c *Condition) { c.Or("name", types.FilterModeEqual, "Blockwatch") },
 			expected: "(id = 1 AND id = 2) OR name = Blockwatch",
 		},
 

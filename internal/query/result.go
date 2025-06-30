@@ -5,6 +5,7 @@ package query
 
 import (
 	"bytes"
+	"context"
 	"iter"
 	"time"
 
@@ -27,7 +28,8 @@ var (
 	_ engine.QueryResultConsumer = (*CountResult)(nil)
 	_ engine.QueryResultConsumer = (*StreamResult)(nil)
 
-	ErrResultClosed = engine.ErrResultClosed
+	ErrResultClosed   = engine.ErrResultClosed
+	ErrResultOverflow = engine.ErrResultOverflow
 )
 
 type CountResult struct {
@@ -38,15 +40,19 @@ func NewCountResult() *CountResult {
 	return &CountResult{}
 }
 
-func (r *CountResult) Append(_ *pack.Package, sel []uint32) error {
-	r.n += uint64(len(sel))
+func (r *CountResult) Append(_ context.Context, src *pack.Package) error {
+	if sel := src.Selected(); sel != nil {
+		r.n += uint64(len(sel))
+	} else {
+		r.n += uint64(src.Len())
+	}
 	return nil
 }
 
-func (r *CountResult) AppendRange(_ *pack.Package, i, j int) error {
-	r.n += uint64(j - i)
-	return nil
-}
+// func (r *CountResult) AppendRange(_ context.Context, _ *pack.Package, i, j int) error {
+// 	r.n += uint64(j - i)
+// 	return nil
+// }
 
 func (r *CountResult) Count() uint64 {
 	return r.n
@@ -73,22 +79,37 @@ func NewStreamResult(fn StreamCallback) *StreamResult {
 }
 
 // QueryResultConsumer interface
-func (r *StreamResult) Append(pkg *pack.Package, sel []uint32) error {
+func (r *StreamResult) Append(_ context.Context, pkg *pack.Package) error {
 	r.r.pkg = pkg
-	for i := range sel {
-		r.n++
-		if err := r.fn(r.r.Row(int(i))); err != nil {
-			return err
+	sel := pkg.Selected()
+	if sel == nil {
+		for i := range pkg.Len() {
+			r.n++
+			if err := r.fn(r.r.Row(i)); err != nil {
+				return err
+			}
+		}
+	} else {
+		for _, v := range sel {
+			r.n++
+			if err := r.fn(r.r.Row(int(v))); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
 }
 
-func (r *StreamResult) AppendRange(pkg *pack.Package, i, j int) error {
-	r.r.pkg = pkg
-	r.n++
-	return r.fn(r.r.Row(i))
-}
+// func (r *StreamResult) AppendRange(_ context.Context, pkg *pack.Package, i, j int) error {
+// 	r.r.pkg = pkg
+// 	for k := i; k < j; k++ {
+// 		r.n++
+// 		if err := r.fn(r.r.Row(k)); err != nil {
+// 			return err
+// 		}
+// 	}
+// 	return nil
+// }
 
 func (r *StreamResult) Len() int {
 	return r.n
@@ -112,13 +133,21 @@ func NewResult(pkg *pack.Package) *Result {
 	}
 }
 
-func (r *Result) AppendRange(pkg *pack.Package, i, j int) error {
-	r.pkg.AppendRange(pkg, i, j)
-	return nil
-}
+// func (r *Result) AppendRange(_ context.Context, pkg *pack.Package, i, j int) error {
+// 	r.pkg.AppendRange(pkg, i, j)
+// 	return nil
+// }
 
-func (r *Result) Append(pkg *pack.Package, sel []uint32) error {
-	pkg.AppendTo(r.pkg, sel)
+func (r *Result) Append(_ context.Context, src *pack.Package) error {
+	sel := src.Selected()
+	k := src.Len()
+	if sel != nil {
+		k = len(sel)
+	}
+	n := src.AppendTo(r.pkg, sel)
+	if n < k {
+		return ErrResultOverflow
+	}
 	return nil
 }
 

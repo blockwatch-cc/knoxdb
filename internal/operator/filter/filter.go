@@ -1,216 +1,131 @@
-// Copyright (c) 2024 Blockwatch Data Inc.
+// Copyright (c) 2023-2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package filter
 
 import (
-    "blockwatch.cc/knoxdb/internal/bitset"
-    "blockwatch.cc/knoxdb/internal/pack"
-    "blockwatch.cc/knoxdb/internal/pack/stats"
-    "blockwatch.cc/knoxdb/internal/query"
-    "blockwatch.cc/knoxdb/internal/types"
+	"errors"
+	"fmt"
+
+	"blockwatch.cc/knoxdb/internal/xroar"
+	"blockwatch.cc/knoxdb/pkg/schema"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
-// MatchFilter matches all elements in package pkg against the defined condition
-// and returns a bitset of the same length as the package with bits set to true
-// where the match is successful.
-//
-// This implementation uses low level block vectors to efficiently execute
-// vectorized checks with custom assembly-optimized routines.
-func MatchFilter(f *query.Filter, pkg *pack.Package, bits, mask *bitset.Bitset) *bitset.Bitset {
-    if bits == nil {
-        bits = bitset.New(pkg.Len())
-    }
-    f.Matcher.MatchVector(pkg.Block(int(f.Index)), bits, mask)
-    return bits
+var (
+	ErrNoName    = errors.New("missing field name")
+	ErrNoMode    = errors.New("invalid filter mode")
+	ErrNoMatcher = errors.New("missing matcher")
+	ErrNoValue   = errors.New("missing value")
+)
+
+type Filter struct {
+	Name    string     // schema field name
+	Type    BlockType  // block type (we need for opimizing filter trees)
+	Mode    FilterMode // eq|ne|gt|gte|lt|lte|rg|in|nin|re
+	Index   int        // field index (use with pack.Package.Block() and schema.View.Get())
+	Id      uint16     // field unique id (used as storage key)
+	Matcher Matcher    // encapsulated match data and function
+	Value   any        // direct val for eq|ne|gt|ge|lt|le, [2]any for rg, slice for in|nin, string re
 }
 
-// MatchTree matches pack contents against a query condition (sub)tree.
-func MatchTree(n *query.FilterTreeNode, pkg *pack.Package, r stats.Reader, bits *bitset.Bitset) *bitset.Bitset {
-    if n.IsLeaf() {
-        return MatchFilter(n.Filter, pkg, bits, nil)
-    }
-
-    if n.OrKind {
-        return MatchTreeOr(n, pkg, r, bits)
-    } else {
-        return MatchTreeAnd(n, pkg, r, bits)
-    }
+func NewFilter(f *schema.Field, idx int, mode FilterMode, val any) *Filter {
+	m := newFactory(f.Type().BlockType()).New(mode)
+	m.WithValue(val)
+	return &Filter{
+		Name:    f.Name(),
+		Type:    f.Type().BlockType(),
+		Mode:    mode,
+		Index:   idx,
+		Id:      f.Id(),
+		Value:   val,
+		Matcher: m,
+	}
 }
 
-// MatchTreeAnd matches siblings from the same level in a filter tree.
-// It return a bit vector from combining child matches with a logical AND
-// and does so efficiently by skipping unnecessary matches and aggregations.
-//
-// TODO: concurrent condition matches and cascading bitset merge
-func MatchTreeAnd(n *query.FilterTreeNode, pkg *pack.Package, r stats.Reader, bits *bitset.Bitset) *bitset.Bitset {
-    // start with a full bitset
-    if bits == nil {
-        bits = bitset.New(pkg.Len())
-    }
-    bits.One()
-
-    // match conditions and merge bit vectors, empty condition lists or always true
-    // filters result in a full match; stop early when result contains all zeros
-    for _, node := range n.Children {
-        // skip always true nodes (AND branches may contain a single always true filter)
-        if node.IsAnyMatch() {
-            continue
-        }
-
-        var scratch *bitset.Bitset
-        if !node.IsLeaf() {
-            // recurse into another AND or OR condition subtree
-            scratch = MatchTree(node, pkg, r, scratch)
-        } else {
-            f := node.Filter
-            // Quick inclusion check to skip matching when the current condition
-            // would return an all-true vector. Note that we do not have to check
-            // for an all-false vector because MaybeMatchTree() has already deselected
-            // packs of that kind (except the journal)
-            if r != nil {
-                min, max := r.MinMax(int(f.Index))
-                // typ := blockInfo.Type
-                switch f.Mode {
-                case types.FilterModeEqual:
-                    // condition is always true iff min == max == f.Value
-                    if f.Type.EQ(min, f.Value) && f.Type.EQ(max, f.Value) {
-                        continue
-                    }
-                case types.FilterModeNotEqual:
-                    // condition is always true iff f.Value < min || f.Value > max
-                    if f.Type.LT(f.Value, min) || f.Type.GT(f.Value, max) {
-                        continue
-                    }
-                case types.FilterModeRange:
-                    // condition is always true iff pack range <= condition range
-                    rg := f.Value.(query.RangeValue)
-                    if f.Type.LE(rg[0], min) && f.Type.GE(rg[1], max) {
-                        continue
-                    }
-                case types.FilterModeGt:
-                    // condition is always true iff min > f.Value
-                    if f.Type.GT(min, f.Value) {
-                        continue
-                    }
-                case types.FilterModeGe:
-                    // condition is always true iff min >= f.Value
-                    if f.Type.GE(min, f.Value) {
-                        continue
-                    }
-                case types.FilterModeLt:
-                    // condition is always true iff max < f.Value
-                    if f.Type.LT(max, f.Value) {
-                        continue
-                    }
-                case types.FilterModeLe:
-                    // condition is always true iff max <= f.Value
-                    if f.Type.LE(max, f.Value) {
-                        continue
-                    }
-                }
-            }
-
-            // match vector against condition using last match as mask
-            scratch = MatchFilter(f, pkg, scratch, bits)
-        }
-
-        // merge
-        _, any, _ := bits.AndFlag(scratch)
-        scratch.Close()
-
-        // early stop on empty aggregate match
-        if !any {
-            break
-        }
-    }
-    return bits
+func (f *Filter) Weight() int {
+	return f.Matcher.Weight()
 }
 
-// Return a bit vector containing matching positions in the pack combining
-// multiple OR conditions with efficient skipping and aggregation.
-func MatchTreeOr(n *query.FilterTreeNode, pkg *pack.Package, r stats.Reader, bits *bitset.Bitset) *bitset.Bitset {
-    // start with an empty bitset
-    if bits == nil {
-        bits = bitset.New(pkg.Len())
-    } else {
-        bits.Zero()
-    }
+func (f *Filter) Validate() error {
+	if f.Name == "" {
+		return ErrNoName
+	}
+	if !f.Mode.IsValid() {
+		return ErrNoMode
+	}
+	switch f.Mode {
+	case FilterModeTrue, FilterModeFalse:
+		// empty matcher or value ok
+	default:
+		if f.Matcher == nil {
+			return ErrNoMatcher
+		}
+		if f.Value == nil {
+			return ErrNoValue
+		}
+	}
+	return nil
+}
 
-    // match conditions and merge bit vectors, always true/false conditions
-    // are optimized away at this point, stop early when result contains all ones
-    for i, node := range n.Children {
-        var scratch *bitset.Bitset
-        if !node.IsLeaf() {
-            // recurse into another AND or OR condition subtree
-            scratch = MatchTree(node, pkg, r, scratch)
-        } else {
-            f := node.Filter
-            // Quick inclusion check to skip matching when the current condition
-            // would return an all-true vector. Note that we do not have to check
-            // for an all-false vector because MaybeMatchPack() has already deselected
-            // packs of that kind (except the journal).
-            if r != nil {
-                min, max := r.MinMax(int(f.Index))
-                skipEarly := false
-                switch f.Mode {
-                case types.FilterModeEqual:
-                    // condition is always true iff min == max == f.Value
-                    skipEarly = f.Type.EQ(min, f.Value) && f.Type.EQ(max, f.Value)
+func (f *Filter) String() string {
+	return fmt.Sprintf("%s[id=%d,n=%d] %s %s",
+		f.Name,
+		f.Id,
+		f.Index,
+		f.Mode.Symbol(),
+		util.ToString(f.Value),
+	)
+}
 
-                case types.FilterModeNotEqual:
-                    // condition is always true iff f.Value < min || f.Value > max
-                    skipEarly = f.Type.LT(f.Value, min) || f.Type.GT(f.Value, max)
+func (f *Filter) AsFalse() *Filter {
+	return &Filter{
+		Name:    f.Name,
+		Type:    f.Type,
+		Mode:    FilterModeFalse,
+		Index:   f.Index,
+		Id:      f.Id,
+		Matcher: &noopMatcher{},
+		Value:   nil,
+	}
+}
 
-                case types.FilterModeRange:
-                    // condition is always true iff pack range <= condition range
-                    rg := f.Value.(query.RangeValue)
-                    skipEarly = f.Type.LE(rg[0], min) && f.Type.GE(rg[1], max)
+func (f *Filter) AsTrue() *Filter {
+	return &Filter{
+		Name:    f.Name,
+		Type:    f.Type,
+		Mode:    FilterModeTrue,
+		Index:   f.Index,
+		Id:      f.Id,
+		Matcher: &noopMatcher{},
+		Value:   nil,
+	}
+}
 
-                case types.FilterModeGt:
-                    // condition is always true iff min > f.Value
-                    skipEarly = f.Type.GT(min, f.Value)
+func (f *Filter) As(mode FilterMode, val any) *Filter {
+	m := newFactory(f.Type).New(mode)
+	m.WithValue(val)
+	return &Filter{
+		Name:    f.Name,
+		Type:    f.Type,
+		Mode:    mode,
+		Index:   f.Index,
+		Id:      f.Id,
+		Matcher: m,
+		Value:   val,
+	}
+}
 
-                case types.FilterModeGe:
-                    // condition is always true iff min >= f.Value
-                    skipEarly = f.Type.GE(min, f.Value)
-
-                case types.FilterModeLt:
-                    // condition is always true iff max < f.Value
-                    skipEarly = f.Type.LT(max, f.Value)
-
-                case types.FilterModeLe:
-                    // condition is always true iff max <= f.Value
-                    skipEarly = f.Type.LE(max, f.Value)
-                }
-                if skipEarly {
-                    return bits.One()
-                }
-            }
-
-            // match vector against condition using last match as mask;
-            // since this is an OR match we only have to test all values
-            // with unset mask bits, that's why we negate the mask first
-            //
-            // Note that an optimization exists for IN/NIN on all types
-            // which implicitly assumes an AND between mask and vector,
-            // i.e. it skips checks for all elems with a mask bit set.
-            // For correctness this still works because we merge mask
-            // and pack match set using OR below. However we cannot
-            // use a shortcut (on all pack bits == 1).
-            mask := bits.Clone().Neg()
-            scratch = MatchFilter(f, pkg, scratch, mask)
-            mask.Close()
-        }
-
-        // merge
-        bits.Or(scratch)
-        scratch.Close()
-
-        // early stop on full aggregate match
-        if i < len(n.Children)-1 && bits.All() {
-            break
-        }
-    }
-    return bits
+func (f *Filter) AsSet(set *xroar.Bitmap) *Filter {
+	m := newFactory(f.Type).New(FilterModeIn)
+	m.WithSet(set)
+	return &Filter{
+		Name:    f.Name,
+		Type:    f.Type,
+		Mode:    FilterModeIn,
+		Index:   f.Index,
+		Id:      f.Id,
+		Matcher: m,
+		Value:   m.Value(), // FIXME: optimizer expects []T which is expensive
+	}
 }

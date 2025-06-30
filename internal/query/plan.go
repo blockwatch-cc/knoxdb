@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"blockwatch.cc/knoxdb/internal/engine"
+	"blockwatch.cc/knoxdb/internal/operator/filter"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/schema"
@@ -52,7 +53,7 @@ var QueryLogMinDuration time.Duration = 500 * time.Millisecond
 
 type QueryPlan struct {
 	Tag     string
-	Filters *FilterTreeNode
+	Filters *filter.Node
 	Limit   uint32
 	Offset  uint32 // discouraged
 	Order   OrderType
@@ -73,7 +74,7 @@ type QueryPlan struct {
 func NewQueryPlan() *QueryPlan {
 	return &QueryPlan{
 		Log:     log.Disabled,
-		Filters: &FilterTreeNode{},
+		Filters: &filter.Node{},
 		Stats:   NewQueryStats(),
 	}
 }
@@ -112,7 +113,7 @@ func (p *QueryPlan) WithFlags(f QueryFlags) *QueryPlan {
 	return p
 }
 
-func (p *QueryPlan) WithFilters(node *FilterTreeNode) *QueryPlan {
+func (p *QueryPlan) WithFilters(node *filter.Node) *QueryPlan {
 	p.Filters = node
 	return p
 }
@@ -222,10 +223,11 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 
 	// use tx snapshot if exists
 	p.Snap = engine.GetSnapshot(ctx)
+	hasMeta := p.Table.Schema().HasMeta()
 
 	// extend filter from snapshot if table supports metadata
 	// allow user override by setting an explicit request schema
-	if p.RequestSchema == nil && p.Snap != nil && p.Table.Schema().HasMeta() {
+	if p.RequestSchema == nil && p.Snap != nil && hasMeta {
 		mc, err := And(
 			// NEW records are visible when their xid committed before the
 			// snapshot, i.e. either `xid < snap.xmin` or `xid !E snap.xact`.
@@ -249,22 +251,23 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 		p.Filters.Children = append(p.Filters.Children, mc.Children...)
 	}
 
-	// request at least the primary key field
-	filterFields := slicex.NewOrderedStrings(p.Filters.Fields())
-	if filterFields.Len() == 0 {
-		filterFields.Insert(p.Table.Schema().Pk().Name())
+	// request at least the primary key and row_id fields
+	filterFieldIds := append(p.Filters.FieldIds(), p.Table.Schema().PkId())
+	if hasMeta {
+		filterFieldIds = append(filterFieldIds, schema.MetaRid)
 	}
+	filterFieldIds = slicex.Unique(filterFieldIds)
 
 	// construct request schema
 	if p.RequestSchema == nil {
-		s, err := p.Table.Schema().SelectFields(filterFields.Values...)
+		s, err := p.Table.Schema().SelectFieldIds(filterFieldIds...)
 		if err != nil {
 			return p.Errorf("make request schema: %v", err)
 		}
-		p.RequestSchema = s.Sort()
+		p.RequestSchema = s.Sort().WithName(p.Tag)
 	}
 
-	p.Log.Tracef("request %s", p.RequestSchema)
+	// p.Log.Debugf("request schema %s", p.RequestSchema)
 
 	// identify relevant indexes based on request schema fields
 	for _, idx := range p.Table.Indexes() {
@@ -272,8 +275,7 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 		// this will select all single-field indexes and all
 		// composite indexes where the first index field is used as
 		// query condition (they may use prefix key matches)
-		idxFirstField := idx.Schema().Fields()[0]
-		if !filterFields.Contains(idxFirstField.Name()) {
+		if !slicex.Contains(filterFieldIds, idx.Schema().Field(0).Id()) {
 			continue
 		}
 		p.Indexes = append(p.Indexes, idx)
@@ -283,7 +285,7 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 	if p.ResultSchema == nil {
 		p.ResultSchema = p.Table.Schema()
 	}
-	p.Log.Tracef("result %s", p.ResultSchema)
+	// p.Log.Debugf("result schema %s", p.ResultSchema)
 
 	// optimize plan
 	// - reorder filters
@@ -306,6 +308,7 @@ func (p *QueryPlan) QueryIndexes(ctx context.Context) error {
 	if p.Flags.IsNoIndex() || p.Filters.IsProcessed() {
 		return nil
 	}
+	origFieldIds := p.Filters.FieldIds()
 
 	// Step 1: query indexes, attach bitmap results
 	n, err := p.queryIndexNode(ctx, p.Filters)
@@ -314,13 +317,13 @@ func (p *QueryPlan) QueryIndexes(ctx context.Context) error {
 	}
 	p.Log.Debugf("%d index results", n)
 
-	// prepare pk field filter template
+	// prepare rowid field filter template
 	ts := p.Table.Schema()
-	tmpl := &Filter{
-		Name:  ts.Pk().Name(),
-		Type:  ts.Pk().Type().BlockType(),
-		Index: ts.PkIndex(),
-		Id:    ts.PkId(),
+	tmpl := &filter.Filter{
+		Name:  "$rid",
+		Type:  types.BlockUint64,
+		Index: ts.RowIdIndex(),
+		Id:    schema.MetaRid,
 	}
 
 	// Step 2: add IN conditions from aggregate bits at each tree level
@@ -332,11 +335,15 @@ func (p *QueryPlan) QueryIndexes(ctx context.Context) error {
 	p.Filters.Optimize()
 	p.Log.Debugf("Optimized %s", p.Filters)
 
-	// Step 4: adjust request schema (we may have to check less fields now)
-	filterFields := slicex.NewOrderedStrings(p.Filters.Fields())
-	requestFields := slicex.NewOrderedStrings(p.RequestSchema.ActiveFieldNames())
-	if !filterFields.Equal(requestFields) && filterFields.Len() > 0 {
-		s, err := p.Table.Schema().SelectFields(filterFields.Values...)
+	// Step 4: adjust request schema (we may have to check less fields now,
+	// but keep all meta fields), collect list of fields to drop (lists are sorted)
+	drop := slicex.RemoveSorted(
+		origFieldIds,
+		slicex.Unique(append(p.Filters.FieldIds(), schema.MetaFieldIds...)),
+	)
+	if len(drop) > 0 {
+		keep := slicex.Remove(p.RequestSchema.AllFieldIds(), drop)
+		s, err := p.Table.Schema().SelectFieldIds(keep...)
 		if err != nil {
 			return p.Errorf("update request schema: %v", err)
 		}
@@ -347,7 +354,7 @@ func (p *QueryPlan) QueryIndexes(ctx context.Context) error {
 	return nil
 }
 
-func (p *QueryPlan) decorateIndexNodes(node *FilterTreeNode, tmpl *Filter, isRoot bool) {
+func (p *QueryPlan) decorateIndexNodes(node *filter.Node, tmpl *filter.Filter, isRoot bool) {
 	// we only handle container nodes here because decoration adds
 	// new conditions into the child list
 
@@ -382,12 +389,12 @@ func (p *QueryPlan) decorateIndexNodes(node *FilterTreeNode, tmpl *Filter, isRoo
 
 		// add a new primary key IN condition to root
 		if bits.Count() == 0 {
-			node.Children = append(node.Children, &FilterTreeNode{
-				Filter: makeFalseFilterFrom(tmpl),
+			node.Children = append(node.Children, &filter.Node{
+				Filter: tmpl.AsFalse(),
 			})
 		} else {
-			node.Children = append(node.Children, &FilterTreeNode{
-				Filter: makeFilterFromSet(tmpl, bits),
+			node.Children = append(node.Children, &filter.Node{
+				Filter: tmpl.AsSet(bits),
 			})
 		}
 
@@ -402,12 +409,12 @@ func (p *QueryPlan) decorateIndexNodes(node *FilterTreeNode, tmpl *Filter, isRoo
 		if child.IsLeaf() {
 			if child.Bits.IsValid() {
 				if child.Bits.Count() == 0 {
-					node.Children = append(node.Children, &FilterTreeNode{
-						Filter: makeFalseFilterFrom(tmpl),
+					node.Children = append(node.Children, &filter.Node{
+						Filter: tmpl.AsFalse(),
 					})
 				} else {
-					node.Children = append(node.Children, &FilterTreeNode{
-						Filter: makeFilterFromSet(tmpl, child.Bits),
+					node.Children = append(node.Children, &filter.Node{
+						Filter: tmpl.AsSet(child.Bits),
 					})
 				}
 			}
@@ -417,12 +424,12 @@ func (p *QueryPlan) decorateIndexNodes(node *FilterTreeNode, tmpl *Filter, isRoo
 		// composite child conditions attach bits to the common anchestor
 		if child.Bits.IsValid() {
 			if child.Bits.Count() == 0 {
-				node.Children = append(node.Children, &FilterTreeNode{
-					Filter: makeFalseFilterFrom(tmpl),
+				node.Children = append(node.Children, &filter.Node{
+					Filter: tmpl.AsFalse(),
 				})
 			} else {
-				node.Children = append(node.Children, &FilterTreeNode{
-					Filter: makeFilterFromSet(tmpl, child.Bits),
+				node.Children = append(node.Children, &filter.Node{
+					Filter: tmpl.AsSet(child.Bits),
 				})
 			}
 			// continue below, we may need to visit unprocessed grandchildren
@@ -436,7 +443,7 @@ func (p *QueryPlan) decorateIndexNodes(node *FilterTreeNode, tmpl *Filter, isRoo
 	}
 }
 
-func (p *QueryPlan) queryIndexNode(ctx context.Context, node *FilterTreeNode) (int, error) {
+func (p *QueryPlan) queryIndexNode(ctx context.Context, node *filter.Node) (int, error) {
 	if node.OrKind {
 		return p.queryIndexOr(ctx, node)
 	} else {
@@ -444,7 +451,7 @@ func (p *QueryPlan) queryIndexNode(ctx context.Context, node *FilterTreeNode) (i
 	}
 }
 
-func (p *QueryPlan) queryIndexOr(ctx context.Context, node *FilterTreeNode) (int, error) {
+func (p *QueryPlan) queryIndexOr(ctx context.Context, node *filter.Node) (int, error) {
 	// 1  recurse into children one by one
 	if !node.IsLeaf() {
 		var nHits int
@@ -481,7 +488,7 @@ func (p *QueryPlan) queryIndexOr(ctx context.Context, node *FilterTreeNode) (int
 	return node.Bits.Count(), nil
 }
 
-func (p *QueryPlan) queryIndexAnd(ctx context.Context, node *FilterTreeNode) (int, error) {
+func (p *QueryPlan) queryIndexAnd(ctx context.Context, node *filter.Node) (int, error) {
 	// AND nodes may contain nested OR nodes which we need to visit first
 	var nHits int
 	for _, child := range node.Children {
@@ -530,7 +537,7 @@ func (p *QueryPlan) queryIndexAnd(ctx context.Context, node *FilterTreeNode) (in
 
 	// TODO: push down extra pk conditions to index query
 	// identify extra pk conditions for push down
-	// var pkNodes []*FilterTreeNode
+	// var pkNodes []*filter.Node
 	// pki := p.Table.Schema().PkIndex()
 	// for _, child := range node.Children {
 	// 	if child.Skip || child.Bits.IsValid() || !child.IsLeaf() {
@@ -576,7 +583,7 @@ func (p *QueryPlan) queryIndexAnd(ctx context.Context, node *FilterTreeNode) (in
 // Find an index compatible with a given filter node. This includes composite indexes.
 // - index supports filter mode (EQ is ok, some cannot do LT/GT or IN style filters)
 // - single field and composite key indexes must start with the filter field
-func (p *QueryPlan) findIndex(node *FilterTreeNode) (engine.QueryableIndex, bool) {
+func (p *QueryPlan) findIndex(node *filter.Node) (engine.QueryableIndex, bool) {
 	for _, v := range p.Indexes {
 		if !v.CanMatch(node) {
 			continue
