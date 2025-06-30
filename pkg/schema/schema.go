@@ -839,10 +839,7 @@ func (s *Schema) String() string {
 	fmt.Fprintf(&b, "\n#  ID   %[1]*[2]s %-15s Flags", -maxNameLen-1, "Name", "Type")
 	for i := range s.fields {
 		f := &s.fields[i]
-		var (
-			typ  string
-			flag []string
-		)
+		var typ string
 		switch f.typ {
 		case FT_TIME, FT_TIMESTAMP:
 			typ = f.typ.String() + "(" + TimeScale(f.scale).ShortName() + ")"
@@ -856,23 +853,9 @@ func (s *Schema) String() string {
 		if typ == "" {
 			typ = f.typ.String()
 		}
-		if f.IsPrimary() {
-			flag = append(flag, "primary")
-		}
-		if f.IsEnum() {
-			flag = append(flag, "enum")
-		}
-		if f.IsNullable() {
-			flag = append(flag, "null")
-		}
-		if f.IsInternal() {
-			flag = append(flag, "internal")
-		}
+		flags := f.flags.String()
 		if f.index > 0 {
-			flag = append(flag, "indexed:"+f.index.String()+":"+strconv.Itoa(int(f.scale)))
-		}
-		if len(flag) == 0 {
-			flag = []string{"--"}
+			flags += "," + f.index.String() + ":" + strconv.Itoa(int(f.scale))
 		}
 		fmt.Fprintf(&b, "\n%02d F#%02d %[3]*[4]s %-15s %s",
 			i,
@@ -880,7 +863,7 @@ func (s *Schema) String() string {
 			-maxNameLen-1,
 			f.name,
 			typ,
-			strings.Join(flag, ","),
+			f.flags.String(),
 		)
 	}
 	return b.String()

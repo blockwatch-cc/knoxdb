@@ -185,7 +185,7 @@ func (s *Schema) NativeStructType() reflect.Type {
 			continue
 		}
 		sfields = append(sfields, reflect.StructField{
-			Name: util.ToTitle(f.name),
+			Name: util.ToTitle(sanitize(f.name)),
 			Type: rtyp,
 		})
 	}
@@ -225,12 +225,22 @@ func (s *Schema) StructType() reflect.Type {
 		}
 		tag += `"`
 		sfields = append(sfields, reflect.StructField{
-			Name: util.ToTitle(f.name),
+			Name: util.ToTitle(sanitize(f.name)),
 			Type: f.GoType(),
 			Tag:  reflect.StructTag(tag),
 		})
 	}
 	return reflect.StructOf(sfields)
+}
+
+func sanitize(s string) string {
+	if len(s) == 0 {
+		return s
+	}
+	if s[0] == '$' {
+		s = "X" + s[1:]
+	}
+	return s
 }
 
 var (

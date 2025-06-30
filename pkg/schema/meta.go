@@ -21,7 +21,10 @@ type Meta struct {
 	IsDel bool   `knox:"$del,internal,id=0xfffb"`  // record was deleted (true) or updated (false)
 }
 
-var MetaSchema = MustSchemaOf(Meta{})
+var (
+	MetaSchema   = MustSchemaOf(Meta{})
+	MetaFieldIds = []uint16{MetaRid, MetaRef, MetaXmin, MetaXmax, MetaDel}
+)
 
 func (s *Schema) WithMeta() *Schema {
 	// check if metadata fields already exist
