@@ -4,7 +4,6 @@
 package wal
 
 import (
-	"encoding/hex"
 	"fmt"
 
 	"blockwatch.cc/knoxdb/internal/types"
@@ -68,18 +67,26 @@ func (r Record) BodySize() (sz int) {
 }
 
 func (r Record) String() string {
+	var sz int
+	for _, v := range r.Data {
+		sz += len(v)
+	}
 	return fmt.Sprintf("typ=%s tag=%s xid=0x%016x entity=0x%016x len=%d lsn=0x%016x",
-		r.Type, r.Tag, r.TxID, r.Entity, len(r.Data), r.Lsn,
+		r.Type, r.Tag, r.TxID, r.Entity, sz, r.Lsn,
 	)
 }
 
 func (r Record) Trace() string {
 	var dump string
 	if r.BodySize() > 0 {
-		dump = hex.Dump(r.Data[0])
+		dump = fmt.Sprintf(" body=%x...", r.Data[0][:min(32, len(r.Data[0]))])
 	}
-	return fmt.Sprintf("typ=%s tag=%s xid=0x%016x entity=0x%016x lsn=0x%016x len=%d\n%s",
-		r.Type, r.Tag, r.TxID, r.Entity, r.Lsn, len(r.Data), dump,
+	var sz int
+	for _, v := range r.Data {
+		sz += len(v)
+	}
+	return fmt.Sprintf("wal: typ=%s tag=%s xid=0x%016x entity=0x%016x lsn=0x%016x len=%d%s",
+		r.Type, r.Tag, r.TxID, r.Entity, r.Lsn, sz, dump,
 	)
 }
 

@@ -104,17 +104,18 @@ func (o WalOptions) Merge(o2 WalOptions) WalOptions {
 }
 
 type Wal struct {
-	mu     sync.RWMutex
-	wg     sync.WaitGroup
-	opts   WalOptions
-	active *segment
-	wr     *BufioWriter
-	req    chan *util.Future
-	close  chan struct{}
-	csum   uint64
-	hash   hash.Hash64
-	lsn    LSN
-	log    log.Logger
+	mu      sync.RWMutex
+	wg      sync.WaitGroup
+	opts    WalOptions
+	active  *segment
+	wr      *BufioWriter
+	req     chan *util.Future
+	close   chan struct{}
+	csum    uint64
+	hash    hash.Hash64
+	nextLsn LSN
+	lastLsn LSN
+	log     log.Logger
 }
 
 func Create(opts WalOptions) (*Wal, error) {
@@ -131,14 +132,15 @@ func Create(opts WalOptions) (*Wal, error) {
 	}
 
 	wal := &Wal{
-		opts:  opts,
-		wr:    NewBufioWriterSize(nil, WAL_BUFFER_SIZE),
-		hash:  xxhash64.New(),
-		csum:  opts.Seed,
-		req:   make(chan *util.Future, WAL_MAX_SYNC_REQUESTS),
-		close: make(chan struct{}),
-		lsn:   0,
-		log:   opts.Logger,
+		opts:    opts,
+		wr:      NewBufioWriterSize(nil, WAL_BUFFER_SIZE),
+		hash:    xxhash64.New(),
+		csum:    opts.Seed,
+		req:     make(chan *util.Future, WAL_MAX_SYNC_REQUESTS),
+		close:   make(chan struct{}),
+		nextLsn: 0,
+		lastLsn: 0,
+		log:     opts.Logger,
 	}
 
 	// create active segment
@@ -158,6 +160,9 @@ func possibleMaxLsn(opts WalOptions) (maxLsn LSN, err error) {
 	opts.Logger.Debugf("wal: walking %s for possible highest segment file", opts.Path)
 	var last fs.FileInfo
 	err = filepath.Walk(opts.Path, func(path string, d fs.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
 		if filepath.Ext(d.Name()) == SEG_FILE_SUFFIX {
 			last = d
 		}
@@ -169,6 +174,7 @@ func possibleMaxLsn(opts WalOptions) (maxLsn LSN, err error) {
 	if err != nil {
 		return
 	}
+	opts.Logger.Debugf("wal: using last segment file %s (%d bytes)", last.Name(), last.Size())
 	if last != nil {
 		name := last.Name()
 		name = strings.TrimSuffix(name, filepath.Ext(name))
@@ -197,16 +203,16 @@ func Open(lsn LSN, opts WalOptions) (*Wal, error) {
 	}
 
 	wal := &Wal{
-		opts:  opts,
-		wr:    NewBufioWriterSize(nil, WAL_BUFFER_SIZE),
-		hash:  xxhash64.New(),
-		req:   make(chan *util.Future, WAL_MAX_SYNC_REQUESTS),
-		close: make(chan struct{}),
-		csum:  opts.Seed,
-		lsn:   maxLsn,
-		log:   opts.Logger,
+		opts:    opts,
+		wr:      NewBufioWriterSize(nil, WAL_BUFFER_SIZE),
+		hash:    xxhash64.New(),
+		req:     make(chan *util.Future, WAL_MAX_SYNC_REQUESTS),
+		close:   make(chan struct{}),
+		csum:    opts.Seed,
+		nextLsn: maxLsn,
+		log:     opts.Logger,
 	}
-	wal.log.Debugf("wal: verifying from LSN %d", lsn)
+	wal.log.Debugf("wal: verifying from LSN 0x%x", lsn)
 
 	r := wal.NewReader()
 	defer r.Close()
@@ -217,6 +223,7 @@ func Open(lsn LSN, opts WalOptions) (*Wal, error) {
 	}
 
 	// walk all records after the checkpoint and validate checksums
+	last := lsn
 scan:
 	for {
 		var rec *Record
@@ -225,6 +232,7 @@ scan:
 		case err == nil:
 			// next record
 		case err == io.EOF:
+			lsn = maxLsn
 			break scan
 		case errors.Is(err, ErrInvalidRecord):
 			if err2 := wal.tryRecover(lsn, err); err2 != nil {
@@ -236,16 +244,18 @@ scan:
 		}
 
 		// keep last good lsn
+		last = lsn
 		lsn = lsn.Add(HeaderSize + rec.BodySize())
 	}
 
 	// after successful init check (or truncate)
-	wal.lsn = lsn
+	wal.nextLsn = lsn
+	wal.lastLsn = last
 	wal.csum = r.Checksum()
-	wal.log.Debugf("wal: last record LSN %d", wal.lsn)
+	wal.log.Debugf("wal: last record LSN 0x%x, next LSN 0x%x", wal.lastLsn, wal.nextLsn)
 
 	// open active segment
-	wal.active, err = wal.openSegment(wal.lsn.Segment(opts.MaxSegmentSize), true)
+	wal.active, err = wal.openSegment(wal.nextLsn.Segment(opts.MaxSegmentSize), true)
 	if err != nil {
 		return nil, err
 	}
@@ -274,7 +284,8 @@ func (w *Wal) Close() error {
 	w.wr = nil
 	w.csum = 0
 	w.hash = nil
-	w.lsn = 0
+	w.nextLsn = 0
+	w.lastLsn = 0
 	w.log = nil
 	return err
 }
@@ -292,7 +303,8 @@ func (w *Wal) ForceClose() error {
 	w.wr = nil
 	w.csum = 0
 	w.hash = nil
-	w.lsn = 0
+	w.nextLsn = 0
+	w.lastLsn = 0
 	w.log = nil
 	return err
 }
@@ -302,7 +314,15 @@ func (w *Wal) IsClosed() bool {
 }
 
 func (w *Wal) Len() int64 {
-	return int64(w.lsn)
+	return int64(w.nextLsn)
+}
+
+func (w *Wal) Last() LSN {
+	return w.lastLsn
+}
+
+func (w *Wal) Next() LSN {
+	return w.nextLsn
 }
 
 func (w *Wal) Sync() error {
@@ -389,7 +409,7 @@ func (w *Wal) write(rec *Record) (LSN, error) {
 	head.SetChecksum(csum)
 
 	// remember current lsn and truncate on failed write
-	lsn := w.lsn
+	lsn := w.nextLsn
 
 	// write header
 	sz, err := w.writeBuffer(head[:])
@@ -414,7 +434,8 @@ func (w *Wal) write(rec *Record) (LSN, error) {
 
 	// all ok, update csum and next lsn
 	w.csum = csum
-	w.lsn = lsn.Add(sz)
+	w.lastLsn = lsn
+	w.nextLsn = lsn.Add(sz)
 
 	return lsn, nil
 }
@@ -533,7 +554,8 @@ func (w *Wal) truncate(lsn LSN) error {
 	}
 
 	// update wal state
-	w.lsn = lsn
+	w.lastLsn = lsn // FIXME: should be start of last record
+	w.nextLsn = lsn
 
 	// open active segment again
 	if reloadActive {

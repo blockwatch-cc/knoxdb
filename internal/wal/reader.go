@@ -44,7 +44,8 @@ func (f *RecordFilter) Match(r *Record) bool {
 	if f.tag.IsValid() && r.Tag != f.tag {
 		return false
 	}
-	if f.entity > 0 && r.Entity != f.entity {
+	isCommitAbort := r.Type == RecordTypeCommit || r.Type == RecordTypeAbort
+	if f.entity > 0 && r.Entity != f.entity && !isCommitAbort {
 		return false
 	}
 	if f.txid > 0 && r.TxID != f.txid {
@@ -87,7 +88,7 @@ func (w *Wal) NewReader() WalReader {
 		hash:   xxhash64.New(),
 		csum:   w.opts.Seed,
 		maxSz:  w.opts.MaxSegmentSize,
-		maxLsn: w.lsn,
+		maxLsn: w.nextLsn,
 		rcmode: w.opts.RecoveryMode,
 	}
 }
@@ -197,7 +198,7 @@ func (r *Reader) Seek(lsn LSN) error {
 			return err
 		}
 		r.csum = r.wal.opts.Seed
-		r.maxLsn = r.wal.lsn
+		r.maxLsn = r.wal.nextLsn
 		r.lsn = 0
 		return nil
 	}
@@ -229,7 +230,10 @@ func (r *Reader) Seek(lsn LSN) error {
 	}
 
 	// ensure this is a checkpoint record
-	if head.Type() != RecordTypeCheckpoint && head.Type() != RecordTypeCommit {
+	switch head.Type() {
+	case RecordTypeCheckpoint, RecordTypeCommit:
+		// ok
+	default:
 		return ErrInvalidLSN
 	}
 
@@ -238,7 +242,7 @@ func (r *Reader) Seek(lsn LSN) error {
 
 	// init next lsn and reinit max lsn
 	r.lsn = lsn.Add(HeaderSize)
-	r.maxLsn = r.wal.lsn
+	r.maxLsn = r.wal.nextLsn
 
 	return nil
 }
@@ -331,7 +335,7 @@ func (r *Reader) read(buf []byte) error {
 			// open another segment if available
 			r.wal.mu.RLock()
 			s, err := r.wal.openSegment(sid+1, false)
-			r.maxLsn = r.wal.lsn
+			r.maxLsn = r.wal.nextLsn
 			r.wal.mu.RUnlock()
 			if err != nil {
 				return err

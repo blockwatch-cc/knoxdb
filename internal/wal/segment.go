@@ -103,7 +103,7 @@ func (w *Wal) openSegment(id int, active bool) (*segment, error) {
 }
 
 func (w *Wal) hasSegment(id int) bool {
-	return id == 0 || LSN(id*w.opts.MaxSegmentSize) < w.lsn
+	return id == 0 || LSN(id*w.opts.MaxSegmentSize) < w.nextLsn
 }
 
 func (s *segment) Close() (err error) {
