@@ -52,7 +52,7 @@ func testCompareCases(t *testing.T, cases []BytesMatchTest, mode types.FilterMod
 		t.Run(fmt.Sprintf("%s/%s", mode, c.Name), func(t *testing.T) {
 			src := c.Data
 			bits, _ := MakeBitsAndMaskPoison(c.N, nil)
-			set := bitset.NewFromBuffer(bits, c.N)
+			set := bitset.NewFromBytes(bits, c.N)
 			switch mode {
 			case types.FilterModeEqual:
 				src.MatchEqual(c.Match, set, nil)
@@ -84,10 +84,10 @@ func benchCompareCases(b *testing.B, mode types.FilterMode) {
 			src := NewStringPool(c.N)
 			src.AppendMany(RandBytes(c.N)...)
 			bits, mask := MakeBitsAndMaskPoison(c.N, m.Pattern)
-			set := bitset.NewFromBuffer(bits, c.N)
+			set := bitset.NewFromBytes(bits, c.N)
 			var msk *bitset.Bitset
 			if mask != nil {
-				msk = bitset.NewFromBuffer(mask, c.N)
+				msk = bitset.NewFromBytes(mask, c.N)
 			}
 			match := Uint64Bytes(math.MaxUint64 >> 2)
 			match2 := Uint64Bytes(math.MaxUint64 >> 1)

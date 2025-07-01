@@ -191,10 +191,7 @@ func (req Request) RunQuery(ctx context.Context, plan *query.QueryPlan) (*Result
 	var last time.Time
 	err := plan.Table.Stream(ctx, plan, func(r engine.QueryRow) error {
 		// read time
-		val, err := r.Index(timeIndex)
-		if err != nil {
-			return err
-		}
+		val := r.Get(timeIndex)
 		t, ok := val.(time.Time)
 		if !ok {
 			return fmt.Errorf("invalid value type %T for time field", val)
@@ -214,10 +211,7 @@ func (req Request) RunQuery(ctx context.Context, plan *query.QueryPlan) (*Result
 		if groupByIndex >= 0 {
 			// we don't enforce groupBy field type, so we read any type
 			// and try convert it to string
-			group, err := r.Index(groupByIndex)
-			if err != nil {
-				return err
-			}
+			group := r.Get(groupByIndex)
 			var groupName string
 			// try enum conversion first
 			if groupByEnum != nil {
