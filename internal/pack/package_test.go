@@ -358,7 +358,7 @@ func (s specialStruct) init() {
 type encodeTestStruct struct {
 	Id       uint64         `knox:"id,pk"`
 	Time     time.Time      `knox:"time"`
-	Hash     OpHash         `knox:"hash,fixed=32,index=bloom:3"`
+	Hash     OpHash         `knox:"hash,index=bloom:3"`
 	String   string         `knox:"str"`
 	Stringer Stringer       `knox:"strlist"`
 	Bool     bool           `knox:"bool"`

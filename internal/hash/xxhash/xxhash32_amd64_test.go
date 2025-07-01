@@ -24,7 +24,7 @@ func TestXXhash32Uint32AVX2(t *testing.T) {
 }
 
 func TestXXhash32Uint32AVX512(t *testing.T) {
-	if !util.UseAVX512_F {
+	if !cpu.UseAVX512_F {
 		t.SkipNow()
 	}
 	for _, c := range xxhash32Uint32Cases {
@@ -52,7 +52,7 @@ func BenchmarkXXHash32Uint32AVX2(b *testing.B) {
 }
 
 func BenchmarkXXHash32Uint32AVX512(b *testing.B) {
-	if !util.UseAVX512_F {
+	if !cpu.UseAVX512_F {
 		b.SkipNow()
 	}
 	for _, n := range hashBenchmarkSizes {
@@ -82,7 +82,7 @@ func TestXXHash32Uint64AVX2(t *testing.T) {
 }
 
 func TestXXHash32Uint64AVX512(t *testing.T) {
-	if !util.UseAVX512_F {
+	if !cpu.UseAVX512_F {
 		t.SkipNow()
 	}
 	for _, c := range xxhash32Uint64Cases {
@@ -110,7 +110,7 @@ func BenchmarkXXHash32Uint64AVX2(b *testing.B) {
 }
 
 func BenchmarkXXHash32Uint64AVX512(b *testing.B) {
-	if !util.UseAVX512_F {
+	if !cpu.UseAVX512_F {
 		b.SkipNow()
 	}
 	for _, n := range hashBenchmarkSizes {

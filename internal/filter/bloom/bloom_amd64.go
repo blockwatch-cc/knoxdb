@@ -7,12 +7,12 @@
 package bloom
 
 import (
+	"blockwatch.cc/knoxdb/internal/cpu"
 	"blockwatch.cc/knoxdb/internal/filter"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 func init() {
-	if util.UseAVX2 {
+	if cpu.UseAVX2 {
 		add_u32 = add_u32_avx2
 		add_u64 = add_u64_avx2
 		merge = merge_core_avx2

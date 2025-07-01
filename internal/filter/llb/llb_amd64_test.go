@@ -260,7 +260,7 @@ func BenchmarkCardinalityAVX2(b *testing.B) {
 }
 
 func BenchmarkCardinalityAVX512(b *testing.B) {
-	if !util.UseAVX512_F {
+	if !cpu.UseAVX512_F {
 		b.SkipNow()
 	}
 	for _, c := range tests.BenchmarkSizes {

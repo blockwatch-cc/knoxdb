@@ -57,11 +57,22 @@ func TestConditionParse(t *testing.T) {
 
 		// Date range - tests date parsing and range mode handling
 		{
-			"Date Range", "created.rg", "2023-01-01,2023-12-31",
+			"Timestamp Range", "created.rg", "2023-01-01 00:00:00 UTC,2023-12-31 00:00:00 UTC",
 			Condition{
 				Name:  "created",
 				Mode:  types.FilterModeRange,
-				Value: filter.RangeValue{int64(1672531200000000000), int64(1703980800000000000)},
+				Value: filter.RangeValue{int64(1672531200), int64(1703980800)},
+			},
+			false,
+		},
+
+		// Date range - tests date parsing and range mode handling
+		{
+			"Date Range", "day.rg", "2023-01-01,2023-12-31",
+			Condition{
+				Name:  "day",
+				Mode:  types.FilterModeRange,
+				Value: filter.RangeValue{int64(19358), int64(19722)},
 			},
 			false,
 		},

@@ -245,44 +245,34 @@ func (b *TypedBucket) Emit(buf *bytes.Buffer) error {
 }
 
 func (b *TypedBucket) readBytes(r engine.QueryRow) (Aggregatable, error) {
-	val, err := r.Index(b.index)
-	if err != nil {
-		return nil, err
-	}
+	val := r.Get(b.index)
 	buf, ok := val.([]byte)
 	if !ok {
 		return nil, fmt.Errorf("invalid value type %T for []byte", val)
 	}
 	elem := reflect.New(b.typ).Interface().(Aggregatable)
 	elem.Init(b.template.Config())
-	err = elem.UnmarshalBinary(buf)
-	return elem, err
+	return elem, elem.UnmarshalBinary(buf)
 }
 
 func (b *TypedBucket) readInt128(r engine.QueryRow) (Aggregatable, error) {
-	val, err := r.Index(b.index)
-	if err != nil {
-		return nil, err
-	}
+	val := r.Get(b.index)
 	i128, ok := val.(num.Int128)
 	if !ok {
 		return nil, fmt.Errorf("invalid value type %T for num.Int128", val)
 	}
 	elem := &Int128Aggregator{i128, 0}
 	elem.Init(b.template.Config())
-	return elem, err
+	return elem, nil
 }
 
 func (b *TypedBucket) readInt256(r engine.QueryRow) (Aggregatable, error) {
-	val, err := r.Index(b.index)
-	if err != nil {
-		return nil, err
-	}
+	val := r.Get(b.index)
 	i256, ok := val.(num.Int256)
 	if !ok {
 		return nil, fmt.Errorf("invalid value type %T for num.Int256", val)
 	}
 	elem := &Int256Aggregator{i256, 0}
 	elem.Init(b.template.Config())
-	return elem, err
+	return elem, nil
 }

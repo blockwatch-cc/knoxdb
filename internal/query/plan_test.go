@@ -38,10 +38,12 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
+	testSchema = testSchema.WithMeta()
 	testIndexSchema, err = testSchema.SelectFields("name", "id")
 	if err != nil {
 		panic(err)
 	}
+	testIndexSchema = testIndexSchema.WithMeta()
 
 	statusEnum := schema.NewEnumDictionary("status")
 	statusEnum.Append("active", "pending", "inactive")
@@ -52,12 +54,13 @@ func init() {
 }
 
 type testStruct struct {
-	Id       uint64    `knox:"id,pk"`
-	Score    float64   `knox:"score"`
-	Name     string    `knox:"name,index=hash"`
-	Created  time.Time `knox:"created"`
-	Status   string    `knox:"status,enum"`
-	IsActive bool      `knox:"is_active"`
+	Id         uint64    `knox:"id,pk"`
+	Score      float64   `knox:"score"`
+	Name       string    `knox:"name,index=hash"`
+	Created    time.Time `knox:"created,scale=s"`
+	CreatedDay time.Time `knox:"day,date"`
+	Status     string    `knox:"status,enum"`
+	IsActive   bool      `knox:"is_active"`
 }
 
 func (t *testStruct) Encode() []byte {
@@ -203,302 +206,305 @@ func TestPlanCompile(t *testing.T) {
 	}
 
 	f1, _ := testSchema.FieldByName("id")
+	px := testSchema.PkIndex()
 	f2, _ := testSchema.FieldByName("name")
+	x2, _ := testSchema.FieldIndexByName("name")
 	f3, _ := testSchema.FieldByName("score")
+	x3, _ := testSchema.FieldIndexByName("score")
 
 	testCases := []TestCase{
 		// single condition + single index
 		{
 			Name:      "EQ Condition",
 			Condition: Equal("id", 1),
-			Expected:  makeAndTree(makeEqualNode(f1, uint64(1))),
+			Expected:  makeAndTree(makeEqualNode(f1, px, uint64(1))),
 		},
 		{
 			Name:      "NE Condition",
 			Condition: NotEqual("id", 1),
-			Expected:  makeAndTree(makeNotEqualNode(f1, uint64(1))),
+			Expected:  makeAndTree(makeNotEqualNode(f1, px, uint64(1))),
 		},
 		{
 			Name:      "In Condition",
 			Condition: In("id", []uint64{1, 4, 8}),
-			Expected:  makeAndTree(makeInNode(f1, []uint64{1, 4, 8})),
+			Expected:  makeAndTree(makeInNode(f1, px, []uint64{1, 4, 8})),
 		},
 		{
 			Name:      "In Condition with full range",
 			Condition: In("id", []uint64{1, 2, 3}),
-			Expected:  makeAndTree(makeRangeNode(f1, uint64(1), uint64(3))),
+			Expected:  makeAndTree(makeRangeNode(f1, px, uint64(1), uint64(3))),
 		},
 		{
 			Name:      "In Condition Single Element",
 			Condition: In("id", []uint64{1}),
-			Expected:  makeAndTree(makeEqualNode(f1, uint64(1))),
+			Expected:  makeAndTree(makeEqualNode(f1, px, uint64(1))),
 		},
 		{
 			Name:      "NI Condition",
 			Condition: NotIn("id", []uint64{2, 3, 4}),
-			Expected:  makeAndTree(makeNotInNode(f1, []uint64{2, 3, 4})),
+			Expected:  makeAndTree(makeNotInNode(f1, px, []uint64{2, 3, 4})),
 		},
 		{
 			Name:      "LT Condition",
 			Condition: Lt("id", 1),
-			Expected:  makeAndTree(makeLtNode(f1, uint64(1))),
+			Expected:  makeAndTree(makeLtNode(f1, px, uint64(1))),
 		},
 		{
 			Name:      "Le Condition",
 			Condition: Le("id", 2),
-			Expected:  makeAndTree(makeLeNode(f1, uint64(2))),
+			Expected:  makeAndTree(makeLeNode(f1, px, uint64(2))),
 		},
 		{
 			Name:      "GT Condition",
 			Condition: Gt("id", 1),
-			Expected:  makeAndTree(makeGtNode(f1, uint64(1))),
+			Expected:  makeAndTree(makeGtNode(f1, px, uint64(1))),
 		},
 		{
 			Name:      "Ge Condition",
 			Condition: Ge("id", 1),
-			Expected:  makeAndTree(makeGeNode(f1, uint64(1))),
+			Expected:  makeAndTree(makeGeNode(f1, px, uint64(1))),
 		},
 		{
 			Name:      "Regexp Condition",
 			Condition: Regexp("name", "zack"),
-			Expected:  makeAndTree(makeRegexNode(f2, "zack")),
+			Expected:  makeAndTree(makeRegexNode(f2, x2, "zack")),
 		},
 		{
 			Name:      "Range Condition",
 			Condition: Range("id", 1, 10),
-			Expected:  makeAndTree(makeRangeNode(f1, uint64(1), uint64(10))),
+			Expected:  makeAndTree(makeRangeNode(f1, px, uint64(1), uint64(10))),
 		},
 
 		// And Condition + 2 or more conditions + single index
 		{
 			Name:      "And(NotEqual(2), Range(1,10)) Condition",
 			Condition: And(NotEqual("id", 2), Range("id", 1, 10)),
-			Expected:  makeAndTree(makeNotEqualNode(f1, uint64(2)), makeRangeNode(f1, uint64(1), uint64(10))),
+			Expected:  makeAndTree(makeNotEqualNode(f1, px, uint64(2)), makeRangeNode(f1, px, uint64(1), uint64(10))),
 		},
 		{
 			Name:      "And(Le(8), Range(6,10)) Condition",
 			Condition: And(Le("id", 8), Range("id", 6, 10)),
-			Expected:  makeAndTree(makeRangeNode(f1, uint64(6), uint64(8))),
+			Expected:  makeAndTree(makeRangeNode(f1, px, uint64(6), uint64(8))),
 		},
 		{
 			Name:      "And(RG(1,10), EQ(1))",
 			Condition: And(Range("id", 1, 10), Equal("id", 1)),
-			Expected:  makeAndTree(makeEqualNode(f1, uint64(1))),
+			Expected:  makeAndTree(makeEqualNode(f1, px, uint64(1))),
 		},
 		{
 			Name:      "AND(RG(1,10), RG(5,10)) Condition",
 			Condition: And(Range("id", 1, 10), Range("id", 5, 10)),
-			Expected:  makeAndTree(makeRangeNode(f1, uint64(5), uint64(10))),
+			Expected:  makeAndTree(makeRangeNode(f1, px, uint64(5), uint64(10))),
 		},
 		{
 			Name:      "AND(EQ(5), RG(0,10)) Condition",
 			Condition: And(Equal("id", 5), Range("id", 0, 10)),
-			Expected:  makeAndTree(makeEqualNode(f1, uint64(5))),
+			Expected:  makeAndTree(makeEqualNode(f1, px, uint64(5))),
 		},
 		{
 			Name:      "And(EQ(id, 1), EQ(name, hi)) Condition",
 			Condition: And(Equal("id", 1), Equal("name", "hi")),
-			Expected:  makeAndTree(makeEqualNode(f1, uint64(1)), makeEqualNode(f2, "hi")),
+			Expected:  makeAndTree(makeEqualNode(f1, px, uint64(1)), makeEqualNode(f2, x2, "hi")),
 		},
 
 		// Or Condition + 2 or more conditions + single index
 		{
 			Name:      "Or(Le(8), Range(6,10)) Condition",
 			Condition: Or(Le("id", 8), Range("id", 6, 10)),
-			Expected:  makeOrTree(makeLeNode(f1, uint64(10))),
+			Expected:  makeOrTree(makeLeNode(f1, px, uint64(10))),
 		},
 		{
 			Name:      "OR(EQ(id, 1), EQ(name, hi)) Condition",
 			Condition: Or(Equal("id", 1), Equal("name", "hi")),
-			Expected:  makeOrTree(makeEqualNode(f1, uint64(1)), makeEqualNode(f2, "hi")),
+			Expected:  makeOrTree(makeEqualNode(f1, px, uint64(1)), makeEqualNode(f2, x2, "hi")),
 		},
 		{
 			Name:      "OR(EQ, EQ) Condition",
 			Condition: Or(Equal("id", 1), Equal("id", 3)),
-			Expected:  makeOrTree(makeInNode(f1, []uint64{1, 3})),
+			Expected:  makeOrTree(makeInNode(f1, px, []uint64{1, 3})),
 		},
 		{
 			Name:      "OR(EQ, EQ) Condition with full range",
 			Condition: Or(Equal("id", 1), Equal("id", 2)),
-			Expected:  makeOrTree(makeRangeNode(f1, uint64(1), uint64(2))),
+			Expected:  makeOrTree(makeRangeNode(f1, px, uint64(1), uint64(2))),
 		},
 		{
 			Name:      "OR(RG, EQ) Condition",
 			Condition: Or(Range("id", 1, 10), Equal("id", 10)),
-			Expected:  makeOrTree(makeRangeNode(f1, uint64(1), uint64(10))),
+			Expected:  makeOrTree(makeRangeNode(f1, px, uint64(1), uint64(10))),
 		},
 		{
 			Name:      "OR(RG, RG, EQ) Condition",
 			Condition: Or(Range("id", 1, 10), Range("id", 5, 10), Equal("id", 2)),
-			Expected:  makeOrTree(makeRangeNode(f1, uint64(1), uint64(10))),
+			Expected:  makeOrTree(makeRangeNode(f1, px, uint64(1), uint64(10))),
 		},
 		{
 			Name:      "OR(In(1,2), RG(6,10)) (In) Out of Range Condition",
 			Condition: Or(In("id", []int{1, 2}), Range("id", 6, 10)),
-			Expected:  makeOrTree(makeRangeNode(f1, uint64(1), uint64(2)), makeRangeNode(f1, uint64(6), uint64(10))),
+			Expected:  makeOrTree(makeRangeNode(f1, px, uint64(1), uint64(2)), makeRangeNode(f1, px, uint64(6), uint64(10))),
 		},
 		{
 			Name:      "OR(In(6,7), RG(6,10)) In Range Condition",
 			Condition: Or(In("id", []int{6, 7}), Range("id", 6, 10)),
-			Expected:  makeOrTree(makeRangeNode(f1, uint64(6), uint64(10))),
+			Expected:  makeOrTree(makeRangeNode(f1, px, uint64(6), uint64(10))),
 		},
 		{
 			Name:      "Or(Le(10), Range(1,5)) Condition",
 			Condition: Or(Le("id", 10), Range("id", 1, 5)),
-			Expected:  makeOrTree(makeLeNode(f1, uint64(10))),
+			Expected:  makeOrTree(makeLeNode(f1, px, uint64(10))),
 		},
 		{
 			Name:      "Or(Le(score, 4.5), Range(id,(0,10))) Condition",
 			Condition: Or(Le("score", 4.5), Range("id", 1, 10)),
-			Expected:  makeOrTree(makeLeNode(f3, float64(4.5)), makeRangeNode(f1, uint64(1), uint64(10))),
+			Expected:  makeOrTree(makeLeNode(f3, x3, float64(4.5)), makeRangeNode(f1, px, uint64(1), uint64(10))),
 		},
 
 		// CAT: merge nested nodes
 		{
 			Name:      "OR ( OR (A, B), C) ) => OR (A, B, C)",
 			Condition: Or(Or(Equal("id", 1), Range("score", 2.0, 5.0)), Gt("name", "hey")),
-			Expected:  makeOrTree(makeEqualNode(f1, uint64(1)), makeRangeNode(f3, float64(2.0), float64(5.0)), makeGtNode(f2, "hey")),
+			Expected:  makeOrTree(makeEqualNode(f1, px, uint64(1)), makeRangeNode(f3, x3, float64(2.0), float64(5.0)), makeGtNode(f2, x2, "hey")),
 		},
 		{
 			Name:      "AND ( AND (A, B), C) => AND (A, B, C)",
 			Condition: And(And(Range("id", 1, 10), Range("id", 2, 5)), Range("id", 4, 5)),
-			Expected:  makeAndTree(makeRangeNode(f1, uint64(4), uint64(5))),
+			Expected:  makeAndTree(makeRangeNode(f1, px, uint64(4), uint64(5))),
 		},
 		// CAT: replace/simplify sets
 		{
 			Name:      "IN(single A) => EQ(A)",
 			Condition: In("id", []uint64{1}),
-			Expected:  makeAndTree(makeEqualNode(f1, uint64(1))),
+			Expected:  makeAndTree(makeEqualNode(f1, px, uint64(1))),
 		},
 		{
 			Name:      "NI(single A) => NE(A)",
 			Condition: NotIn("id", []uint64{1}),
-			Expected:  makeAndTree(makeNotEqualNode(f1, uint64(1))),
+			Expected:  makeAndTree(makeNotEqualNode(f1, px, uint64(1))),
 		},
 		{
 			Name:      "And: EQ(A) + EQ(A) => EQ(A)",
 			Condition: And(Equal("id", 1), Equal("id", 1)),
-			Expected:  makeAndTree(makeEqualNode(f1, uint64(1))),
+			Expected:  makeAndTree(makeEqualNode(f1, px, uint64(1))),
 		},
 		{
 			Name:      "Or: EQ(A) + EQ(A) => EQ(A)",
 			Condition: Or(Equal("id", 1), Equal("id", 1)),
-			Expected:  makeOrTree(makeEqualNode(f1, uint64(1))),
+			Expected:  makeOrTree(makeEqualNode(f1, px, uint64(1))),
 		},
 		{
 			Name:      "Empty IN => false",
 			Condition: In("id", []uint64{}),
-			Expected:  makeAndTree(makeFalseNode(f1)),
+			Expected:  makeAndTree(makeFalseNode(f1, px)),
 		}, {
 			Name:      "Empty NIN => true",
 			Condition: NotIn("id", []uint64{}),
-			Expected:  makeAndTree(makeTrueNode(f1)),
+			Expected:  makeAndTree(makeTrueNode(f1, px)),
 		},
 		{
 			Name:      "and: IN(A) + IN(B) => IN(A-B)",
 			Condition: And(In("id", []uint64{1, 4, 8}), In("id", []uint64{4, 8, 10})),
-			Expected:  makeAndTree(makeInNode(f1, []uint64{4, 8})),
+			Expected:  makeAndTree(makeInNode(f1, px, []uint64{4, 8})),
 		},
 		{
 			Name:      "and: IN(A) + IN(B) => RG(A-B) iff full range",
 			Condition: And(In("id", []uint64{1, 2, 3}), In("id", []uint64{2, 3, 4})),
-			Expected:  makeAndTree(makeRangeNode(f1, uint64(2), uint64(3))),
+			Expected:  makeAndTree(makeRangeNode(f1, px, uint64(2), uint64(3))),
 		},
 		{
 			Name:      "or: IN(A) + IN(B) => IN(A+B)",
 			Condition: Or(In("id", []uint64{1, 4, 8}), In("id", []uint64{8, 5, 9})),
-			Expected:  makeOrTree(makeInNode(f1, []uint64{1, 4, 5, 8, 9})),
+			Expected:  makeOrTree(makeInNode(f1, px, []uint64{1, 4, 5, 8, 9})),
 		},
 		{
 			Name:      "or: IN(A) + IN(B) => RG(A,B) iff full range",
 			Condition: Or(In("id", []uint64{1, 2, 3}), In("id", []uint64{2, 3, 4})),
-			Expected:  makeOrTree(makeRangeNode(f1, uint64(1), uint64(4))),
+			Expected:  makeOrTree(makeRangeNode(f1, px, uint64(1), uint64(4))),
 		},
 		{
 			Name:      "and: NI(A) + NI(B) => NI(A+B)",
 			Condition: And(NotIn("id", []uint64{1, 2, 3}), NotIn("id", []uint64{2, 3, 4})),
-			Expected:  makeAndTree(makeNotInNode(f1, []uint64{1, 2, 3, 4})),
+			Expected:  makeAndTree(makeNotInNode(f1, px, []uint64{1, 2, 3, 4})),
 		},
 		{
 			Name:      "or: NI(A) + NI(B) => NI(A+B)",
 			Condition: Or(NotIn("id", []uint64{1, 2, 3}), NotIn("id", []uint64{2, 3, 4})),
-			Expected:  makeOrTree(makeNotInNode(f1, []uint64{2, 3})),
+			Expected:  makeOrTree(makeNotInNode(f1, px, []uint64{2, 3})),
 		},
 		{
 			Name:      "or: IN(A) + EQ(B) => IN(A+B)",
 			Condition: Or(In("id", []uint64{1, 4, 8}), Equal("id", 2)),
-			Expected:  makeOrTree(makeInNode(f1, []uint64{1, 2, 4, 8})),
+			Expected:  makeOrTree(makeInNode(f1, px, []uint64{1, 2, 4, 8})),
 		},
 		{
 			Name:      "or: IN(A) + EQ(B) => RG(A,B) iff B = A+1",
 			Condition: Or(In("id", []uint64{1, 2, 3}), Equal("id", 4)),
-			Expected:  makeOrTree(makeRangeNode(f1, uint64(1), uint64(4))),
+			Expected:  makeOrTree(makeRangeNode(f1, px, uint64(1), uint64(4))),
 		},
 		{
 			Name:      "or: EQ(A) + EQ(B) => IN(A+B)",
 			Condition: Or(Equal("id", 1), Equal("id", 3)),
-			Expected:  makeOrTree(makeInNode(f1, []uint64{1, 3})),
+			Expected:  makeOrTree(makeInNode(f1, px, []uint64{1, 3})),
 		},
 		{
 			Name:      "or: EQ(A) + EQ(B) => RG(A,B) iff B = A+1",
 			Condition: Or(Equal("id", 1), Equal("id", 2)),
-			Expected:  makeOrTree(makeRangeNode(f1, uint64(1), uint64(2))),
+			Expected:  makeOrTree(makeRangeNode(f1, px, uint64(1), uint64(2))),
 		},
 		// CAT: replace/simplify ranges
 		{
 			Name:      "and: LT(A) + LT(A) => LT(A)",
 			Condition: And(Lt("id", 10), Lt("id", 5)),
-			Expected:  makeAndTree(makeLtNode(f1, uint64(5))),
+			Expected:  makeAndTree(makeLtNode(f1, px, uint64(5))),
 		},
 		{
 			Name:      "and: LE(A) + LE(A) => LE(A)",
 			Condition: And(Le("id", 10), Le("id", 5)),
-			Expected:  makeAndTree(makeLeNode(f1, uint64(5))),
+			Expected:  makeAndTree(makeLeNode(f1, px, uint64(5))),
 		},
 		{
 			Name:      "and: LE(0)",
 			Condition: And(Le("id", 0)),
-			Expected:  makeAndTree(makeEqualNode(f1, uint64(0))),
+			Expected:  makeAndTree(makeEqualNode(f1, px, uint64(0))),
 		},
 		{
 			Name:      "and: GT(A) + GT(A) => GT(A)",
 			Condition: And(Gt("id", 2), Gt("id", 5)),
-			Expected:  makeAndTree(makeGtNode(f1, uint64(5))),
+			Expected:  makeAndTree(makeGtNode(f1, px, uint64(5))),
 		},
 		{
 			Name:      "and: GE(A) + GE(A) => GE(A)",
 			Condition: And(Ge("id", 2), Ge("id", 5)),
-			Expected:  makeAndTree(makeGeNode(f1, uint64(5))),
+			Expected:  makeAndTree(makeGeNode(f1, px, uint64(5))),
 		},
 		{
 			Name:      "and: RG(A,B) + RG(C,D) => RG(B,C) iff C ≤ B",
 			Condition: And(Range("id", 1, 5), Range("id", 3, 10)),
-			Expected:  makeAndTree(makeRangeNode(f1, uint64(3), uint64(5))),
+			Expected:  makeAndTree(makeRangeNode(f1, px, uint64(3), uint64(5))),
 		},
 		{
 			Name:      "and: RG(A,B) + RG(B,D) => EQ(B)",
 			Condition: And(Range("id", 1, 5), Range("id", 5, 10)),
-			Expected:  makeAndTree(makeEqualNode(f1, uint64(5))),
+			Expected:  makeAndTree(makeEqualNode(f1, px, uint64(5))),
 		},
 		{
 			Name:      "and: RG(A,B) + EQ(C) => EQ(C) iff A ≤ C ≤ B",
 			Condition: And(Range("id", 1, 5), Equal("id", 3)),
-			Expected:  makeAndTree(makeEqualNode(f1, uint64(3))),
+			Expected:  makeAndTree(makeEqualNode(f1, px, uint64(3))),
 		},
 		{
 			Name:      "and: GE(A) + LE(B) => RG(A,B) iff A ≤ B",
 			Condition: And(Ge("id", 1), Le("id", 5)),
-			Expected:  makeAndTree(makeRangeNode(f1, uint64(1), uint64(5))),
+			Expected:  makeAndTree(makeRangeNode(f1, px, uint64(1), uint64(5))),
 		},
 		{
 			Name:      "and: GT(A) + LT(B) => RG(A+1,B-1) iff A ≤ B",
 			Condition: And(Gt("id", 1), Lt("id", 5)),
-			Expected:  makeAndTree(makeRangeNode(f1, uint64(2), uint64(4))),
+			Expected:  makeAndTree(makeRangeNode(f1, px, uint64(2), uint64(4))),
 		},
 		{
 			Name:      "or: RG(A,B) + EQ(C) => EQ(C) iff A ≤ C ≤ B",
 			Condition: Or(Range("id", 1, 5), Equal("id", 3)),
-			Expected:  makeOrTree(makeRangeNode(f1, uint64(1), uint64(5))),
+			Expected:  makeOrTree(makeRangeNode(f1, px, uint64(1), uint64(5))),
 		},
 	}
 
@@ -543,7 +549,8 @@ func TestPlanQueryIndexes(t *testing.T) {
 		Expected  *filter.Node
 	}
 
-	f1, _ := testSchema.FieldByName("id")
+	f1, _ := testSchema.FieldByName("$rid")
+	rx := testSchema.RowIdIndex()
 	// f2, _ := testSchema.FieldByName("name")
 	// f3, _ := testSchema.FieldByName("score")
 
@@ -553,44 +560,44 @@ func TestPlanQueryIndexes(t *testing.T) {
 			Name:      "EQ Single",
 			Condition: Equal("name", "a"),
 			Index:     makeIndex(1),
-			Expected:  makeAndTree(makeEqualNode(f1, uint64(1))),
+			Expected:  makeAndTree(makeEqualNode(f1, rx, uint64(1))),
 		},
 		{
 			Name:      "EQ Double",
 			Condition: Equal("name", "a"),
 			Index:     makeIndex(1, 2),
-			Expected:  makeAndTree(makeRangeNode(f1, uint64(1), uint64(2))),
+			Expected:  makeAndTree(makeRangeNode(f1, rx, uint64(1), uint64(2))),
 		},
 		{
 			Name:      "EQ Triple",
 			Condition: Equal("name", "a"),
 			Index:     makeIndex(1, 2, 4),
-			Expected:  makeAndTree(makeInNode(f1, []uint64{1, 2, 4})),
+			Expected:  makeAndTree(makeInNode(f1, rx, []uint64{1, 2, 4})),
 		},
 		{
 			Name:      "IN",
 			Condition: In("name", []string{"a", "b", "c"}),
 			Index:     makeIndex(1, 4, 5),
-			Expected:  makeAndTree(makeInNode(f1, []uint64{1, 4, 5})),
+			Expected:  makeAndTree(makeInNode(f1, rx, []uint64{1, 4, 5})),
 		},
 		{
 			Name:      "Empty",
 			Condition: Equal("name", "a"),
 			Index:     makeIndex(),
-			Expected:  makeAndTree(makeFalseNode(f1)),
+			Expected:  makeAndTree(makeFalseNode(f1, rx)),
 		},
 		// extra pk condition
 		{
 			Name:      "EQ(INDEX) AND IN(PK)",
-			Condition: And(Equal("name", "a"), In("id", []uint64{1, 2})),
+			Condition: And(Equal("name", "a"), In("$rid", []uint64{1, 2})),
 			Index:     makeIndex(1),
-			Expected:  makeAndTree(makeEqualNode(f1, uint64(1))),
+			Expected:  makeAndTree(makeEqualNode(f1, rx, uint64(1))),
 		},
 		{
 			Name:      "IN(INDEX) AND GT(PK)",
-			Condition: And(In("name", []string{"a", "b", "c"}), Gt("id", uint64(4))),
+			Condition: And(In("name", []string{"a", "b", "c"}), Gt("$rid", uint64(4))),
 			Index:     makeIndex(1, 4, 5),
-			Expected:  makeAndTree(makeEqualNode(f1, uint64(5))),
+			Expected:  makeAndTree(makeEqualNode(f1, rx, uint64(5))),
 		},
 	}
 	for _, tc := range testCases {
@@ -639,7 +646,7 @@ func TestPlanQueryIndexes(t *testing.T) {
 }
 
 // makeNode constructs a Node with a specified filter mode, field index, and value, setting up the appropriate matcher.
-func makeNode(field schema.Field, mode types.FilterMode, value any) *filter.Node {
+func makeNode(field schema.Field, idx int, mode types.FilterMode, value any) *filter.Node {
 	tree := filter.NewNode()
 	// Log the initial value and its type
 	// log.Printf("makeNode called with mode: %v, fieldIndex: %d, value: %v (type: %T)", mode, fieldIndex, value, value)
@@ -648,7 +655,7 @@ func makeNode(field schema.Field, mode types.FilterMode, value any) *filter.Node
 	f := &filter.Filter{
 		Name:    field.Name(),
 		Mode:    mode,
-		Index:   int(field.Id() - 1), // index = id - 1 (for regular fields)
+		Index:   idx,
 		Id:      field.Id(),
 		Type:    blockType,
 		Value:   value,
@@ -732,62 +739,62 @@ func makeOrTree(children ...*filter.Node) *filter.Node {
 }
 
 // makeEqualNode constructs a Node for an equality condition with a specified integer value.
-func makeEqualNode(field schema.Field, val any) *filter.Node {
-	return makeNode(field, types.FilterModeEqual, val)
+func makeEqualNode(field schema.Field, idx int, val any) *filter.Node {
+	return makeNode(field, idx, types.FilterModeEqual, val)
 }
 
 // makeRangeNode constructs a Node for a range condition between two integer values.
-func makeRangeNode(field schema.Field, from, to any) *filter.Node {
-	return makeNode(field, types.FilterModeRange, filter.RangeValue{from, to})
+func makeRangeNode(field schema.Field, idx int, from, to any) *filter.Node {
+	return makeNode(field, idx, types.FilterModeRange, filter.RangeValue{from, to})
 }
 
 // makeRegexNode constructs a Node for a regular expression condition with a specified string.
 // makeRegexNode constructs a Node for a regexp conditions.
-func makeRegexNode(field schema.Field, s string) *filter.Node {
-	return makeNode(field, types.FilterModeRegexp, s)
+func makeRegexNode(field schema.Field, idx int, s string) *filter.Node {
+	return makeNode(field, idx, types.FilterModeRegexp, s)
 }
 
 // makeInNode constructs a Node for an IN condition with a list of integer values.
-func makeInNode(field schema.Field, vals any) *filter.Node {
-	return makeNode(field, types.FilterModeIn, vals)
+func makeInNode(field schema.Field, idx int, vals any) *filter.Node {
+	return makeNode(field, idx, types.FilterModeIn, vals)
 }
 
 // makeNiNode constructs a Node for an Not IN condition with a list of integer values.
-func makeNotInNode(field schema.Field, vals any) *filter.Node {
-	return makeNode(field, types.FilterModeNotIn, vals)
+func makeNotInNode(field schema.Field, idx int, vals any) *filter.Node {
+	return makeNode(field, idx, types.FilterModeNotIn, vals)
 }
 
 // makeNotEqualNode constructs a Node for a not-equal condition with a specified integer value.
-func makeNotEqualNode(field schema.Field, val any) *filter.Node {
-	return makeNode(field, types.FilterModeNotEqual, val)
+func makeNotEqualNode(field schema.Field, idx int, val any) *filter.Node {
+	return makeNode(field, idx, types.FilterModeNotEqual, val)
 }
 
 // makeGtNode constructs a Node for a greater-than condition with a specified integer value.
-func makeGtNode(field schema.Field, val any) *filter.Node {
-	return makeNode(field, types.FilterModeGt, val)
+func makeGtNode(field schema.Field, idx int, val any) *filter.Node {
+	return makeNode(field, idx, types.FilterModeGt, val)
 }
 
 // makeLtNode constructs a Node for a less-than condition with a specified integer value.
-func makeLtNode(field schema.Field, val any) *filter.Node {
-	return makeNode(field, types.FilterModeLt, val)
+func makeLtNode(field schema.Field, idx int, val any) *filter.Node {
+	return makeNode(field, idx, types.FilterModeLt, val)
 }
 
 // makeGeNode constructs a Node for a greater-than-or-equal condition with a specified integer value.
-func makeGeNode(field schema.Field, val any) *filter.Node {
-	return makeNode(field, types.FilterModeGe, val)
+func makeGeNode(field schema.Field, idx int, val any) *filter.Node {
+	return makeNode(field, idx, types.FilterModeGe, val)
 }
 
 // makeLeNode constructs a Node for a less-than-or-equal condition with a specified integer value.
-func makeLeNode(field schema.Field, val any) *filter.Node {
-	return makeNode(field, types.FilterModeLe, val)
+func makeLeNode(field schema.Field, idx int, val any) *filter.Node {
+	return makeNode(field, idx, types.FilterModeLe, val)
 }
 
 // makeFalseNode constructs a Node for a false condition.
-func makeFalseNode(field schema.Field) *filter.Node {
-	return makeNode(field, types.FilterModeFalse, nil)
+func makeFalseNode(field schema.Field, idx int) *filter.Node {
+	return makeNode(field, idx, types.FilterModeFalse, nil)
 }
 
 // makeTrueNode constructs a Node for a true condition.
-func makeTrueNode(field schema.Field) *filter.Node {
-	return makeNode(field, types.FilterModeTrue, nil)
+func makeTrueNode(field schema.Field, idx int) *filter.Node {
+	return makeNode(field, idx, types.FilterModeTrue, nil)
 }

@@ -113,7 +113,7 @@ func (t *hashTable[T]) hash16(key uint64) uint16 {
 // 		// table.hashes = AllocT[uint16](1 << 16)[:1<<16]
 // 	}
 
-// 	// if !util.UseAVX2 {
+// 	// if !cpu.UseAVX2 {
 // 	// 	// Fill values
 // 	// 	table.codes[0] = 0xFFFF
 // 	// 	n := 1

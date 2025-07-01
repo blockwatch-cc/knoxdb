@@ -10,14 +10,14 @@ import (
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/cmp/tests"
-	"blockwatch.cc/knoxdb/pkg/util"
+	"blockwatch.cc/knoxdb/internal/cpu"
 )
 
 func requireAvx512(t testing.TB) {
-	if !util.UseAVX512_F {
+	if !cpu.UseAVX512_F {
 		t.Skip("AVX512F not available.")
 	}
-	if !util.UseAVX512_BW {
+	if !cpu.UseAVX512_BW {
 		t.Skip("AVX512BW not available.")
 	}
 }

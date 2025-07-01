@@ -9,13 +9,13 @@ package avx2
 import (
 	"testing"
 
+	"blockwatch.cc/knoxdb/internal/cpu"
 	"blockwatch.cc/knoxdb/internal/encode/s8b/generic"
 	"blockwatch.cc/knoxdb/internal/encode/s8b/tests"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 func TestDecode(t *testing.T) {
-	if !util.UseAVX2 {
+	if !cpu.UseAVX2 {
 		t.Skip()
 	}
 	tests.EncodeTest[uint64](t, generic.Encode[uint64], DecodeUint64)

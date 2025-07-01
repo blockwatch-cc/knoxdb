@@ -500,20 +500,18 @@ func TestWorkload5(t *testing.T) {
 
 		// log metrics
 		m := table.Metrics()
-		t.Logf("Tuple metrics -- total:%d inserted:%d updated:%d deleted:%d flushed:%d queried:%d streamed:%d",
+		t.Logf("Tuple metrics -- total:%d inserted:%d updated:%d deleted:%d queried:%d streamed:%d",
 			m.TupleCount,
 			m.InsertedTuples,
 			m.UpdatedTuples,
 			m.DeletedTuples,
-			m.FlushedTuples,
 			m.QueriedTuples,
 			m.StreamedTuples,
 		)
-		t.Logf("Call metrics -- inserts:%d updates:%d deletes:%d flushes:%d queries:%d streams:%d",
+		t.Logf("Call metrics -- inserts:%d updates:%d deletes:%d queries:%d streams:%d",
 			m.InsertCalls,
 			m.UpdateCalls,
 			m.DeleteCalls,
-			m.FlushCalls,
 			m.QueryCalls,
 			m.StreamCalls,
 		)

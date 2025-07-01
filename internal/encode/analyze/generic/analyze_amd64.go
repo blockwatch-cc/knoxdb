@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
-//go:build amd64
-// +build amd64
+//go:build amd64 && wasm
+// +build amd64,wasm
 
 package generic
 

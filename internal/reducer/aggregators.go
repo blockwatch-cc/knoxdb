@@ -13,6 +13,8 @@ import (
 	"blockwatch.cc/knoxdb/pkg/num"
 )
 
+type Bitmap = bitmap.Bitmap // xroar.Bitmap
+
 type Aggregatable interface {
 	encoding.BinaryUnmarshaler
 	Emit(*bytes.Buffer) error
@@ -30,20 +32,20 @@ var (
 	I128Agg      = func(scale uint8) Aggregatable { return &Int128Aggregator{scale: scale} }
 	I256Agg      = func(scale uint8) Aggregatable { return &Int256Aggregator{scale: scale} }
 	BitAgg       = func() Aggregatable { return &BitmapAggregator{} }
-	BitAggAnd    = func(src bitmap.Bitmap) Aggregatable { return &BitmapAggregator{src: src, fn: bitmap.And} }
-	BitAggOr     = func(src bitmap.Bitmap) Aggregatable { return &BitmapAggregator{src: src, fn: bitmap.Or} }
-	BitAggAndNot = func(src bitmap.Bitmap) Aggregatable { return &BitmapAggregator{src: src, fn: bitmap.AndNot} }
+	BitAggAnd    = func(src *Bitmap) Aggregatable { return &BitmapAggregator{src: src, fn: bitmap.And} }
+	BitAggOr     = func(src *Bitmap) Aggregatable { return &BitmapAggregator{src: src, fn: bitmap.Or} }
+	BitAggAndNot = func(src *Bitmap) Aggregatable { return &BitmapAggregator{src: src, fn: bitmap.AndNot} }
 )
 
-type BitmapIntersectFunc func(bitmap.Bitmap, bitmap.Bitmap) bitmap.Bitmap
+type BitmapIntersectFunc func(*Bitmap, *Bitmap) *bitmap.Bitmap
 
 // bitmap.Bitmap OR's on add and returns count of bits on emit. When used for
 // linear interpolation or other math, we convert calculated float64 values
 // to a separate internal int counter.
 type BitmapAggregator struct {
 	count int
-	bits  bitmap.Bitmap
-	src   bitmap.Bitmap
+	bits  *Bitmap
+	src   *Bitmap
 	fn    BitmapIntersectFunc
 }
 
@@ -54,7 +56,7 @@ func (b *BitmapAggregator) Init(val Aggregatable) {
 }
 
 func (b BitmapAggregator) IsZero() bool {
-	return b.bits.Bitmap == nil
+	return b.bits == nil
 }
 
 func (b BitmapAggregator) Count() int {
@@ -66,7 +68,7 @@ func (b BitmapAggregator) Count() int {
 	}
 	res := b.fn(b.src, b.bits)
 	cnt := res.Count()
-	res.Free()
+	// res.Free()
 	return cnt
 }
 

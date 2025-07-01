@@ -5,17 +5,13 @@
 
 package generic
 
-import (
-	"blockwatch.cc/knoxdb/internal/types"
-)
-
 // BenchmarkAnalyze/float64/dups_64k-10     41259 ns/op    12707.20 MB/s  1.588 vals/ns
 // BenchmarkAnalyze/float64/runs_64k-10     41228 ns/op    12716.91 MB/s  1.590 vals/ns
 // BenchmarkAnalyze/float64/seq_64k-10      41049 ns/op    12772.17 MB/s  1.597 vals/ns
 // BenchmarkAnalyze/float32/dups_64k-10     41063 ns/op    6383.89 MB/s   1.596 vals/ns
 // BenchmarkAnalyze/float32/runs_64k-10     41170 ns/op    6367.36 MB/s   1.592 vals/ns
 // BenchmarkAnalyze/float32/seq_64k-10      41246 ns/op    6355.65 MB/s   1.589 vals/ns
-func AnalyzeFloat[T types.Float](vals []T) (minv T, maxv T, numRuns int) {
+func AnalyzeFloat[T float64 | float32](vals []T) (minv T, maxv T, numRuns int) {
 	if len(vals) == 0 {
 		return
 	}

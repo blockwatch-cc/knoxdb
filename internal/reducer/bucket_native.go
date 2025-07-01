@@ -230,11 +230,7 @@ func emitFloats[T Float](num T) string {
 }
 
 func (b *NativeBucket[T]) read(r engine.QueryRow) (T, error) {
-	val, err := r.Index(b.index)
-	if err != nil {
-		var t T
-		return t, err
-	}
+	val := r.Get(b.index)
 	t, ok := val.(T)
 	if !ok {
 		return t, fmt.Errorf("invalid value type %T for %T", val, t)
