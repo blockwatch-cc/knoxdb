@@ -87,26 +87,16 @@ import (
 // - data pack tombstones [tombstone-kind:key:version] - rewrite, add block id
 // - spack tombstones [tombstone-kind:key:version] - rewrite, add block id
 
-// TODO
-// - run GC at start of merge
-// - run WAL gc in cron job (watermark based on catalog states, remove wal files)
-// - test GC
-// - table indexes
-//   - add through index journal directly on merge
-//   - insert tombstones on merge (write compressed index tombstone pack vectors)
-//   - delay removal until epoch GC
-// TODO: howto add index packs?
-// - tighten table locks (maybe move into journal functions, don't hold lock too long)
-//
-
 // adds the current epoch to the list of live epochs on storage
 func (idx *Index) addEpoch(tx store.Tx) error {
+	// idx.log.Tracef("Add tomb epoch %d", idx.epoch)
 	return idx.epochBucket(tx).Put(num.EncodeUvarint(uint64(idx.epoch)), nil)
 }
 
 // removes the current epoch from the list of live epochs, which makes
 // the on-disk tombstones from this epoch garbage collectable.
 func (idx *Index) dropEpoch(tx store.Tx) error {
+	// idx.log.Tracef("Drop tomb epoch %d", idx.epoch)
 	return idx.epochBucket(tx).Delete(num.EncodeUvarint(uint64(idx.epoch)))
 }
 
@@ -114,8 +104,9 @@ func (idx *Index) dropEpoch(tx store.Tx) error {
 func (idx *Index) RunGC(tx store.Tx) error {
 	// read watermark
 	watermark := idx.getWatermark(tx)
+	idx.log.Debugf("table[%s]: gc watermark %d", idx.schema.Name(), watermark)
 
-	// identify epochs to drop
+	// identify epochs with GC data
 	drop := make([]uint32, 0)
 	c := idx.tombBucket(tx).Cursor()
 	for ok := c.First(); ok; ok = c.Next() {
@@ -126,12 +117,12 @@ func (idx *Index) RunGC(tx store.Tx) error {
 		drop = append(drop, uint32(v))
 	}
 	c.Close()
+	idx.log.Debugf("table[%s]: gc %d epochs ready to drop", idx.schema.Name(), len(drop))
 
 	// gc epochs
 	for _, v := range drop {
 		if err := idx.gcEpoch(tx, v); err != nil {
-			idx.log.Errorf("gc: epoch %d: %v", v, err)
-			return err
+			return fmt.Errorf("gc: epoch %d: %v", v, err)
 		}
 	}
 
@@ -155,20 +146,22 @@ func (idx *Index) CleanupEpochs(tx store.Tx) error {
 	}
 	c.Close()
 
-	idx.log.Debugf("table[%s]: cleanup %d epochs", idx.schema.Name(), len(drop))
+	idx.log.Debugf("table[%s]: cleanup %d broken epochs", idx.schema.Name(), len(drop))
 
 	// step 2: drop epoch keys
 	for _, v := range drop {
-		if err := b.Delete(num.EncodeUvarint(uint64(v))); err != nil {
-			idx.log.Error(err)
-		}
-
 		// GC future tombstones (cleanup after crash)
 		if v >= idx.epoch {
 			idx.log.Debugf("table[%s]: gc broken future epoch %d", idx.schema.Name(), v)
 			if err := idx.gcEpoch(tx, v); err != nil {
 				idx.log.Error(err)
 			}
+		}
+
+		// drop epoch
+		idx.log.Debugf("table[%s]: drop epoch %d", idx.schema.Name(), v)
+		if err := b.Delete(num.EncodeUvarint(uint64(v))); err != nil {
+			idx.log.Error(err)
 		}
 	}
 
@@ -182,7 +175,7 @@ func (idx *Index) CleanupEpochs(tx store.Tx) error {
 // Checks if cleanup is required, ie. future epochs exist or GC should run.
 // Can run in read-only tx.
 func (idx *Index) NeedCleanup(tx store.Tx) bool {
-	b := idx.epochBucket(tx)
+	b := idx.tombBucket(tx)
 	c := b.Cursor()
 	defer c.Close()
 	for ok := c.First(); ok; ok = c.Next() {
@@ -220,8 +213,6 @@ func (idx *Index) gcEpoch(tx store.Tx, epoch uint32) error {
 	if ebucket == nil {
 		return store.ErrNoBucket
 	}
-	idx.log.Debugf("GC epoch %d", epoch)
-
 	var (
 		start        = time.Now()
 		nTableBlocks int
@@ -229,6 +220,7 @@ func (idx *Index) gcEpoch(tx store.Tx, epoch uint32) error {
 		nStatsBlocks int
 		nTreeNodes   int
 	)
+	idx.log.Debugf("table[%s]: gc epoch %d", idx.schema.Name(), epoch)
 
 	// process table data packs
 	if b := ebucket.Bucket([]byte{TOMB_KIND_TABLE_PACK}); b != nil {
@@ -242,6 +234,7 @@ func (idx *Index) gcEpoch(tx store.Tx, epoch uint32) error {
 			key := c.Key()
 			pk, n := num.Uvarint(key)
 			pv, _ := num.Uvarint(key[n:])
+			idx.log.Tracef("table[%s]: gc table pack 0x%08d[v%d]", idx.schema.Name(), pk, pv)
 
 			// drop blocks
 			for _, id := range idx.tomb.activeFields {
@@ -282,6 +275,7 @@ func (idx *Index) gcEpoch(tx store.Tx, epoch uint32) error {
 			key := c.Key()
 			pk, n := num.Uvarint(key)
 			pv, _ := num.Uvarint(key[n:])
+			idx.log.Tracef("table[%s]: gc spack 0x%08d[v%d]", idx.schema.Name(), pk, pv)
 
 			// drop blocks (id is u16(pos + 1))
 			for id := range idx.tomb.nSpackFields {
@@ -300,6 +294,8 @@ func (idx *Index) gcEpoch(tx store.Tx, epoch uint32) error {
 		c := b.Cursor()
 		defer c.Close()
 		for ok := c.First(); ok; ok = c.Next() {
+			idx.log.Tracef("table[%s]: gc tree node 0x%x", idx.schema.Name(), c.Key())
+
 			// use key as is
 			err := tbucket.Delete(c.Key())
 			if err != nil {
@@ -309,7 +305,7 @@ func (idx *Index) gcEpoch(tx store.Tx, epoch uint32) error {
 		}
 	}
 
-	idx.log.Debugf("GC[%s] epoch %d: reclaimed table=%d filter=%d stats=%d tree=%d in %s",
+	idx.log.Debugf("table[%s]: gc epoch %d: reclaimed table=%d filter=%d stats=%d tree=%d in %s",
 		idx.schema.Name(), epoch, nTableBlocks, nFilters, nStatsBlocks, nTreeNodes,
 		time.Since(start),
 	)

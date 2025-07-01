@@ -194,13 +194,12 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 
 	// open db backend and load latest state
 	if err := idx.openBackend(ctx); err != nil {
-		idx.log.Errorf("%s: open index: %v", name, err)
+		idx.log.Errorf("index[%s]: %v", name, err)
 		_ = idx.Close(ctx)
 		return engine.ErrDatabaseCorrupt
 	}
 
-	idx.log.Debugf("index[%s]: open with %d rows\n source schema: %s\nindex schema: %s",
-		name, idx.state.NRows, idx.srcSchema, idx.idxSchema)
+	idx.log.Debugf("index[%s]: open with %d entries", name, idx.state.NRows)
 
 	return nil
 }
@@ -214,7 +213,7 @@ func (idx *Index) openBackend(ctx context.Context) error {
 
 	db, err := store.Open(idx.opts.Driver, path, idx.opts.ToDriverOpts())
 	if err != nil {
-		return fmt.Errorf("open: %v: %v", err, engine.ErrNoIndex)
+		return fmt.Errorf("open: %v", err)
 	}
 	idx.db = db
 

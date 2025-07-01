@@ -6,6 +6,7 @@ package table
 import (
 	"context"
 
+	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/pack/stats"
 	"blockwatch.cc/knoxdb/internal/xroar"
@@ -43,24 +44,14 @@ func (t *Table) ViewPackage(ctx context.Context, i int) *pack.Package {
 			return nil
 		}
 	}
-	si := t.stats.Retain()
-	defer si.Release(false)
-	if i < 0 || i >= si.Len() {
-		return nil
-	}
-	rec, ok := si.Get(uint32(i))
-	if !ok {
-		return nil
-	}
-	pkg, err := t.NewReader().Read(ctx, rec.Key, rec.Version)
+	ctx = engine.WithEngine(ctx, t.engine)
+	r := t.NewReader()
+	defer r.Close()
+	pkg, err := r.Read(ctx, uint32(i))
 	if err != nil {
 		return nil
 	}
-	if pkg.IsNil() {
-		pkg.Release()
-		return nil
-	}
-	return pkg
+	return pkg.Copy() // copy because we close reader on return
 }
 
 func (t *Table) ViewTomb() *xroar.Bitmap {

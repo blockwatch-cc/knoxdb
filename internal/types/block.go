@@ -193,7 +193,7 @@ func (t BlockType) IsUnsigned() bool {
 
 func (t BlockType) CanUseAsSet() bool {
 	switch t {
-	case BlockFloat64, BlockFloat32, BlockBool, BlockInt128, BlockInt256:
+	case BlockFloat64, BlockFloat32, BlockBool, BlockInt128, BlockInt256, BlockBytes:
 		return false
 	default:
 		return true

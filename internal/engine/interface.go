@@ -88,8 +88,8 @@ type TableReader interface {
 	WithQuery(QueryPlan) TableReader
 	WithMask(*Bitmap, ReadMode) TableReader
 	WithFields([]uint16) TableReader
-	Read(Context, uint32, uint32) (*Package, error)
 	Next(Context) (*Package, error)
+	Read(Context, uint32) (*Package, error)
 	Reset()
 	Close()
 	Schema() *Schema
@@ -104,6 +104,7 @@ type TableWriter interface {
 	Finalize(Context, ObjectState) error
 	Close()
 	Epoch() uint32
+	GC() error
 }
 
 type QueryPlan interface {

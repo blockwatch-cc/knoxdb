@@ -137,7 +137,8 @@ func (b *Writer) Write(i int, val any) error {
 			}
 		} else {
 			// variable size
-			b.dyn[i] = bytes.Clone(buf)
+			// b.dyn[i] = bytes.Clone(buf)
+			b.dyn[i] = buf
 		}
 
 	case FT_TIMESTAMP:
@@ -285,10 +286,13 @@ func (b *Writer) Write(i int, val any) error {
 			buf = v.Bytes()
 		case *big.Int:
 			buf = v.Bytes()
+		case []byte:
+			buf = v
 		default:
 			err = ErrInvalidValueType
 		}
 		// variable size (already in new allocated []byte)
+		// b.dyn[i] = bytes.Clone(buf)
 		b.dyn[i] = buf
 
 	default:

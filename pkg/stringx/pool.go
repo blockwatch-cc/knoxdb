@@ -275,7 +275,7 @@ func (p *StringPool) Set(i int, val []byte) {
 	// insert val at place i and append string to the end of buf
 	vlen := uint32(len(val))
 	vofs := uint32(len(p.buf))
-	p.ptr[i] = pair2ptr(vlen, vofs)
+	p.ptr[i] = pair2ptr(vofs, vlen)
 	p.buf = append(p.buf, val...)
 }
 

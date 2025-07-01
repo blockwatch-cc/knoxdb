@@ -165,6 +165,11 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 	table := t.NewWriter(seg.Id())
 	defer table.Close()
 
+	// run table GC to free up unused space
+	if err := table.GC(); err != nil {
+		t.log.Error(err)
+	}
+
 	// t.log.Debugf("table[%s]: merge epoch %d", t.schema.Name(), seg.Id())
 
 	// init history writer

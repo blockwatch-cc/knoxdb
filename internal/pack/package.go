@@ -117,6 +117,9 @@ func (p *Package) CanGrow(n int) bool {
 }
 
 func (p *Package) NumSelected() int {
+	if p.selected == nil {
+		return p.nRows
+	}
 	return len(p.selected)
 }
 

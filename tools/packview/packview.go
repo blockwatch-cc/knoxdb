@@ -14,8 +14,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	dbg "runtime/debug"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/echa/log"
 
@@ -25,6 +27,7 @@ import (
 	pt "blockwatch.cc/knoxdb/internal/pack/table"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
+	"blockwatch.cc/knoxdb/pkg/encode"
 	"blockwatch.cc/knoxdb/pkg/knox"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/util"
@@ -75,6 +78,7 @@ func run() (err error) {
 	defer func() {
 		if e := recover(); e != nil {
 			log.Error(e)
+			dbg.PrintStack()
 			switch x := e.(type) {
 			case string:
 				err = errors.New(x)
@@ -142,14 +146,14 @@ func run() (err error) {
 	case "stats":
 		PrintMetadata(getTableOrIndexStatsView(db, desc.Table), desc, out)
 	case "detail":
-		PrintMetadataDetail(getTableOrIndexStatsView(db, desc.Table), desc, out)
+		PrintDetail(getTableOrIndexView(db, desc.Table), desc, out)
 	case "content":
 		ctx, _, abort, err := db.Begin(ctx)
 		if err != nil {
 			return err
 		}
 		defer abort()
-		PrintContent(ctx, getTableOrIndexPackView(db, desc.Table), desc, out)
+		PrintContent(ctx, getTableOrIndexView(db, desc.Table), desc, out)
 
 	default:
 		return fmt.Errorf("unsupported command %s", cmd)
@@ -175,8 +179,18 @@ type ContentViewer interface {
 	Schema() *schema.Schema
 }
 
+type StatsViewer interface {
+	ViewStats(int) *stats.Record
+	Schema() *schema.Schema
+}
+
+type Viewer interface {
+	StatsViewer
+	ContentViewer
+}
+
 //nolint:all
-func getTableOrIndexPackView(db knox.Database, name string) ContentViewer {
+func getTableOrIndexView(db knox.Database, name string) Viewer {
 	t, err := db.UseTable(name)
 	if err == nil {
 		return t.Engine().(*pt.Table)
@@ -185,11 +199,6 @@ func getTableOrIndexPackView(db knox.Database, name string) ContentViewer {
 		return idx.Engine().(*pi.Index)
 	}
 	panic(err)
-}
-
-type StatsViewer interface {
-	ViewStats(int) *stats.Record
-	Schema() *schema.Schema
 }
 
 //nolint:all
@@ -321,12 +330,18 @@ func PrintMetadata(view StatsViewer, desc TableDescriptor, w io.Writer) {
 	t.Render()
 }
 
-func PrintMetadataDetail(view StatsViewer, desc TableDescriptor, w io.Writer) {
+type InfoView interface {
+	Type() encode.ContainerType
+	Info() string
+	Size() int
+}
+
+func PrintDetail(view Viewer, desc TableDescriptor, w io.Writer) {
 	s := view.Schema()
 	t := table.NewWriter()
 	fields := s.Exported()
 	t.SetOutputMirror(w)
-	t.AppendHeader(table.Row{"#", "Name", "Type", "Min", "Max"})
+	t.AppendHeader(table.Row{"#", "Name", "Type", "Min", "Max", "Size", "Info"})
 	var (
 		i         int
 		stopAfter bool
@@ -340,6 +355,10 @@ func PrintMetadataDetail(view StatsViewer, desc TableDescriptor, w io.Writer) {
 		if md == nil {
 			break
 		}
+		pkg := view.ViewPackage(context.Background(), i)
+		if pkg == nil {
+			break
+		}
 		t.SetTitle("%s - Pack 0x%08x[v%d] - %s records - Size %s",
 			s.Name(),
 			md.Key,
@@ -348,12 +367,27 @@ func PrintMetadataDetail(view StatsViewer, desc TableDescriptor, w io.Writer) {
 			util.ByteSize(md.DiskSize),
 		)
 		for i := range s.NumFields() {
+			var (
+				sz   int
+				info string
+			)
+			if pkg.Block(i).IsMaterialized() {
+				sz = pkg.Block(i).Size()
+				info = "raw"
+			} else {
+				v := pkg.Block(i).Container().(InfoView)
+				sz = v.Size()
+				info = v.Info()
+			}
+
 			t.AppendRow([]any{
 				fields[i].Id,
 				fields[i].Name,
 				fields[i].Type,
-				util.LimitStringEllipsis(util.ToString(md.Min(i)), 33),
-				util.LimitStringEllipsis(util.ToString(md.Max(i)), 33),
+				printValue(s, fields[i], md.Min(i)),
+				printValue(s, fields[i], md.Max(i)),
+				sz,
+				info,
 			})
 		}
 		t.Render()
@@ -362,6 +396,29 @@ func PrintMetadataDetail(view StatsViewer, desc TableDescriptor, w io.Writer) {
 		if stopAfter {
 			break
 		}
+	}
+}
+
+func printValue(s *schema.Schema, f *schema.ExportedField, val any) any {
+	switch f.Type {
+	case types.FieldTypeBytes:
+		return util.LimitStringEllipsis(util.ToString(val), 33)
+	case types.FieldTypeUint16:
+		if f.Flags.Is(types.FieldFlagEnum) && s.HasEnums() {
+			if lut, ok := s.Enums().Lookup(f.Name); ok {
+				enum, ok := lut.Value(val.(uint16))
+				if ok {
+					return enum
+				}
+			}
+		}
+		return val
+	case types.FieldTypeTimestamp, types.FieldTypeDate, types.FieldTypeTime:
+		return schema.TimeScale(f.Scale).Format(val.(time.Time))
+	case types.FieldTypeInt128, types.FieldTypeInt256, types.FieldTypeDecimal128, types.FieldTypeDecimal256:
+		return util.LimitStringEllipsis(val.(fmt.Stringer).String(), 33)
+	default:
+		return val
 	}
 }
 
@@ -374,27 +431,36 @@ func PrintContent(ctx context.Context, view ContentViewer, desc TableDescriptor,
 	// analyze schema and set custom text transformer for byte and enum columns
 	var cfgs []table.ColumnConfig
 	for _, field := range s.Exported() {
-		if field.Type == types.FieldTypeBytes {
+		switch field.Type {
+		case types.FieldTypeBytes:
 			cfgs = append(cfgs, table.ColumnConfig{
 				Name: field.Name,
 				Transformer: func(val any) string {
 					return hex.EncodeToString(val.([]byte))
 				},
 			})
-		}
-		if field.Type == types.FieldTypeUint16 && field.Flags.Is(types.FieldFlagEnum) {
-			if lut, ok := schema.LookupEnum(0, field.Name); ok {
-				cfgs = append(cfgs, table.ColumnConfig{
-					Name: field.Name,
-					Transformer: func(val any) string {
-						enum, ok := lut.Value(val.(uint16))
-						if ok {
-							return enum
-						}
-						return strconv.Itoa(int(val.(uint16)))
-					},
-				})
+		case types.FieldTypeUint16:
+			if field.Flags.Is(types.FieldFlagEnum) && s.HasEnums() {
+				if lut, ok := s.Enums().Lookup(field.Name); ok {
+					cfgs = append(cfgs, table.ColumnConfig{
+						Name: field.Name,
+						Transformer: func(val any) string {
+							enum, ok := lut.Value(val.(uint16))
+							if ok {
+								return enum
+							}
+							return strconv.Itoa(int(val.(uint16)))
+						},
+					})
+				}
 			}
+		case types.FieldTypeTimestamp, types.FieldTypeDate, types.FieldTypeTime:
+			cfgs = append(cfgs, table.ColumnConfig{
+				Name: field.Name,
+				Transformer: func(val any) string {
+					return schema.TimeScale(field.Scale).Format(val.(time.Time))
+				},
+			})
 		}
 	}
 	if cfgs != nil {
@@ -406,12 +472,12 @@ func PrintContent(ctx context.Context, view ContentViewer, desc TableDescriptor,
 	if desc.PackId < 0 {
 		pkg := view.ViewPackage(ctx, desc.PackId)
 		tomb := view.ViewTomb()
-		pki := s.PkIndex()
+		rx := s.RowIdIndex()
 		t.AppendHeader(append(table.Row{"DEL"}, util.StringList(s.AllFieldNames()).AsInterface()...))
 		for r := 0; r < pkg.Len(); r++ {
 			res = pkg.ReadRow(r, res)
 			var live string
-			if tomb.Contains(res[pki].(uint64)) {
+			if tomb.Contains(res[rx].(uint64)) {
 				live = "*"
 			}
 			t.AppendRow(append([]any{live}, res...))

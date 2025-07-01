@@ -55,6 +55,9 @@ func (t *Tomb) WithSchema(tableSchema, metaSchema *schema.Schema, use Features) 
 			t.rangeFields = append(t.rangeFields, f.Id)
 		}
 	}
+	// fmt.Printf("Tomb %s active fields %v\n", t.tkey, t.activeFields)
+	// fmt.Printf("Tomb %s filter fields %v\n", t.tkey, t.filteredFields)
+	// fmt.Printf("Tomb %s range fields %v\n", t.tkey, t.rangeFields)
 	return t
 }
 
@@ -80,21 +83,26 @@ func (t *Tomb) Close() {
 }
 
 type TombWriter struct {
-	t   *Tomb
-	sb  store.Bucket // spack tombstones
-	nb  store.Bucket // node tombstones
-	err error        // deferred error
+	t  *Tomb
+	sb store.Bucket // spack tombstones
+	nb store.Bucket // node tombstones
 }
 
 func (t *Tomb) NewWriter(tx store.Tx) *TombWriter {
-	w := &TombWriter{
-		t: t,
+	return &TombWriter{t: t}
+}
+
+func (w *TombWriter) makeBuckets(tx store.Tx) error {
+	if w.sb != nil {
+		return nil
 	}
-	w.sb, w.err = t.bucket(tx, TOMB_KIND_STATS_PACK)
-	if w.err == nil {
-		w.nb, w.err = t.bucket(tx, TOMB_KIND_STATS_NODE)
+	var err error
+	w.sb, err = w.t.bucket(tx, TOMB_KIND_STATS_PACK)
+	if err != nil {
+		return err
 	}
-	return w
+	w.nb, err = w.t.bucket(tx, TOMB_KIND_STATS_NODE)
+	return err
 }
 
 func (w *TombWriter) Close() {
@@ -104,9 +112,10 @@ func (w *TombWriter) Close() {
 }
 
 func (w *TombWriter) AddSPack(tx store.Tx, key, ver uint32) error {
-	if w.err != nil {
-		return w.err
+	if err := w.makeBuckets(tx); err != nil {
+		return err
 	}
+	// fmt.Printf("Add tomb spack %d[v%d] to epoch %d\n", key, ver, w.t.epoch)
 	var b [2 * num.MaxVarintLen32]byte
 	buf := num.AppendUvarint(b[:0], uint64(key))
 	buf = num.AppendUvarint(buf, uint64(ver))
@@ -114,13 +123,15 @@ func (w *TombWriter) AddSPack(tx store.Tx, key, ver uint32) error {
 }
 
 func (w *TombWriter) AddNode(tx store.Tx, key []byte) error {
-	if w.err != nil {
-		return w.err
+	if err := w.makeBuckets(tx); err != nil {
+		return err
 	}
+	// fmt.Printf("Add tomb node %x to epoch %d\n", key, w.t.epoch)
 	return w.nb.Put(key, nil)
 }
 
 func (t *Tomb) AddDataPack(tx store.Tx, key, ver uint32) error {
+	// fmt.Printf("Add tomb data pack %d[v%d] to epoch %d\n", key, ver, t.epoch)
 	var tmp [2 * num.MaxVarintLen32]byte
 	buf := num.AppendUvarint(tmp[:0], uint64(key))
 	buf = num.AppendUvarint(buf, uint64(ver))
@@ -139,6 +150,7 @@ func (t *Tomb) bucket(tx store.Tx, kind byte) (store.Bucket, error) {
 	eb := tb.Bucket(t.ekey)
 	var err error
 	if eb == nil {
+		// fmt.Printf("Create tomb bucket %x for epoch %d\n", t.ekey, t.epoch)
 		eb, err = tb.CreateBucketIfNotExists(t.ekey)
 		if err != nil {
 			return nil, fmt.Errorf("create epoch bucket: %v", err)
@@ -146,7 +158,8 @@ func (t *Tomb) bucket(tx store.Tx, kind byte) (store.Bucket, error) {
 	}
 	kb := eb.Bucket([]byte{kind})
 	if kb == nil {
-		kb, err = tb.CreateBucketIfNotExists([]byte{kind})
+		// fmt.Printf("Create kind bucket %x for epoch %d\n", kind, t.epoch)
+		kb, err = eb.CreateBucketIfNotExists([]byte{kind})
 		if err != nil {
 			return nil, fmt.Errorf("create kind bucket: %v", err)
 		}

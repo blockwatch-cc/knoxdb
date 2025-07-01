@@ -52,6 +52,8 @@ func (t *Table) NewWriter(epoch uint32) engine.TableWriter {
 	if epoch == 0 {
 		epoch = uint32(t.state.Epoch)
 	}
+	// its safe to call Get here because we will be the onlt thread executing
+	// merge on this table
 	s := t.stats.Get().Clone().WithEpoch(epoch)
 	return &Writer{
 		table:   t,
@@ -87,6 +89,20 @@ func (w *Writer) Close() {
 	w.nRecords = 0
 	w.nBytes = 0
 	w.start = time.Time{}
+}
+
+// Runs garbage collection on the table dropping old versions of vector blocks
+// and metadata. May be called before merge starts to free storage space that
+// new merged blocks can occupy. Note after merge completes, GC will run
+// automatically again, but only if the writer drops the last reference to
+// the current stats index epoch.
+func (w *Writer) GC() error {
+	if !w.stats.IsClean() {
+		return w.table.db.Update(func(tx store.Tx) error {
+			return w.stats.RunGC(tx)
+		})
+	}
+	return nil
 }
 
 // Appends src data to table and indexes. Writes new pack versions as they become full.

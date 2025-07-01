@@ -181,7 +181,7 @@ func (t *Table) doQueryAsc(ctx context.Context, plan *query.QueryPlan, res Query
 
 	// early return
 	if jres.IsEmpty() && plan.IsNoMatch() {
-		// plan.Log.Debugf("empty match")
+		plan.Log.Debugf("empty match")
 		return nil
 	}
 

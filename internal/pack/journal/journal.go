@@ -372,12 +372,10 @@ func (j *Journal) Query(plan *query.QueryPlan, epoch uint32) *Result {
 	for seg != nil {
 		// skip merged and empty segments
 		if seg.Id() <= epoch || seg.canDrop() {
-			// plan.Log.Infof("skip journal query segment %d: %#v", seg.Id(), seg)
+			plan.Log.Debugf("skip journal query segment %d", seg.Id())
 			seg = seg.parent
 			continue
 		}
-
-		// plan.Log.Infof("query journal segment %d", seg.Id())
 
 		// step 1: identify deleted records
 		seg.MergeDeleted(res.tomb, snap)
@@ -387,7 +385,7 @@ func (j *Journal) Query(plan *query.QueryPlan, epoch uint32) *Result {
 
 		// add segment to result if it has any match
 		if bits.Any() {
-			// plan.Log.Debugf("using journal segment %d", seg.Id())
+			plan.Log.Debugf("using journal segment %d with %d matches", seg.Id(), bits.Count())
 			res.Append(seg, bits)
 		}
 

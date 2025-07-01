@@ -5,6 +5,7 @@ package table
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 
 	"blockwatch.cc/knoxdb/internal/arena"
@@ -425,8 +426,23 @@ func makeRxFilter(rx int) *filter.Node {
 	})
 }
 
-func (r *Reader) Read(ctx context.Context, key, ver uint32) (*pack.Package, error) {
-	err := r.loadPack(ctx, key, ver, 0, nil)
+// debug use only
+func (r *Reader) Read(ctx context.Context, key uint32) (*pack.Package, error) {
+	rec, ok := r.stats.Get(key)
+	if !ok {
+		return nil, fmt.Errorf("no such pack")
+	}
+
+	// init cache on first call
+	if r.bcache == nil {
+		if r.useCache {
+			r.bcache = engine.GetEngine(ctx).BlockCache(r.table.id)
+		} else {
+			r.bcache = block.NoCache
+		}
+	}
+
+	err := r.loadPack(ctx, rec.Key, rec.Version, int(rec.NValues), nil)
 	return r.pack, err
 }
 
@@ -472,7 +488,7 @@ func (r *Reader) loadPack(ctx context.Context, key, ver uint32, nval int, fids [
 		return err
 	}
 
-	// -- debug
+	// // -- debug
 	// var lmin, lmax int = 1<<32 - 1, 0
 	// ld := make([]int, 0)
 	// for i, b := range r.pack.Blocks() {
@@ -484,7 +500,7 @@ func (r *Reader) loadPack(ctx context.Context, key, ver uint32, nval int, fids [
 	// 	lmax = max(lmax, b.Len())
 	// }
 	// r.log.Debugf("reader loaded blocks %v, lmin=%d lmax=%d pkglen=%d", ld, lmin, lmax, r.pack.Len())
-	// -- debug
+	// // -- debug
 
 	// add loaded blocks to cache
 	if r.useCache {

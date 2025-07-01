@@ -276,7 +276,10 @@ func (idx *Index) WithSchema(s *schema.Schema) *Index {
 
 func (idx *Index) WithEpoch(v uint32) *Index {
 	idx.epoch = v
-	idx.tomb.WithEpoch(v - 1) // track tombs at parent epoch (reclaim by watermark)
+	if v > 0 {
+		v-- // track tombs at parent epoch (reclaim by watermark)
+	}
+	idx.tomb.WithEpoch(v)
 	return idx
 }
 
@@ -342,6 +345,7 @@ func (idx *Index) cleanup(withGC bool) error {
 		if err := idx.dropEpoch(tx); err != nil {
 			return err
 		}
+		idx.clean = false
 
 		// run GC when requested
 		if withGC {
@@ -369,6 +373,7 @@ func (idx *Index) Free() {
 	idx.px = 0
 	idx.nmax = 0
 	idx.use = 0
+	idx.clean = false
 }
 
 func (idx *Index) Clear() {
@@ -380,6 +385,7 @@ func (idx *Index) Clear() {
 	clear(idx.inodes)
 	idx.inodes = idx.inodes[:0]
 	idx.snodes = idx.snodes[:0]
+	idx.clean = true
 }
 
 func (idx *Index) Close() {
@@ -406,6 +412,7 @@ func (idx *Index) Close() {
 	idx.px = 0
 	idx.nmax = 0
 	idx.use = 0
+	idx.clean = false
 }
 
 // introspect
@@ -624,6 +631,7 @@ func (idx *Index) TailInfo() (uint32, uint32, int) {
 	return idx.snodes[len(idx.snodes)-1].LastInfo()
 }
 
+// debug use only
 func (idx *Index) Get(key uint32) (*Record, bool) {
 	node, _, ok := idx.findSNode(key)
 	if !ok {

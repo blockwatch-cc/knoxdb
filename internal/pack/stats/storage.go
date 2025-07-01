@@ -77,12 +77,26 @@ func decodeNodeKey(buf []byte) (kind byte, id, key, ver uint32) {
 // or update operation, the tree is reorganized and all nodes are rewritten. Even with
 // a table size of 1Bn records and pack size of 8192 the tree contains only 60 snodes
 // (each covering 2048 data packs) and 6 levels of inodes. Rewrite impact remains small.
+//
+// TODO: after 4,294,967,295 node rewrites the uint32 version counter wraps around.
+// This causes problems with i/snodes loading. We walk the node bucket backwards
+// with the assumption to see the most recent version of each node first and will skip
+// any duplicate. Our only relief when the first node hits this case is a full tree
+// rewrite. Just the inner inode tree and all snodes is sufficient, the snode spack's
+// block versions can wrap around just as the data block versions.
 func (idx *Index) Store(ctx context.Context, tx store.Tx) error {
 	// create buckets if not exist
 	for _, k := range idx.keys {
 		if _, err := tx.Root().CreateBucketIfNotExists(k); err != nil {
 			return err
 		}
+	}
+
+	// resolve buckets
+	tree := idx.treeBucket(tx)
+	blocks := idx.statsBucket(tx)
+	if tree == nil || blocks == nil {
+		return store.ErrNoBucket
 	}
 
 	// identify empty snodes for garbage collection
@@ -168,10 +182,6 @@ func (idx *Index) Store(ctx context.Context, tx store.Tx) error {
 	// idx.log.Tracef("store %d snodes, %d inodes", len(idx.snodes), len(idx.inodes))
 
 	// store dirty inodes
-	tree := idx.treeBucket(tx)
-	if tree == nil {
-		return store.ErrNoBucket
-	}
 	for i, inode := range idx.inodes {
 		if inode == nil || !inode.dirty {
 			continue
@@ -192,23 +202,31 @@ func (idx *Index) Store(ctx context.Context, tx store.Tx) error {
 		}
 		inode.dirty = false
 		idx.bytesWritten += int64(len(inode.meta))
+		idx.clean = false
 	}
 
 	// store dirty snodes
-	blocks := idx.statsBucket(tx)
-	if blocks == nil {
-		return store.ErrNoBucket
-	}
 	for i, snode := range idx.snodes {
 		if !snode.dirty {
 			continue
+		}
+
+		// mark previous snodes for gc
+		key := encodeNodeKey(KIND_SNODE, uint32(i), snode.Key(), snode.Version())
+		if err := tomb.AddNode(tx, key); err != nil {
+			return err
+		}
+
+		// mark previous snode packs for gc
+		if err := tomb.AddSPack(tx, snode.Key(), snode.Version()); err != nil {
+			return err
 		}
 
 		// update version
 		snode.SetVersion(idx.view, snode.Version()+1)
 
 		// key is tree node kind + id (u32) + spack key (u32) + version
-		key := encodeNodeKey(KIND_SNODE, uint32(i), snode.Key(), snode.Version())
+		key = encodeNodeKey(KIND_SNODE, uint32(i), snode.Key(), snode.Version())
 		// idx.log.Tracef("store snode %d [%x]", i, key)
 		err := tree.Put(key, snode.meta)
 		if err != nil {
@@ -223,6 +241,7 @@ func (idx *Index) Store(ctx context.Context, tx store.Tx) error {
 		}
 		snode.dirty = false
 		idx.bytesWritten += int64(snode.disksize)
+		idx.clean = false
 
 		// operator.NewLogOperator(os.Stdout, 30).Process(context.Background(), snode.spack)
 	}
@@ -241,7 +260,7 @@ func (idx *Index) Load(ctx context.Context, tx store.Tx) error {
 		return store.ErrNoBucket
 	}
 
-	// check of we need to GC after crash
+	// check if we need to GC after crash
 	idx.clean = !idx.NeedCleanup(tx)
 
 	// walk reverse finds snode entries first

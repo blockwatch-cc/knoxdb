@@ -179,6 +179,10 @@ func (b *Block) Deref() int64 {
 	return val
 }
 
+func (b *Block) Container() any {
+	return b.any
+}
+
 func (b Block) Type() BlockType {
 	return b.typ
 }

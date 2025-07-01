@@ -45,7 +45,7 @@ func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
 	pstats := pkg.Stats()
 	for i, f := range pkg.Schema().Exported() {
 		b := pkg.Block(i)
-		if b == nil || !b.IsDirty() {
+		if b == nil || !pstats.WasDirty[i] {
 			continue
 		}
 
