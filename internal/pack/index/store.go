@@ -4,12 +4,15 @@
 package index
 
 import (
+	"context"
 	"encoding/binary"
 
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/hash/xxhash64"
+	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/pkg/num"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 var BE = binary.BigEndian
@@ -67,4 +70,83 @@ func (idx *Index) encodeCacheKey(ik, pk uint64, id int) uint64 {
 	buf[0] = byte(id)
 	h64.Write(buf[:1])
 	return h64.Sum64()
+}
+
+func (idx *Index) storeTomb(ctx context.Context, epoch uint32) error {
+	idx.log.Debugf("index[%s]: store tomb %d[v%d] with len=%d",
+		idx.name, idx.tomb.Key(), epoch, idx.tomb.Len())
+
+	// set tomb version
+	idx.tomb.WithVersion(epoch)
+
+	// co-sort tomb columns in-place
+	t0 := idx.tomb.Block(0).Uint64().Slice() // keys
+	t1 := idx.tomb.Block(1).Uint64().Slice() // rowids
+	util.Sort2(t0, t1)
+
+	// write in storage tx
+	err := idx.db.Update(func(tx store.Tx) error {
+		b := tx.Bucket(append([]byte(idx.name), engine.TombKeySuffix...))
+		if b == nil {
+			return store.ErrNoBucket
+		}
+		_, err := idx.tomb.StoreToDisk(ctx, b)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+
+	// clear tomb and rotate key
+	idx.tomb.Clear()
+	idx.tomb.WithKey(idx.tomb.Key() + 1)
+
+	return nil
+}
+
+func (idx *Index) loadTomb(ctx context.Context, key, epoch uint32) (*pack.Package, error) {
+	pkg := pack.New().
+		WithMaxRows(idx.opts.JournalSize).
+		WithSchema(idx.idxSchema).
+		WithKey(key).
+		WithVersion(epoch)
+	err := idx.db.View(func(tx store.Tx) error {
+		b := tx.Bucket(append([]byte(idx.name), engine.TombKeySuffix...))
+		if b == nil {
+			return store.ErrNoBucket
+		}
+		_, err := pkg.LoadFromDisk(ctx, b, nil, 0)
+		return err
+	})
+	if err != nil {
+		pkg.Release()
+		return nil, err
+	}
+
+	// empty tomb (all blocks are nil) is expected when no more tomb vectors
+	// are available for this epoch
+	if pkg.IsNil() {
+		pkg.Release()
+		return nil, nil
+	}
+
+	idx.log.Debugf("index[%s]: load tomb %d[v%d]", idx.name, key, epoch)
+
+	return pkg, nil
+}
+
+func (idx *Index) dropTomb(ctx context.Context, key, epoch uint32) error {
+	idx.log.Debugf("index[%s]: drop tomb %d[v%d]", idx.name, key, epoch)
+	return idx.db.Update(func(tx store.Tx) error {
+		b := tx.Bucket(append([]byte(idx.name), engine.TombKeySuffix...))
+		if b == nil {
+			return store.ErrNoBucket
+		}
+		for _, f := range idx.idxSchema.Exported() {
+			if err := b.Delete(pack.EncodeBlockKey(key, epoch, f.Id)); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }

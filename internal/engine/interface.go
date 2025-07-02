@@ -192,7 +192,9 @@ type IndexEngine interface {
 
 	// data ingress from table merge
 	AddPack(Context, *Package, WriteMode) error
-	DelPack(Context, *Package, WriteMode) error
+	DelPack(Context, *Package, WriteMode, uint32) error
+	Finalize(Context, uint32) error
+	GC(Context, uint32) error
 
 	// data egress
 	IsComposite() bool

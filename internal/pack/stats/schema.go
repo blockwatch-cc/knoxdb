@@ -6,7 +6,6 @@ package stats
 import (
 	"math/bits"
 
-	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"golang.org/x/exp/constraints"
@@ -28,7 +27,7 @@ import (
 // used to skip/remove statistics when columns are marked as deleted.
 func MakeSchema(s *schema.Schema) *schema.Schema {
 	statsSchema := schema.NewSchema().
-		WithName(s.Name() + string(engine.StatsKeySuffix)).
+		WithName(s.Name()).
 		WithVersion(s.Version())
 
 	// add pack stats fields

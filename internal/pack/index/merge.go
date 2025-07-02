@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
@@ -20,22 +21,22 @@ import (
 
 // MergeValue is a helper to compare multi-key records during merge.
 type MergeValue struct {
-	Ik uint64 // indexed key
-	Pk uint64 // primary key
-	Ok bool   // flag indicating this value is initialized
+	Key uint64 // indexed key
+	Rid uint64 // row id
+	Ok  bool   // flag indicating this value is initialized
 }
 
-func NewMergeValue(ik, pk uint64) MergeValue {
+func NewMergeValue(k, r uint64) MergeValue {
 	return MergeValue{
-		Ik: ik,
-		Pk: pk,
-		Ok: true,
+		Key: k,
+		Rid: r,
+		Ok:  true,
 	}
 }
 
 func (v *MergeValue) Reset() {
-	v.Ik = 0
-	v.Pk = 0
+	v.Key = 0
+	v.Rid = 0
 	v.Ok = false
 }
 
@@ -44,13 +45,13 @@ func (v MergeValue) IsValid() bool {
 }
 
 func (v MergeValue) Equal(w MergeValue) bool {
-	return v.Ok && w.Ok && v.Ik == w.Ik && v.Pk == w.Pk
+	return v.Ok && w.Ok && v.Key == w.Key && v.Rid == w.Rid
 }
 
 func (v MergeValue) Less(w MergeValue) bool {
 	switch {
 	case v.Ok && w.Ok:
-		return v.Ik < w.Ik || (v.Ik == w.Ik && v.Pk < w.Pk)
+		return v.Key < w.Key || (v.Key == w.Key && v.Rid < w.Rid)
 	case v.Ok:
 		return true
 	default:
@@ -60,18 +61,20 @@ func (v MergeValue) Less(w MergeValue) bool {
 
 // MergeIterator is a helper to locate, load and store index packs.
 type MergeIterator struct {
-	idx    *Index                    // ref to index
-	tx     store.Tx                  // current write tx
-	cur    store.Cursor              // current read cursor
-	pack   *pack.Package             // current read-only pack
-	bcache block.BlockCachePartition // cache reference
-	last   MergeValue                // current pack keys (used on store/delete)
-	lastSz int                       // current pack data size (to calculate diff)
+	idx     *Index                    // ref to index
+	tx      store.Tx                  // current write tx
+	cur     store.Cursor              // current read cursor
+	pack    *pack.Package             // current read-only pack
+	bcache  block.BlockCachePartition // cache reference
+	last    MergeValue                // current pack keys (used on store/delete)
+	lastSz  int                       // current pack data size (to calculate diff)
+	halfSel []uint32                  // selector for second half of a pack for splitting
 
 	// stats
 	nTxBytes      int // pending tx bytes to write
 	nDel          int // number of records deleted from index
 	nIns          int // number of records inserted into index
+	nDups         int // number of duplicate records from earlier aborted merge
 	nBytesRead    int // total bytes read by merge
 	nBytesWritten int // total bytes written by merge
 	nBytesDiff    int // storage size diff after merge
@@ -82,7 +85,8 @@ type MergeIterator struct {
 
 func NewMergeIterator(idx *Index) *MergeIterator {
 	return &MergeIterator{
-		idx: idx,
+		idx:     idx,
+		halfSel: types.NewRange(idx.opts.PackSize/2, idx.opts.PackSize).AsSelection(),
 	}
 }
 
@@ -99,6 +103,7 @@ func (it *MergeIterator) Close() {
 		it.tx.Rollback()
 		it.tx = nil
 	}
+	arena.Free(it.halfSel)
 	it.idx = nil
 	it.bcache = nil
 	it.nTxBytes = 0
@@ -137,6 +142,11 @@ func (it *MergeIterator) UpdateIndexState(ctx context.Context) error {
 		return nil
 	}
 
+	// FIXME: with aborted merges (both for append and drop passes)
+	// the stats below will drift as packs are written and committed
+	// in multiple storage transactions, the index statistics are only
+	// committed at a successful end
+
 	// require store tx
 	if it.tx == nil {
 		return engine.ErrNoTx
@@ -150,17 +160,37 @@ func (it *MergeIterator) UpdateIndexState(ctx context.Context) error {
 
 	// byte size
 	if it.nBytesDiff != 0 {
-		n := max(0, int(it.idx.state.NextRid)+it.nBytesDiff)
-		it.idx.state.NextRid = uint64(n)
+		n := max(0, int(it.idx.state.NextPk)+it.nBytesDiff)
+		it.idx.state.NextPk = uint64(n)
 	}
 
 	// pack count
 	if it.nPacksDiff != 0 {
-		n := max(0, int(it.idx.state.NextPk)+it.nPacksDiff)
-		it.idx.state.NextPk = uint64(n)
+		n := max(0, int(it.idx.state.NextRid)+it.nPacksDiff)
+		it.idx.state.NextRid = uint64(n)
 	}
 
 	return it.idx.state.Store(ctx, it.tx)
+}
+
+func (it *MergeIterator) SplitAndStore(pkg *pack.Package) (*pack.Package, error) {
+	// move the second half of the pack's contents to a new pack
+	half := it.NewPack()
+	pkg.AppendTo(half, it.halfSel)
+
+	// drop second half from pack
+	pkg.Delete(it.idx.opts.PackSize/2, it.idx.opts.PackSize)
+
+	// store first half
+	if err := it.Store(pkg); err != nil {
+		return nil, err
+	}
+
+	// free first half
+	pkg.Release()
+
+	// return second half
+	return half, nil
 }
 
 func (it *MergeIterator) Store(pkg *pack.Package) error {
@@ -181,16 +211,17 @@ func (it *MergeIterator) Store(pkg *pack.Package) error {
 	var n int
 	for i := range []int{0, 1} {
 		var err error
-		key := it.idx.encodePackKey(id.Ik, id.Pk, i)
+		key := it.idx.encodePackKey(id.Key, id.Rid, i)
 		if pkg.Len() == 0 {
 			err = bucket.Delete(key)
 			it.nTxBytes++
 		} else {
-			// it.idx.log.Infof("Storing block 0x%016x:%016x:%d as %x", id.Ik, id.Pk, i, key)
 			buf, stats, err := pkg.Block(i).Encode(types.BlockCompressNone)
 			if err == nil {
 				err = bucket.Put(key, buf)
 			}
+			// it.idx.log.Tracef("index[%s]: merge storing block 0x%016x:%016x:%d len=%d size=%d",
+			// 	it.idx.name, id.Key, id.Rid, i, pkg.Len(), len(buf))
 			stats.Close()
 			n += len(buf)
 			pkg.Block(i).SetClean()
@@ -200,7 +231,7 @@ func (it *MergeIterator) Store(pkg *pack.Package) error {
 		}
 		// drop cache keys
 		if it.bcache != nil {
-			it.bcache.Remove(it.idx.encodeCacheKey(id.Ik, id.Pk, i))
+			it.bcache.Remove(it.idx.encodeCacheKey(id.Key, id.Rid, i))
 		}
 	}
 
@@ -258,22 +289,22 @@ func (it *MergeIterator) Next(ctx context.Context, id MergeValue) (*pack.Package
 		}
 	}
 
-	// load and materialize pack that matches ik+pk combi or create new pack
+	// load source pack pack that matches key+rid combi, when nil create new pack
 	if err := it.loadNextPack(id); err != nil {
 		return nil, MergeValue{}, err
 	}
 
 	// cursor either points one key behind the loaded pack's blocks now or
-	// is invalid in which case we created a new pack at the end. we try
+	// is invalid in which case we will create a new pack at the end. we try
 	// decoding the next key either way which yields zero or correct ids
 	// which we'll use as boundary during merge.
 	if it.cur.Key() != nil {
-		id.Ik, id.Pk, _ = it.idx.decodePackKey(it.cur.Key())
+		id.Key, id.Rid, _ = it.idx.decodePackKey(it.cur.Key())
 		id.Ok = true
-		// it.idx.log.Infof("index merge: next id 0x%016x:%016x", id.Ik, id.Pk)
+		// it.idx.log.Tracef("index merge: next id 0x%016x:%016x", id.Key, id.Rid)
 	} else {
 		id.Reset()
-		// it.idx.log.Infof("index merge: next id not yet on storage, need new pack")
+		// it.idx.log.Tracef("index merge: next id not yet on storage, need new pack")
 	}
 
 	// return current pack and boundary of next pack
@@ -281,50 +312,50 @@ func (it *MergeIterator) Next(ctx context.Context, id MergeValue) (*pack.Package
 }
 
 func (it *MergeIterator) loadNextPack(search MergeValue) error {
-	// seek to search position (this likely does not exist and we will find the next
-	// higher pack in which case we rewind)
-	ok := it.cur.Seek(it.idx.encodePackKey(search.Ik, search.Pk, 0))
-	// it.idx.log.Infof("Merge: Seek 0x%016x:%016x:%d key=%x ok=%t", search.Ik, search.Pk, 0,
-	// it.idx.encodePackKey(search.Ik, search.Pk, 0), ok)
+	// seek to search MergeValue's position, most likely we will find the next
+	// higher pack in which case we rewind one pack
+	ok := it.cur.Seek(it.idx.encodePackKey(search.Key, search.Rid, 0))
+	// it.idx.log.Tracef("Merge: Seek 0x%016x:%016x:%d key=%x ok=%t", search.Key, search.Rid, 0,
+	// 	it.idx.encodePackKey(search.Key, search.Rid, 0), ok)
 
-	// seek to last pack when not found (our search key is likely in this pack)
+	// seek to last pack when not found (our search key is within this pack's range)
 	if !ok {
-		// if exists this will set cur to the first block in the last pair
+		// if not found, set cur to the first block of the last pack
 		it.cur.Last()
 		ok = it.cur.Prev()
-		// it.idx.log.Infof("Merge: Seek last>prev %t, key=%x", ok, it.cur.Key())
+		// it.idx.log.Tracef("Merge: Seek last>prev %t, key=%x", ok, it.cur.Key())
 	}
 
-	// no last pack? this must be an empty bucket, we'll create our first pack
+	// still not found? this must be an empty bucket, we'll create our first pack
 	if !ok {
-		// it.idx.log.Infof("Merge: no pack found")
+		// it.idx.log.Tracef("Merge: no pack found")
 		return nil
 	}
 
-	// try decode the key
-	ik, pk, id := it.idx.decodePackKey(it.cur.Key())
-	// it.idx.log.Infof("Merge: Found 0x%016x:%016x:%d", ik, pk, id)
+	// decode the block's key
+	key, rid, id := it.idx.decodePackKey(it.cur.Key())
+	// it.idx.log.Tracef("Merge: Found 0x%016x:%016x:%d", key, rid, id)
 
 	// rewind if we're behind the search key
-	if ik > search.Ik || pk > search.Pk {
-		// if exists double prev will set cur the first block of the previous pair
+	if key > search.Key || (key == search.Key && rid > search.Rid) {
+		// if exists, calling `prev` again will set cur the first block of the previous pair
 		it.cur.Prev()
 		ok = it.cur.Prev()
-		// it.idx.log.Infof("Merge: Rewind prev>prev %t", ok)
+		// it.idx.log.Tracef("Merge: Rewind prev>prev %t", ok)
 
 		// decode the previous key
 		if ok {
-			ik, pk, id = it.idx.decodePackKey(it.cur.Key())
-			// it.idx.log.Infof("Merge: Now 0x%016x:%016x:%d", ik, pk, id)
+			key, rid, id = it.idx.decodePackKey(it.cur.Key())
+			// it.idx.log.Tracef("Merge: Now 0x%016x:%016x:%d", key, rid, id)
 			// assert we're actually at the first block
 		}
 	}
 	assert.Always(id == 0, "must be at first block in index pair")
 
 	// looks like this was the first pack and it did not contain
-	// our search key, we're going to create a new pack and place it in front
+	// our search key, we're going to create a new pack to place in front
 	if !ok {
-		// it.idx.log.Infof("Merge: must create new pack in front")
+		// it.idx.log.Tracef("Merge: must create new pack in front")
 		return nil
 	}
 
@@ -337,10 +368,8 @@ func (it *MergeIterator) loadNextPack(search MergeValue) error {
 	var n int
 	for i := range []int{0, 1} {
 		// assert block is correct
-		bik, bpk, bid := it.idx.decodePackKey(it.cur.Key())
-		assert.Always(bid == i, "unexpected block id", "ik", bik, "pk", bpk, "id", bid)
-
-		// it.idx.log.Infof("Merge: Loading block 0x%016x:%016x:%d", bik, bpk, i)
+		bkey, brid, bid := it.idx.decodePackKey(it.cur.Key())
+		assert.Always(bid == i, "unexpected block id", "key", bkey, "rid", brid, "id", bid)
 
 		// create and decode block
 		b, err := block.Decode(
@@ -348,8 +377,12 @@ func (it *MergeIterator) loadNextPack(search MergeValue) error {
 			it.cur.Value(),
 		)
 		if err != nil {
-			return fmt.Errorf("loading block 0x%08x:%08x:%d: %v", bik, bpk, bid, err)
+			return fmt.Errorf("loading block 0x%08x:%08x:%d: %v", bkey, brid, bid, err)
 		}
+
+		// it.idx.log.Tracef("index[%s]: merge loading block 0x%016x:%016x:%d len=%d",
+		// 	it.idx.name, bkey, brid, i, b.Len())
+
 		it.pack.WithBlock(i, b)
 		n += len(it.cur.Value())
 
@@ -357,7 +390,7 @@ func (it *MergeIterator) loadNextPack(search MergeValue) error {
 		it.cur.Next()
 	}
 	it.nPacksLoaded++
-	it.last = NewMergeValue(ik, pk)
+	it.last = NewMergeValue(key, rid)
 	it.lastSz = n
 	it.nBytesRead += n
 
@@ -367,238 +400,350 @@ func (it *MergeIterator) loadNextPack(search MergeValue) error {
 // Merge journal and tomb entries into data partitions, repack and store.
 //
 // Algo design
-//   - find source pack with where next to be merged pk (journal or tomb) is in range
-//   - create a new writable output pack, inherit the source pack's key on first output
-//   - merge src & journal records into output while skipping tomb entries
-//   - note tomb entries cancel out both source and journal entries (both may exist)
-//   - stop when journal or tomb records cross the next pack's min boundary
-//   - when output pack is full (this happens when inserting more records than deleting)
-//     -- save the current output pack
-//     -- start a new output pack
+//   - append happens direct, delete is deferred to GC
+//   - on-disk packs are read-only, merge appends to new packs
+//   - pack keys are shared keys so that merge effectively overwrites/replaces versions
+//   - append pass: merge src & journal records into output
+//   - delete pass: copy src records while skipping tomb entries
+//
+// Details
+//   - block keys encode the key/rid combination of the first record in a pack
+//   - keys remain unchanged even if the first record is removed later
+//   - merge find source packs where new/old rids are in range
+//   - writable output packs inherit the source pack's key (if a src exist)
+//   - data is merged in sorted order (sort by first key then rid)
+//   - merge allocates records to a pack until key/rid crosses the next packs start boundary
+//   - when an output pack is full (happens during append only)
+//     - the pack is split in half
+//     - the first half is stored
+//     - the second half continues to be used as output
+//   - storing packs may commit the backend tx when the configured max tx
+//     size limit is crossed (large merges progress in multiple atomic steps
+//     which is safe for both append and garbage collection)
 //
 // Data placement
-//   - block vector KV keys are generated from the first record in each pack
-//     with format `index key + primary key + block id`
-//   - merge iterator peeks into next KV store key to identify next pack's start ids
+//   - block vector KV keys are generated from the first record in a pack
+//     with format `index key + rowid + block id`
+//   - merge iterator peeks into next KV store keys to identify next pack's start ids
+//     which serves as boundary for insertion
 //
 // Edge cases
-//   - nextMinIk & nextMinPk can be 0 (empty index, behind last index pack)
-//   - entire pack runs empty -> drop from storage (iterator remembers last read KV keys)
-//   - first record in a pack is deleted (on store we keep the original KV keys)
-//   - first append (empty src, empty tomb, full journal)
-//   - delete only (empty journal, tomb deletes all src records)
-//   - stale tombstones without match in journal/source may exist
-//     when merge restarts after error while packs have been committed before
-func (idx *Index) merge(ctx context.Context) error {
-	// measure stats
-	start := time.Now()
-	var err error
+//   - nextMinKey & nextMinRid can be 0 (empty index, behind last index pack)
+//   - a pack becomes empty -> dropped from storage (iterator remembers last read KV keys)
+//   - first record in a pack is deleted (keep the original pack storage key)
+//   - stale tombstones without match in source packs may exist
+//     when GC restarts after error/crash as some packs may have committed
+//     before
 
-	idx.log.Debugf("index[%s]: starting merge journal[%d] tomb[%d]", idx.name,
-		idx.journal.Len(), idx.tomb.Len())
-	defer func() {
-		if err == nil {
-			return
-		}
-		idx.log.Debugf("index[%s]: merge failed: %v", idx.name, err)
-	}()
+// writes journal records to index packs. this is called during table merge when
+// index journal runs full and when finalizing index updates.
+func (idx *Index) mergeAppend(ctx context.Context) error {
+	idx.log.Debugf("index[%s]: starting merge journal[%d]", idx.name, idx.journal.Len())
 
-	// direct access to pk columns of both journal parts
-	jkeys := idx.journal.Block(0).Uint64().Slice()
-	jpks := idx.journal.Block(1).Uint64().Slice()
-	tkeys := idx.tomb.Block(0).Uint64().Slice()
-	tpks := idx.tomb.Block(1).Uint64().Slice()
-	jlen, tlen := len(jkeys), len(tkeys)
-	var jpos, tpos int
+	var (
+		start = time.Now()
+		jpos  int
+	)
 
-	// co-sort journal and tomb columns in-place
-	util.Sort2(jkeys, jpks)
-	util.Sort2(tkeys, tpks)
+	// direct access to journal vectors
+	j0 := idx.journal.Block(0).Uint64().Slice()
+	j1 := idx.journal.Block(1).Uint64().Slice()
+	jlen := len(j0)
+
+	// co-sort journal vectors in-place
+	util.Sort2(j0, j1)
 
 	// iterator to lookup matching packages
 	it := NewMergeIterator(idx)
 	defer it.Close()
 
-	// 3-way merge into packs
+	// 2-way merge into packs
 	for {
 		// check context
-		if err = ctx.Err(); err != nil {
+		if err := ctx.Err(); err != nil {
 			return err
 		}
 
-		// stop when all journal and tomb records are processed
-		if jpos == jlen && tpos == tlen {
+		// stop when all journal records are processed
+		if jpos == jlen {
 			break
 		}
 
-		// init next value from journal or tombstone
-		var search MergeValue
-		switch {
-		case jpos < jlen && tpos < tlen:
-			// select the smalles next value to load a source pack for
-			if jkeys[jpos] < tkeys[tpos] || (jkeys[jpos] == tkeys[tpos] && jpks[jpos] < tpks[tpos]) {
-				search = NewMergeValue(jkeys[jpos], jpks[jpos])
-			} else {
-				search = NewMergeValue(tkeys[tpos], tpks[tpos])
-			}
-		case tpos == tlen:
-			// no more tomb records
-			search = NewMergeValue(jkeys[jpos], jpks[jpos])
-		case jpos == jlen:
-			// no more journal records
-			search = NewMergeValue(tkeys[tpos], tpks[tpos])
-		default:
-			// should never reach here
-			break
-		}
-
-		// load next source pack (may be nil when ik/pk is supposed to be inserted
-		// behind the last pack or when no pack exists yet)
+		// load next source pack (may be nil when key/rid is not found, ie.
+		// we're behind the last pack or no pack exists yet) in which case
+		// we allocate a new output pack
 		var (
-			src  *pack.Package
-			next MergeValue
+			spos, slen int
+			s0, s1     types.NumberAccessor[uint64]
 		)
-		src, next, err = it.Next(ctx, search)
+		src, next, err := it.Next(ctx, NewMergeValue(j0[jpos], j1[jpos]))
 		if err != nil {
 			return err
 		}
-		var (
-			spos, slen int
-			src0, src1 types.NumberAccessor[uint64]
-		)
+
 		if src != nil {
 			slen = src.Len()
-			src0 = src.Block(0).Uint64()
-			src1 = src.Block(1).Uint64()
+			s0 = src.Block(0).Uint64()
+			s1 = src.Block(1).Uint64()
 		}
-		// idx.log.Infof("index merge: src=%d j=%d t=%d next=%016x:%016x:%t", slen, jlen, tlen, next.Ik, next.Pk, next.Ok)
+		// idx.log.Infof("index[%s]: merge next src=%d/%d j=%d/%d next=%016x:%016x:%t",
+		// 	idx.name, spos, slen, jpos, jlen, next.Key, next.Rid, next.Ok)
 
-		// 3-way merge: src, journal, tomb -> out
-		var (
-			pkg        *pack.Package
-			col1, col2 types.NumberAccessor[uint64]
-		)
+		// 2-way merge: src & journal
+
+		// create a new output pack
+		out := it.NewPack()
+		o0 := out.Block(0).Uint64()
+		o1 := out.Block(1).Uint64()
+
+		// assign src/journal -> out
+		var sval, jval MergeValue
+	mergeloop:
 		for {
-			// stop when all inputs are exhausted
-			if jpos == jlen && spos == slen {
-				break
+			// load values
+			if spos < slen && !sval.IsValid() {
+				sval = NewMergeValue(s0.Get(spos), s1.Get(spos))
 			}
+			if jpos < jlen && !jval.IsValid() {
+				jval = NewMergeValue(j0[jpos], j1[jpos])
 
-			// create a new writable pack on first iteration or after a previous
-			// full pack was stored
-			if pkg == nil {
-				// idx.log.Infof("index merge: init new out pack")
-				pkg = it.NewPack()
-				col1 = pkg.Block(0).Uint64()
-				col2 = pkg.Block(1).Uint64()
-			}
-
-			// init values
-			var jval, tval, sval MergeValue
-			if jpos < jlen {
-				jval = NewMergeValue(jkeys[jpos], jpks[jpos])
-				// idx.log.Infof("Merge jval=%016x:%016x", jkeys[jpos], jpks[jpos])
-			}
-
-			// stop when this journal value crosses next src pack's min
-			if jval.IsValid() && next.IsValid() && !jval.Less(next) {
-				// idx.log.Infof("index merge: break to next pack")
-				break
-			}
-
-			// init next source val when available
-			if spos < slen {
-				sval = NewMergeValue(src0.Get(spos), src1.Get(spos))
-				// idx.log.Infof("Merge sval=%016x:%016x", sval.Ik, sval.Pk)
-			}
-
-			// load next tomb val, skip stale tomb records
-			for tpos < tlen {
-				val := NewMergeValue(tkeys[tpos], tpks[tpos])
-				if sval.IsValid() && val.Less(sval) {
-					// idx.log.Infof("Merge skip unused tomb val=%016x:%016x", val.Ik, val.Pk)
-					tpos++
-					continue
+				// stop when this journal value crosses next src pack's min
+				if next.IsValid() && !jval.Less(next) {
+					// idx.log.Infof("index merge: break to next pack at jval %d/%d", jval.Key, jval.Rid)
+					break mergeloop
 				}
-				if jval.IsValid() && val.Less(jval) {
-					// idx.log.Infof("Merge skip unused tomb val=%016x:%016x", val.Ik, val.Pk)
-					tpos++
-					continue
-				}
-				tval = val
-				break
 			}
 
-			// skip deleted values and advance pointers
-			if tval.Equal(sval) {
-				spos++
-				tpos++
-				if tval.Equal(jval) {
-					jpos++
-				}
-				it.nDel++
-				// it.idx.log.Infof("Merge: skip src 0x%016x:%016x", sval.Ik, sval.Pk)
-				continue
-			}
-			if tval.Equal(jval) {
-				jpos++
-				tpos++
-				// it.idx.log.Infof("Merge: skip new 0x%016x:%016x", jval.Ik, jval.Pk)
-				continue
-			}
-
-			// output the smaller of two values, at least one of both values
-			// is valid here
+			// merge
 			switch {
-			case sval.IsValid() && sval.Less(jval):
-				// merge src row
+			case sval.IsValid() && jval.IsValid():
+				// merge lesser value first
+				if sval.Less(jval) {
+					o0.Append(sval.Key)
+					o1.Append(sval.Rid)
+					out.UpdateLen()
+					spos++
+					sval.Reset()
+				} else if sval.Equal(jval) {
+					// exact same value, must be from an aborted earlier merge,
+					// skip but still count
+					jpos++
+					it.nIns++
+					it.nDups++
+					jval.Reset()
+				} else {
+					// write jval
+					o0.Append(jval.Key)
+					o1.Append(jval.Rid)
+					out.UpdateLen()
+					jpos++
+					it.nIns++
+					jval.Reset()
+				}
+			case sval.IsValid():
+				// no more jvals, merge sval
+				o0.Append(sval.Key)
+				o1.Append(sval.Rid)
+				out.UpdateLen()
 				spos++
-				col1.Append(sval.Ik)
-				col2.Append(sval.Pk)
-				pkg.UpdateLen()
-				// it.idx.log.Infof("Merge: append src 0x%016x:%016x", sval.Ik, sval.Pk)
-			case sval.IsValid() && sval.Equal(jval):
-				// prevent duplicates (after merge was canceled and restarted)
-				jpos++
+				sval.Reset()
+
 			case jval.IsValid():
-				// merge journal row
+				// no more svals, merge jval
+				o0.Append(jval.Key)
+				o1.Append(jval.Rid)
+				out.UpdateLen()
 				jpos++
-				col1.Append(jval.Ik)
-				col2.Append(jval.Pk)
-				pkg.UpdateLen()
 				it.nIns++
-				// it.idx.log.Infof("Merge: append new 0x%016x:%016x", jval.Ik, jval.Pk)
+				jval.Reset()
+
+			default:
+				// no more values, we're done
+				// idx.log.Infof("index merge: no more values")
+				break mergeloop
 			}
 
-			// store output pack when full
-			if pkg.IsFull() {
-				// idx.log.Infof("index merge: store full out pack")
-				if err = it.Store(pkg); err != nil {
+			// split pack when full
+			if out.IsFull() {
+				half, err := it.SplitAndStore(out)
+				if err != nil {
 					return err
 				}
-				pkg.Release()
-				pkg = nil
-				col1 = nil
-				col2 = nil
+				// continue appending to the second half (a new pack)
+				out = half
+				o0 = out.Block(0).Uint64()
+				o1 = out.Block(1).Uint64()
 			}
 		}
 
-		// store pending output pack
-		if pkg != nil {
-			// idx.log.Infof("index merge: store pending out pack")
-			if err = it.Store(pkg); err != nil {
+		// store non-empty output pack
+		if out.Len() > 0 {
+			if err = it.Store(out); err != nil {
 				return err
 			}
-			pkg.Release()
-			pkg = nil
-			col1 = nil
-			col2 = nil
+		}
+		out.Release()
+	}
+
+	// update index state
+	if err := it.UpdateIndexState(ctx); err != nil {
+		return err
+	}
+
+	// commit backend transaction
+	if err := it.Complete(ctx); err != nil {
+		return err
+	}
+
+	// reset journal
+	idx.journal.Clear()
+
+	// update counters
+	atomic.StoreInt64(&idx.metrics.LastMergeTime, start.UnixNano())
+	atomic.StoreInt64(&idx.metrics.LastMergeDuration, int64(time.Since(start)))
+	atomic.StoreInt64(&idx.metrics.TotalSize, int64(idx.state.NextPk))
+	atomic.StoreInt64(&idx.metrics.PacksCount, int64(idx.state.NextRid))
+	atomic.AddInt64(&idx.metrics.NumCalls, 1)
+	atomic.AddInt64(&idx.metrics.InsertedTuples, int64(it.nIns))
+	atomic.AddInt64(&idx.metrics.PacksLoaded, int64(it.nPacksLoaded))
+	atomic.AddInt64(&idx.metrics.PacksStored, int64(it.nPacksStored))
+	atomic.AddInt64(&idx.metrics.BlocksLoaded, int64(it.nPacksLoaded*2))
+	atomic.AddInt64(&idx.metrics.BlocksStored, int64(it.nPacksStored*2))
+	atomic.AddInt64(&idx.metrics.BytesRead, int64(it.nBytesRead))
+	atomic.AddInt64(&idx.metrics.BytesWritten, int64(it.nBytesWritten))
+
+	idx.log.Debugf("index[%s]: merged journal packs=%d add=%d/%d dups=%d total_size=%s in %s",
+		idx.name,
+		it.nPacksStored,
+		it.nIns,
+		jlen,
+		it.nDups,
+		util.ByteSize(it.nBytesWritten),
+		time.Since(start),
+	)
+
+	return nil
+}
+
+// removes tombstoned records from journal packs by rewriting packs.
+func (idx *Index) mergeTomb(ctx context.Context, tomb *pack.Package) error {
+	idx.log.Debugf("index[%s]: starting merge tomb[%d]", idx.name, tomb.Len())
+
+	var (
+		start = time.Now()
+		tpos  int
+	)
+
+	// direct access to both tomb vectors (pre-sorted on store)
+	t0 := tomb.Block(0).Uint64() // keys
+	t1 := tomb.Block(1).Uint64() // rowids
+	tlen := t0.Len()
+
+	// iterator to lookup matching packages
+	it := NewMergeIterator(idx)
+	defer it.Close()
+
+	// 2-way merge into packs
+	for {
+		// check context
+		if err := ctx.Err(); err != nil {
+			return err
 		}
 
-		// skip unused trailing tomb records
+		// stop when all tomb records are processed
+		if tpos == tlen {
+			break
+		}
+
+		// load next source pack (may be nil when key/rid does not match any pack on disk)
+		src, next, err := it.Next(ctx, NewMergeValue(t0.Get(tpos), t1.Get(tpos)))
+		if err != nil {
+			return err
+		}
+
+		// skip trailing tombstones (outside any packs range)
+		if src == nil {
+			// idx.log.Tracef("index[%s]: merge no more src, skip remaining %d tombstones",
+			// 	idx.name, tlen-tpos)
+			break
+		}
+
+		// init source accessors
+		spos := 0
+		slen := src.Len()
+		s0 := src.Block(0).Uint64()
+		s1 := src.Block(1).Uint64()
+
+		// create a new output pack
+		out := it.NewPack()
+		o0 := out.Block(0).Uint64()
+		o1 := out.Block(1).Uint64()
+
+		// idx.log.Tracef("index[%s]: merge src=%d/%d tomb=%d/%d next=%016x:%016x:%t",
+		// 	idx.name, spos, slen, tpos, tlen, next.Key, next.Rid, next.Ok)
+
+		var sval, tval MergeValue
+		for spos < slen {
+			// load values
+			if spos < slen && !sval.IsValid() {
+				sval = NewMergeValue(s0.Get(spos), s1.Get(spos))
+			}
+			if tpos < tlen && !tval.IsValid() {
+				tval = NewMergeValue(t0.Get(tpos), t1.Get(tpos))
+			}
+
+			// merge
+			switch {
+			case sval.IsValid() && tval.IsValid():
+				if sval.Equal(tval) {
+					// skip svals with tombstones
+					spos++
+					tpos++
+					it.nDel++
+					sval.Reset()
+					tval.Reset()
+				} else if sval.Less(tval) {
+					// keep svals < next tombstone
+					o0.Append(sval.Key)
+					o1.Append(sval.Rid)
+					out.UpdateLen()
+					spos++
+					sval.Reset()
+				} else {
+					// skip stray tombstone, don't output sval yet, it may
+					// match another tombstone
+					tpos++
+					tval.Reset()
+				}
+			case sval.IsValid():
+				// no more tombstones, merge sval
+				o0.Append(sval.Key)
+				o1.Append(sval.Rid)
+				out.UpdateLen()
+				spos++
+				sval.Reset()
+
+				// impossible: tval without sval (for loop checks end of src)
+				// impossible: both vals invalid
+			}
+		}
+
+		// store output pack (note: in case all entries were deleted, store
+		// will drop block vectors from storage)
+		// it.idx.log.Tracef("index[%s]: store pack 0x%016x:%016x len=%d",
+		// 	idx.name, it.last.Key, it.last.Rid, out.Len())
+		if err = it.Store(out); err != nil {
+			return err
+		}
+		out.Release()
+		out = nil
+		o0 = nil
+		o1 = nil
+
+		// skip stray trailing tombstones lower than `next` index pack's start
 		if next.IsValid() {
 			for tpos < tlen {
-				if NewMergeValue(tkeys[tpos], tpks[tpos]).Less(next) {
+				if NewMergeValue(t0.Get(tpos), t1.Get(tpos)).Less(next) {
 					tpos++
 				} else {
 					break
@@ -610,18 +755,14 @@ func (idx *Index) merge(ctx context.Context) error {
 	}
 
 	// update index state
-	if err = it.UpdateIndexState(ctx); err != nil {
+	if err := it.UpdateIndexState(ctx); err != nil {
 		return err
 	}
 
 	// commit backend transaction
-	if err = it.Complete(ctx); err != nil {
+	if err := it.Complete(ctx); err != nil {
 		return err
 	}
-
-	// reset journal
-	idx.tomb.Clear()
-	idx.journal.Clear()
 
 	// update counters
 	atomic.StoreInt64(&idx.metrics.LastMergeTime, start.UnixNano())
@@ -629,7 +770,6 @@ func (idx *Index) merge(ctx context.Context) error {
 	atomic.StoreInt64(&idx.metrics.TotalSize, int64(idx.state.NextRid))
 	atomic.StoreInt64(&idx.metrics.PacksCount, int64(idx.state.NextPk))
 	atomic.AddInt64(&idx.metrics.NumCalls, 1)
-	atomic.AddInt64(&idx.metrics.InsertedTuples, int64(it.nIns))
 	atomic.AddInt64(&idx.metrics.DeletedTuples, int64(it.nDel))
 	atomic.AddInt64(&idx.metrics.PacksLoaded, int64(it.nPacksLoaded))
 	atomic.AddInt64(&idx.metrics.PacksStored, int64(it.nPacksStored))
@@ -638,11 +778,9 @@ func (idx *Index) merge(ctx context.Context) error {
 	atomic.AddInt64(&idx.metrics.BytesRead, int64(it.nBytesRead))
 	atomic.AddInt64(&idx.metrics.BytesWritten, int64(it.nBytesWritten))
 
-	idx.log.Debugf("index[%s]: merged %d packs add=%d/%d del=%d/%d total_size=%s in %s",
+	idx.log.Debugf("index[%s]: merged tomb packs=%d del=%d/%d total_size=%s in %s",
 		idx.name,
 		it.nPacksStored,
-		it.nIns,
-		jlen,
 		it.nDel,
 		tlen,
 		util.ByteSize(it.nBytesWritten),

@@ -13,7 +13,8 @@ import (
 
 var (
 	DataKeySuffix  = []byte("_data")  // data vectors bucket
-	StatsKeySuffix = []byte("_stats") // metadata statistics prefix
+	TombKeySuffix  = []byte("_tomb")  // tomb vectors bucket
+	EpochKeySuffix = []byte("_epoch") // epoch watermark bucket
 	StateKeySuffix = []byte("_state") // table state bucket
 	StateKey       = []byte("state")  // table state key
 )

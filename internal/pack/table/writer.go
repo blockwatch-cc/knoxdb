@@ -218,6 +218,13 @@ func (w *Writer) Finalize(ctx context.Context, state engine.ObjectState) error {
 		return err
 	}
 
+	// sync table when running in no-sync mode
+	if w.table.opts.NoSync {
+		if err := w.table.Sync(ctx); err != nil {
+			return err
+		}
+	}
+
 	// swap new stats index, may GC previous version
 	w.table.stats.Update(w.stats)
 	w.stats = nil
@@ -236,7 +243,7 @@ func (w *Writer) AppendIndexes(ctx context.Context, src *pack.Package, mode engi
 
 func (w *Writer) DeleteIndexes(ctx context.Context, src *pack.Package, mode engine.WriteMode) error {
 	for _, idx := range w.table.indexes {
-		if err := idx.(engine.IndexEngine).DelPack(ctx, src, mode); err != nil {
+		if err := idx.(engine.IndexEngine).DelPack(ctx, src, mode, w.stats.Epoch()); err != nil {
 			return err
 		}
 	}
@@ -246,7 +253,7 @@ func (w *Writer) DeleteIndexes(ctx context.Context, src *pack.Package, mode engi
 func (w *Writer) FinalizeIndexes(ctx context.Context) error {
 	for _, v := range w.table.indexes {
 		idx := v.(engine.IndexEngine)
-		if err := idx.Sync(ctx); err != nil {
+		if err := idx.Finalize(ctx, w.stats.Epoch()); err != nil {
 			return err
 		}
 	}

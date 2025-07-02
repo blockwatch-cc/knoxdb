@@ -20,6 +20,7 @@ import (
 // TODO
 // - support 'including' extra payload fields (load/store/merge more columns)
 // - tomb should not have to store extra fields
+// - data placement algorithm is inefficient for hash indexes (use linear hashing)
 
 // This index supports the following condition types on lookup.
 // - hash: EQ, IN (single or composite EQ)
@@ -146,6 +147,7 @@ func (idx *Index) createBackend(ctx context.Context) error {
 	defer tx.Rollback()
 	for _, v := range [][]byte{
 		engine.DataKeySuffix,
+		engine.TombKeySuffix,
 		engine.StateKeySuffix,
 	} {
 		key := append([]byte(idx.name), v...)
@@ -199,6 +201,11 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 		return engine.ErrDatabaseCorrupt
 	}
 
+	// try GC old epochs
+	if err := idx.Cleanup(ctx, uint32(idx.state.Epoch)); err != nil {
+		idx.log.Warn(err)
+	}
+
 	idx.log.Debugf("index[%s]: open with %d entries", name, idx.state.NRows)
 
 	return nil
@@ -231,6 +238,7 @@ func (idx *Index) openBackend(ctx context.Context) error {
 		// check table storage
 		for _, v := range [][]byte{
 			engine.DataKeySuffix,
+			engine.TombKeySuffix,
 			engine.StateKeySuffix,
 		} {
 			key := append([]byte(idx.name), v...)
@@ -314,6 +322,7 @@ func (idx *Index) Truncate(ctx context.Context) error {
 	defer tx.Rollback()
 	for _, v := range [][]byte{
 		engine.DataKeySuffix,
+		engine.TombKeySuffix,
 		engine.StateKeySuffix,
 	} {
 		key := append([]byte(idx.name), v...)
@@ -372,7 +381,7 @@ func (idx *Index) Rebuild(ctx context.Context) error {
 	}
 
 	// final index flush
-	return idx.merge(ctx)
+	return idx.Finalize(ctx, 0)
 }
 
 func (idx *Index) AddPack(ctx context.Context, pkg *pack.Package, mode pack.WriteMode) error {
@@ -383,10 +392,7 @@ func (idx *Index) AddPack(ctx context.Context, pkg *pack.Package, mode pack.Writ
 	ipkg := idx.convert.ConvertPack(pkg, mode)
 	ipkg.WithSelection(pkg.Selected())
 
-	var (
-		state pack.AppendState
-		err   error
-	)
+	var state pack.AppendState
 
 	for {
 		// append next chunk of data to journal: max(cap(journal), len(src))
@@ -394,9 +400,9 @@ func (idx *Index) AddPack(ctx context.Context, pkg *pack.Package, mode pack.Writ
 
 		// store when journal is full
 		if idx.journal.IsFull() {
-			// idx.log.Debugf("index[%s]: journal full, merging", idx.name)
-			if err = idx.merge(ctx); err != nil {
-				break
+			if err := idx.mergeAppend(ctx); err != nil {
+				idx.log.Debugf("index[%s]: merge failed: %v", idx.name, err)
+				return err
 			}
 		}
 
@@ -408,29 +414,25 @@ func (idx *Index) AddPack(ctx context.Context, pkg *pack.Package, mode pack.Writ
 	ipkg.WithSelection(nil)
 	ipkg.Release()
 
-	return err
+	return nil
 }
 
-func (idx *Index) DelPack(ctx context.Context, pkg *pack.Package, mode pack.WriteMode) error {
+func (idx *Index) DelPack(ctx context.Context, pkg *pack.Package, mode pack.WriteMode, epoch uint32) error {
 	// idx.log.Debugf("index[%s]: del journal epoch %d", idx.idxSchema.Name(), pkg.Key())
 
 	// build new index pack, relink columns and produce `hash` column)
 	ipkg := idx.convert.ConvertPack(pkg, mode)
 	ipkg.WithSelection(pkg.Selected())
 
-	var (
-		state pack.AppendState
-		err   error
-	)
+	var state pack.AppendState
 	for {
 		// append next chunk of data to tomb: max(cap(tomb), len(src))
 		_, state = idx.tomb.AppendSelected(ipkg, mode, state)
 
 		// store when tomb is full
 		if idx.tomb.IsFull() {
-			// idx.log.Debugf("index[%s]: tomb full, merging", idx.name)
-			if err = idx.merge(ctx); err != nil {
-				break
+			if err := idx.storeTomb(ctx, epoch); err != nil {
+				return err
 			}
 		}
 
@@ -443,5 +445,105 @@ func (idx *Index) DelPack(ctx context.Context, pkg *pack.Package, mode pack.Writ
 	ipkg.WithSelection(nil)
 	ipkg.Release()
 
-	return err
+	return nil
+}
+
+func (idx *Index) Finalize(ctx context.Context, epoch uint32) error {
+	// flush remaining journal entries
+	if idx.journal.Len() > 0 {
+		if err := idx.mergeAppend(ctx); err != nil {
+			return err
+		}
+	}
+
+	// write tombstone for later GC
+	if idx.tomb.Len() > 0 {
+		if err := idx.storeTomb(ctx, epoch); err != nil {
+			return err
+		}
+	}
+
+	// write epoch
+	err := idx.db.Update(func(tx store.Tx) error {
+		idx.state.Epoch = uint64(epoch)
+		return idx.state.Store(ctx, tx)
+	})
+	if err != nil {
+		return err
+	}
+
+	// sync db file if running in no-sync write mode
+	if idx.opts.NoSync {
+		if err := idx.Sync(ctx); err != nil {
+			return err
+		}
+	}
+
+	// reset tomb pack id
+	idx.tomb.WithKey(0)
+
+	return nil
+}
+
+func (idx *Index) GC(ctx context.Context, epoch uint32) error {
+	idx.log.Debugf("index[%s]: gc epoch %d", idx.name, epoch)
+	var key uint32
+	for {
+		pkg, err := idx.loadTomb(ctx, key, epoch)
+		if err != nil {
+			return err
+		}
+		if pkg == nil {
+			break
+		}
+		if err := idx.mergeTomb(ctx, pkg); err != nil {
+			return err
+		}
+		pkg.Release()
+		if err := idx.dropTomb(ctx, key, epoch); err != nil {
+			return err
+		}
+		key++
+	}
+	return nil
+}
+
+// GC all tombstones <= epoch. Called in startup
+func (idx *Index) Cleanup(ctx context.Context, epoch uint32) error {
+	idx.log.Debugf("index[%s]: cleanup until epoch %d", idx.name, epoch)
+	var drop []uint32
+	err := idx.db.View(func(tx store.Tx) error {
+		b := tx.Bucket(append([]byte(idx.name), engine.TombKeySuffix...))
+		if b == nil {
+			return store.ErrNoBucket
+		}
+		c := b.Cursor()
+		defer c.Close()
+		if !c.First() {
+			return nil
+		}
+
+		// decode version (Note: block key uses 16bit stripped epoch version)
+		_, v, _ := pack.DecodeBlockKey(c.Key())
+		for e := uint32(v); e <= epoch&0xFFFF; e++ {
+			drop = append(drop, e)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if len(drop) == 0 {
+		return nil
+	}
+
+	idx.log.Debugf("index[%s]: gc %d epochs", idx.name, len(drop))
+	for _, e := range drop {
+		if err := idx.GC(ctx, e); err != nil {
+			return fmt.Errorf("gc epoch %d: %v", e, err)
+		}
+	}
+
+	return nil
 }

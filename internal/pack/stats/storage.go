@@ -8,7 +8,6 @@ import (
 	"context"
 	"fmt"
 	"slices"
-	"strings"
 
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/store"
@@ -33,12 +32,12 @@ const (
 )
 
 var (
-	BlockKeySuffix  = []byte("_block")  // stats vector bucket
-	TreeKeySuffix   = []byte("_tree")   // stats tree bucket
-	FilterKeySuffix = []byte("_filter") // bloom/bits/fuse filter bucket
-	RangeKeySuffix  = []byte("_range")  // range filter bucket
-	EpochKeySuffix  = []byte("_epoch")  // live epochs bucket
-	TombKeySuffix   = []byte("_tomb")   // version tomb bucket
+	BlockKeySuffix  = []byte("_stats_block") // stats vector bucket
+	TreeKeySuffix   = []byte("_stats_tree")  // stats tree bucket
+	FilterKeySuffix = []byte("_filter")      // bloom/bits/fuse filter bucket
+	RangeKeySuffix  = []byte("_range")       // range filter bucket
+	EpochKeySuffix  = engine.EpochKeySuffix  // live epochs bucket
+	TombKeySuffix   = engine.TombKeySuffix   // version tomb bucket
 )
 
 func encodeNodeKey(kind byte, id, key, ver uint32) []byte {
@@ -399,11 +398,7 @@ func (idx *Index) tombBucket(tx store.Tx) store.Bucket {
 }
 
 func (idx *Index) tableBucket(tx store.Tx) store.Bucket {
-	// idx schema name = table name + `_stats`
-	// table data bucket = table name + `_data`
-	name := strings.TrimSuffix(idx.schema.Name(), string(engine.StatsKeySuffix))
-	name += string(engine.DataKeySuffix)
-	return tx.Bucket([]byte(name))
+	return tx.Bucket(append([]byte(idx.schema.Name()), engine.DataKeySuffix...))
 }
 
 func (idx *Index) bucket(tx store.Tx, id int) store.Bucket {

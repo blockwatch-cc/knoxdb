@@ -27,6 +27,7 @@ func (idx *Index) ViewStats(i int) *stats.Record {
 			idx.log.Debugf("index[%s]: pack %d: %v", idx.idxSchema.Name(), i, err)
 			return nil
 		}
+		pkg.WithStats()
 		defer pkg.Release()
 		return stats.NewRecordFromPack(pkg, n)
 	}

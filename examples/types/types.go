@@ -305,17 +305,37 @@ func Create(ctx context.Context) (db knox.Database, table knox.Table, err error)
 	}
 	ts := table.Schema()
 
-	s, err = ts.SelectFields("hash", "$rid")
+	// s, err = ts.SelectFields("hash", "$rid")
+	// if err != nil {
+	// 	return
+	// }
+	// s.WithName("types_hash_index")
+	// log.Infof("Creating Index %s", s.Name())
+	// log.Debugf("Schema %s", s)
+	// err = db.CreateIndex(ctx, "types_hash_index", table, s, knox.IndexOptions{
+	// 	Engine:      "pack",
+	// 	Driver:      "bolt",
+	// 	Type:        knox.IndexTypeHash,
+	// 	PackSize:    1 << TypesIndexPackSizeLog2,
+	// 	JournalSize: 1 << TypesIndexJournalSizeLog2,
+	// 	PageFill:    TypesIndexFillLevel,
+	// 	Logger:      log.Log,
+	// })
+	// if err != nil {
+	// 	return
+	// }
+
+	s, err = ts.SelectFields("id", "$rid")
 	if err != nil {
 		return
 	}
-	s.WithName("types_hash_index")
+	s.WithName("types_pk_index")
 	log.Infof("Creating Index %s", s.Name())
 	log.Debugf("Schema %s", s)
-	err = db.CreateIndex(ctx, "types_hash_index", table, s, knox.IndexOptions{
+	err = db.CreateIndex(ctx, "types_pk_index", table, s, knox.IndexOptions{
 		Engine:      "pack",
 		Driver:      "bolt",
-		Type:        knox.IndexTypeHash,
+		Type:        knox.IndexTypeInt,
 		PackSize:    1 << TypesIndexPackSizeLog2,
 		JournalSize: 1 << TypesIndexJournalSizeLog2,
 		PageFill:    TypesIndexFillLevel,

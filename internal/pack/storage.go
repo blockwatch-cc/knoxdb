@@ -248,8 +248,8 @@ func (p *Package) StoreToDisk(ctx context.Context, bucket store.Bucket) (int, er
 	return n, nil
 }
 
-// Deprecated, deletion is deferred to garbage collection
-// delete all blocks from storage
+// delete all blocks from storage (used in rare cases like GC, regular lifecycle
+// uses deferred deletion)
 // func (p *Package) RemoveFromDisk(ctx context.Context, bucket store.Bucket) error {
 // 	if bucket == nil {
 // 		return store.ErrNoBucket
