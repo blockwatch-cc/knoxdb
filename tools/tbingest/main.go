@@ -9,14 +9,13 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/pkg/containers"
-	"blockwatch.cc/knoxdb/pkg/knox"
-	"blockwatch.cc/knoxdb/pkg/util"
 
 	"github.com/parquet-go/parquet-go"
 )
@@ -121,10 +120,7 @@ func ingestParquet(ctx context.Context, input, output, mode string) error {
 	}
 	defer f.Close()
 
-	reader, err := parquet.NewReader(f)
-	if err != nil {
-		return fmt.Errorf("initializing parquet reader: %w", err)
-	}
+	reader := parquet.NewReader(f)
 	defer reader.Close()
 
 	switch strings.ToLower(mode) {
@@ -132,7 +128,7 @@ func ingestParquet(ctx context.Context, input, output, mode string) error {
 		var cont []containers.AccountContainer
 		for {
 			var row Account
-			if err := reader.Read(&row); errors.Is(err, parquet.ErrEOF) {
+			if err := reader.Read(&row); errors.Is(err, io.EOF) {
 				break
 			} else if err != nil {
 				return fmt.Errorf("reading account row: %w", err)
@@ -145,7 +141,7 @@ func ingestParquet(ctx context.Context, input, output, mode string) error {
 		var tlist []containers.Transfer
 		for {
 			var row Transfer
-			if err := reader.Read(&row); errors.Is(err, parquet.ErrEOF) {
+			if err := reader.Read(&row); errors.Is(err, io.EOF) {
 				break
 			} else if err != nil {
 				return fmt.Errorf("reading transfer row: %w", err)
@@ -173,9 +169,9 @@ func encodePack[T any](out string, slice []T) error {
 	}
 	defer f.Close()
 
-	w, err := stream.NewWriter(f, &pack.WriterOptions{})
+	w, err := pack.NewWriter(f, &pack.WriterOptions{})
 	if err != nil {
-		return fmt.Errorf("initializing stream writer: %w", err)
+		return fmt.Errorf("initializing pack writer: %w", err)
 	}
 	defer w.Close()
 

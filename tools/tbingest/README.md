@@ -28,7 +28,7 @@ go run ./tools/tbingest/main.go --mode=account --input=accounts.json --output=ac
 
 Input must be a `.json` or `.parquet` file containing an array of records.
 
-### ✅ Example: `accounts.json`
+### Example: `accounts.json`
 
 ```json
 [
@@ -45,7 +45,7 @@ Input must be a `.json` or `.parquet` file containing an array of records.
 ]
 ```
 
-### ✅ Example: `transfers.json`
+### Example: `transfers.json`
 
 ```json
 [
@@ -69,13 +69,13 @@ Input must be a `.json` or `.parquet` file containing an array of records.
 
 ```bash
 # Ingest transfers from JSON
-$ go run ./tools/tbingest/main.go \
+go run ./tools/tbingest/main.go \
     --mode=transfer \
     --input=transfers.json \
     --output=transfers.knox
 
 # Ingest accounts from Parquet
-$ go run ./tools/tbingest/main.go \
+go run ./tools/tbingest/main.go \
     --mode=account \
     --input=accounts.parquet \
     --output=accounts.knox
@@ -114,17 +114,3 @@ These are readable by `tbquery` and other KnoxDB tooling.
 * `id` and `pending_id` must be 128-bit `[uint64, uint64]` arrays
 * Uses the `stream.Writer` API from the v2 KnoxDB columnar pack system
 * Input detection is automatic based on file extension
-
----
-
-## Future Work
-
-* Add schema inference from Parquet or CSV files
-* Optional deduplication or auto-repair mode
-* Batch validation logging
-
----
-
-## Philosophy
-
-This tool bridges operational systems (like TigerBeetle) with columnar analytical storage (KnoxDB), enabling a performant and compressed ledger archive pipeline.
