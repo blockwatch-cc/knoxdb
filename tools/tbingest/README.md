@@ -1,26 +1,34 @@
 # tbingest
 
-A simple command-line tool for ingesting TigerBeetle-style `Account` and `Transfer` data into KnoxDB packfiles.
+A minimal cli tool for ingesting TigerBeetle-style `Account` and `Transfer` data into KnoxDB `.knox` packfiles using the v2 columnar container format.
 
-This tool reads a JSON array of records and converts them into KnoxDB `.knox` format using the v2 columnar container system.
+---
+
+## Features
+
+- Supports **JSON input** with 128-bit ID fields
+- Ingests both `Account` and `Transfer` records
+- Validates **transfer semantics** (e.g. flag consistency, unique IDs, pending references)
+- Outputs `.knox` packfiles readable by `tbquery` or KnoxDB scanners
+- Built for seamless integration with financial systems and archival analytics
 
 ---
 
 ## Installation
 
-No install needed. Just run via Go:
+No install needed — run directly:
 
 ```bash
-go run ./tools/tb_ingest/main.go --mode=account --input=accounts.json --output=accounts.knox
-```
+go run ./tools/tbingest/main.go --mode=account --input=accounts.json --output=accounts.knox
+````
 
 ---
 
 ## Input File Format
 
-The input must be a `.json` file containing an array of objects.
+Input must be a `.json` file containing an array of records.
 
-### Example: `accounts.json`
+### ✅ Example: `accounts.json`
 
 ```json
 [
@@ -37,7 +45,7 @@ The input must be a `.json` file containing an array of objects.
 ]
 ```
 
-### Example: `transfers.json`
+### ✅ Example: `transfers.json`
 
 ```json
 [
@@ -60,14 +68,14 @@ The input must be a `.json` file containing an array of objects.
 ## Usage
 
 ```bash
-# Ingest transfer records into a KnoxDB file
-$ go run ./tools/tb_ingest/main.go \
+# Ingest transfers into a KnoxDB container file
+$ go run ./tools/tbingest/main.go \
     --mode=transfer \
     --input=transfers.json \
     --output=transfers.knox
 
-# Ingest account records
-$ go run ./tools/tb_ingest/main.go \
+# Ingest accounts
+$ go run ./tools/tbingest/main.go \
     --mode=account \
     --input=accounts.json \
     --output=accounts.knox
@@ -75,24 +83,45 @@ $ go run ./tools/tb_ingest/main.go \
 
 ---
 
-## Notes
+## Transfer Validation
 
-* `id` fields must be given as `[high, low]` 64-bit pairs to represent u128 values.
-* The tool uses the KnoxDB `stream.Writer` API and appends rows in packfile format.
+All transfers undergo strict semantic checks:
+
+* No duplicate IDs
+* Valid flag combinations (`post`/`void` vs `pending`)
+* Referenced `pending_id`s must exist
+* `id` must be non-zero
+
+Failing any of these checks aborts ingestion with a clear error message.
 
 ---
 
 ## Output
 
-The output will be a compressed `.knox` file compatible with KnoxDB v2 containers:
+Creates a compressed `.knox` file containing:
 
-* `AccountContainer`
-* `TransferContainer`
+* `TransferContainer` rows for `transfer` mode
+* `AccountContainer` rows for `account` mode
 
-These can be scanned or queried using standard KnoxDB tooling.
+These are readable by `tbquery` and other KnoxDB tooling.
 
 ---
 
-## Design Philosophy
+## Notes
 
-This tool acts as a bridge between TigerBeetle-style operational systems and KnoxDB's analytical engine, allowing efficient ingestion of double-entry financial data for compression, querying, and archival.
+* `id` and `pending_id` must be 128-bit `[uint64, uint64]` arrays
+* Uses the `stream.Writer` API from the v2 KnoxDB columnar pack system
+
+---
+
+## Future Work
+
+* Add support for `.parquet` ingestion (`--input=xyz.parquet`)
+* Add schema inference from Parquet or CSV files
+* Optional deduplication or auto-repair mode
+
+---
+
+## Philosophy
+
+This tool bridges operational systems (like TigerBeetle) with columnar analytical storage (KnoxDB), enabling a performant and compressed ledger archive pipeline.

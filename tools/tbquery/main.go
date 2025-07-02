@@ -30,6 +30,9 @@ func main() {
 		log.Fatalf("Missing required --file or --type flags")
 	}
 
+	// ✅ Register container types
+	containers.RegisterAll()
+
 	r, err := os.Open(*filePath)
 	if err != nil {
 		log.Fatalf("Failed to open file: %v", err)

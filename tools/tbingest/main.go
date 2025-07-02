@@ -6,8 +6,8 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"flag"
+	"fmt"
 	"os"
 	"strings"
 
@@ -47,57 +47,68 @@ func main() {
 	flag.Parse()
 
 	if *input == "" || *output == "" {
-		panic("--input and --output required")
+		fmt.Fprintln(os.Stderr, "--input and --output are required")
+		os.Exit(1)
 	}
 
 	ctx := context.Background()
 	if err := runIngest(ctx, *input, *output, *mode); err != nil {
-		panic(err)
+		fmt.Fprintln(os.Stderr, "ERROR:", err)
+		os.Exit(1)
 	}
 }
 
 func runIngest(ctx context.Context, input, output, mode string) error {
 	data, err := os.ReadFile(input)
 	if err != nil {
-		return err
+		return fmt.Errorf("reading input: %w", err)
 	}
 
 	switch strings.ToLower(mode) {
 	case "account":
 		var rows []Account
 		if err := json.Unmarshal(data, &rows); err != nil {
-			return err
+			return fmt.Errorf("decoding account JSON: %w", err)
 		}
 		var cont []containers.AccountContainer
 		for _, row := range rows {
 			cont = append(cont, containers.AccountContainer(row))
 		}
 		return encodePack(output, cont)
+
 	case "transfer":
 		var rows []Transfer
 		if err := json.Unmarshal(data, &rows); err != nil {
-			return err
+			return fmt.Errorf("decoding transfer JSON: %w", err)
+		}
+		var tlist []containers.Transfer
+		for _, row := range rows {
+			tlist = append(tlist, containers.Transfer(row))
+		}
+		if err := containers.ValidateAllTransferConstraints(tlist); err != nil {
+			return fmt.Errorf("transfer constraint check failed: %w", err)
 		}
 		var cont []containers.TransferContainer
-		for _, row := range rows {
+		for _, row := range tlist {
 			cont = append(cont, containers.TransferContainer(row))
 		}
 		return encodePack(output, cont)
+
 	default:
-		return errors.New("unknown mode: " + mode)
+		return fmt.Errorf("unknown mode: %s", mode)
 	}
 }
 
 func encodePack[T any](out string, slice []T) error {
 	f, err := os.Create(out)
 	if err != nil {
-		return err
+		return fmt.Errorf("creating output file: %w", err)
 	}
 	defer f.Close()
 
 	w, err := stream.NewWriter(f, &pack.WriterOptions{})
 	if err != nil {
-		return err
+		return fmt.Errorf("initializing stream writer: %w", err)
 	}
 	defer w.Close()
 
