@@ -1,12 +1,12 @@
 # tbingest
 
-A minimal cli tool for ingesting TigerBeetle-style `Account` and `Transfer` data into KnoxDB `.knox` packfiles using the v2 columnar container format.
+A minimal CLI tool for ingesting TigerBeetle-style `Account` and `Transfer` data into KnoxDB `.knox` packfiles using the v2 columnar container format.
 
 ---
 
 ## Features
 
-- Supports **JSON input** with 128-bit ID fields
+- Supports **JSON** and **Parquet** input with 128-bit ID fields
 - Ingests both `Account` and `Transfer` records
 - Validates **transfer semantics** (e.g. flag consistency, unique IDs, pending references)
 - Outputs `.knox` packfiles readable by `tbquery` or KnoxDB scanners
@@ -24,9 +24,9 @@ go run ./tools/tbingest/main.go --mode=account --input=accounts.json --output=ac
 
 ---
 
-## Input File Format
+## Input File Formats
 
-Input must be a `.json` file containing an array of records.
+Input must be a `.json` or `.parquet` file containing an array of records.
 
 ### ✅ Example: `accounts.json`
 
@@ -68,18 +68,20 @@ Input must be a `.json` file containing an array of records.
 ## Usage
 
 ```bash
-# Ingest transfers into a KnoxDB container file
+# Ingest transfers from JSON
 $ go run ./tools/tbingest/main.go \
     --mode=transfer \
     --input=transfers.json \
     --output=transfers.knox
 
-# Ingest accounts
+# Ingest accounts from Parquet
 $ go run ./tools/tbingest/main.go \
     --mode=account \
-    --input=accounts.json \
+    --input=accounts.parquet \
     --output=accounts.knox
 ```
+
+Supported extensions: `.json` and `.parquet`
 
 ---
 
@@ -111,14 +113,15 @@ These are readable by `tbquery` and other KnoxDB tooling.
 
 * `id` and `pending_id` must be 128-bit `[uint64, uint64]` arrays
 * Uses the `stream.Writer` API from the v2 KnoxDB columnar pack system
+* Input detection is automatic based on file extension
 
 ---
 
 ## Future Work
 
-* Add support for `.parquet` ingestion (`--input=xyz.parquet`)
 * Add schema inference from Parquet or CSV files
 * Optional deduplication or auto-repair mode
+* Batch validation logging
 
 ---
 
