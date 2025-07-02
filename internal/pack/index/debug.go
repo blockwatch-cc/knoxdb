@@ -48,7 +48,7 @@ func (idx *Index) ViewPackage(ctx context.Context, i int) *pack.Package {
 	}
 }
 
-func (idx *Index) ViewTomb() *xroar.Bitmap {
+func (idx *Index) ViewTomb(_ int) *xroar.Bitmap {
 	bits := xroar.New()
 	for _, v := range idx.tomb.Block(0).Uint64().Slice() {
 		bits.Set(v)

@@ -175,7 +175,7 @@ func getTableOrIndexSchema(db knox.Database, name string) *schema.Schema {
 
 type ContentViewer interface {
 	ViewPackage(context.Context, int) *pack.Package
-	ViewTomb() *xroar.Bitmap
+	ViewTomb(int) *xroar.Bitmap
 	Schema() *schema.Schema
 }
 
@@ -471,7 +471,7 @@ func PrintContent(ctx context.Context, view ContentViewer, desc TableDescriptor,
 	var res []any
 	if desc.PackId < 0 {
 		pkg := view.ViewPackage(ctx, desc.PackId)
-		tomb := view.ViewTomb()
+		tomb := view.ViewTomb(desc.PackId)
 		rx := s.RowIdIndex()
 		t.AppendHeader(append(table.Row{"DEL"}, util.StringList(s.AllFieldNames()).AsInterface()...))
 		for r := 0; r < pkg.Len(); r++ {

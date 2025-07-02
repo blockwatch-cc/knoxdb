@@ -54,7 +54,14 @@ func (t *Table) ViewPackage(ctx context.Context, i int) *pack.Package {
 	return pkg.Copy() // copy because we close reader on return
 }
 
-func (t *Table) ViewTomb() *xroar.Bitmap {
-	// TODO: howto address multi-segment journal?
-	return t.journal.Tip().Tomb().RowIds()
+func (t *Table) ViewTomb(i int) *xroar.Bitmap {
+	if i < 0 {
+		i = -i - 1
+	}
+	if i == 0 {
+		return t.journal.Tip().Tomb().RowIds()
+	} else if i-1 < t.journal.NumSegments()-1 {
+		return t.journal.Segments()[i-1].Tomb().RowIds()
+	}
+	return nil
 }

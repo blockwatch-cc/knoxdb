@@ -213,10 +213,10 @@ func (p *Package) StoreToDisk(ctx context.Context, bucket store.Bucket) (int, er
 			return 0, err
 		}
 
-		if len(buf) > 20<<20 {
-			fmt.Printf("WARNING: suspiciously large block %s/%s/0x%08x:%02d[v%d] %d bytes\n",
-				p.schema.Name(), p.schema.Field(i).Name(), p.Key(), i, p.Version(), len(buf))
-		}
+		// if len(buf) > 20<<20 {
+		// 	fmt.Printf("WARNING: suspiciously large block %s/%s/0x%08x:%02d[v%d] %d bytes\n",
+		// 		p.schema.Name(), p.schema.Field(i).Name(), p.Key(), i, p.Version(), len(buf))
+		// }
 
 		// minv, maxv := stats.MinMax()
 		// fmt.Printf("store block 0x%08x:%02d[v%d]: len=%d size=%d min=%v max=%v\n",
