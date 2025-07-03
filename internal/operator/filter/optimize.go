@@ -131,6 +131,11 @@ func (n *Node) Optimize() {
 
 	// replace current children
 	n.Children = newChilds
+
+	// drop or flag when a single child is left
+	if len(newChilds) == 1 {
+		n.OrKind = false
+	}
 }
 
 func simplifyNodes(nodes []*Node, isOrNode bool) []*Node {
@@ -157,6 +162,11 @@ func simplifyNodes(nodes []*Node, isOrNode bool) []*Node {
 
 	// then merge sets (EQ, NE, IN, NI)
 	leafs = simplifySets(leafs, isOrNode)
+
+	// remove OR flag from leafs
+	for _, n := range leafs {
+		n.OrKind = false
+	}
 
 	// recombine optimized leafs with nested branch nodes
 	nodes = nodes[:0]

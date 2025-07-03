@@ -39,11 +39,10 @@ func init() {
 		panic(err)
 	}
 	testSchema = testSchema.WithMeta()
-	testIndexSchema, err = testSchema.SelectFields("name", "id")
+	testIndexSchema, err = testSchema.SelectFields("name", "$rid")
 	if err != nil {
 		panic(err)
 	}
-	testIndexSchema = testIndexSchema.WithMeta()
 
 	statusEnum := schema.NewEnumDictionary("status")
 	statusEnum.Append("active", "pending", "inactive")
@@ -311,7 +310,7 @@ func TestPlanCompile(t *testing.T) {
 		{
 			Name:      "Or(Le(8), Range(6,10)) Condition",
 			Condition: Or(Le("id", 8), Range("id", 6, 10)),
-			Expected:  makeOrTree(makeLeNode(f1, px, uint64(10))),
+			Expected:  makeAndTree(makeLeNode(f1, px, uint64(10))),
 		},
 		{
 			Name:      "OR(EQ(id, 1), EQ(name, hi)) Condition",
@@ -321,22 +320,22 @@ func TestPlanCompile(t *testing.T) {
 		{
 			Name:      "OR(EQ, EQ) Condition",
 			Condition: Or(Equal("id", 1), Equal("id", 3)),
-			Expected:  makeOrTree(makeInNode(f1, px, []uint64{1, 3})),
+			Expected:  makeAndTree(makeInNode(f1, px, []uint64{1, 3})),
 		},
 		{
 			Name:      "OR(EQ, EQ) Condition with full range",
 			Condition: Or(Equal("id", 1), Equal("id", 2)),
-			Expected:  makeOrTree(makeRangeNode(f1, px, uint64(1), uint64(2))),
+			Expected:  makeAndTree(makeRangeNode(f1, px, uint64(1), uint64(2))),
 		},
 		{
 			Name:      "OR(RG, EQ) Condition",
 			Condition: Or(Range("id", 1, 10), Equal("id", 10)),
-			Expected:  makeOrTree(makeRangeNode(f1, px, uint64(1), uint64(10))),
+			Expected:  makeAndTree(makeRangeNode(f1, px, uint64(1), uint64(10))),
 		},
 		{
 			Name:      "OR(RG, RG, EQ) Condition",
 			Condition: Or(Range("id", 1, 10), Range("id", 5, 10), Equal("id", 2)),
-			Expected:  makeOrTree(makeRangeNode(f1, px, uint64(1), uint64(10))),
+			Expected:  makeAndTree(makeRangeNode(f1, px, uint64(1), uint64(10))),
 		},
 		{
 			Name:      "OR(In(1,2), RG(6,10)) (In) Out of Range Condition",
@@ -346,12 +345,12 @@ func TestPlanCompile(t *testing.T) {
 		{
 			Name:      "OR(In(6,7), RG(6,10)) In Range Condition",
 			Condition: Or(In("id", []int{6, 7}), Range("id", 6, 10)),
-			Expected:  makeOrTree(makeRangeNode(f1, px, uint64(6), uint64(10))),
+			Expected:  makeAndTree(makeRangeNode(f1, px, uint64(6), uint64(10))),
 		},
 		{
 			Name:      "Or(Le(10), Range(1,5)) Condition",
 			Condition: Or(Le("id", 10), Range("id", 1, 5)),
-			Expected:  makeOrTree(makeLeNode(f1, px, uint64(10))),
+			Expected:  makeAndTree(makeLeNode(f1, px, uint64(10))),
 		},
 		{
 			Name:      "Or(Le(score, 4.5), Range(id,(0,10))) Condition",
@@ -389,7 +388,7 @@ func TestPlanCompile(t *testing.T) {
 		{
 			Name:      "Or: EQ(A) + EQ(A) => EQ(A)",
 			Condition: Or(Equal("id", 1), Equal("id", 1)),
-			Expected:  makeOrTree(makeEqualNode(f1, px, uint64(1))),
+			Expected:  makeAndTree(makeEqualNode(f1, px, uint64(1))),
 		},
 		{
 			Name:      "Empty IN => false",
@@ -413,12 +412,12 @@ func TestPlanCompile(t *testing.T) {
 		{
 			Name:      "or: IN(A) + IN(B) => IN(A+B)",
 			Condition: Or(In("id", []uint64{1, 4, 8}), In("id", []uint64{8, 5, 9})),
-			Expected:  makeOrTree(makeInNode(f1, px, []uint64{1, 4, 5, 8, 9})),
+			Expected:  makeAndTree(makeInNode(f1, px, []uint64{1, 4, 5, 8, 9})),
 		},
 		{
 			Name:      "or: IN(A) + IN(B) => RG(A,B) iff full range",
 			Condition: Or(In("id", []uint64{1, 2, 3}), In("id", []uint64{2, 3, 4})),
-			Expected:  makeOrTree(makeRangeNode(f1, px, uint64(1), uint64(4))),
+			Expected:  makeAndTree(makeRangeNode(f1, px, uint64(1), uint64(4))),
 		},
 		{
 			Name:      "and: NI(A) + NI(B) => NI(A+B)",
@@ -428,27 +427,27 @@ func TestPlanCompile(t *testing.T) {
 		{
 			Name:      "or: NI(A) + NI(B) => NI(A+B)",
 			Condition: Or(NotIn("id", []uint64{1, 2, 3}), NotIn("id", []uint64{2, 3, 4})),
-			Expected:  makeOrTree(makeNotInNode(f1, px, []uint64{2, 3})),
+			Expected:  makeAndTree(makeNotInNode(f1, px, []uint64{2, 3})),
 		},
 		{
 			Name:      "or: IN(A) + EQ(B) => IN(A+B)",
 			Condition: Or(In("id", []uint64{1, 4, 8}), Equal("id", 2)),
-			Expected:  makeOrTree(makeInNode(f1, px, []uint64{1, 2, 4, 8})),
+			Expected:  makeAndTree(makeInNode(f1, px, []uint64{1, 2, 4, 8})),
 		},
 		{
 			Name:      "or: IN(A) + EQ(B) => RG(A,B) iff B = A+1",
 			Condition: Or(In("id", []uint64{1, 2, 3}), Equal("id", 4)),
-			Expected:  makeOrTree(makeRangeNode(f1, px, uint64(1), uint64(4))),
+			Expected:  makeAndTree(makeRangeNode(f1, px, uint64(1), uint64(4))),
 		},
 		{
 			Name:      "or: EQ(A) + EQ(B) => IN(A+B)",
 			Condition: Or(Equal("id", 1), Equal("id", 3)),
-			Expected:  makeOrTree(makeInNode(f1, px, []uint64{1, 3})),
+			Expected:  makeAndTree(makeInNode(f1, px, []uint64{1, 3})),
 		},
 		{
 			Name:      "or: EQ(A) + EQ(B) => RG(A,B) iff B = A+1",
 			Condition: Or(Equal("id", 1), Equal("id", 2)),
-			Expected:  makeOrTree(makeRangeNode(f1, px, uint64(1), uint64(2))),
+			Expected:  makeAndTree(makeRangeNode(f1, px, uint64(1), uint64(2))),
 		},
 		// CAT: replace/simplify ranges
 		{
@@ -504,7 +503,7 @@ func TestPlanCompile(t *testing.T) {
 		{
 			Name:      "or: RG(A,B) + EQ(C) => EQ(C) iff A ≤ C ≤ B",
 			Condition: Or(Range("id", 1, 5), Equal("id", 3)),
-			Expected:  makeOrTree(makeRangeNode(f1, px, uint64(1), uint64(5))),
+			Expected:  makeAndTree(makeRangeNode(f1, px, uint64(1), uint64(5))),
 		},
 	}
 
