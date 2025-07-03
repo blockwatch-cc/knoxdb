@@ -39,27 +39,28 @@ const (
 // - DDL and DML functions return error ErrDatabaseReadOnly
 
 type Engine struct {
-	mu       sync.RWMutex
-	shutdown atomic.Value
-	flock    *flock.Flock
-	cat      *Catalog
-	cache    CacheManager
-	tables   *util.LockFreeMap[uint64, TableEngine]
-	stores   *util.LockFreeMap[uint64, StoreEngine]
-	indexes  *util.LockFreeMap[uint64, IndexEngine]
-	enums    schema.EnumRegistry
-	opts     DatabaseOptions
-	txs      TxList
-	xact     uint64 // single active write tx (none when 0)
-	xmin     uint64 // xid horizon (minimum active xid)
-	xnext    uint64 // next txid for read/write tx
-	vnext    uint64 // virtual xid for read-only tx
-	dbId     uint64 // unique database tag
-	path     string // full db base path (from opts + name)
-	log      log.Logger
-	tasks    *TaskService
-	wal      *wal.Wal
-	lm       *LockManager
+	mu         sync.RWMutex
+	shutdown   atomic.Value
+	flock      *flock.Flock
+	cat        *Catalog
+	cache      CacheManager
+	tables     *util.LockFreeMap[uint64, TableEngine]
+	stores     *util.LockFreeMap[uint64, StoreEngine]
+	indexes    *util.LockFreeMap[uint64, IndexEngine]
+	enums      schema.EnumRegistry
+	opts       DatabaseOptions
+	txs        TxList
+	dbId       uint64        // unique database tag
+	writeToken chan struct{} // single writer enforcement
+	xact       uint64        // single active write tx (none when 0)
+	xmin       uint64        // xid horizon (minimum active xid)
+	xnext      uint64        // next txid for read/write tx
+	vnext      uint64        // virtual xid for read-only tx
+	path       string        // full db base path (from opts + name)
+	log        log.Logger
+	tasks      *TaskService
+	wal        *wal.Wal
+	lm         *LockManager
 }
 
 type CacheManager struct {
@@ -125,21 +126,22 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 			blocks:  block.NewCache(0),
 			buffers: NewBufferCache(0),
 		},
-		tables:  util.NewLockFreeMap[uint64, TableEngine](),
-		stores:  util.NewLockFreeMap[uint64, StoreEngine](),
-		indexes: util.NewLockFreeMap[uint64, IndexEngine](),
-		enums:   schema.NewEnumRegistry(),
-		txs:     make(TxList, 0),
-		xact:    0,
-		xmin:    0,
-		xnext:   0,
-		vnext:   ReadTxOffset,
-		dbId:    types.TaggedHash(types.ObjectTagDatabase, name),
-		opts:    opts,
-		cat:     NewCatalog(name),
-		log:     log.Disabled,
-		tasks:   NewTaskService().WithLimits(opts.MaxWorkers, opts.MaxTasks),
-		lm:      NewLockManager().WithTimeout(opts.LockTimeout),
+		tables:     util.NewLockFreeMap[uint64, TableEngine](),
+		stores:     util.NewLockFreeMap[uint64, StoreEngine](),
+		indexes:    util.NewLockFreeMap[uint64, IndexEngine](),
+		enums:      schema.NewEnumRegistry(),
+		txs:        make(TxList, 0),
+		writeToken: make(chan struct{}, 1),
+		xact:       0,
+		xmin:       0,
+		xnext:      0,
+		vnext:      ReadTxOffset,
+		dbId:       types.TaggedHash(types.ObjectTagDatabase, name),
+		opts:       opts,
+		cat:        NewCatalog(name),
+		log:        log.Disabled,
+		tasks:      NewTaskService().WithLimits(opts.MaxWorkers, opts.MaxTasks),
+		lm:         NewLockManager().WithTimeout(opts.LockTimeout),
 	}
 	e.tasks.WithContext(WithEngine(ctx, e))
 	e.shutdown.Store(false)
@@ -163,18 +165,17 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 		e.flock = lock
 	}
 
-	// start transaction and amend context (required to store catalog db)
-	ctx, _, commit, abort, err := e.WithTransaction(ctx)
-	if err != nil {
-		return nil, err
-	}
+	// start write transaction and amend context (required to store catalog db)
+	tx := e.NewTransaction(0)
+	ctx = context.WithValue(ctx, TransactionKey{}, tx)
+	ctx = WithEngine(ctx, e)
 
 	// cleanup on any errors
 	defer func() {
 		if err == nil {
 			return
 		}
-		abort()
+		tx.Abort()
 		e.Close(ctx)
 	}()
 
@@ -209,7 +210,7 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 	}
 
 	// commit open tx
-	if err = commit(); err != nil {
+	if err = tx.Commit(); err != nil {
 		return nil, err
 	}
 
@@ -224,20 +225,21 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 			blocks:  block.NewCache(0),
 			buffers: NewBufferCache(0),
 		},
-		tables:  util.NewLockFreeMap[uint64, TableEngine](),
-		stores:  util.NewLockFreeMap[uint64, StoreEngine](),
-		indexes: util.NewLockFreeMap[uint64, IndexEngine](),
-		enums:   schema.NewEnumRegistry(),
-		txs:     make(TxList, 0),
-		xact:    0,
-		xmin:    0,
-		xnext:   0,
-		vnext:   ReadTxOffset,
-		dbId:    types.TaggedHash(types.ObjectTagDatabase, name),
-		cat:     NewCatalog(name),
-		log:     log.Disabled,
-		tasks:   NewTaskService().WithLimits(opts.MaxWorkers, opts.MaxTasks),
-		lm:      NewLockManager(),
+		tables:     util.NewLockFreeMap[uint64, TableEngine](),
+		stores:     util.NewLockFreeMap[uint64, StoreEngine](),
+		indexes:    util.NewLockFreeMap[uint64, IndexEngine](),
+		enums:      schema.NewEnumRegistry(),
+		txs:        make(TxList, 0),
+		writeToken: make(chan struct{}, 1),
+		xact:       0,
+		xmin:       0,
+		xnext:      0,
+		vnext:      ReadTxOffset,
+		dbId:       types.TaggedHash(types.ObjectTagDatabase, name),
+		cat:        NewCatalog(name),
+		log:        log.Disabled,
+		tasks:      NewTaskService().WithLimits(opts.MaxWorkers, opts.MaxTasks),
+		lm:         NewLockManager(),
 	}
 	e.tasks.WithContext(WithEngine(ctx, e))
 	e.shutdown.Store(false)
@@ -263,23 +265,22 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 	// start transaction (for catalog access and recovery we need a write tx,
 	// but we don't want it to write wal records; in read-only mode we open
 	// a read-only tx instead)
-	roFlag := TxFlagsReadOnly
-	if !e.IsReadOnly() {
-		roFlag = 0
+	uflags := TxFlagNoWal
+	if e.IsReadOnly() {
+		uflags |= TxFlagReadOnly
 	}
-	ctx, _, commit, abort, err := e.WithTransaction(ctx, TxFlagsNoWal, roFlag)
-	if err != nil {
-		e.Close(ctx)
-		return nil, err
-	}
+	tx := e.NewTransaction(uflags)
+
+	// link to context
+	ctx = context.WithValue(ctx, TransactionKey{}, tx)
+	ctx = WithEngine(ctx, e)
 
 	// cleanup on error
 	defer func() {
 		if err == nil {
 			return
 		}
-		// tx.Fail(err)
-		if err := abort(); err != nil {
+		if err := tx.Abort(); err != nil {
 			e.log.Errorf("abort: %v", err)
 		}
 		if err := e.Close(ctx); err != nil {
@@ -356,9 +357,8 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 	// init virtual xid for read-only tx
 	e.vnext = e.xnext + ReadTxOffset
 
-	// close tx (we commit here because crash recovery may have rewritten
-	// catalog state)
-	if err = commit(); err != nil {
+	// commit tx, crash recovery may have rewritten catalog state
+	if err = tx.Commit(); err != nil {
 		return nil, err
 	}
 
@@ -382,6 +382,10 @@ func (e *Engine) Close(ctx context.Context) error {
 
 	// TODO: shutdown user sessions (close wire protocol server)
 	// - should cancel contexts
+
+	// close write token channel, unblocking waiting writers which will cancel
+	close(e.writeToken)
+	e.writeToken = nil
 
 	// cancel pending transaction
 	// TODO: find another way, maybe cancel session contexts + define an explicit
@@ -497,6 +501,10 @@ func (e *Engine) ForceShutdown() error {
 	// lock engine
 	e.mu.Lock()
 	defer e.mu.Unlock()
+
+	// close write token channel, unblocking waiting writers which will cancel
+	close(e.writeToken)
+	e.writeToken = nil
 
 	// TODO: shutdown user sessions (close wire protocol server)
 	// - should cancel contexts

@@ -95,7 +95,7 @@ type Store interface {
 type Database interface {
 	// db global
 	Sync(ctx context.Context) error
-	Begin(ctx context.Context) (context.Context, func() error, func() error, error)
+	Begin(ctx context.Context, flags ...TxFlags) (context.Context, func() error, func() error, error)
 	Close(ctx context.Context) error
 
 	// tables

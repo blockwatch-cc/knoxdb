@@ -23,6 +23,7 @@ type DatabaseOptions struct {
 	WalSegmentSize  int              // wal file size
 	WalRecoveryMode wal.RecoveryMode // howto recover from wal damage
 	LockTimeout     time.Duration    // lock manager timeout
+	TxWaitTimeout   time.Duration    // write tx timeout
 	NoSync          bool             // boltdb, no fsync on transactions (dangerous)
 	NoGrowSync      bool             // boltdb, skip fsync+alloc on grow
 	ReadOnly        bool             // read-only tx and no schema changes
@@ -41,6 +42,7 @@ func (o DatabaseOptions) Merge(o2 DatabaseOptions) DatabaseOptions {
 	o.WalSegmentSize = util.NonZero(o2.WalSegmentSize, o.WalSegmentSize)
 	o.WalRecoveryMode = util.NonZero(o2.WalRecoveryMode, o.WalRecoveryMode)
 	o.LockTimeout = util.NonZero(o2.LockTimeout, o.LockTimeout)
+	o.TxWaitTimeout = util.NonZero(o2.TxWaitTimeout, o.TxWaitTimeout)
 	o.ReadOnly = o2.ReadOnly
 	o.NoSync = o2.NoSync
 	o.NoGrowSync = o2.NoGrowSync

@@ -11,6 +11,15 @@ import (
 	"github.com/echa/log"
 )
 
+type TxFlags = engine.TxFlags
+
+const (
+	TxFlagReadOnly = engine.TxFlagReadOnly // run tx in read-only mode
+	TxFlagNoWal    = engine.TxFlagNoWal    // do not write wal
+	TxFlagNoSync   = engine.TxFlagNoSync   // write wal but do not fsync
+	TxFlagNoWait   = engine.TxFlagNoWait   // don't block in single writer mode
+)
+
 var _ Database = (*DB)(nil)
 
 type DB struct {
@@ -67,8 +76,8 @@ func (d *DB) Sync(ctx context.Context) error {
 }
 
 // Transaction
-func (d *DB) Begin(ctx context.Context) (context.Context, func() error, func() error, error) {
-	ctx, _, commit, abort, err := d.engine.WithTransaction(ctx)
+func (d *DB) Begin(ctx context.Context, flags ...TxFlags) (context.Context, func() error, func() error, error) {
+	ctx, _, commit, abort, err := d.engine.WithTransaction(ctx, flags...)
 	return ctx, commit, abort, err
 }
 

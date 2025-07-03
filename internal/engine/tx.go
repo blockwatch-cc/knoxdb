@@ -16,9 +16,7 @@ import (
 )
 
 // TODO
-// - enforce single writer tx (UX and mechanism)
 // - implement tx reuse/pooling
-// - use read-only tx for read queries
 // - close/drop/truncate/compact/alter integration
 //   - use lock manager
 //   - should deterministic tx exclusive lock the entire db (or table?)
@@ -32,29 +30,33 @@ import (
 //   - on tx close (commit or abort) AND NOT engine list with local list clearing touched pks
 // writes map[uint64]bitmap.Bitmap
 
-type TxFlags byte
+type TxFlags uint16
 
 const (
-	TxFlagsReadOnly     TxFlags = 1 << iota
-	TxFlagsCatalog              // txn made changes to catalog
-	TxFlagsSerializable         // use serializable snapshot isolation level (TODO)
-	TxFlagsDeferred             // wait for safe snapshot (TODO)
-	TxFlagsConflict             // conflict detected, abort on commit
-	TxFlagsNoWal                // do not write wal
-	TxFlagsNoSync               // write wal but do not fsync
-	TxFlagsDelaySync            // batch wal fsync requests
+	TxFlagReadOnly TxFlags = 1 << iota
+	TxFlagNoWal            // do not write wal
+	TxFlagNoSync           // write wal but do not fsync
+	TxFlagNoWait           // don't block in single writer mode
+	TxFlagCatalog          // txn made changes to catalog (internal)
+	TxFlagConflict         // conflict detected, abort on commit (internal)
+
+	// multi-writer support
+	TxFlagDelaySync    // batch wal fsync requests
+	TxFlagSerializable // use serializable snapshot isolation level (TODO)
+	TxFlagDeferred     // wait for safe snapshot (TODO)
 )
 
 const ReadTxOffset uint64 = 1 << 63
 
-func (f TxFlags) IsReadOnly() bool     { return f&TxFlagsReadOnly > 0 }
-func (f TxFlags) IsCatalog() bool      { return f&TxFlagsCatalog > 0 }
-func (f TxFlags) IsSerializable() bool { return f&TxFlagsSerializable > 0 }
-func (f TxFlags) IsDeferred() bool     { return f&TxFlagsDeferred > 0 }
-func (f TxFlags) IsConflict() bool     { return f&TxFlagsConflict > 0 }
-func (f TxFlags) IsNoWal() bool        { return f&TxFlagsNoWal > 0 }
-func (f TxFlags) IsNoSync() bool       { return f&TxFlagsNoSync > 0 }
-func (f TxFlags) IsDelaySync() bool    { return f&TxFlagsDelaySync > 0 }
+func (f TxFlags) IsReadOnly() bool     { return f&TxFlagReadOnly > 0 }
+func (f TxFlags) IsCatalog() bool      { return f&TxFlagCatalog > 0 }
+func (f TxFlags) IsConflict() bool     { return f&TxFlagConflict > 0 }
+func (f TxFlags) IsNoWal() bool        { return f&TxFlagNoWal > 0 }
+func (f TxFlags) IsNoSync() bool       { return f&TxFlagNoSync > 0 }
+func (f TxFlags) IsNoWait() bool       { return f&TxFlagNoWait > 0 }
+func (f TxFlags) IsDelaySync() bool    { return f&TxFlagDelaySync > 0 }
+func (f TxFlags) IsSerializable() bool { return f&TxFlagSerializable > 0 }
+func (f TxFlags) IsDeferred() bool     { return f&TxFlagDeferred > 0 }
 
 type TxHook func(Context) error
 
@@ -117,15 +119,15 @@ func mergeFlags(x []TxFlags) (f TxFlags) {
 	return
 }
 
-func (e *Engine) NewTransaction(flags ...TxFlags) *Tx {
+func (e *Engine) NewTransaction(uflags TxFlags) *Tx {
 	tx := &Tx{
 		id:     0,
 		engine: e,
-		flags:  mergeFlags(flags),
+		flags:  uflags,
 		ctx:    context.Background(),
 		cancel: func(error) {},
 	}
-	if tx.flags.IsReadOnly() {
+	if uflags.IsReadOnly() {
 		// create snapshot for read transactions (don't pollute xid space, use virtual id)
 		e.mu.Lock()
 		tx.id = atomic.AddUint64(&e.vnext, 1)
@@ -230,6 +232,11 @@ func (t *Tx) Close() {
 	// remove from global tx list, update xmin
 	t.engine.delTx(t)
 
+	// signal to waiting writers
+	if !t.flags.IsReadOnly() {
+		t.engine.writeToken <- struct{}{}
+	}
+
 	// cleanup
 	clear(t.touched)
 	t.catTx = nil
@@ -314,6 +321,10 @@ func (t *Tx) Commit() error {
 
 	defer t.Close()
 
+	if t.IsReadOnly() {
+		return nil
+	}
+
 	t.engine.log.Tracef("Commit tx %d", t.id)
 
 	// don't log read only tx or tx without activity
@@ -396,6 +407,10 @@ func (t *Tx) Abort() error {
 
 	defer t.Close()
 
+	if t.IsReadOnly() {
+		return nil
+	}
+
 	t.engine.log.Tracef("Abort tx %d", t.id)
 
 	// don't log read only tx or tx without activity
@@ -466,28 +481,25 @@ func (t *Tx) Abort() error {
 
 func (t *Tx) Fail(err error) {
 	if errors.Is(err, ErrTxConflict) {
-		t.flags |= TxFlagsConflict
+		t.flags |= TxFlagConflict
 	}
 	t.cancel(err)
 }
 
-// func (t *Tx) kill() {
-// 	// TODO
-// 	// - like abort() but called from another goroutine on engine shutdown
-// 	// - should prevent race conditions with other code altering tx data
-// 	// - write wal record
-// 	// - run abort callbacks
-// 	// - free locks
-// 	// - abort storage txn
-// 	// - prevent running commit/abort functions
-// 	//
-// 	// scenarios
-// 	// - tx owner goroutine is waiting or executing database code
-// 	//   -> needs context cancel with cause
-// 	// - tx owner goroutine is in user code
-// 	//   -> needs flag & check on each entry to a tx func (return error ErrTxKilled)
-// 	t.cancel(ErrDatabaseShutdown)
-// }
+// TODO
+// - like abort() but called from another goroutine on engine shutdown
+// - prevent race conditions with other code altering tx data
+// - write wal record
+// - run abort callbacks
+// - free locks
+// - abort storage txn
+// - prevent running commit/abort functions
+//
+// scenarios
+// - tx owner goroutine is waiting or executing database code
+//   -> needs context cancel with cause
+// - tx owner goroutine is in user code
+//   -> needs flag & check on each entry to a tx func (return error ErrTxKilled)
 
 func (t *Tx) Kill(err error) error {
 	// cancel context
@@ -496,21 +508,14 @@ func (t *Tx) Kill(err error) error {
 
 	// close catalog tx
 	if t.catTx != nil {
-		if e := t.catTx.Rollback(); e != nil {
-			err = e
-		}
+		err = t.catTx.Rollback()
 	}
 
 	// release locks
 	t.engine.lm.Done(t.id)
 
-	// remove from tx list (requires Kill is called under lock)
-	t.engine.txs.Del(t)
-
-	// clear data
-	clear(t.touched)
-	t.catTx = nil
-	t.engine = nil
+	// regular cleanup
+	t.Close()
 
 	return err
 }
@@ -538,7 +543,7 @@ func (t *Tx) CatalogTx(db store.DB, write bool) (store.Tx, error) {
 		return nil, err
 	}
 	t.catTx = tx
-	t.flags |= TxFlagsCatalog
+	t.flags |= TxFlagCatalog
 	return tx, nil
 }
 

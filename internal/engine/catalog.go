@@ -847,7 +847,7 @@ func (c *Catalog) append(ctx context.Context, o Object) error {
 	defer c.mu.Unlock()
 
 	// fetch tx and append with index flag (to forward commit call)
-	tx := GetTransaction(ctx).WithFlags(TxFlagsCatalog)
+	tx := GetTransaction(ctx).WithFlags(TxFlagCatalog)
 
 	// write wal record
 	buf, err := o.Encode()

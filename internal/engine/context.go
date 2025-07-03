@@ -5,6 +5,7 @@ package engine
 
 import (
 	"context"
+	"time"
 
 	"blockwatch.cc/knoxdb/internal/types"
 )
@@ -26,16 +27,19 @@ func GetEngine(ctx context.Context) *Engine {
 type TransactionKey struct{}
 
 func (e *Engine) WithTransaction(ctx context.Context, flags ...TxFlags) (context.Context, *Tx, func() error, func() error, error) {
+	// merge flags
+	uflags := mergeFlags(flags)
+
 	// prevent duplicates, return noops because an outer call frame controls
 	if tx := GetTransaction(ctx); tx != nil {
 		// check compatibility
-		if tx.IsReadOnly() && !mergeFlags(flags).IsReadOnly() {
+		if tx.IsReadOnly() && !uflags.IsReadOnly() {
 			return ctx, tx, noop, noop, ErrTxReadonly
 		}
 
 		// allow catalog flag update
 		for _, f := range flags {
-			if f == TxFlagsCatalog {
+			if f == TxFlagCatalog {
 				tx.WithFlags(f)
 			}
 		}
@@ -44,17 +48,43 @@ func (e *Engine) WithTransaction(ctx context.Context, flags ...TxFlags) (context
 	}
 
 	// check readonly state
-	if e.IsReadOnly() && !mergeFlags(flags).IsReadOnly() {
-		return ctx, nil, nil, nil, ErrDatabaseReadOnly
+	if e.IsReadOnly() && !uflags.IsReadOnly() {
+		return ctx, nil, noop, noop, ErrDatabaseReadOnly
 	}
-
-	// create new tx
-	tx := e.NewTransaction(flags...)
 
 	// check engine shutdown state
 	if e.IsShutdown() {
-		return ctx, tx, noop, noop, ErrDatabaseShutdown
+		return ctx, nil, noop, noop, ErrDatabaseShutdown
 	}
+
+	// enforce single writer tx
+	if !uflags.IsReadOnly() {
+		var ok bool = true
+		switch {
+		case uflags.IsNoWait():
+			select {
+			case _, ok = <-e.writeToken:
+			default:
+				return ctx, nil, noop, noop, ErrTxConflict
+			}
+		case e.opts.TxWaitTimeout > 0:
+			select {
+			case _, ok = <-e.writeToken:
+			case <-time.After(e.opts.TxWaitTimeout):
+				return ctx, nil, noop, noop, ErrTxTimeout
+			}
+		default:
+			_, ok = <-e.writeToken
+		}
+
+		// channel closed during wait
+		if !ok {
+			return ctx, nil, noop, noop, ErrDatabaseShutdown
+		}
+	}
+
+	// create new tx
+	tx := e.NewTransaction(uflags)
 
 	// link tx to context
 	ctx = context.WithValue(ctx, TransactionKey{}, tx)

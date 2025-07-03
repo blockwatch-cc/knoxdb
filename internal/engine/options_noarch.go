@@ -45,9 +45,6 @@ func (o DatabaseOptions) ToDriverOpts() any {
 		o.Logger.Debugf("  No-Sync          %t", o.NoSync)
 		o.Logger.Debugf("  No-Grow-Sync     %t", o.NoGrowSync)
 		o.Logger.Debugf("  Pagesize         %d", o.PageSize)
-		if o.NoSync {
-			o.Logger.Warnf("Enabled NOSYNC mode. Database will not be safe on crashes!")
-		}
 		return &drvOpts
 	case "mem":
 		return &mem.Options{
@@ -89,9 +86,6 @@ func (o TableOptions) ToDriverOpts() any {
 		o.Logger.Debugf("  No-Sync          %t", o.NoSync)
 		o.Logger.Debugf("  No-Grow-Sync     %t", o.NoGrowSync)
 		o.Logger.Debugf("  Pagesize         %d", o.PageSize)
-		if o.NoSync {
-			o.Logger.Warnf("Enabled NOSYNC mode. Database will not be safe on crashes!")
-		}
 		return &drvOpts
 	case "mem":
 		return &mem.Options{
@@ -133,9 +127,6 @@ func (o StoreOptions) ToDriverOpts() any {
 		o.Logger.Debugf("  No-Sync          %t", o.NoSync)
 		o.Logger.Debugf("  No-Grow-Sync     %t", o.NoGrowSync)
 		o.Logger.Debugf("  Pagesize         %d", o.PageSize)
-		if o.NoSync {
-			o.Logger.Warnf("Enabled NOSYNC mode. Database will not be safe on crashes!")
-		}
 		return &drvOpts
 	case "mem":
 		return &mem.Options{
@@ -177,9 +168,6 @@ func (o IndexOptions) ToDriverOpts() any {
 		o.Logger.Debugf("  No-Sync          %t", o.NoSync)
 		o.Logger.Debugf("  No-Grow-Sync     %t", o.NoGrowSync)
 		o.Logger.Debugf("  Pagesize         %d", o.PageSize)
-		if o.NoSync {
-			o.Logger.Warnf("Enabled NOSYNC mode. Database will not be safe on crashes!")
-		}
 		return &drvOpts
 	case "mem":
 		return &mem.Options{
