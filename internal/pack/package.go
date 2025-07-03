@@ -108,6 +108,10 @@ func (p *Package) Cap() int {
 	return p.maxRows
 }
 
+func (p *Package) FreeSpace() int {
+	return p.maxRows - p.nRows
+}
+
 func (p *Package) IsFull() bool {
 	return p.nRows == p.maxRows
 }

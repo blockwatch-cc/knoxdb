@@ -49,11 +49,6 @@ func (r *CountResult) Append(_ context.Context, src *pack.Package) error {
 	return nil
 }
 
-// func (r *CountResult) AppendRange(_ context.Context, _ *pack.Package, i, j int) error {
-// 	r.n += uint64(j - i)
-// 	return nil
-// }
-
 func (r *CountResult) Count() uint64 {
 	return r.n
 }
@@ -65,9 +60,11 @@ func (r *CountResult) Len() int {
 type StreamCallback func(engine.QueryRow) error
 
 type StreamResult struct {
-	r  *Result
-	fn StreamCallback
-	n  int
+	r      *Result
+	fn     StreamCallback
+	n      uint32
+	limit  uint32
+	offset uint32
 }
 
 func NewStreamResult(fn StreamCallback) *StreamResult {
@@ -78,41 +75,58 @@ func NewStreamResult(fn StreamCallback) *StreamResult {
 	return sr
 }
 
+func (r *StreamResult) WithLimit(l uint32) *StreamResult {
+	r.limit = l
+	return r
+}
+
+func (r *StreamResult) WithOffset(o uint32) *StreamResult {
+	r.offset = o
+	return r
+}
+
 // QueryResultConsumer interface
 func (r *StreamResult) Append(_ context.Context, pkg *pack.Package) error {
 	r.r.pkg = pkg
 	sel := pkg.Selected()
 	if sel == nil {
 		for i := range pkg.Len() {
+			// skip offset
+			if r.offset > 0 {
+				r.offset--
+				continue
+			}
 			r.n++
 			if err := r.fn(r.r.Row(i)); err != nil {
 				return err
 			}
+			// apply limit
+			if r.limit > 0 && r.n >= r.limit {
+				return types.EndStream
+			}
 		}
 	} else {
 		for _, v := range sel {
+			// skip offset
+			if r.offset > 0 {
+				r.offset--
+				continue
+			}
 			r.n++
 			if err := r.fn(r.r.Row(int(v))); err != nil {
 				return err
+			}
+			// apply limit
+			if r.limit > 0 && r.n >= r.limit {
+				return types.EndStream
 			}
 		}
 	}
 	return nil
 }
 
-// func (r *StreamResult) AppendRange(_ context.Context, pkg *pack.Package, i, j int) error {
-// 	r.r.pkg = pkg
-// 	for k := i; k < j; k++ {
-// 		r.n++
-// 		if err := r.fn(r.r.Row(k)); err != nil {
-// 			return err
-// 		}
-// 	}
-// 	return nil
-// }
-
 func (r *StreamResult) Len() int {
-	return r.n
+	return int(r.n)
 }
 
 func (r *StreamResult) Close() {
@@ -120,11 +134,15 @@ func (r *StreamResult) Close() {
 	r.fn = nil
 	r.r.Close()
 	r.r = nil
+	r.limit = 0
+	r.offset = 0
 }
 
 type Result struct {
-	pkg *pack.Package
-	row *Row // row cache
+	pkg    *pack.Package
+	row    *Row // row cache
+	limit  uint32
+	offset uint32
 }
 
 func NewResult(pkg *pack.Package) *Result {
@@ -133,20 +151,64 @@ func NewResult(pkg *pack.Package) *Result {
 	}
 }
 
-// func (r *Result) AppendRange(_ context.Context, pkg *pack.Package, i, j int) error {
-// 	r.pkg.AppendRange(pkg, i, j)
-// 	return nil
-// }
+func (r *Result) WithLimit(l uint32) *Result {
+	r.limit = l
+	return r
+}
+
+func (r *Result) WithOffset(o uint32) *Result {
+	r.offset = o
+	return r
+}
 
 func (r *Result) Append(_ context.Context, src *pack.Package) error {
+	// read selection info
 	sel := src.Selected()
-	k := src.Len()
-	if sel != nil {
-		k = len(sel)
+	nsel := uint32(src.NumSelected())
+
+	// apply offset and limit to selection vector, generate selection vector if necessary
+	if r.offset > 0 || r.limit > 0 {
+		// skip offset records
+		if r.offset > 0 {
+			if r.offset > nsel {
+				// skip the entire src pack
+				r.offset -= nsel
+				return nil
+			}
+			if sel != nil {
+				// skip offset elements from existing selection vector
+				sel = sel[r.offset:]
+				nsel -= r.offset
+			} else {
+				// create selection vector for some tail portion of src
+				sel = types.NewRange(r.offset, nsel).AsSelection()
+				nsel = uint32(src.Len()) - r.offset
+			}
+			r.offset = 0
+		}
+
+		// apply limit
+		if r.limit > 0 {
+			free := uint32(r.pkg.FreeSpace())
+			if nsel > free {
+				if sel != nil {
+					// shorten selection vector
+					sel = sel[:free]
+				} else {
+					// create selection vector
+					sel = types.NewRange(0, free).AsSelection()
+				}
+			}
+		}
 	}
-	n := src.AppendTo(r.pkg, sel)
-	if n < k {
-		return ErrResultOverflow
+
+	// append selected elements (note: without src selection, limit and offset
+	// sel is nil here)
+	src.AppendTo(r.pkg, sel)
+
+	// stop when limit is reached
+	if r.limit > 0 && r.pkg.Len() == int(r.limit) {
+		return types.EndStream
 	}
 	return nil
 }
