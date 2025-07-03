@@ -4,9 +4,11 @@
 package stats
 
 import (
+	"context"
 	"fmt"
 	"time"
 
+	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/pkg/num"
@@ -309,6 +311,14 @@ func (idx *Index) gcEpoch(tx store.Tx, epoch uint32) error {
 		idx.schema.Name(), epoch, nTableBlocks, nFilters, nStatsBlocks, nTreeNodes,
 		time.Since(start),
 	)
+
+	// run index GC
+	for _, v := range idx.table.Indexes() {
+		idx := v.(engine.IndexEngine)
+		if err := idx.GC(context.Background(), epoch); err != nil {
+			return err
+		}
+	}
 
 	// after successful GC, drop this epoch's bucket from the tomb
 	return idx.tombBucket(tx).DeleteBucket(ekey)

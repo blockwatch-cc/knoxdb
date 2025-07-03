@@ -14,6 +14,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/bitset"
+	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/operator/filter"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/store"
@@ -201,6 +202,7 @@ type Index struct {
 	schema       *schema.Schema        // statistics schema (meta + min + max)
 	view         *schema.View          // helper to extract tree node data from wire format
 	wr           *schema.Writer        // wire format builder (writer only)
+	table        engine.TableEngine    // table back-reference used for index GC
 	rx           int                   // index of the data pack's rowid column
 	px           int                   // index of the data pack's primary key column
 	nmax         int                   // max data pack size
@@ -238,6 +240,7 @@ func (idx *Index) Clone() *Index {
 		epoch:        idx.epoch,                  // same epoch, writer can set
 		schema:       idx.schema,                 // schema is read-only
 		view:         schema.NewView(idx.schema), // need private view state
+		table:        idx.table,                  // table back-reference
 		wr:           idx.wr,                     // writer is stateful, only used during merge
 		rx:           idx.rx,                     // config is read-only
 		px:           idx.px,                     // config is read-only
@@ -290,6 +293,11 @@ func (idx *Index) WithMaxSize(nmax int) *Index {
 
 func (idx *Index) WithLogger(l log.Logger) *Index {
 	idx.log = l
+	return idx
+}
+
+func (idx *Index) WithTable(t engine.TableEngine) *Index {
+	idx.table = t
 	return idx
 }
 
@@ -360,6 +368,7 @@ func (idx *Index) Free() {
 	clear(idx.snodes)
 	clear(idx.inodes)
 	clear(idx.keys[:])
+	idx.table = nil
 	idx.tomb = nil
 	idx.rc = 0
 	idx.epoch = 0
@@ -400,6 +409,7 @@ func (idx *Index) Close() {
 		idx.tomb.Close()
 		idx.tomb = nil
 	}
+	idx.table = nil
 	idx.rc = 0
 	idx.epoch = 0
 	idx.schema = nil

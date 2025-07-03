@@ -200,6 +200,7 @@ func (t *Table) createBackend(ctx context.Context) error {
 	// init statistics index and storage
 	sx := stats.NewIndex().
 		WithDB(t.db).
+		WithTable(t).
 		WithEpoch(uint32(t.state.Epoch)).
 		WithSchema(t.schema).
 		WithMaxSize(t.opts.PackSize).
@@ -331,6 +332,7 @@ func (t *Table) openBackend(ctx context.Context) error {
 		// init statistics index
 		sx := stats.NewIndex().
 			WithDB(t.db).
+			WithTable(t).
 			WithEpoch(uint32(t.state.Epoch)).
 			WithSchema(t.schema).
 			WithMaxSize(t.opts.PackSize).
