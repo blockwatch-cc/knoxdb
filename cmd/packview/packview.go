@@ -77,8 +77,9 @@ func printhelp() {
 func run() (err error) {
 	defer func() {
 		if e := recover(); e != nil {
-			log.Error(e)
-			dbg.PrintStack()
+			if trace {
+				dbg.PrintStack()
+			}
 			switch x := e.(type) {
 			case string:
 				err = errors.New(x)

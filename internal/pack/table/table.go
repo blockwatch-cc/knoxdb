@@ -38,7 +38,7 @@ var (
 		PageFill:        1.0,     // append only
 		TxMaxSize:       1 << 24, // 16 MB,
 		ReadOnly:        false,
-		NoSync:          false,
+		NoSync:          true,
 		NoGrowSync:      false,
 		Logger:          log.Disabled,
 	}
@@ -50,7 +50,7 @@ var (
 		PageFill:   1.0,     // append only
 		TxMaxSize:  1 << 24, // 16 MB,
 		ReadOnly:   false,
-		NoSync:     false,
+		NoSync:     true,
 		NoGrowSync: false,
 		Logger:     log.Disabled,
 	}
@@ -82,6 +82,10 @@ func (t *Table) Schema() *schema.Schema {
 
 func (t *Table) State() engine.ObjectState {
 	return t.state
+}
+
+func (t *Table) IsReadOnly() bool {
+	return t.opts.ReadOnly
 }
 
 func (t *Table) Indexes() []engine.QueryableIndex {
@@ -254,7 +258,7 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 	}
 
 	// cleanup after crash
-	if !t.stats.Get().IsClean() {
+	if !t.IsReadOnly() && !t.stats.Get().IsClean() {
 		t.db.Update(func(tx store.Tx) error {
 			return t.stats.Get().CleanupEpochs(tx)
 		})
@@ -407,25 +411,7 @@ func (t *Table) Drop(ctx context.Context) error {
 }
 
 func (t *Table) Sync(ctx context.Context) error {
-	// TODO: journal is loaded from wal, no need to flush here
-	// flush journal data, write wal checkpoint and state
-	// t.mu.Lock()
-	// if err := t.flushJournal(ctx); err != nil {
-	//  t.mu.Unlock()
-	// 	return err
-	// }
-	// t.mu.Unlock()
-
-	// sync db file
-	if err := t.db.Sync(); err != nil {
-		return err
-	}
-
-	// atomic.AddInt64(&t.stats.MetaBytesWritten, int64(n))
-	// atomic.StoreInt64(&t.metrics.PacksCount, int64(t.stats.Len()))
-	// atomic.StoreInt64(&t.metrics.MetaSize, int64(t.stats.HeapSize()))
-
-	return nil
+	return t.db.Sync()
 }
 
 func (t *Table) Truncate(ctx context.Context) error {

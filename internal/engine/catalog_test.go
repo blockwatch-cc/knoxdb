@@ -44,7 +44,7 @@ func TestCatalogCreate(t *testing.T) {
 		return true
 	}, time.Second/4, time.Second/8)
 
-	require.NoError(t, e.cat.Close(context.Background()))
+	require.NoError(t, e.cat.Close(ctx))
 }
 
 func TestCatalogOpen(t *testing.T) {
@@ -56,7 +56,7 @@ func TestCatalogOpen(t *testing.T) {
 	// create catalog (requires write tx)
 	require.NoError(t, e.cat.Create(ctx, e.opts))
 	require.NoError(t, commit())
-	require.NoError(t, e.cat.Close(context.Background()))
+	require.NoError(t, e.cat.Close(ctx))
 
 	// create new engine
 	e = OpenTestEngine(t, e.opts)
@@ -88,7 +88,7 @@ func TestCatalogOpen(t *testing.T) {
 	}, time.Second/4, time.Second/8)
 
 	require.NoError(t, abort())
-	require.NoError(t, e.cat.Close(context.Background()))
+	require.NoError(t, e.cat.Close(ctx))
 }
 
 func WithCatalog(t *testing.T) (context.Context, *Engine, *Catalog, func() error) {
@@ -98,7 +98,7 @@ func WithCatalog(t *testing.T) (context.Context, *Engine, *Catalog, func() error
 	require.NoError(t, err)
 	require.NoError(t, e.cat.Create(tctx, e.opts))
 	require.NoError(t, commit())
-	return ctx, e, e.cat, func() error { return e.cat.Close(ctx) }
+	return ctx, e, e.cat, func() error { return e.cat.Close(tctx) }
 }
 
 type TestTable struct {

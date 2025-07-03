@@ -44,7 +44,7 @@ var (
 		PageFill:    1.0,
 		TxMaxSize:   1 << 20, // 1 MB
 		ReadOnly:    false,
-		NoSync:      false,
+		NoSync:      true,
 		NoGrowSync:  false,
 		Logger:      log.Disabled,
 	}
@@ -69,6 +69,10 @@ type Index struct {
 
 func NewIndex() engine.IndexEngine {
 	return &Index{}
+}
+
+func (idx *Index) IsReadOnly() bool {
+	return idx.opts.ReadOnly
 }
 
 func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Schema, opts engine.IndexOptions) error {
@@ -202,8 +206,10 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 	}
 
 	// try GC old epochs
-	if err := idx.Cleanup(ctx, uint32(idx.state.Epoch)); err != nil {
-		idx.log.Warn(err)
+	if !idx.IsReadOnly() {
+		if err := idx.Cleanup(ctx, uint32(idx.state.Epoch)); err != nil {
+			idx.log.Warn(err)
+		}
 	}
 
 	idx.log.Debugf("index[%s]: open with %d entries", name, idx.state.NRows)

@@ -204,7 +204,7 @@ func (r *Reader) Seek(lsn LSN) error {
 	}
 
 	// check lsn is within segment size
-	if int64(r.seg.sz) <= lsn.Offset(r.maxSz) {
+	if int64(r.seg.sz) < lsn.Offset(r.maxSz) {
 		return ErrSegmentTooShort
 	}
 
@@ -221,7 +221,8 @@ func (r *Reader) Seek(lsn LSN) error {
 	// read record (we expect a checkpoint record)
 	var head RecordHeader
 	if err := r.read(head[:]); err != nil {
-		return err
+		return fmt.Errorf("wal: reading checkpoint at LSN 0x%016x offs=%d: %v",
+			lsn, lsn.Offset(r.maxSz), err)
 	}
 
 	// ensure this header looks correct

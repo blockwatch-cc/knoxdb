@@ -110,6 +110,11 @@ func (t *Table) Merge(ctx context.Context) error {
 		err      error
 		nRetries = 3
 	)
+
+	if t.IsReadOnly() {
+		return engine.ErrTableReadOnly
+	}
+
 	for {
 		// get next segment, will mark segment as merge in progress
 		t.mu.RLock()

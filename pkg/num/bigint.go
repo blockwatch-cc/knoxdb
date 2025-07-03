@@ -159,6 +159,11 @@ func (z *Big) SetInt64(i int64) *Big {
 	return z
 }
 
+func (z *Big) SetBytes(buf []byte) *Big {
+	(*big.Int)(z).SetBytes(buf)
+	return z
+}
+
 func (z Big) Clone() Big {
 	var x Big
 	x.SetBig(z.Big())

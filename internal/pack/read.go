@@ -304,13 +304,14 @@ func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, maps []
 			case field.Fixed > 0:
 				copy(unsafe.Slice((*byte)(fptr), field.Fixed), b.Bytes().Get(row))
 			default:
-				b := b.Bytes().Get(row)
-				if cap(*(*[]byte)(fptr)) < len(b) {
-					*(*[]byte)(fptr) = make([]byte, len(b))
-				} else {
-					*(*[]byte)(fptr) = (*(*[]byte)(fptr))[:len(b)]
-				}
-				copy(*(*[]byte)(fptr), b)
+				// b := b.Bytes().Get(row)
+				// if cap(*(*[]byte)(fptr)) < len(b) {
+				// 	*(*[]byte)(fptr) = make([]byte, len(b))
+				// } else {
+				// 	*(*[]byte)(fptr) = (*(*[]byte)(fptr))[:len(b)]
+				// }
+				// copy(*(*[]byte)(fptr), b)
+				*(*[]byte)(fptr) = b.Bytes().Get(row)
 			}
 
 		case types.FieldTypeString:
@@ -319,7 +320,9 @@ func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, maps []
 				rfield := field.StructValue(rval)
 				err = rfield.Addr().Interface().(encoding.TextUnmarshaler).UnmarshalText(b.Bytes().Get(row))
 			default:
-				*(*string)(fptr) = string(b.Bytes().Get(row))
+				// safe version with copy
+				// *(*string)(fptr) = string(b.Bytes().Get(row))
+				*(*string)(fptr) = util.UnsafeGetString(b.Bytes().Get(row))
 			}
 
 		case types.FieldTypeInt256:
@@ -345,7 +348,7 @@ func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, maps []
 			(*(*num.Decimal32)(fptr)).SetScale(field.Scale)
 
 		case types.FieldTypeBigint:
-			*(*num.Big)(fptr) = num.NewBigFromBytes(b.Bytes().Get(row))
+			(*(*num.Big)(fptr)).SetBytes(b.Bytes().Get(row))
 
 		default:
 			// oh, its a type we don't support yet

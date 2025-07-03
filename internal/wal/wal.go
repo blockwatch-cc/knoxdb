@@ -74,6 +74,7 @@ type WalOptions struct {
 	Seed           uint64
 	Path           string
 	MaxSegmentSize int
+	ReadOnly       bool
 	SyncDelay      time.Duration
 	RecoveryMode   RecoveryMode
 	Logger         log.Logger
@@ -83,7 +84,8 @@ var DefaultOptions = WalOptions{
 	Path:           "",
 	SyncDelay:      time.Second, // sync at most each second
 	MaxSegmentSize: 1 << 20,     // 1MB
-	RecoveryMode:   RecoveryModeFail,
+	ReadOnly:       false,
+	RecoveryMode:   RecoveryModeFail, // default in read-only mode
 	Logger:         log.Disabled,
 }
 
@@ -95,7 +97,10 @@ func (o WalOptions) Merge(o2 WalOptions) WalOptions {
 	o.Path = util.NonZero(o2.Path, o.Path)
 	o.SyncDelay = util.NonZero(o2.SyncDelay, o.SyncDelay)
 	o.MaxSegmentSize = util.NonZero(o2.MaxSegmentSize, o.MaxSegmentSize)
-	o.RecoveryMode = util.NonZero(o2.RecoveryMode, o.RecoveryMode)
+	o.ReadOnly = o2.ReadOnly
+	if !o.ReadOnly {
+		o.RecoveryMode = util.NonZero(o2.RecoveryMode, o.RecoveryMode)
+	}
 	o.Seed = o2.Seed
 	if o2.Logger != nil {
 		o.Logger = o2.Logger
@@ -255,7 +260,7 @@ scan:
 	wal.log.Debugf("wal: last record LSN 0x%x, next LSN 0x%x", wal.lastLsn, wal.nextLsn)
 
 	// open active segment
-	wal.active, err = wal.openSegment(wal.nextLsn.Segment(opts.MaxSegmentSize), true)
+	wal.active, err = wal.openSegment(wal.nextLsn.Segment(opts.MaxSegmentSize), !wal.opts.ReadOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -271,7 +276,10 @@ func (w *Wal) Close() error {
 	w.stopSyncThread()
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	err := w.wr.Flush()
+	var err error
+	if !w.opts.ReadOnly {
+		err = w.wr.Flush()
+	}
 	err2 := w.active.Close()
 	if err == nil {
 		err = err2
@@ -399,8 +407,6 @@ func (w *Wal) write(rec *Record) (LSN, error) {
 		return 0, err
 	}
 
-	w.log.Trace(rec.Trace)
-
 	// create header
 	head := rec.Header()
 
@@ -410,6 +416,9 @@ func (w *Wal) write(rec *Record) (LSN, error) {
 
 	// remember current lsn and truncate on failed write
 	lsn := w.nextLsn
+
+	rec.Lsn = lsn
+	w.log.Trace(rec.Trace)
 
 	// write header
 	sz, err := w.writeBuffer(head[:])

@@ -148,20 +148,6 @@ func run() error {
 	}
 	defer db.Close(ctx)
 
-	// enc := schema.NewEncoder(table.Schema())
-	// buf, err := enc.Encode(NewRandomTypes(1), nil)
-	// if err != nil {
-	// 	return err
-	// }
-	// view := schema.NewView(enc.Schema())
-	// fmt.Println(hex.Dump(buf))
-	// var ok bool
-	// view, buf, ok = view.Cut(buf)
-	// if !ok || len(buf) != 0 {
-	// 	return fmt.Errorf("view problem ok=%t l=%d", ok, len(buf))
-	// }
-	// return nil
-
 	// Step 1
 	//
 	// fill with random data
@@ -299,6 +285,7 @@ func Create(ctx context.Context) (db knox.Database, table knox.Table, err error)
 		PackSize:    1 << TypesPackSizeLog2,
 		JournalSize: 1 << TypesJournalSizeLog2,
 		PageFill:    TypesFillLevel,
+		NoSync:      true,
 	})
 	if err != nil {
 		return
@@ -340,6 +327,7 @@ func Create(ctx context.Context) (db knox.Database, table knox.Table, err error)
 		JournalSize: 1 << TypesIndexJournalSizeLog2,
 		PageFill:    TypesIndexFillLevel,
 		Logger:      log.Log,
+		NoSync:      true,
 	})
 	if err != nil {
 		return

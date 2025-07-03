@@ -587,12 +587,12 @@ func (q GenericQuery[T]) Execute(ctx context.Context, val any) (err error) {
 }
 
 func (q GenericQuery[T]) Stream(ctx context.Context, fn func(*T) error) error {
+	t := new(T)
 	return q.Query.Stream(ctx, func(r QueryRow) error {
-		var t T
-		if err := r.Decode(&t); err != nil {
+		if err := r.Decode(t); err != nil {
 			return err
 		}
-		return fn(&t)
+		return fn(t)
 	})
 }
 

@@ -922,10 +922,23 @@ func (c *Catalog) doCheckpoint(ctx context.Context) error {
 		return nil
 	}
 
-	// only checkpoint when a managed tx is not failed
-	tx := GetTransaction(ctx)
-	if tx != nil && tx.Err() != nil {
+	// only checkpoint when a managed tx is not failed and
+	// we're not in read-only mode or wal is disabled in tx
+	if GetEngine(ctx).IsReadOnly() {
 		return nil
+	}
+
+	tx := GetTransaction(ctx)
+	if tx != nil {
+		if tx.Err() != nil {
+			return nil
+		}
+		if tx.IsReadOnly() {
+			return nil
+		}
+		if !tx.UseWal() {
+			return nil
+		}
 	}
 
 	// write checkpoint record to wal

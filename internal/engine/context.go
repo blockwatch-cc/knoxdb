@@ -43,6 +43,11 @@ func (e *Engine) WithTransaction(ctx context.Context, flags ...TxFlags) (context
 		return ctx, tx, noop, noop, nil
 	}
 
+	// check readonly state
+	if e.IsReadOnly() && !mergeFlags(flags).IsReadOnly() {
+		return ctx, nil, nil, nil, ErrDatabaseReadOnly
+	}
+
 	// create new tx
 	tx := e.NewTransaction(flags...)
 

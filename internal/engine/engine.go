@@ -26,6 +26,18 @@ const (
 )
 
 // Engine is the central instance managing a database
+//
+// Read-only mode
+// - changes no data on disk
+// - all backends opened in read-only mode
+// - no wal repair/truncate before replay
+// - no wal write
+// - no journal merge
+// - no table gc
+// - no write tx
+// - no catalog object create/change
+// - DDL and DML functions return error ErrDatabaseReadOnly
+
 type Engine struct {
 	mu       sync.RWMutex
 	shutdown atomic.Value
@@ -99,6 +111,10 @@ func (e *Engine) Log() log.Logger {
 func (e *Engine) IsShutdown() bool {
 	sd := e.shutdown.Load()
 	return sd != nil && sd.(bool)
+}
+
+func (e *Engine) IsReadOnly() bool {
+	return e.opts.ReadOnly
 }
 
 func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, error) {
@@ -245,8 +261,13 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 	e.tasks.Start()
 
 	// start transaction (for catalog access and recovery we need a write tx,
-	// but we don't want it to write wal records)
-	ctx, _, commit, abort, err := e.WithTransaction(ctx, TxFlagsNoWal)
+	// but we don't want it to write wal records; in read-only mode we open
+	// a read-only tx instead)
+	roFlag := TxFlagsReadOnly
+	if !e.IsReadOnly() {
+		roFlag = 0
+	}
+	ctx, _, commit, abort, err := e.WithTransaction(ctx, TxFlagsNoWal, roFlag)
 	if err != nil {
 		e.Close(ctx)
 		return nil, err
@@ -286,6 +307,7 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 		Seed:           e.dbId,
 		Path:           filepath.Join(e.path, "wal"),
 		MaxSegmentSize: e.opts.WalSegmentSize,
+		ReadOnly:       e.opts.ReadOnly,
 		RecoveryMode:   e.opts.WalRecoveryMode,
 		Logger:         e.log,
 	}
@@ -300,7 +322,7 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 	// recover missing catalog changes from wal, potentially clean up files from
 	// failed transactions, we can skip this step if we had a clean shutdown, ie.
 	// db checkpoint == last wal record
-	if e.cat.Checkpoint() < e.wal.Last() {
+	if !e.IsReadOnly() && e.cat.Checkpoint() < e.wal.Last() {
 		// recover catalog object changes
 		if err = e.cat.Recover(ctx); err != nil {
 			return nil, err
@@ -348,6 +370,9 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 func (e *Engine) Close(ctx context.Context) error {
 	e.log.Debugf("Closing database %s at %s", e.cat.name, e.path)
 
+	// export engine
+	ctx = WithEngine(ctx, e)
+
 	// set shutdown flag to prevent new transactions
 	e.shutdown.Store(true)
 
@@ -387,8 +412,10 @@ func (e *Engine) Close(ctx context.Context) error {
 	for _, idx := range e.indexes.Map() {
 		idx.Table().UnuseIndex(idx)
 		name := idx.Schema().Name()
-		if err := idx.Sync(ctx); err != nil {
-			e.log.Errorf("Syncing index %s: %v", name, err)
+		if !e.IsReadOnly() {
+			if err := idx.Sync(ctx); err != nil {
+				e.log.Errorf("Syncing index %s: %v", name, err)
+			}
 		}
 		if err := idx.Close(ctx); err != nil {
 			e.log.Errorf("Closing index %s: %v", name, err)
@@ -400,8 +427,10 @@ func (e *Engine) Close(ctx context.Context) error {
 	e.log.Trace("Close tables")
 	for _, t := range e.tables.Map() {
 		name := t.Schema().Name()
-		if err := t.Sync(ctx); err != nil {
-			e.log.Errorf("Syncing table %s: %v", name, err)
+		if !e.IsReadOnly() {
+			if err := t.Sync(ctx); err != nil {
+				e.log.Errorf("Syncing table %s: %v", name, err)
+			}
 		}
 		if err := t.Close(ctx); err != nil {
 			e.log.Errorf("Closing table %s: %v", name, err)
@@ -413,8 +442,10 @@ func (e *Engine) Close(ctx context.Context) error {
 	e.log.Trace("Close stores")
 	for _, s := range e.stores.Map() {
 		name := s.Schema().Name()
-		if err := s.Sync(ctx); err != nil {
-			e.log.Errorf("Syncing store %s: %v", name, err)
+		if !e.IsReadOnly() {
+			if err := s.Sync(ctx); err != nil {
+				e.log.Errorf("Syncing store %s: %v", name, err)
+			}
 		}
 		if err := s.Close(ctx); err != nil {
 			e.log.Errorf("Closing store %s: %v", name, err)
@@ -563,6 +594,11 @@ func (e *Engine) ForceShutdown() error {
 }
 
 func (e *Engine) Sync(ctx context.Context) error {
+	// skip in read-only mode
+	if e.IsReadOnly() {
+		return nil
+	}
+
 	// write explicit checkpoints for all storage backends
 	// legacy tables without wal write their journal here
 	errg := &errgroup.Group{}
