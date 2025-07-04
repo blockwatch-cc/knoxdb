@@ -5,6 +5,7 @@ package engine
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -210,7 +211,7 @@ func TestConcurrentReadTx(t *testing.T) {
 	require.NoError(t, abort())
 }
 
-func TestWriteTxWait(t *testing.T) {
+func TestTxWait(t *testing.T) {
 	e := NewTestEngine(t, NewTestDatabaseOptions(t, "mem"))
 	ctx := context.Background()
 
@@ -272,6 +273,39 @@ func TestWriteTxWait(t *testing.T) {
 		assert.Len(t, e.txs, 0, "txs")
 	}
 
+	// deferred waits until snapshot is safe, i.e. writer has finished
+	{
+		var lastXid XID
+		_, tx, _, abort, err := e.WithTransaction(ctx)
+		require.NoError(t, err)
+
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			require.NoError(t, abort())
+			atomic.StoreUint64((*uint64)(&lastXid), uint64(tx.id))
+		}()
+
+		wg.Add(1)
+		e.opts.TxWaitTimeout = 10 * time.Millisecond
+		require.Eventually(t, func() bool {
+			defer wg.Done()
+			_, tx, _, abort, err := e.WithTransaction(ctx, TxFlagReadOnly, TxFlagDeferred)
+			assert.NoError(t, err)
+			assert.True(t, tx.snap.Safe, "safe snapshot")
+			atomic.StoreUint64((*uint64)(&lastXid), uint64(tx.id))
+			assert.NoError(t, abort())
+			return true
+		}, 2*e.opts.TxWaitTimeout, 5*time.Millisecond)
+		e.opts.TxWaitTimeout = 0
+
+		wg.Wait()
+		assert.True(t, tx.IsClosed(), "1st tx closed")
+		assert.Equal(t, ReadTxOffset, lastXid, "last tx closed")
+		assert.Len(t, e.txs, 0, "txs")
+	}
+
 	// error cases with concurrent writer
 	_, tx, _, _, err := e.WithTransaction(ctx)
 	require.NoError(t, err)
@@ -285,9 +319,21 @@ func TestWriteTxWait(t *testing.T) {
 
 	// with timeout throws error
 	{
-		e.opts.TxWaitTimeout = time.Second
+		e.opts.TxWaitTimeout = 10 * time.Millisecond
 		require.Eventually(t, func() bool {
 			_, _, _, _, err := e.WithTransaction(ctx)
+			require.Error(t, err)
+			require.ErrorIs(t, err, ErrTxTimeout)
+			return true
+		}, 2*e.opts.TxWaitTimeout, 5*time.Millisecond)
+		e.opts.TxWaitTimeout = 0
+	}
+
+	// deferred waits can timeout
+	{
+		e.opts.TxWaitTimeout = 10 * time.Millisecond
+		require.Eventually(t, func() bool {
+			_, _, _, _, err := e.WithTransaction(ctx, TxFlagReadOnly, TxFlagDeferred)
 			require.Error(t, err)
 			require.ErrorIs(t, err, ErrTxTimeout)
 			return true

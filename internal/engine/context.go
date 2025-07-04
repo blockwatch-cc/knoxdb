@@ -57,9 +57,24 @@ func (e *Engine) WithTransaction(ctx context.Context, flags ...TxFlags) (context
 		return ctx, nil, noop, noop, ErrDatabaseShutdown
 	}
 
-	// enforce single writer tx
-	if !uflags.IsReadOnly() {
-		var ok bool = true
+	// potentially wait
+	var ok bool = true
+	if uflags.IsReadOnly() {
+		// enforce deferred flag
+		if uflags.IsDeferred() {
+			switch {
+			case e.opts.TxWaitTimeout > 0:
+				select {
+				case _, ok = <-e.writeToken:
+				case <-time.After(e.opts.TxWaitTimeout):
+					return ctx, nil, noop, noop, ErrTxTimeout
+				}
+			default:
+				_, ok = <-e.writeToken
+			}
+		}
+	} else {
+		// enforce single writer tx
 		switch {
 		case uflags.IsNoWait():
 			select {
@@ -77,14 +92,19 @@ func (e *Engine) WithTransaction(ctx context.Context, flags ...TxFlags) (context
 			_, ok = <-e.writeToken
 		}
 
-		// channel closed during wait
-		if !ok || e.IsShutdown() {
-			return ctx, nil, noop, noop, ErrDatabaseShutdown
-		}
+	}
+	// channel was closed during wait
+	if !ok {
+		return ctx, nil, noop, noop, ErrDatabaseShutdown
 	}
 
 	// create new tx
 	tx := e.NewTransaction(uflags)
+
+	// return writer token after deferred reader wait
+	if uflags.IsDeferred() {
+		e.writeToken <- struct{}{}
+	}
 
 	// link tx to context
 	ctx = context.WithValue(ctx, TransactionKey{}, tx)
