@@ -79,11 +79,11 @@ func (idx *Index) canMatchFilter(f *filter.Filter) bool {
 func (idx *Index) Query(ctx context.Context, c engine.QueryCondition) (*xroar.Bitmap, bool, error) {
 	node, ok := c.(*filter.Node)
 	if !ok {
-		return nil, false, fmt.Errorf("invalid condition type %T", c)
+		return nil, false, fmt.Errorf("invalid filter type %T", c)
 	}
 
 	if !node.IsLeaf() {
-		return nil, false, fmt.Errorf("invalid branch node")
+		return nil, false, fmt.Errorf("unexpected branch node")
 	}
 
 	// cross-check if we can match this
@@ -170,16 +170,16 @@ func (idx *Index) queryKeys(ctx context.Context, node *filter.Node) (*xroar.Bitm
 
 		for _, i := range hits {
 			// read pk from index row
-			pk := pkg.Uint64(1, int(i))
+			rid := pkg.Uint64(1, int(i))
 
-			// skip broken records (invalid pk)
-			if pk == 0 {
+			// skip broken records (invalid rid)
+			if rid == 0 {
 				continue
 			}
 
 			// add to result
-			// idx.log.Infof("Set key %d", pk)
-			bits.Set(pk)
+			// idx.log.Infof("Set key %d", rid)
+			bits.Set(rid)
 		}
 	}
 
@@ -188,6 +188,11 @@ func (idx *Index) queryKeys(ctx context.Context, node *filter.Node) (*xroar.Bitm
 
 // lookup only matches EQ, IN, NI (list of search keys is known)
 func (idx *Index) lookupKeys(ctx context.Context, keys []uint64) (*xroar.Bitmap, error) {
+	// gracefully handle empty query list
+	if len(keys) == 0 {
+		return xroar.New(), nil
+	}
+	idx.log.Infof("lookup keys %v", keys)
 	var (
 		next         int
 		nKeysMatched uint32
@@ -223,43 +228,43 @@ func (idx *Index) lookupKeys(ctx context.Context, keys []uint64) (*xroar.Bitmap,
 
 		// finish when no more packs or no more keys are available
 		if pkg == nil {
-			// idx.log.Infof("No more packs")
+			idx.log.Infof("No more packs")
 			break
 		}
-		// idx.log.Infof("Next pack len=%d up to max ik=%d", pkg.Len(), maxIk)
+		idx.log.Infof("Next pack len=%d up to max ik=0x%016x", pkg.Len(), maxIk)
 
 		// access key columns (used for binary search below)
-		iKeys := pkg.Block(0).Uint64().Slice() // index pks
-		pKeys := pkg.Block(1).Uint64().Slice() // table pks
-		packLen := len(iKeys)
+		k0 := pkg.Block(0).Uint64() // index pks
+		k1 := pkg.Block(1).Uint64() // table pks
+		packLen := k0.Len()
 
 		// loop over the remaining (unresolved) keys, packs are sorted by pk
 		pos := 0
 		for _, ik := range in[next:] {
-			// idx.log.Infof("Looking for ik=0x%016x", ik)
+			idx.log.Infof("Looking for ik=0x%016x", ik)
 
 			// no more matches in this pack?
-			if maxIk < ik || iKeys[pos] > maxKey {
-				// idx.log.Infof("No more matches in this pack")
+			if maxIk < ik || k0.Get(pos) > maxKey {
+				idx.log.Infof("No more matches in this pack")
 				break
 			}
 
 			// find pk in pack
-			n := sort.Search(packLen-pos, func(i int) bool { return iKeys[pos+i] >= ik })
+			n := sort.Search(packLen-pos, func(i int) bool { return k0.Get(pos+i) >= ik })
 
 			// skip when not found
-			if pos+n >= packLen || iKeys[pos+n] != ik {
-				// idx.log.Infof("Lookup key not found")
+			if pos+n >= packLen || k0.Get(pos+n) != ik {
+				idx.log.Infof("Lookup key not found")
 				next++
 				continue
 			}
-			// idx.log.Infof("At pos %d found=%016x", pos+n, iKeys[pos+n])
+			idx.log.Infof("At pos %d found=%016x", pos+n, k0.Get(pos+n))
 			pos += n
 
 			// on match, add table primary key to result
 			nKeysMatched++
-			// idx.log.Infof("Add Result %d", pKeys[pos])
-			bits.Set(pKeys[pos])
+			idx.log.Infof("Add Result %d", k1.Get(pos))
+			bits.Set(k1.Get(pos))
 			next++
 		}
 
@@ -270,10 +275,10 @@ func (idx *Index) lookupKeys(ctx context.Context, keys []uint64) (*xroar.Bitmap,
 		// first := sort.Search(len(keys), func(x int) bool { return in[x] >= minPk })
 
 		// // run through pack and in-slice until no more values match
-		// for k, i, kl, il := 0, first, len(iKeys), len(in); k < kl && i < il; {
+		// for k, i, kl, il := 0, first, len(k0), len(in); k < kl && i < il; {
 
 		//  // find the next matching key or any value > next lookup
-		//  k += sort.Search(kl-k, func(x int) bool { return iKeys[x+k] >= in[i] })
+		//  k += sort.Search(kl-k, func(x int) bool { return k0[x+k] >= in[i] })
 
 		//  // stop at pack end
 		//  if k == kl {
@@ -282,7 +287,7 @@ func (idx *Index) lookupKeys(ctx context.Context, keys []uint64) (*xroar.Bitmap,
 		//  }
 
 		//  // if no match was found, advance in-slice
-		//  for i < il && iKeys[k] > in[i] {
+		//  for i < il && k0[k] > in[i] {
 		//      i++
 		//  }
 
@@ -292,7 +297,7 @@ func (idx *Index) lookupKeys(ctx context.Context, keys []uint64) (*xroar.Bitmap,
 		//  }
 
 		//  // handle multiple matches
-		//  if iKeys[k] == in[i] {
+		//  if k0[k] == in[i] {
 		//      // append to result
 		//      bits.Set(pKeys[k])
 
@@ -300,7 +305,7 @@ func (idx *Index) lookupKeys(ctx context.Context, keys []uint64) (*xroar.Bitmap,
 		//      // multi-matches for integer indexes. K can safely be advanced
 		//      // because collisions/multi-matches for in[i] are directly after
 		//      // the first match.
-		//      for ; k+1 < kl && iKeys[k+1] == in[i]; k++ {
+		//      for ; k+1 < kl && k0[k+1] == in[i]; k++ {
 		//          bits.Set(pKeys[k+1])
 		//      }
 

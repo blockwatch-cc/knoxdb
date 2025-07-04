@@ -132,7 +132,7 @@ func (n *Node) Optimize() {
 	// replace current children
 	n.Children = newChilds
 
-	// drop or flag when a single child is left
+	// drop OR flag when a single child is left
 	if len(newChilds) == 1 {
 		n.OrKind = false
 	}

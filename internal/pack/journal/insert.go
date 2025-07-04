@@ -58,7 +58,7 @@ func (j *Journal) InsertRecords(ctx context.Context, buf []byte) (uint64, int, e
 			sz += len(view.Bytes())
 			view, vbuf, _ = view.Cut(vbuf)
 		}
-		j.log.Debugf("journal inserted %d records into segment %d", nextRid-firstRid, j.tip.Id())
+		// j.log.Debugf("journal inserted %d records into segment %d", nextRid-firstRid, j.tip.Id())
 
 		// write wal batch
 		if tx.UseWal() {

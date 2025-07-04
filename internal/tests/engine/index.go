@@ -86,22 +86,20 @@ func TestIndexEngine[T any, F IF[T]](t *testing.T, driver, eng string, table eng
 				e := NewTestEngine(t, NewTestDatabaseOptions(t, driver))
 				defer e.Close(ctx)
 
-				// prepare schema (we need metadata)
-				ts := allTypesSchema.WithMeta()
-
 				// create table and insert data
 				CreateEnum(t, e)
 				topts := NewTestTableOptions(t, driver, eng)
-				CreateTable(t, e, table, topts, ts)
+				CreateTable(t, e, table, topts, allTypesSchema)
 				defer table.Close(ctx)
 				InsertData(t, e, table)
+				ts := table.Schema() // table has added metadata
 
 				iopts := NewTestIndexOptions(t, driver, eng, indexType)
 				indexSchema, err := ts.SelectFields("u64", "$rid")
 				require.NoError(t, err)
 
 				var indexEngine F = new(T)
-				c.Run(t, e, table, indexEngine, indexSchema, allTypesSchema, iopts, topts)
+				c.Run(t, e, table, indexEngine, indexSchema, ts, iopts, topts)
 			})
 		}
 	}
@@ -109,21 +107,16 @@ func TestIndexEngine[T any, F IF[T]](t *testing.T, driver, eng string, table eng
 
 func CreateIndex(t *testing.T, idxEngine engine.IndexEngine, tab engine.TableEngine, e *engine.Engine, idxOpts engine.IndexOptions, s *schema.Schema) {
 	t.Helper()
-	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
-	defer abort()
-	require.NoError(t, err)
-
-	err = idxEngine.Create(ctx, tab, s, idxOpts)
-	require.NoError(t, err)
-	require.NoError(t, commit())
+	ctx := engine.WithEngine(context.Background(), e)
+	require.NoError(t, idxEngine.Create(ctx, tab, s, idxOpts))
 	tab.UseIndex(idxEngine)
 }
 
 func FillIndex(t *testing.T, e *engine.Engine, ti engine.IndexEngine) *pack.Package {
 	t.Helper()
-	ctx, _, commit, _, _ := e.WithTransaction(context.Background())
+	ctx := engine.WithEngine(context.Background(), e)
 	enc := schema.NewEncoder(ti.Table().Schema())
-	pkg := pack.New().WithSchema(ti.Table().Schema())
+	pkg := pack.New().WithSchema(ti.Table().Schema()).WithMaxRows(1 << 11).Alloc()
 	meta := &schema.Meta{}
 	for i := range 6 {
 		allType := NewAllTypes(i)
@@ -134,8 +127,7 @@ func FillIndex(t *testing.T, e *engine.Engine, ti engine.IndexEngine) *pack.Pack
 		pkg.AppendWire(buf, meta)
 	}
 	require.NoError(t, ti.AddPack(ctx, pkg, pack.WriteModeAll))
-	require.NoError(t, commit())
-	require.NoError(t, ti.Sync(ctx))
+	require.NoError(t, ti.Finalize(ctx, 1))
 
 	// return a package with just the last row (for delete tests)
 	pkg.Delete(0, 5)
@@ -164,35 +156,25 @@ func CreateIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti 
 func OpenIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
 	CreateIndex(t, ti, tab, e, io, is)
 	require.NoError(t, ti.Close(context.Background()))
-	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
-	defer abort()
-	require.NoError(t, err)
+	ctx := engine.WithEngine(context.Background(), e)
 	require.NoError(t, ti.Open(ctx, tab, is, io))
-	require.NoError(t, commit())
 	require.NoError(t, ti.Close(ctx))
 }
 
 func CloseIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
 	CreateIndex(t, ti, tab, e, io, is)
-	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
-	defer abort()
-	require.NoError(t, err)
+	ctx := engine.WithEngine(context.Background(), e)
 	require.NoError(t, ti.Close(ctx))
-	require.NoError(t, commit())
 }
 
 func DropIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
 	CreateIndex(t, ti, tab, e, io, is)
-	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
-	defer abort()
-	require.NoError(t, err)
-
+	ctx := engine.WithEngine(context.Background(), e)
 	dbpath := filepath.Join(e.RootPath(), is.Name()+".db")
 	ok, err := store.Exists(io.Driver, dbpath)
 	require.NoError(t, err, "access error")
 	require.True(t, ok, "db not exists")
 	require.NoError(t, ti.Drop(ctx))
-	require.NoError(t, commit())
 	ok, err = store.Exists(io.Driver, dbpath)
 	require.NoError(t, err, "access error")
 	require.False(t, ok, "db not deleted")
@@ -201,30 +183,22 @@ func DropIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti en
 func TruncateIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
 	CreateIndex(t, ti, tab, e, io, is)
 	FillIndex(t, e, ti)
-
-	ctx, _, commit, _, _ := e.WithTransaction(context.Background())
+	ctx := engine.WithEngine(context.Background(), e)
 	require.NoError(t, ti.Truncate(ctx))
-	require.NoError(t, commit())
 }
 
 func RebuildIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
 	CreateIndex(t, ti, tab, e, io, is)
-	ctx, _, commit, _, _ := e.WithTransaction(context.Background())
+	ctx := engine.WithEngine(context.Background(), e)
 	require.NoError(t, ti.Rebuild(ctx))
-	require.NoError(t, commit())
 }
 
 func SyncIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
 	CreateIndex(t, ti, tab, e, io, is)
-	ctx, _, commit, _, _ := e.WithTransaction(context.Background())
+	ctx := engine.WithEngine(context.Background(), e)
 	require.NoError(t, ti.Sync(ctx))
-	require.NoError(t, commit())
-
 	FillIndex(t, e, ti)
-
-	ctx, _, commit, _, _ = e.WithTransaction(context.Background())
 	require.NoError(t, ti.Sync(ctx))
-	require.NoError(t, commit())
 }
 
 func CanMatchIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
@@ -283,11 +257,7 @@ func CanMatchIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, t
 func AddIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
 	CreateIndex(t, ti, tab, e, io, is)
 	FillIndex(t, e, ti)
-
-	// need tx to query index
-	ctx, _, _, abort, err := e.WithTransaction(context.Background())
-	defer abort()
-	require.NoError(t, err)
+	ctx := engine.WithEngine(context.Background(), e)
 
 	// query data to confirm it is stored
 	switch io.Type {
@@ -307,11 +277,7 @@ func AddIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti eng
 func DeleteIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
 	CreateIndex(t, ti, tab, e, io, is)
 	prev := FillIndex(t, e, ti)
-
-	// need tx to query index
-	ctx, _, _, abort, err := e.WithTransaction(context.Background())
-	defer abort()
-	require.NoError(t, err)
+	ctx := engine.WithEngine(context.Background(), e)
 
 	switch io.Type {
 	case types.IndexTypeHash:
@@ -323,20 +289,13 @@ func DeleteIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti 
 	default:
 		require.Fail(t, "no case for testing index type %s", io.Type)
 	}
-	abort()
 
 	// delete last item and store
-	ctx, _, commit, _, _ := e.WithTransaction(context.Background())
 	require.NoError(t, ti.DelPack(ctx, prev, pack.WriteModeAll, 0))
-	require.NoError(t, ti.Sync(ctx))
-	require.NoError(t, commit())
+	require.NoError(t, ti.Finalize(ctx, 1))
+	require.NoError(t, ti.GC(ctx, 1))
 
-	// query again
-	ctx, _, _, abort, err = e.WithTransaction(context.Background())
-	defer abort()
-	require.NoError(t, err)
-
-	// confirm item is removed
+	// query again, confirm item is removed
 	switch io.Type {
 	case types.IndexTypeHash:
 		QueryIndex(t, ctx, ti, makeFilter(ts, "u64", EQ, 5, nil), 0)
@@ -352,10 +311,7 @@ func DeleteIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti 
 func QueryIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
 	CreateIndex(t, ti, tab, e, io, is)
 	FillIndex(t, e, ti)
-
-	ctx, _, _, abort, err := e.WithTransaction(context.Background())
-	defer abort()
-	require.NoError(t, err)
+	ctx := engine.WithEngine(context.Background(), e)
 
 	// query by type
 	switch io.Type {

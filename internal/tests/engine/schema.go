@@ -158,7 +158,7 @@ func makeFilter(s *schema.Schema, name string, mode types.FilterMode, val, val2 
 		val, _ = c.CastValue(val)
 	}
 	m.WithValue(val)
-	return filter.NewNode().AddLeaf(&filter.Filter{
+	return filter.NewNode().SetFilter(&filter.Filter{
 		Name:    field.Name(),
 		Type:    field.Type().BlockType(),
 		Mode:    mode,

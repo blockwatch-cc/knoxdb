@@ -321,34 +321,25 @@ func (idx *Index) Drop(ctx context.Context) error {
 func (idx *Index) Truncate(ctx context.Context) error {
 	// start direct backend write tx (assumes index and table are
 	// not stored in the same backend db file)
-	tx, err := idx.db.Begin(true)
+	err := idx.db.Update(func(tx store.Tx) error {
+		for _, v := range [][]byte{
+			engine.DataKeySuffix,
+			engine.TombKeySuffix,
+			engine.StateKeySuffix,
+		} {
+			key := append([]byte(idx.name), v...)
+			if err := tx.Root().DeleteBucket(key); err != nil {
+				return err
+			}
+			if _, err := tx.Root().CreateBucket(key); err != nil {
+				return err
+			}
+		}
+		// reset state
+		idx.state.Reset()
+		return idx.state.Store(ctx, tx)
+	})
 	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	for _, v := range [][]byte{
-		engine.DataKeySuffix,
-		engine.TombKeySuffix,
-		engine.StateKeySuffix,
-	} {
-		key := append([]byte(idx.name), v...)
-		if err := tx.Root().DeleteBucket(key); err != nil {
-			return err
-		}
-		if _, err := tx.Root().CreateBucket(key); err != nil {
-			return err
-		}
-	}
-
-	// reset state
-	nDel := idx.state.NRows
-	idx.state.Reset()
-	if err := idx.state.Store(ctx, tx); err != nil {
-		return err
-	}
-
-	// commit storage tx
-	if err := tx.Commit(); err != nil {
 		return err
 	}
 
@@ -357,7 +348,9 @@ func (idx *Index) Truncate(ctx context.Context) error {
 	idx.tomb.Clear()
 
 	// update metrics
-	idx.metrics.DeletedTuples += int64(nDel)
+	idx.metrics.TotalSize = 0
+	idx.metrics.PacksCount = 0
+	idx.metrics.DeletedTuples = 0
 	idx.metrics.TupleCount = 0
 
 	return nil

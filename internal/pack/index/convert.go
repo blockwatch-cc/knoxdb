@@ -174,14 +174,15 @@ func (_ *SimpleHashConverter) QueryNode(_ *filter.Node) *filter.Node {
 }
 
 type CompositeHashConverter struct {
-	schema     *schema.Schema
+	idxSchema  *schema.Schema
+	srcSchema  *schema.Schema
 	srcBlocks  []int // ordered list of src blocks to link
 	hashBlocks []int // ordered list of blocks to hash
 }
 
 func (c *CompositeHashConverter) ConvertPack(pkg *pack.Package, mode pack.WriteMode) *pack.Package {
 	// construct a new package
-	ipkg := pack.New().WithSchema(c.schema).WithMaxRows(pkg.Cap())
+	ipkg := pack.New().WithSchema(c.idxSchema).WithMaxRows(pkg.Cap())
 
 	// use a new allocated hash block
 	hashBlock := block.New(block.BlockUint64, pkg.Len())
@@ -262,8 +263,8 @@ func (c *CompositeHashConverter) QueryKeys(node *filter.Node) []uint64 {
 	// try combine multiple AND leaf conditions into longer index key,
 	// all index fields must be available
 	buf := new(bytes.Buffer)
-	nfields := c.schema.NumFields()
-	for _, field := range c.schema.Fields()[:nfields-1] {
+	nfields := c.srcSchema.NumFields()
+	for _, field := range c.srcSchema.Fields()[:nfields-1] {
 		name := field.Name()
 		node, ok := eq[name]
 		if !ok {

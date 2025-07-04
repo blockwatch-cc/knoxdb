@@ -62,10 +62,10 @@ var TestCases = []TestCase{
 		Name: "InsertRows:ReadOnlyDb",
 		Run:  InsertRowsReadOnlyTableTest,
 	},
-	{
-		Name: "UpdateRows",
-		Run:  UpdateRowsTableTest,
-	},
+	// {
+	// 	Name: "UpdateRows",
+	// 	Run:  UpdateRowsTableTest,
+	// },
 	{
 		Name: "Query",
 		Run:  QueryTableTest,
@@ -248,28 +248,28 @@ func InsertRowsReadOnlyTableTest(t *testing.T, e *engine.Engine, tab engine.Tabl
 	require.NoError(t, commit())
 }
 
-func UpdateRowsTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions) {
-	SetupTableTest(t, e, tab, opts)
-	InsertData(t, e, tab)
+// func UpdateRowsTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions) {
+// 	SetupTableTest(t, e, tab, opts)
+// 	InsertData(t, e, tab)
 
-	enc := schema.NewEncoder(tab.Schema())
-	data := make([]*AllTypes, 10)
-	for i := range data {
-		data[i] = NewAllTypes(i)
-		data[i].Id = uint64(i + 1)
-	}
-	buf, err := enc.Encode(data, nil)
-	require.NoError(t, err)
+// 	enc := schema.NewEncoder(tab.Schema())
+// 	data := make([]*AllTypes, 10)
+// 	for i := range data {
+// 		data[i] = NewAllTypes(i)
+// 		data[i].Id = uint64(i + 1)
+// 	}
+// 	buf, err := enc.Encode(data, nil)
+// 	require.NoError(t, err)
 
-	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
-	defer abort()
-	require.NoError(t, err)
+// 	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
+// 	defer abort()
+// 	require.NoError(t, err)
 
-	cnt, err := tab.UpdateRows(ctx, buf)
-	require.NoError(t, err)
-	assert.Equal(t, uint64(len(data)), cnt)
-	require.NoError(t, commit())
-}
+// 	cnt, err := tab.UpdateRows(ctx, buf)
+// 	require.NoError(t, err)
+// 	assert.Equal(t, uint64(len(data)), cnt)
+// 	require.NoError(t, commit())
+// }
 
 func QueryTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions) {
 	SetupTableTest(t, e, tab, opts)

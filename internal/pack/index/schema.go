@@ -112,16 +112,16 @@ func convertSchema(s, ts *schema.Schema, typ types.IndexType) (*schema.Schema, C
 			Schema()
 
 		c := &CompositeHashConverter{
-			schema: s,
+			idxSchema: ixs,
+			srcSchema: s,
 		}
-		for _, f := range s.Exported() {
+		n := s.NumFields()
+		for _, f := range s.Exported()[:n-1] {
 			i, _ := ts.FieldIndexById(f.Id)
-			if f.Index == types.IndexTypeComposite {
-				c.hashBlocks = append(c.hashBlocks, i)
-			} else {
-				c.srcBlocks = append(c.srcBlocks, i)
-			}
+			c.hashBlocks = append(c.hashBlocks, i)
 		}
+		i, _ := ts.FieldIndexById(s.Exported()[n-1].Id)
+		c.srcBlocks = append(c.srcBlocks, i)
 		return ixs, c, nil
 
 	default:

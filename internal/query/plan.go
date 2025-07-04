@@ -218,7 +218,7 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 	// log incoming plan before compile
 	if p.Flags.IsDebug() {
 		p.Log.SetLevel(log.LevelDebug)
-		p.Log.Debug(p)
+		p.Log.Debugf("original: %s", p)
 	}
 
 	// use tx snapshot if exists
@@ -248,7 +248,10 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 		if err != nil {
 			return p.Errorf("extend request filter: %v", err)
 		}
-		p.Filters.Children = append(p.Filters.Children, mc.Children...)
+		p.Filters.And(mc)
+		if p.Flags.IsDebug() {
+			p.Log.Debugf("extended: %s", p)
+		}
 	}
 
 	// request at least the primary key and row_id fields
@@ -297,7 +300,7 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 
 	// log optimized plan
 	if p.Flags.IsDebug() {
-		p.Log.Debug(p)
+		p.Log.Debugf("optimized: %s", p)
 	}
 
 	return nil

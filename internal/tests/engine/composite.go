@@ -82,13 +82,14 @@ func TestCompositeIndexEngine[T any, F IF[T]](t *testing.T, driver, eng string, 
 			CreateTable(t, e, table, topts, allTypesSchema)
 			defer table.Close(ctx)
 			InsertData(t, e, table)
+			ts := table.Schema()
 
 			iopts := NewTestIndexOptions(t, driver, eng, types.IndexTypeComposite)
-			indexSchema, err := allTypesSchema.SelectFields("i32", "i64", "id")
+			indexSchema, err := ts.SelectFields("i32", "i64", "$rid")
 			require.NoError(t, err)
 
 			var indexEngine F = new(T)
-			c.Run(t, e, table, indexEngine, indexSchema, allTypesSchema, iopts, topts)
+			c.Run(t, e, table, indexEngine, indexSchema, ts, iopts, topts)
 		})
 	}
 }
@@ -98,37 +99,29 @@ func CreateCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEn
 }
 
 func OpenCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
+	ctx := context.Background()
 	CreateIndex(t, ti, tab, e, io, is)
-	require.NoError(t, ti.Close(context.Background()))
-	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
-	defer abort()
-	require.NoError(t, err)
+	require.NoError(t, ti.Close(ctx))
+	ctx = engine.WithEngine(ctx, e)
 	require.NoError(t, ti.Open(ctx, tab, is, io))
-	require.NoError(t, commit())
 	require.NoError(t, ti.Close(ctx))
 }
 
 func CloseCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
 	CreateIndex(t, ti, tab, e, io, is)
-	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
-	defer abort()
-	require.NoError(t, err)
+	ctx := engine.WithEngine(context.Background(), e)
 	require.NoError(t, ti.Close(ctx))
-	require.NoError(t, commit())
 }
 
 func DropCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
 	CreateIndex(t, ti, tab, e, io, is)
-	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
-	defer abort()
-	require.NoError(t, err)
+	ctx := engine.WithEngine(context.Background(), e)
 
 	dbpath := filepath.Join(e.RootPath(), is.Name()+".db")
 	ok, err := store.Exists(io.Driver, dbpath)
 	require.NoError(t, err, "access error")
 	require.True(t, ok, "db not exists")
 	require.NoError(t, ti.Drop(ctx))
-	require.NoError(t, commit())
 	ok, err = store.Exists(io.Driver, dbpath)
 	require.NoError(t, err, "access error")
 	require.False(t, ok, "db not deleted")
@@ -136,33 +129,22 @@ func DropCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngi
 
 func TruncateCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
 	CreateIndex(t, ti, tab, e, io, is)
-	ctx, _, _, abort, err := e.WithTransaction(context.Background())
-	defer abort()
-	require.NoError(t, err)
+	ctx := engine.WithEngine(context.Background(), e)
 	require.NoError(t, ti.Truncate(ctx))
 }
 
 func RebuildCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
 	CreateIndex(t, ti, tab, e, io, is)
-	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
-	defer abort()
-	require.NoError(t, err)
+	ctx := engine.WithEngine(context.Background(), e)
 	require.NoError(t, ti.Rebuild(ctx))
-	require.NoError(t, commit())
 }
 
 func SyncCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
 	CreateIndex(t, ti, tab, e, io, is)
-
-	ctx, _, commit, _, _ := e.WithTransaction(context.Background())
+	ctx := engine.WithEngine(context.Background(), e)
 	require.NoError(t, ti.Sync(ctx))
-	require.NoError(t, commit())
-
 	FillIndex(t, e, ti)
-
-	ctx, _, commit, _, _ = e.WithTransaction(context.Background())
 	require.NoError(t, ti.Sync(ctx))
-	require.NoError(t, commit())
 }
 
 func CanMatchCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
@@ -226,11 +208,7 @@ func CanMatchCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.Table
 func AddCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
 	CreateIndex(t, ti, tab, e, io, is)
 	FillIndex(t, e, ti)
-
-	// need tx to query index
-	ctx, _, _, abort, err := e.WithTransaction(context.Background())
-	defer abort()
-	require.NoError(t, err)
+	ctx := engine.WithEngine(context.Background(), e)
 
 	// query data to confirm it is stored
 	res, _, err := ti.QueryComposite(ctx, makeTree(
@@ -245,11 +223,7 @@ func AddCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngin
 func DeleteCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
 	CreateIndex(t, ti, tab, e, io, is)
 	prev := FillIndex(t, e, ti)
-
-	// need tx to query index
-	ctx, _, _, abort, err := e.WithTransaction(context.Background())
-	defer abort()
-	require.NoError(t, err)
+	ctx := engine.WithEngine(context.Background(), e)
 
 	q := makeTree(
 		makeFilter(ts, "i64", EQ, 5, nil),
@@ -260,19 +234,13 @@ func DeleteCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEn
 	require.NoError(t, err)
 	require.NotNil(t, res)
 	require.Equal(t, 1, res.Count())
-	abort()
 
 	// delete last item stored
-	ctx, _, commit, _, _ := e.WithTransaction(context.Background())
 	require.NoError(t, ti.DelPack(ctx, prev, pack.WriteModeAll, 0))
-	require.NoError(t, ti.Sync(ctx))
-	require.NoError(t, commit())
+	require.NoError(t, ti.Finalize(ctx, 1))
+	require.NoError(t, ti.GC(ctx, 1))
 
 	// query again
-	ctx, _, _, abort, err = e.WithTransaction(context.Background())
-	defer abort()
-	require.NoError(t, err)
-
 	// check 2: confirm item is removed
 	res, _, err = ti.QueryComposite(ctx, q)
 	require.NoError(t, err)
@@ -283,11 +251,7 @@ func DeleteCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEn
 func QueryCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
 	CreateIndex(t, ti, tab, e, io, is)
 	FillIndex(t, e, ti)
-
-	// need tx to query index
-	ctx, _, _, abort, err := e.WithTransaction(context.Background())
-	defer abort()
-	require.NoError(t, err)
+	ctx := engine.WithEngine(context.Background(), e)
 
 	switch to.Engine {
 	case engine.TableKindLSM:
@@ -314,17 +278,17 @@ func QueryCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEng
 	}
 }
 
-func IsCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, si *schema.Schema, st *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
+func IsCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
 	t.Helper()
 
 	if io.Type != types.IndexTypeComposite {
 		// create index
-		CreateIndex(t, ti, tab, e, io, si)
+		CreateIndex(t, ti, tab, e, io, is)
 		// check is false
 		require.False(t, ti.IsComposite())
 	} else {
 		// create composite index index
-		cs, err := st.SelectFields("i64", "i32", "id")
+		cs, err := ts.SelectFields("i64", "i32", "$rid")
 		require.NoError(t, err)
 
 		CreateIndex(t, ti, tab, e, io, cs)

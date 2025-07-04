@@ -56,6 +56,19 @@ func (n *Node) AddLeaf(f *Filter) *Node {
 	return n
 }
 
+func (n *Node) And(n2 *Node) *Node {
+	if n.IsLeaf() {
+		n.Children = append(n.Children, NewNode().SetFilter(n.Filter))
+		n.Filter = nil
+	}
+	if n2.IsLeaf() {
+		n.Children = append(n.Children, n2)
+	} else {
+		n.Children = append(n.Children, n2.Children...)
+	}
+	return n
+}
+
 func (n *Node) SetOr(b bool) *Node {
 	n.OrKind = b
 	return n
