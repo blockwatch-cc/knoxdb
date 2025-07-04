@@ -16,6 +16,10 @@ func ChunkPos(n int) int {
 	return n & CHUNK_MASK
 }
 
+func ToChunkSize(n int) int {
+	return (n + CHUNK_MASK) &^ CHUNK_MASK
+}
+
 type Set[E any] interface {
 	Set(E)
 	Unset(E)

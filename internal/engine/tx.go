@@ -289,7 +289,7 @@ func (t *Tx) Lock(ctx context.Context, oid uint64) error {
 	if err := t.Err(); err != nil {
 		return err
 	}
-	t.engine.log.Tracef("Lock tx %s", t.id)
+	// t.engine.log.Tracef("Lock tx %s", t.id)
 	return t.engine.lm.Lock(ctx, t.id, LockModeExclusive, oid)
 }
 
@@ -297,7 +297,7 @@ func (t *Tx) Unlock() {
 	if t == nil {
 		return
 	}
-	t.engine.log.Tracef("Unlock tx %s", t.id)
+	// t.engine.log.Tracef("Unlock tx %s", t.id)
 	t.engine.lm.Done(t.id)
 }
 
@@ -308,7 +308,7 @@ func (t *Tx) RLock(ctx context.Context, oid uint64) error {
 	if err := t.Err(); err != nil {
 		return err
 	}
-	t.engine.log.Tracef("Rlock tx %s", t.id)
+	// t.engine.log.Tracef("Rlock tx %s", t.id)
 	return t.engine.lm.Lock(ctx, t.id, LockModeShared, oid)
 }
 
