@@ -119,7 +119,7 @@ func BenchmarkTombAdd(b *testing.B) {
 		b.Run(c.Name, func(b *testing.B) {
 			for b.Loop() {
 				for i := range c.N {
-					tomb.Append(uint64(i+1), uint64(i+1), true)
+					tomb.Append(types.XID(i+1), uint64(i+1), true)
 				}
 				tomb.Clear()
 			}
@@ -130,11 +130,11 @@ func BenchmarkTombAdd(b *testing.B) {
 func BenchmarkTombMerge(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		tomb := newTomb(c.N)
-		snap := types.NewSnapshot(uint64(c.N/2), uint64(c.N/2), uint64(c.N)+1)
+		snap := types.NewSnapshot(types.XID(c.N/2), types.XID(c.N/2), types.XID(c.N)+1)
 		for i := range c.N {
-			tomb.Append(uint64(i+1), uint64(i+1), true)
+			tomb.Append(types.XID(i+1), uint64(i+1), true)
 			if i > c.N/2 {
-				snap.AddActive(uint64(i + 1))
+				snap.AddActive(types.XID(i + 1))
 			}
 		}
 		set := xroar.New()

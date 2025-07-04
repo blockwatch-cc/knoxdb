@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 
 	"blockwatch.cc/knoxdb/internal/bitset"
+	"blockwatch.cc/knoxdb/internal/types"
 	"github.com/echa/log"
 )
 
@@ -28,10 +29,10 @@ func init() {
 
 const (
 	CommitLogName          = "xlog.bin"
-	CommitFrameHeaderSize  = 12                              // bytes
-	CommitFramePayloadSize = 1 << 16                         // 64k bytes
-	CommitFrameShift       = 19                              // bit shift for frame/offset calculation
-	CommitFrameMask        = uint64(1<<CommitFrameShift) - 1 // bits for address calculation
+	CommitFrameHeaderSize  = 12                          // bytes
+	CommitFramePayloadSize = 1 << 16                     // 64k bytes
+	CommitFrameShift       = 19                          // bit shift for frame/offset calculation
+	CommitFrameMask        = (1 << CommitFrameShift) - 1 // bits for address calculation
 	CommitFrameSize        = CommitFrameHeaderSize + CommitFramePayloadSize
 )
 
@@ -46,7 +47,7 @@ type CommitLog struct {
 type CommitFrame struct {
 	checkpoint LSN            // latest update written to this frame
 	offset     int64          // file offset (calculated)
-	xmin       uint64         // min xid (calculated)
+	xmin       types.XID      // min xid (calculated)
 	bits       *bitset.Bitset // commit bits
 	dirty      bool           // content changed, must flush to disk
 	log        log.Logger     // logger
@@ -55,7 +56,7 @@ type CommitFrame struct {
 func NewCommitFrame(id int64) *CommitFrame {
 	return &CommitFrame{
 		offset: id * CommitFrameSize,
-		xmin:   uint64(id) << CommitFrameShift,
+		xmin:   types.XID(id) << CommitFrameShift,
 		bits:   bitset.New(CommitFramePayloadSize << 3),
 		log:    log.Disabled,
 	}
@@ -75,19 +76,19 @@ func (f *CommitFrame) Close() {
 	f.dirty = false
 }
 
-func (f *CommitFrame) Xmin() uint64 {
+func (f *CommitFrame) Xmin() types.XID {
 	return f.xmin
 }
 
-func (f *CommitFrame) Xmax() uint64 {
+func (f *CommitFrame) Xmax() types.XID {
 	return f.xmin + 1<<CommitFrameShift - 1
 }
 
-func (f *CommitFrame) IsCommitted(xid uint64) bool {
+func (f *CommitFrame) IsCommitted(xid types.XID) bool {
 	return f.bits.Contains(int(xid - f.xmin))
 }
 
-func (f *CommitFrame) Append(xid uint64, lsn LSN) {
+func (f *CommitFrame) Append(xid types.XID, lsn LSN) {
 	if f.bits == nil {
 		f.log.Debugf("appending xid: %d lsn: %d to closed frame", xid, lsn)
 	}
@@ -96,7 +97,7 @@ func (f *CommitFrame) Append(xid uint64, lsn LSN) {
 	f.checkpoint = max(f.checkpoint, lsn)
 }
 
-func (f *CommitFrame) Contains(xid uint64) bool {
+func (f *CommitFrame) Contains(xid types.XID) bool {
 	return xid-f.xmin <= CommitFrameMask
 }
 
@@ -290,7 +291,7 @@ func (c *CommitLog) Sync() error {
 	return c.fd.Sync()
 }
 
-func (c *CommitLog) IsCommitted(xid uint64) (bool, error) {
+func (c *CommitLog) IsCommitted(xid types.XID) (bool, error) {
 	if c.tail.Contains(xid) {
 		return c.tail.IsCommitted(xid), nil
 	}
@@ -311,7 +312,7 @@ func (c *CommitLog) IsCommitted(xid uint64) (bool, error) {
 	return c.last.IsCommitted(xid), nil
 }
 
-func (c *CommitLog) Append(xid uint64, lsn LSN) error {
+func (c *CommitLog) Append(xid types.XID, lsn LSN) error {
 	c.checkpoint = max(c.checkpoint, lsn)
 
 	// txid is in tail frame

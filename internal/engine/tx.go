@@ -39,6 +39,7 @@ const (
 	TxFlagNoWait           // don't block in single writer mode
 	TxFlagCatalog          // txn made changes to catalog (internal)
 	TxFlagConflict         // conflict detected, abort on commit (internal)
+	TxFlagAborted          // set on close when aborted (internal)
 
 	// multi-writer support
 	TxFlagDelaySync    // batch wal fsync requests
@@ -46,11 +47,10 @@ const (
 	TxFlagDeferred     // wait for safe snapshot (TODO)
 )
 
-const ReadTxOffset uint64 = 1 << 63
-
 func (f TxFlags) IsReadOnly() bool     { return f&TxFlagReadOnly > 0 }
 func (f TxFlags) IsCatalog() bool      { return f&TxFlagCatalog > 0 }
 func (f TxFlags) IsConflict() bool     { return f&TxFlagConflict > 0 }
+func (f TxFlags) IsAborted() bool      { return f&TxFlagAborted > 0 }
 func (f TxFlags) IsNoWal() bool        { return f&TxFlagNoWal > 0 }
 func (f TxFlags) IsNoSync() bool       { return f&TxFlagNoSync > 0 }
 func (f TxFlags) IsNoWait() bool       { return f&TxFlagNoWait > 0 }
@@ -60,10 +60,12 @@ func (f TxFlags) IsDeferred() bool     { return f&TxFlagDeferred > 0 }
 
 type TxHook func(Context) error
 
+const ReadTxOffset = types.ReadTxOffset
+
 type Tx struct {
 	ctx      context.Context         // derived context so tx is cancellable
 	cancel   context.CancelCauseFunc // cancel tx with this function
-	id       uint64                  // unique tx id (read-only txn use alternative range)
+	id       types.XID               // unique tx id (read-only txn use alternative range)
 	engine   *Engine                 // reference to engine
 	catTx    store.Tx                // separate storage tx for catalog db
 	snap     *types.Snapshot         // isolation snapshot
@@ -130,21 +132,42 @@ func (e *Engine) NewTransaction(uflags TxFlags) *Tx {
 	if uflags.IsReadOnly() {
 		// create snapshot for read transactions (don't pollute xid space, use virtual id)
 		e.mu.Lock()
-		tx.id = atomic.AddUint64(&e.vnext, 1)
+		tx.id = types.XID(atomic.AddUint64((*uint64)(&e.vnext), 1)) - 1
 		tx.snap = e.NewSnapshot(0)
 		e.txs.Add(tx)
 		e.mu.Unlock()
 	} else {
 		// generate txid for write transactions and store in global tx list
 		e.mu.Lock()
-		tx.id = atomic.AddUint64(&e.xnext, 1)
+		tx.id = types.XID(atomic.AddUint64((*uint64)(&e.xnext), 1)) - 1
 		tx.snap = e.NewSnapshot(tx.id)
 		e.txs.Add(tx)
 		e.mu.Unlock()
 	}
-	e.log.Tracef("New tx %d", tx.id)
+
+	// e.log.Tracef("New tx %s", tx.id)
 
 	return tx
+}
+
+// Must be called holding the engine lock
+func (e *Engine) NewSnapshot(id XID) *types.Snapshot {
+	s := types.NewSnapshot(id, e.xmin, e.xnext)
+	for _, x := range e.txs {
+		if x.IsReadOnly() {
+			continue
+		}
+		s.AddActive(x.id)
+	}
+	return s
+}
+
+// called during wal replay
+func (e *Engine) UpdateTxHorizon(xid types.XID) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.xmin = max(e.xmin, xid)
+	e.xnext = e.xmin + 1
 }
 
 func (e *Engine) delTx(tx *Tx) {
@@ -170,7 +193,7 @@ func (e *Engine) delTx(tx *Tx) {
 	}
 
 	// release all locks
-	e.log.Tracef("Unlock tx %d", tx.id)
+	// e.log.Tracef("Unlock tx %s", tx.id)
 	e.lm.Done(tx.id)
 
 	e.mu.Unlock()
@@ -196,13 +219,21 @@ func (t *Tx) IsClosed() bool {
 	return t.engine == nil
 }
 
+func (t *Tx) IsAborted() bool {
+	return t.engine == nil && t.flags.IsAborted()
+}
+
+func (t *Tx) IsCommitted() bool {
+	return t.engine == nil && !t.flags.IsAborted()
+}
+
 func (t *Tx) UseWal() bool {
 	return !t.flags.IsNoWal() &&
 		t.engine.wal != nil &&
 		(len(t.touched) > 0 || t.flags.IsCatalog())
 }
 
-func (t *Tx) Id() uint64 {
+func (t *Tx) Id() types.XID {
 	return t.id
 }
 
@@ -237,12 +268,11 @@ func (t *Tx) Close() {
 		t.engine.writeToken <- struct{}{}
 	}
 
-	// cleanup
+	// cleanup, but keep id and flags
 	clear(t.touched)
+	t.snap.Close()
 	t.catTx = nil
 	t.snap = nil
-	t.flags = 0
-	t.id = 0
 	t.engine = nil
 
 	// reset all
@@ -259,7 +289,7 @@ func (t *Tx) Lock(ctx context.Context, oid uint64) error {
 	if err := t.Err(); err != nil {
 		return err
 	}
-	t.engine.log.Tracef("Lock tx %d", t.id)
+	t.engine.log.Tracef("Lock tx %s", t.id)
 	return t.engine.lm.Lock(ctx, t.id, LockModeExclusive, oid)
 }
 
@@ -267,7 +297,7 @@ func (t *Tx) Unlock() {
 	if t == nil {
 		return
 	}
-	t.engine.log.Tracef("Unlock tx %d", t.id)
+	t.engine.log.Tracef("Unlock tx %s", t.id)
 	t.engine.lm.Done(t.id)
 }
 
@@ -278,7 +308,7 @@ func (t *Tx) RLock(ctx context.Context, oid uint64) error {
 	if err := t.Err(); err != nil {
 		return err
 	}
-	t.engine.log.Tracef("Rlock tx %d", t.id)
+	t.engine.log.Tracef("Rlock tx %s", t.id)
 	return t.engine.lm.Lock(ctx, t.id, LockModeShared, oid)
 }
 
@@ -316,16 +346,16 @@ func (t *Tx) Commit() error {
 	}
 
 	if t.IsClosed() {
-		return nil
+		return t.Err()
 	}
 
 	defer t.Close()
 
 	if t.IsReadOnly() {
-		return nil
+		return t.Err()
 	}
 
-	t.engine.log.Tracef("Commit tx %d", t.id)
+	// t.engine.log.Tracef("Commit tx %s", t.id)
 
 	// don't log read only tx or tx without activity
 	if t.UseWal() {
@@ -402,16 +432,17 @@ func (t *Tx) Abort() error {
 	}
 
 	if t.IsClosed() {
-		return nil
+		return t.Err()
 	}
 
+	t.flags |= TxFlagAborted
 	defer t.Close()
 
 	if t.IsReadOnly() {
-		return nil
+		return t.Err()
 	}
 
-	t.engine.log.Tracef("Abort tx %d", t.id)
+	// t.engine.log.Tracef("Abort tx %d", t.id)
 
 	// don't log read only tx or tx without activity
 	if t.UseWal() {
@@ -505,6 +536,7 @@ func (t *Tx) Kill(err error) error {
 	// cancel context
 	t.cancel(err)
 	err = nil
+	t.flags |= TxFlagAborted
 
 	// close catalog tx
 	if t.catTx != nil {
@@ -546,47 +578,3 @@ func (t *Tx) CatalogTx(db store.DB, write bool) (store.Tx, error) {
 	t.flags |= TxFlagCatalog
 	return tx, nil
 }
-
-// DEPRECATED: write is background only
-// func (t *Tx) StoreTx(db store.DB, write bool) (store.Tx, error) {
-// 	if t == nil {
-// 		return nil, ErrNoTx
-// 	}
-// 	if err := t.Err(); err != nil {
-// 		return nil, err
-// 	}
-// 	tx, ok := t.dbTx[db]
-// 	if ok {
-// 		if write && !tx.IsWriteable() {
-// 			// cancel and upgrade tx
-// 			if err := tx.Rollback(); err != nil {
-// 				return nil, err
-// 			}
-// 			delete(t.dbTx, db)
-// 		} else {
-// 			return tx, nil
-// 		}
-// 	}
-// 	tx, err := db.Begin(write)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	t.dbTx[db] = tx
-// 	return tx, nil
-// }
-
-// // Commits and reopens a writeable storage tx. This may be used to flush verly large
-// // transactions to storage in incremental pieces.
-// func (t *Tx) Continue(tx store.Tx) (store.Tx, error) {
-// 	if err := t.Err(); err != nil {
-// 		return nil, err
-// 	}
-// 	db := tx.DB()
-// 	tx, err := store.CommitAndContinue(tx)
-// 	if err != nil {
-// 		delete(t.dbTx, db)
-// 		return nil, err
-// 	}
-// 	t.dbTx[db] = tx
-// 	return tx, nil
-// }

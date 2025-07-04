@@ -53,7 +53,7 @@ func (l LSN) Offset(sz int) int64 {
 type Record struct {
 	Type   RecordType
 	Tag    types.ObjectTag // object kind (db, table, store, enum, etc)
-	TxID   uint64          // unique transaction id this record was belongs to
+	TxID   types.XID       // unique transaction id this record was belongs to
 	Entity uint64          // object id (tagged hash for db, table, store, enum, etc)
 	Data   [][]byte        // iovec body with encoded data, may be empty
 	Lsn    LSN             // the record's byte offset in the WAL

@@ -38,7 +38,7 @@ func (j *Journal) DeletePack(ctx context.Context, src *pack.Package) (int, error
 	}
 }
 
-func (j *Journal) deletePackWithWal(src *pack.Package, xid uint64, w *wal.Wal) (int, error) {
+func (j *Journal) deletePackWithWal(src *pack.Package, xid types.XID, w *wal.Wal) (int, error) {
 	// WAL Record format
 	// | rid1 | rid2 | ... |
 	var (
@@ -149,7 +149,7 @@ func (j *Journal) deletePackWithWal(src *pack.Package, xid uint64, w *wal.Wal) (
 	return count, nil
 }
 
-func (j *Journal) deletePackNoWal(src *pack.Package, xid uint64) (int, error) {
+func (j *Journal) deletePackNoWal(src *pack.Package, xid types.XID) (int, error) {
 	var (
 		sel   = src.Selected() // selection vector, may be nil
 		count int

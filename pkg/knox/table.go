@@ -159,7 +159,7 @@ func (t TableImpl) Count(ctx context.Context, q QueryRequest) (uint64, error) {
 	}
 
 	// use or open tx
-	ctx, commit, abort, err := t.db.Begin(ctx)
+	ctx, commit, abort, err := t.db.Begin(ctx, TxFlagReadOnly)
 	if err != nil {
 		return 0, err
 	}
@@ -188,7 +188,7 @@ func (t TableImpl) Query(ctx context.Context, q QueryRequest) (QueryResult, erro
 	}
 
 	// use or open tx
-	ctx, commit, abort, err := t.db.Begin(ctx)
+	ctx, commit, abort, err := t.db.Begin(ctx, TxFlagReadOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -218,7 +218,7 @@ func (t TableImpl) Stream(ctx context.Context, q QueryRequest, fn func(QueryRow)
 	defer plan.Close()
 
 	// use or open tx
-	ctx, commit, abort, err := t.db.Begin(ctx)
+	ctx, commit, abort, err := t.db.Begin(ctx, TxFlagReadOnly)
 	if err != nil {
 		return err
 	}
@@ -430,7 +430,7 @@ func (t *GenericTable[T]) Count(ctx context.Context, q QueryRequest) (uint64, er
 	}
 
 	// use or open tx
-	ctx, commit, abort, err := t.db.Begin(ctx)
+	ctx, commit, abort, err := t.db.Begin(ctx, TxFlagReadOnly)
 	if err != nil {
 		return 0, err
 	}
@@ -459,7 +459,7 @@ func (t *GenericTable[T]) Query(ctx context.Context, q QueryRequest) (QueryResul
 	}
 
 	// use or open tx
-	ctx, commit, abort, err := t.db.Begin(ctx)
+	ctx, commit, abort, err := t.db.Begin(ctx, TxFlagReadOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -488,7 +488,7 @@ func (t *GenericTable[T]) Stream(ctx context.Context, q QueryRequest, fn func(Qu
 	}
 
 	// use or open tx
-	ctx, commit, abort, err := t.db.Begin(ctx)
+	ctx, commit, abort, err := t.db.Begin(ctx, TxFlagReadOnly)
 	if err != nil {
 		return err
 	}

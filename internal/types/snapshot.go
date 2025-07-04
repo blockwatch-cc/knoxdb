@@ -5,25 +5,38 @@ package types
 
 import (
 	"math/bits"
+	"strconv"
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/bitset"
 )
+
+type XID uint64
+
+const ReadTxOffset XID = 1 << 63
+
+func (x XID) String() string {
+	if x > ReadTxOffset {
+		return "R-" + strconv.FormatUint(uint64(x-ReadTxOffset), 10)
+	} else {
+		return "W-" + strconv.FormatUint(uint64(x), 10)
+	}
+}
 
 var snapPool = sync.Pool{
 	New: func() any { return new(Snapshot) },
 }
 
 type Snapshot struct {
-	Xown uint64         // current transaction id (0 when readonly)
-	Xmin uint64         // minimum active transaction id
-	Xmax uint64         // next tx id (not yet assigned)
-	Xaci uint64         // bitset with active tx ids (xmax-xmin <= 64)
+	Xown XID            // current transaction id (0 when readonly)
+	Xmin XID            // minimum active transaction id
+	Xmax XID            // next tx id (not yet assigned)
+	Xaci XID            // bitset with active tx ids (xmax-xmin <= 64)
 	Xact *bitset.Bitset // bitset with active tx ids (xmax-xmin > 64)
 	Safe bool           // snapshot is safe (xact = 0 || only readonly tx)
 }
 
-func NewSnapshot(xid, xmin, xmax uint64) *Snapshot {
+func NewSnapshot(xid, xmin, xmax XID) *Snapshot {
 	s := snapPool.Get().(*Snapshot)
 	s.Xown = xid
 	s.Xmin = xmin
@@ -46,7 +59,7 @@ func (s *Snapshot) Close() {
 }
 
 // we only add writable tx here
-func (s *Snapshot) AddActive(xid uint64) *Snapshot {
+func (s *Snapshot) AddActive(xid XID) *Snapshot {
 	if s.Xact == nil {
 		s.Xaci |= 1 << (xid - s.Xmin)
 	} else {
@@ -58,7 +71,7 @@ func (s *Snapshot) AddActive(xid uint64) *Snapshot {
 
 // IsVisible returns true when records updated by this xid
 // are visible to the snapshot.
-func (s *Snapshot) IsVisible(xid uint64) bool {
+func (s *Snapshot) IsVisible(xid XID) bool {
 	// records from aborted tx (xid = 0) and future tx are invisible
 	// note xmax is next assignable xid at time of snapshot
 	if xid == 0 || xid >= s.Xmax {
@@ -89,7 +102,7 @@ func (s *Snapshot) IsVisible(xid uint64) bool {
 	}
 }
 
-func (s *Snapshot) IsConflict(xid uint64) bool {
+func (s *Snapshot) IsConflict(xid XID) bool {
 	if xid < s.Xmin || xid == s.Xown {
 		return false
 	}

@@ -21,14 +21,14 @@ type Tomb struct {
 	rids   *xroar.Bitmap // rids with tombstones (updated or deleted records)
 	stones Tombstones    // list of tombstones sorted by xid
 	sz     int           // max number of tombstones
-	xmax   uint64        // max xid, used to determine sort/insertion policy
+	xmax   types.XID     // max xid, used to determine sort/insertion policy
 	dirty  bool
 }
 
 type Tombstone struct {
-	Xid   uint64 // transaction that deleted this record
-	Rid   uint64 // unique row id of the deleted record
-	IsDel bool   // whether the tomstone is for a true delete or update
+	Xid   types.XID // transaction that deleted this record
+	Rid   uint64    // unique row id of the deleted record
+	IsDel bool      // whether the tomstone is for a true delete or update
 }
 
 // kept sorted by xid
@@ -74,7 +74,7 @@ func (t *Tomb) Size() int {
 	return 16*len(t.stones) + t.rids.Size() + 44
 }
 
-func (t *Tomb) Append(xid, rid uint64, isDelete bool) {
+func (t *Tomb) Append(xid types.XID, rid uint64, isDelete bool) {
 	if t.rids == nil {
 		t.rids = xroar.New()
 		t.stones = make(Tombstones, 0, t.sz)
@@ -97,11 +97,11 @@ func (t *Tomb) Append(xid, rid uint64, isDelete bool) {
 	t.dirty = true
 }
 
-func (t *Tomb) CommitTx(xid uint64) {
+func (t *Tomb) CommitTx(xid types.XID) {
 	// noop
 }
 
-func (t *Tomb) AbortTx(xid uint64) (int, int) {
+func (t *Tomb) AbortTx(xid types.XID) (int, int) {
 	l := len(t.stones)
 	idx := sort.Search(l, func(i int) bool {
 		return t.stones[i].Xid >= xid
@@ -140,7 +140,7 @@ func (t *Tomb) AbortTx(xid uint64) (int, int) {
 	return n, d
 }
 
-func (t *Tomb) AbortActiveTx(xid uint64) (int, int) {
+func (t *Tomb) AbortActiveTx(xid types.XID) (int, int) {
 	var (
 		n, d, i int
 		l       = len(t.stones)
@@ -205,7 +205,7 @@ func (t *Tomb) MergeVisible(set *xroar.Bitmap, snap *types.Snapshot) {
 	// otherwise walk stones backwards to unset invisible rids checking
 	// each xid once against snapshot
 	var (
-		last uint64
+		last types.XID
 		skip bool
 	)
 	for i := len(t.stones) - 1; i >= 0; i-- {
@@ -292,12 +292,12 @@ func (t *Tomb) MarshalBinary() ([]byte, error) {
 
 	// write minima
 	buf.Write(b[:num.PutUvarint(b[:], minRid)])
-	buf.Write(b[:num.PutUvarint(b[:], minXid)])
+	buf.Write(b[:num.PutUvarint(b[:], uint64(minXid))])
 
 	// write diffs
 	for _, v := range t.stones {
 		buf.Write(b[:binary.PutUvarint(b[:], v.Rid-minRid)])
-		buf.Write(b[:binary.PutUvarint(b[:], v.Xid-minXid)])
+		buf.Write(b[:binary.PutUvarint(b[:], uint64(v.Xid-minXid))])
 	}
 
 	return buf.Bytes(), nil
@@ -333,7 +333,7 @@ func (t *Tomb) UnmarshalBinary(buf []byte) error {
 
 		v, n = num.Uvarint(buf)
 		buf = buf[n:]
-		t.stones[i].Xid = v + minXid
+		t.stones[i].Xid = types.XID(v + minXid)
 
 		if n == 0 {
 			return io.ErrShortBuffer

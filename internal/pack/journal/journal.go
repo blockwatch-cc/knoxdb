@@ -262,7 +262,7 @@ func (j *Journal) AbortMerged(s *Segment) {
 	s.setState(SegmentStateComplete)
 }
 
-func (j *Journal) CommitTx(xid uint64) bool {
+func (j *Journal) CommitTx(xid types.XID) bool {
 	if j.tip.ContainsTx(xid) {
 		j.tip.CommitTx(xid)
 	}
@@ -277,7 +277,7 @@ func (j *Journal) CommitTx(xid uint64) bool {
 	return j.compact()
 }
 
-func (j *Journal) AbortTx(xid uint64) bool {
+func (j *Journal) AbortTx(xid types.XID) bool {
 	// update tip
 	if j.tip.ContainsTx(xid) {
 		j.tip.AbortTx(xid)

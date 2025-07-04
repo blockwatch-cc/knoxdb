@@ -42,7 +42,7 @@ func (j *Journal) UpdatePack(ctx context.Context, src *pack.Package) (int, error
 	}
 }
 
-func (j *Journal) updatePackNoWal(src *pack.Package, xid uint64) (int, error) {
+func (j *Journal) updatePackNoWal(src *pack.Package, xid types.XID) (int, error) {
 	var (
 		state   pack.AppendState
 		mode    = pack.WriteModeAll
@@ -71,7 +71,7 @@ func (j *Journal) updatePackNoWal(src *pack.Package, xid uint64) (int, error) {
 			// write rid, ref, xid vectors directly
 			rids.Set(i, nextRid)
 			refs.Set(i, ref)
-			xmins.Set(i, xid)
+			xmins.Set(i, uint64(xid))
 
 			// add insert + delete info, set xmax on ref when in tip segment
 			j.tip.NotifyUpdate(xid, nextRid, ref)
@@ -93,7 +93,7 @@ func (j *Journal) updatePackNoWal(src *pack.Package, xid uint64) (int, error) {
 	return count, nil
 }
 
-func (j *Journal) updatePackWithWal(src *pack.Package, xid uint64, w *wal.Wal) (int, error) {
+func (j *Journal) updatePackWithWal(src *pack.Package, xid types.XID, w *wal.Wal) (int, error) {
 	// - src: full pack with current PK / RID, some columns changed (dirty, materialized)
 	//   and optional selection vector
 	// - dst: journal and WAL

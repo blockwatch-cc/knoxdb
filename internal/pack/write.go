@@ -46,9 +46,9 @@ func (p *Package) AppendWire(buf []byte, meta *schema.Meta) {
 				case schema.MetaRef:
 					b.Uint64().Append(meta.Ref)
 				case schema.MetaXmin:
-					b.Uint64().Append(meta.Xmin)
+					b.Uint64().Append(uint64(meta.Xmin))
 				case schema.MetaXmax:
-					b.Uint64().Append(meta.Xmax)
+					b.Uint64().Append(uint64(meta.Xmax))
 				case schema.MetaDel:
 					b.Bool().Append(meta.IsDel)
 				}

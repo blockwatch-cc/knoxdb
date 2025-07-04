@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"blockwatch.cc/knoxdb/internal/engine"
+	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/wal"
 )
 
@@ -23,7 +24,7 @@ import (
 // Delete
 // | wal rec header | rid1 | rid2 | ... |
 func (t *Table) ReplayWal(ctx context.Context) error {
-	var xmax uint64 // highest xid seen
+	var xmax types.XID // highest xid seen
 	start := time.Now()
 
 	t.log.Debugf("table[%s]: recovering journals from wal lsn 0x%x", t.schema.Name(), t.state.Checkpoint)

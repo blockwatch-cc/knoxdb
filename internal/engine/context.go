@@ -78,7 +78,7 @@ func (e *Engine) WithTransaction(ctx context.Context, flags ...TxFlags) (context
 		}
 
 		// channel closed during wait
-		if !ok {
+		if !ok || e.IsShutdown() {
 			return ctx, nil, noop, noop, ErrDatabaseShutdown
 		}
 	}
@@ -95,7 +95,7 @@ func (e *Engine) WithTransaction(ctx context.Context, flags ...TxFlags) (context
 	// use ctx in tx (will make cancelable and forward to commit/abort callbacks)
 	tx.WithContext(ctx)
 
-	return ctx, tx, tx.Commit, tx.Abort, nil
+	return tx.ctx, tx, tx.Commit, tx.Abort, nil
 }
 
 func noop() error {
@@ -110,7 +110,7 @@ func GetTransaction(ctx context.Context) *Tx {
 	return val.(*Tx)
 }
 
-func GetTxId(ctx context.Context) uint64 {
+func GetTxId(ctx context.Context) types.XID {
 	val := ctx.Value(TransactionKey{})
 	if val == nil {
 		return 0

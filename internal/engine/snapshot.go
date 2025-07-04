@@ -3,22 +3,6 @@
 
 package engine
 
-import (
-	"blockwatch.cc/knoxdb/internal/types"
-)
-
-// Must be called holding the engine lock
-func (e *Engine) NewSnapshot(id uint64) *types.Snapshot {
-	s := types.NewSnapshot(id, e.xmin, e.xnext)
-	for _, x := range e.txs {
-		if x.IsReadOnly() {
-			continue
-		}
-		s.AddActive(x.id)
-	}
-	return s
-}
-
 // func (e *Engine) CreateSnapshot(name string) (*Snapshot, error) {
 
 // }

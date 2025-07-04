@@ -260,10 +260,10 @@ func (kv *KVStore) Drop(ctx context.Context) error {
 	return nil
 }
 
-func (kv *KVStore) CommitTx(_ context.Context, _ uint64) error {
+func (kv *KVStore) CommitTx(_ context.Context, _ types.XID) error {
 	return nil
 }
 
-func (kv *KVStore) AbortTx(_ context.Context, _ uint64) error {
+func (kv *KVStore) AbortTx(_ context.Context, _ types.XID) error {
 	return nil
 }

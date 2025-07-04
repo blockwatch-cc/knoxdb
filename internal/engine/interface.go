@@ -22,6 +22,7 @@ type (
 	FilterMode = types.FilterMode
 	Package    = pack.Package
 	WriteMode  = pack.WriteMode
+	XID        = types.XID
 )
 
 type TableKind string
@@ -64,8 +65,8 @@ type TableEngine interface {
 	Indexes() []QueryableIndex
 
 	// Tx Management
-	CommitTx(ctx Context, xid uint64) error
-	AbortTx(ctx Context, xid uint64) error
+	CommitTx(ctx Context, xid XID) error
+	AbortTx(ctx Context, xid XID) error
 
 	// data handling
 	NewReader() TableReader
@@ -230,8 +231,8 @@ type StoreEngine interface {
 	Scan(ctx Context, from, to []byte, fn func(ctx Context, k, v []byte) error) error
 
 	// Tx Management
-	CommitTx(ctx Context, xid uint64) error
-	AbortTx(ctx Context, xid uint64) error
+	CommitTx(ctx Context, xid XID) error
+	AbortTx(ctx Context, xid XID) error
 }
 
 type ConditionMatcher interface {
@@ -241,6 +242,6 @@ type ConditionMatcher interface {
 
 // all objects that support tracking tx info
 type TxTracker interface {
-	CommitTx(ctx Context, xid uint64) error
-	AbortTx(ctx Context, xid uint64) error
+	CommitTx(ctx Context, xid XID) error
+	AbortTx(ctx Context, xid XID) error
 }

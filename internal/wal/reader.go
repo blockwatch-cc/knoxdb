@@ -22,7 +22,7 @@ type WalReader interface {
 	WithType(RecordType) WalReader
 	WithTag(types.ObjectTag) WalReader
 	WithEntity(uint64) WalReader
-	WithTxID(uint64) WalReader
+	WithTxID(types.XID) WalReader
 	WithCommitted(*CommitLog) WalReader
 }
 
@@ -30,7 +30,7 @@ type RecordFilter struct {
 	typ    RecordType
 	tag    types.ObjectTag
 	entity uint64
-	txid   uint64
+	txid   types.XID
 	xlog   *CommitLog
 }
 
@@ -69,7 +69,7 @@ type Reader struct {
 	rd     *BufioReader
 	hash   hash.Hash64
 	csum   uint64
-	xid    uint64
+	xid    types.XID
 	lsn    LSN
 	maxSz  int
 	maxLsn LSN
@@ -125,7 +125,7 @@ func (r *Reader) WithEntity(v uint64) WalReader {
 	return r
 }
 
-func (r *Reader) WithTxID(v uint64) WalReader {
+func (r *Reader) WithTxID(v types.XID) WalReader {
 	if r.flt == nil {
 		r.flt = &RecordFilter{}
 	}

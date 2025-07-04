@@ -27,9 +27,13 @@ func (p *Package) HasMeta() bool {
 func (p *Package) Pk(row int) uint64    { return p.blocks[p.px].Uint64().Get(row) }
 func (p *Package) RowId(row int) uint64 { return p.blocks[p.rx+ridOffs].Uint64().Get(row) }
 func (p *Package) RefId(row int) uint64 { return p.blocks[p.rx+refOffs].Uint64().Get(row) }
-func (p *Package) Xmin(row int) uint64  { return p.blocks[p.rx+xminOffs].Uint64().Get(row) }
-func (p *Package) Xmax(row int) uint64  { return p.blocks[p.rx+xmaxOffs].Uint64().Get(row) }
-func (p *Package) IsDel(row int) bool   { return p.blocks[p.rx+delOffs].Bool().Get(row) }
+func (p *Package) Xmin(row int) types.XID {
+	return types.XID(p.blocks[p.rx+xminOffs].Uint64().Get(row))
+}
+func (p *Package) Xmax(row int) types.XID {
+	return types.XID(p.blocks[p.rx+xmaxOffs].Uint64().Get(row))
+}
+func (p *Package) IsDel(row int) bool { return p.blocks[p.rx+delOffs].Bool().Get(row) }
 
 func (p *Package) Pks() types.NumberAccessor[uint64]    { return p.blocks[p.px].Uint64() }
 func (p *Package) RowIds() types.NumberAccessor[uint64] { return p.blocks[p.rx+ridOffs].Uint64() }
@@ -71,8 +75,8 @@ func (p *Package) SetMeta(row int, m *schema.Meta) {
 
 	p.blocks[p.rx+ridOffs].Uint64().Set(row, m.Rid)
 	p.blocks[p.rx+refOffs].Uint64().Set(row, m.Ref)
-	p.blocks[p.rx+xminOffs].Uint64().Set(row, m.Xmin)
-	p.blocks[p.rx+xmaxOffs].Uint64().Set(row, m.Xmax)
+	p.blocks[p.rx+xminOffs].Uint64().Set(row, uint64(m.Xmin))
+	p.blocks[p.rx+xmaxOffs].Uint64().Set(row, uint64(m.Xmax))
 	if m.Xmax > 0 {
 		p.blocks[p.rx+delOffs].Bool().Set(row)
 	} else {

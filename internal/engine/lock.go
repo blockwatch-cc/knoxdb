@@ -49,16 +49,16 @@ const (
 type LockManager struct {
 	mu      sync.Mutex
 	timeout time.Duration
-	locks   []*lock            // all granted locks, use chan for exclusive access
-	granted map[uint64][]*lock // map of tx id to locks granted
-	nlocks  int64              // total number of locks currently in existence
+	locks   []*lock         // all granted locks, use chan for exclusive access
+	granted map[XID][]*lock // map of tx id to locks granted
+	nlocks  int64           // total number of locks currently in existence
 }
 
 func NewLockManager() *LockManager {
 	m := &LockManager{
 		timeout: 10 * time.Second,
 		locks:   make([]*lock, 0),
-		granted: make(map[uint64][]*lock),
+		granted: make(map[XID][]*lock),
 	}
 	return m
 }
@@ -147,7 +147,7 @@ var (
 // form a fifo queue (linked list)
 type waiter struct {
 	next *waiter
-	xid  uint64
+	xid  XID
 	ch   chan struct{}
 	excl bool
 }
@@ -159,8 +159,8 @@ type waiter struct {
 // 	return n
 // }
 
-// func (l *lock) listWaiters() []uint64 {
-// 	n := make([]uint64, 0)
+// func (l *lock) listWaiters() []XID {
+// 	n := make([]XID, 0)
 // 	for w := l.front; w != nil; w = w.next {
 // 		n = append(n, w.xid)
 // 	}
@@ -210,7 +210,7 @@ func (l *lock) yield() {
 	}
 }
 
-func (l *lock) wait(xid uint64, isExcl bool) chan struct{} {
+func (l *lock) wait(xid XID, isExcl bool) chan struct{} {
 	w := waiterPool.Get().(*waiter)
 	w.next = nil
 	w.xid = xid
@@ -225,7 +225,7 @@ func (l *lock) wait(xid uint64, isExcl bool) chan struct{} {
 	return w.ch
 }
 
-func (l *lock) drop(xid uint64) {
+func (l *lock) drop(xid XID) {
 	if l.front == nil {
 		return
 	}
@@ -268,7 +268,7 @@ func (l *lock) drop(xid uint64) {
 }
 
 // Lock obtains a lock on a specific object.
-func (m *LockManager) Lock(ctx context.Context, xid uint64, mode LockMode, oid uint64) error {
+func (m *LockManager) Lock(ctx context.Context, xid XID, mode LockMode, oid uint64) error {
 	// upgrade context with timeout
 	if m.timeout > 0 {
 		var cancel context.CancelFunc
@@ -280,7 +280,7 @@ func (m *LockManager) Lock(ctx context.Context, xid uint64, mode LockMode, oid u
 }
 
 // TODO: not yet supported
-func (m *LockManager) LockPredicate(ctx context.Context, xid uint64, mode LockMode, oid uint64, pred ConditionMatcher) error {
+func (m *LockManager) LockPredicate(ctx context.Context, xid XID, mode LockMode, oid uint64, pred ConditionMatcher) error {
 	tx := GetTransaction(ctx)
 
 	// check tx status
@@ -307,7 +307,7 @@ func (m *LockManager) LockPredicate(ctx context.Context, xid uint64, mode LockMo
 }
 
 // Done releases all locks acquired by the given transaction xid.
-func (m *LockManager) Done(xid uint64) {
+func (m *LockManager) Done(xid XID) {
 	// exclusive access
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -339,7 +339,7 @@ func (m *LockManager) Done(xid uint64) {
 	atomic.StoreInt64(&m.nlocks, int64(len(m.locks)))
 }
 
-func (m *LockManager) acquire(ctx context.Context, xid uint64, mode LockMode, typ LockType, oid uint64, _ ConditionMatcher) error {
+func (m *LockManager) acquire(ctx context.Context, xid XID, mode LockMode, typ LockType, oid uint64, _ ConditionMatcher) error {
 	// sync state access
 	m.mu.Lock()
 
@@ -522,12 +522,12 @@ func getOrCreateLock(locks []*lock, typ LockType, oid uint64, exclusive bool) (*
 // Find cycle in dependency graph, starting at current xid. We are not yet waiting
 // on the next lock, but of lock is found in any of our dependecies granted lists
 // then we are about to get a deadlock.
-func (m *LockManager) detectDeadlock(next *lock, xid uint64) bool {
+func (m *LockManager) detectDeadlock(next *lock, xid XID) bool {
 	return m.hasLoopTo(m.granted[xid], next, xid)
 }
 
 // detect a potential loop in granted locks and waiters
-func (m *LockManager) hasLoopTo(locks []*lock, next *lock, self uint64) bool {
+func (m *LockManager) hasLoopTo(locks []*lock, next *lock, self XID) bool {
 	for _, l := range locks {
 		if l == next {
 			return true
@@ -546,7 +546,7 @@ func (m *LockManager) hasLoopTo(locks []*lock, next *lock, self uint64) bool {
 
 // Drop releases a single lock after it has been granted. its required to roll back
 // high level locks in case a lower level lock fails.
-// func (m *LockManager) drop(xid uint64, _ LockMode, typ LockType, oid uint64, _ ConditionMatcher) {
+// func (m *LockManager) drop(xid XID, _ LockMode, typ LockType, oid uint64, _ ConditionMatcher) {
 // 	// exclusive access
 // 	m.mu.Lock()
 // 	defer m.mu.Unlock()

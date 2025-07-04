@@ -115,22 +115,22 @@ var DefaultDatabaseOptions = DatabaseOptions{
 
 // knoxdb.schemas.catalog.v1
 type Catalog struct {
-	mu         sync.RWMutex        // guard write access to catalog internals
-	db         store.DB            // catalog database file
-	path       string              // database path, used for object file cleanup
-	name       string              // database name
-	id         uint64              // database tag
-	wal        *wal.Wal            // copy of wal managed by engine
-	checkpoint wal.LSN             // latest wal checkpoint that is safe in db
-	pending    map[uint64][]Object // active txids pending updates waiting for commit/abort
-	log        log.Logger          // logger handle
+	mu         sync.RWMutex           // guard write access to catalog internals
+	db         store.DB               // catalog database file
+	path       string                 // database path, used for object file cleanup
+	name       string                 // database name
+	id         uint64                 // database tag
+	wal        *wal.Wal               // copy of wal managed by engine
+	checkpoint wal.LSN                // latest wal checkpoint that is safe in db
+	pending    map[types.XID][]Object // active txids pending updates waiting for commit/abort
+	log        log.Logger             // logger handle
 }
 
 func NewCatalog(name string) *Catalog {
 	return &Catalog{
 		name:    name,
 		id:      types.TaggedHash(types.ObjectTagDatabase, name),
-		pending: make(map[uint64][]Object),
+		pending: make(map[types.XID][]Object),
 		log:     log.Disabled,
 	}
 }
@@ -872,7 +872,7 @@ func (c *Catalog) append(ctx context.Context, o Object) error {
 	return nil
 }
 
-func (c *Catalog) CommitTx(ctx context.Context, xid uint64) error {
+func (c *Catalog) CommitTx(ctx context.Context, xid types.XID) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -895,7 +895,7 @@ func (c *Catalog) CommitTx(ctx context.Context, xid uint64) error {
 	return c.doCheckpoint(ctx)
 }
 
-func (c *Catalog) AbortTx(ctx context.Context, xid uint64) error {
+func (c *Catalog) AbortTx(ctx context.Context, xid types.XID) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	pending, ok := c.pending[xid]
@@ -1026,7 +1026,7 @@ func (c *Catalog) Recover(ctx context.Context) error {
 	}
 
 	// track max committed/aborted xid seen
-	var xmax uint64
+	var xmax types.XID
 
 	// we may have data from multiple txn in the wal and each txn may
 	// have created, updated or removed multiple objects. some txn

@@ -6,6 +6,7 @@ package engine
 import (
 	"path/filepath"
 	"testing"
+	"time"
 
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/types"
@@ -18,22 +19,24 @@ import (
 
 const TEST_DB_NAME = "test"
 
-func NewTestDatabaseOptions(t *testing.T, driver string) DatabaseOptions {
+func NewTestDatabaseOptions(t testing.TB, driver string) DatabaseOptions {
 	return DatabaseOptions{
-		Path:       t.TempDir(),
-		Namespace:  "cx.bwd.knoxdb.testdb",
-		Driver:     driver,
-		PageSize:   4096,
-		PageFill:   1.0,
-		CacheSize:  1 << 20,
-		NoSync:     false,
-		NoGrowSync: false,
-		ReadOnly:   false,
-		Logger:     log.Log,
+		Path:          t.TempDir(),
+		Namespace:     "cx.bwd.knoxdb.testdb",
+		Driver:        driver,
+		PageSize:      4096,
+		PageFill:      1.0,
+		CacheSize:     1 << 20,
+		LockTimeout:   time.Second,
+		TxWaitTimeout: 0,
+		NoSync:        false,
+		NoGrowSync:    false,
+		ReadOnly:      false,
+		Logger:        log.Log,
 	}
 }
 
-func NewTestEngine(t *testing.T, opts DatabaseOptions) *Engine {
+func NewTestEngine(t testing.TB, opts DatabaseOptions) *Engine {
 	path := filepath.Join(opts.Path, TEST_DB_NAME)
 	e := &Engine{
 		path: path,
@@ -41,18 +44,20 @@ func NewTestEngine(t *testing.T, opts DatabaseOptions) *Engine {
 			blocks:  block.NewCache(0),
 			buffers: NewBufferCache(0),
 		},
-		tables:  util.NewLockFreeMap[uint64, TableEngine](),
-		stores:  util.NewLockFreeMap[uint64, StoreEngine](),
-		indexes: util.NewLockFreeMap[uint64, IndexEngine](),
-		enums:   schema.NewEnumRegistry(),
-		txs:     make(TxList, 0),
-		xmin:    0,
-		xnext:   1,
-		dbId:    types.TaggedHash(types.ObjectTagDatabase, TEST_DB_NAME),
-		opts:    opts,
-		cat:     NewCatalog(TEST_DB_NAME),
-		log:     opts.Logger,
-		lm:      NewLockManager(),
+		tables:     util.NewLockFreeMap[uint64, TableEngine](),
+		stores:     util.NewLockFreeMap[uint64, StoreEngine](),
+		indexes:    util.NewLockFreeMap[uint64, IndexEngine](),
+		enums:      schema.NewEnumRegistry(),
+		txs:        make(TxList, 0),
+		writeToken: make(chan struct{}, 1),
+		xmin:       1,
+		xnext:      1,
+		vnext:      ReadTxOffset,
+		dbId:       types.TaggedHash(types.ObjectTagDatabase, TEST_DB_NAME),
+		opts:       opts,
+		cat:        NewCatalog(TEST_DB_NAME),
+		log:        opts.Logger,
+		lm:         NewLockManager(),
 	}
 	var err error
 	e.wal, err = wal.Create(wal.WalOptions{
@@ -64,10 +69,11 @@ func NewTestEngine(t *testing.T, opts DatabaseOptions) *Engine {
 	})
 	require.NoError(t, err)
 	e.cat.WithWal(e.wal)
+	e.writeToken <- struct{}{}
 	return e
 }
 
-func OpenTestEngine(t *testing.T, opts DatabaseOptions) *Engine {
+func OpenTestEngine(t testing.TB, opts DatabaseOptions) *Engine {
 	path := filepath.Join(opts.Path, TEST_DB_NAME)
 	e := &Engine{
 		path: path,
@@ -75,18 +81,20 @@ func OpenTestEngine(t *testing.T, opts DatabaseOptions) *Engine {
 			blocks:  block.NewCache(0),
 			buffers: NewBufferCache(0),
 		},
-		tables:  util.NewLockFreeMap[uint64, TableEngine](),
-		stores:  util.NewLockFreeMap[uint64, StoreEngine](),
-		indexes: util.NewLockFreeMap[uint64, IndexEngine](),
-		enums:   schema.NewEnumRegistry(),
-		txs:     make(TxList, 0),
-		xmin:    0,
-		xnext:   1,
-		dbId:    types.TaggedHash(types.ObjectTagDatabase, TEST_DB_NAME),
-		opts:    opts,
-		cat:     NewCatalog(TEST_DB_NAME),
-		log:     opts.Logger,
-		lm:      NewLockManager(),
+		tables:     util.NewLockFreeMap[uint64, TableEngine](),
+		stores:     util.NewLockFreeMap[uint64, StoreEngine](),
+		indexes:    util.NewLockFreeMap[uint64, IndexEngine](),
+		enums:      schema.NewEnumRegistry(),
+		txs:        make(TxList, 0),
+		writeToken: make(chan struct{}, 1),
+		xmin:       1,
+		xnext:      1,
+		vnext:      ReadTxOffset,
+		dbId:       types.TaggedHash(types.ObjectTagDatabase, TEST_DB_NAME),
+		opts:       opts,
+		cat:        NewCatalog(TEST_DB_NAME),
+		log:        opts.Logger,
+		lm:         NewLockManager(),
 	}
 
 	var err error
@@ -98,5 +106,6 @@ func OpenTestEngine(t *testing.T, opts DatabaseOptions) *Engine {
 		Logger:         opts.Logger,
 	})
 	require.NoError(t, err)
+	e.writeToken <- struct{}{}
 	return e
 }

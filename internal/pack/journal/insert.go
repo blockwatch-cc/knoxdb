@@ -111,7 +111,7 @@ func (j *Journal) InsertPack(ctx context.Context, src *pack.Package) (uint64, in
 	}
 }
 
-func (j *Journal) insertPackNoWal(_ context.Context, src *pack.Package, xid uint64) (uint64, int, error) {
+func (j *Journal) insertPackNoWal(_ context.Context, src *pack.Package, xid types.XID) (uint64, int, error) {
 	var (
 		state   pack.AppendState
 		mode    = pack.WriteModeAll
@@ -138,7 +138,7 @@ func (j *Journal) insertPackNoWal(_ context.Context, src *pack.Package, xid uint
 		for i := pos; i < pos+n; i++ {
 			pks.Set(i, nextPk)
 			rids.Set(i, nextRid)
-			xmins.Set(i, xid)
+			xmins.Set(i, uint64(xid))
 			j.tip.NotifyInsert(xid, nextRid)
 			nextPk++
 			nextRid++
@@ -162,7 +162,7 @@ func (j *Journal) insertPackNoWal(_ context.Context, src *pack.Package, xid uint
 	return firstPk, count, nil
 }
 
-func (j *Journal) insertPackWithWal(_ context.Context, src *pack.Package, xid uint64, w *wal.Wal) (uint64, int, error) {
+func (j *Journal) insertPackWithWal(_ context.Context, src *pack.Package, xid types.XID, w *wal.Wal) (uint64, int, error) {
 	// WAL Record format (rids are sequential)
 	// | rid1 | wire1 | wire2 | ... |
 	var (

@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func genHeader(typ RecordType, tag types.ObjectTag, entity, xid uint64, bodysz int) (head RecordHeader) {
+func genHeader(typ RecordType, tag types.ObjectTag, entity uint64, xid types.XID, bodysz int) (head RecordHeader) {
 	head.SetType(typ)
 	head.SetTag(tag)
 	head.SetTxId(xid)
@@ -24,7 +24,7 @@ func genHeader(typ RecordType, tag types.ObjectTag, entity, xid uint64, bodysz i
 var headerTests = []struct {
 	name        string
 	header      RecordHeader
-	lastTxID    uint64
+	lastTxID    types.XID
 	currentLSN  LSN
 	maxWalLSN   LSN
 	expectError bool

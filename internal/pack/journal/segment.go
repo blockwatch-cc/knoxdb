@@ -45,21 +45,21 @@ type Segment struct {
 	tomb    *Tomb              // tombstone (compact delete records) with tx metadata
 	meta    *schema.Meta       // cache for decoded row metadata
 	lsn     wal.LSN            // WAL checkpoint, i.e. first LSN that holds data for this segment
-	xact    uint64             // single uncommitted xid in this segment (0 = none)
+	xact    types.XID          // single uncommitted xid in this segment (0 = none)
 	tstate  engine.ObjectState // table state (serial number generators, checkpoint LSN)
 	aborted *bitset.Bitset     // lazy allocated bitset flagging aborted records
 	parent  *Segment           // parent segment (can form a DAG in future versions)
 	state   SegmentState       // segment lifecycle status
 
 	// statistics
-	xmin    uint64 // min xid in this segment (from ins/upd/del)
-	xmax    uint64 // max xid in this segment (from ins/upd/del)
-	rmin    uint64 // min rid in this segment (from ins/upd)
-	rmax    uint64 // max rid in this segment (from ins/upd)
-	nInsert uint32 // count of inserted records
-	nUpdate uint32 // count of updated records
-	nDelete uint32 // count of deleted records (excluding update replacements)
-	nAbort  uint32 // count of aborted records (updates count only once)
+	xmin    types.XID // min xid in this segment (from ins/upd/del)
+	xmax    types.XID // max xid in this segment (from ins/upd/del)
+	rmin    uint64    // min rid in this segment (from ins/upd)
+	rmax    uint64    // max rid in this segment (from ins/upd)
+	nInsert uint32    // count of inserted records
+	nUpdate uint32    // count of updated records
+	nDelete uint32    // count of deleted records (excluding update replacements)
+	nAbort  uint32    // count of aborted records (updates count only once)
 }
 
 func newSegment(s *schema.Schema, id uint32, maxsz int) *Segment {
@@ -234,13 +234,13 @@ func (s *Segment) Size() int {
 }
 
 // ContainsTx returns true if rid is within segment bounds.
-func (s *Segment) ContainsTx(xid uint64) bool {
+func (s *Segment) ContainsTx(xid types.XID) bool {
 	return s.Len() > 0 && xid-s.xmin <= s.xmax-s.xmin
 }
 
 // IsActiveTx returns true when xid has written data to this segment but
 // has not committed or aborted yet.
-func (s *Segment) IsActiveTx(xid uint64) bool {
+func (s *Segment) IsActiveTx(xid types.XID) bool {
 	return s.xact == xid
 }
 
@@ -255,7 +255,7 @@ func (s *Segment) ContainsRid(rid uint64) bool {
 }
 
 // append insert record
-func (s *Segment) InsertRecord(xid, rid uint64, buf []byte) {
+func (s *Segment) InsertRecord(xid types.XID, rid uint64, buf []byte) {
 	// set metadata
 	s.meta.Rid = rid
 	s.meta.Ref = rid
@@ -270,7 +270,7 @@ func (s *Segment) InsertRecord(xid, rid uint64, buf []byte) {
 }
 
 // append update record
-func (s *Segment) UpdateRecord(xid, rid, ref uint64, buf []byte) {
+func (s *Segment) UpdateRecord(xid types.XID, rid, ref uint64, buf []byte) {
 	// set metadata
 	s.meta.Rid = rid
 	s.meta.Ref = ref
@@ -284,7 +284,7 @@ func (s *Segment) UpdateRecord(xid, rid, ref uint64, buf []byte) {
 	s.NotifyUpdate(xid, rid, ref)
 }
 
-func (s *Segment) NotifyInsert(xid, rid uint64) {
+func (s *Segment) NotifyInsert(xid types.XID, rid uint64) {
 	// xid
 	s.xact = xid
 
@@ -306,7 +306,7 @@ func (s *Segment) NotifyInsert(xid, rid uint64) {
 }
 
 // append update
-func (s *Segment) NotifyUpdate(xid, rid, ref uint64) {
+func (s *Segment) NotifyUpdate(xid types.XID, rid, ref uint64) {
 	// update xid
 	s.xact = xid
 
@@ -336,7 +336,7 @@ func (s *Segment) NotifyUpdate(xid, rid, ref uint64) {
 }
 
 // append delete
-func (s *Segment) NotifyDelete(xid, rid uint64) {
+func (s *Segment) NotifyDelete(xid types.XID, rid uint64) {
 	// xid
 	s.xact = xid
 
@@ -355,14 +355,14 @@ func (s *Segment) NotifyDelete(xid, rid uint64) {
 }
 
 // Sets xmax to xid for record rid.
-func (s *Segment) SetXmax(xid, rid uint64, isDeleted bool) {
+func (s *Segment) SetXmax(xid types.XID, rid uint64, isDeleted bool) {
 	if !s.ContainsRid(rid) {
 		return
 	}
 	if s.nAbort == 0 {
 		// without aborts rids are unique sorted (append only) and never reused
 		idx := int(rid - s.rmin)
-		s.data.Xmaxs().Set(idx, xid)
+		s.data.Xmaxs().Set(idx, uint64(xid))
 		if isDeleted {
 			s.data.Dels().Set(idx)
 			s.data.DelBlock().SetDirty()
@@ -380,7 +380,7 @@ func (s *Segment) SetXmax(xid, rid uint64, isDeleted bool) {
 			}
 		}
 		if idx >= 0 {
-			s.data.Xmaxs().Set(idx, xid)
+			s.data.Xmaxs().Set(idx, uint64(xid))
 			if isDeleted {
 				s.data.Dels().Set(idx)
 				s.data.DelBlock().SetDirty()
@@ -391,14 +391,14 @@ func (s *Segment) SetXmax(xid, rid uint64, isDeleted bool) {
 	s.xmax = max(s.xmax, xid)
 }
 
-func (s *Segment) CommitTx(xid uint64) {
+func (s *Segment) CommitTx(xid types.XID) {
 	// drop from active set (xid may not exist)
 	if s.xact == xid {
 		s.xact = 0
 	}
 }
 
-func (s *Segment) AbortTx(xid uint64) {
+func (s *Segment) AbortTx(xid types.XID) {
 	if s.xact != xid {
 		return
 	}
@@ -414,7 +414,7 @@ func (s *Segment) AbortTx(xid uint64) {
 		// segment is sorted by xid (single writer tx), walk backwards & stop early
 		xmins := s.data.Xmins().Slice()
 		i := len(xmins) - 1
-		for i >= 0 && xmins[i] == xid {
+		for i >= 0 && xmins[i] == uint64(xid) {
 			xmins[i] = 0
 			s.aborted.Set(i) // set aborted flag
 			s.nAbort++       // count aborted insert + update rows
@@ -433,7 +433,7 @@ func (s *Segment) AbortTx(xid uint64) {
 		xmaxs := s.data.Xmaxs().Slice()
 		dels := s.data.Dels()
 		for i, v := range xmaxs {
-			if v == xid {
+			if v == uint64(xid) {
 				xmaxs[i] = 0     // reset xmax effectively undeleting the record
 				dels.Unset(i)    // unset deleted flag (safe for both delete and replace)
 				s.aborted.Set(i) // set aborted flag
@@ -576,7 +576,7 @@ func (s *Segment) Match(node *filter.Node, snap *types.Snapshot, tomb *xroar.Bit
 			rids := s.data.RowIds()
 			xmins := s.data.Xmins()
 			for i := range bits.Iterator() {
-				if !snap.IsVisible(xmins.Get(i)) || tomb.Contains(rids.Get(i)) {
+				if !snap.IsVisible(types.XID(xmins.Get(i))) || tomb.Contains(rids.Get(i)) {
 					bits.Unset(i)
 				}
 			}
@@ -585,7 +585,7 @@ func (s *Segment) Match(node *filter.Node, snap *types.Snapshot, tomb *xroar.Bit
 			// 1. remove invisible new records, i.e xmin > xown
 			xmins := s.data.Xmins()
 			for i := xmins.Len() - 1; i >= 0; i-- {
-				xid := xmins.Get(i)
+				xid := types.XID(xmins.Get(i))
 
 				// stop early when xid is no longer above snapshot, this works because
 				// xids are sequential in a segment
@@ -629,177 +629,3 @@ func (s *Segment) MergeDeleted(set *xroar.Bitmap, snap *types.Snapshot) {
 	// merge only visible xids into set
 	s.tomb.MergeVisible(set, snap)
 }
-
-// func (s *Segment) Store(ctx context.Context, bucket store.Bucket) error {
-// 	switch s.state {
-// 	case SegmentStateFlushing:
-// 		// write full segment to disk
-// 		s.data.WithStats()
-// 		if _, err := s.data.StoreToDisk(ctx, bucket); err != nil {
-// 			return err
-// 		}
-
-// 		// generate stats record after store
-// 		s.stats = stats.NewRecordFromPack(s.data, 0)
-// 		s.data.CloseStats()
-
-// 		// write tomb data to disk
-// 		if s.tomb.dirty {
-// 			if err := s.tomb.Store(ctx, bucket, s.Id()); err != nil {
-// 				return err
-// 			}
-// 		}
-
-// 		// write segment xact to disk
-// 		var err error
-// 		xkey := pack.EncodeBlockKey(s.data.Key(), JournalXactKey)
-// 		if s.xact.IsEmpty() {
-// 			err = bucket.Delete(xkey)
-// 		} else {
-// 			err = bucket.Put(xkey, s.xact.Bytes())
-// 		}
-// 		if err != nil {
-// 			return err
-// 		}
-
-// 		// update segment state
-// 		switch {
-// 		case s.IsEmpty():
-// 			s.SetState(SegmentStateEmpty)
-// 		case s.IsDone():
-// 			s.SetState(SegmentStateCompleting)
-// 		default:
-// 			s.SetState(SegmentStateFlushed)
-// 		}
-// 		return nil
-
-// 	case SegmentStateCompleting:
-// 		// write dirty metadata
-// 		s.data.WithStats()
-// 		if _, err := s.data.StoreToDisk(ctx, bucket); err != nil {
-// 			return err
-// 		}
-
-// 		// update meta stats after store
-// 		s.stats.Update(s.data)
-// 		s.data.CloseStats()
-
-// 		// write tomb data to disk
-// 		if s.tomb.dirty {
-// 			if err := s.tomb.Store(ctx, bucket, s.Id()); err != nil {
-// 				return err
-// 			}
-// 		}
-
-// 		// write segment xact to disk
-// 		var err error
-// 		xkey := pack.EncodeBlockKey(s.data.Key(), JournalXactKey)
-// 		if s.xact.IsEmpty() {
-// 			err = bucket.Delete(xkey)
-// 		} else {
-// 			err = bucket.Put(xkey, s.xact.Bytes())
-// 		}
-// 		if err != nil {
-// 			return err
-// 		}
-
-// 		// update segment state
-// 		if s.IsEmpty() {
-// 			s.SetState(SegmentStateEmpty)
-// 		} else {
-// 			s.SetState(SegmentStateComplete)
-// 		}
-// 		return nil
-
-// 	case SegmentStateEmpty, SegmentStateMerged:
-// 		// remove all segment data
-// 		xkey := pack.EncodeBlockKey(s.data.Key(), JournalXactKey)
-// 		if err := bucket.Delete(xkey); err != nil {
-// 			return err
-// 		}
-// 		if err := s.tomb.Remove(ctx, bucket, s.Id()); err != nil {
-// 			return err
-// 		}
-// 		return s.data.RemoveFromDisk(ctx, bucket)
-
-// 	default:
-// 		return nil
-// 	}
-// }
-
-// func loadSegment(ctx context.Context, s *schema.Schema, bucket store.Bucket, id uint32, maxsz int) (*Segment, error) {
-// 	seg := &Segment{
-// 		xact: xroar.New(),
-// 		data: pack.New().
-// 			WithSchema(s).
-// 			WithMaxRows(maxsz).
-// 			WithKey(id),
-// 		tomb:   newTomb(maxsz),
-// 		state:  SegmentStateEmpty,
-// 		xmin: 1<<64 - 1,
-// 		rmin: 1<<64 - 1,
-// 	}
-
-// 	// load data (nocache, size unknown)
-// 	if _, err := seg.data.LoadFromDisk(ctx, bucket, nil, maxsz); err == nil {
-// 		return nil, err
-// 	}
-
-// 	// FIXME: pack.Stats is empty here, need to initialize from blocks
-// 	// regenerate stats after load
-// 	seg.stats = stats.NewRecordFromPack(seg.data, 0)
-
-// 	// find min and max xid, rid and skip zeros (aborted xid's)
-// 	for _, v := range seg.data.Xmins().Iterator() {
-// 		if v == 0 {
-// 			seg.nAbort++
-// 			continue
-// 		}
-// 		seg.xmin = min(seg.xmin, v)
-// 		seg.xmax = max(seg.xmax, v)
-// 	}
-// 	for _, v := range seg.data.Xmaxs().Iterator() {
-// 		if v == 0 {
-// 			continue
-// 		}
-// 		seg.xmin = min(seg.xmin, v)
-// 		seg.xmax = max(seg.xmax, v)
-// 	}
-// 	for _, v := range seg.data.RowIds().Iterator() {
-// 		seg.rmin = min(seg.rmin, v)
-// 		seg.rmax = max(seg.rmax, v)
-// 	}
-
-// 	// count inserts and updates (including aborted ins/upd)
-// 	rids := seg.data.RowIds()
-// 	refs := seg.data.RefIds()
-// 	for i, v := range rids.Iterator() {
-// 		if v == refs.Get(i) {
-// 			seg.nInsert++
-// 		} else {
-// 			seg.nUpdate++
-// 		}
-// 	}
-
-// 	// load xact (may not exist when empty)
-// 	xkey := pack.EncodeBlockKey(id, JournalXactKey)
-// 	buf := bucket.Get(xkey)
-// 	if buf != nil {
-// 		seg.xact = xroar.NewFromBytes(bytes.Clone(buf))
-// 	}
-
-// 	// load tomb
-// 	if err := seg.tomb.Load(ctx, bucket, id); err != nil {
-// 		return nil, err
-// 	}
-
-// 	// count deletes
-// 	seg.nDelete = uint32(seg.tomb.Len())
-
-// 	// set state after load
-// 	if !seg.IsEmpty() {
-// 		seg.state = SegmentStateComplete
-// 	}
-
-// 	return seg, nil
-// }

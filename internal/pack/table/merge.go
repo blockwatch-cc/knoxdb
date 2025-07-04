@@ -220,7 +220,7 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 					xmaxs := pkg.Xmaxs().Slice()
 					dels := pkg.Dels().Writer()
 					for _, v := range pkg.Selected() {
-						xmaxs[int(v)] = stones[0].Xid
+						xmaxs[int(v)] = uint64(stones[0].Xid)
 						if stones[0].IsDel {
 							dels.Set(int(v))
 						}

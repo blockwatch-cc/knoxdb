@@ -476,7 +476,7 @@ func (t *Table) UnuseIndex(idx engine.QueryableIndex) {
 	})
 }
 
-func (t *Table) CommitTx(ctx context.Context, xid uint64) error {
+func (t *Table) CommitTx(ctx context.Context, xid types.XID) error {
 	// lock journal access
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -493,7 +493,7 @@ func (t *Table) CommitTx(ctx context.Context, xid uint64) error {
 	return nil
 }
 
-func (t *Table) AbortTx(ctx context.Context, xid uint64) error {
+func (t *Table) AbortTx(ctx context.Context, xid types.XID) error {
 	// lock journal access
 	t.mu.Lock()
 	defer t.mu.Unlock()

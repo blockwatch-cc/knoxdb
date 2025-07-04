@@ -27,6 +27,15 @@ const (
 
 // Engine is the central instance managing a database
 //
+// Transaction support
+// - single writer, multiple reader MVCC
+// - readers, writer and background merge processes do not block each other
+// - optional tx flags to control tx behavior
+//   - enable or disbale no wal write
+//   - choose between direct, no or delayed wal fsync
+//   - timeout mode for concurrent writers (wait unlimited, limited, don't wait)
+//   - readers can wait until writer finished (for more efficient 'safe' MVCC snapshot)
+//
 // Read-only mode
 // - changes no data on disk
 // - all backends opened in read-only mode
@@ -52,10 +61,9 @@ type Engine struct {
 	txs        TxList
 	dbId       uint64        // unique database tag
 	writeToken chan struct{} // single writer enforcement
-	xact       uint64        // single active write tx (none when 0)
-	xmin       uint64        // xid horizon (minimum active xid)
-	xnext      uint64        // next txid for read/write tx
-	vnext      uint64        // virtual xid for read-only tx
+	xmin       XID           // xid horizon (minimum active xid)
+	xnext      XID           // next txid for read/write tx
+	vnext      XID           // virtual xid for read-only tx
 	path       string        // full db base path (from opts + name)
 	log        log.Logger
 	tasks      *TaskService
@@ -132,9 +140,8 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 		enums:      schema.NewEnumRegistry(),
 		txs:        make(TxList, 0),
 		writeToken: make(chan struct{}, 1),
-		xact:       0,
-		xmin:       0,
-		xnext:      0,
+		xmin:       1,
+		xnext:      1,
 		vnext:      ReadTxOffset,
 		dbId:       types.TaggedHash(types.ObjectTagDatabase, name),
 		opts:       opts,
@@ -231,9 +238,8 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 		enums:      schema.NewEnumRegistry(),
 		txs:        make(TxList, 0),
 		writeToken: make(chan struct{}, 1),
-		xact:       0,
-		xmin:       0,
-		xnext:      0,
+		xmin:       1,
+		xnext:      1,
 		vnext:      ReadTxOffset,
 		dbId:       types.TaggedHash(types.ObjectTagDatabase, name),
 		cat:        NewCatalog(name),
@@ -354,9 +360,6 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 		return nil, err
 	}
 
-	// init virtual xid for read-only tx
-	e.vnext = e.xnext + ReadTxOffset
-
 	// commit tx, crash recovery may have rewritten catalog state
 	if err = tx.Commit(); err != nil {
 		return nil, err
@@ -376,24 +379,22 @@ func (e *Engine) Close(ctx context.Context) error {
 	// set shutdown flag to prevent new transactions
 	e.shutdown.Store(true)
 
-	// lock engine
-	e.mu.Lock()
-	defer e.mu.Unlock()
+	// cancel pending transaction, tx contexts
+	for _, tx := range e.txs {
+		e.log.Tracef("Kill tx id %d", tx.id)
+		tx.Kill(ErrDatabaseShutdown)
+	}
 
 	// TODO: shutdown user sessions (close wire protocol server)
-	// - should cancel contexts
+	// - should cancel session contexts
 
 	// close write token channel, unblocking waiting writers which will cancel
 	close(e.writeToken)
 	e.writeToken = nil
 
-	// cancel pending transaction
-	// TODO: find another way, maybe cancel session contexts + define an explicit
-	// session for sdk usage
-	for _, tx := range e.txs {
-		e.log.Tracef("Kill tx id %d", tx.id)
-		tx.Kill(ErrDatabaseShutdown)
-	}
+	// lock engine
+	e.mu.Lock()
+	defer e.mu.Unlock()
 
 	// stop services
 	e.log.Trace("Stop services")
@@ -625,7 +626,7 @@ func (e *Engine) Sync(ctx context.Context) error {
 	return errg.Wait()
 }
 
-func (e *Engine) CommitTx(ctx context.Context, oid, xid uint64) error {
+func (e *Engine) CommitTx(ctx context.Context, oid uint64, xid types.XID) error {
 	var (
 		t  TxTracker
 		ok bool
@@ -640,7 +641,7 @@ func (e *Engine) CommitTx(ctx context.Context, oid, xid uint64) error {
 	return t.CommitTx(ctx, xid)
 }
 
-func (e *Engine) AbortTx(ctx context.Context, oid, xid uint64) error {
+func (e *Engine) AbortTx(ctx context.Context, oid uint64, xid types.XID) error {
 	var (
 		t  TxTracker
 		ok bool
@@ -657,11 +658,4 @@ func (e *Engine) AbortTx(ctx context.Context, oid, xid uint64) error {
 
 func (e *Engine) Schedule(t *Task) bool {
 	return e.tasks.Submit(t)
-}
-
-func (e *Engine) UpdateTxHorizon(xid uint64) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.xmin = max(e.xmin, xid)
-	e.xnext = e.xmin + 1
 }

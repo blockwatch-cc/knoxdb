@@ -108,7 +108,7 @@ func SetupTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts
 func CreateTable(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions, s *schema.Schema) {
 	t.Helper()
 	ctx, tx, commit, abort, err := e.WithTransaction(context.Background())
-	tx.WithFlags(engine.TxFlagsCatalog) // let tx sync wal
+	tx.WithFlags(engine.TxFlagCatalog) // let tx sync wal
 	require.NoError(t, err)
 	defer abort()
 
@@ -133,7 +133,7 @@ func CreateEnum(t *testing.T, e *engine.Engine) {
 	defer abort()
 	require.NoError(t, err)
 
-	_, err = e.CreateEnum(context.Background(), "my_enum")
+	_, err = e.CreateEnum(ctx, "my_enum")
 	require.NoError(t, err)
 	err = e.ExtendEnum(ctx, "my_enum", "one", "two", "three", "four")
 	require.NoError(t, err, "extend enum")

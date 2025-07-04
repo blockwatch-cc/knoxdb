@@ -27,7 +27,7 @@ func TestLockShared(t *testing.T) {
 	require.Equal(t, 1, m.Len())
 
 	// release first locker
-	m.Done(uint64(1))
+	m.Done(1)
 	require.Equal(t, 1, m.Len())
 
 	// third shared lock
@@ -35,8 +35,8 @@ func TestLockShared(t *testing.T) {
 	require.Equal(t, 1, m.Len())
 
 	// release all locks
-	m.Done(uint64(2))
-	m.Done(uint64(3))
+	m.Done(2)
+	m.Done(3)
 	require.Equal(t, 0, m.Len())
 }
 
@@ -52,7 +52,7 @@ func TestLockExclusive(t *testing.T) {
 	require.Equal(t, 1, m.Len()) // still first lock exists
 
 	// release first locker
-	m.Done(uint64(1))
+	m.Done(1)
 	require.Equal(t, 0, m.Len()) // no more lock
 
 	// third exclusive lock
@@ -60,7 +60,7 @@ func TestLockExclusive(t *testing.T) {
 	require.Equal(t, 1, m.Len())
 
 	// release
-	m.Done(uint64(3))
+	m.Done(3)
 	require.Equal(t, 0, m.Len()) // no more lock
 
 	// concurrent locks
@@ -73,7 +73,7 @@ func TestLockExclusive(t *testing.T) {
 			return err
 		}
 		time.Sleep(200 * time.Millisecond)
-		m.Done(uint64(1))
+		m.Done(1)
 		return nil
 	})
 	g.Go(func() error {
@@ -83,7 +83,7 @@ func TestLockExclusive(t *testing.T) {
 			return err
 		}
 		time.Sleep(200 * time.Millisecond)
-		m.Done(uint64(2))
+		m.Done(2)
 		return nil
 	})
 
@@ -99,12 +99,12 @@ func TestLockConcurrent(t *testing.T) {
 		k := i
 		g.Go(func() error {
 			for j := 4 * k; j <= 4*k+4; j++ {
-				err := m.Lock(ctx, uint64(j), LockModeExclusive, 1)
+				err := m.Lock(ctx, XID(j), LockModeExclusive, 1)
 				if err != nil {
 					return err
 				}
 				time.Sleep(time.Duration(util.RandIntn(10)) * time.Millisecond)
-				m.Done(uint64(j))
+				m.Done(XID(j))
 			}
 			return nil
 		})
@@ -190,7 +190,7 @@ func BenchmarkLockShared(b *testing.B) {
 		b.Run(strconv.Itoa(n), func(b *testing.B) {
 			b.ReportAllocs()
 			b.RunParallel(func(pb *testing.PB) {
-				var xid uint64 = 1
+				var xid XID = 1
 				for pb.Next() {
 					for i := 0; i < n; i++ {
 						_ = m.Lock(ctx, xid, LockModeShared, uint64(i))
@@ -210,7 +210,7 @@ func BenchmarkLockExclusive(b *testing.B) {
 	var id int64 = 1
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			xid := uint64(atomic.AddInt64(&id, 1))
+			xid := XID(atomic.AddInt64(&id, 1))
 			_ = m.Lock(ctx, xid, LockModeExclusive, 1)
 			m.Done(xid)
 		}

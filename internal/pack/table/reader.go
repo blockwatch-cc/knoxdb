@@ -361,9 +361,9 @@ func (r *Reader) nextQueryMatch(ctx context.Context) (*pack.Package, error) {
 			// hide future values from concurrent txn based on rec.$xmin
 			x, y := r.it.MinMax(r.rx + 2)
 			xmins := r.pack.Xmins()
-			if r.query.Snap.Xmin >= x.(uint64) && r.query.Snap.Xmin <= y.(uint64) {
+			if r.query.Snap.Xmin >= types.XID(x.(uint64)) && r.query.Snap.Xmin <= types.XID(y.(uint64)) {
 				for i := range r.bits.Iterator() {
-					if !r.query.Snap.IsVisible(xmins.Get(i)) {
+					if !r.query.Snap.IsVisible(types.XID(xmins.Get(i))) {
 						r.bits.Unset(i)
 					}
 				}
@@ -371,10 +371,10 @@ func (r *Reader) nextQueryMatch(ctx context.Context) (*pack.Package, error) {
 
 			// hide deleted rows based on rec.$xmax
 			x, y = r.it.MinMax(r.rx + 3)
-			if r.query.Snap.Xmax >= x.(uint64) && r.query.Snap.Xmax <= y.(uint64) {
+			if r.query.Snap.Xmax >= types.XID(x.(uint64)) && r.query.Snap.Xmax <= types.XID(y.(uint64)) {
 				xmaxs := r.pack.Xmaxs()
 				for i := range r.bits.Iterator() {
-					if !r.query.Snap.IsVisible(xmaxs.Get(i)) {
+					if !r.query.Snap.IsVisible(types.XID(xmaxs.Get(i))) {
 						r.bits.Unset(i)
 					}
 				}

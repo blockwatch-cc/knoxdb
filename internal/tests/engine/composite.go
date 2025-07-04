@@ -264,7 +264,7 @@ func DeleteCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEn
 
 	// delete last item stored
 	ctx, _, commit, _, _ := e.WithTransaction(context.Background())
-	require.NoError(t, ti.DelPack(ctx, prev, pack.WriteModeAll))
+	require.NoError(t, ti.DelPack(ctx, prev, pack.WriteModeAll, 0))
 	require.NoError(t, ti.Sync(ctx))
 	require.NoError(t, commit())
 
