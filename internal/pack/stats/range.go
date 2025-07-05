@@ -227,6 +227,7 @@ func (idx RangeIndex) mergeRange(start, end int, maxRange uint32) types.Range {
 		}
 	}
 
+	// when 0,0 returns equivalent to InvalidRange(0, 1<<32-1)
 	return types.Range{lower, upper - 1}
 }
 

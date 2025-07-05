@@ -26,7 +26,7 @@ func NewRange[T Integer | int | uint](a, b T) Range {
 }
 
 func (r Range) IsValid() bool {
-	return r == InvalidRange
+	return r != InvalidRange
 }
 
 func (r Range) IsFull(n int) bool {
@@ -59,6 +59,9 @@ func (r Range) Intersect(s Range) Range {
 }
 
 func (r Range) AsSelection() []uint32 {
+	if !r.IsValid() {
+		return nil
+	}
 	return MakeSelection(r[0], r[1])
 }
 

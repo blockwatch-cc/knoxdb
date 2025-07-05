@@ -73,6 +73,7 @@ func makeTestPackage(t testing.TB, key int, pk uint64) *pack.Package {
 	pstats := pkg.Stats()
 	for i, b := range pkg.Blocks() {
 		pstats.MinMax[i][0], pstats.MinMax[i][1] = b.MinMax()
+		pstats.WasDirty[i] = true
 	}
 
 	return pkg
