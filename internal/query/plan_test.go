@@ -14,6 +14,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/operator/filter"
+	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/bitmap"
 	"blockwatch.cc/knoxdb/pkg/schema"
@@ -24,9 +25,6 @@ import (
 )
 
 var (
-	_ engine.QueryableIndex = (*MockIndex)(nil)
-	_ engine.QueryableTable = (*MockTable)(nil)
-
 	testSchema      *schema.Schema
 	testIndexSchema *schema.Schema
 	testEnums       schema.EnumRegistry
@@ -71,82 +69,8 @@ func (t *testStruct) Encode() []byte {
 	return buf
 }
 
-type MockIndex struct {
-	schema *schema.Schema
-	result bitmap.Bitmap
-}
-
-func NewMockIndex(s *schema.Schema, result bitmap.Bitmap) engine.QueryableIndex {
-	return &MockIndex{
-		schema: s,
-		result: result,
-	}
-}
-
 func makeIndex(pks ...uint64) engine.QueryableIndex {
-	return NewMockIndex(testIndexSchema, *bitmap.NewFromIndexes(pks))
-}
-
-func (idx *MockIndex) Schema() *schema.Schema {
-	return idx.schema
-}
-
-func (idx *MockIndex) IsComposite() bool {
-	return false
-}
-
-func (idx *MockIndex) CanMatch(node engine.QueryCondition) bool {
-	f, ok := idx.schema.FieldByIndex(0)
-	if !ok {
-		return false
-	}
-	return f.Name() == node.Fields()[0]
-}
-
-func (idx *MockIndex) Query(_ context.Context, _ engine.QueryCondition) (*bitmap.Bitmap, bool, error) {
-	// return &idx.result, true, nil
-	return &idx.result, false, nil
-}
-
-func (idx *MockIndex) QueryComposite(_ context.Context, _ engine.QueryCondition) (*bitmap.Bitmap, bool, error) {
-	return &idx.result, false, nil
-}
-
-type MockTable struct {
-	schema  *schema.Schema
-	indexes []engine.QueryableIndex
-	result  engine.QueryResult
-}
-
-func NewMockTable(s *schema.Schema, idxs []engine.QueryableIndex, res engine.QueryResult) engine.QueryableTable {
-	return &MockTable{
-		schema:  s,
-		indexes: idxs,
-		result:  res,
-	}
-}
-
-func (t *MockTable) Schema() *schema.Schema {
-	return t.schema
-}
-
-func (t *MockTable) Indexes() []engine.QueryableIndex {
-	return t.indexes
-}
-
-func (t *MockTable) Query(_ context.Context, _ engine.QueryPlan) (engine.QueryResult, error) {
-	return t.result, nil
-}
-
-func (t *MockTable) Stream(_ context.Context, _ engine.QueryPlan, fn func(engine.QueryRow) error) error {
-	var err error
-	for _, r := range t.result.Iterator() {
-		err = fn(r)
-		if err != nil {
-			break
-		}
-	}
-	return nil
+	return tests.NewMockIndex(testIndexSchema, bitmap.NewFromIndexes(pks))
 }
 
 func IsFilterEqual(a, b *filter.Node) bool {
@@ -514,7 +438,7 @@ func TestPlanCompile(t *testing.T) {
 			require.NoError(t, err)
 
 			// construct mock table from schema without index and result
-			mockTable := NewMockTable(testSchema, nil, nil)
+			mockTable := tests.NewMockTable(testSchema, nil, nil)
 
 			// construct a query plan for testing
 			plan := NewQueryPlan().
@@ -606,7 +530,7 @@ func TestPlanQueryIndexes(t *testing.T) {
 			require.NoError(t, err)
 
 			// construct mock table from schema, mock index and mock result
-			mockTable := NewMockTable(
+			mockTable := tests.NewMockTable(
 				testSchema,
 				[]engine.QueryableIndex{tc.Index},
 				nil,

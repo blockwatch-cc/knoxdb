@@ -629,3 +629,46 @@ func (s *Segment) MergeDeleted(set *xroar.Bitmap, snap *types.Snapshot) {
 	// merge only visible xids into set
 	s.tomb.MergeVisible(set, snap)
 }
+
+func (s *Segment) LookupRids(ridMap map[uint64]uint64, snap *types.Snapshot) {
+	// check empty state and return early
+	if s.state == SegmentStateEmpty || s.IsEmpty() {
+		return
+	}
+
+	// shortcut: can skip this segment when no records are visible
+	// to the snapshot, i.e. the segment contains only future tx
+	if s.xmin >= snap.Xmax {
+		return
+	}
+
+	// optimization: if the segment is complete (no more open tx) and all xids are
+	// visible to the snapshot, we can merge all records
+	if s.IsDone() && (s.xmax < snap.Xmin || snap.Safe) {
+		// without snapshot isolation
+		pks := s.data.Pks().Slice()
+		rids := s.data.RowIds().Slice()
+		for i, pk := range pks {
+			rid, ok := ridMap[pk]
+			if !ok {
+				continue
+			}
+			ridMap[pk] = max(rid, rids[i])
+		}
+	} else {
+		// apply snapshot isolation
+		pks := s.data.Pks().Slice()
+		rids := s.data.RowIds().Slice()
+		xmins := s.data.Xmins().Slice()
+		for i, pk := range pks {
+			rid, ok := ridMap[pk]
+			if !ok {
+				continue
+			}
+			if !snap.IsVisible(types.XID(xmins[i])) {
+				continue
+			}
+			ridMap[pk] = max(rid, rids[i])
+		}
+	}
+}

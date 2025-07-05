@@ -14,6 +14,7 @@ var (
 	ErrNoTable    = errors.New("table does not exist")
 	ErrNoStore    = errors.New("store does not exist")
 	ErrNoIndex    = errors.New("index does not exist")
+	ErrNoPkIndex  = errors.New("primary key index does not exist")
 	ErrNoEnum     = errors.New("enum does not exist")
 	ErrNoColumn   = errors.New("column does not exist")
 	// ErrNoBucket   = errors.New("bucket does not exist")

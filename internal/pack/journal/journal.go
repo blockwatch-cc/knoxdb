@@ -380,7 +380,7 @@ func (j *Journal) Query(plan *query.QueryPlan, epoch uint32) *Result {
 		// step 1: identify deleted records
 		seg.MergeDeleted(res.tomb, snap)
 
-		// step 2: match filters, apply snapshot visibility roles and tomb
+		// step 2: match filters, apply snapshot visibility rules and tomb
 		seg.Match(node, snap, res.tomb, bits.Zero())
 
 		// add segment to result if it has any match
@@ -397,6 +397,19 @@ func (j *Journal) Query(plan *query.QueryPlan, epoch uint32) *Result {
 	bits.Close()
 
 	return res
+}
+
+// Identify most recent visible row ids for primary keys in list. Walk journal backwards
+// and keep max(rid), ignore tombstones.
+func (j *Journal) Lookup(ridMap map[uint64]uint64, snap *types.Snapshot) {
+	seg := j.tip
+	for seg != nil {
+		// merge max(rid)
+		seg.LookupRids(ridMap, snap)
+
+		// next segment in history order
+		seg = seg.parent
+	}
 }
 
 func (j *Journal) ReplayWalRecord(ctx context.Context, rec *wal.Record, rd engine.TableReader) error {
@@ -585,90 +598,3 @@ func (j *Journal) ReplayWalRecord(ctx context.Context, rec *wal.Record, rd engin
 
 	return nil
 }
-
-// func (j *Journal) Flush(ctx context.Context, tx store.Tx) error {
-// 	bucket := tx.Bucket(j.key)
-// 	if bucket == nil {
-// 		return store.ErrNoBucket
-// 	}
-// 	bucket.FillPercent(1.0)
-
-// 	// flush passive segments with dirty data
-// 	for _, s := range j.tail {
-// 		if err := s.Store(ctx, bucket); err != nil {
-// 			return err
-// 		}
-// 	}
-
-// 	// remove empty and merged segments
-// 	j.tail = slices.DeleteFunc(j.tail, func(s *Segment) bool {
-// 		switch s.state {
-// 		case SegmentStateEmpty, SegmentStateMerged:
-// 			s.Close()
-// 			return true
-// 		default:
-// 			return false
-// 		}
-// 	})
-
-// 	// FIXME: refactor process
-
-// 	// rotate active segment if it contains data
-// 	if !j.tip.IsEmpty() {
-// 		// store active segment
-// 		if err := j.tip.Store(ctx, bucket); err != nil {
-// 			return err
-// 		}
-
-// 		// TODO: free unused memory
-// 		// - tombstones-only: can we safely release data pack here?
-// 		// - data-only: can we safely relese tomb memory here?
-
-// 		// append active segment to immutable list
-// 		j.tail = append(j.tail, j.tip)
-
-// 		// create new active segment
-// 		j.tip = newSegment(j.schema, j.tip.Id()+1, j.maxsz)
-// 	}
-
-// 	return nil
-// }
-
-// // Loads all journal segments found on disk
-// func (j *Journal) Load(ctx context.Context, tx store.Tx) error {
-// 	bucket := tx.Bucket(j.key)
-// 	if bucket == nil {
-// 		return store.ErrNoBucket
-// 	}
-
-// 	// identify segment ids to load from all keys in bucket
-// 	segIds := make([]uint32, 0)
-// 	var last uint32
-// 	err := bucket.ForEach(func(k, v []byte) error {
-// 		id, _ := pack.DecodeBlockKey(k)
-// 		if id == last {
-// 			return nil
-// 		}
-// 		segIds = append(segIds, id)
-// 		last = id
-// 		return nil
-// 	})
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	// load segments from disk
-// 	for _, id := range segIds {
-// 		seg, err := loadSegment(ctx, j.schema, bucket, id, j.maxsz)
-// 		if err != nil {
-// 			return fmt.Errorf("loading journal segment %d: %v", id, err)
-// 		}
-// 		seg.SetState(SegmentStateWaiting)
-// 		j.tail = append(j.tail, seg)
-// 	}
-
-// 	// update active segment id
-// 	j.tip.data.WithKey(last + 1)
-
-// 	return nil
-// }

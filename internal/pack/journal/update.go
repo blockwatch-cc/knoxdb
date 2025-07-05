@@ -14,7 +14,118 @@ import (
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/wal"
 	"blockwatch.cc/knoxdb/pkg/num"
+	"blockwatch.cc/knoxdb/pkg/schema"
 )
+
+// Appends updates of full wire-encoded records to journal and WAL. Each
+// record update appends one post-image to the journal and one tombstone
+// for the pre-image row id. Full records are written to WAL since its
+// unclear which fields have changed.
+//
+// Requires an active write transaction which at this point is unclear if
+// it will commit. Hence the updates are tentative and require a subseqent
+// Abort() or Commit() call.
+//
+// For metadata updates we require the current PK -> RID mapping as visible
+// under MVCC snapshot isolation rules. This mapping was looked up prior to
+// the call to UpdateRecords and is in pkMap. This map will be updated by
+// the call to retain the most recent rid in case a batch contains multiple
+// updates of the same pk.
+//
+// Only source of errors is WAL write or system crash. For efficient recovery
+// we break the message batch into pieces so that each piece fits into the
+// current journal's active segment. This ensures each journal segment aligns
+// with a WAL LSN which we can use as recovery checkpoint.
+//
+// Transactions allow to turn WAL mode off selectively. We choose the appropriate
+// algorithm for each case.
+func (j *Journal) UpdateRecords(ctx context.Context, src []byte, ridMap map[uint64]uint64) (int, error) {
+	var (
+		view     = schema.NewView(j.schema)
+		tx       = engine.GetTransaction(ctx)
+		bits     = bitset.New(j.schema.NumFields()).One() // bitset of all column positions
+		xid      = tx.Id()                                // id of user tx
+		firstRid = j.tip.tstate.NextRid                   // first assigned rid (per wal batch!)
+		nextRid  = firstRid                               // next free row id to assign
+		count    int                                      // count of processed records so far
+		rec      = &wal.Record{                           // wal record template
+			Type:   wal.RecordTypeUpdate,
+			Tag:    types.ObjectTagTable,
+			Entity: j.id,
+			TxID:   xid,
+			Data:   make([][]byte, 1),
+		}
+	)
+
+	// dimension WAL write buffer
+	baseSz := (bits.Len()+7)/8 + num.MaxVarintLen64 // changeset + rid1
+	sz := baseSz + 2*num.MaxVarintLen64 + len(src)  // add max rid + refid space
+	buf := arena.AllocBytes(sz)
+	msg := bytes.NewBuffer(buf)
+
+	// split buf into wire messages
+	view, vbuf, _ := view.Cut(src)
+
+	for view.IsValid() {
+		var (
+			sz, n int
+			jcap  = j.Capacity()
+		)
+
+		// prepare WAL message
+		// | changeset | rid1 | ref1 | wire1 | ..
+		msg.Write(bits.Bytes())
+
+		// assign new row ids, insert to active segment and assemble WAL batch buffer
+		for view.IsValid() && jcap > 0 {
+			// get pk and lookup current rid
+			pk := view.GetPk()
+			ref := ridMap[pk]
+
+			// write to wal msg
+			num.WriteUvarint(msg, nextRid)
+			num.WriteUvarint(msg, ref)
+			msg.Write(view.Bytes())
+
+			// add update to journal
+			j.tip.UpdateRecord(xid, nextRid, ref, view.Bytes())
+
+			// keep new assigned rid (in case we update again later)
+			ridMap[pk] = nextRid
+
+			// next iteration
+			nextRid++
+			jcap--
+			n++
+			sz += len(view.Bytes())
+			view, vbuf, _ = view.Cut(vbuf)
+		}
+		// j.log.Debugf("journal updated %d records into segment %d", nextRid-firstRid, j.tip.Id())
+
+		// 2 write to wal
+		rec.Data[0] = msg.Bytes()
+		_, err := j.wal.Write(rec)
+		if err != nil {
+			return 0, err
+		}
+
+		rec.Data[0] = nil
+		msg.Reset()
+		count += n
+
+		// update object state
+		j.tip.tstate.NextRid = nextRid
+
+		// rotate segment once full
+		if err := j.rotateAndCheckpoint(); err != nil {
+			return 0, err
+		}
+	}
+
+	arena.Free(buf)
+
+	return count, nil
+}
 
 // Updates selected records from a pack, typically a query result with some
 // changed (materialized/dirty) vectors and an optional selection vector.
@@ -106,13 +217,13 @@ func (j *Journal) updatePackWithWal(src *pack.Package, xid types.XID, w *wal.Wal
 	// - extract and write changeset to WAL
 	//
 	// WAL format
-	// | changeset | n | rid1 | ref1 | ref2 | .. | wire1 | wire2 | ... |
+	// | changeset | rid1 | ref1 | wire1 | ... |
 
 	var (
 		sel     = src.Selected()         // selection vector, may be nil
 		changed = make([]int, 0)         // change column positions
 		bits    = bitset.New(src.Cols()) // bitset of changed column positions
-		nextRid = j.tip.tstate.NextRid   // first assigned rid (per wal batch!)
+		nextRid = j.tip.tstate.NextRid   // next free row id to assign
 		sz      int                      // estimated per msg size for WAL buffer
 		count   int                      // count of processed records so far
 		rids    = src.RowIds()           // current rowid accessor

@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"slices"
 
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/bitset"
@@ -19,10 +18,11 @@ import (
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/assert"
 	"blockwatch.cc/knoxdb/pkg/num"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 type LookupIterator struct {
-	iks      []uint64      // idx keys (sorted)
+	keys     []uint64      // idx keys (sorted)
 	tx       store.Tx      // backend tx
 	cur      store.Cursor  // backend cursor
 	nextPk   uint64        // last matching idx key (for duplicate handling)
@@ -31,10 +31,10 @@ type LookupIterator struct {
 	useCache bool
 }
 
-func NewLookupIterator(idx *Index, iks []uint64, useCache bool) *LookupIterator {
-	slices.Sort(iks)
+func NewLookupIterator(idx *Index, keys []uint64, useCache bool) *LookupIterator {
+	util.Sort(keys, 0)
 	return &LookupIterator{
-		iks:      iks,
+		keys:     keys,
 		idx:      idx,
 		useCache: useCache,
 	}
@@ -48,7 +48,7 @@ func (it *LookupIterator) Next(ctx context.Context) (*pack.Package, uint64, erro
 	}
 
 	// stop when lookup list is exhausted
-	if len(it.iks) == 0 {
+	if len(it.keys) == 0 {
 		return nil, 0, nil
 	}
 
@@ -78,41 +78,41 @@ func (it *LookupIterator) Next(ctx context.Context) (*pack.Package, uint64, erro
 		return nil, 0, nil
 	}
 
-	// Skip all search keys that are in this pack. The last ik may continue
-	// in the next pack, so we do not yet remove it
-	lastIk := it.pack.Uint64(0, it.pack.Len()-1)
-	for len(it.iks) > 0 && it.iks[0] < lastIk {
-		it.iks = it.iks[1:]
+	// Skip all search keys in this pack. The last key may continue
+	// in the following pack, so we do not yet remove it
+	last := it.pack.Uint64(0, it.pack.Len()-1)
+	for len(it.keys) > 0 && it.keys[0] < last {
+		it.keys = it.keys[1:]
 	}
 
 	// to handle non-unique indexes (duplicate hashes, intentional duplicates)
 	// we use a cursor approach taking the next pk we're looking for into account
 	// when scanning for the next pack. Our pack keys for this reason contain
 	// the ik+pk combination of the first record in a pack as prefix.
-	if len(it.iks) > 0 {
-		if lastIk == it.iks[0] {
+	if len(it.keys) > 0 {
+		if last == it.keys[0] {
 			it.nextPk = it.pack.Uint64(1, it.pack.Len()-1) + 1
 		} else {
 			it.nextPk = 0
-			it.iks = it.iks[1:]
+			it.keys = it.keys[1:]
 		}
 	}
 
-	return it.pack, lastIk, nil
+	return it.pack, last, nil
 }
 
 func (it *LookupIterator) loadNextPack(ctx context.Context) (bool, error) {
 	for {
 		// stop when search keys are exhausted
-		if len(it.iks) == 0 {
+		if len(it.keys) == 0 {
 			return false, nil
 		}
 
 		// seek to the next search key, this will either point cur to the search
 		// key directly or to the next larger key (in both cases the first
 		// of a block pair, id = 0)
-		ok := it.cur.Seek(it.idx.encodePackKey(it.iks[0], it.nextPk, 0))
-		// it.idx.log.Infof("Seek 0x%016x:%016x:%d ok=%t", it.iks[0], it.nextPk, 0, ok)
+		ok := it.cur.Seek(it.idx.encodePackKey(it.keys[0], it.nextPk, 0))
+		// it.idx.log.Infof("Seek 0x%016x:%016x:%d ok=%t", it.keys[0], it.nextPk, 0, ok)
 
 		// seek to last pack when not found (our search key is likely in this pack)
 		if !ok {
@@ -125,16 +125,16 @@ func (it *LookupIterator) loadNextPack(ctx context.Context) (bool, error) {
 		// no last pack? this must be an empty bucket
 		if !ok {
 			// it.idx.log.Infof("Empty bucket, skippikng all searches")
-			it.iks = it.iks[:0]
+			it.keys = it.keys[:0]
 			return false, nil
 		}
 
 		// decode the key
-		ik, pk, id := it.idx.decodePackKey(it.cur.Key())
-		// it.idx.log.Infof("Found 0x%016x:%016x:%d", ik, pk, id)
+		key, rid, id := it.idx.decodePackKey(it.cur.Key())
+		// it.idx.log.Infof("Found 0x%016x:%016x:%d", key, rid, id)
 
 		// rewind if we're behind the search key
-		if ik > it.iks[0] {
+		if key > it.keys[0] {
 			// set cur to the first block in the previous pair
 			it.cur.Prev()
 			ok = it.cur.Prev()
@@ -142,8 +142,8 @@ func (it *LookupIterator) loadNextPack(ctx context.Context) (bool, error) {
 
 			// decode the previous key
 			if ok {
-				ik, pk, id = it.idx.decodePackKey(it.cur.Key())
-				// it.idx.log.Infof("Now 0x%016x:%016x:%d", ik, pk, id)
+				key, rid, id = it.idx.decodePackKey(it.cur.Key())
+				// it.idx.log.Infof("Now 0x%016x:%016x:%d", key, rid, id)
 				// assert we're actually at the first block
 			}
 		}
@@ -153,9 +153,9 @@ func (it *LookupIterator) loadNextPack(ctx context.Context) (bool, error) {
 		// our search key, skip all search keys smaller than the found
 		// key and retry
 		if !ok {
-			for len(it.iks) > 0 && it.iks[0] < ik {
-				// it.idx.log.Infof("Ignoring ik 0x%016x", it.iks[0])
-				it.iks = it.iks[1:]
+			for len(it.keys) > 0 && it.keys[0] < key {
+				// it.idx.log.Infof("Ignoring key 0x%016x", it.keys[0])
+				it.keys = it.keys[1:]
 			}
 			continue
 		}
@@ -168,10 +168,10 @@ func (it *LookupIterator) loadNextPack(ctx context.Context) (bool, error) {
 		// try load block pair from cache
 		if it.useCache {
 			bcache := engine.GetEngine(ctx).BlockCache(it.idx.id)
-			if b, ok := bcache.Get(it.idx.encodeCacheKey(ik, pk, 0)); ok {
+			if b, ok := bcache.Get(it.idx.encodeCacheKey(key, rid, 0)); ok {
 				it.pack.WithBlock(0, b)
 			}
-			if b, ok := bcache.Get(it.idx.encodeCacheKey(ik, pk, 1)); ok {
+			if b, ok := bcache.Get(it.idx.encodeCacheKey(key, rid, 1)); ok {
 				it.pack.WithBlock(1, b)
 			}
 		}
@@ -179,17 +179,17 @@ func (it *LookupIterator) loadNextPack(ctx context.Context) (bool, error) {
 		// load missing blocks in pair from cursor
 		for i := range []int{0, 1} {
 			// assert block is correct
-			bik, bpk, bid := it.idx.decodePackKey(it.cur.Key())
-			assert.Always(bid == i, "unexpected block id", "ik", bik, "pk", bpk, "id", bid, "i", i)
+			bkey, brid, bid := it.idx.decodePackKey(it.cur.Key())
+			assert.Always(bid == i, "unexpected block id", "key", bkey, "rid", brid, "id", bid, "i", i)
 
 			// decode when not already found in cache
 			if it.pack.Block(i) == nil {
-				// it.idx.log.Infof("Loading block 0x%016x:%016x:%d", bik, bpk, i)
+				// it.idx.log.Infof("Loading block 0x%016x:%016x:%d", bik, brid, i)
 				f, ok := it.idx.idxSchema.FieldByIndex(i)
 				assert.Always(ok, "missing schema field", "idx", i)
 				b, err := block.Decode(f.Type().BlockType(), it.cur.Value())
 				if err != nil {
-					return false, fmt.Errorf("decoding block 0x%016x:%016x:%d: %v", bik, bpk, bid, err)
+					return false, fmt.Errorf("decoding block 0x%016x:%016x:%d: %v", bkey, brid, bid, err)
 				}
 				it.pack.WithBlock(i, b)
 			}
@@ -215,7 +215,7 @@ func (it *LookupIterator) Close() {
 		it.tx.Rollback()
 		it.tx = nil
 	}
-	it.iks = nil
+	it.keys = nil
 	it.idx = nil
 	it.nextPk = 0
 	it.useCache = false

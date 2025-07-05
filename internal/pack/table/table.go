@@ -92,6 +92,15 @@ func (t *Table) Indexes() []engine.QueryableIndex {
 	return t.indexes
 }
 
+func (t *Table) PkIndex() (engine.QueryableIndex, bool) {
+	for _, idx := range t.indexes {
+		if idx.IsPk() {
+			return idx, true
+		}
+	}
+	return nil, false
+}
+
 // main and history tables use different setups
 func validateSchemaAndOptions(s *schema.Schema, opts engine.TableOptions) (*schema.Schema, engine.TableOptions, error) {
 	if opts.Engine == engine.TableKindHistory {

@@ -333,18 +333,18 @@ func (t *GenericTable[T]) Insert(ctx context.Context, val any) (uint64, error) {
 	}
 
 	// assign primary keys to all values, return above is first sequential pk assigned
-	pkfield := t.schema.Pk()
+	pkOffset := t.schema.Pk().Offset()
 	switch v := val.(type) {
 	case *T:
-		*(*uint64)(unsafe.Add(unsafe.Pointer(v), pkfield.Offset())) = n
+		*(*uint64)(unsafe.Add(unsafe.Pointer(v), pkOffset)) = n
 	case []T:
 		for i := range v {
-			*(*uint64)(unsafe.Add(unsafe.Pointer(&v[i]), pkfield.Offset())) = n
+			*(*uint64)(unsafe.Add(unsafe.Pointer(&v[i]), pkOffset)) = n
 			n++
 		}
 	case []*T:
 		for i := range v {
-			*(*uint64)(unsafe.Add(unsafe.Pointer(v[i]), pkfield.Offset())) = n
+			*(*uint64)(unsafe.Add(unsafe.Pointer(v[i]), pkOffset)) = n
 			n++
 		}
 	}

@@ -119,8 +119,8 @@ func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (uint64, error) 
 	tx.Touch(t.id)
 
 	// protect journal access
-	t.mu.RLock()
-	defer t.mu.RUnlock()
+	t.mu.Lock()
+	defer t.mu.Unlock()
 
 	// run the query, forward result to journal delete
 	res := &DeleteAdapter{

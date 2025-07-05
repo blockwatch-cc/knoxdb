@@ -298,6 +298,10 @@ func (idx *Index) IsComposite() bool {
 	return idx.opts.Type == types.IndexTypeComposite
 }
 
+func (idx *Index) IsPk() bool {
+	return idx.opts.Type == types.IndexTypePk
+}
+
 func (idx *Index) Sync(ctx context.Context) error {
 	return idx.db.Sync()
 }

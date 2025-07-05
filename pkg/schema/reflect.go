@@ -294,7 +294,7 @@ func reflectStructField(f reflect.StructField, tagName string) (field Field, err
 	// Validate field
 
 	// pk field must be of type uint64
-	if field.flags&types.FieldFlagPrimary > 0 {
+	if field.flags&F_PRIMARY > 0 {
 		switch f.Type.Kind() {
 		case reflect.Uint64:
 		default:
@@ -383,7 +383,7 @@ func (f *Field) ParseType(r reflect.StructField) error {
 	case reflect.String:
 		if r.Type.String() == "schema.Enum" {
 			typ = FT_U16
-			flags = types.FieldFlagEnum
+			flags = F_ENUM
 		} else {
 			typ = FT_STRING
 		}
@@ -495,29 +495,35 @@ func (f *Field) ParseTag(tag string) error {
 		val = strings.TrimSpace(val)
 		switch key {
 		case "pk":
-			flags |= types.FieldFlagPrimary
+			flags |= F_PRIMARY | F_INDEXED
+			index = I_PK
 		case "index":
-			flags |= types.FieldFlagIndexed
+			flags |= F_INDEXED
 			switch val {
 			case "hash":
-				index = types.IndexTypeHash
+				index = I_HASH
 			case "int":
 				switch f.typ {
 				case FT_I64, FT_I32, FT_I16, FT_I8, FT_U64, FT_U32, FT_U16, FT_U8:
 				default:
 					return fmt.Errorf("integer index unsupported on type %s", f.typ)
 				}
-				index = types.IndexTypeInt
+				index = I_INT
+			case "pk":
+				if f.typ != FT_U64 || !f.IsPrimary() {
+					return fmt.Errorf("pk index on invalid field %s type %s", f.name, f.typ)
+				}
+				index = I_PK
 			case "bits":
-				index = types.IndexTypeBits
+				index = I_BITS
 			case "bloom":
-				index = types.IndexTypeBloom
+				index = I_BLOOM
 				scale = 2
 			case "bfuse":
-				index = types.IndexTypeBfuse
+				index = I_BFUSE
 			default:
 				if val == "" || strings.HasPrefix(val, "bloom") {
-					index = types.IndexTypeBloom
+					index = I_BLOOM
 					scale = 2
 					// accept = and :
 					val = strings.ReplaceAll(val, "=", ":")
@@ -592,13 +598,13 @@ func (f *Field) ParseTag(tag string) error {
 			switch f.typ {
 			case FT_STRING, FT_U16:
 				// ok
-				flags |= types.FieldFlagEnum
+				flags |= F_ENUM
 				f.typ = FT_U16
 			default:
 				return fmt.Errorf("unsupported enum type %s", f.typ)
 			}
 		case "internal":
-			flags |= types.FieldFlagInternal
+			flags |= F_INTERNAL
 		case "id":
 			num, err := strconv.ParseUint(val, 0, 16)
 			if err != nil {
@@ -606,9 +612,9 @@ func (f *Field) ParseTag(tag string) error {
 			}
 			f.id = uint16(num)
 		case "null":
-			flags |= types.FieldFlagNullable
+			flags |= F_NULLABLE
 		case "notnull":
-			flags &^= types.FieldFlagNullable
+			flags &^= F_NULLABLE
 		case "timestamp":
 			f.typ = FT_TIMESTAMP
 			scale = TIME_SCALE_NANO.AsUint()

@@ -192,7 +192,7 @@ func (idx *Index) lookupKeys(ctx context.Context, keys []uint64) (*xroar.Bitmap,
 	if len(keys) == 0 {
 		return xroar.New(), nil
 	}
-	idx.log.Infof("lookup keys %v", keys)
+	// idx.log.Infof("lookup keys %v", keys)
 	var (
 		next         int
 		nKeysMatched uint32
@@ -221,17 +221,17 @@ func (idx *Index) lookupKeys(ctx context.Context, keys []uint64) (*xroar.Bitmap,
 		}
 
 		// load next pack with potential matches, use pack max index key to break early
-		pkg, maxIk, err := it.Next(ctx)
+		pkg, kmax, err := it.Next(ctx)
 		if err != nil {
 			return nil, err
 		}
 
 		// finish when no more packs or no more keys are available
 		if pkg == nil {
-			idx.log.Infof("No more packs")
+			// idx.log.Infof("No more packs")
 			break
 		}
-		idx.log.Infof("Next pack len=%d up to max ik=0x%016x", pkg.Len(), maxIk)
+		// idx.log.Infof("Next pack len=%d up to max key=0x%016x", pkg.Len(), kmax)
 
 		// access key columns (used for binary search below)
 		k0 := pkg.Block(0).Uint64() // index pks
@@ -240,31 +240,41 @@ func (idx *Index) lookupKeys(ctx context.Context, keys []uint64) (*xroar.Bitmap,
 
 		// loop over the remaining (unresolved) keys, packs are sorted by pk
 		pos := 0
-		for _, ik := range in[next:] {
-			idx.log.Infof("Looking for ik=0x%016x", ik)
+		for _, key := range in[next:] {
+			// idx.log.Infof("Looking for key=0x%016x", key)
 
 			// no more matches in this pack?
-			if maxIk < ik || k0.Get(pos) > maxKey {
-				idx.log.Infof("No more matches in this pack")
+			if kmax < key || k0.Get(pos) > maxKey {
+				// idx.log.Infof("No more matches in this pack")
 				break
 			}
 
 			// find pk in pack
-			n := sort.Search(packLen-pos, func(i int) bool { return k0.Get(pos+i) >= ik })
+			n := sort.Search(packLen-pos, func(i int) bool { return k0.Get(pos+i) >= key })
 
 			// skip when not found
-			if pos+n >= packLen || k0.Get(pos+n) != ik {
-				idx.log.Infof("Lookup key not found")
+			if pos+n >= packLen || k0.Get(pos+n) != key {
+				// idx.log.Infof("Lookup key not found")
 				next++
 				continue
 			}
-			idx.log.Infof("At pos %d found=%016x", pos+n, k0.Get(pos+n))
+			// idx.log.Infof("At pos %d found=%016x", pos+n, k0.Get(pos+n))
 			pos += n
 
-			// on match, add table primary key to result
+			// on match, add row id to result
 			nKeysMatched++
-			idx.log.Infof("Add Result %d", k1.Get(pos))
+			// idx.log.Infof("Add Result %d", k1.Get(pos))
 			bits.Set(k1.Get(pos))
+
+			// Note: index may not be unique as updates merge duplicates which
+			// are not removed until GC; we must all matching row ids and let
+			// the query engine later decide which row is visible under MVCC.
+			// Multi-matches are in sort order.
+			for pos+1 < packLen && k0.Get(pos+1) == key {
+				pos++
+				bits.Set(k1.Get(pos))
+			}
+
 			next++
 		}
 
@@ -316,4 +326,97 @@ func (idx *Index) lookupKeys(ctx context.Context, keys []uint64) (*xroar.Bitmap,
 	}
 
 	return bits, nil
+}
+
+// PK -> RID lookup, keys are sorted, ridMap is allocated
+func (idx *Index) Lookup(ctx context.Context, keys []uint64, ridMap map[uint64]uint64) error {
+	// gracefully handle empty query list
+	if len(keys) == 0 {
+		return nil
+	}
+	// idx.log.Infof("lookup keys %v", keys)
+	var (
+		next         int
+		nKeysMatched uint32
+		nKeys        = uint32(len(keys))
+		maxKey       = keys[nKeys-1]
+		it           = NewLookupIterator(idx, keys, true)
+		in           = keys
+	)
+
+	// cleanup and log on exit
+	defer func() {
+		atomic.AddInt64(&idx.metrics.QueriedTuples, int64(nKeysMatched))
+		it.Close()
+	}()
+
+	for {
+		// stop when all inputs are matched
+		if nKeys == nKeysMatched {
+			break
+		}
+
+		// check context
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		// load next pack with potential matches, use pack max index key to break early
+		pkg, kmax, err := it.Next(ctx)
+		if err != nil {
+			return err
+		}
+
+		// finish when no more packs or no more keys are available
+		if pkg == nil {
+			break
+		}
+
+		// access key columns (used for binary search below)
+		k0 := pkg.Block(0).Uint64() // index pks
+		k1 := pkg.Block(1).Uint64() // table pks
+		packLen := k0.Len()
+
+		// loop over the remaining (unresolved) keys, packs are sorted by pk
+		pos := 0
+		for _, key := range in[next:] {
+			// idx.log.Infof("Looking for ik=0x%016x", ik)
+
+			// no more matches in this pack?
+			if kmax < key || k0.Get(pos) > maxKey {
+				// idx.log.Infof("No more matches in this pack")
+				break
+			}
+
+			// find key in remainder of pack
+			n := sort.Search(packLen-pos, func(i int) bool { return k0.Get(pos+i) >= key })
+
+			// skip when not found
+			if pos+n >= packLen || k0.Get(pos+n) != key {
+				// idx.log.Infof("Lookup key not found")
+				next++
+				continue
+			}
+			// idx.log.Infof("At pos %d found=%016x", pos+n, k0.Get(pos+n))
+			pos += n
+
+			// on match, add row id to result
+			nKeysMatched++
+			// idx.log.Infof("Add Result %d", k1.Get(pos))
+			ridMap[key] = k1.Get(pos)
+
+			// Note: index may not be unique as updates merge duplicates which
+			// are not removed until GC; we must all matching row ids and let
+			// the query engine later decide which row is visible under MVCC.
+			// Multi-matches are in sort order.
+			for pos+1 < packLen && k0.Get(pos+1) == key {
+				pos++
+				ridMap[key] = k1.Get(pos)
+			}
+
+			next++
+		}
+	}
+
+	return nil
 }

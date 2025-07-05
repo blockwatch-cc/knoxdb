@@ -23,8 +23,8 @@ func convertSchema(s, ts *schema.Schema, typ types.IndexType) (*schema.Schema, C
 	}
 
 	// last field must be row id
-	pkf := s.Fields()[s.NumFields()-1]
-	if pkf.Id() != schema.MetaRid {
+	rid := s.Fields()[s.NumFields()-1]
+	if rid.Id() != schema.MetaRid {
 		return nil, nil, fmt.Errorf("last schema field must be row id")
 	}
 
@@ -40,7 +40,7 @@ func convertSchema(s, ts *schema.Schema, typ types.IndexType) (*schema.Schema, C
 			WithName(s.Name()).
 			WithVersion(s.Version()).
 			Uint64("hash").
-			Uint64(pkf.Name()).
+			Uint64(rid.Name()).
 			Finalize().
 			Schema()
 
@@ -85,7 +85,7 @@ func convertSchema(s, ts *schema.Schema, typ types.IndexType) (*schema.Schema, C
 				WithName(s.Name()).
 				WithVersion(s.Version()).
 				Uint64("int").
-				Uint64(pkf.Name()).
+				Uint64(rid.Name()).
 				Finalize().
 				Schema()
 
@@ -99,6 +99,34 @@ func convertSchema(s, ts *schema.Schema, typ types.IndexType) (*schema.Schema, C
 			return ixs, c, nil
 		}
 
+	case types.IndexTypePk:
+		// pk -> rid index
+		if s.NumFields() > 2 {
+			return nil, nil, fmt.Errorf("too many schema columns for pk index")
+		}
+
+		f, _ := s.FieldByIndex(0)
+		if !f.Flags().Is(types.FieldFlagPrimary) || f.Type() != types.FieldTypeUint64 {
+			return nil, nil, fmt.Errorf("invalid field %s (%s) for pk index", f.Name(), f.Type())
+		}
+
+		ixs := schema.NewBuilder().
+			WithName(s.Name()).
+			WithVersion(s.Version()).
+			Uint64(f.Name(), schema.Primary()).
+			Uint64(rid.Name()).
+			Finalize().
+			Schema()
+
+		c := &RelinkConverter{
+			schema: s,
+		}
+		for _, f := range s.Exported() {
+			i, _ := ts.FieldIndexById(f.Id)
+			c.srcBlocks = append(c.srcBlocks, i)
+		}
+		return ixs, c, nil
+
 	case types.IndexTypeComposite:
 		// supports any number of source columns >= 1
 		// first column: hash value (uint64)
@@ -107,7 +135,7 @@ func convertSchema(s, ts *schema.Schema, typ types.IndexType) (*schema.Schema, C
 			WithName(s.Name()).
 			WithVersion(s.Version()).
 			Uint64("hash").
-			Uint64(pkf.Name()).
+			Uint64(rid.Name()).
 			Finalize().
 			Schema()
 

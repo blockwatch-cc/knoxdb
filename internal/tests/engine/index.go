@@ -226,7 +226,7 @@ func CanMatchIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, t
 		require.False(t, ti.CanMatch(makeFilter(ts, "i32", EQ, 1, nil)), "non index field")
 		require.False(t, ti.CanMatch(makeFilter(ts, "u64", NI, []int{1, 2}, nil)), NI)
 
-	case types.IndexTypeInt:
+	case types.IndexTypeInt, types.IndexTypePk:
 		// eq
 		require.True(t, ti.CanMatch(makeFilter(ts, "u64", EQ, 1, nil)), EQ)
 		// le

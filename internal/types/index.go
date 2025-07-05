@@ -11,6 +11,7 @@ const (
 	IndexTypeNone IndexType = iota
 	IndexTypeHash
 	IndexTypeInt
+	IndexTypePk
 	IndexTypeComposite
 	IndexTypeBloom
 	IndexTypeBfuse
@@ -22,8 +23,8 @@ func (i IndexType) Is(f IndexType) bool {
 }
 
 var (
-	indexTypeString  = "__hash_int_composite_bloom_bfuse_bits"
-	indexTypeIdx     = [...]int{0, 2, 7, 11, 21, 27, 33, 37}
+	indexTypeString  = "__hash_int_pk_composite_bloom_bfuse_bits"
+	indexTypeIdx     = [...]int{0, 2, 7, 11, 14, 24, 30, 36, 41}
 	indexTypeReverse = map[string]IndexType{}
 )
 

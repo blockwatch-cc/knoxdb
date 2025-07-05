@@ -63,6 +63,7 @@ type TableEngine interface {
 	UseIndex(QueryableIndex)
 	UnuseIndex(QueryableIndex)
 	Indexes() []QueryableIndex
+	PkIndex() (QueryableIndex, bool)
 
 	// Tx Management
 	CommitTx(ctx Context, xid XID) error
@@ -128,9 +129,11 @@ type QueryCondition interface {
 type QueryableIndex interface {
 	Schema() *Schema
 	IsComposite() bool
+	IsPk() bool
 	CanMatch(QueryCondition) bool
 	Query(Context, QueryCondition) (*Bitmap, bool, error)
 	QueryComposite(Context, QueryCondition) (*Bitmap, bool, error)
+	Lookup(Context, []uint64, map[uint64]uint64) error
 }
 
 type QueryableTable interface {
@@ -199,9 +202,11 @@ type IndexEngine interface {
 
 	// data egress
 	IsComposite() bool
+	IsPk() bool
 	CanMatch(QueryCondition) bool // static: based to index engine type
 	Query(Context, QueryCondition) (*Bitmap, bool, error)
 	QueryComposite(Context, QueryCondition) (*Bitmap, bool, error)
+	Lookup(Context, []uint64, map[uint64]uint64) error
 }
 
 type StoreKind string

@@ -86,8 +86,8 @@ func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, error) {
 	tx.Touch(t.id)
 
 	// protect journal access
-	t.mu.RLock()
-	defer t.mu.RUnlock()
+	t.mu.Lock()
+	defer t.mu.Unlock()
 
 	// insert to journal, write WAL
 	pk, n, err := t.journal.InsertRecords(ctx, buf)
@@ -133,8 +133,8 @@ func (t *Table) InsertInto(ctx context.Context, src *pack.Package) (uint64, erro
 	tx.Touch(t.id)
 
 	// protect journal access
-	t.mu.RLock()
-	defer t.mu.RUnlock()
+	t.mu.Lock()
+	defer t.mu.Unlock()
 
 	// insert to journal, write WAL
 	pk, n, err := t.journal.InsertPack(ctx, src)

@@ -16,7 +16,11 @@ import (
 	"blockwatch.cc/knoxdb/pkg/num"
 )
 
-type FieldType = types.FieldType
+type (
+	FieldType  = types.FieldType
+	FieldFlags = types.FieldFlags
+	IndexType  = types.IndexType
+)
 
 const (
 	FT_TIMESTAMP = types.FieldTypeTimestamp
@@ -42,16 +46,31 @@ const (
 	FT_BIGINT    = types.FieldTypeBigint
 	FT_TIME      = types.FieldTypeTime
 	FT_DATE      = types.FieldTypeDate
+
+	F_PRIMARY  = types.FieldFlagPrimary
+	F_INDEXED  = types.FieldFlagIndexed
+	F_ENUM     = types.FieldFlagEnum
+	F_DELETED  = types.FieldFlagDeleted
+	F_INTERNAL = types.FieldFlagInternal
+	F_NULLABLE = types.FieldFlagNullable
+
+	I_HASH      = types.IndexTypeHash
+	I_INT       = types.IndexTypeInt
+	I_PK        = types.IndexTypePk
+	I_COMPOSITE = types.IndexTypeComposite
+	I_BLOOM     = types.IndexTypeBloom
+	I_BFUSE     = types.IndexTypeBfuse
+	I_BITS      = types.IndexTypeBits
 )
 
 type Field struct {
 	// schema values for CREATE TABLE
 	name     string                 // field name from struct tag or variable name
 	id       uint16                 // unique lifetime id of the field
-	typ      types.FieldType        // schema field type from struct tag or Go type
-	flags    types.FieldFlags       // schema flags from struct tag
+	typ      FieldType              // schema field type from struct tag or Go type
+	flags    FieldFlags             // schema flags from struct tag
 	compress types.BlockCompression // data compression from struct tag
-	index    types.IndexType        // index type: none, hash, int, bloom
+	index    IndexType              // index type: none, hash, int, bloom
 	fixed    uint16                 // 0..65535 fixed size array/bytes/string length
 	scale    uint8                  // 0..255 fixed point scale, time scale, bloom error probability 1/x (1..4)
 
@@ -67,10 +86,10 @@ type Field struct {
 type ExportedField struct {
 	Name       string
 	Id         uint16
-	Type       types.FieldType
-	Flags      types.FieldFlags
+	Type       FieldType
+	Flags      FieldFlags
 	Compress   types.BlockCompression
-	Index      types.IndexType
+	Index      IndexType
 	IsVisible  bool
 	IsInternal bool
 	IsNullable bool
@@ -82,7 +101,7 @@ type ExportedField struct {
 	path       []int
 }
 
-func NewField(typ types.FieldType) Field {
+func NewField(typ FieldType) Field {
 	return Field{
 		typ:      typ,
 		wireSize: uint16(typ.Size()),
@@ -97,7 +116,7 @@ func (f *Field) Id() uint16 {
 	return f.id
 }
 
-func (f *Field) Type() types.FieldType {
+func (f *Field) Type() FieldType {
 	return f.typ
 }
 
@@ -105,7 +124,7 @@ func (f *Field) Path() []int {
 	return f.path
 }
 
-func (f *Field) Flags() types.FieldFlags {
+func (f *Field) Flags() FieldFlags {
 	return f.flags
 }
 
@@ -117,7 +136,7 @@ func (f *Field) Compress() types.BlockCompression {
 	return f.compress
 }
 
-func (f *Field) Index() types.IndexType {
+func (f *Field) Index() IndexType {
 	return f.index
 }
 
@@ -137,36 +156,36 @@ func (f *Field) IsValid() bool {
 	return len(f.name) > 0 && f.typ.IsValid()
 }
 
-func (f *Field) Is(v types.FieldFlags) bool {
+func (f *Field) Is(v FieldFlags) bool {
 	return f.flags.Is(v)
 }
 
 func (f *Field) IsVisible() bool {
-	return f.flags&(types.FieldFlagDeleted|types.FieldFlagInternal) == 0
+	return f.flags&(F_DELETED|F_INTERNAL) == 0
 }
 
 func (f *Field) IsActive() bool {
-	return !f.flags.Is(types.FieldFlagDeleted)
+	return !f.flags.Is(F_DELETED)
 }
 
 func (f *Field) IsInternal() bool {
-	return f.flags.Is(types.FieldFlagInternal)
+	return f.flags.Is(F_INTERNAL)
 }
 
 func (f *Field) IsPrimary() bool {
-	return f.flags.Is(types.FieldFlagPrimary)
+	return f.flags.Is(F_PRIMARY)
 }
 
 func (f *Field) IsIndexed() bool {
-	return f.flags.Is(types.FieldFlagIndexed)
+	return f.flags.Is(F_INDEXED)
 }
 
 func (f *Field) IsNullable() bool {
-	return f.flags.Is(types.FieldFlagNullable)
+	return f.flags.Is(F_NULLABLE)
 }
 
 func (f *Field) IsEnum() bool {
-	return f.flags.Is(types.FieldFlagEnum)
+	return f.flags.Is(F_ENUM)
 }
 
 func (f *Field) IsFixedSize() bool {
@@ -246,10 +265,10 @@ func (f Field) WithScale(n uint8) Field {
 
 func (f Field) WithIndex(kind types.IndexType) Field {
 	f.index = kind
-	if kind != types.IndexTypeNone {
-		f.flags |= types.FieldFlagIndexed
+	if kind != 0 {
+		f.flags |= F_INDEXED
 	} else {
-		f.flags &^= types.FieldFlagIndexed
+		f.flags &^= F_INDEXED
 	}
 	return f
 }
@@ -275,7 +294,7 @@ func (f *Field) Validate() error {
 			minScale = uint8(TIME_SCALE_DAY)
 			maxScale = uint8(TIME_SCALE_DAY)
 		default:
-			if f.index == types.IndexTypeBloom {
+			if f.index == I_BLOOM {
 				minScale, maxScale = 1, 4
 			} else {
 				return fmt.Errorf("scale unsupported on type %s", f.typ)
@@ -305,12 +324,12 @@ func (f *Field) Validate() error {
 	}
 
 	// require index flag when index is != none
-	if f.index > 0 && f.flags&types.FieldFlagIndexed == 0 {
+	if f.index > 0 && f.flags&F_INDEXED == 0 {
 		return fmt.Errorf("missing indexed flag with index kind set")
 	}
 
 	// require integer index on int fields only
-	if f.index == types.IndexTypeInt {
+	if f.index == I_INT {
 		switch f.typ {
 		case FT_I64, FT_I32, FT_I16, FT_I8, FT_U64, FT_U32, FT_U16, FT_U8:
 			// ok
@@ -319,15 +338,22 @@ func (f *Field) Validate() error {
 		}
 	}
 
+	// require pk index on pk field only
+	if f.index == I_PK {
+		if f.typ != FT_U64 || f.flags&F_PRIMARY == 0 {
+			return fmt.Errorf("unsupported pk index on non pk field %s type %s", f.name, f.typ)
+		}
+	}
+
 	// require bloom scale 1..4
-	if f.index == types.IndexTypeBloom {
+	if f.index == I_BLOOM {
 		if _, err := validateInt("bloom factor", int(f.scale), 1, 4); err != nil {
 			return err
 		}
 	}
 
 	// require uint16 for enum types
-	if f.flags.Is(types.FieldFlagEnum) && f.typ != FT_U16 {
+	if f.flags.Is(F_ENUM) && f.typ != FT_U16 {
 		return fmt.Errorf("invalid type %s for enum, requires uint16", f.typ)
 	}
 
@@ -368,7 +394,7 @@ func (f *Field) Codec() OpCode {
 		return OpCodeUint32
 
 	case FT_U16:
-		if f.flags.Is(types.FieldFlagEnum) {
+		if f.flags.Is(F_ENUM) {
 			return OpCodeEnum
 		}
 		return OpCodeUint16
