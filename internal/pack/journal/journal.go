@@ -472,9 +472,8 @@ func (j *Journal) ReplayWalRecord(ctx context.Context, rec *wal.Record, rd engin
 		cset := bitset.NewFromBytes(buf[:csize], j.schema.NumFields())
 		buf = buf[csize:]
 
-		// first rowid
-		rid, n := num.Uvarint(buf)
-		buf = buf[n:]
+		// peek first rowid
+		rid, _ := num.Uvarint(buf)
 
 		// sanity check row id
 		if j.tip.tstate.NextRid != rid {
@@ -483,92 +482,130 @@ func (j *Journal) ReplayWalRecord(ctx context.Context, rec *wal.Record, rd engin
 				j.tip.tstate.NextRid, rid)
 		}
 
-		// make change schema (for parsing change records)
-		cids := make([]uint16, 0, cset.Count())
-		cols := make([]int, 0, cset.Count())
-		for i := range cset.Iterator() {
-			cids = append(cids, j.schema.Field(i).Id())
-			cols = append(cols, i)
-		}
-		cschema, err := j.schema.SelectFieldIds(cids...)
-		if err != nil {
-			// should not happen
-			return fmt.Errorf("update: make change schema: %v", err)
-		}
+		if cset.Count() == j.schema.NumFields() {
+			// optimize, we have full records available
+			var (
+				view    = schema.NewView(j.schema)
+				nextRid = j.tip.tstate.NextRid
+			)
+			for len(buf) > 0 {
+				// decode rid
+				rid, n := num.Uvarint(buf)
+				buf = buf[n:]
 
-		// decode refs from WAL record and construct a query mask
-		var (
-			tmp  = buf
-			refs = xroar.New()
-			recs = make(map[uint64]int)
-			view = schema.NewView(cschema)
-			c    int
-		)
-		for len(buf) > 0 {
-			ref, n := num.Uvarint(buf)
-			buf = buf[n:]
-			c += n
-			refs.Set(ref)
-			recs[ref] = c
-			view, buf, _ = view.Cut(buf)
-			c += view.Len()
-		}
-		buf = tmp
+				// decode ref
+				ref, n := num.Uvarint(buf)
+				buf = buf[n:]
 
-		// ensure amount of updates fits into current journal tip
-		if len(recs) > j.Capacity() {
-			// should not happen
-			return fmt.Errorf("update: num updates %d is larger than journal capacity %d",
-				len(recs), j.Capacity())
-		}
+				// decode record
+				view, buf, _ = view.Cut(buf)
 
-		// run query visiting all packs with matches
-		rd.WithMask(refs, engine.ReadModeIncludeMask)
-		for {
-			pkg, err := rd.Next(ctx)
-			if err != nil {
-				return err
-			}
-			if pkg == nil {
-				break
-			}
+				// append to journal
+				j.tip.UpdateRecord(rec.TxID, rid, ref, view.Bytes())
+				nextRid++
 
-			// materialize columns in the change set
-			for _, col := range cols {
-				pkg.MaterializeBlock(col)
-			}
-
-			// patch records
-			for _, row := range pkg.Selected() {
-				rid := pkg.RowId(int(row))
-				ofs, ok := recs[rid]
-				if !ok {
+				// ensure amount of updates fits into current journal tip
+				if j.Capacity() == 0 {
 					// should not happen
-					return fmt.Errorf("update: found invalid original rid=%d", rid)
+					return fmt.Errorf("update: num updates is larger than journal capacity")
 				}
-
-				// set values
-				view.Reset(buf[ofs:])
-				for i, col := range cols {
-					val, _ := view.Get(i)
-					pkg.Block(col).Set(int(row), val)
-				}
-
-				// remove patched update
-				delete(recs, rid)
 			}
+			j.tip.tstate.NextRid = nextRid
 
-			// append changed records to journal (will set new rowid, xid, ref)
-			_, err = j.updatePackNoWal(pkg, rec.TxID)
+		} else {
+			// make change schema (for parsing change records)
+			cids := make([]uint16, 0, cset.Count())
+			cols := make([]int, 0, cset.Count())
+			for i := range cset.Iterator() {
+				cids = append(cids, j.schema.Field(i).Id())
+				cols = append(cols, i)
+			}
+			cschema, err := j.schema.SelectFieldIds(cids...)
 			if err != nil {
-				return fmt.Errorf("replay update: %v", err)
+				// should not happen
+				return fmt.Errorf("update: make change schema: %v", err)
 			}
-		}
 
-		// sanity check we have applied changes to all records found in WAL
-		if len(recs) > 0 {
-			// should not happen
-			return fmt.Errorf("update: %d unhandled records", len(recs))
+			// decode refs from WAL record and construct a query mask
+			var (
+				tmp  = buf
+				refs = xroar.New()
+				recs = make(map[uint64]int)
+				view = schema.NewView(cschema)
+				c    int
+			)
+			for len(buf) > 0 {
+				// decode rid
+				_, n := num.Uvarint(buf)
+				buf = buf[n:]
+				c += n
+				// decode ref
+				ref, n := num.Uvarint(buf)
+				buf = buf[n:]
+				c += n
+				refs.Set(ref)
+				recs[ref] = c
+				// skip record
+				view, buf, _ = view.Cut(buf)
+				c += view.Len()
+			}
+			buf = tmp
+
+			// ensure amount of updates fits into current journal tip
+			if len(recs) > j.Capacity() {
+				// should not happen
+				return fmt.Errorf("update: num updates %d is larger than journal capacity %d",
+					len(recs), j.Capacity())
+			}
+
+			// run query visiting all packs with matches
+			rd.WithMask(refs, engine.ReadModeIncludeMask)
+			for {
+				pkg, err := rd.Next(ctx)
+				if err != nil {
+					return err
+				}
+				if pkg == nil {
+					break
+				}
+
+				// materialize columns in the change set
+				for _, col := range cols {
+					pkg.MaterializeBlock(col)
+				}
+
+				// patch records
+				for _, row := range pkg.Selected() {
+					rid := pkg.RowId(int(row))
+					ofs, ok := recs[rid]
+					if !ok {
+						// should not happen
+						return fmt.Errorf("update: found invalid original rid=%d", rid)
+					}
+
+					// set values
+					view.Reset(buf[ofs:])
+					for i, col := range cols {
+						val, _ := view.Get(i)
+						pkg.Block(col).Set(int(row), val)
+					}
+
+					// remove patched update
+					delete(recs, rid)
+				}
+
+				// append changed records to journal (will set new rowid, xid, ref)
+				_, err = j.updatePackNoWal(pkg, rec.TxID)
+				if err != nil {
+					return fmt.Errorf("replay update: %v", err)
+				}
+			}
+
+			// sanity check we have applied changes to all records found in WAL
+			if len(recs) > 0 {
+				// should not happen
+				return fmt.Errorf("update: %d unhandled records", len(recs))
+			}
 		}
 
 	case wal.RecordTypeDelete:
