@@ -265,7 +265,7 @@ func (t *Tx) Close() {
 
 	// signal to waiting writers
 	if !t.flags.IsReadOnly() {
-		t.engine.writeToken <- struct{}{}
+		t.engine.txchan <- struct{}{}
 	}
 
 	// cleanup, but keep id and flags

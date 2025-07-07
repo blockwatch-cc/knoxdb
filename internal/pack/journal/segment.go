@@ -99,10 +99,11 @@ func (s *Segment) Reset() {
 	s.xmax = 0
 	s.rmin = 1<<64 - 1
 	s.rmax = 0
-	s.state = SegmentStateEmpty
+	s.state = SegmentStateActive
 	s.lsn = 0
 	s.tstate = engine.ObjectState{}
 	s.xact = 0
+	s.parent = nil
 }
 
 func (s *Segment) Close() {

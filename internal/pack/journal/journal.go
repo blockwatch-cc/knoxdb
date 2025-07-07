@@ -163,12 +163,23 @@ func (j *Journal) Close() {
 	j.wal = nil
 }
 
+// Force-rotates the current segment and writes a new WAL checkpoint.
+// Rotated empty segments are still merged to make their checkpoints
+// durable. Note the caller must schedule a merge task to actually
+// write the new table checkpoint to disk.
+func (j *Journal) Checkpoint(_ context.Context) error {
+	return j.doRotateAndCheckpoint()
+}
+
 func (j *Journal) rotateAndCheckpoint() error {
 	// rotate segment when full
 	if !j.rotateWhenFull() {
 		return nil
 	}
+	return j.doRotateAndCheckpoint()
+}
 
+func (j *Journal) doRotateAndCheckpoint() error {
 	// write WAL checkpoint
 	lsn, err := j.wal.Write(&wal.Record{
 		Type:   wal.RecordTypeCheckpoint,

@@ -12,9 +12,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/echa/log"
@@ -121,6 +120,7 @@ type Wal struct {
 	nextLsn LSN
 	lastLsn LSN
 	log     log.Logger
+	nBytes  int64
 }
 
 func Create(opts WalOptions) (*Wal, error) {
@@ -161,37 +161,6 @@ func Create(opts WalOptions) (*Wal, error) {
 	return wal, nil
 }
 
-func possibleMaxLsn(opts WalOptions) (maxLsn LSN, err error) {
-	opts.Logger.Debugf("wal: walking %s for possible highest segment file", opts.Path)
-	var last fs.FileInfo
-	err = filepath.Walk(opts.Path, func(path string, d fs.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if filepath.Ext(d.Name()) == SEG_FILE_SUFFIX {
-			last = d
-		}
-		if d.IsDir() && opts.Path != path {
-			return filepath.SkipDir
-		}
-		return nil
-	})
-	if err != nil {
-		return
-	}
-	opts.Logger.Debugf("wal: using last segment file %s (%d bytes)", last.Name(), last.Size())
-	if last != nil {
-		name := last.Name()
-		name = strings.TrimSuffix(name, filepath.Ext(name))
-		id, err := strconv.ParseInt(name, 10, 0)
-		if err != nil {
-			return 0, err
-		}
-		maxLsn = LSN(id*int64(opts.MaxSegmentSize) + last.Size())
-	}
-	return maxLsn, nil
-}
-
 func Open(lsn LSN, opts WalOptions) (*Wal, error) {
 	opts = DefaultOptions.Merge(opts)
 	if !opts.IsValid() {
@@ -199,10 +168,10 @@ func Open(lsn LSN, opts WalOptions) (*Wal, error) {
 	}
 	opts.Logger.Debugf("wal: open files at %s", opts.Path)
 
-	// guess possible max lsn based on segment names
+	// guess possible min/max lsn based on segment names
 	// used for only validating checksum
 	// actual max lsn will be set after
-	maxLsn, err := possibleMaxLsn(opts)
+	minLsn, maxLsn, err := possibleMaxLsn(opts)
 	if err != nil {
 		return nil, err
 	}
@@ -216,6 +185,7 @@ func Open(lsn LSN, opts WalOptions) (*Wal, error) {
 		csum:    opts.Seed,
 		nextLsn: maxLsn,
 		log:     opts.Logger,
+		nBytes:  int64(maxLsn - minLsn),
 	}
 	wal.log.Debugf("wal: verifying from LSN 0x%x", lsn)
 
@@ -295,6 +265,7 @@ func (w *Wal) Close() error {
 	w.nextLsn = 0
 	w.lastLsn = 0
 	w.log = nil
+	w.nBytes = 0
 	return err
 }
 
@@ -314,6 +285,7 @@ func (w *Wal) ForceClose() error {
 	w.nextLsn = 0
 	w.lastLsn = 0
 	w.log = nil
+	w.nBytes = 0
 	return err
 }
 
@@ -389,6 +361,72 @@ func (w *Wal) WriteAndSchedule(rec *Record) (LSN, *util.Future, error) {
 	return lsn, w.Schedule(), nil
 }
 
+func (w *Wal) NumBytesSincdLastGC() int64 {
+	return atomic.LoadInt64(&w.nBytes)
+}
+
+// remove all WAL segment files before lsn
+func (w *Wal) GC(watermark LSN) error {
+	if watermark > w.nextLsn {
+		return ErrInvalidLSN
+	}
+
+	// cannot remove the active segment or drop any segment the
+	// watermark points to. all removals must be strictly smaller segments.
+	sid := watermark.Segment(w.opts.MaxSegmentSize) - 1
+	if w.active.id == sid || sid < 0 {
+		w.log.Tracef("wal: skip gc of active segment")
+		return nil
+	}
+
+	// skip if we haven't made a segment worth of progress since last GC
+	// (on startup we analyze segment files and set nBytes to the full range)
+	if atomic.LoadInt64(&w.nBytes) < int64(w.opts.MaxSegmentSize) {
+		w.log.Tracef("wal: skip gc due to too little progress")
+		return nil
+	}
+
+	// walk in lexical order and remove segment files, stop at sid
+	err := filepath.Walk(w.opts.Path, func(path string, d fs.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() && w.opts.Path != path {
+			return filepath.SkipDir
+		}
+		name := d.Name()
+		if filepath.Ext(name) != SEG_FILE_SUFFIX {
+			return nil
+		}
+		id, err := decodeSegmentName(name)
+		if err != nil {
+			return err
+		}
+		if id > sid {
+			return io.EOF
+		}
+		fname := w.segmentName(id)
+		w.log.Infof("wal: gc removing segment %s", fname)
+		return os.Remove(fname)
+	})
+	if err != nil && err != io.EOF {
+		return err
+	}
+
+	// sync directory
+	dir, err := os.Open(w.opts.Path)
+	if err != nil {
+		return err
+	}
+	err = dir.Sync()
+	dir.Close()
+
+	// reset write counter
+	atomic.StoreInt64(&w.nBytes, 0)
+
+	return err
+}
+
 func (w *Wal) sync() error {
 	if err := w.wr.Flush(); err != nil {
 		return err
@@ -445,6 +483,7 @@ func (w *Wal) write(rec *Record) (LSN, error) {
 	w.csum = csum
 	w.lastLsn = lsn
 	w.nextLsn = lsn.Add(sz)
+	atomic.AddInt64(&w.nBytes, int64(sz))
 
 	return lsn, nil
 }
@@ -658,4 +697,48 @@ func (w *Wal) runSyncThread() {
 func (w *Wal) stopSyncThread() {
 	close(w.close)
 	w.wg.Wait()
+}
+
+func possibleMaxLsn(opts WalOptions) (minLsn, maxLsn LSN, err error) {
+	opts.Logger.Debugf("wal: walking %s for possible highest segment file", opts.Path)
+	var (
+		first, last string
+		lastSz      int64
+	)
+	err = filepath.Walk(opts.Path, func(path string, d fs.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if filepath.Ext(d.Name()) == SEG_FILE_SUFFIX {
+			last = d.Name()
+			lastSz = d.Size()
+			if first == "" {
+				first = last
+			}
+		}
+		if d.IsDir() && opts.Path != path {
+			return filepath.SkipDir
+		}
+		return nil
+	})
+	if err != nil {
+		return
+	}
+	opts.Logger.Debugf("wal: using last segment file %s (%d bytes)", last, lastSz)
+	if last != "" {
+		id, err := decodeSegmentName(last)
+		if err != nil {
+			return 0, 0, err
+		}
+		maxLsn = LSN(id*opts.MaxSegmentSize + int(lastSz))
+	}
+	if first != "" {
+		id, err := decodeSegmentName(first)
+		if err != nil {
+			return 0, 0, err
+		}
+		minLsn = LSN(id * opts.MaxSegmentSize)
+
+	}
+	return minLsn, maxLsn, nil
 }

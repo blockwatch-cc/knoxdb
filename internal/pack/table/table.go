@@ -460,6 +460,7 @@ func (t *Table) Truncate(ctx context.Context) error {
 		// reset state
 		t.state.Reset()
 		t.state.Checkpoint = lsn
+		t.journal.WithState(t.state)
 		return t.state.Store(ctx, tx)
 	})
 	if err != nil {
@@ -491,8 +492,8 @@ func (t *Table) CommitTx(ctx context.Context, xid types.XID) error {
 	defer t.mu.Unlock()
 	canMerge := t.journal.CommitTx(xid)
 	if canMerge {
-		// TODO: prevent cascading on high tx volume (merge task starts async
-		// and canMerge is true each time CommitTx is called)
+		// cascading merge calls on high tx volume are scheduled, but may
+		// bail out when segment merge takes too long
 		t.log.Debugf("table[%s]: scheduling merge task", t.schema.Name())
 		ok := t.engine.Schedule(engine.NewTask(t.Merge))
 		if !ok {
@@ -508,14 +509,31 @@ func (t *Table) AbortTx(ctx context.Context, xid types.XID) error {
 	defer t.mu.Unlock()
 	canMerge := t.journal.AbortTx(xid)
 	if canMerge {
-		// TODO: prevent cascading on high tx volume (merge task starts async
-		// and canMerge is true each time AbortTx is called)
+		// cascading merge calls on high tx volume are scheduled, but may
+		// bail out when segment merge takes too long
 		t.log.Debugf("table[%s]: scheduling merge task", t.schema.Name())
 		ok := t.engine.Schedule(engine.NewTask(t.Merge))
 		if !ok {
 			t.log.Warnf("table[%s]: merge task queue full", t.schema.Name())
 		}
 	}
+	return nil
+}
+
+// Checkpoint journal which rotates the active segment and writes
+// new table checkpoint to WAL. This may be called concurrently to
+// queries and writer calls by a background worker to advance WAL LSNs
+// across tables. After writing a new WAL checkpoint this function
+// also schedules a merge call which is required to push the new table
+// checkpoint to disk.
+func (t *Table) Checkpoint(ctx context.Context) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if err := t.journal.Checkpoint(ctx); err != nil {
+		return err
+	}
+	// schedule merge task to make new checkpoint durable
+	t.engine.Schedule(engine.NewTask(t.Merge))
 	return nil
 }
 

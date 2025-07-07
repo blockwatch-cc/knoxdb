@@ -47,6 +47,7 @@ type TableEngine interface {
 	Sync(Context) error
 	Compact(Context) error
 	Truncate(Context) error
+	Checkpoint(Context) error
 
 	// data ingress
 	InsertRows(Context, []byte) (uint64, error) // wire encoded rows

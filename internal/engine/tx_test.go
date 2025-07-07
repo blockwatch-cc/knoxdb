@@ -19,7 +19,7 @@ func TestNewTx(t *testing.T) {
 
 	// 1 start write tx
 	t1 := e.NewTransaction(0)
-	<-e.writeToken
+	<-e.txchan
 
 	// check write tx
 	// - xid
@@ -288,7 +288,7 @@ func TestTxWait(t *testing.T) {
 		}()
 
 		wg.Add(1)
-		e.opts.TxWaitTimeout = 10 * time.Millisecond
+		e.opts.TxWaitTimeout = 20 * time.Millisecond
 		require.Eventually(t, func() bool {
 			defer wg.Done()
 			_, tx, _, abort, err := e.WithTransaction(ctx, TxFlagReadOnly, TxFlagDeferred)
@@ -319,7 +319,7 @@ func TestTxWait(t *testing.T) {
 
 	// with timeout throws error
 	{
-		e.opts.TxWaitTimeout = 10 * time.Millisecond
+		e.opts.TxWaitTimeout = 20 * time.Millisecond
 		require.Eventually(t, func() bool {
 			_, _, _, _, err := e.WithTransaction(ctx)
 			require.Error(t, err)
@@ -331,7 +331,7 @@ func TestTxWait(t *testing.T) {
 
 	// deferred waits can timeout
 	{
-		e.opts.TxWaitTimeout = 10 * time.Millisecond
+		e.opts.TxWaitTimeout = 20 * time.Millisecond
 		require.Eventually(t, func() bool {
 			_, _, _, _, err := e.WithTransaction(ctx, TxFlagReadOnly, TxFlagDeferred)
 			require.Error(t, err)
@@ -347,7 +347,7 @@ func TestTxWait(t *testing.T) {
 			// simulate shutdown (order matters!)
 			e.shutdown.Store(true)
 			tx.Kill(ErrDatabaseShutdown)
-			close(e.writeToken)
+			close(e.txchan)
 		}()
 		require.Eventually(t, func() bool {
 			_, _, _, _, err := e.WithTransaction(ctx)
@@ -383,7 +383,7 @@ func TestReadTxShutdown(t *testing.T) {
 	go func() {
 		e.shutdown.Store(true)
 		tx.Kill(ErrDatabaseShutdown)
-		close(e.writeToken)
+		close(e.txchan)
 	}()
 
 	// tx should be aborted, context canceled
@@ -417,7 +417,7 @@ func TestWriteTxShutdown(t *testing.T) {
 	go func() {
 		e.shutdown.Store(true)
 		tx.Kill(ErrDatabaseShutdown)
-		close(e.writeToken)
+		close(e.txchan)
 	}()
 
 	// tx should be aborted, context canceled

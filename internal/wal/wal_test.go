@@ -139,7 +139,7 @@ func TestWalOptions(t *testing.T) {
 		// Write records to force multiple segment creation
 		for i := 0; i < 100; i++ {
 			rec := &Record{
-				TxID: uint64(i + 1),
+				TxID: types.XID(i + 1),
 				Tag:  types.ObjectTagDatabase,
 				Type: RecordTypeInsert,
 				Data: [][]byte{bytes.Repeat([]byte("a"), 1000)}, // 100 byte records
@@ -180,7 +180,7 @@ func TestWalWrite(t *testing.T) {
 		recordType RecordType
 		tag        types.ObjectTag
 		entity     uint64
-		txID       uint64
+		txID       types.XID
 		data       string
 	}{
 		{RecordTypeInsert, types.ObjectTagDatabase, 1, 100, "d1"},
@@ -370,7 +370,7 @@ func TestWalRead(t *testing.T) {
 		recordType RecordType
 		tag        types.ObjectTag
 		entity     uint64
-		txID       uint64
+		txID       types.XID
 		data       string
 	}{
 		{RecordTypeInsert, types.ObjectTagDatabase, 1, 100, "data1"},
@@ -466,7 +466,7 @@ func TestWalSyncAndClose(t *testing.T) {
 			Type:   RecordTypeInsert,
 			Tag:    types.ObjectTagDatabase,
 			Entity: uint64(i),
-			TxID:   uint64(i + 1*100),
+			TxID:   types.XID(i + 1*100),
 			Data:   [][]byte{[]byte(fmt.Sprintf("data%d", i))},
 		}
 		_, err := w.Write(rec)
@@ -501,7 +501,7 @@ func TestWalAsyncWait(t *testing.T) {
 					Type:   RecordTypeInsert,
 					Tag:    types.ObjectTagDatabase,
 					Entity: uint64(i),
-					TxID:   uint64(i + th*100 + 1),
+					TxID:   types.XID(i + th*100 + 1),
 					Data:   [][]byte{[]byte(fmt.Sprintf("data%d", i))},
 				}
 				_, fut, err := w.WriteAndSchedule(rec)
@@ -537,7 +537,7 @@ func TestWalAsyncNoWait(t *testing.T) {
 					Type:   RecordTypeInsert,
 					Tag:    types.ObjectTagDatabase,
 					Entity: uint64(i),
-					TxID:   uint64(i + th*100 + 1),
+					TxID:   types.XID(i + th*100 + 1),
 					Data:   [][]byte{[]byte(fmt.Sprintf("data%d", i))},
 				}
 				_, fut, err := w.WriteAndSchedule(rec)
@@ -565,7 +565,7 @@ func TestWalAsyncClose(t *testing.T) {
 		Type:   RecordTypeInsert,
 		Tag:    types.ObjectTagDatabase,
 		Entity: uint64(1),
-		TxID:   uint64(100 + 1),
+		TxID:   types.XID(100 + 1),
 		Data:   [][]byte{[]byte("data")},
 	}
 	_, fut, err := w.WriteAndSchedule(rec)
@@ -596,7 +596,7 @@ func TestWalSegmentRollover(t *testing.T) {
 			Type:   RecordTypeInsert,
 			Tag:    types.ObjectTagDatabase,
 			Entity: uint64(i),
-			TxID:   uint64(i + 1),
+			TxID:   types.XID(i + 1),
 			Data:   [][]byte{bytes.Repeat([]byte("a"), 100)},
 		}
 		_, err := w.Write(rec)
@@ -692,7 +692,7 @@ func TestWalRecovery(t *testing.T) {
 				Type:   RecordTypeInsert,
 				Tag:    types.ObjectTagDatabase,
 				Entity: uint64(i),
-				TxID:   uint64(i + 1*100),
+				TxID:   types.XID(i + 1*100),
 				Data:   [][]byte{[]byte(fmt.Sprintf("data%d", i))},
 			}
 			_, err := w.Write(rec)
@@ -742,7 +742,7 @@ func TestWalRecovery(t *testing.T) {
 				Type:   RecordTypeInsert,
 				Tag:    types.ObjectTagDatabase,
 				Entity: uint64(i),
-				TxID:   uint64(i + 1*100),
+				TxID:   types.XID(i + 1*100),
 				Data:   [][]byte{[]byte(fmt.Sprintf("data%d", i))},
 			}
 			_, err := w.Write(rec)
@@ -857,7 +857,7 @@ func TestWalRecoveryWithPartialRecords(t *testing.T) {
 			Type:   RecordTypeInsert,
 			Tag:    types.ObjectTagDatabase,
 			Entity: uint64(i),
-			TxID:   uint64(i),
+			TxID:   types.XID(i),
 			Data:   [][]byte{[]byte(fmt.Sprintf("complete data %d", i))},
 		}
 		_, err := w.Write(rec)
@@ -869,7 +869,7 @@ func TestWalRecoveryWithPartialRecords(t *testing.T) {
 		Type:   RecordTypeUpdate,
 		Tag:    types.ObjectTagDatabase,
 		Entity: uint64(completeRecords),
-		TxID:   uint64(completeRecords),
+		TxID:   types.XID(completeRecords),
 		Data:   [][]byte{[]byte("partial data")},
 	}
 
@@ -914,11 +914,11 @@ func TestWalRecoveryWithPartialRecords(t *testing.T) {
 			break
 		}
 		require.NoError(t, err)
-		assert.Equal(t, RecordTypeInsert, rec.Type)
-		assert.Equal(t, types.ObjectTagDatabase, rec.Tag)
-		assert.Equal(t, uint64(j), rec.Entity)
-		assert.Equal(t, uint64(j), rec.TxID)
-		assert.Equal(t, [][]byte{[]byte(fmt.Sprintf("complete data %d", j))}, rec.Data)
+		require.Equal(t, RecordTypeInsert, rec.Type)
+		require.Equal(t, types.ObjectTagDatabase, rec.Tag)
+		require.Equal(t, uint64(j), rec.Entity)
+		require.Equal(t, types.XID(j), rec.TxID)
+		require.Equal(t, [][]byte{[]byte(fmt.Sprintf("complete data %d", j))}, rec.Data)
 		recoveredCounter++
 		j++
 	}
@@ -931,7 +931,7 @@ func TestWalRecoveryWithPartialRecords(t *testing.T) {
 		Type:   RecordTypeInsert,
 		Tag:    types.ObjectTagDatabase,
 		Entity: uint64(completeRecords + 1),
-		TxID:   uint64((completeRecords + 1)),
+		TxID:   types.XID((completeRecords + 1)),
 		Data:   [][]byte{[]byte("new record after recovery")},
 	}
 	_, err = recoveredWal.Write(newRec)
@@ -1067,7 +1067,7 @@ func TestWalFaultInjection(t *testing.T) {
 			rec := &Record{
 				Type: RecordTypeInsert,
 				Tag:  types.ObjectTagDatabase,
-				TxID: uint64(i),
+				TxID: types.XID(i),
 				Data: [][]byte{[]byte(fmt.Sprintf("data %d", i))},
 			}
 			lastLSN, err = w.Write(rec)
@@ -1249,7 +1249,7 @@ func TestWalFaultInjection(t *testing.T) {
 				Type: RecordTypeInsert,
 				Tag:  types.ObjectTagDatabase,
 				Data: [][]byte{bytes.Repeat([]byte("a"), 900)},
-				TxID: uint64(i + 1),
+				TxID: types.XID(i + 1),
 			}
 			_, err := w.Write(rec)
 			require.NoError(t, err)
@@ -1316,7 +1316,7 @@ func BenchmarkWalWrite(b *testing.B) {
 					Type:   RecordTypeInsert,
 					Tag:    types.ObjectTagDatabase,
 					Entity: uint64(i),
-					TxID:   uint64(i),
+					TxID:   types.XID(i),
 					Data:   [][]byte{data},
 				}
 				_, err := w.Write(rec)
@@ -1342,7 +1342,7 @@ func BenchmarkWalWriteSync(b *testing.B) {
 			Type:   RecordTypeInsert,
 			Tag:    types.ObjectTagDatabase,
 			Entity: uint64(i),
-			TxID:   uint64(i),
+			TxID:   types.XID(i),
 			Data:   [][]byte{data},
 		}
 		_, err := w.Write(rec)
@@ -1367,7 +1367,7 @@ func BenchmarkWalWriteSchedule(b *testing.B) {
 			Type:   RecordTypeInsert,
 			Tag:    types.ObjectTagDatabase,
 			Entity: uint64(i),
-			TxID:   uint64(i),
+			TxID:   types.XID(i),
 			Data:   [][]byte{data},
 		}
 		_, err := w.Write(rec)
@@ -1398,7 +1398,7 @@ func BenchmarkWalSegmentSize(b *testing.B) {
 					Type:   RecordTypeInsert,
 					Tag:    types.ObjectTagDatabase,
 					Entity: uint64(i),
-					TxID:   uint64(i),
+					TxID:   types.XID(i),
 					Data:   [][]byte{data},
 				}
 				_, err := w.Write(rec)

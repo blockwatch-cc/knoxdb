@@ -14,6 +14,7 @@ var (
 	ErrInvalidObjectTag  = errors.New("invalid object tag")
 	ErrInvalidTxId       = errors.New("invalid tx id")
 	ErrInvalidBodySize   = errors.New("invalid body size")
+	ErrInvalidFilename   = errors.New("invalid segment filename")
 
 	ErrInvalidLSN   = errors.New("seek to non-checkpoint LSN")
 	ErrReaderClosed = errors.New("wal reader closed")

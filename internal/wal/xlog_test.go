@@ -11,11 +11,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func xmin(id int) uint64 {
-	return uint64(id) << CommitFrameShift
+func xmin(id int) types.XID {
+	return types.XID(id) << CommitFrameShift
 }
 
-func xmax(id int) uint64 {
+func xmax(id int) types.XID {
 	return xmin(id) + 1<<CommitFrameShift - 1
 }
 
@@ -50,7 +50,7 @@ func makeRecords(sz int) []*Record {
 		recs = append(recs, &Record{
 			Type:   walTyp,
 			Tag:    types.ObjectTagDatabase,
-			TxID:   uint64(walTxId),
+			TxID:   types.XID(walTxId),
 			Entity: 10,
 			Data:   [][]byte{walBody},
 		})
@@ -62,7 +62,7 @@ func TestCommitFrameXmin(t *testing.T) {
 	type testCase struct {
 		Name         string
 		Id           int64
-		ExpectedXmin uint64
+		ExpectedXmin types.XID
 	}
 
 	var testCases = []testCase{
@@ -104,7 +104,7 @@ func TestCommitFrameXmax(t *testing.T) {
 	type testCase struct {
 		Name         string
 		Id           int64
-		ExpectedXmax uint64
+		ExpectedXmax types.XID
 	}
 
 	var testCases = []testCase{
@@ -144,13 +144,13 @@ func TestCommitFrameXmax(t *testing.T) {
 
 func TestCommitFrameIsCommittedFrame(t *testing.T) {
 	t.Run("checks if appended transaction id is committed", func(t *testing.T) {
-		xid := uint64(100)
+		xid := types.XID(100)
 		commitFrame := NewCommitFrame(0)
 		commitFrame.Append(xid, LSN(0))
 		require.Truef(t, commitFrame.IsCommitted(xid), "xid %d was appended ", xid)
 	})
 	t.Run("checks if transaction id is not appended id, it is not committed", func(t *testing.T) {
-		xid := uint64(100)
+		xid := types.XID(100)
 		commitFrame := NewCommitFrame(3)
 		commitFrame.Append(xid, LSN(2))
 		require.Falsef(t, commitFrame.IsCommitted(xid), "xid %d was not appended ", xid)
@@ -158,7 +158,7 @@ func TestCommitFrameIsCommittedFrame(t *testing.T) {
 }
 
 func TestCommitFrameAppend(t *testing.T) {
-	xid := uint64(100)
+	xid := types.XID(100)
 	commitFrame := NewCommitFrame(0)
 	commitFrame.Append(xid, LSN(2))
 	require.Truef(t, commitFrame.IsCommitted(xid), "xid %d was not appended ", xid)
@@ -170,9 +170,9 @@ func TestCommitFrameContains(t *testing.T) {
 	for i := range commitFrames {
 		commitFrames[i] = *NewCommitFrame(int64(i))
 	}
-	xids := make([]uint64, 10)
+	xids := make([]types.XID, 10)
 	for i := range xids {
-		xids[i] = uint64(i << 19)
+		xids[i] = types.XID(i << 19)
 	}
 
 	for j := range xids {

@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 )
 
 const (
@@ -33,6 +35,15 @@ type segment struct {
 
 func (w *Wal) segmentName(id int) string {
 	return filepath.Join(w.opts.Path, fmt.Sprintf(SEG_FILE_PATTERN, id))
+}
+
+func decodeSegmentName(name string) (int, error) {
+	if filepath.Ext(name) != SEG_FILE_SUFFIX {
+		return 0, ErrInvalidFilename
+	}
+	name = strings.TrimSuffix(name, filepath.Ext(name))
+	id, err := strconv.ParseInt(name, 10, 0)
+	return int(id), err
 }
 
 // must call with lock held

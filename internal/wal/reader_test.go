@@ -55,11 +55,11 @@ func TestReaderFilter(t *testing.T) {
 				assert.Equal(t, io.EOF, err, "Expected EOF when no records match the filter")
 			} else if assert.NoError(t, err) {
 				t.Logf("Read record: %+v", rec)
-				assert.Equal(t, tt.expect.Type, rec.Type, "Record type mismatch")
-				assert.Equal(t, tt.expect.Tag, rec.Tag, "Record tag mismatch")
-				assert.Equal(t, tt.expect.Entity, rec.Entity, "Record entity mismatch")
-				assert.Equal(t, tt.expect.TxID, rec.TxID, "Record TxID mismatch")
-				assert.Equal(t, tt.expect.Data, rec.Data, "Record data mismatch")
+				require.Equal(t, tt.expect.Type, rec.Type, "Record type mismatch")
+				require.Equal(t, tt.expect.Tag, rec.Tag, "Record tag mismatch")
+				require.Equal(t, tt.expect.Entity, rec.Entity, "Record entity mismatch")
+				require.Equal(t, tt.expect.TxID, rec.TxID, "Record TxID mismatch")
+				require.Equal(t, tt.expect.Data, rec.Data, "Record data mismatch")
 			}
 		})
 	}
@@ -229,7 +229,7 @@ func TestTwoSimultaneousReaders(t *testing.T) {
 			Type:   RecordTypeInsert,
 			Tag:    types.ObjectTagDatabase,
 			Entity: uint64(i),
-			TxID:   uint64(i * 100),
+			TxID:   types.XID(i * 100),
 			Data:   [][]byte{[]byte(fmt.Sprintf("data%d", i))},
 		}
 		_, err := w.Write(rec)
@@ -252,11 +252,11 @@ func TestTwoSimultaneousReaders(t *testing.T) {
 			var err error
 			rec, err = r.Next()
 			require.NoError(t, err)
-			assert.Equal(t, RecordTypeInsert, rec.Type)
-			assert.Equal(t, types.ObjectTagDatabase, rec.Tag)
-			assert.Equal(t, uint64(i), rec.Entity)
-			assert.Equal(t, uint64(i*100), rec.TxID)
-			assert.Equal(t, [][]byte{[]byte(fmt.Sprintf("data%d", i))}, rec.Data)
+			require.Equal(t, RecordTypeInsert, rec.Type)
+			require.Equal(t, types.ObjectTagDatabase, rec.Tag)
+			require.Equal(t, uint64(i), rec.Entity)
+			require.Equal(t, types.XID(i*100), rec.TxID)
+			require.Equal(t, [][]byte{[]byte(fmt.Sprintf("data%d", i))}, rec.Data)
 		}
 	}
 
@@ -287,7 +287,7 @@ func TestConcurrentReadersLargeDataset(t *testing.T) {
 			Type:   RecordTypeInsert,
 			Tag:    types.ObjectTagDatabase,
 			Entity: uint64(i),
-			TxID:   uint64(i * 100),
+			TxID:   types.XID(i * 100),
 			Data:   [][]byte{[]byte(fmt.Sprintf("data%d", i))},
 		}
 		_, err := w.Write(rec)
@@ -319,11 +319,11 @@ func TestConcurrentReadersLargeDataset(t *testing.T) {
 				}
 
 				expectedI := count + 1
-				assert.Equal(t, RecordTypeInsert, rec.Type)
-				assert.Equal(t, types.ObjectTagDatabase, rec.Tag)
-				assert.Equal(t, uint64(expectedI), rec.Entity)
-				assert.Equal(t, uint64(expectedI*100), rec.TxID)
-				assert.Equal(t, [][]byte{[]byte(fmt.Sprintf("data%d", expectedI))}, rec.Data)
+				require.Equal(t, RecordTypeInsert, rec.Type)
+				require.Equal(t, types.ObjectTagDatabase, rec.Tag)
+				require.Equal(t, uint64(expectedI), rec.Entity)
+				require.Equal(t, types.XID(expectedI*100), rec.TxID)
+				require.Equal(t, [][]byte{[]byte(fmt.Sprintf("data%d", expectedI))}, rec.Data)
 
 				count++
 			}
@@ -357,7 +357,7 @@ func BenchmarkWalRead(b *testing.B) {
 			Type:   RecordTypeInsert,
 			Tag:    types.ObjectTagDatabase,
 			Entity: uint64(i),
-			TxID:   uint64(i),
+			TxID:   types.XID(i),
 			Data:   [][]byte{data},
 		}
 		_, err := w.Write(rec)

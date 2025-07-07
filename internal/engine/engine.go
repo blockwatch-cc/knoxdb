@@ -6,10 +6,12 @@ package engine
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"runtime"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/types"
@@ -26,6 +28,13 @@ const (
 )
 
 // Engine is the central instance managing a database
+//
+// Relevant Subsystems
+// - block caches
+// - lock manager
+// - task manager
+// - WAL
+// - catalog
 //
 // Transaction support
 // - single writer, multiple reader MVCC
@@ -48,27 +57,27 @@ const (
 // - DDL and DML functions return error ErrDatabaseReadOnly
 
 type Engine struct {
-	mu         sync.RWMutex
-	shutdown   atomic.Value
-	flock      *flock.Flock
-	cat        *Catalog
-	cache      CacheManager
-	tables     *util.LockFreeMap[uint64, TableEngine]
-	stores     *util.LockFreeMap[uint64, StoreEngine]
-	indexes    *util.LockFreeMap[uint64, IndexEngine]
-	enums      schema.EnumRegistry
-	opts       DatabaseOptions
-	txs        TxList
-	dbId       uint64        // unique database tag
-	writeToken chan struct{} // single writer enforcement
-	xmin       XID           // xid horizon (minimum active xid)
-	xnext      XID           // next txid for read/write tx
-	vnext      XID           // virtual xid for read-only tx
-	path       string        // full db base path (from opts + name)
-	log        log.Logger
-	tasks      *TaskService
-	wal        *wal.Wal
-	lm         *LockManager
+	mu       sync.RWMutex                           // engine mutex
+	shutdown atomic.Value                           // atomic shutdown state
+	flock    *flock.Flock                           // exclusive directory lock
+	dbId     uint64                                 // unique database tag
+	path     string                                 // full db base path (from opts + name)
+	cat      *Catalog                               // objects, identities, configurations
+	cache    CacheManager                           // block and buffer caches
+	tables   *util.LockFreeMap[uint64, TableEngine] // table objects
+	stores   *util.LockFreeMap[uint64, StoreEngine] // store objects
+	indexes  *util.LockFreeMap[uint64, IndexEngine] // index objects
+	enums    schema.EnumRegistry                    // enum objects
+	opts     DatabaseOptions                        // engine-wide configuration
+	txchan   chan struct{}                          // single writer enforcement
+	txs      TxList                                 // active read / write transactions
+	xmin     XID                                    // xid horizon (minimum active xid)
+	xnext    XID                                    // next txid for read/write tx
+	vnext    XID                                    // virtual xid for read-only tx
+	log      log.Logger                             // engine logger
+	tasks    *TaskService                           // async task execution service
+	wal      *wal.Wal                               // write ahead log
+	lm       *LockManager                           // object lock manager
 }
 
 type CacheManager struct {
@@ -134,21 +143,21 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 			blocks:  block.NewCache(0),
 			buffers: NewBufferCache(0),
 		},
-		tables:     util.NewLockFreeMap[uint64, TableEngine](),
-		stores:     util.NewLockFreeMap[uint64, StoreEngine](),
-		indexes:    util.NewLockFreeMap[uint64, IndexEngine](),
-		enums:      schema.NewEnumRegistry(),
-		txs:        make(TxList, 0),
-		writeToken: make(chan struct{}, 1),
-		xmin:       1,
-		xnext:      1,
-		vnext:      ReadTxOffset,
-		dbId:       types.TaggedHash(types.ObjectTagDatabase, name),
-		opts:       opts,
-		cat:        NewCatalog(name),
-		log:        log.Disabled,
-		tasks:      NewTaskService().WithLimits(opts.MaxWorkers, opts.MaxTasks),
-		lm:         NewLockManager().WithTimeout(opts.LockTimeout),
+		tables:  util.NewLockFreeMap[uint64, TableEngine](),
+		stores:  util.NewLockFreeMap[uint64, StoreEngine](),
+		indexes: util.NewLockFreeMap[uint64, IndexEngine](),
+		enums:   schema.NewEnumRegistry(),
+		txs:     make(TxList, 0),
+		txchan:  make(chan struct{}, 1),
+		xmin:    1,
+		xnext:   1,
+		vnext:   ReadTxOffset,
+		dbId:    types.TaggedHash(types.ObjectTagDatabase, name),
+		opts:    opts,
+		cat:     NewCatalog(name),
+		log:     log.Disabled,
+		tasks:   NewTaskService().WithLimits(opts.MaxWorkers, opts.MaxTasks),
+		lm:      NewLockManager().WithTimeout(opts.LockTimeout),
 	}
 	e.tasks.WithContext(WithEngine(ctx, e))
 	e.shutdown.Store(false)
@@ -232,20 +241,20 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 			blocks:  block.NewCache(0),
 			buffers: NewBufferCache(0),
 		},
-		tables:     util.NewLockFreeMap[uint64, TableEngine](),
-		stores:     util.NewLockFreeMap[uint64, StoreEngine](),
-		indexes:    util.NewLockFreeMap[uint64, IndexEngine](),
-		enums:      schema.NewEnumRegistry(),
-		txs:        make(TxList, 0),
-		writeToken: make(chan struct{}, 1),
-		xmin:       1,
-		xnext:      1,
-		vnext:      ReadTxOffset,
-		dbId:       types.TaggedHash(types.ObjectTagDatabase, name),
-		cat:        NewCatalog(name),
-		log:        log.Disabled,
-		tasks:      NewTaskService().WithLimits(opts.MaxWorkers, opts.MaxTasks),
-		lm:         NewLockManager(),
+		tables:  util.NewLockFreeMap[uint64, TableEngine](),
+		stores:  util.NewLockFreeMap[uint64, StoreEngine](),
+		indexes: util.NewLockFreeMap[uint64, IndexEngine](),
+		enums:   schema.NewEnumRegistry(),
+		txs:     make(TxList, 0),
+		txchan:  make(chan struct{}, 1),
+		xmin:    1,
+		xnext:   1,
+		vnext:   ReadTxOffset,
+		dbId:    types.TaggedHash(types.ObjectTagDatabase, name),
+		cat:     NewCatalog(name),
+		log:     log.Disabled,
+		tasks:   NewTaskService().WithLimits(opts.MaxWorkers, opts.MaxTasks),
+		lm:      NewLockManager(),
 	}
 	e.tasks.WithContext(WithEngine(ctx, e))
 	e.shutdown.Store(false)
@@ -389,8 +398,8 @@ func (e *Engine) Close(ctx context.Context) error {
 	// - should cancel session contexts
 
 	// close write token channel, unblocking waiting writers which will cancel
-	close(e.writeToken)
-	e.writeToken = nil
+	close(e.txchan)
+	e.txchan = nil
 
 	// lock engine
 	e.mu.Lock()
@@ -504,8 +513,8 @@ func (e *Engine) ForceShutdown() error {
 	defer e.mu.Unlock()
 
 	// close write token channel, unblocking waiting writers which will cancel
-	close(e.writeToken)
-	e.writeToken = nil
+	close(e.txchan)
+	e.txchan = nil
 
 	// TODO: shutdown user sessions (close wire protocol server)
 	// - should cancel contexts
@@ -658,4 +667,58 @@ func (e *Engine) AbortTx(ctx context.Context, oid uint64, xid types.XID) error {
 
 func (e *Engine) Schedule(t *Task) bool {
 	return e.tasks.Submit(t)
+}
+
+// WAL GC is triggered after table engines have merged new journal checkpoints.
+func (e *Engine) GCWal(ctx context.Context) error {
+	// identify WAL watermark
+	lsn := e.cat.Checkpoint()
+	for _, t := range e.tables.Map() {
+		lsn = min(lsn, t.State().Checkpoint)
+	}
+
+	// if watermark is too old, force checkpoints for catalog and tables
+	// some of which may update right away (catalog), some need time for
+	// a background merge to progress.
+	walSize, segSize := e.wal.Next(), wal.LSN(e.opts.WalSegmentSize)
+	if lsn < walSize-5*segSize {
+		// write catalog checkpoint when older than one segment
+		if e.cat.Checkpoint() < walSize-segSize {
+			if err := e.cat.doCheckpoint(ctx); err != nil {
+				return err
+			}
+		}
+
+		for _, t := range e.tables.Map() {
+			// write table checkpoints when older than 5 segments
+			if t.State().Checkpoint < walSize-5*segSize {
+				e.log.Tracef("engine: checkpoint table %s", t.Schema().Name())
+				if err := t.Checkpoint(ctx); err != nil {
+					return err
+				}
+			}
+		}
+
+		// sync WAL
+		if err := e.wal.Sync(); err != nil {
+			return fmt.Errorf("sync wal: %v", err)
+		}
+
+		// wait some time for checkpoints to flush
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Second):
+		}
+
+		// re-compute WAL watermark
+		lsn = e.cat.Checkpoint()
+		for _, t := range e.tables.Map() {
+			lsn = min(lsn, t.State().Checkpoint)
+		}
+	}
+
+	// run WAL GC
+	e.log.Tracef("engine: wal gc before LSN 0x%016x", lsn)
+	return e.wal.GC(lsn)
 }

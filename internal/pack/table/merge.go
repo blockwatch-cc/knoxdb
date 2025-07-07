@@ -151,6 +151,11 @@ func (t *Table) Merge(ctx context.Context) error {
 		t.mu.Lock()
 		t.journal.ConfirmMerged(ctx, seg)
 		t.mu.Unlock()
+
+		// gc wal
+		if err := t.engine.GCWal(ctx); err != nil {
+			t.log.Warnf("wal gc: %v", err)
+		}
 	}
 
 	return err

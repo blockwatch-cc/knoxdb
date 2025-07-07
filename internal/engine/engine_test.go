@@ -44,20 +44,20 @@ func NewTestEngine(t testing.TB, opts DatabaseOptions) *Engine {
 			blocks:  block.NewCache(0),
 			buffers: NewBufferCache(0),
 		},
-		tables:     util.NewLockFreeMap[uint64, TableEngine](),
-		stores:     util.NewLockFreeMap[uint64, StoreEngine](),
-		indexes:    util.NewLockFreeMap[uint64, IndexEngine](),
-		enums:      schema.NewEnumRegistry(),
-		txs:        make(TxList, 0),
-		writeToken: make(chan struct{}, 1),
-		xmin:       1,
-		xnext:      1,
-		vnext:      ReadTxOffset,
-		dbId:       types.TaggedHash(types.ObjectTagDatabase, TEST_DB_NAME),
-		opts:       opts,
-		cat:        NewCatalog(TEST_DB_NAME),
-		log:        opts.Logger,
-		lm:         NewLockManager(),
+		tables:  util.NewLockFreeMap[uint64, TableEngine](),
+		stores:  util.NewLockFreeMap[uint64, StoreEngine](),
+		indexes: util.NewLockFreeMap[uint64, IndexEngine](),
+		enums:   schema.NewEnumRegistry(),
+		txs:     make(TxList, 0),
+		txchan:  make(chan struct{}, 1),
+		xmin:    1,
+		xnext:   1,
+		vnext:   ReadTxOffset,
+		dbId:    types.TaggedHash(types.ObjectTagDatabase, TEST_DB_NAME),
+		opts:    opts,
+		cat:     NewCatalog(TEST_DB_NAME),
+		log:     opts.Logger,
+		lm:      NewLockManager(),
 	}
 	var err error
 	e.wal, err = wal.Create(wal.WalOptions{
@@ -69,7 +69,7 @@ func NewTestEngine(t testing.TB, opts DatabaseOptions) *Engine {
 	})
 	require.NoError(t, err)
 	e.cat.WithWal(e.wal)
-	e.writeToken <- struct{}{}
+	e.txchan <- struct{}{}
 	return e
 }
 
@@ -81,20 +81,20 @@ func OpenTestEngine(t testing.TB, opts DatabaseOptions) *Engine {
 			blocks:  block.NewCache(0),
 			buffers: NewBufferCache(0),
 		},
-		tables:     util.NewLockFreeMap[uint64, TableEngine](),
-		stores:     util.NewLockFreeMap[uint64, StoreEngine](),
-		indexes:    util.NewLockFreeMap[uint64, IndexEngine](),
-		enums:      schema.NewEnumRegistry(),
-		txs:        make(TxList, 0),
-		writeToken: make(chan struct{}, 1),
-		xmin:       1,
-		xnext:      1,
-		vnext:      ReadTxOffset,
-		dbId:       types.TaggedHash(types.ObjectTagDatabase, TEST_DB_NAME),
-		opts:       opts,
-		cat:        NewCatalog(TEST_DB_NAME),
-		log:        opts.Logger,
-		lm:         NewLockManager(),
+		tables:  util.NewLockFreeMap[uint64, TableEngine](),
+		stores:  util.NewLockFreeMap[uint64, StoreEngine](),
+		indexes: util.NewLockFreeMap[uint64, IndexEngine](),
+		enums:   schema.NewEnumRegistry(),
+		txs:     make(TxList, 0),
+		txchan:  make(chan struct{}, 1),
+		xmin:    1,
+		xnext:   1,
+		vnext:   ReadTxOffset,
+		dbId:    types.TaggedHash(types.ObjectTagDatabase, TEST_DB_NAME),
+		opts:    opts,
+		cat:     NewCatalog(TEST_DB_NAME),
+		log:     opts.Logger,
+		lm:      NewLockManager(),
 	}
 
 	var err error
@@ -106,6 +106,6 @@ func OpenTestEngine(t testing.TB, opts DatabaseOptions) *Engine {
 		Logger:         opts.Logger,
 	})
 	require.NoError(t, err)
-	e.writeToken <- struct{}{}
+	e.txchan <- struct{}{}
 	return e
 }

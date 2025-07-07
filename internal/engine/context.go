@@ -93,12 +93,12 @@ func (e *Engine) WithTransaction(ctx context.Context, flags ...TxFlags) (context
 			switch {
 			case e.opts.TxWaitTimeout > 0:
 				select {
-				case _, ok = <-e.writeToken:
+				case _, ok = <-e.txchan:
 				case <-time.After(e.opts.TxWaitTimeout):
 					return ctx, nil, noop, noop, ErrTxTimeout
 				}
 			default:
-				_, ok = <-e.writeToken
+				_, ok = <-e.txchan
 			}
 		}
 	} else {
@@ -106,18 +106,18 @@ func (e *Engine) WithTransaction(ctx context.Context, flags ...TxFlags) (context
 		switch {
 		case uflags.IsNoWait():
 			select {
-			case _, ok = <-e.writeToken:
+			case _, ok = <-e.txchan:
 			default:
 				return ctx, nil, noop, noop, ErrTxConflict
 			}
 		case e.opts.TxWaitTimeout > 0:
 			select {
-			case _, ok = <-e.writeToken:
+			case _, ok = <-e.txchan:
 			case <-time.After(e.opts.TxWaitTimeout):
 				return ctx, nil, noop, noop, ErrTxTimeout
 			}
 		default:
-			_, ok = <-e.writeToken
+			_, ok = <-e.txchan
 		}
 
 	}
@@ -131,7 +131,7 @@ func (e *Engine) WithTransaction(ctx context.Context, flags ...TxFlags) (context
 
 	// return writer token after deferred reader wait
 	if uflags.IsDeferred() {
-		e.writeToken <- struct{}{}
+		e.txchan <- struct{}{}
 	}
 
 	// link tx and engine to context and derive tx context
