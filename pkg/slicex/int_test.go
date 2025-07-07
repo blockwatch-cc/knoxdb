@@ -11,6 +11,7 @@ import (
 
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestOrderedIntegersContains(t *testing.T) {
@@ -374,6 +375,21 @@ func BenchmarkOrderedIntegersContainsRange(b *testing.B) {
 			}
 		})
 	}
+}
+
+func TestOrderedIntegersInsert(t *testing.T) {
+	o := NewOrderedIntegers[int](nil).SetUnique()
+	require.NotNil(t, o.Values)
+	require.Equal(t, 0, o.Len())
+	o.Insert(42)
+	require.Equal(t, 1, o.Len())
+	require.Equal(t, []int{42}, o.Values)
+	o.Insert(1)
+	require.Equal(t, 2, o.Len())
+	require.Equal(t, []int{1, 42}, o.Values)
+	o.Insert(50, 5, 42, 5)
+	require.Equal(t, 4, o.Len(), o.Values)
+	require.Equal(t, []int{1, 5, 42, 50}, o.Values)
 }
 
 func TestOrderedIntegersRemove(t *testing.T) {

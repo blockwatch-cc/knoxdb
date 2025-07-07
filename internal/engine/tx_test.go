@@ -122,7 +122,7 @@ func TestWithReadTx(t *testing.T) {
 
 	// check context
 	require.NotNil(t, GetEngine(ctx), "ctx.engine")
-	require.NotNil(t, GetTransaction(ctx), "ctx.tx")
+	require.NotNil(t, GetTx(ctx), "ctx.tx")
 	require.NotNil(t, GetSnapshot(ctx), "ctx.snap")
 	require.Equal(t, XID(ReadTxOffset), GetTxId(ctx), "ctx.xid")
 
@@ -137,7 +137,7 @@ func TestWithReadTx(t *testing.T) {
 
 	// check context
 	require.NotNil(t, GetEngine(ctx2), "ctx.engine")
-	require.NotNil(t, GetTransaction(ctx2), "ctx.tx")
+	require.NotNil(t, GetTx(ctx2), "ctx.tx")
 	require.NotNil(t, GetSnapshot(ctx2), "ctx.snap")
 	require.Equal(t, XID(ReadTxOffset), GetTxId(ctx2), "ctx.xid")
 
@@ -160,7 +160,7 @@ func TestWithWriteTx(t *testing.T) {
 
 	// check context
 	require.NotNil(t, GetEngine(ctx), "ctx.engine")
-	require.NotNil(t, GetTransaction(ctx), "ctx.tx")
+	require.NotNil(t, GetTx(ctx), "ctx.tx")
 	require.NotNil(t, GetSnapshot(ctx), "ctx.snap")
 	require.Equal(t, XID(1), GetTxId(ctx), "ctx.xid")
 
@@ -175,7 +175,7 @@ func TestWithWriteTx(t *testing.T) {
 
 	// check context
 	require.NotNil(t, GetEngine(ctx2), "ctx.engine")
-	require.NotNil(t, GetTransaction(ctx2), "ctx.tx")
+	require.NotNil(t, GetTx(ctx2), "ctx.tx")
 	require.NotNil(t, GetSnapshot(ctx2), "ctx.snap")
 	require.Equal(t, XID(1), GetTxId(ctx2), "ctx.xid")
 

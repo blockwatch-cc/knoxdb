@@ -93,7 +93,7 @@ func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (uint64, error) 
 	}
 
 	// obtain shared table lock
-	tx := engine.GetTransaction(ctx)
+	tx := engine.GetTx(ctx)
 	err := tx.RLock(ctx, t.id)
 	if err != nil {
 		return 0, err

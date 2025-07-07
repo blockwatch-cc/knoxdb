@@ -26,12 +26,40 @@ func GetEngine(ctx context.Context) *Engine {
 
 type TransactionKey struct{}
 
+func WithTx(ctx context.Context, tx *Tx) context.Context {
+	return context.WithValue(ctx, TransactionKey{}, tx)
+}
+
+func GetTx(ctx context.Context) *Tx {
+	val := ctx.Value(TransactionKey{})
+	if val == nil {
+		return nil
+	}
+	return val.(*Tx)
+}
+
+func GetTxId(ctx context.Context) types.XID {
+	val := ctx.Value(TransactionKey{})
+	if val == nil {
+		return 0
+	}
+	return val.(*Tx).id
+}
+
+func GetSnapshot(ctx context.Context) *types.Snapshot {
+	val := ctx.Value(TransactionKey{})
+	if val == nil {
+		return nil
+	}
+	return val.(*Tx).Snapshot()
+}
+
 func (e *Engine) WithTransaction(ctx context.Context, flags ...TxFlags) (context.Context, *Tx, func() error, func() error, error) {
 	// merge flags
 	uflags := mergeFlags(flags)
 
 	// prevent duplicates, return noops because an outer call frame controls
-	if tx := GetTransaction(ctx); tx != nil {
+	if tx := GetTx(ctx); tx != nil {
 		// check compatibility
 		if tx.IsReadOnly() && !uflags.IsReadOnly() {
 			return ctx, tx, noop, noop, ErrTxReadonly
@@ -106,42 +134,13 @@ func (e *Engine) WithTransaction(ctx context.Context, flags ...TxFlags) (context
 		e.writeToken <- struct{}{}
 	}
 
-	// link tx to context
-	ctx = context.WithValue(ctx, TransactionKey{}, tx)
-
-	// link engine to ctx
-	ctx = WithEngine(ctx, e)
-
-	// use ctx in tx (will make cancelable and forward to commit/abort callbacks)
-	tx.WithContext(ctx)
+	// link tx and engine to context and derive tx context
+	// (will make context cancelable via tx, forwards to commit/abort callbacks)
+	tx.WithContext(WithTx(WithEngine(ctx, e), tx))
 
 	return tx.ctx, tx, tx.Commit, tx.Abort, nil
 }
 
 func noop() error {
 	return nil
-}
-
-func GetTransaction(ctx context.Context) *Tx {
-	val := ctx.Value(TransactionKey{})
-	if val == nil {
-		return nil
-	}
-	return val.(*Tx)
-}
-
-func GetTxId(ctx context.Context) types.XID {
-	val := ctx.Value(TransactionKey{})
-	if val == nil {
-		return 0
-	}
-	return val.(*Tx).id
-}
-
-func GetSnapshot(ctx context.Context) *types.Snapshot {
-	val := ctx.Value(TransactionKey{})
-	if val == nil {
-		return nil
-	}
-	return val.(*Tx).Snapshot()
 }

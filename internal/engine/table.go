@@ -215,7 +215,7 @@ func (e *Engine) DropTable(ctx context.Context, name string) error {
 	}
 
 	// register commit callback
-	GetTransaction(ctx).OnCommit(func(ctx context.Context) error {
+	GetTx(ctx).OnCommit(func(ctx context.Context) error {
 		if err := t.Drop(ctx); err != nil {
 			e.log.Errorf("Drop table: %v", err)
 		}

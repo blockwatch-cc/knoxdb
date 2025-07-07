@@ -281,7 +281,7 @@ func (m *LockManager) Lock(ctx context.Context, xid XID, mode LockMode, oid uint
 
 // TODO: not yet supported
 func (m *LockManager) LockPredicate(ctx context.Context, xid XID, mode LockMode, oid uint64, pred ConditionMatcher) error {
-	tx := GetTransaction(ctx)
+	tx := GetTx(ctx)
 
 	// check tx status
 	if err := tx.Err(); err != nil {

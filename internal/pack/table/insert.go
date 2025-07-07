@@ -67,7 +67,7 @@ func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, error) {
 	atomic.AddInt64(&t.metrics.InsertCalls, 1)
 
 	// obtain shared table lock
-	tx := engine.GetTransaction(ctx)
+	tx := engine.GetTx(ctx)
 	err := tx.RLock(ctx, t.id)
 	if err != nil {
 		return 0, err
@@ -114,7 +114,7 @@ func (t *Table) InsertInto(ctx context.Context, src *pack.Package) (uint64, erro
 	atomic.AddInt64(&t.metrics.InsertCalls, 1)
 
 	// obtain shared table lock
-	tx := engine.GetTransaction(ctx)
+	tx := engine.GetTx(ctx)
 	err := tx.RLock(ctx, t.id)
 	if err != nil {
 		return 0, err

@@ -15,9 +15,9 @@ type Integer interface {
 
 // Optimized algorithms for ordered numeric slices
 type OrderedIntegers[T Integer] struct {
+	Values  []T
 	NonZero bool
 	Unique  bool
-	Values  []T
 }
 
 func NewOrderedIntegers[T Integer](s []T) *OrderedIntegers[T] {
@@ -115,19 +115,29 @@ func (o OrderedIntegers[T]) IsContinuous() bool {
 	return int(b-a)+1 == len(o.Values)
 }
 
+func (o OrderedIntegers[T]) Clone() *OrderedIntegers[T] {
+	return &OrderedIntegers[T]{
+		NonZero: o.NonZero,
+		Unique:  o.Unique,
+		Values:  slices.Clone(o.Values),
+	}
+}
+
 func (o *OrderedIntegers[T]) Insert(val ...T) *OrderedIntegers[T] {
 	// remove incoming zeros
 	if o.NonZero {
 		val, _ = removeZeros(val)
 	}
 	// sort incoming slice
-	slices.Sort(val)
+	util.Sort(val, 0)
+
+	// remove dups
+	if o.Unique {
+		val = removeDuplicates(val)
+	}
 
 	// shortcut for empty target
 	if len(o.Values) == 0 {
-		if o.Unique {
-			val = removeDuplicates(val)
-		}
 		o.Values = append(o.Values, val...)
 		return o
 	}
@@ -155,7 +165,7 @@ func (o OrderedIntegers[T]) Contains(val T) bool {
 }
 
 func (o OrderedIntegers[T]) ContainsAny(val ...T) bool {
-	slices.Sort(val)
+	util.Sort(val, 0)
 	var (
 		last int
 		ok   bool
@@ -170,7 +180,7 @@ func (o OrderedIntegers[T]) ContainsAny(val ...T) bool {
 }
 
 func (o OrderedIntegers[T]) ContainsAll(val ...T) bool {
-	slices.Sort(val)
+	util.Sort(val, 0)
 	var (
 		last int
 		ok   bool

@@ -6,7 +6,6 @@ package journal
 import (
 	"iter"
 
-	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/xroar"
@@ -40,11 +39,7 @@ func (r *Result) IsEmpty() bool {
 func (r *Result) Len() int {
 	var n int
 	for _, pkg := range r.pkgs {
-		if sel := pkg.Selected(); sel != nil {
-			n += len(sel)
-		} else {
-			n += pkg.Len()
-		}
+		n += pkg.NumSelected()
 	}
 	return n
 }
@@ -62,7 +57,7 @@ func (r *Result) Append(seg *Segment, bits *bitset.Bitset) {
 
 	// add selection vector unless all records match
 	if !bits.All() {
-		clone.WithSelection(bits.Indexes(arena.AllocUint32(bits.Count())))
+		clone.WithSelection(bits.Indexes(nil))
 	}
 
 	r.pkgs = append(r.pkgs, clone)

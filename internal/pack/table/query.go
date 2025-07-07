@@ -31,7 +31,7 @@ func (t *Table) Query(ctx context.Context, q engine.QueryPlan) (engine.QueryResu
 	}
 
 	// obtain shared table lock
-	err := engine.GetTransaction(ctx).RLock(ctx, t.id)
+	err := engine.GetTx(ctx).RLock(ctx, t.id)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +73,7 @@ func (t *Table) Stream(ctx context.Context, q engine.QueryPlan, fn func(engine.Q
 	}
 
 	// obtain shared table lock
-	err := engine.GetTransaction(ctx).RLock(ctx, t.id)
+	err := engine.GetTx(ctx).RLock(ctx, t.id)
 	if err != nil {
 		return err
 	}
@@ -111,7 +111,7 @@ func (t *Table) Count(ctx context.Context, q engine.QueryPlan) (uint64, error) {
 	}
 
 	// obtain shared table lock
-	err := engine.GetTransaction(ctx).RLock(ctx, t.id)
+	err := engine.GetTx(ctx).RLock(ctx, t.id)
 	if err != nil {
 		return 0, err
 	}

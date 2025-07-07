@@ -29,7 +29,7 @@ import (
 // Transactions allow to turn WAL mode off selectively. We choose the appropriate
 // algorithm for each case.
 func (j *Journal) DeletePack(ctx context.Context, src *pack.Package) (int, error) {
-	tx := engine.GetTransaction(ctx)
+	tx := engine.GetTx(ctx)
 	xid := tx.Id()
 	if tx.UseWal() {
 		return j.deletePackWithWal(src, xid, tx.Engine().Wal())
@@ -178,7 +178,7 @@ func (j *Journal) deletePackNoWal(src *pack.Package, xid types.XID) (int, error)
 				}
 
 				// rotate segment once full
-				j.rotate()
+				j.rotateWhenFull()
 
 				// prepare next round
 				count += m
@@ -192,6 +192,7 @@ func (j *Journal) deletePackNoWal(src *pack.Package, xid types.XID) (int, error)
 		// write selected rows up until capacity limit, continue with next sel each round
 		for len(sel) > 0 {
 			n := min(len(sel), j.TombCapacity())
+
 			for _, v := range sel[:n] {
 				rid := src.RowId(int(v))
 
@@ -200,7 +201,7 @@ func (j *Journal) deletePackNoWal(src *pack.Package, xid types.XID) (int, error)
 			}
 
 			// rotate segment once full
-			j.rotate()
+			j.rotateWhenFull()
 
 			// prepare next round
 			count += n

@@ -44,7 +44,7 @@ func (a *allocator[T]) Alloc(sz int) any {
 		class++
 	}
 	if class < minAllocClass || class > maxAllocClass {
-		return make([]T, 0, sz)
+		return make([]T, 0, max(sz, 8))
 	}
 	return a.pool(class).Get()
 }

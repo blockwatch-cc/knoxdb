@@ -165,7 +165,7 @@ func (j *Journal) Close() {
 
 func (j *Journal) rotateAndCheckpoint() error {
 	// rotate segment when full
-	if !j.rotate() {
+	if !j.rotateWhenFull() {
 		return nil
 	}
 
@@ -185,11 +185,14 @@ func (j *Journal) rotateAndCheckpoint() error {
 	return nil
 }
 
-func (j *Journal) rotate() bool {
+func (j *Journal) rotateWhenFull() bool {
 	if !j.tip.IsFull() {
 		return false
 	}
+	return j.doRotate()
+}
 
+func (j *Journal) doRotate() bool {
 	j.log.Debugf("journal rotate segment %d with %d records %d tombstones",
 		j.tip.Id(), j.tip.data.Len(), j.tip.tomb.Len())
 
@@ -278,32 +281,66 @@ func (j *Journal) CommitTx(xid types.XID) bool {
 }
 
 func (j *Journal) AbortTx(xid types.XID) bool {
-	// update tip
-	if j.tip.ContainsTx(xid) {
-		j.tip.AbortTx(xid)
-	}
-
-	// abort tx across segments
+	// abort tx across segments, rollback table state
+	var (
+		pmin, rmin uint64 = 1<<64 - 1, 1<<64 - 1
+		nRowsDiff  int
+	)
 	for _, v := range j.tail {
 		if v.is(SegmentStateWaiting) && v.ContainsTx(xid) {
-			v.AbortTx(xid)
+			r := v.AbortTx(xid)
+			pmin = min(pmin, v.tstate.NextPk)
+			rmin = min(rmin, v.tstate.NextRid)
+			v.tstate.NextPk = pmin
+			v.tstate.NextRid = rmin
+			v.tstate.NRows = uint64(int64(v.tstate.NRows) - int64(nRowsDiff))
+			// log.Warnf("Adjust seg %d state nrowsdiff=%d to %#v", v.Id(), nRowsDiff, v.tstate)
+			nRowsDiff += r
 		}
+	}
+
+	// update tip, adjust state also when tip is empty to roll over changes from parent segment
+	if j.tip.ContainsTx(xid) || j.tip.IsEmpty() {
+		j.tip.AbortTx(xid)
+		pmin = min(pmin, j.tip.tstate.NextPk)
+		rmin = min(rmin, j.tip.tstate.NextRid)
+		j.tip.tstate.NextPk = pmin
+		j.tip.tstate.NextRid = rmin
+		j.tip.tstate.NRows = uint64(int64(j.tip.tstate.NRows) - int64(nRowsDiff))
+		// log.Warnf("Adjust tip %d state with nrowsdiff=%d to %#v", j.tip.Id(), nRowsDiff, j.tip.tstate)
 	}
 
 	return j.compact()
 }
 
-// called once to finalize wal replay
+// called once to finalize wal replay, rollback pk/rid state
 func (j *Journal) AbortActiveTx() (int, bool) {
-	n := j.tip.AbortActiveTx()
-
+	var (
+		nAborted, nRowsDiff int
+		pmin, rmin          uint64 = 1<<64 - 1, 1<<64 - 1
+	)
 	for _, v := range j.tail {
 		if v.is(SegmentStateWaiting) {
-			n += v.AbortActiveTx()
+			n, r := v.AbortActiveTx()
+			pmin = min(pmin, v.tstate.NextPk)  // track cross-segment
+			rmin = min(rmin, v.tstate.NextRid) // track cross-segment
+			v.tstate.NextPk = pmin
+			v.tstate.NextRid = rmin
+			v.tstate.NRows = uint64(int64(v.tstate.NRows) - int64(nRowsDiff))
+			nAborted += n
+			nRowsDiff += r
 		}
 	}
 
-	return n, j.compact()
+	n, _ := j.tip.AbortActiveTx()
+	nAborted += n
+	pmin = min(pmin, j.tip.tstate.NextPk)  // track cross-segment
+	rmin = min(rmin, j.tip.tstate.NextRid) // track cross-segment
+	j.tip.tstate.NextPk = pmin
+	j.tip.tstate.NextRid = rmin
+	j.tip.tstate.NRows = uint64(int64(j.tip.tstate.NRows) - int64(nRowsDiff))
+
+	return nAborted, j.compact()
 }
 
 func (j *Journal) compact() bool {
@@ -372,7 +409,7 @@ func (j *Journal) Query(plan *query.QueryPlan, epoch uint32) *Result {
 	for seg != nil {
 		// skip merged and empty segments
 		if seg.Id() <= epoch || seg.canDrop() {
-			plan.Log.Debugf("skip journal query segment %d", seg.Id())
+			// plan.Log.Debugf("skip journal query segment %d", seg.Id())
 			seg = seg.parent
 			continue
 		}
@@ -385,7 +422,7 @@ func (j *Journal) Query(plan *query.QueryPlan, epoch uint32) *Result {
 
 		// add segment to result if it has any match
 		if bits.Any() {
-			plan.Log.Debugf("using journal segment %d with %d matches", seg.Id(), bits.Count())
+			// plan.Log.Debugf("using journal segment %d with %d matches", seg.Id(), bits.Count())
 			res.Append(seg, bits)
 		}
 
@@ -611,7 +648,7 @@ func (j *Journal) ReplayWalRecord(ctx context.Context, rec *wal.Record, rd engin
 	case wal.RecordTypeDelete:
 		j.log.Debugf("journal: apply %s", rec)
 		buf := rec.Data[0]
-		var nRows uint64
+		var nDeleted uint64
 		for len(buf) > 0 && j.Capacity() > 0 {
 			rid, n := num.Uvarint(buf)
 			buf = buf[n:]
@@ -619,7 +656,7 @@ func (j *Journal) ReplayWalRecord(ctx context.Context, rec *wal.Record, rd engin
 			// append to tomb, set xmax on rid when in tip segment
 			j.tip.NotifyDelete(rec.TxID, rid)
 
-			nRows++
+			nDeleted++
 		}
 
 		// fail on overlow, should not happen
@@ -627,11 +664,11 @@ func (j *Journal) ReplayWalRecord(ctx context.Context, rec *wal.Record, rd engin
 			return fmt.Errorf("delete: journal overflow")
 		}
 
-		j.tip.tstate.NRows -= nRows
+		j.tip.tstate.NRows -= nDeleted
 	}
 
 	// try rotate segment once full
-	j.rotate()
+	j.rotateWhenFull()
 
 	return nil
 }

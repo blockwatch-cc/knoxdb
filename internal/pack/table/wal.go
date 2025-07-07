@@ -36,7 +36,7 @@ func (t *Table) ReplayWal(ctx context.Context) error {
 
 	// process wal records (even on a clean shutdown we reconstruct
 	// an active journal segment from WAL)
-	var n int
+	var nProcessed int
 	for {
 		rec, err := r.Next()
 		if err != nil {
@@ -45,7 +45,7 @@ func (t *Table) ReplayWal(ctx context.Context) error {
 			}
 			return err
 		}
-		n++
+		nProcessed++
 
 		// init a new table reader for updates
 		var rd engine.TableReader
@@ -69,9 +69,9 @@ func (t *Table) ReplayWal(ctx context.Context) error {
 	}
 
 	// abort all remaining pending tx
-	skipped, canMerge := t.journal.AbortActiveTx()
+	nAborted, canMerge := t.journal.AbortActiveTx()
 	t.log.Debugf("table[%s]: processed %d wal records, aborted %d txn in %s",
-		t.schema.Name(), n, skipped, time.Since(start))
+		t.schema.Name(), nProcessed, nAborted, time.Since(start))
 
 	// merge journal after crash recovery when segments are ready
 	if canMerge {

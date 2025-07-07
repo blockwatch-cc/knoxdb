@@ -267,22 +267,24 @@ DONE:
 
 // Indexes returns a slice positions as uint32 for one bits in the bitset.
 func (s *Bitset) Indexes(result []uint32) []uint32 {
-	cnt := s.cnt
-	switch {
-	case cnt == 0:
+	cnt := s.Count()
+	if cnt == 0 {
+		if result == nil {
+			return []uint32{}
+		}
 		return result[:0]
-	case cnt < 0:
-		cnt = s.size
 	}
-	// ensure slice is padded with 8 extra values, we need this for our
+	// ensure slice is padded with 7 extra values, we need this for our
 	// index lookup algo which always writes multiples of 8 entries
-	// cnt = roundUpPow2(cnt, 8)
-	cnt = min(cnt+8, s.size)
+	cnt += 7
 	if result == nil || cap(result) < cnt {
 		result = arena.AllocUint32(cnt)[:cnt]
 	} else {
 		result = result[:cnt]
 	}
+
+	// TODO: could optimize for all bits set using memcpy from const seq (see types.Range)
+
 	n := bitsetIndexes(s.buf, s.size, result)
 	return result[:n]
 }

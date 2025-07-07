@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"blockwatch.cc/knoxdb/internal/arena"
+	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/pack/journal"
@@ -188,6 +189,7 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 	stones := seg.Tomb().Stones() // non-aborted deletes (within and outside the segment)
 	mask := seg.Tomb().RowIds()   // row id bitmap of all deletes, nil when empty
 	aborted := seg.Aborted()      // bitset of aborted records, nil when empty
+	replaced := seg.Replaced()    // bitset of updated/deleted records, nil when empty
 	nStones = len(stones)
 
 	if mask != nil && mask.Any() {
@@ -259,14 +261,12 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 		// close source reader
 		src.Close()
 
-		// write in-segment deleted records to history
-		if hist != nil {
+		// write in-segment replaced records to history
+		if hist != nil && replaced != nil {
 			// copy journal segment pack and attach private selection vector
 			pkg := seg.Data().Copy()
 
-			// produce selection vector for all in-segment deleted records
-			dbits := pkg.Dels().Writer()
-			sel := dbits.Indexes(arena.AllocUint32(dbits.Count()))
+			sel := replaced.Indexes(arena.AllocUint32(replaced.Count()))
 			pkg.WithSelection(sel)
 
 			// append to history and indexes
@@ -279,14 +279,22 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 		}
 	}
 
-	// Phase 2 - move journal data to table and history, exclude aborted records
+	// Phase 2 - move journal data to table, exclude aborted and replaced records
 	if seg.Data().Len() > 0 {
-		if aborted != nil {
+		if aborted != nil || replaced != nil {
 			// copy journal segment pack and attach private selection vector
 			pkg := seg.Data().Copy()
 
-			// create selection vector for all non-deleted non-aborted records
-			live := aborted.Clone().Or(pkg.Dels().Writer()).Neg()
+			// create selection vector for all non-replaced & non-aborted records
+			var live *bitset.Bitset
+			switch {
+			case aborted != nil && replaced != nil:
+				live = aborted.Clone().Or(replaced).Neg()
+			case aborted != nil:
+				live = aborted.Clone().Neg()
+			case replaced != nil:
+				live = replaced.Clone().Neg()
+			}
 			pkg.WithSelection(live.Indexes(arena.AllocUint32(live.Count())))
 			nAdd += live.Count()
 			nPacks += (live.Count() + t.opts.PackSize - 1) / t.opts.PackSize

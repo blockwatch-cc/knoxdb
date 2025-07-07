@@ -152,6 +152,7 @@ func run() error {
 	//
 	// fill with random data
 	log.Infof("Writing data...")
+	start := time.Now()
 	c := 2 * 64 * 1024
 	data := make([]*Types, 0, c)
 	for i := 1; i <= c; i++ {
@@ -167,14 +168,14 @@ func run() error {
 		return err
 	}
 
-	log.Infof("Written %d records", c)
+	log.Infof("Written %d records in %s", c, time.Since(start))
 	log.Infof("Total %d records", table.Metrics().TupleCount)
 
 	// Step 2
 	//
 	// read records back
 	var count int
-	start := time.Now()
+	start = time.Now()
 	err = knox.NewGenericQuery[Types]().
 		WithTable(table).
 		WithTag("three_million_records").

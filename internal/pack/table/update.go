@@ -78,7 +78,7 @@ func (t *Table) UpdateRows(ctx context.Context, buf []byte) (uint64, error) {
 	pks = slicex.Unique(pks)
 
 	// obtain shared table lock
-	tx := engine.GetTransaction(ctx)
+	tx := engine.GetTx(ctx)
 	err := tx.RLock(ctx, t.id)
 	if err != nil {
 		return 0, err
@@ -162,7 +162,7 @@ func (t *Table) Update(ctx context.Context, q engine.QueryPlan) (uint64, error) 
 	atomic.AddInt64(&t.metrics.UpdateCalls, 1)
 
 	// obtain shared table lock
-	tx := engine.GetTransaction(ctx)
+	tx := engine.GetTx(ctx)
 	err := tx.RLock(ctx, t.id)
 	if err != nil {
 		return 0, err

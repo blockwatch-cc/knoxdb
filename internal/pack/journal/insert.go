@@ -30,7 +30,7 @@ import (
 func (j *Journal) InsertRecords(ctx context.Context, buf []byte) (uint64, int, error) {
 	var (
 		view     = schema.NewView(j.schema)
-		tx       = engine.GetTransaction(ctx)
+		tx       = engine.GetTx(ctx)
 		xid      = tx.Id()              // id of user tx
 		firstPk  = j.tip.tstate.NextPk  // first assigned pk
 		firstRid = j.tip.tstate.NextRid // first assigned rid (per wal batch!)
@@ -87,12 +87,14 @@ func (j *Journal) InsertRecords(ctx context.Context, buf []byte) (uint64, int, e
 		count += n
 
 		// rotate segment once full
-		if err := j.rotateAndCheckpoint(); err != nil {
-			return 0, 0, err
+		if tx.UseWal() {
+			if err := j.rotateAndCheckpoint(); err != nil {
+				return 0, 0, err
+			}
+		} else {
+			j.rotateWhenFull()
 		}
 	}
-
-	// update shared state on success
 
 	return firstPk, count, nil
 }
@@ -102,7 +104,7 @@ func (j *Journal) InsertRecords(ctx context.Context, buf []byte) (uint64, int, e
 // or computed columns. Tx have the ability to turn WAL mode off selectively,
 // so we choose appropriate algorithm for each case.
 func (j *Journal) InsertPack(ctx context.Context, src *pack.Package) (uint64, int, error) {
-	tx := engine.GetTransaction(ctx)
+	tx := engine.GetTx(ctx)
 	xid := tx.Id()
 	if tx.UseWal() {
 		return j.insertPackWithWal(ctx, src, xid, tx.Engine().Wal())
@@ -151,7 +153,7 @@ func (j *Journal) insertPackNoWal(_ context.Context, src *pack.Package, xid type
 		count += n
 
 		// rotate segment once full
-		j.rotate()
+		j.rotateWhenFull()
 
 		// stop when src is exhausted
 		if !state.More() {

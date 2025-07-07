@@ -41,9 +41,10 @@ func (it *BlockIterator[T]) NextChunk() (*[types.CHUNK_SIZE]T, int) {
 	if it.base >= it.block.len {
 		return nil, 0
 	}
-	n := int(min(it.block.len-it.base, types.CHUNK_SIZE))
+	n := min(it.block.len-it.base, types.CHUNK_SIZE)
 	ptr := unsafe.Add(unsafe.Pointer(it.block.buf), it.base*uint32(it.block.sz))
-	return (*[types.CHUNK_SIZE]T)(ptr), n
+	it.base += n
+	return (*[types.CHUNK_SIZE]T)(ptr), int(n)
 }
 
 func (it *BlockIterator[T]) SkipChunk() int {

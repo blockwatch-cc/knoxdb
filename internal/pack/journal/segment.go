@@ -40,16 +40,17 @@ var segmentSz = int(unsafe.Sizeof(Segment{}))
 // can add/commit/abort data. Concurrent queries hide uncommitted,
 // deleted and future data based on snapshot isolation (xmin/xmax tx ids).
 type Segment struct {
-	data    *pack.Package      // full column data (insert/update) and tx metadata
-	stats   *stats.Record      // column statistics (available when full: waiting++)
-	tomb    *Tomb              // tombstone (compact delete records) with tx metadata
-	meta    *schema.Meta       // cache for decoded row metadata
-	lsn     wal.LSN            // WAL checkpoint, i.e. first LSN that holds data for this segment
-	xact    types.XID          // single uncommitted xid in this segment (0 = none)
-	tstate  engine.ObjectState // table state (serial number generators, checkpoint LSN)
-	aborted *bitset.Bitset     // lazy allocated bitset flagging aborted records
-	parent  *Segment           // parent segment (can form a DAG in future versions)
-	state   SegmentState       // segment lifecycle status
+	data     *pack.Package      // full column data (insert/update) and tx metadata
+	stats    *stats.Record      // column statistics (available when full: waiting++)
+	tomb     *Tomb              // tombstone (compact delete records) with tx metadata
+	meta     *schema.Meta       // cache for decoded row metadata
+	lsn      wal.LSN            // WAL checkpoint, i.e. first LSN that holds data for this segment
+	xact     types.XID          // single uncommitted xid in this segment (0 = none)
+	tstate   engine.ObjectState // table state (serial number generators, checkpoint LSN)
+	aborted  *bitset.Bitset     // lazy allocated bitset flagging aborted records
+	replaced *bitset.Bitset     // lazy allocated bitset flagging deleted/updated records
+	parent   *Segment           // parent segment (can form a DAG in future versions)
+	state    SegmentState       // segment lifecycle status
 
 	// statistics
 	xmin    types.XID // min xid in this segment (from ins/upd/del)
@@ -88,6 +89,10 @@ func (s *Segment) Reset() {
 		s.aborted.Close()
 		s.aborted = nil
 	}
+	if s.replaced != nil {
+		s.replaced.Close()
+		s.replaced = nil
+	}
 	s.stats = nil
 	s.meta = &schema.Meta{}
 	s.xmin = 1<<64 - 1
@@ -108,6 +113,10 @@ func (s *Segment) Close() {
 	if s.aborted != nil {
 		s.aborted.Close()
 		s.aborted = nil
+	}
+	if s.replaced != nil {
+		s.replaced.Close()
+		s.replaced = nil
 	}
 	s.stats = nil
 	s.meta = nil
@@ -195,6 +204,10 @@ func (s *Segment) Tomb() *Tomb {
 
 func (s *Segment) Aborted() *bitset.Bitset {
 	return s.aborted
+}
+
+func (s *Segment) Replaced() *bitset.Bitset {
+	return s.replaced
 }
 
 // Len returns the number of entries in this segment. Note this
@@ -303,6 +316,9 @@ func (s *Segment) NotifyInsert(xid types.XID, rid uint64) {
 	if s.aborted != nil {
 		s.aborted.Append(false)
 	}
+	if s.replaced != nil {
+		s.replaced.Append(false)
+	}
 }
 
 // append update
@@ -326,7 +342,7 @@ func (s *Segment) NotifyUpdate(xid types.XID, rid, ref uint64) {
 
 	// same segment replace by update
 	if s.ContainsRid(ref) {
-		s.SetXmax(xid, ref, false)
+		s.setXmax(xid, ref, false)
 	}
 
 	// extend aborted set if used
@@ -349,16 +365,20 @@ func (s *Segment) NotifyDelete(xid types.XID, rid uint64) {
 
 	// same segment delete
 	if s.ContainsRid(rid) {
-		s.SetXmax(xid, rid, true)
-		s.nDelete++
+		s.setXmax(xid, rid, true)
+		// s.nDelete++
 	}
+	s.nDelete++
 }
 
 // Sets xmax to xid for record rid.
-func (s *Segment) SetXmax(xid types.XID, rid uint64, isDeleted bool) {
-	if !s.ContainsRid(rid) {
-		return
+func (s *Segment) setXmax(xid types.XID, rid uint64, isDeleted bool) {
+	// lazy allocate replaced bitset, or grow to fit current data len)
+	if s.replaced == nil {
+		s.replaced = bitset.New(s.data.Cap())
 	}
+	s.replaced.Resize(s.data.Len())
+
 	if s.nAbort == 0 {
 		// without aborts rids are unique sorted (append only) and never reused
 		idx := int(rid - s.rmin)
@@ -367,6 +387,7 @@ func (s *Segment) SetXmax(xid types.XID, rid uint64, isDeleted bool) {
 			s.data.Dels().Set(idx)
 			s.data.DelBlock().SetDirty()
 		}
+		s.replaced.Set(idx)
 	} else {
 		// with aborts, rids may appear multiple times, but only once in any
 		// non-aborted record
@@ -385,6 +406,7 @@ func (s *Segment) SetXmax(xid types.XID, rid uint64, isDeleted bool) {
 				s.data.Dels().Set(idx)
 				s.data.DelBlock().SetDirty()
 			}
+			s.replaced.Set(idx)
 		}
 	}
 	s.xmin = min(s.xmin, xid)
@@ -398,24 +420,40 @@ func (s *Segment) CommitTx(xid types.XID) {
 	}
 }
 
-func (s *Segment) AbortTx(xid types.XID) {
+func (s *Segment) AbortTx(xid types.XID) int {
 	if s.xact != xid {
-		return
+		return 0
 	}
 
-	// lazy allocate aborted set
+	// lazy allocate aborted set, set to data len (will grow with more data)
 	if s.aborted == nil {
 		s.aborted = bitset.New(s.data.Cap()).Resize(s.data.Len())
 	}
 
 	// reset all metadata records where xmin or xmax = xid to zero
-	var dirty bool
-	if s.nInsert+s.nUpdate > 0 {
+	// so they become invisible to MVCC
+	// and rollback state changes to serial counters for deterministic
+	// id assignments in the presence of aborts
+	var (
+		dirty     bool
+		minPk     uint64 = 1<<64 - 1 // first aborted pk (use for reset state)
+		minRid    uint64 = 1<<64 - 1 // first aborted rid (use for reset state)
+		nRowsDiff int                // number of added - deleted records (use for reset state)
+	)
+	if s.nInsert > 0 || s.nUpdate > 0 {
 		// segment is sorted by xid (single writer tx), walk backwards & stop early
 		xmins := s.data.Xmins().Slice()
+		rids := s.data.RowIds().Slice()
+		refs := s.data.RefIds().Slice()
+		pks := s.data.Pks().Slice()
 		i := len(xmins) - 1
 		for i >= 0 && xmins[i] == uint64(xid) {
 			xmins[i] = 0
+			minRid = min(minRid, rids[i]) // find first rid the aborted tx wrote
+			if refs[i] == rids[i] {
+				minPk = min(minPk, pks[i]) // first inserted pk the aborted tx wrote
+				nRowsDiff++
+			}
 			s.aborted.Set(i) // set aborted flag
 			s.nAbort++       // count aborted insert + update rows
 			dirty = true
@@ -433,33 +471,54 @@ func (s *Segment) AbortTx(xid types.XID) {
 		xmaxs := s.data.Xmaxs().Slice()
 		dels := s.data.Dels()
 		for i, v := range xmaxs {
-			if v == uint64(xid) {
-				xmaxs[i] = 0     // reset xmax effectively undeleting the record
-				dels.Unset(i)    // unset deleted flag (safe for both delete and replace)
-				s.aborted.Set(i) // set aborted flag
-				dirty = true
+			if v != uint64(xid) {
+				continue
 			}
+			xmaxs[i] = 0        // reset xmax effectively undeleting the record
+			dels.Unset(i)       // unset deleted flag (safe for both delete and replace)
+			s.replaced.Unset(i) // reset replaced flag
+			dirty = true
 		}
 		if dirty {
 			// explicitly set block dirty flags (we change raw vector content above)
 			s.data.XmaxBlock().SetDirty()
 			s.data.DelBlock().SetDirty()
 		}
-		// update tomb, count aborted deletes (excluding replace by update)
+		// update tomb, count aborted deletes (n = aborted tombstones, d = true deletes)
 		_, d := s.tomb.AbortTx(xid)
 		s.nAbort += uint32(d)
+		nRowsDiff -= d
 	}
 
 	// drop from active set
 	s.xact = 0
+
+	// roll back state (mind there may have been no rollbacked inserts/updates)
+	s.tstate.NextPk = min(s.tstate.NextPk, minPk)
+	s.tstate.NextRid = min(s.tstate.NextRid, minRid)
+	s.tstate.NRows = uint64(int64(s.tstate.NRows) - int64(nRowsDiff))
+	// log.Warnf("Rollback seg %d state to %#v", s.Id(), s.tstate)
+
+	if s.IsEmpty() {
+		s.rmin = 1<<64 - 1
+		s.rmax = 0
+	} else {
+		s.rmax = min(s.rmax, s.tstate.NextRid-1)
+		s.rmin = min(s.rmax, s.rmin)
+	}
+
+	// return diff in num rows
+	return nRowsDiff
 }
 
-func (s *Segment) AbortActiveTx() int {
+// Aborts the single active transaction (if any) and returns count of tx aborted
+// and rows diff from forward looking inserts (+) and deletes (-). To compensate
+// for aborted rows count, subtract nRowsDiff.
+func (s *Segment) AbortActiveTx() (nAborted int, nRowsDiff int) {
 	if s.xact == 0 || s.IsEmpty() {
-		return 0
+		return 0, 0
 	}
-	s.AbortTx(s.xact)
-	return 1
+	return 1, s.AbortTx(s.xact)
 }
 
 // Match and exclude records not visible to this tx based on snapshot
@@ -532,14 +591,22 @@ func (s *Segment) Match(node *filter.Node, snap *types.Snapshot, tomb *xroar.Bit
 		// All data in this segment was committed or aborted. We can skip
 		// snapshot checks. Note the segment can still be active at this time.
 
-		// remove in-segment deletes (note del is only set for true deletes, not updates)
-		if s.nDelete > 0 {
-			bits.AndNot(s.data.Dels().Writer())
+		// remove in-segment replaced records (all replacements are visible)
+		if s.replaced != nil {
+			bits.AndNot(s.replaced)
 			if bits.None() {
 				// log.Infof("> empty match after dels")
 				return
 			}
 		}
+		// // remove in-segment deletes (note del is only set for true deletes, not updates)
+		// if s.nDelete > 0 {
+		// 	bits.AndNot(s.data.Dels().Writer())
+		// 	if bits.None() {
+		// 		log.Infof("> empty match after dels")
+		// 		return
+		// 	}
+		// }
 
 		// remove records deleted outside this segment and records replaced
 		// by in-segment updates using the global tomb view
@@ -630,6 +697,7 @@ func (s *Segment) MergeDeleted(set *xroar.Bitmap, snap *types.Snapshot) {
 	s.tomb.MergeVisible(set, snap)
 }
 
+// Map most recent visible row id to primary key. Used during full record updates.
 func (s *Segment) LookupRids(ridMap map[uint64]uint64, snap *types.Snapshot) {
 	// check empty state and return early
 	if s.state == SegmentStateEmpty || s.IsEmpty() {
@@ -648,27 +716,60 @@ func (s *Segment) LookupRids(ridMap map[uint64]uint64, snap *types.Snapshot) {
 		// without snapshot isolation
 		pks := s.data.Pks().Slice()
 		rids := s.data.RowIds().Slice()
-		for i, pk := range pks {
-			rid, ok := ridMap[pk]
-			if !ok {
-				continue
+		if s.aborted != nil {
+			// with aborted records
+			for i, pk := range pks {
+				if s.aborted.Contains(i) {
+					continue // skip aborted records
+				}
+				rid, ok := ridMap[pk]
+				if !ok {
+					continue // skip rids we're not looking for in this query
+				}
+				ridMap[pk] = max(rid, rids[i])
 			}
-			ridMap[pk] = max(rid, rids[i])
+		} else {
+			// no aborted records
+			for i, pk := range pks {
+				rid, ok := ridMap[pk]
+				if !ok {
+					continue // skip rids we're not looking for in this query
+				}
+				ridMap[pk] = max(rid, rids[i])
+			}
 		}
 	} else {
 		// apply snapshot isolation
 		pks := s.data.Pks().Slice()
 		rids := s.data.RowIds().Slice()
 		xmins := s.data.Xmins().Slice()
-		for i, pk := range pks {
-			rid, ok := ridMap[pk]
-			if !ok {
-				continue
+		if s.aborted != nil {
+			// with aborted records
+			for i, pk := range pks {
+				if s.aborted.Contains(i) {
+					continue // skip aborted records
+				}
+				rid, ok := ridMap[pk]
+				if !ok {
+					continue // skip rids we're not looking for in this query
+				}
+				if !snap.IsVisible(types.XID(xmins[i])) {
+					continue // skip MVCC invisible records
+				}
+				ridMap[pk] = max(rid, rids[i])
 			}
-			if !snap.IsVisible(types.XID(xmins[i])) {
-				continue
+		} else {
+			// no aborted records
+			for i, pk := range pks {
+				rid, ok := ridMap[pk]
+				if !ok {
+					continue // skip rids we're not looking for in this query
+				}
+				if !snap.IsVisible(types.XID(xmins[i])) {
+					continue // skip MVCC invisible records
+				}
+				ridMap[pk] = max(rid, rids[i])
 			}
-			ridMap[pk] = max(rid, rids[i])
 		}
 	}
 }

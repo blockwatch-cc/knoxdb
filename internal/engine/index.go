@@ -123,7 +123,7 @@ func (e *Engine) CreateIndex(ctx context.Context, tableName string, s *schema.Sc
 	}
 
 	// register commit/abort callbacks
-	GetTransaction(ctx).OnCommit(func(ctx context.Context) error {
+	GetTx(ctx).OnCommit(func(ctx context.Context) error {
 		// add to table and engine
 		table.UseIndex(index)
 
@@ -228,7 +228,7 @@ func (e *Engine) DropIndex(ctx context.Context, name string) error {
 	}
 
 	// register commit callback
-	GetTransaction(ctx).OnCommit(func(ctx context.Context) error {
+	GetTx(ctx).OnCommit(func(ctx context.Context) error {
 		// remove index from table
 		index.Table().UnuseIndex(index)
 

@@ -42,7 +42,7 @@ import (
 func (j *Journal) UpdateRecords(ctx context.Context, src []byte, ridMap map[uint64]uint64) (int, error) {
 	var (
 		view     = schema.NewView(j.schema)
-		tx       = engine.GetTransaction(ctx)
+		tx       = engine.GetTx(ctx)
 		bits     = bitset.New(j.schema.NumFields()).One() // bitset of all column positions
 		xid      = tx.Id()                                // id of user tx
 		firstRid = j.tip.tstate.NextRid                   // first assigned rid (per wal batch!)
@@ -88,6 +88,7 @@ func (j *Journal) UpdateRecords(ctx context.Context, src []byte, ridMap map[uint
 			msg.Write(view.Bytes())
 
 			// add update to journal
+			// j.log.Debugf("journal update records %d[%d] -> [%d]", pk, ref, nextRid)
 			j.tip.UpdateRecord(xid, nextRid, ref, view.Bytes())
 
 			// keep new assigned rid (in case we update again later)
@@ -103,10 +104,12 @@ func (j *Journal) UpdateRecords(ctx context.Context, src []byte, ridMap map[uint
 		// j.log.Debugf("journal updated %d records into segment %d", nextRid-firstRid, j.tip.Id())
 
 		// 2 write to wal
-		rec.Data[0] = msg.Bytes()
-		_, err := j.wal.Write(rec)
-		if err != nil {
-			return 0, err
+		if tx.UseWal() {
+			rec.Data[0] = msg.Bytes()
+			_, err := j.wal.Write(rec)
+			if err != nil {
+				return 0, err
+			}
 		}
 
 		rec.Data[0] = nil
@@ -117,8 +120,12 @@ func (j *Journal) UpdateRecords(ctx context.Context, src []byte, ridMap map[uint
 		j.tip.tstate.NextRid = nextRid
 
 		// rotate segment once full
-		if err := j.rotateAndCheckpoint(); err != nil {
-			return 0, err
+		if tx.UseWal() {
+			if err := j.rotateAndCheckpoint(); err != nil {
+				return 0, err
+			}
+		} else {
+			j.rotateWhenFull()
 		}
 	}
 
@@ -144,7 +151,7 @@ func (j *Journal) UpdateRecords(ctx context.Context, src []byte, ridMap map[uint
 // Transactions allow to turn WAL mode off selectively. We choose the appropriate
 // algorithm for each case.
 func (j *Journal) UpdatePack(ctx context.Context, src *pack.Package) (int, error) {
-	tx := engine.GetTransaction(ctx)
+	tx := engine.GetTx(ctx)
 	xid := tx.Id()
 	if tx.UseWal() {
 		return j.updatePackWithWal(src, xid, tx.Engine().Wal())
@@ -193,7 +200,7 @@ func (j *Journal) updatePackNoWal(src *pack.Package, xid types.XID) (int, error)
 		j.tip.tstate.NextRid = nextRid
 
 		// rotate segment once full
-		j.rotate()
+		j.rotateWhenFull()
 
 		// stop when src is exhausted
 		if !state.More() {

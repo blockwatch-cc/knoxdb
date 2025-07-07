@@ -51,7 +51,7 @@ func NewKVStore() engine.StoreEngine {
 }
 
 func (kv *KVStore) Create(ctx context.Context, s *schema.Schema, opts engine.StoreOptions) error {
-	e := engine.GetTransaction(ctx).Engine()
+	e := engine.GetTx(ctx).Engine()
 
 	// init names
 	name := s.Name()
@@ -116,7 +116,7 @@ func (kv *KVStore) Create(ctx context.Context, s *schema.Schema, opts engine.Sto
 }
 
 func (kv *KVStore) Open(ctx context.Context, s *schema.Schema, opts engine.StoreOptions) error {
-	e := engine.GetTransaction(ctx).Engine()
+	e := engine.GetTx(ctx).Engine()
 
 	// init names
 	name := s.Name()

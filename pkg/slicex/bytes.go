@@ -12,9 +12,9 @@ import (
 
 // Optimized algorithms for ordered byte slices
 type OrderedBytes struct {
+	Values  [][]byte
 	NonZero bool
 	Unique  bool
-	Values  [][]byte
 }
 
 func NewOrderedBytes(s [][]byte) *OrderedBytes {

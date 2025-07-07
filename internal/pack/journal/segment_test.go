@@ -4,14 +4,13 @@
 package journal
 
 import (
-	"context"
-	"os"
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/bitset"
-	"blockwatch.cc/knoxdb/internal/operator"
+	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/operator/filter"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/internal/wal"
 	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"github.com/stretchr/testify/require"
@@ -158,8 +157,8 @@ func TestSegmentMatch(t *testing.T) {
 	t.Logf("Tomb set with %d vals", set.Count())
 	t.Logf("Tomb %#v", seg.tomb.stones)
 
-	logOp := operator.NewLogOperator(os.Stdout, 8)
-	logOp.Process(context.Background(), seg.data)
+	// logOp := operator.NewLogOperator(os.Stdout, 8)
+	// logOp.Process(context.Background(), seg.data)
 
 	// all matches
 	fltAll := filter.NewNode().AddLeaf(
@@ -181,4 +180,96 @@ func TestSegmentMatch(t *testing.T) {
 
 }
 
-// func TestSegmentStoreLoad(t *testing.T) {}
+func TestSegmentStateUpdates(t *testing.T) {
+	seg := newSegment(testSchema.WithMeta(), 42, 8).
+		setState(SegmentStateActive).
+		WithState(engine.NewObjectState("test")).
+		setCheckpoint(42)
+	enc := schema.NewGenericEncoder[schema.BaseModel]()
+	makeRecord := func(i int) []byte {
+		buf, err := enc.Encode(schema.BaseModel{Id: uint64(i)}, nil)
+		require.NoError(t, err)
+		return buf
+	}
+
+	var xid types.XID = 1
+
+	// xid-1: insert 1 + commit
+	seg.InsertRecord(xid, seg.tstate.NextRid, makeRecord(1))
+	seg.tstate.NextPk++
+	seg.tstate.NextRid++
+	seg.tstate.NRows++
+	seg.CommitTx(xid)
+	require.Equal(t, uint64(2), seg.tstate.NextPk, "nextPk")
+	require.Equal(t, uint64(2), seg.tstate.NextRid, "nextRid")
+	require.Equal(t, uint64(1), seg.tstate.NRows, "nrows")
+	require.Equal(t, wal.LSN(42), seg.tstate.Checkpoint)
+	xid++
+
+	// xid-2: insert + commit again
+	seg.InsertRecord(xid, seg.tstate.NextRid, makeRecord(2))
+	seg.tstate.NextPk++
+	seg.tstate.NextRid++
+	seg.tstate.NRows++
+	seg.CommitTx(xid)
+	require.Equal(t, uint64(3), seg.tstate.NextPk, "nextPk")
+	require.Equal(t, uint64(3), seg.tstate.NextRid, "nextRid")
+	require.Equal(t, uint64(2), seg.tstate.NRows, "nrows")
+	require.Equal(t, wal.LSN(42), seg.tstate.Checkpoint)
+	xid++
+
+	// xid-3: insert 3 + abort (must reset state)
+	seg.InsertRecord(xid, seg.tstate.NextRid, makeRecord(3))
+	seg.tstate.NextPk++
+	seg.tstate.NextRid++
+	seg.tstate.NRows++
+	seg.AbortTx(xid)
+	require.Equal(t, uint64(3), seg.tstate.NextPk, "nextPk")
+	require.Equal(t, uint64(3), seg.tstate.NextRid, "nextRid")
+	require.Equal(t, uint64(2), seg.tstate.NRows, "nrows")
+	require.Equal(t, wal.LSN(42), seg.tstate.Checkpoint)
+	xid++
+
+	// xid-4: update 1 + commit
+	seg.UpdateRecord(xid, seg.tstate.NextRid, 1, makeRecord(1))
+	seg.tstate.NextRid++
+	seg.CommitTx(xid)
+	require.Equal(t, uint64(3), seg.tstate.NextPk, "nextPk")
+	require.Equal(t, uint64(4), seg.tstate.NextRid, "nextRid")
+	require.Equal(t, uint64(2), seg.tstate.NRows, "nrows")
+	require.Equal(t, wal.LSN(42), seg.tstate.Checkpoint)
+	xid++
+
+	// xid-5: update 2 + abort (must reset state)
+	seg.UpdateRecord(xid, seg.tstate.NextRid, 2, makeRecord(2))
+	seg.tstate.NextRid++
+	seg.AbortTx(xid)
+	require.Equal(t, uint64(3), seg.tstate.NextPk, "nextPk")
+	require.Equal(t, uint64(4), seg.tstate.NextRid, "nextRid")
+	require.Equal(t, uint64(2), seg.tstate.NRows, "nrows")
+	require.Equal(t, wal.LSN(42), seg.tstate.Checkpoint)
+	xid++
+
+	// xid-6: delete + commit
+	seg.NotifyDelete(xid, 1)
+	seg.tstate.NRows--
+	seg.CommitTx(xid)
+	require.Equal(t, uint64(3), seg.tstate.NextPk, "nextPk")
+	require.Equal(t, uint64(4), seg.tstate.NextRid, "nextRid")
+	require.Equal(t, uint64(1), seg.tstate.NRows, "nrows")
+	require.Equal(t, wal.LSN(42), seg.tstate.Checkpoint)
+	xid++
+
+	// xid-7: delete + abort (must reset state)
+	seg.NotifyDelete(xid, 2)
+	seg.tstate.NRows--
+	seg.AbortTx(xid)
+	require.Equal(t, uint64(3), seg.tstate.NextPk, "nextPk")
+	require.Equal(t, uint64(4), seg.tstate.NextRid, "nextRid")
+	require.Equal(t, uint64(1), seg.tstate.NRows, "nrows")
+	require.Equal(t, wal.LSN(42), seg.tstate.Checkpoint)
+	xid++
+
+	// operator.NewLogOperator(os.Stdout, 8).Process(context.Background(), seg.data)
+	// t.Logf("State: %#v", seg.tstate)
+}

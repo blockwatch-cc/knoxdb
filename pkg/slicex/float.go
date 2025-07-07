@@ -17,9 +17,9 @@ type Float interface {
 
 // Optimized algorithms for ordered numeric slices
 type OrderedFloats[T Float] struct {
+	Values  []T
 	NonZero bool
 	Unique  bool
-	Values  []T
 }
 
 func NewOrderedFloats[T Float](s []T) *OrderedFloats[T] {

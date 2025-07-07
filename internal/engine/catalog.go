@@ -299,7 +299,7 @@ func (c *Catalog) PutCheckpoint(ctx context.Context, lsn wal.LSN) error {
 
 	// when run with a managed tx we reuse it here, otherwise we open
 	// a separate storage tx
-	if etx := GetTransaction(ctx); etx != nil {
+	if etx := GetTx(ctx); etx != nil {
 		tx, err := etx.CatalogTx(c.db, true)
 		if err != nil {
 			return err
@@ -311,7 +311,7 @@ func (c *Catalog) PutCheckpoint(ctx context.Context, lsn wal.LSN) error {
 }
 
 func (c *Catalog) GetSchema(ctx context.Context, key uint64) (*schema.Schema, error) {
-	tx, err := GetTransaction(ctx).CatalogTx(c.db, false)
+	tx, err := GetTx(ctx).CatalogTx(c.db, false)
 	if err != nil {
 		return nil, err
 	}
@@ -331,7 +331,7 @@ func (c *Catalog) GetSchema(ctx context.Context, key uint64) (*schema.Schema, er
 }
 
 func (c *Catalog) PutSchema(ctx context.Context, s *schema.Schema) error {
-	tx, err := GetTransaction(ctx).CatalogTx(c.db, true)
+	tx, err := GetTx(ctx).CatalogTx(c.db, true)
 	if err != nil {
 		return err
 	}
@@ -347,7 +347,7 @@ func (c *Catalog) PutSchema(ctx context.Context, s *schema.Schema) error {
 }
 
 func (c *Catalog) DelSchema(ctx context.Context, key uint64) error {
-	tx, err := GetTransaction(ctx).CatalogTx(c.db, true)
+	tx, err := GetTx(ctx).CatalogTx(c.db, true)
 	if err != nil {
 		return err
 	}
@@ -363,7 +363,7 @@ func (c *Catalog) GetOptions(ctx context.Context, key uint64, opts any) error {
 	if err != nil {
 		return err
 	}
-	tx, err := GetTransaction(ctx).CatalogTx(c.db, false)
+	tx, err := GetTx(ctx).CatalogTx(c.db, false)
 	if err != nil {
 		return err
 	}
@@ -390,7 +390,7 @@ func (c *Catalog) PutOptions(ctx context.Context, key uint64, opts any) error {
 	if err != nil {
 		return err
 	}
-	tx, err := GetTransaction(ctx).CatalogTx(c.db, true)
+	tx, err := GetTx(ctx).CatalogTx(c.db, true)
 	if err != nil {
 		return err
 	}
@@ -407,7 +407,7 @@ func (c *Catalog) PutOptions(ctx context.Context, key uint64, opts any) error {
 }
 
 func (c *Catalog) DelOptions(ctx context.Context, key uint64) error {
-	tx, err := GetTransaction(ctx).CatalogTx(c.db, true)
+	tx, err := GetTx(ctx).CatalogTx(c.db, true)
 	if err != nil {
 		return err
 	}
@@ -424,7 +424,7 @@ func (c *Catalog) ListTables(ctx context.Context) ([]uint64, error) {
 
 func (c *Catalog) GetTable(ctx context.Context, key uint64) (s *schema.Schema, o TableOptions, err error) {
 	var tx store.Tx
-	tx, err = GetTransaction(ctx).CatalogTx(c.db, false)
+	tx, err = GetTx(ctx).CatalogTx(c.db, false)
 	if err != nil {
 		return
 	}
@@ -461,7 +461,7 @@ func (c *Catalog) AddTable(ctx context.Context, key uint64, s *schema.Schema, o 
 	}
 
 	// create table bucket, add table name and current schema
-	tx, err := GetTransaction(ctx).CatalogTx(c.db, true)
+	tx, err := GetTx(ctx).CatalogTx(c.db, true)
 	if err != nil {
 		return err
 	}
@@ -485,7 +485,7 @@ func (c *Catalog) AddTable(ctx context.Context, key uint64, s *schema.Schema, o 
 
 func (c *Catalog) DropTable(ctx context.Context, key uint64) error {
 	// TODO: we don't have a reference to previous schema versions/hashes for removal
-	tx, err := GetTransaction(ctx).CatalogTx(c.db, true)
+	tx, err := GetTx(ctx).CatalogTx(c.db, true)
 	if err != nil {
 		return err
 	}
@@ -516,7 +516,7 @@ func (c *Catalog) DropTable(ctx context.Context, key uint64) error {
 
 func (c *Catalog) GetIndex(ctx context.Context, key uint64) (s *schema.Schema, o IndexOptions, err error) {
 	var tx store.Tx
-	tx, err = GetTransaction(ctx).CatalogTx(c.db, false)
+	tx, err = GetTx(ctx).CatalogTx(c.db, false)
 	if err != nil {
 		return
 	}
@@ -544,7 +544,7 @@ func (c *Catalog) GetIndex(ctx context.Context, key uint64) (s *schema.Schema, o
 }
 
 func (c *Catalog) ListIndexes(ctx context.Context, key uint64) ([]uint64, error) {
-	tx, err := GetTransaction(ctx).CatalogTx(c.db, false)
+	tx, err := GetTx(ctx).CatalogTx(c.db, false)
 	if err != nil {
 		return nil, err
 	}
@@ -578,7 +578,7 @@ func (c *Catalog) AddIndex(ctx context.Context, ikey, tkey uint64, s *schema.Sch
 		return err
 	}
 	// create index bucket, add index name, current schema, table hash
-	tx, err := GetTransaction(ctx).CatalogTx(c.db, true)
+	tx, err := GetTx(ctx).CatalogTx(c.db, true)
 	if err != nil {
 		return err
 	}
@@ -604,7 +604,7 @@ func (c *Catalog) AddIndex(ctx context.Context, ikey, tkey uint64, s *schema.Sch
 }
 
 func (c *Catalog) DropIndex(ctx context.Context, key uint64) error {
-	tx, err := GetTransaction(ctx).CatalogTx(c.db, true)
+	tx, err := GetTx(ctx).CatalogTx(c.db, true)
 	if err != nil {
 		return err
 	}
@@ -639,7 +639,7 @@ func (c *Catalog) ListStores(ctx context.Context) ([]uint64, error) {
 
 func (c *Catalog) GetStore(ctx context.Context, key uint64) (s *schema.Schema, o StoreOptions, err error) {
 	var tx store.Tx
-	tx, err = GetTransaction(ctx).CatalogTx(c.db, false)
+	tx, err = GetTx(ctx).CatalogTx(c.db, false)
 	if err != nil {
 		return
 	}
@@ -676,7 +676,7 @@ func (c *Catalog) AddStore(ctx context.Context, key uint64, s *schema.Schema, o 
 	}
 
 	// create store bucket, add name and current schema
-	tx, err := GetTransaction(ctx).CatalogTx(c.db, true)
+	tx, err := GetTx(ctx).CatalogTx(c.db, true)
 	if err != nil {
 		return err
 	}
@@ -699,7 +699,7 @@ func (c *Catalog) AddStore(ctx context.Context, key uint64, s *schema.Schema, o 
 
 func (c *Catalog) DropStore(ctx context.Context, key uint64) error {
 	// TODO: we don't have a reference to previous schema versions/hashes for removal
-	tx, err := GetTransaction(ctx).CatalogTx(c.db, true)
+	tx, err := GetTx(ctx).CatalogTx(c.db, true)
 	if err != nil {
 		return err
 	}
@@ -734,7 +734,7 @@ func (c *Catalog) ListEnums(ctx context.Context) ([]uint64, error) {
 
 func (c *Catalog) GetEnum(ctx context.Context, key uint64) (e *schema.EnumDictionary, err error) {
 	var tx store.Tx
-	tx, err = GetTransaction(ctx).CatalogTx(c.db, false)
+	tx, err = GetTx(ctx).CatalogTx(c.db, false)
 	if err != nil {
 		return
 	}
@@ -760,7 +760,7 @@ func (c *Catalog) GetEnum(ctx context.Context, key uint64) (e *schema.EnumDictio
 }
 
 func (c *Catalog) PutEnum(ctx context.Context, e *schema.EnumDictionary) error {
-	tx, err := GetTransaction(ctx).CatalogTx(c.db, true)
+	tx, err := GetTx(ctx).CatalogTx(c.db, true)
 	if err != nil {
 		return err
 	}
@@ -781,7 +781,7 @@ func (c *Catalog) PutEnum(ctx context.Context, e *schema.EnumDictionary) error {
 
 func (c *Catalog) AddEnum(ctx context.Context, e *schema.EnumDictionary) error {
 	// create enum bucket, add enum name and data
-	tx, err := GetTransaction(ctx).CatalogTx(c.db, true)
+	tx, err := GetTx(ctx).CatalogTx(c.db, true)
 	if err != nil {
 		return err
 	}
@@ -807,7 +807,7 @@ func (c *Catalog) AddEnum(ctx context.Context, e *schema.EnumDictionary) error {
 }
 
 func (c *Catalog) DropEnum(ctx context.Context, key uint64) error {
-	tx, err := GetTransaction(ctx).CatalogTx(c.db, true)
+	tx, err := GetTx(ctx).CatalogTx(c.db, true)
 	if err != nil {
 		return err
 	}
@@ -823,7 +823,7 @@ func (c *Catalog) DropEnum(ctx context.Context, key uint64) error {
 }
 
 func (c *Catalog) listKeys(ctx context.Context, bucketKey []byte) ([]uint64, error) {
-	tx, err := GetTransaction(ctx).CatalogTx(c.db, false)
+	tx, err := GetTx(ctx).CatalogTx(c.db, false)
 	if err != nil {
 		return nil, err
 	}
@@ -847,7 +847,7 @@ func (c *Catalog) append(ctx context.Context, o Object) error {
 	defer c.mu.Unlock()
 
 	// fetch tx and append with index flag (to forward commit call)
-	tx := GetTransaction(ctx).WithFlags(TxFlagCatalog)
+	tx := GetTx(ctx).WithFlags(TxFlagCatalog)
 
 	// write wal record
 	buf, err := o.Encode()
@@ -928,7 +928,7 @@ func (c *Catalog) doCheckpoint(ctx context.Context) error {
 		return nil
 	}
 
-	tx := GetTransaction(ctx)
+	tx := GetTx(ctx)
 	if tx != nil {
 		if tx.Err() != nil {
 			return nil
