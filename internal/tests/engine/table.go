@@ -10,7 +10,6 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/query"
-	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"github.com/stretchr/testify/assert"
@@ -257,7 +256,7 @@ func UpdateRowsTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine,
 	// create fake pk index
 	idxSchema, err := tab.Schema().SelectFieldIds(tab.Schema().PkId(), schema.MetaRid)
 	require.NoError(t, err)
-	idx := tests.NewMockIndex(idxSchema, xroar.New())
+	idx := query.NewMockIndex(idxSchema, xroar.New())
 	tab.UseIndex(idx)
 
 	enc := schema.NewEncoder(tab.Schema())
