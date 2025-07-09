@@ -225,67 +225,67 @@ exit_avx:
         RET
         
 // func xxh3_u64_core_avx512_unroll(src []uint64, res []uint64)
-TEXT ·xxh3_u64_core_avx512_unroll(SB), NOSPLIT, $0-48
-        MOVQ    src_base+0(FP), SI
-        MOVQ    src_len+8(FP), BX
-        MOVQ    res_base+24(FP), DI
-
-        VPBROADCASTQ    key64_008<>(SB), Z11           
-        VPBROADCASTQ    key64_016<>(SB), Z12           
-        VPXORQ          Z11, Z12, Z11
-
-        VPBROADCASTQ    con64_1<>(SB), Z10
-        VPBROADCASTQ    maskHighD<>+0x00(SB), Z9   // 0xffffffff00000000 mask
-        VPBROADCASTQ    constU64_8<>(SB), Z8 // const 8
-
-        SHRQ    $4, BX          
-        JZ      exit_avx
-
-loop_avx:
-        //input64 := val>>32 + val<<32
-        VPSHUFD         $0xb1, (SI), Z0
-        VPSHUFD         $0xb1, 64(SI), Z3
-        // h := input64 ^ (key64_008 ^ key64_016)
-        VPXORQ          Z11, Z0, Z0           
-        VPXORQ          Z11, Z3, Z3           
-
-        // h ^= rol64_49(h) ^ rol64_24(h)
-        VPROLQ          $49, Z0, Z1
-        VPROLQ          $49, Z3, Z4
-        VPROLQ          $24, Z0, Z2
-        VPROLQ          $24, Z3, Z5
-        VPXORQ          Z1, Z2, Z1
-        VPXORQ          Z4, Z5, Z4
-        VPXORQ          Z0, Z1, Z0
-        VPXORQ          Z3, Z4, Z3
-        // h *= 0x9fb21c651e98df25
-        VPMULLQ         Z0, Z10, Z1
-        VPMULLQ         Z3, Z10, Z4
-        // h ^= (h >> 35) + 8
-        VPSRLQ          $35, Z1, Z0
-        VPSRLQ          $35, Z4, Z3
-        VPADDQ          Z0, Z8, Z0
-        VPADDQ          Z3, Z8, Z3
-        VPXORQ          Z1, Z0, Z0
-        VPXORQ          Z4, Z3, Z3
-        // h *= 0x9fb21c651e98df25
-        VPMULLQ         Z0, Z10, Z1
-        VPMULLQ         Z3, Z10, Z4
-        // h ^= (h >> 28)
-        VPSRLQ          $28, Z1, Z0
-        VPSRLQ          $28, Z4, Z3
-        VPXORQ          Z1, Z0, Z0
-        VPXORQ          Z4, Z3, Z3
-        
-        ADDQ            $128, SI
-
-        VMOVDQU64       Z0, (DI)
-        VMOVDQU64       Z3, 64(DI)
-        ADDQ            $128, DI
-        SUBQ            $1, BX
-        JZ              exit_avx
-        JMP             loop_avx
-
-exit_avx:
-        VZEROUPPER
-        RET
+// TEXT ·xxh3_u64_core_avx512_unroll(SB), NOSPLIT, $0-48
+//         MOVQ    src_base+0(FP), SI
+//         MOVQ    src_len+8(FP), BX
+//         MOVQ    res_base+24(FP), DI
+//
+//         VPBROADCASTQ    key64_008<>(SB), Z11
+//         VPBROADCASTQ    key64_016<>(SB), Z12
+//         VPXORQ          Z11, Z12, Z11
+//
+//         VPBROADCASTQ    con64_1<>(SB), Z10
+//         VPBROADCASTQ    maskHighD<>+0x00(SB), Z9   // 0xffffffff00000000 mask
+//         VPBROADCASTQ    constU64_8<>(SB), Z8 // const 8
+//
+//         SHRQ    $4, BX
+//         JZ      exit_avx
+//
+// loop_avx:
+//         //input64 := val>>32 + val<<32
+//         VPSHUFD         $0xb1, (SI), Z0
+//         VPSHUFD         $0xb1, 64(SI), Z3
+//         // h := input64 ^ (key64_008 ^ key64_016)
+//         VPXORQ          Z11, Z0, Z0
+//         VPXORQ          Z11, Z3, Z3
+//
+//         // h ^= rol64_49(h) ^ rol64_24(h)
+//         VPROLQ          $49, Z0, Z1
+//         VPROLQ          $49, Z3, Z4
+//         VPROLQ          $24, Z0, Z2
+//         VPROLQ          $24, Z3, Z5
+//         VPXORQ          Z1, Z2, Z1
+//         VPXORQ          Z4, Z5, Z4
+//         VPXORQ          Z0, Z1, Z0
+//         VPXORQ          Z3, Z4, Z3
+//         // h *= 0x9fb21c651e98df25
+//         VPMULLQ         Z0, Z10, Z1
+//         VPMULLQ         Z3, Z10, Z4
+//         // h ^= (h >> 35) + 8
+//         VPSRLQ          $35, Z1, Z0
+//         VPSRLQ          $35, Z4, Z3
+//         VPADDQ          Z0, Z8, Z0
+//         VPADDQ          Z3, Z8, Z3
+//         VPXORQ          Z1, Z0, Z0
+//         VPXORQ          Z4, Z3, Z3
+//         // h *= 0x9fb21c651e98df25
+//         VPMULLQ         Z0, Z10, Z1
+//         VPMULLQ         Z3, Z10, Z4
+//         // h ^= (h >> 28)
+//         VPSRLQ          $28, Z1, Z0
+//         VPSRLQ          $28, Z4, Z3
+//         VPXORQ          Z1, Z0, Z0
+//         VPXORQ          Z4, Z3, Z3
+        //
+//         ADDQ            $128, SI
+//
+//         VMOVDQU64       Z0, (DI)
+//         VMOVDQU64       Z3, 64(DI)
+//         ADDQ            $128, DI
+//         SUBQ            $1, BX
+//         JZ              exit_avx
+//         JMP             loop_avx
+//
+// exit_avx:
+//         VZEROUPPER
+//         RET

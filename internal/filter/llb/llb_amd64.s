@@ -973,7 +973,7 @@ done:
 
 /***************************** regSumAndZeros ****************************************************/
 
-// func llb_sum_core_avx2(registers []uint8) (float64, float64)
+// func llb_sum_core_avx2(registers []uint8) (ret1 float64, ret2 float64)
 TEXT ·llb_sum_core_avx2(SB), NOSPLIT, $0-40
 	MOVQ	        registers_base+0(FP), SI
 	MOVQ	        registers_len+8(FP), BX
@@ -1076,15 +1076,15 @@ loop_i8:
 
 done:
         VCVTSS2SD       X10, X10, X10   // convert to float64
-        MOVSD           X10, ret+24(FP)
+        MOVSD           X10, ret1+24(FP)
 
         VCVTSI2SDQ      R11, X0, X0     // convert to float64
-        MOVSD           X0, ret+32(FP)
+        MOVSD           X0, ret2+32(FP)
     
         VZEROUPPER
 	RET
 
-// func llb_sum_core_avx512(registers []uint8) (float64, float64)
+// func llb_sum_core_avx512(registers []uint8) (ret1 float64, ret2 float64)
 TEXT ·llb_sum_core_avx512(SB), NOSPLIT, $0-40
 	MOVQ	        registers_base+0(FP), SI
 	MOVQ	        registers_len+8(FP), BX
@@ -1189,10 +1189,10 @@ loop_i8:
 
 done:
         VCVTSS2SD       X10, X10, X10   // convert to float64
-        MOVSD           X10, ret+24(FP)
+        MOVSD           X10, ret1+24(FP)
 
         VCVTSI2SDQ      R11, X0, X0     // convert to float64
-        MOVSD           X0, ret+32(FP)
+        MOVSD           X0, ret2+32(FP)
     
         VZEROUPPER
 	RET

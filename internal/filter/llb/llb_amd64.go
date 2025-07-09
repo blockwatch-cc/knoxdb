@@ -51,10 +51,10 @@ func llb_add_u64_core_avx512(f LogLogBeta, data []uint64, seed uint32)
 func llb_merge_core_avx2(dst, src []byte)
 
 //go:noescape
-func llb_sum_core_avx2(registers []uint8) (float64, float64)
+func llb_sum_core_avx2(registers []uint8) (ret1 float64, ret2 float64)
 
 //go:noescape
-func llb_sum_core_avx512(registers []uint8) (float64, float64)
+func llb_sum_core_avx512(registers []uint8) (ret1 float64, ret2 float64)
 
 func llb_add_u32_avx2(f *LogLogBeta, data []uint32, seed uint32) {
 	len_head := len(data) & 0x7ffffffffffffff8

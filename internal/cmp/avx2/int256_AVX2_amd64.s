@@ -10,7 +10,7 @@
 //
 // input:
 //   SI = src_X0_base (1st qwords)
-//   BP = src_X1_base (2nd qwords)
+//   DX = src_X1_base (2nd qwords)
 //   R14 = src_X2_base (3rd qwords)
 //   R15 = src_X3_base (4th qwords)
 //   DI = bits_base
@@ -24,7 +24,7 @@
 //   Y1-Y8 = vector data
 TEXT ·cmp_i256_eq_x2(SB), NOSPLIT, $0-160
 	MOVQ	src_X0_base+0(FP), SI
-    MOVQ    src_X1_base+24(FP), BP
+    MOVQ    src_X1_base+24(FP), DX
     MOVQ    src_X2_base+48(FP), R14
     MOVQ    src_X3_base+72(FP), R15
 	MOVQ	src_X0_len+8(FP), BX
@@ -57,7 +57,7 @@ prep_big:
 
 loop_big:
     VPCMPEQQ	    0(SI), Y0, Y1     
-	VPCMPEQQ	    0(BP), Y13, Y2
+	VPCMPEQQ	    0(DX), Y13, Y2
     VPCMPEQQ	    0(R14), Y14, Y3
 	VPCMPEQQ	    0(R15), Y15, Y4
     VPAND       Y1, Y2, Y1
@@ -65,7 +65,7 @@ loop_big:
     VPAND       Y1, Y3, Y1
 
     VPCMPEQQ	    32(SI), Y0, Y2
-	VPCMPEQQ	    32(BP), Y13, Y3
+	VPCMPEQQ	    32(DX), Y13, Y3
     VPCMPEQQ	    32(R14), Y14, Y4
 	VPCMPEQQ	    32(R15), Y15, Y5
     VPAND       Y2, Y3, Y2
@@ -73,7 +73,7 @@ loop_big:
     VPAND       Y2, Y4, Y2
 
     VPCMPEQQ	    64(SI), Y0, Y3
-	VPCMPEQQ	    64(BP), Y13, Y4
+	VPCMPEQQ	    64(DX), Y13, Y4
     VPCMPEQQ	    64(R14), Y14, Y5
 	VPCMPEQQ	    64(R15), Y15, Y6
     VPAND       Y3, Y4, Y3
@@ -81,7 +81,7 @@ loop_big:
     VPAND       Y3, Y5, Y3
 
     VPCMPEQQ	    96(SI), Y0, Y4
-	VPCMPEQQ	    96(BP), Y13, Y5
+	VPCMPEQQ	    96(DX), Y13, Y5
     VPCMPEQQ	    96(R14), Y14, Y6
 	VPCMPEQQ	    96(R15), Y15, Y7
     VPAND       Y4, Y5, Y4
@@ -89,7 +89,7 @@ loop_big:
     VPAND       Y4, Y6, Y4
 
     VPCMPEQQ	    128(SI), Y0, Y5
-	VPCMPEQQ	    128(BP), Y13, Y6
+	VPCMPEQQ	    128(DX), Y13, Y6
     VPCMPEQQ	    128(R14), Y14, Y7
 	VPCMPEQQ	    128(R15), Y15, Y8
     VPAND       Y5, Y6, Y5
@@ -97,7 +97,7 @@ loop_big:
     VPAND       Y5, Y7, Y5
 
     VPCMPEQQ	    160(SI), Y0, Y6
-	VPCMPEQQ	    160(BP), Y13, Y7
+	VPCMPEQQ	    160(DX), Y13, Y7
     VPCMPEQQ	    160(R14), Y14, Y8
 	VPCMPEQQ	    160(R15), Y15, Y9
     VPAND       Y6, Y7, Y6
@@ -105,7 +105,7 @@ loop_big:
     VPAND       Y6, Y8, Y6
 
     VPCMPEQQ	    192(SI), Y0, Y7
-	VPCMPEQQ	    192(BP), Y13, Y8
+	VPCMPEQQ	    192(DX), Y13, Y8
     VPCMPEQQ	    192(R14), Y14, Y9
 	VPCMPEQQ	    192(R15), Y15, Y10
     VPAND       Y7, Y8, Y7
@@ -115,7 +115,7 @@ loop_big:
 	VPACKSSDW	Y1, Y2, Y1
 
     VPCMPEQQ	    224(SI), Y0, Y8
-	VPCMPEQQ	    224(BP), Y13, Y9
+	VPCMPEQQ	    224(DX), Y13, Y9
     VPCMPEQQ	    224(R14), Y14, Y10
 	VPCMPEQQ	    224(R15), Y15, Y2
     VPAND       Y8, Y9, Y8
@@ -137,7 +137,7 @@ loop_big:
 	ADDQ		AX, R9
 
 	ADDQ		$256, SI
-	ADDQ		$256, BP
+	ADDQ		$256, DX
 	ADDQ		$256, R14
 	ADDQ		$256, R15
 	ADDQ		$4, CX
@@ -157,7 +157,7 @@ done:
 //
 // input:
 //   SI = src_X0_base (1st qwords)
-//   BP = src_X1_base (2nd qwords)
+//   DX = src_X1_base (2nd qwords)
 //   R14 = src_X2_base (3rd qwords)
 //   R15 = src_X3_base (4th qwords)
 //   DI = bits_base
@@ -171,7 +171,7 @@ done:
 //   Y1-Y8 = vector data
 TEXT ·cmp_i256_ne_x2(SB), NOSPLIT, $0-160
 	MOVQ	src_X0_base+0(FP), SI
-    MOVQ    src_X1_base+24(FP), BP
+    MOVQ    src_X1_base+24(FP), DX
     MOVQ    src_X2_base+48(FP), R14
     MOVQ    src_X3_base+72(FP), R15
 	MOVQ	src_X0_len+8(FP), BX
@@ -204,7 +204,7 @@ prep_big:
 
 loop_big:
     VPCMPEQQ	    0(SI), Y0, Y1
-	VPCMPEQQ	    0(BP), Y13, Y2
+	VPCMPEQQ	    0(DX), Y13, Y2
     VPCMPEQQ	    0(R14), Y14, Y3
 	VPCMPEQQ	    0(R15), Y15, Y4
     VPAND       Y1, Y2, Y1
@@ -212,7 +212,7 @@ loop_big:
     VPAND       Y1, Y3, Y1
 
     VPCMPEQQ	    32(SI), Y0, Y2
-	VPCMPEQQ	    32(BP), Y13, Y3
+	VPCMPEQQ	    32(DX), Y13, Y3
     VPCMPEQQ	    32(R14), Y14, Y4
 	VPCMPEQQ	    32(R15), Y15, Y5
     VPAND       Y2, Y3, Y2
@@ -220,7 +220,7 @@ loop_big:
     VPAND       Y2, Y4, Y2
 
     VPCMPEQQ	    64(SI), Y0, Y3
-	VPCMPEQQ	    64(BP), Y13, Y4
+	VPCMPEQQ	    64(DX), Y13, Y4
     VPCMPEQQ	    64(R14), Y14, Y5
 	VPCMPEQQ	    64(R15), Y15, Y6
     VPAND       Y3, Y4, Y3
@@ -228,7 +228,7 @@ loop_big:
     VPAND       Y3, Y5, Y3
 
     VPCMPEQQ	    96(SI), Y0, Y4
-	VPCMPEQQ	    96(BP), Y13, Y5
+	VPCMPEQQ	    96(DX), Y13, Y5
     VPCMPEQQ	    96(R14), Y14, Y6
 	VPCMPEQQ	    96(R15), Y15, Y7
     VPAND       Y4, Y5, Y4
@@ -236,7 +236,7 @@ loop_big:
     VPAND       Y4, Y6, Y4
 
     VPCMPEQQ	    128(SI), Y0, Y5
-	VPCMPEQQ	    128(BP), Y13, Y6
+	VPCMPEQQ	    128(DX), Y13, Y6
     VPCMPEQQ	    128(R14), Y14, Y7
 	VPCMPEQQ	    128(R15), Y15, Y8
     VPAND       Y5, Y6, Y5
@@ -244,7 +244,7 @@ loop_big:
     VPAND       Y5, Y7, Y5
 
     VPCMPEQQ	    160(SI), Y0, Y6
-	VPCMPEQQ	    160(BP), Y13, Y7
+	VPCMPEQQ	    160(DX), Y13, Y7
     VPCMPEQQ	    160(R14), Y14, Y8
 	VPCMPEQQ	    160(R15), Y15, Y9
     VPAND       Y6, Y7, Y6
@@ -252,7 +252,7 @@ loop_big:
     VPAND       Y6, Y8, Y6
 
     VPCMPEQQ	    192(SI), Y0, Y7
-	VPCMPEQQ	    192(BP), Y13, Y8
+	VPCMPEQQ	    192(DX), Y13, Y8
     VPCMPEQQ	    192(R14), Y14, Y9
 	VPCMPEQQ	    192(R15), Y15, Y10
     VPAND       Y7, Y8, Y7
@@ -262,7 +262,7 @@ loop_big:
 	VPACKSSDW	Y1, Y2, Y1
 
     VPCMPEQQ	    224(SI), Y0, Y8
-	VPCMPEQQ	    224(BP), Y13, Y9
+	VPCMPEQQ	    224(DX), Y13, Y9
     VPCMPEQQ	    224(R14), Y14, Y10
 	VPCMPEQQ	    224(R15), Y15, Y2
     VPAND       Y8, Y9, Y8
@@ -285,7 +285,7 @@ loop_big:
 	ADDQ		AX, R9
 
 	ADDQ		$256, SI
-	ADDQ		$256, BP
+	ADDQ		$256, DX
 	ADDQ		$256, R14
 	ADDQ		$256, R15
 	ADDQ		$4, CX
@@ -305,7 +305,7 @@ done:
 //
 // input:
 //   SI = src_X0_base (1st qwords)
-//   BP = src_X1_base (2nd qwords)
+//   DX = src_X1_base (2nd qwords)
 //   R14 = src_X2_base (3rd qwords)
 //   R15 = src_X3_base (4th qwords)
 //   DI = bits_base
@@ -319,7 +319,7 @@ done:
 //   Y1-Y8 = vector data
 TEXT ·cmp_i256_lt_x2(SB), NOSPLIT, $0-160
 	MOVQ	src_X0_base+0(FP), SI
-    MOVQ    src_X1_base+24(FP), BP
+    MOVQ    src_X1_base+24(FP), DX
     MOVQ    src_X2_base+48(FP), R14
     MOVQ    src_X3_base+72(FP), R15
 	MOVQ	src_X0_len+8(FP), BX
@@ -364,7 +364,7 @@ loop_big:
     VPXOR       Y10, Y1, Y1               // flip sign bit (for unsigned comparision)
 	VMOVDQU	    0(R14), Y6
     VPXOR       Y10, Y6, Y6               // flip sign bit (for unsigned comparision)
-    VMOVDQU	    0(BP), Y7
+    VMOVDQU	    0(DX), Y7
     VPXOR       Y10, Y7, Y7               // flip sign bit (for unsigned comparision)
 	VMOVDQU	    0(SI), Y8
 
@@ -389,7 +389,7 @@ loop_big:
     VPXOR       Y10, Y2, Y2            
     VMOVDQU	    32(R14), Y6
     VPXOR       Y10, Y6, Y6          
-    VMOVDQU	    32(BP), Y7
+    VMOVDQU	    32(DX), Y7
     VPXOR       Y10, Y7, Y7         
 	VMOVDQU	    32(SI), Y8
 
@@ -414,7 +414,7 @@ loop_big:
     VPXOR       Y10, Y3, Y3            
     VMOVDQU	    64(R14), Y6
     VPXOR       Y10, Y6, Y6          
-    VMOVDQU	    64(BP), Y7
+    VMOVDQU	    64(DX), Y7
     VPXOR       Y10, Y7, Y7         
 	VMOVDQU	    64(SI), Y8
 
@@ -439,7 +439,7 @@ loop_big:
     VPXOR       Y10, Y4, Y4            
     VMOVDQU	    96(R14), Y6
     VPXOR       Y10, Y6, Y6          
-    VMOVDQU	    96(BP), Y7
+    VMOVDQU	    96(DX), Y7
     VPXOR       Y10, Y7, Y7         
 	VMOVDQU	    96(SI), Y8
 
@@ -468,7 +468,7 @@ loop_big:
     VPXOR       Y10, Y5, Y5            
     VMOVDQU	    128(R14), Y2
     VPXOR       Y10, Y2, Y2          
-    VMOVDQU	    128(BP), Y3
+    VMOVDQU	    128(DX), Y3
     VPXOR       Y10, Y3, Y3         
 	VMOVDQU	    128(SI), Y4
 
@@ -493,7 +493,7 @@ loop_big:
     VPXOR       Y10, Y6, Y6            
     VMOVDQU	    160(R14), Y2
     VPXOR       Y10, Y2, Y2          
-    VMOVDQU	    160(BP), Y3
+    VMOVDQU	    160(DX), Y3
     VPXOR       Y10, Y3, Y3         
 	VMOVDQU	    160(SI), Y4
 
@@ -518,7 +518,7 @@ loop_big:
     VPXOR       Y10, Y7, Y7            
     VMOVDQU	    192(R14), Y2
     VPXOR       Y10, Y2, Y2          
-    VMOVDQU	    192(BP), Y3
+    VMOVDQU	    192(DX), Y3
     VPXOR       Y10, Y3, Y3         
 	VMOVDQU	    192(SI), Y4
 
@@ -543,7 +543,7 @@ loop_big:
     VPXOR       Y10, Y8, Y8            
     VMOVDQU	    224(R14), Y2
     VPXOR       Y10, Y2, Y2          
-    VMOVDQU	    224(BP), Y3
+    VMOVDQU	    224(DX), Y3
     VPXOR       Y10, Y3, Y3         
 	VMOVDQU	    224(SI), Y4
 
@@ -578,7 +578,7 @@ loop_big:
 	ADDQ		AX, R9
 
 	ADDQ		$256, SI
-	ADDQ		$256, BP
+	ADDQ		$256, DX
 	ADDQ		$256, R14
 	ADDQ		$256, R15
 	ADDQ		$4, CX
@@ -598,7 +598,7 @@ done:
 //
 // input:
 //   SI = src_X0_base (1st qwords)
-//   BP = src_X1_base (2nd qwords)
+//   DX = src_X1_base (2nd qwords)
 //   R14 = src_X2_base (3rd qwords)
 //   R15 = src_X3_base (4th qwords)
 //   DI = bits_base
@@ -612,7 +612,7 @@ done:
 //   Y1-Y8 = vector data
 TEXT ·cmp_i256_le_x2(SB), NOSPLIT, $0-160
 	MOVQ	src_X0_base+0(FP), SI
-    MOVQ    src_X1_base+24(FP), BP
+    MOVQ    src_X1_base+24(FP), DX
     MOVQ    src_X2_base+48(FP), R14
     MOVQ    src_X3_base+72(FP), R15
 	MOVQ	src_X0_len+8(FP), BX
@@ -657,7 +657,7 @@ loop_big:
     VPXOR       Y10, Y1, Y1               // flip sign bit (for unsigned comparision)
 	VMOVDQU	    0(R14), Y6
     VPXOR       Y10, Y6, Y6               // flip sign bit (for unsigned comparision)
-    VMOVDQU	    0(BP), Y7
+    VMOVDQU	    0(DX), Y7
     VPXOR       Y10, Y7, Y7               // flip sign bit (for unsigned comparision)
 	VMOVDQU	    0(SI), Y8
 
@@ -682,7 +682,7 @@ loop_big:
     VPXOR       Y10, Y2, Y2            
     VMOVDQU	    32(R14), Y6
     VPXOR       Y10, Y6, Y6          
-    VMOVDQU	    32(BP), Y7
+    VMOVDQU	    32(DX), Y7
     VPXOR       Y10, Y7, Y7         
 	VMOVDQU	    32(SI), Y8
 
@@ -707,7 +707,7 @@ loop_big:
     VPXOR       Y10, Y3, Y3            
     VMOVDQU	    64(R14), Y6
     VPXOR       Y10, Y6, Y6          
-    VMOVDQU	    64(BP), Y7
+    VMOVDQU	    64(DX), Y7
     VPXOR       Y10, Y7, Y7         
 	VMOVDQU	    64(SI), Y8
 
@@ -732,7 +732,7 @@ loop_big:
     VPXOR       Y10, Y4, Y4            
     VMOVDQU	    96(R14), Y6
     VPXOR       Y10, Y6, Y6          
-    VMOVDQU	    96(BP), Y7
+    VMOVDQU	    96(DX), Y7
     VPXOR       Y10, Y7, Y7         
 	VMOVDQU	    96(SI), Y8
 
@@ -761,7 +761,7 @@ loop_big:
     VPXOR       Y10, Y5, Y5            
     VMOVDQU	    128(R14), Y2
     VPXOR       Y10, Y2, Y2          
-    VMOVDQU	    128(BP), Y3
+    VMOVDQU	    128(DX), Y3
     VPXOR       Y10, Y3, Y3         
 	VMOVDQU	    128(SI), Y4
 
@@ -786,7 +786,7 @@ loop_big:
     VPXOR       Y10, Y6, Y6            
     VMOVDQU	    160(R14), Y2
     VPXOR       Y10, Y2, Y2          
-    VMOVDQU	    160(BP), Y3
+    VMOVDQU	    160(DX), Y3
     VPXOR       Y10, Y3, Y3         
 	VMOVDQU	    160(SI), Y4
 
@@ -811,7 +811,7 @@ loop_big:
     VPXOR       Y10, Y7, Y7            
     VMOVDQU	    192(R14), Y2
     VPXOR       Y10, Y2, Y2          
-    VMOVDQU	    192(BP), Y3
+    VMOVDQU	    192(DX), Y3
     VPXOR       Y10, Y3, Y3         
 	VMOVDQU	    192(SI), Y4
 
@@ -836,7 +836,7 @@ loop_big:
     VPXOR       Y10, Y8, Y8            
     VMOVDQU	    224(R14), Y2
     VPXOR       Y10, Y2, Y2          
-    VMOVDQU	    224(BP), Y3
+    VMOVDQU	    224(DX), Y3
     VPXOR       Y10, Y3, Y3         
 	VMOVDQU	    224(SI), Y4
 
@@ -872,7 +872,7 @@ loop_big:
 	ADDQ		AX, R9
 
 	ADDQ		$256, SI
-	ADDQ		$256, BP
+	ADDQ		$256, DX
 	ADDQ		$256, R14
 	ADDQ		$256, R15
 	ADDQ		$4, CX
@@ -892,7 +892,7 @@ done:
 //
 // input:
 //   SI = src_X0_base (1st qwords)
-//   BP = src_X1_base (2nd qwords)
+//   DX = src_X1_base (2nd qwords)
 //   R14 = src_X2_base (3rd qwords)
 //   R15 = src_X3_base (4th qwords)
 //   DI = bits_base
@@ -906,7 +906,7 @@ done:
 //   Y1-Y8 = vector data
 TEXT ·cmp_i256_gt_x2(SB), NOSPLIT, $0-160
 	MOVQ	src_X0_base+0(FP), SI
-    MOVQ    src_X1_base+24(FP), BP
+    MOVQ    src_X1_base+24(FP), DX
     MOVQ    src_X2_base+48(FP), R14
     MOVQ    src_X3_base+72(FP), R15
 	MOVQ	src_X0_len+8(FP), BX
@@ -951,7 +951,7 @@ loop_big:
     VPXOR       Y10, Y1, Y1               // flip sign bit (for unsigned comparision)
 	VMOVDQU	    0(R14), Y6
     VPXOR       Y10, Y6, Y6               // flip sign bit (for unsigned comparision)
-    VMOVDQU	    0(BP), Y7
+    VMOVDQU	    0(DX), Y7
     VPXOR       Y10, Y7, Y7               // flip sign bit (for unsigned comparision)
 	VMOVDQU	    0(SI), Y8
 
@@ -976,7 +976,7 @@ loop_big:
     VPXOR       Y10, Y2, Y2            
     VMOVDQU	    32(R14), Y6
     VPXOR       Y10, Y6, Y6          
-    VMOVDQU	    32(BP), Y7
+    VMOVDQU	    32(DX), Y7
     VPXOR       Y10, Y7, Y7         
 	VMOVDQU	    32(SI), Y8
 
@@ -1001,7 +1001,7 @@ loop_big:
     VPXOR       Y10, Y3, Y3            
     VMOVDQU	    64(R14), Y6
     VPXOR       Y10, Y6, Y6          
-    VMOVDQU	    64(BP), Y7
+    VMOVDQU	    64(DX), Y7
     VPXOR       Y10, Y7, Y7         
 	VMOVDQU	    64(SI), Y8
 
@@ -1026,7 +1026,7 @@ loop_big:
     VPXOR       Y10, Y4, Y4            
     VMOVDQU	    96(R14), Y6
     VPXOR       Y10, Y6, Y6          
-    VMOVDQU	    96(BP), Y7
+    VMOVDQU	    96(DX), Y7
     VPXOR       Y10, Y7, Y7         
 	VMOVDQU	    96(SI), Y8
 
@@ -1055,7 +1055,7 @@ loop_big:
     VPXOR       Y10, Y5, Y5            
     VMOVDQU	    128(R14), Y2
     VPXOR       Y10, Y2, Y2          
-    VMOVDQU	    128(BP), Y3
+    VMOVDQU	    128(DX), Y3
     VPXOR       Y10, Y3, Y3         
 	VMOVDQU	    128(SI), Y4
 
@@ -1080,7 +1080,7 @@ loop_big:
     VPXOR       Y10, Y6, Y6            
     VMOVDQU	    160(R14), Y2
     VPXOR       Y10, Y2, Y2          
-    VMOVDQU	    160(BP), Y3
+    VMOVDQU	    160(DX), Y3
     VPXOR       Y10, Y3, Y3         
 	VMOVDQU	    160(SI), Y4
 
@@ -1105,7 +1105,7 @@ loop_big:
     VPXOR       Y10, Y7, Y7            
     VMOVDQU	    192(R14), Y2
     VPXOR       Y10, Y2, Y2          
-    VMOVDQU	    192(BP), Y3
+    VMOVDQU	    192(DX), Y3
     VPXOR       Y10, Y3, Y3         
 	VMOVDQU	    192(SI), Y4
 
@@ -1130,7 +1130,7 @@ loop_big:
     VPXOR       Y10, Y8, Y8            
     VMOVDQU	    224(R14), Y2
     VPXOR       Y10, Y2, Y2          
-    VMOVDQU	    224(BP), Y3
+    VMOVDQU	    224(DX), Y3
     VPXOR       Y10, Y3, Y3         
 	VMOVDQU	    224(SI), Y4
 
@@ -1165,7 +1165,7 @@ loop_big:
 	ADDQ		AX, R9
 
 	ADDQ		$256, SI
-	ADDQ		$256, BP
+	ADDQ		$256, DX
 	ADDQ		$256, R14
 	ADDQ		$256, R15
 	ADDQ		$4, CX
@@ -1185,7 +1185,7 @@ done:
 //
 // input:
 //   SI = src_X0_base (1st qwords)
-//   BP = src_X1_base (2nd qwords)
+//   DX = src_X1_base (2nd qwords)
 //   R14 = src_X2_base (3rd qwords)
 //   R15 = src_X3_base (4th qwords)
 //   DI = bits_base
@@ -1199,7 +1199,7 @@ done:
 //   Y1-Y8 = vector data
 TEXT ·cmp_i256_ge_x2(SB), NOSPLIT, $0-160
 	MOVQ	src_X0_base+0(FP), SI
-    MOVQ    src_X1_base+24(FP), BP
+    MOVQ    src_X1_base+24(FP), DX
     MOVQ    src_X2_base+48(FP), R14
     MOVQ    src_X3_base+72(FP), R15
 	MOVQ	src_X0_len+8(FP), BX
@@ -1244,7 +1244,7 @@ loop_big:
     VPXOR       Y10, Y1, Y1               // flip sign bit (for unsigned comparision)
 	VMOVDQU	    0(R14), Y6
     VPXOR       Y10, Y6, Y6               // flip sign bit (for unsigned comparision)
-    VMOVDQU	    0(BP), Y7
+    VMOVDQU	    0(DX), Y7
     VPXOR       Y10, Y7, Y7               // flip sign bit (for unsigned comparision)
 	VMOVDQU	    0(SI), Y8
 
@@ -1269,7 +1269,7 @@ loop_big:
     VPXOR       Y10, Y2, Y2            
     VMOVDQU	    32(R14), Y6
     VPXOR       Y10, Y6, Y6          
-    VMOVDQU	    32(BP), Y7
+    VMOVDQU	    32(DX), Y7
     VPXOR       Y10, Y7, Y7         
 	VMOVDQU	    32(SI), Y8
 
@@ -1294,7 +1294,7 @@ loop_big:
     VPXOR       Y10, Y3, Y3            
     VMOVDQU	    64(R14), Y6
     VPXOR       Y10, Y6, Y6          
-    VMOVDQU	    64(BP), Y7
+    VMOVDQU	    64(DX), Y7
     VPXOR       Y10, Y7, Y7         
 	VMOVDQU	    64(SI), Y8
 
@@ -1319,7 +1319,7 @@ loop_big:
     VPXOR       Y10, Y4, Y4            
     VMOVDQU	    96(R14), Y6
     VPXOR       Y10, Y6, Y6          
-    VMOVDQU	    96(BP), Y7
+    VMOVDQU	    96(DX), Y7
     VPXOR       Y10, Y7, Y7         
 	VMOVDQU	    96(SI), Y8
 
@@ -1348,7 +1348,7 @@ loop_big:
     VPXOR       Y10, Y5, Y5            
     VMOVDQU	    128(R14), Y2
     VPXOR       Y10, Y2, Y2          
-    VMOVDQU	    128(BP), Y3
+    VMOVDQU	    128(DX), Y3
     VPXOR       Y10, Y3, Y3         
 	VMOVDQU	    128(SI), Y4
 
@@ -1373,7 +1373,7 @@ loop_big:
     VPXOR       Y10, Y6, Y6            
     VMOVDQU	    160(R14), Y2
     VPXOR       Y10, Y2, Y2          
-    VMOVDQU	    160(BP), Y3
+    VMOVDQU	    160(DX), Y3
     VPXOR       Y10, Y3, Y3         
 	VMOVDQU	    160(SI), Y4
 
@@ -1398,7 +1398,7 @@ loop_big:
     VPXOR       Y10, Y7, Y7            
     VMOVDQU	    192(R14), Y2
     VPXOR       Y10, Y2, Y2          
-    VMOVDQU	    192(BP), Y3
+    VMOVDQU	    192(DX), Y3
     VPXOR       Y10, Y3, Y3         
 	VMOVDQU	    192(SI), Y4
 
@@ -1423,7 +1423,7 @@ loop_big:
     VPXOR       Y10, Y8, Y8            
     VMOVDQU	    224(R14), Y2
     VPXOR       Y10, Y2, Y2          
-    VMOVDQU	    224(BP), Y3
+    VMOVDQU	    224(DX), Y3
     VPXOR       Y10, Y3, Y3         
 	VMOVDQU	    224(SI), Y4
 
@@ -1459,7 +1459,7 @@ loop_big:
 	ADDQ		AX, R9
 
 	ADDQ		$256, SI
-	ADDQ		$256, BP
+	ADDQ		$256, DX
 	ADDQ		$256, R14
 	ADDQ		$256, R15
 	ADDQ		$4, CX
@@ -1479,7 +1479,7 @@ done:
 //
 // input:
 //   SI = src_X0_base (1st qwords)
-//   BP = src_X1_base (2nd qwords)
+//   DX = src_X1_base (2nd qwords)
 //   R14 = src_X2_base (3rd qwords)
 //   R15 = src_X3_base (4th qwords)
 //   DI = bits_base
@@ -1493,7 +1493,7 @@ done:
 //   Y1-Y8 = vector data
 TEXT ·cmp_i256_bw_x2(SB), NOSPLIT, $0-192
 	MOVQ	src_X0_base+0(FP), SI
-    MOVQ    src_X1_base+24(FP), BP
+    MOVQ    src_X1_base+24(FP), DX
     MOVQ    src_X2_base+48(FP), R14
     MOVQ    src_X3_base+72(FP), R15
 	MOVQ	src_X0_len+8(FP), BX
@@ -1537,7 +1537,7 @@ loop_big:
     VPXOR       Y10, Y1, Y1               // flip sign bit (for unsigned comparision)
 	VMOVDQU	    0(R14), Y6
     VPXOR       Y10, Y6, Y6               // flip sign bit (for unsigned comparision)
-    VMOVDQU	    0(BP), Y7
+    VMOVDQU	    0(DX), Y7
     VPXOR       Y10, Y7, Y7               // flip sign bit (for unsigned comparision)
 	VMOVDQU	    0(SI), Y8
 
@@ -1562,7 +1562,7 @@ loop_big:
     VPXOR       Y10, Y2, Y2            
     VMOVDQU	    32(R14), Y6
     VPXOR       Y10, Y6, Y6          
-    VMOVDQU	    32(BP), Y7
+    VMOVDQU	    32(DX), Y7
     VPXOR       Y10, Y7, Y7         
 	VMOVDQU	    32(SI), Y8
 
@@ -1587,7 +1587,7 @@ loop_big:
     VPXOR       Y10, Y3, Y3            
     VMOVDQU	    64(R14), Y6
     VPXOR       Y10, Y6, Y6          
-    VMOVDQU	    64(BP), Y7
+    VMOVDQU	    64(DX), Y7
     VPXOR       Y10, Y7, Y7         
 	VMOVDQU	    64(SI), Y8
 
@@ -1612,7 +1612,7 @@ loop_big:
     VPXOR       Y10, Y4, Y4            
     VMOVDQU	    96(R14), Y6
     VPXOR       Y10, Y6, Y6          
-    VMOVDQU	    96(BP), Y7
+    VMOVDQU	    96(DX), Y7
     VPXOR       Y10, Y7, Y7         
 	VMOVDQU	    96(SI), Y8
 
@@ -1641,7 +1641,7 @@ loop_big:
     VPXOR       Y10, Y5, Y5            
     VMOVDQU	    128(R14), Y2
     VPXOR       Y10, Y2, Y2          
-    VMOVDQU	    128(BP), Y3
+    VMOVDQU	    128(DX), Y3
     VPXOR       Y10, Y3, Y3         
 	VMOVDQU	    128(SI), Y4
 
@@ -1666,7 +1666,7 @@ loop_big:
     VPXOR       Y10, Y6, Y6            
     VMOVDQU	    160(R14), Y2
     VPXOR       Y10, Y2, Y2          
-    VMOVDQU	    160(BP), Y3
+    VMOVDQU	    160(DX), Y3
     VPXOR       Y10, Y3, Y3         
 	VMOVDQU	    160(SI), Y4
 
@@ -1691,7 +1691,7 @@ loop_big:
     VPXOR       Y10, Y7, Y7            
     VMOVDQU	    192(R14), Y2
     VPXOR       Y10, Y2, Y2          
-    VMOVDQU	    192(BP), Y3
+    VMOVDQU	    192(DX), Y3
     VPXOR       Y10, Y3, Y3         
 	VMOVDQU	    192(SI), Y4
 
@@ -1716,7 +1716,7 @@ loop_big:
     VPXOR       Y10, Y8, Y8            
     VMOVDQU	    224(R14), Y2
     VPXOR       Y10, Y2, Y2          
-    VMOVDQU	    224(BP), Y3
+    VMOVDQU	    224(DX), Y3
     VPXOR       Y10, Y3, Y3         
 	VMOVDQU	    224(SI), Y4
 
@@ -1744,7 +1744,7 @@ loop_big:
   	VPERMD		Y1, Y11, Y1
 	VPSHUFB		Y12, Y1, Y1
 
-	VPMOVMSKB	Y1, DX      // move per byte MSBs into packed bitmask to r32 or r64
+	VPMOVMSKB	Y1, R10      // move per byte MSBs into packed bitmask to r32 or r64
 
     // second we check for each block if v < a
 	VBROADCASTSD    a_0+96(FP), Y0              // load 1st qword of val into AVX2 reg (signed)
@@ -1759,7 +1759,7 @@ loop_big:
     VPXOR       Y10, Y1, Y1               // flip sign bit (for unsigned comparision)
 	VMOVDQU	    0(R14), Y6
     VPXOR       Y10, Y6, Y6               // flip sign bit (for unsigned comparision)
-    VMOVDQU	    0(BP), Y7
+    VMOVDQU	    0(DX), Y7
     VPXOR       Y10, Y7, Y7               // flip sign bit (for unsigned comparision)
 	VMOVDQU	    0(SI), Y8
 
@@ -1784,7 +1784,7 @@ loop_big:
     VPXOR       Y10, Y2, Y2            
     VMOVDQU	    32(R14), Y6
     VPXOR       Y10, Y6, Y6          
-    VMOVDQU	    32(BP), Y7
+    VMOVDQU	    32(DX), Y7
     VPXOR       Y10, Y7, Y7         
 	VMOVDQU	    32(SI), Y8
 
@@ -1809,7 +1809,7 @@ loop_big:
     VPXOR       Y10, Y3, Y3            
     VMOVDQU	    64(R14), Y6
     VPXOR       Y10, Y6, Y6          
-    VMOVDQU	    64(BP), Y7
+    VMOVDQU	    64(DX), Y7
     VPXOR       Y10, Y7, Y7         
 	VMOVDQU	    64(SI), Y8
 
@@ -1834,7 +1834,7 @@ loop_big:
     VPXOR       Y10, Y4, Y4            
     VMOVDQU	    96(R14), Y6
     VPXOR       Y10, Y6, Y6          
-    VMOVDQU	    96(BP), Y7
+    VMOVDQU	    96(DX), Y7
     VPXOR       Y10, Y7, Y7         
 	VMOVDQU	    96(SI), Y8
 
@@ -1863,7 +1863,7 @@ loop_big:
     VPXOR       Y10, Y5, Y5            
     VMOVDQU	    128(R14), Y2
     VPXOR       Y10, Y2, Y2          
-    VMOVDQU	    128(BP), Y3
+    VMOVDQU	    128(DX), Y3
     VPXOR       Y10, Y3, Y3         
 	VMOVDQU	    128(SI), Y4
 
@@ -1888,7 +1888,7 @@ loop_big:
     VPXOR       Y10, Y6, Y6            
     VMOVDQU	    160(R14), Y2
     VPXOR       Y10, Y2, Y2          
-    VMOVDQU	    160(BP), Y3
+    VMOVDQU	    160(DX), Y3
     VPXOR       Y10, Y3, Y3         
 	VMOVDQU	    160(SI), Y4
 
@@ -1913,7 +1913,7 @@ loop_big:
     VPXOR       Y10, Y7, Y7            
     VMOVDQU	    192(R14), Y2
     VPXOR       Y10, Y2, Y2          
-    VMOVDQU	    192(BP), Y3
+    VMOVDQU	    192(DX), Y3
     VPXOR       Y10, Y3, Y3         
 	VMOVDQU	    192(SI), Y4
 
@@ -1938,7 +1938,7 @@ loop_big:
     VPXOR       Y10, Y8, Y8            
     VMOVDQU	    224(R14), Y2
     VPXOR       Y10, Y2, Y2          
-    VMOVDQU	    224(BP), Y3
+    VMOVDQU	    224(DX), Y3
     VPXOR       Y10, Y3, Y3         
 	VMOVDQU	    224(SI), Y4
 
@@ -1968,14 +1968,14 @@ loop_big:
 
 	VPMOVMSKB	Y1, AX      // move per byte MSBs into packed bitmask to r32 or r64
 
-    ORL         DX, AX      // v < a or v > b
+    ORL         R10, AX      // v < a or v > b
     NOTL        AX          // v >= a and v <= b
 	MOVL		AX, (DI)(CX*1)    // write the 64 bits to the output slice
 	POPCNTQ		AX, AX      // count 1 bits
 	ADDQ		AX, R9
 
 	ADDQ		$256, SI
-	ADDQ		$256, BP
+	ADDQ		$256, DX
 	ADDQ		$256, R14
 	ADDQ		$256, R15
 	ADDQ		$4, CX

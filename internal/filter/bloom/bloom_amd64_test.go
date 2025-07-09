@@ -173,7 +173,7 @@ func BenchmarkAddManyUint32AVX2(b *testing.B) {
 	}
 	for _, c := range tests.BenchmarkSizes {
 		for _, s := range bloomSizes {
-			data := tests.GenSeq[uint32](c.N)
+			data := tests.GenSeq[uint32](c.N, 1)
 			filter := NewFilter(s.M)
 			b.Run(fmt.Sprintf("%s/%s", c.Name, s.Name), func(b *testing.B) {
 				b.SetBytes(4 * int64(c.N))
@@ -191,7 +191,7 @@ func BenchmarkAddManyUint64AVX2(b *testing.B) {
 	}
 	for _, c := range tests.BenchmarkSizes {
 		for _, s := range bloomSizes {
-			data := tests.GenSeq[uint64](c.N)
+			data := tests.GenSeq[uint64](c.N, 1)
 			filter := NewFilter(s.M)
 			b.Run(fmt.Sprintf("%s/%s", c.Name, s.Name), func(b *testing.B) {
 				b.SetBytes(8 * int64(c.N))

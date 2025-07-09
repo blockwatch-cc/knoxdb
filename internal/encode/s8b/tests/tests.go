@@ -4,7 +4,6 @@
 package tests
 
 import (
-	"encoding/hex"
 	"fmt"
 	"slices"
 	"testing"
@@ -331,10 +330,10 @@ func CompareTest[T types.Integer](t *testing.T, enc EncodeFunc[T], dec DecodeFun
 				// value exists
 				val := vals[len(vals)/2]
 				cmp(buf, uint64(val)-uint64(minv), bits)
-				t.Logf("Exist Min=%d Max=%d", minv, maxv)
-				t.Log(hex.Dump(bits.Bytes()))
-				t.Logf("Orig: %v", vals)
-				t.Logf("Conv: %v", dst)
+				// t.Logf("Exist Min=%d Max=%d", minv, maxv)
+				// t.Log(hex.Dump(bits.Bytes()))
+				// t.Logf("Orig: %v", vals)
+				// t.Logf("Conv: %v", dst)
 				ensureBits(t, vals, val, val, bits, mode)
 				bits.Zero()
 				require.Equal(t, 0, bits.Count(), "cleared")
@@ -344,10 +343,10 @@ func CompareTest[T types.Integer](t *testing.T, enc EncodeFunc[T], dec DecodeFun
 					// value over bounds
 					over := maxv + 1
 					cmp(buf, uint64(over)-uint64(minv), bits)
-					t.Logf("Over Min=%d Max=%d Cmp=%d", minv, maxv, over)
-					t.Log(hex.Dump(bits.Bytes()))
-					t.Logf("Orig: %v", vals)
-					t.Logf("Conv: %v", dst)
+					// t.Logf("Over Min=%d Max=%d Cmp=%d", minv, maxv, over)
+					// t.Log(hex.Dump(bits.Bytes()))
+					// t.Logf("Orig: %v", vals)
+					// t.Logf("Conv: %v", dst)
 					ensureBits(t, vals, over, over, bits, mode)
 					bits.Zero()
 					require.Equal(t, 0, bits.Count(), "cleared")
@@ -398,10 +397,10 @@ func CompareTest2[T types.Integer](t *testing.T, enc EncodeFunc[T], dec DecodeFu
 
 				// full range
 				cmp(buf, uint64(minv)-uint64(minv), uint64(maxv)-uint64(minv), bits)
-				t.Logf("Full Min=%d Max=%d", minv, maxv)
-				t.Log(hex.Dump(bits.Bytes()))
-				t.Logf("Orig: %v", vals)
-				t.Logf("Conv: %v", dst)
+				// t.Logf("Full Min=%d Max=%d", minv, maxv)
+				// t.Log(hex.Dump(bits.Bytes()))
+				// t.Logf("Orig: %v", vals)
+				// t.Logf("Conv: %v", dst)
 				ensureBits(t, vals, minv, maxv, bits, mode)
 				bits.Zero()
 				require.Equal(t, 0, bits.Count(), "cleared")
@@ -414,10 +413,10 @@ func CompareTest2[T types.Integer](t *testing.T, enc EncodeFunc[T], dec DecodeFu
 				// skip test if values would wrap around
 				if from > minv && to < maxv {
 					cmp(buf, uint64(from)-uint64(minv), uint64(to)-uint64(minv), bits)
-					t.Logf("Partial Min=%d Max=%d From=%d To=%d", minv, maxv, from, to)
-					t.Log(hex.Dump(bits.Bytes()))
-					t.Logf("Orig: %v", vals)
-					t.Logf("Conv: %v", dst)
+					// t.Logf("Partial Min=%d Max=%d From=%d To=%d", minv, maxv, from, to)
+					// t.Log(hex.Dump(bits.Bytes()))
+					// t.Logf("Orig: %v", vals)
+					// t.Logf("Conv: %v", dst)
 					ensureBits(t, vals, from, to, bits, mode)
 					bits.Zero()
 					require.Equal(t, 0, bits.Count(), "cleared")
@@ -427,10 +426,10 @@ func CompareTest2[T types.Integer](t *testing.T, enc EncodeFunc[T], dec DecodeFu
 				if maxv < types.MaxVal[T]()-1 {
 					// out of bounds (over)
 					cmp(buf, uint64(maxv+1)-uint64(minv), uint64(maxv+2)-uint64(minv), bits)
-					t.Logf("Over Min=%d Max=%d From=%d To=%d", minv, maxv, maxv+1, maxv+2)
-					t.Log(hex.Dump(bits.Bytes()))
-					t.Logf("Orig: %v", vals)
-					t.Logf("Conv: %v", dst)
+					// t.Logf("Over Min=%d Max=%d From=%d To=%d", minv, maxv, maxv+1, maxv+2)
+					// t.Log(hex.Dump(bits.Bytes()))
+					// t.Logf("Orig: %v", vals)
+					// t.Logf("Conv: %v", dst)
 					ensureBits(t, vals, maxv+1, maxv+2, bits, mode)
 					bits.Zero()
 					require.Equal(t, 0, bits.Count(), "cleared")
@@ -440,10 +439,10 @@ func CompareTest2[T types.Integer](t *testing.T, enc EncodeFunc[T], dec DecodeFu
 				if minv > types.MinVal[T]()+2 {
 					// out of bounds (under)
 					cmp(buf, uint64(minv-2)-uint64(minv), uint64(minv-1)-uint64(minv), bits)
-					t.Logf("Under Min=%d Max=%d From=%d To=%d", minv, maxv, minv+2, minv+1)
-					t.Log(hex.Dump(bits.Bytes()))
-					t.Logf("Orig: %v", vals)
-					t.Logf("Conv: %v", dst)
+					// t.Logf("Under Min=%d Max=%d From=%d To=%d", minv, maxv, minv+2, minv+1)
+					// t.Log(hex.Dump(bits.Bytes()))
+					// t.Logf("Orig: %v", vals)
+					// t.Logf("Conv: %v", dst)
 					ensureBits(t, vals, minv-2, minv-1, bits, mode)
 					bits.Zero()
 					require.Equal(t, 0, bits.Count(), "cleared")

@@ -911,8 +911,7 @@ TEXT ·bit_idx_skip(SB), NOSPLIT, $0-104
 	MOVQ	bitmap_base+0(FP), SI
 	MOVQ	bitmap_len+8(FP), CX
 	MOVQ	out_base+24(FP), DI
-	MOVQ    DI, R15                 // save pointer for later
-	MOVQ	decodeTable_base+48(FP), BP
+	MOVQ	decodeTable_base+48(FP), R15
 	MOVQ	lengthTable_base+72(FP), DX
 
 	VPCMPEQQ	    Y10, Y10, Y10           // Y10 = -1
@@ -1036,6 +1035,7 @@ loop_i8:
 
 done:
 	VZEROUPPER
+	MOVQ	    out_base+24(FP), R15
     SUBQ        R15, DI
     SHRQ        $2, DI
     MOVQ        DI, ret+96(FP)
@@ -1049,7 +1049,7 @@ found:
     XORQ            R8, R8
     MOVB            (SI), R8            // R8 = bitmap[BX]  
     LEAQ            (R8*8), R12         // R12 = (decodeTable[8*R8])
-    VMOVDQU         (BP)(R12*4), Y9     // Y9 = decodeTable[8*R8,...] (8x u32)
+    VMOVDQU         (R15)(R12*4), Y9    // Y9 = decodeTable[8*R8,...] (8x u32)
 
 	VMOVD	        BX, X11             // X11 = leading zero bytes (no direct broadcast in AVX2)
     VPSLLD          $3, X11, X11        // X11 = leading zero bits

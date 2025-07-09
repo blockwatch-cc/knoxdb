@@ -302,7 +302,7 @@ extract_done:
 
 
 // func ht_encode32(vals, ht_keys *uint32, ht_values, codes *uint16, len uint32)
-TEXT ·ht_encode32(SB), NOSPLIT, $0-40
+TEXT ·ht_encode32(SB), NOSPLIT, $0-36
     // Move arguments to named registers for clarity and correctness
     MOVQ vals+0(FP), DI           // DI = vals
     MOVQ ht_keys+8(FP), SI        // SI = ht_keys

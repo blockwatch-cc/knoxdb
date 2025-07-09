@@ -30,7 +30,7 @@ func TestAll(t *testing.T) {
 			lastChunkSize = 1
 		}
 		for chunkSize := 1; chunkSize <= lastChunkSize; chunkSize++ {
-			t.Logf("%s,chunkSize=%d", tt.name, chunkSize)
+			// t.Logf("%s,chunkSize=%d", tt.name, chunkSize)
 			testDigest(t, tt.input, chunkSize, tt.want)
 		}
 		t.Run(tt.name, func(t *testing.T) { testSum(t, tt.input, tt.want) })

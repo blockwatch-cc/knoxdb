@@ -10,7 +10,6 @@ import (
 	"math"
 	"slices"
 	"testing"
-	"time"
 
 	"blockwatch.cc/knoxdb/internal/hash/xxhash"
 	"blockwatch.cc/knoxdb/internal/tests"
@@ -72,11 +71,12 @@ func TestCardinality(t *testing.T) {
 func TestPrecision(t *testing.T) {
 	for _, sz := range []int{1024, 2048, 8192, 16 * 1024, 32 * 1024, 64 * 1024} {
 		for _, f := range []int{8, 9, 10, 11, 12, 13, 14, 15, 16} {
-			now := time.Now()
+			// now := time.Now()
 			flt := NewFilterWithPrecision(uint32(f))
 			flt.AddMultiInt64(util.RandInts[int64](sz))
 			c := flt.Cardinality()
-			t.Logf("F=%d SZ=%d C=%d ERR=%f RT=%s", f, sz, c, float64(sz-int(c))/float64(sz), time.Since(now))
+			_ = c
+			// t.Logf("F=%d SZ=%d C=%d ERR=%f RT=%s", f, sz, c, float64(sz-int(c))/float64(sz), time.Since(now))
 		}
 	}
 }

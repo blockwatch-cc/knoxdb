@@ -7,13 +7,13 @@
 package avx2
 
 //go:noescape
-func alp_f64_decode(src *int64, dst *float64, sz int, fx, ex uint8)
+func alp_f64_decode(src *int64, dst *float64, len int, fx, ex uint8)
 
 //go:noescape
-func alp_f64_decode_safe(src *int64, dst *float64, sz int, fx, ex uint8)
+func alp_f64_decode_safe(src *int64, dst *float64, len int, fx, ex uint8)
 
 //go:noescape
-func alp_f32_decode(src *int32, dst *float32, sz int, fx, ex uint8)
+func alp_f32_decode(src *int32, dst *float32, len int, fx, ex uint8)
 
 func Decode64(dst []float64, src []int64, fx, ex byte, isSafe bool) int {
 	if isSafe {

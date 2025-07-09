@@ -88,11 +88,13 @@ start:
         MOVQ            (R14)(DX*8), AX
         JMP             AX
 
-TEXT ·decodeUint8AVX2Exit(SB), NOSPLIT, $0-0
+
+TEXT ·decodeUint8AVX2Exit(SB), NOSPLIT, $0-64
         VZEROUPPER
         SUBQ            R15, DI
         MOVQ            DI, value+56(FP)
         RET
+
 
 // func unpack1AVX2()
 TEXT ·unpack1Uint8AVX2(SB), NOSPLIT, $0-0
@@ -657,3 +659,4 @@ TEXT ·unpackZerosUint8AVX2(SB), NOSPLIT, $0-0
         JMP             AX
 exit:
         JMP ·decodeUint8AVX2Exit(SB)
+
