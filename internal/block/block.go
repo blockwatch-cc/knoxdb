@@ -482,7 +482,7 @@ func (b *Block) AppendTo(dst *Block, sel []uint32) {
 	assert.Always(b != nil, "appendTo: nil block, potential use after free")
 	assert.Always(dst != nil, "appendTo: nil dst block, potential use after free")
 	assert.Always(dst.IsMaterialized(), "appendTo: dst block not materialized")
-	assert.Always(dst.Cap()-dst.Len() < n, "appendTo: dst free capacity smaller than selection")
+	assert.Always(dst.Cap()-dst.Len() >= n, "appendTo: dst free capacity smaller than selection")
 	switch b.typ {
 	case BlockInt64:
 		b.Int64().AppendTo(dst.Int64().Slice(), sel)

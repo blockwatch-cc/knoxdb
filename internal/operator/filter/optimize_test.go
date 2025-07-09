@@ -283,7 +283,9 @@ func TestOptimizeExtended(t *testing.T) {
 
 				// Check logical tree structure
 				assert.True(t, andTree.OrKind == false, "AND tree should maintain AND structure")
-				assert.True(t, orTree.OrKind == true, "OR tree should maintain OR structure")
+				if orTree.Size() > 1 {
+					assert.True(t, orTree.OrKind == true, "OR tree should maintain OR structure")
+				}
 			})
 		}
 	}

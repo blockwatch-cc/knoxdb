@@ -88,6 +88,7 @@ func (gen *Generator) Next(context.Context) (*pack.Package, operator.Result) {
 			gen.err = err
 			return nil, operator.ResultError
 		}
+		gen.buf.Reset()
 		gen.pkg.AppendWire(buf, &schema.Meta{Rid: uint64(gen.next), Ref: uint64(gen.next), Xmin: 1})
 		gen.limit--
 		gen.next++

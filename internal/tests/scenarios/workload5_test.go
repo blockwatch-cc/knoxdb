@@ -163,6 +163,7 @@ func TestWorkload5(t *testing.T) {
 	// rand usage in other testcases does not impact the random selection here)
 	t.Logf("Random seed 0x%016x", seed)
 	util.RandInit(seed)
+	t.Setenv("KNOX_DRIVER", "mem")
 
 	// create new database and table
 	db := &dbProvider{}
