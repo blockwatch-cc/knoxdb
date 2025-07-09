@@ -10,28 +10,27 @@ import (
 	"blockwatch.cc/knoxdb/internal/pack"
 )
 
-var _ PushOperator = (*UpdateOperator)(nil)
+var _ PushOperator = (*PhysicalUpdater)(nil)
 
-type UpdateOperator struct {
+type PhysicalUpdater struct {
 	cols []int
 	vm   []*expr.Vm
 	err  error
 }
 
-func (op *UpdateOperator) Process(ctx context.Context, src *pack.Package) (*pack.Package, Result) {
+func (op *PhysicalUpdater) Process(ctx context.Context, src *pack.Package) (*pack.Package, Result) {
 	op.err = ErrTodo
 	return nil, ResultError
 }
 
-func (op *UpdateOperator) Finalize(ctx context.Context) (*pack.Package, Result) {
-	op.err = ErrTodo
-	return nil, ResultError
+func (op *PhysicalUpdater) Finalize(ctx context.Context) error {
+	return nil
 }
 
-func (op *UpdateOperator) Err() error {
+func (op *PhysicalUpdater) Err() error {
 	return op.err
 }
 
-func (op *UpdateOperator) Close() {
+func (op *PhysicalUpdater) Close() {
 	op.err = nil
 }

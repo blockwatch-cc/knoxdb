@@ -408,7 +408,7 @@ func (r *Reader) nextQueryMatch(ctx context.Context) (*pack.Package, error) {
 		// 	}
 		// }
 
-		// operator.NewLogOperator(os.Stdout, 10).Process(context.Background(), r.pack)
+		// operator.NewLogger(os.Stdout, 10).Process(context.Background(), r.pack)
 
 		return r.pack, nil
 	}

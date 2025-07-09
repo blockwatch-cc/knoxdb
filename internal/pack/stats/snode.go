@@ -103,7 +103,7 @@ func (n *SNode) MaxKey() uint32 {
 	// fmt.Printf("Snode %d[v%d] %p max key at pos %d is %d\n",
 	// 	n.Key(), n.Version(), n, n.spack.Len(), k)
 
-	// operator.NewLogOperator(os.Stdout, 30).Process(context.Background(), n.spack)
+	// operator.NewLogger(os.Stdout, 30).Process(context.Background(), n.spack)
 
 	return k
 }
@@ -176,7 +176,7 @@ func (n *SNode) AppendPack(pkg *pack.Package) bool {
 	// fmt.Printf("snode: %x[v%d] append from %x[v%d] len=%d\n",
 	// 	n.Key(), n.Version(), pkg.Key(), pkg.Version(), n.spack.Len())
 
-	// operator.NewLogOperator(os.Stdout, 30).Process(context.Background(), n.spack)
+	// operator.NewLogger(os.Stdout, 30).Process(context.Background(), n.spack)
 
 	return n.dirty
 }
@@ -242,7 +242,7 @@ func (n *SNode) UpdatePack(pkg *pack.Package) bool {
 		n.dirty = true
 	}
 
-	// operator.NewLogOperator(os.Stdout, 30).Process(context.Background(), n.spack)
+	// operator.NewLogger(os.Stdout, 30).Process(context.Background(), n.spack)
 
 	// data may not have changed
 	return n.dirty

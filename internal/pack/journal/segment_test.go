@@ -157,7 +157,7 @@ func TestSegmentMatch(t *testing.T) {
 	t.Logf("Tomb set with %d vals", set.Count())
 	t.Logf("Tomb %#v", seg.tomb.stones)
 
-	// logOp := operator.NewLogOperator(os.Stdout, 8)
+	// logOp := operator.NewLogger(os.Stdout, 8)
 	// logOp.Process(context.Background(), seg.data)
 
 	// all matches
@@ -270,6 +270,6 @@ func TestSegmentStateUpdates(t *testing.T) {
 	require.Equal(t, wal.LSN(42), seg.tstate.Checkpoint)
 	xid++
 
-	// operator.NewLogOperator(os.Stdout, 8).Process(context.Background(), seg.data)
+	// operator.NewLogger(os.Stdout, 8).Process(context.Background(), seg.data)
 	// t.Logf("State: %#v", seg.tstate)
 }

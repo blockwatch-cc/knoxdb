@@ -242,7 +242,7 @@ func (idx *Index) Store(ctx context.Context, tx store.Tx) error {
 		idx.bytesWritten += int64(snode.disksize)
 		idx.clean = false
 
-		// operator.NewLogOperator(os.Stdout, 30).Process(context.Background(), snode.spack)
+		// operator.NewLogger(os.Stdout, 30).Process(context.Background(), snode.spack)
 	}
 
 	return nil
@@ -328,7 +328,7 @@ func (idx *Index) Load(ctx context.Context, tx store.Tx) error {
 			idx.bytesRead += int64(n)
 
 			// idx.log.Tracef("loaded snode %d %d[v%d]", id, node.Key(), node.Version())
-			// operator.NewLogOperator(os.Stdout, 30).Process(context.Background(), node.spack)
+			// operator.NewLogger(os.Stdout, 30).Process(context.Background(), node.spack)
 
 		case KIND_INODE:
 			// inode

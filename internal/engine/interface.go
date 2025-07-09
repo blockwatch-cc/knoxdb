@@ -52,6 +52,8 @@ type TableEngine interface {
 	// data ingress
 	InsertRows(Context, []byte) (uint64, error) // wire encoded rows
 	UpdateRows(Context, []byte) (uint64, error) // wire encoded rows
+	InsertInto(Context, *Package) (uint64, error)
+	ImportInto(Context, *Package) (uint64, error)
 
 	// data egress
 	Query(Context, QueryPlan) (QueryResult, error)

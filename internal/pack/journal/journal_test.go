@@ -335,10 +335,10 @@ func TestJournalRandom(t *testing.T) {
 		if t.Failed() {
 			// print contents of the top two segments
 			fmt.Printf("Tip #%d ---------- \n", j.tip.Id())
-			operator.NewLogOperator(os.Stdout, 128).Process(ctx, j.tip.data)
+			operator.NewLogger(os.Stdout, 128).Process(ctx, j.tip.data)
 			if l := len(j.tail); l > 0 {
 				fmt.Printf("Seg #%d ---------- \n", j.tail[l-1].Id())
-				operator.NewLogOperator(os.Stdout, 128).Process(ctx, j.tail[l-1].data)
+				operator.NewLogger(os.Stdout, 128).Process(ctx, j.tail[l-1].data)
 			}
 		}
 	}()

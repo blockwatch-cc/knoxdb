@@ -12,17 +12,17 @@ import (
 )
 
 // Outputs package schema definition as ASCII table to writer.
-type DescribeOperator struct {
+type Describer struct {
 	w io.Writer
 }
 
-func NewDescribeOperator(w io.Writer) *DescribeOperator {
-	return &DescribeOperator{
+func NewDescriber(w io.Writer) *Describer {
+	return &Describer{
 		w: w,
 	}
 }
 
-func (d *DescribeOperator) Process(_ context.Context, src *pack.Package) (*pack.Package, Result) {
+func (d *Describer) Process(_ context.Context, src *pack.Package) (*pack.Package, Result) {
 	s := src.Schema()
 	t := table.NewWriter()
 	t.SetOutputMirror(d.w)
@@ -43,17 +43,17 @@ func (d *DescribeOperator) Process(_ context.Context, src *pack.Package) (*pack.
 		})
 	}
 	t.Render()
-	return nil, ResultDone
+	return src, ResultOK
 }
 
-func (d *DescribeOperator) Finalize(_ context.Context) (*pack.Package, Result) {
-	return nil, ResultDone
-}
-
-func (d *DescribeOperator) Err() error {
+func (d *Describer) Finalize(_ context.Context) error {
 	return nil
 }
 
-func (d *DescribeOperator) Close() {
-	// noop
+func (d *Describer) Err() error {
+	return nil
+}
+
+func (d *Describer) Close() {
+	d.w = nil
 }

@@ -18,22 +18,22 @@ import (
 )
 
 // Outputs n rows to writer formatted as ASCII table.
-type LogOperator struct {
+type Logger struct {
 	w     io.Writer
 	limit int
 }
 
-func NewLogOperator(w io.Writer, limit int) *LogOperator {
+func NewLogger(w io.Writer, limit int) *Logger {
 	if limit <= 0 {
 		limit = 10
 	}
-	return &LogOperator{
+	return &Logger{
 		w:     w,
 		limit: limit,
 	}
 }
 
-func (op *LogOperator) Process(_ context.Context, src *pack.Package) (*pack.Package, Result) {
+func (op *Logger) Process(_ context.Context, src *pack.Package) (*pack.Package, Result) {
 	s := src.Schema()
 	t := table.NewWriter()
 	t.SetOutputMirror(op.w)
@@ -89,17 +89,17 @@ func (op *LogOperator) Process(_ context.Context, src *pack.Package) (*pack.Pack
 		}
 	}
 	t.Render()
-	return nil, ResultDone
+	return src, ResultOK
 }
 
-func (op *LogOperator) Finalize(_ context.Context) (*pack.Package, Result) {
-	return nil, ResultDone
-}
-
-func (op *LogOperator) Err() error {
+func (op *Logger) Finalize(_ context.Context) error {
 	return nil
 }
 
-func (op *LogOperator) Close() {
+func (op *Logger) Err() error {
+	return nil
+}
+
+func (op *Logger) Close() {
 	// noop
 }

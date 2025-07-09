@@ -15,15 +15,17 @@ type Result byte
 const (
 	ResultOK Result = iota
 	ResultMore
+	// ResultBlocked // operator is waiting for event
 	ResultDone
 	ResultError
 )
 
 var (
-	ErrNoPull = errors.New("pull mode not supported")
-	ErrNoPush = errors.New("push mode not supported")
-	ErrClosed = errors.New("operator closed")
-	ErrTodo   = errors.New("operator not implemented")
+	ErrNilPack  = errors.New("unexpected nil package")
+	ErrNoSource = errors.New("missing source operator")
+	ErrNoSink   = errors.New("missing sink operator")
+	ErrClosed   = errors.New("operator closed")
+	ErrTodo     = errors.New("operator not implemented")
 )
 
 type PullOperator interface {
@@ -34,7 +36,7 @@ type PullOperator interface {
 
 type PushOperator interface {
 	Process(context.Context, *pack.Package) (*pack.Package, Result)
-	Finalize(context.Context) (*pack.Package, Result)
+	Finalize(context.Context) error
 	Err() error
 	Close()
 }
@@ -46,4 +48,7 @@ type PushOperator interface {
 // 	Finalize(context.Context) (*pack.Package, Result)
 // 	Err() error
 // 	Close()
+// }
+
+// type OperatorState struct {
 // }

@@ -171,7 +171,7 @@ func (t *Table) doQueryAsc(ctx context.Context, plan *query.QueryPlan, res Query
 	plan.Stats.Tick(JOURNAL_TIME_KEY)
 	plan.Log.Debugf("%d journal results in %s", jres.Len(), plan.Stats.GetRuntime(JOURNAL_TIME_KEY))
 
-	// l := operator.NewLogOperator(plan.Log.Logger().Writer(), 10)
+	// l := operator.NewLogger(plan.Log.Logger().Writer(), 10)
 	// l.Process(ctx, t.journal.Tip().Data())
 
 	// run index query
