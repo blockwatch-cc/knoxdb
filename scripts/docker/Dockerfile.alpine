@@ -1,10 +1,14 @@
 ARG BUILD_VERSION
+ARG PLATFORM
+
+FROM golang:${BUILD_VERSION}-${PLATFORM}
+
+ARG BUILD_VERSION
 ARG BUILD_COMMIT
 ARG BUILD_DATE
 ARG BUILD_ID
 ARG BUILD_ARTIFACT
-
-FROM golang:${BUILD_VERSION}
+ARG PLATFORM
 
 LABEL vendor=Blockwatch\ Data\ Inc \
   maintainer="Alexander Eichhorn <alex@blockwatch.cc>, Abdul-Harisu Inusah<abdul@blockwatch.cc>" \
@@ -18,10 +22,10 @@ LABEL vendor=Blockwatch\ Data\ Inc \
 
 WORKDIR /usr/local/go
 
-COPY ./0001-GORANDSEED.patch ./0001-GORANDSEED.patch
+COPY ./*.patch ./
 
 RUN apk add patch --no-cache ca-certificates
 
-RUN patch -p1 < 0001-GORANDSEED.patch
+RUN patch -p1 < 0001-DETERMINISTIC-go-${BUILD_VERSION}.patch
 
 WORKDIR /go

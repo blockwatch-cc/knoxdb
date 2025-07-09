@@ -1,0 +1,98 @@
+diff --git a/src/race.bash b/src/race.bash
+index f1a168bfbb..d71858b059 100755
+--- a/src/race.bash
++++ b/src/race.bash
+@@ -31,5 +31,5 @@ if [ ! -f make.bash ]; then
+ 	exit 1
+ fi
+ . ./make.bash --no-banner
+-go install -race std
+-go tool dist test -race
++# go install -race std
++# go tool dist test -race
+diff --git a/src/run.bash b/src/run.bash
+index cb474325c4..e7094aaa3c 100755
+--- a/src/run.bash
++++ b/src/run.bash
+@@ -50,4 +50,4 @@ if ulimit -T &> /dev/null; then
+ fi
+ 
+ export GOPATH=/nonexist-gopath
+-exec ../bin/go tool dist test -rebuild "$@"
++# exec ../bin/go tool dist test -rebuild "$@"
+diff --git a/src/runtime/lock_wasip1.go b/src/runtime/lock_wasip1.go
+index 55153c3a05..42ee639a0d 100644
+--- a/src/runtime/lock_wasip1.go
++++ b/src/runtime/lock_wasip1.go
+@@ -75,11 +75,13 @@ func notewakeup(n *note) {
+ }
+ 
+ func notesleep(n *note) {
+-	throw("notesleep not supported by wasi")
++	// throw("notesleep not supported by wasi")
++	// No-op since WASM is single-threaded.
++	return
+ }
+ 
+ func notetsleep(n *note, ns int64) bool {
+-	throw("notetsleep not supported by wasi")
++	// throw("notetsleep not supported by wasi")
+ 	return false
+ }
+ 
+diff --git a/src/runtime/os_wasip1.go b/src/runtime/os_wasip1.go
+index ed4f646a62..70f8801cca 100644
+--- a/src/runtime/os_wasip1.go
++++ b/src/runtime/os_wasip1.go
+@@ -189,6 +189,7 @@ func usleep(usec uint32) {
+ }
+ 
+ func readRandom(r []byte) int {
++	throw("wasip1 readRandom should not be called! Use GORANDSEED to seed runtime")
+ 	if random_get(&r[0], size(len(r))) != 0 {
+ 		return 0
+ 	}
+diff --git a/src/runtime/proc.go b/src/runtime/proc.go
+index 42200dcb1c..2c4da0baf2 100644
+--- a/src/runtime/proc.go
++++ b/src/runtime/proc.go
+@@ -836,6 +836,7 @@ func schedinit() {
+ 	mallocinit()
+ 	godebug := getGodebugEarly()
+ 	cpuinit(godebug) // must run before alginit
++	goenvs()         // DST: read env variables like GORANDSEED before rand init
+ 	randinit()       // must run before alginit, mcommoninit
+ 	alginit()        // maps, hash, rand must not be used before this call
+ 	mcommoninit(gp.m, -1)
+@@ -6753,7 +6754,8 @@ func runqempty(pp *p) bool {
+ // With the randomness here, as long as the tests pass
+ // consistently with -race, they shouldn't have latent scheduling
+ // assumptions.
+-const randomizeScheduler = raceenabled
++// const randomizeScheduler = raceenabled
++const randomizeScheduler = true
+ 
+ // runqput tries to put g on the local runnable queue.
+ // If next is false, runqput adds g to the tail of the runnable queue.
+diff --git a/src/runtime/rand.go b/src/runtime/rand.go
+index 1739e9f8f5..89a30cbcef 100644
+--- a/src/runtime/rand.go
++++ b/src/runtime/rand.go
+@@ -42,6 +42,17 @@ func randinit() {
+ 	}
+ 
+ 	seed := &globalRand.seed
++
++	// DST: allow user defined seed
++	psSeed := gogetenv("GORANDSEED")
++	if psSeed != "" {
++		// println("Go runtime is using GORANDSEED=", psSeed)
++		startupRand = make([]byte, len(psSeed))
++		for i, c := range psSeed {
++			startupRand[i] = byte(c)
++		}
++	}
++
+ 	if len(startupRand) >= 16 &&
+ 		// Check that at least the first two words of startupRand weren't
+ 		// cleared by any libc initialization.
