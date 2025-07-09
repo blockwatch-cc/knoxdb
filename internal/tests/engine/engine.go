@@ -121,9 +121,18 @@ func NewDatabase(t *testing.T, typs ...any) (*engine.Engine, func()) {
 		s, err := schema.SchemaOf(typ)
 		require.NoError(t, err, "Failed to generate schema for type %T", typ)
 		opts := NewTestTableOptions(t, "", "")
-		_, err = db.CreateTable(ctx, s, opts)
+		tab, err := db.CreateTable(ctx, s, opts)
 		require.NoError(t, err, "Failed to create table for type %T", typ)
 		t.Logf("NEW table=%s driver=%s engine=%s", s.Name(), opts.Driver, opts.Engine)
+
+		// create primary key index
+		if s.PkIndex() >= 0 {
+			is, err := tab.Schema().PkIndexSchema()
+			require.NoError(t, err, "pk index schema")
+			iopts := NewTestIndexOptions(t, "", "", types.IndexTypePk)
+			_, err = db.CreateIndex(ctx, s.Name(), is, iopts)
+			require.NoError(t, err, "creaet pk index")
+		}
 	}
 
 	return db, func() { db.Close(ctx) }

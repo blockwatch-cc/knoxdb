@@ -568,6 +568,10 @@ func (s *Schema) SelectFields(fields ...string) (*Schema, error) {
 	return ns.Finalize(), nil
 }
 
+func (s *Schema) PkIndexSchema() (*Schema, error) {
+	return s.SelectFieldIds(s.PkId(), MetaRid)
+}
+
 func (s *Schema) Sort() *Schema {
 	sort.Slice(s.fields, func(i, j int) bool { return s.fields[i].id < s.fields[j].id })
 	s.encode = nil
