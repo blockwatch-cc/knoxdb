@@ -135,7 +135,7 @@ func (idx *Index) loadTomb(ctx context.Context, key, epoch uint32) (*pack.Packag
 	return pkg, nil
 }
 
-func (idx *Index) dropTomb(ctx context.Context, key, epoch uint32) error {
+func (idx *Index) dropTomb(_ context.Context, key, epoch uint32) error {
 	idx.log.Debugf("index[%s]: drop tomb %d[v%d]", idx.name, key, epoch)
 	return idx.db.Update(func(tx store.Tx) error {
 		b := tx.Bucket(append([]byte(idx.name), engine.TombKeySuffix...))

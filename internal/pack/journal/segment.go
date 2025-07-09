@@ -157,10 +157,6 @@ func (s *Segment) setState(state SegmentState) *Segment {
 	return s
 }
 
-func (s *Segment) getState() SegmentState {
-	return s.state
-}
-
 func (s *Segment) is(state SegmentState) bool {
 	return s.state == state
 }
@@ -171,15 +167,6 @@ func (s *Segment) canDrop() bool {
 		return true
 	default:
 		return false
-	}
-}
-
-func (s *Segment) isWriteable() bool {
-	switch s.state {
-	case SegmentStateComplete, SegmentStateMerging, SegmentStateMerged:
-		return false
-	default:
-		return true
 	}
 }
 

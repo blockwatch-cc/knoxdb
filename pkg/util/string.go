@@ -373,7 +373,7 @@ func DecodeU64String(s string) (U64String, error) {
 	if buf, err := hex.DecodeString(s); err == nil && len(buf) == 8 {
 		return U64String(binary.BigEndian.Uint64(buf)), nil
 	}
-	return 0, fmt.Errorf("Invalid u64 hex or base64 string")
+	return 0, fmt.Errorf("invalid u64 hex or base64 string")
 }
 
 func (u *U64String) UnmarshalText(data []byte) error {

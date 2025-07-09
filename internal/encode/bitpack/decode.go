@@ -155,17 +155,17 @@ func decode[T types.Integer](out []T, in []uint64, log2 int, minv T) (int, error
 		// Ensure we have enough bits in pack
 		for offset < log2 && inIdx < len(in) {
 			if lost > 0 {
-				pack |= uint64(in[inIdx]) >> (BitsSize - offset - lost) &^ (1<<offset - 1)
+				pack |= in[inIdx] >> (BitsSize - offset - lost) &^ (1<<offset - 1)
 				inIdx++
 				offset += lost
 				lost = 0
 				if offset < log2 {
-					pack |= uint64(in[inIdx]) << offset
+					pack |= in[inIdx] << offset
 					lost = offset
 					offset += BitsSize - offset
 				}
 			} else {
-				pack |= uint64(in[inIdx]) << offset
+				pack |= in[inIdx] << offset
 				lost = offset
 				inIdx += util.Bool2int(offset == 0)
 				offset += BitsSize - offset
@@ -500,17 +500,17 @@ func decodeFused[T types.Float](out []T, in []uint64, log2 int, minv, f, e T) (i
 		// Ensure we have enough bits in pack
 		for offset < log2 && inIdx < len(in) {
 			if lost > 0 {
-				pack |= uint64(in[inIdx]) >> (BitsSize - offset - lost) &^ (1<<offset - 1)
+				pack |= in[inIdx] >> (BitsSize - offset - lost) &^ (1<<offset - 1)
 				inIdx++
 				offset += lost
 				lost = 0
 				if offset < log2 {
-					pack |= uint64(in[inIdx]) << offset
+					pack |= in[inIdx] << offset
 					lost = offset
 					offset += BitsSize - offset
 				}
 			} else {
-				pack |= uint64(in[inIdx]) << offset
+				pack |= in[inIdx] << offset
 				lost = offset
 				inIdx += util.Bool2int(offset == 0)
 				offset += BitsSize - offset

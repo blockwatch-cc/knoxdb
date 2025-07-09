@@ -25,7 +25,10 @@ func (b *Bitmap) UnmarshalBinary(src []byte) error {
 	if err != nil {
 		return err
 	}
-	b = NewFromBytes(dst)
+	b.data = toUint16Slice(dst)
+	x := toUint64Slice(b.data[:4])[indexNodeSize]
+	b._ptr = dst
+	b.keys = toUint64Slice(b.data[:x])
 	return nil
 }
 
@@ -42,6 +45,9 @@ func (b *Bitmap) UnmarshalText(src []byte) error {
 	if err != nil {
 		return err
 	}
-	b = NewFromBytes(dst)
+	b.data = toUint16Slice(dst)
+	x := toUint64Slice(b.data[:4])[indexNodeSize]
+	b._ptr = dst
+	b.keys = toUint64Slice(b.data[:x])
 	return nil
 }

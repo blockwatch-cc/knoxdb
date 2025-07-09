@@ -28,8 +28,8 @@ func (v ViewReader) MinMax(col int) (any, any) {
 	minx, maxx := minColIndex(col), maxColIndex(col)
 
 	// load min/max values
-	minv, _ := v.View.GetPhy(minx)
-	maxv, _ := v.View.GetPhy(maxx)
+	minv, _ := v.GetPhy(minx)
+	maxv, _ := v.GetPhy(maxx)
 
 	return minv, maxv
 }
@@ -80,7 +80,7 @@ func Match(n *filter.Node, r engine.StatsReader) bool {
 // against meta statistics. It returns true if the filter is within
 // statistics range.
 func matchFilter(f *filter.Filter, r engine.StatsReader) bool {
-	minv, maxv := r.MinMax(int(f.Index))
+	minv, maxv := r.MinMax(f.Index)
 
 	// matcher is selected and configured during compile stage
 	return f.Matcher.MatchRange(minv, maxv)
@@ -115,7 +115,7 @@ func matchFilterVector(f *filter.Filter, pkg *pack.Package, bits, mask *bitset.B
 	}
 
 	// translate filter field index into statistics pack index for min&max columns
-	minx, maxx := minColIndex(int(f.Index)), maxColIndex(int(f.Index))
+	minx, maxx := minColIndex(f.Index), maxColIndex(f.Index)
 
 	// let the matcher translate its query into a min/max range check
 	f.Matcher.MatchRangeVectors(pkg.Block(minx), pkg.Block(maxx), bits, mask)

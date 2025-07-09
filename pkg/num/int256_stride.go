@@ -97,10 +97,10 @@ func (src *Int256Stride) AppendTo(v BigIntWriter[Int256], sel []uint32) {
 		dst.X3 = append(dst.X3, src.X3...)
 	} else {
 		for v := range sel {
-			dst.X0 = append(dst.X0, src.X0[int(v)])
-			dst.X1 = append(dst.X1, src.X1[int(v)])
-			dst.X2 = append(dst.X2, src.X2[int(v)])
-			dst.X3 = append(dst.X3, src.X3[int(v)])
+			dst.X0 = append(dst.X0, src.X0[v])
+			dst.X1 = append(dst.X1, src.X1[v])
+			dst.X2 = append(dst.X2, src.X2[v])
+			dst.X3 = append(dst.X3, src.X3[v])
 		}
 	}
 }

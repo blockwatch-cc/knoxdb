@@ -124,7 +124,7 @@ func TestWithReadTx(t *testing.T) {
 	require.NotNil(t, GetEngine(ctx), "ctx.engine")
 	require.NotNil(t, GetTx(ctx), "ctx.tx")
 	require.NotNil(t, GetSnapshot(ctx), "ctx.snap")
-	require.Equal(t, XID(ReadTxOffset), GetTxId(ctx), "ctx.xid")
+	require.Equal(t, ReadTxOffset, GetTxId(ctx), "ctx.xid")
 
 	// check we get the same tx, context, and noop funcs when calling again
 	ctx2, tx2, commit2, abort2, err := e.WithTransaction(ctx, TxFlagReadOnly)
@@ -139,7 +139,7 @@ func TestWithReadTx(t *testing.T) {
 	require.NotNil(t, GetEngine(ctx2), "ctx.engine")
 	require.NotNil(t, GetTx(ctx2), "ctx.tx")
 	require.NotNil(t, GetSnapshot(ctx2), "ctx.snap")
-	require.Equal(t, XID(ReadTxOffset), GetTxId(ctx2), "ctx.xid")
+	require.Equal(t, ReadTxOffset, GetTxId(ctx2), "ctx.xid")
 
 	// check we get an error when we try switching to read-write
 	_, _, _, _, err = e.WithTransaction(ctx)
@@ -378,6 +378,7 @@ func TestReadTxShutdown(t *testing.T) {
 
 	// open tx before shutdown
 	ctx, tx, commit, abort, err := e.WithTransaction(ctx, TxFlagReadOnly)
+	assert.NoError(t, err)
 
 	// simulate shutdown (order matters!)
 	go func() {
@@ -412,6 +413,7 @@ func TestWriteTxShutdown(t *testing.T) {
 
 	// open tx before shutdown
 	ctx, tx, commit, abort, err := e.WithTransaction(ctx)
+	assert.NoError(t, err)
 
 	// simulate shutdown (order matters!)
 	go func() {

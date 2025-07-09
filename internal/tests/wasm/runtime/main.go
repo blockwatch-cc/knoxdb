@@ -43,7 +43,7 @@ func run() error {
 		return err
 	}
 	if !randomize && seed == "" {
-		return fmt.Errorf("Missing random seed, set %s env var", util.GORANDSEED)
+		return fmt.Errorf("missing random seed, set %s env var", util.GORANDSEED)
 	}
 
 	// setup logging

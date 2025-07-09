@@ -115,7 +115,7 @@ func TestEncode(t *testing.T) {
 				WithTrim(c.Trim).
 				WithSeparator(c.Sep)
 			require.NoError(t, enc.Encode(c.Src))
-			require.Equal(t, c.Csv, string(w.Bytes()))
+			require.Equal(t, c.Csv, w.String())
 		})
 	}
 }

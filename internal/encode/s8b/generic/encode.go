@@ -151,11 +151,11 @@ func Encode[T types.Integer](dst []byte, src []T, minv, maxv T) ([]byte, error) 
 		}
 
 		var (
+			nleft    = len(remaining)
+			maxN     = 60
+			usedBits = 1
 			n        int
-			nleft    int    = len(remaining)
 			maxSeen  uint64 = 1
-			maxN     int    = 60
-			usedBits int    = 1
 			isFull   bool
 		)
 

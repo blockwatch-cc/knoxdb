@@ -440,7 +440,7 @@ func (m *LockManager) acquire(ctx context.Context, xid XID, mode LockMode, typ L
 				}
 			default:
 				m.mu.Unlock()
-				panic(fmt.Errorf("Unhandled shared case lock=%#v %v %v %v", l, xid, mode, typ))
+				panic(fmt.Errorf("unhandled shared case lock=%#v %v %v %v", l, xid, mode, typ))
 			}
 		}
 

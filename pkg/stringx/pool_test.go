@@ -126,6 +126,7 @@ func BenchmarkByteSliceAppend(b *testing.B) {
 				for _, v := range src {
 					dst = append(dst, bytes.Clone(v))
 				}
+				_ = dst
 			}
 			b.ReportMetric(float64(sz.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 		})

@@ -45,8 +45,8 @@ func EncodeFloat[T types.Float](ctx *Context[T], v []T) NumberContainer[T] {
 
 	// try all eligible encoding schemes
 	var (
-		bestScheme ContainerType = TFloatRaw
-		bestRatio  float64       = 1.0
+		bestScheme = TFloatRaw
+		bestRatio  = 1.0
 	)
 	if ctx.Lvl > 0 {
 		for _, scheme := range ctx.EligibleFloatSchemes() {
@@ -67,8 +67,8 @@ func EncodeFloat[T types.Float](ctx *Context[T], v []T) NumberContainer[T] {
 func EstimateFloat[T types.Float](ctx *Context[T], scheme ContainerType, vals []T) float64 {
 	// estimate cheap encodings
 	var (
-		w       int = util.SizeOf[T]()
-		rawSize int = ctx.rawCosts()
+		w       = util.SizeOf[T]()
+		rawSize = ctx.rawCosts()
 		estSize int
 	)
 	switch scheme {

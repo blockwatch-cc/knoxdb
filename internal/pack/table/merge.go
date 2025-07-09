@@ -164,12 +164,12 @@ func (t *Table) Merge(ctx context.Context) error {
 func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 	// metrics
 	var (
-		start      = time.Now()
 		nStones    int
 		nPacks     int
 		nAdd, nDel int
-		nHeap      int = seg.Size()
-		nBytes         = atomic.LoadInt64(&t.metrics.BytesWritten)
+		nHeap      = seg.Size()
+		nBytes     = atomic.LoadInt64(&t.metrics.BytesWritten)
+		start      = time.Now()
 	)
 
 	// init table writer

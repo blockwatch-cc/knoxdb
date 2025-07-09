@@ -121,14 +121,14 @@ var selectorLegacy8 [16]packing = [16]packing{
 }
 
 // legacy use only
-func unpack_240[T types.Integer](v uint64, p unsafe.Pointer, _ uint64) {
+func unpack_240[T types.Integer](_ uint64, p unsafe.Pointer, _ uint64) {
 	dst := (*[240]T)(p)
 	for i := range dst {
 		dst[i] = 1
 	}
 }
 
-func unpack_120[T types.Integer](v uint64, p unsafe.Pointer, _ uint64) {
+func unpack_120[T types.Integer](_ uint64, p unsafe.Pointer, _ uint64) {
 	dst := (*[120]T)(p)
 	for i := range dst {
 		dst[i] = 1

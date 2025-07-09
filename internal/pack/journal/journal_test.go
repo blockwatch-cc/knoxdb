@@ -324,7 +324,7 @@ func TestJournalRandom(t *testing.T) {
 	ctx, j, makeRecord := setupJournalTest(t)
 
 	var (
-		liveSnap = make(map[uint64]uint64) // live pk -> rid mappings
+		liveSnap map[uint64]uint64         // live pk -> rid mappings
 		live     = make(map[uint64]uint64) // temp live pk -> rid mapping (merged on commit)
 		pksSnap  = slicex.NewOrderedIntegers[uint64](make([]uint64, 0)).SetUnique()
 		pks      = slicex.NewOrderedIntegers[uint64](make([]uint64, 0)).SetUnique()
@@ -462,8 +462,8 @@ func TestJournalRandom(t *testing.T) {
 	t.Logf("X-%d Commit", engine.GetTxId(ctx))
 	j.CommitTx(engine.GetTxId(ctx))
 	snap = j.Tip().State()
-	liveSnap = maps.Clone(live)
-	pksSnap = pks.Clone()
+	// liveSnap = maps.Clone(live)
+	// pksSnap = pks.Clone()
 	validate(ctx)
 }
 

@@ -86,7 +86,7 @@ func (e *Engine) WithTransaction(ctx context.Context, flags ...TxFlags) (context
 	}
 
 	// potentially wait
-	var ok bool = true
+	ok := true
 	if uflags.IsReadOnly() {
 		// enforce deferred flag
 		if uflags.IsDeferred() {

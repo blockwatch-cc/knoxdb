@@ -225,7 +225,7 @@ func encode[T types.Integer](dst []uint64, src []T, log2 int, minv T) int {
 		word |= uint64((src[i] - minv)) & mask << offset
 		offset += log2
 		if offset >= BitsSize { // If we've filled a 64-bit word
-			dst[n] = uint64(word) // Write to buffer
+			dst[n] = word // Write to buffer
 
 			n++
 			offset -= BitsSize // Reset offset
@@ -239,7 +239,7 @@ func encode[T types.Integer](dst []uint64, src []T, log2 int, minv T) int {
 	}
 
 	if offset > 0 { // Write any remaining bits
-		dst[n] = uint64(word)
+		dst[n] = word
 		n++
 	}
 	return n * BitsSize / 8

@@ -299,15 +299,6 @@ type Simple8Factory struct {
 	u32Pool sync.Pool
 	u16Pool sync.Pool
 	u8Pool  sync.Pool
-
-	i64ItPool sync.Pool
-	i32ItPool sync.Pool
-	i16ItPool sync.Pool
-	i8ItPool  sync.Pool
-	u64ItPool sync.Pool
-	u32ItPool sync.Pool
-	u16ItPool sync.Pool
-	u8ItPool  sync.Pool
 }
 
 func newSimple8Container[T types.Integer]() NumberContainer[T] {

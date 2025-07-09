@@ -28,12 +28,12 @@ func TestMain(m *testing.M) {
 const (
 	CsvWithHeader = `s,i,f,b
 Hello,42,23.45,true`
-	CsvWithoutHeader = `Hello,42,23.45,true`
-	CsvWhitespace    = `  Hello  ,  42  ,  23.45  ,  true  `
-	CsvWhitespaceString    = `  Hello  ,42,23.45,true`
-	CsvUnicode       = `1,🚀,🌱,😎`
-	CsvSemicolon     = `Hello;42;23.45;true`
-	CsvComment       = `# Comment line
+	CsvWithoutHeader    = `Hello,42,23.45,true`
+	CsvWhitespace       = `  Hello  ,  42  ,  23.45  ,  true  `
+	CsvWhitespaceString = `  Hello  ,42,23.45,true`
+	CsvUnicode          = `1,🚀,🌱,😎`
+	CsvSemicolon        = `Hello;42;23.45;true`
+	CsvComment          = `# Comment line
 Hello,42,23.45,true
 #
 # another comment

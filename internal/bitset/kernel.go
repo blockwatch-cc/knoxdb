@@ -25,7 +25,7 @@ var (
 	bytemask      = generic.Bytemask
 	bitmask       = generic.Bitmask
 	reverseLut256 = generic.ReverseLut256
-	roundUpPow2   = generic.RoundUpPow2
+	// roundUpPow2   = generic.RoundUpPow2
 )
 
 func init() {

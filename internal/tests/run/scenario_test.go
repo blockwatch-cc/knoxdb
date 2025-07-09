@@ -186,17 +186,17 @@ func TestScenarios(t *testing.T) {
 		f, err = os.Create(logFilePath)
 		require.NoError(t, err)
 
-		_, err = f.WriteString(fmt.Sprintf("--- Scenario #%d with %s=0x%016x\n", round, util.GORANDSEED, rnd))
+		_, err = fmt.Fprintf(f, "--- Scenario #%d with %s=0x%016x\n", round, util.GORANDSEED, rnd)
 		require.NoError(t, err)
 
 		// run test in child process
 		err = run(t, buildPath, f)
 
 		if err != nil {
-			_, err := f.WriteString(fmt.Sprintf("--- FAILED Scenario #%d with %s=0x%016x err=%v\n", round, util.GORANDSEED, rnd, err))
+			_, err := fmt.Fprintf(f, "--- FAILED Scenario #%d with %s=0x%016x err=%v\n", round, util.GORANDSEED, rnd, err)
 			require.NoError(t, err)
 		} else {
-			_, err := f.WriteString(fmt.Sprintf("--- DONE Scenario #%d with %s=0x%016x\n", round, util.GORANDSEED, rnd))
+			_, err := fmt.Fprintf(f, "--- DONE Scenario #%d with %s=0x%016x\n", round, util.GORANDSEED, rnd)
 			require.NoError(t, err)
 		}
 

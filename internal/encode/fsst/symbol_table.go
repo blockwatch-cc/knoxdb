@@ -125,13 +125,14 @@ func (s *SymbolTable) Clear() {
 	// clear a symbolTable with minimal effort (only erase the used positions in it)
 	s.lenHisto = [FSST_CODE_BITS]uint16{} // all unused
 	for i := uint32(FSST_CODE_BASE); i < uint32(FSST_CODE_BASE+s.nSymbols); i++ {
-		if s.symbols[i].Len() == 1 {
+		switch {
+		case s.symbols[i].Len() == 1:
 			val := s.symbols[i].First()
 			s.byteCodes[val] = (1 << FSST_LEN_BITS) | uint16(val)
-		} else if s.symbols[i].Len() == 2 {
+		case s.symbols[i].Len() == 2:
 			val := s.symbols[i].First2()
 			s.shortCodes[val] = (1 << FSST_LEN_BITS) | (val & 255)
-		} else {
+		default:
 			idx := s.symbols[i].Hash() & (HashTabSize - 1)
 			s.hashTab[idx].val.SetUint64(0)
 			s.hashTab[idx].icl = FSST_ICL_FREE // marks empty in hashtab
@@ -155,11 +156,12 @@ func (sym *SymbolTable) Add(s Symbol) bool {
 	len := s.Len()
 	s = s.SetCodeLen(uint32(FSST_CODE_BASE+sym.nSymbols), len)
 
-	if len == 1 {
+	switch {
+	case len == 1:
 		sym.byteCodes[s.First()] = FSST_CODE_BASE + sym.nSymbols + (1 << FSST_LEN_BITS) // len=1 (<<FSST_LEN_BITS)
-	} else if len == 2 {
+	case len == 2:
 		sym.shortCodes[s.First2()] = FSST_CODE_BASE + sym.nSymbols + (2 << FSST_LEN_BITS) // len=2 (<<FSST_LEN_BITS)
-	} else if !sym.HashInsert(s) {
+	case !sym.HashInsert(s):
 		return false
 	}
 
@@ -220,7 +222,7 @@ func (sym *SymbolTable) Finalize(zeroTerminated uint8) {
 
 	// compute running sum of code lengths (starting offsets for each length)
 	rsum[0] = uint8(byteLim) // 1-byte codes are highest
-	rsum[1] = uint8(zeroTerminated)
+	rsum[1] = zeroTerminated
 	for i := 1; i < 7; i++ {
 		rsum[i+1] = rsum[i] + uint8(sym.lenHisto[i])
 	}
@@ -333,12 +335,13 @@ func buildSymbolTable(encoder *Encoder, sample [][]uint8, zeroTerminated bool) *
 					continue
 				}
 			}
-			cur := 0
-			end := len(line)
-			start := cur
+			var (
+				start, cur int
+				end        = len(line)
+			)
 			if cur < end {
 				start = cur
-				code2 := 255
+				var code2 int
 				code1 := st.FindLongestSymbol(NewSymbol().
 					WithBuffer(line[cur:]))
 				cur += int(st.symbols[code1].Len())
@@ -377,12 +380,13 @@ func buildSymbolTable(encoder *Encoder, sample [][]uint8, zeroTerminated bool) *
 						if s.val.Uint64() == word {
 							c1Val = 1
 						}
-						if c0Val&c1Val > 0 {
+						switch {
+						case c0Val&c1Val > 0:
 							code2 = int(s.Code())
 							cur += int(s.Len())
-						} else if code2 >= FSST_CODE_BASE {
+						case code2 >= FSST_CODE_BASE:
 							cur += 2
-						} else {
+						default:
 							code2 = int(st.byteCodes[word&0xFF] & FSST_CODE_MASK)
 							cur += 1
 						}
@@ -446,7 +450,7 @@ func buildSymbolTable(encoder *Encoder, sample [][]uint8, zeroTerminated bool) *
 		// add candidate symbols based on counted frequency
 		for pos1 := uint32(0); pos1 < uint32(FSST_CODE_BASE+sym.nSymbols); pos1++ {
 			var cnt1 uint32
-			cnt1, pos1 = counter.Count1GetNext(uint32(pos1))
+			cnt1, pos1 = counter.Count1GetNext(pos1)
 			if cnt1 <= 0 {
 				continue
 			}
@@ -554,7 +558,7 @@ func makeSample(strIn [][]uint8) [][]uint8 {
 			linenr := sampleRnd % nlines
 			for len(strIn[linenr]) == 0 {
 				linenr++
-				if linenr == uint64(nlines) {
+				if linenr == nlines {
 					linenr = 0
 				}
 			}

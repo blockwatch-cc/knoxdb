@@ -38,14 +38,14 @@ func (it *Int128Iterator) NextChunk() (*Int128Stride, int) {
 	if it.base >= it.stride.Len() {
 		return nil, 0
 	}
-	n := int(min(it.stride.Len()-it.base, CHUNK_SIZE))
+	n := min(it.stride.Len()-it.base, CHUNK_SIZE)
 	return it.stride.Range(it.base, it.base+n), n
 }
 
 func (it *Int128Iterator) SkipChunk() int {
 	n := min(CHUNK_SIZE, it.stride.Len()-it.base)
 	it.base += n
-	return int(n)
+	return n
 }
 
 func (it *Int128Iterator) Close() {

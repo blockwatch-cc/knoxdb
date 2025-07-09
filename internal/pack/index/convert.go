@@ -29,7 +29,7 @@ type RelinkConverter struct {
 	srcBlocks []int // ordered list of src blocks to link
 }
 
-func (_ *RelinkConverter) QueryKeys(_ *filter.Node) []uint64 {
+func (*RelinkConverter) QueryKeys(_ *filter.Node) []uint64 {
 	// unused (hash index only)
 	return nil
 }
@@ -168,7 +168,7 @@ func (c *SimpleHashConverter) QueryKeys(node *filter.Node) []uint64 {
 	}
 }
 
-func (_ *SimpleHashConverter) QueryNode(_ *filter.Node) *filter.Node {
+func (*SimpleHashConverter) QueryNode(_ *filter.Node) *filter.Node {
 	// unused (range index scans only)
 	return nil
 }
@@ -281,7 +281,7 @@ func (c *CompositeHashConverter) QueryKeys(node *filter.Node) []uint64 {
 	return []uint64{xxhash64.Sum64(buf.Bytes())}
 }
 
-func (_ *CompositeHashConverter) QueryNode(_ *filter.Node) *filter.Node {
+func (*CompositeHashConverter) QueryNode(_ *filter.Node) *filter.Node {
 	// unused (range index scans only)
 	return nil
 }

@@ -415,13 +415,13 @@ func (c *BitmapContainer) MatchBetween(a, b bool, bits, _ *Bitset) {
 }
 
 // N.A.
-func (_ *BitmapContainer) MatchInSet(_ any, _, _ *Bitset)    {}
-func (_ *BitmapContainer) MatchNotInSet(_ any, _, _ *Bitset) {}
+func (*BitmapContainer) MatchInSet(_ any, _, _ *Bitset)    {}
+func (*BitmapContainer) MatchNotInSet(_ any, _, _ *Bitset) {}
 
 // special read-only bitmap function overrides
-func (_ *BitmapContainer) Set(_ int)       {}
-func (_ *BitmapContainer) Unset(_ int)     {}
-func (_ *BitmapContainer) Writer() *Bitset { return nil }
+func (*BitmapContainer) Set(_ int)       {}
+func (*BitmapContainer) Unset(_ int)     {}
+func (*BitmapContainer) Writer() *Bitset { return nil }
 
 // ---------------------------------------
 // Factory
@@ -474,8 +474,8 @@ func (it *xroarBitmapIterator) Next() ([]int, bool) {
 
 type zeroBitmapIterator struct{}
 
-func (_ *zeroBitmapIterator) Close()              {}
-func (_ *zeroBitmapIterator) Next() ([]int, bool) { return nil, false }
+func (*zeroBitmapIterator) Close()              {}
+func (*zeroBitmapIterator) Next() ([]int, bool) { return nil, false }
 
 type oneBitmapIterator struct {
 	chunk [types.CHUNK_SIZE]int

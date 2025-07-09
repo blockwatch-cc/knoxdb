@@ -122,10 +122,6 @@ func (r *Reader) WithBuffer(buf []byte) *Reader {
 	return r
 }
 
-func (r *Reader) doTrim() bool {
-	return r.flags&ReadFlagTrim > 0
-}
-
 // Read returns the next non-empty and non-commented line of input split
 // into fields. Read returns an error when the underlying io.Reader fails
 // and nil with io.EOF on EOF. The underlying memory for returned strings

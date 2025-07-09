@@ -209,12 +209,8 @@ func (idx *Index) lookupKeys(ctx context.Context, keys []uint64) (*xroar.Bitmap,
 		it.Close()
 	}()
 
-	for {
-		// stop when all inputs are matched
-		if nKeys == nKeysMatched {
-			break
-		}
-
+	// stop when all inputs are matched
+	for nKeys < nKeysMatched {
 		// check context
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -350,12 +346,8 @@ func (idx *Index) Lookup(ctx context.Context, keys []uint64, ridMap map[uint64]u
 		it.Close()
 	}()
 
-	for {
-		// stop when all inputs are matched
-		if nKeys == nKeysMatched {
-			break
-		}
-
+	// stop when all inputs are matched
+	for nKeys < nKeysMatched {
 		// check context
 		if err := ctx.Err(); err != nil {
 			return err

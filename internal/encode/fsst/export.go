@@ -24,8 +24,8 @@ func Export(e *Encoder, buf []byte) uint64 {
 	// The version field is now there just for future-proofness, but not used yet
 
 	// version allows keeping track of fsst versions, track endianness, and encoder reconstruction
-	var version uint64 = (FSST_VERSION << 32) | // version is 24 bits, most significant byte is 0
-		(uint64(e.symbolTable.suffixLim) << 24) |
+	var version = (FSST_VERSION << 32) | // version is 24 bits, most significant byte is 0
+		(e.symbolTable.suffixLim)<<24 |
 		(uint64(e.symbolTable.terminator) << 16) |
 		(uint64(e.symbolTable.nSymbols) << 8) |
 		FSST_ENDIAN_MARKER // least significant byte is nonzero

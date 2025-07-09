@@ -171,7 +171,7 @@ func init() {
 	}
 }
 
-func decodeCore[T Float, E Int](dst []T, src []E, fx, ex uint8, isSafe bool) int {
+func decodeCore[T Float, E Int](dst []T, src []E, fx, ex uint8, _ bool) int {
 	l := len(src)
 	if l == 0 {
 		return 0

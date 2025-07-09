@@ -141,7 +141,7 @@ func SchemaOfTag(m any, tag string) (*Schema, error) {
 // Produces a dynamic struct type only using native types like int64 for Decimal64
 // [16]byte for Int128, etc.
 func (s *Schema) NativeStructType() reflect.Type {
-	var sfields []reflect.StructField
+	sfields := make([]reflect.StructField, 0, len(s.fields))
 	for _, f := range s.fields {
 		if !f.IsVisible() {
 			continue
@@ -196,7 +196,7 @@ func (s *Schema) NativeStructType() reflect.Type {
 // Produces a dynamic struct type compatible with SchemaOf which uses custom types
 // for large numeric values (num.Int128) and decimals (num.Decimal64).
 func (s *Schema) StructType() reflect.Type {
-	var sfields []reflect.StructField
+	sfields := make([]reflect.StructField, 0, len(s.fields))
 	for _, f := range s.fields {
 		if !f.IsVisible() {
 			continue

@@ -214,7 +214,7 @@ func CompareTest2[T types.Integer](t *testing.T, cmp CompareFunc2, mode types.Fi
 					bits.Zero()
 
 					// full range
-					cmp(buf, w, uint64(minv)-uint64(minv), uint64(maxv)-uint64(minv), sz, bits)
+					cmp(buf, w, uint64(0), uint64(maxv)-uint64(minv), sz, bits)
 					ensureBits(t, buf, w, src, minv, maxv, minv, bits, mode)
 					bits.Zero()
 
@@ -251,7 +251,8 @@ func CompareTest2[T types.Integer](t *testing.T, cmp CompareFunc2, mode types.Fi
 	}
 }
 
-func ensureBits[T types.Integer](t *testing.T, buf []byte, log2 int, vals []T, val, val2 T, minv T, bits *bitset.Bitset, mode types.FilterMode) {
+// func ensureBits[T types.Integer](t *testing.T, buf []byte, log2 int, vals []T, val, val2 T, minv T, bits *bitset.Bitset, mode types.FilterMode) {
+func ensureBits[T types.Integer](t *testing.T, _ []byte, _ int, vals []T, val, val2 T, _ T, bits *bitset.Bitset, mode types.FilterMode) {
 	// if !testing.Short() {
 	// 	dec := Decoder(buf, log2, minv)
 	// 	for i, v := range vals {

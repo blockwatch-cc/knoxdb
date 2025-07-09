@@ -86,7 +86,7 @@ func run() (err error) {
 			case error:
 				err = x
 			default:
-				err = errors.New("Unknown panic")
+				err = errors.New("unknown panic")
 			}
 		}
 	}()
@@ -125,10 +125,10 @@ func run() (err error) {
 	}
 
 	if cmd == "" {
-		return fmt.Errorf("Missing command.")
+		return fmt.Errorf("missing command")
 	}
 	if !desc.IsValid() {
-		return fmt.Errorf("Invalid database file locator. Need [path/database/table.db][#pack]")
+		return fmt.Errorf("invalid database file locator: need [path/database/table.db][#pack]")
 	}
 
 	ctx := context.Background()
@@ -238,11 +238,11 @@ func separateTarget(s string) TableDescriptor {
 		Table:  strings.TrimSuffix(filepath.Base(fileName), ".db"),
 		PackId: 0,
 	}
-	switch {
-	case extra == "journal":
+	switch extra {
+	case "journal":
 		desc.PackId = -1
 		desc.HavePackId = true
-	// case extra == "tomb":
+	// case "tomb":
 	// 	desc.PackId = -2
 	default:
 		if n, err := strconv.ParseInt(extra, 0, 64); err == nil {

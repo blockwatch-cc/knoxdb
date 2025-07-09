@@ -165,7 +165,7 @@ func (req Request) RunQuery(ctx context.Context, plan *query.QueryPlan) (*Result
 
 	// identify groupBy column
 	var (
-		groupByIndex int = -1
+		groupByIndex = -1
 		groupByEnum  *schema.EnumDictionary
 	)
 	if req.GroupBy != "" {

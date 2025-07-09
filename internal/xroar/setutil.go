@@ -20,7 +20,7 @@ package xroar
 // }
 
 func difference(set1 []uint16, set2 []uint16, buffer []uint16) int {
-	if 0 == len(set2) {
+	if len(set2) == 0 {
 		buffer = buffer[:len(set1)]
 		copy(buffer, set1)
 		// for k := 0; k < len(set1); k++ {
@@ -28,7 +28,7 @@ func difference(set1 []uint16, set2 []uint16, buffer []uint16) int {
 		// }
 		return len(set1)
 	}
-	if 0 == len(set1) {
+	if len(set1) == 0 {
 		return 0
 	}
 	pos := 0
@@ -271,7 +271,7 @@ func localintersect2by2(
 	set2 []uint16,
 	buffer []uint16) int {
 
-	if (0 == len(set1)) || (0 == len(set2)) {
+	if (len(set1) == 0) || (len(set2) == 0) {
 		return 0
 	}
 	k1 := 0
@@ -442,7 +442,7 @@ func onesidedgallopingintersect2by2(
 	largeset []uint16,
 	buffer []uint16) int {
 
-	if 0 == len(smallset) {
+	if len(smallset) == 0 {
 		return 0
 	}
 	buffer = buffer[:cap(buffer)]
@@ -564,12 +564,12 @@ func union2by2(set1 []uint16, set2 []uint16, buffer []uint16) int {
 	pos := 0
 	k1 := 0
 	k2 := 0
-	if 0 == len(set2) {
+	if len(set2) == 0 {
 		buffer = buffer[:len(set1)]
 		copy(buffer, set1)
 		return len(set1)
 	}
-	if 0 == len(set1) {
+	if len(set1) == 0 {
 		buffer = buffer[:len(set2)]
 		copy(buffer, set2)
 		return len(set2)

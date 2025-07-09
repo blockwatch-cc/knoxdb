@@ -402,7 +402,7 @@ func MinMax(src []byte, size int) (minIdx int, maxIdx int) {
 	}
 
 	// find the first non-zero byte
-	var sz8 int = (len(src) >> 3) << 3
+	var sz8 = (len(src) >> 3) << 3
 	var n int
 
 	// skip leading zeros

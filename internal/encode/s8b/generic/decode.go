@@ -82,7 +82,7 @@ func Decode[T types.Integer](dst []T, buf []byte, minv T) (int, error) {
 
 func CountValues(src []byte) int {
 	var (
-		i int = 7 // little endian encoding
+		i = 7 // little endian encoding
 		n int
 	)
 
@@ -109,7 +109,7 @@ func CountValues(src []byte) int {
 // Seek returns code word position in src and value offset inside code word.
 func Seek(src []byte, v int) (int, int) {
 	var (
-		i int = 7 // little endian encoding
+		i = 7 // little endian encoding
 		n int
 	)
 

@@ -236,8 +236,8 @@ func (t *Table) doQueryDesc(ctx context.Context, plan *query.QueryPlan, res Quer
 	// cleanup and log on exit
 	defer func() {
 		plan.Stats.Tick(query.SCAN_TIME_KEY)
-		plan.Stats.Count(query.ROWS_SCANNED_KEY, int(nRowsScanned))
-		plan.Stats.Count(query.ROWS_MATCHED_KEY, int(nRowsMatched))
+		plan.Stats.Count(query.ROWS_SCANNED_KEY, nRowsScanned)
+		plan.Stats.Count(query.ROWS_MATCHED_KEY, nRowsMatched)
 		atomic.AddInt64(&t.metrics.QueriedTuples, int64(nRowsMatched))
 	}()
 

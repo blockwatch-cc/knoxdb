@@ -90,7 +90,7 @@ const (
 type Block struct {
 	nref  int64      // ref counter
 	buf   *byte      // backing store for raw numeric types ([0:n:n] n = sz*cap)
-	page  *page      // buffer page reference (to release page lock on close)
+	_     *page      // buffer page reference (to release page lock on close)
 	any   any        // interface to embedded vector container
 	len   uint32     // in type units
 	cap   uint32     // in type units
@@ -446,7 +446,7 @@ func (b *Block) AppendRange(src *Block, i, j int) {
 			dbuf := b.buffer()
 			sbuf := src.buffer()
 			copy(dbuf[ofs:], sbuf[i:j])
-			b.len += uint32(n)
+			b.len += n
 		default:
 			// src is compressed
 			sel := types.NewRange(i, j-1).AsSelection()
@@ -464,7 +464,7 @@ func (b *Block) AppendRange(src *Block, i, j int) {
 			case BlockFloat32:
 				src.Float32().AppendTo(b.Float32().Slice(), sel)
 			}
-			b.len += uint32(n)
+			b.len += n
 		}
 	}
 	b.SetDirty()

@@ -43,8 +43,8 @@ func EncodeInt[T types.Integer](ctx *Context[T], v []T) NumberContainer[T] {
 
 	// try all eligible encoding schemes
 	var (
-		bestScheme ContainerType = TIntRaw
-		bestRatio  float64       = 1.0
+		bestScheme = TIntRaw
+		bestRatio  = 1.0
 	)
 	if ctx.Lvl > 0 {
 		for _, scheme := range ctx.EligibleIntSchemes() {
@@ -65,7 +65,7 @@ func EncodeInt[T types.Integer](ctx *Context[T], v []T) NumberContainer[T] {
 func EstimateInt[T types.Integer](ctx *Context[T], scheme ContainerType, v []T) float64 {
 	// estimate cheap encodings
 	var (
-		rawSize int = ctx.rawCosts()
+		rawSize = ctx.rawCosts()
 		estSize int
 		ok      bool
 	)

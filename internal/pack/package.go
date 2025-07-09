@@ -205,7 +205,7 @@ func (p *Package) Copy() *Package {
 }
 
 func (p *Package) Size() int {
-	var sz int = szPackage
+	sz := szPackage
 	for _, b := range p.blocks {
 		if b == nil {
 			continue

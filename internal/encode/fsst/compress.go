@@ -97,12 +97,13 @@ func _compressGeneral(sym *SymbolTable, strIn [][]uint8, compressed []byte, noSu
 				s := sym.hashTab[idx]
 				nout[1] = uint8(word) // speculatively write out escaped byte
 				word &= (0xFFFFFFFFFFFFFFFF >> uint8(s.icl))
-				if (s.icl < uint64(FSST_ICL_FREE)) && s.val.Uint64() == word {
+				switch {
+				case (s.icl < uint64(FSST_ICL_FREE)) && s.val.Uint64() == word:
 					nout[0] = uint8(s.Code())
 					// log.Tracef("Compressed %q into %q ", buf[start:start+int(s.Len())], nout[0])
 					nout = nout[1:]
 					start += int(s.Len())
-				} else if avoidBranch {
+				case avoidBranch:
 					// could be a 2-byte or 1-byte code, or miss
 					// handle everything with predication
 					nout[0] = uint8(code)
@@ -110,13 +111,13 @@ func _compressGeneral(sym *SymbolTable, strIn [][]uint8, compressed []byte, noSu
 					// log.Tracef("Compressed %q into %q ", buf[start:start+int(inc)], nout[:inc])
 					nout = nout[inc:]
 					start += int(code >> FSST_LEN_BITS)
-				} else if uint8(code) < byteLim {
+				case uint8(code) < byteLim:
 					// 2 byte code after checking there is no longer pattern
 					nout[0] = uint8(code)
 					// log.Tracef("Compressed %q into %q ", buf[start:start+2], nout[0])
 					nout = nout[1:]
 					start += 2
-				} else {
+				default:
 					// 1 byte code or miss.
 					nout[0] = uint8(code)
 					inc := 1 + ((code & FSST_CODE_BASE) >> 8)
@@ -131,7 +132,7 @@ func _compressGeneral(sym *SymbolTable, strIn [][]uint8, compressed []byte, noSu
 	}
 
 	for _, curLine := range strIn {
-		var curOff int = 0
+		var curOff = 0
 
 		for {
 			chunk := min(len(curLine)-curOff, bufLen) // we need to compress in chunks of 511 in order to be byte-compatible with simd-compressed FSST
@@ -148,11 +149,12 @@ func _compressGeneral(sym *SymbolTable, strIn [][]uint8, compressed []byte, noSu
 			// based on symboltable stats, choose a variant that is nice to the branch predictor
 			out := make([]uint8, len(buf)*2)
 			var pos int
-			if noSuffixOpt {
+			switch {
+			case noSuffixOpt:
 				pos = compressVariant(buf, out, true, false)
-			} else if avoidBranch {
+			case avoidBranch:
 				pos = compressVariant(buf, out, false, true)
-			} else {
+			default:
 				pos = compressVariant(buf, out, false, false)
 			}
 			copy(compressed[le:], out[:pos])

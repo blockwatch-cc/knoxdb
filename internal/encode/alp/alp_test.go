@@ -66,7 +66,7 @@ func MakeTestcases[T types.Float]() []TestCase[T] {
 			{"bw37", append(tests.GenConst[T](1023, 4611686018427387903.0), 0.0), 0},
 			{"nan", []T{-1.0, 1.0, T(math.NaN()), -1.0, 1.0}, 1},
 			// -0.0 is not an exception
-			{"inf", []T{T(math.Inf(-1)), 1.0, 2.0, -1.0, T(math.Inf(1)), -0.0}, 2},
+			{"inf", []T{T(math.Inf(-1)), 1.0, 2.0, -1.0, T(math.Inf(1)), T(math.Copysign(0.0, -1.0))}, 2},
 			// {"bw38", append(tests.GenConst[T](1023, 9223372036854775807.0), 0.0)},
 			// {"bw39", append(tests.GenConst[T](1023, 18446744073709551615.0), 0.0)}
 		}
@@ -102,7 +102,7 @@ func MakeTestcases[T types.Float]() []TestCase[T] {
 			{"bw26", append(tests.GenConst[T](1023, 10.23), 0.0), 0},
 			{"nan", []T{-1.0, 1.0, T(math.NaN()), -1.0, 1.0}, 1},
 			// -0.0 is not an exception
-			{"inf", []T{T(math.Inf(-1)), 1.0, 2.0, -1.0, T(math.Inf(1)), T(-0.0)}, 2},
+			{"inf", []T{T(math.Inf(-1)), 1.0, 2.0, -1.0, T(math.Inf(1)), T(math.Copysign(0.0, -1.0))}, 2},
 		}
 	}
 }

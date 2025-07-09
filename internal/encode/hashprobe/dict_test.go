@@ -34,7 +34,6 @@ func TestDictAVX2(t *testing.T) {
 }
 
 type buildFunc[T Integer] func([]T, int) ([]T, []uint16)
-type buildFuncFloat[T Float] func([]T, int) ([]T, []uint16)
 
 type DictTestCase[T Integer] struct {
 	Name string

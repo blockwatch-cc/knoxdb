@@ -76,7 +76,7 @@ func BenchmarkIterate(b *testing.B) {
 				for b.Loop() {
 					var (
 						buf  [128]int // alloc once and reuse
-						last int      = -1
+						last = -1
 					)
 					for {
 						vals, ok := bits.Iterate(last, buf[:])

@@ -493,7 +493,7 @@ func (b *bucket) NextSequence() (uint64, error) {
 	return b.seq.Next()
 }
 
-func (_ *bucket) FillPercent(_ float64) {
+func (*bucket) FillPercent(_ float64) {
 	// unsupported
 }
 

@@ -445,7 +445,7 @@ func (s *Schema) DeleteField(id uint16) (*Schema, error) {
 
 func (s *Schema) RenameField(id uint16, name string) (*Schema, error) {
 	// check pre-conditions
-	var pos int = -1
+	var pos = -1
 	for i, v := range s.fields {
 		// ensure name is unique
 		if v.name == name {
@@ -589,7 +589,7 @@ func (s *Schema) MapTo(dst *Schema) ([]int, error) {
 	for _, dstField := range dst.fields {
 		var (
 			srcField Field
-			pos      int = -1
+			pos      = -1
 		)
 		for i, f := range s.fields {
 			if dstField.name == f.name {
@@ -867,7 +867,7 @@ func (s *Schema) String() string {
 			-maxNameLen-1,
 			f.name,
 			typ,
-			f.flags.String(),
+			flags,
 		)
 	}
 	return b.String()

@@ -823,7 +823,7 @@ func (idx *Index) Query(ctx context.Context, flt *filter.Node, dir types.OrderTy
 			}
 
 			// translate table column index into min statistics column
-			field, _ := idx.schema.FieldByIndex(int(minColIndex(f.Index)))
+			field, _ := idx.schema.FieldByIndex(minColIndex(f.Index))
 
 			// check if this field has any filters enabled
 			switch field.Index() {

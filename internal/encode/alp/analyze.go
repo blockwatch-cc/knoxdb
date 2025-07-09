@@ -163,17 +163,17 @@ func AnalyzeRD[T Float, U Uint](src []T) Analysis {
 
 func analyzeRD[T Float, U Uint](sample []T) Analysis {
 	var (
-		bestShift int      = 16
-		bestSize  int      = math.MaxInt32
-		useDict   bool     = false
-		sz        int      = len(sample)
-		w         int      = int(unsafe.Sizeof(T(0)))
-		unique    []uint16 = arena.Alloc[uint16](1 << 16)[:1<<16]
+		bestShift = 16
+		bestSize  = math.MaxInt32
+		useDict   = false
+		sz        = len(sample)
+		w         = int(unsafe.Sizeof(T(0)))
+		unique    = arena.Alloc[uint16](1 << 16)[:1<<16]
 	)
 
 	for i := 1; i <= 16; i++ {
 		var (
-			shift      int    = w*8 - i
+			shift             = w*8 - i
 			mask       U      = 1<<shift - 1
 			lmin, lmax uint16 = math.MaxUint16, 0
 			rmin, rmax U      = types.MaxVal[U](), 0

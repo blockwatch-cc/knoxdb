@@ -264,7 +264,7 @@ func (r *Reader) nextLookupMatch(ctx context.Context) (*pack.Package, error) {
 
 func (r *Reader) nextQueryMatch(ctx context.Context) (*pack.Package, error) {
 	// fixed marker value to identify excluded entries in the selection vector
-	const DROP_MARKER uint32 = 0xffffffff
+	// const DROP_MARKER uint32 = 0xffffffff
 
 	// Loop until a pack with query matches is found.
 	//

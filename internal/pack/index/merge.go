@@ -11,6 +11,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/block"
+	"blockwatch.cc/knoxdb/internal/encode"
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/store"
@@ -216,15 +217,19 @@ func (it *MergeIterator) Store(pkg *pack.Package) error {
 			err = bucket.Delete(key)
 			it.nTxBytes++
 		} else {
-			buf, stats, err := pkg.Block(i).Encode(types.BlockCompressNone)
+			var (
+				buf   []byte
+				stats encode.ContextExporter
+			)
+			buf, stats, err = pkg.Block(i).Encode(types.BlockCompressNone)
 			if err == nil {
 				err = bucket.Put(key, buf)
+				// it.idx.log.Tracef("index[%s]: merge storing block 0x%016x:%016x:%d len=%d size=%d",
+				// 	it.idx.name, id.Key, id.Rid, i, pkg.Len(), len(buf))
+				stats.Close()
+				n += len(buf)
+				pkg.Block(i).SetClean()
 			}
-			// it.idx.log.Tracef("index[%s]: merge storing block 0x%016x:%016x:%d len=%d size=%d",
-			// 	it.idx.name, id.Key, id.Rid, i, pkg.Len(), len(buf))
-			stats.Close()
-			n += len(buf)
-			pkg.Block(i).SetClean()
 		}
 		if err != nil {
 			return err
@@ -518,20 +523,21 @@ func (idx *Index) mergeAppend(ctx context.Context) error {
 			switch {
 			case sval.IsValid() && jval.IsValid():
 				// merge lesser value first
-				if sval.Less(jval) {
+				switch {
+				case sval.Less(jval):
 					o0.Append(sval.Key)
 					o1.Append(sval.Rid)
 					out.UpdateLen()
 					spos++
 					sval.Reset()
-				} else if sval.Equal(jval) {
+				case sval.Equal(jval):
 					// exact same value, must be from an aborted earlier merge,
 					// skip but still count
 					jpos++
 					it.nIns++
 					it.nDups++
 					jval.Reset()
-				} else {
+				default:
 					// write jval
 					o0.Append(jval.Key)
 					o1.Append(jval.Rid)
@@ -695,21 +701,22 @@ func (idx *Index) mergeTomb(ctx context.Context, tomb *pack.Package) error {
 			// merge
 			switch {
 			case sval.IsValid() && tval.IsValid():
-				if sval.Equal(tval) {
+				switch {
+				case sval.Equal(tval):
 					// skip svals with tombstones
 					spos++
 					tpos++
 					it.nDel++
 					sval.Reset()
 					tval.Reset()
-				} else if sval.Less(tval) {
+				case sval.Less(tval):
 					// keep svals < next tombstone
 					o0.Append(sval.Key)
 					o1.Append(sval.Rid)
 					out.UpdateLen()
 					spos++
 					sval.Reset()
-				} else {
+				default:
 					// skip stray tombstone, don't output sval yet, it may
 					// match another tombstone
 					tpos++

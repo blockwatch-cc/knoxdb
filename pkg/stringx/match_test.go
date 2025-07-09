@@ -467,7 +467,7 @@ var (
 	u64_bw_mat_2a uint64 = math.MaxUint32
 	u64_bw_mat_2b uint64 = math.MaxUint64
 
-	u64_bw_res_3         = []byte{0xff, 0xff, 0xff, 0xff}
-	u64_bw_mat_3a uint64 = 0
-	u64_bw_mat_3b uint64 = math.MaxUint64
+	// u64_bw_res_3         = []byte{0xff, 0xff, 0xff, 0xff}
+	// u64_bw_mat_3a uint64 = 0
+	// u64_bw_mat_3b uint64 = math.MaxUint64
 )

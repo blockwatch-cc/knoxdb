@@ -481,7 +481,7 @@ func (j *Journal) ReplayWalRecord(ctx context.Context, rec *wal.Record, rd engin
 		buf = buf[n:]
 		var (
 			count    uint64
-			expectPk uint64 = j.tip.tstate.NextPk
+			expectPk = j.tip.tstate.NextPk
 		)
 
 		// split buf into wire messages

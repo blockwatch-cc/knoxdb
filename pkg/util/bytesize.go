@@ -45,7 +45,7 @@ const (
 	YB          = ZB * 1000 // 10^24
 )
 
-var EInvalidByteSize = errors.New("invalid byte size")
+var ErrInvalidByteSize = errors.New("invalid byte size")
 
 func (b ByteSize) BitRate(d time.Duration) BitRate {
 	return BitRate(float64(b) * 8 * float64(time.Second) / float64(d))
@@ -115,7 +115,7 @@ func ParseByteSize(r string) (ByteSize, error) {
 		f, pos = 1, len(r)
 	}
 	if v, err := strconv.ParseFloat(r[:pos], 64); err != nil {
-		return 0, EInvalidByteSize
+		return 0, ErrInvalidByteSize
 	} else {
 		return ByteSize(v) * f, nil
 	}

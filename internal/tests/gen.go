@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"math"
 	"reflect"
 	"strconv"
 
@@ -19,10 +18,10 @@ import (
 
 const BENCH_WIDTH = 60
 
-var (
-	f64 = math.Float64frombits
-	f32 = math.Float32frombits
-)
+// var (
+// 	f64 = math.Float64frombits
+// 	f32 = math.Float32frombits
+// )
 
 var Generators = []Generator{
 	NumGenerator[int8]{},
@@ -131,21 +130,21 @@ var _ Generator = (*BytesGenerator)(nil)
 
 type BytesGenerator struct{}
 
-func (_ BytesGenerator) Type() types.BlockType {
+func (BytesGenerator) Type() types.BlockType {
 	return types.BlockBytes
 }
 
-func (_ BytesGenerator) Name() string {
+func (BytesGenerator) Name() string {
 	return "bytes"
 }
 
-func (_ BytesGenerator) MakeValue(n int) any {
+func (BytesGenerator) MakeValue(n int) any {
 	var b [8]byte
 	binary.BigEndian.PutUint64(b[:], uint64(n))
 	return b[:]
 }
 
-func (_ BytesGenerator) MakeSlice(n ...int) any {
+func (BytesGenerator) MakeSlice(n ...int) any {
 	s := make([][]byte, len(n))
 	for i := range n {
 		var b [8]byte
@@ -160,19 +159,19 @@ var _ Generator = (*BoolsGenerator)(nil)
 
 type BoolsGenerator struct{}
 
-func (_ BoolsGenerator) Type() types.BlockType {
+func (BoolsGenerator) Type() types.BlockType {
 	return types.BlockBool
 }
 
-func (_ BoolsGenerator) Name() string {
+func (BoolsGenerator) Name() string {
 	return "bool"
 }
 
-func (_ BoolsGenerator) MakeValue(n int) any {
+func (BoolsGenerator) MakeValue(n int) any {
 	return n%2 == 0
 }
 
-func (_ BoolsGenerator) MakeSlice(n ...int) any {
+func (BoolsGenerator) MakeSlice(n ...int) any {
 	s := make([]bool, len(n))
 	for i := range n {
 		s[i] = n[i]%2 == 0
@@ -185,19 +184,19 @@ var _ Generator = (*Int128Generator)(nil)
 
 type Int128Generator struct{}
 
-func (_ Int128Generator) Type() types.BlockType {
+func (Int128Generator) Type() types.BlockType {
 	return types.BlockInt128
 }
 
-func (_ Int128Generator) Name() string {
+func (Int128Generator) Name() string {
 	return "i128"
 }
 
-func (_ Int128Generator) MakeValue(n int) any {
+func (Int128Generator) MakeValue(n int) any {
 	return num.Int128FromInt64(int64(n))
 }
 
-func (_ Int128Generator) MakeSlice(n ...int) any {
+func (Int128Generator) MakeSlice(n ...int) any {
 	s := make([]num.Int128, len(n))
 	for i := range n {
 		s[i] = num.Int128FromInt64(int64(n[i]))
@@ -210,19 +209,19 @@ var _ Generator = (*Int256Generator)(nil)
 
 type Int256Generator struct{}
 
-func (_ Int256Generator) Type() types.BlockType {
+func (Int256Generator) Type() types.BlockType {
 	return types.BlockInt256
 }
 
-func (_ Int256Generator) Name() string {
+func (Int256Generator) Name() string {
 	return "i256"
 }
 
-func (_ Int256Generator) MakeValue(n int) any {
+func (Int256Generator) MakeValue(n int) any {
 	return num.Int256FromInt64(int64(n))
 }
 
-func (_ Int256Generator) MakeSlice(n ...int) any {
+func (Int256Generator) MakeSlice(n ...int) any {
 	s := make([]num.Int256, len(n))
 	for i := range n {
 		s[i] = num.Int256FromInt64(int64(n[i]))

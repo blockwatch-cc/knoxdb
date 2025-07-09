@@ -40,7 +40,7 @@ func makeAligned(sz int) []byte {
 	// Can't check alignment of a zero sized block
 	if sz != 0 {
 		if !isAligned(block) {
-			panic(fmt.Errorf("Failed to align block"))
+			panic(fmt.Errorf("failed to align block"))
 		}
 	}
 	return block

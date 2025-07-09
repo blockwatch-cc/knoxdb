@@ -396,7 +396,7 @@ func CompareTest2[T types.Integer](t *testing.T, enc EncodeFunc[T], dec DecodeFu
 				require.Equal(t, 0, bits.Count(), "cleared")
 
 				// full range
-				cmp(buf, uint64(minv)-uint64(minv), uint64(maxv)-uint64(minv), bits)
+				cmp(buf, uint64(0), uint64(maxv)-uint64(minv), bits)
 				// t.Logf("Full Min=%d Max=%d", minv, maxv)
 				// t.Log(hex.Dump(bits.Bytes()))
 				// t.Logf("Orig: %v", vals)

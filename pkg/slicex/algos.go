@@ -23,13 +23,14 @@ func remove[T constraints.Ordered](src, rem []T) []T {
 	var i, j, k int
 
 	for i < len(src) && j < len(rem) {
-		if src[i] < rem[j] {
+		switch {
+		case src[i] < rem[j]:
 			src[k] = src[i]
 			k++
 			i++
-		} else if src[i] > rem[j] {
+		case src[i] > rem[j]:
 			j++
-		} else {
+		default:
 			i++
 			j++
 		}

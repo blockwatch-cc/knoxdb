@@ -331,10 +331,10 @@ func (n *SNode) Query(it *Iterator) error {
 				minx, maxx := minColIndex(f.Index), maxColIndex(f.Index)
 
 				// identify missing statistics blocks and load by id (not by index)
-				if n.spack.Block(int(minx)) == nil {
+				if n.spack.Block(minx) == nil {
 					loadBlocks = append(loadBlocks, uint16(minx+1))
 				}
-				if n.spack.Block(int(maxx)) == nil {
+				if n.spack.Block(maxx) == nil {
 					loadBlocks = append(loadBlocks, uint16(maxx+1))
 				}
 

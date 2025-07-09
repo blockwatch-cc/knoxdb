@@ -268,7 +268,7 @@ func TestSegmentStateUpdates(t *testing.T) {
 	require.Equal(t, uint64(4), seg.tstate.NextRid, "nextRid")
 	require.Equal(t, uint64(1), seg.tstate.NRows, "nrows")
 	require.Equal(t, wal.LSN(42), seg.tstate.Checkpoint)
-	xid++
+	// xid++
 
 	// operator.NewLogger(os.Stdout, 8).Process(context.Background(), seg.data)
 	// t.Logf("State: %#v", seg.tstate)

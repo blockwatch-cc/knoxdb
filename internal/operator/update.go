@@ -6,16 +6,15 @@ package operator
 import (
 	"context"
 
-	"blockwatch.cc/knoxdb/internal/expr"
 	"blockwatch.cc/knoxdb/internal/pack"
 )
 
 var _ PushOperator = (*PhysicalUpdater)(nil)
 
 type PhysicalUpdater struct {
-	cols []int
-	vm   []*expr.Vm
-	err  error
+	// cols []int
+	// vm   []*expr.Vm
+	err error
 }
 
 func (op *PhysicalUpdater) Process(ctx context.Context, src *pack.Package) (*pack.Package, Result) {

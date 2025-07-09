@@ -67,7 +67,7 @@ var registry sync.Map
 // created with.
 //
 // This function is part of the store.DB interface implementation.
-func (_ *db) Type() string {
+func (*db) Type() string {
 	return dbType
 }
 
@@ -77,7 +77,7 @@ func (db *db) IsReadOnly() bool {
 
 // IsZeroCopyRead returns true if keys and values on Get and from Cursors
 // are only valid within the current transaction (or iterator step).
-func (_ *db) IsZeroCopyRead() bool {
+func (*db) IsZeroCopyRead() bool {
 	return true
 }
 
@@ -404,20 +404,20 @@ func dropDB(dbPath string) error {
 // Database maintenance functions
 
 // Export all database contents as protobuf data.
-func (_ *db) Dump(_ io.Writer) error {
+func (*db) Dump(_ io.Writer) error {
 	// not implemented
 	return nil
 }
 
 // Should be called on a database that is not running any other
 // concurrent transactions while it is running.
-func (_ *db) Restore(_ io.Reader) error {
+func (*db) Restore(_ io.Reader) error {
 	// not implemented
 	return nil
 }
 
 // Should be called on a database that is not running any concurrent tx.
-func (_ *db) GC(_ context.Context, _ float64) error {
+func (*db) GC(_ context.Context, _ float64) error {
 	// not implemented
 	return nil
 }

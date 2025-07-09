@@ -11,4 +11,4 @@ type BaseModel struct {
 	Id uint64 `knox:"id,pk"`
 }
 
-func (_ BaseModel) Key() string { return "" }
+func (BaseModel) Key() string { return "" }

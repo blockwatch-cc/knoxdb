@@ -25,12 +25,8 @@ func (e *Executor) Run(ctx context.Context) error {
 
 	var nActive = len(e.pipelines)
 
-	for {
-		// stop when all pipelines are done
-		if nActive == 0 {
-			break
-		}
-
+	// stop when all pipelines are done
+	for nActive > 0 {
 		// find the next runnable pipeline and execute it
 		for _, p := range e.pipelines {
 			if !p.IsRunnable() {

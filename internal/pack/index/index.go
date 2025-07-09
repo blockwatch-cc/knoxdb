@@ -528,7 +528,7 @@ func (idx *Index) Cleanup(ctx context.Context, epoch uint32) error {
 
 		// decode version (Note: block key uses 16bit stripped epoch version)
 		_, v, _ := pack.DecodeBlockKey(c.Key())
-		for e := uint32(v); e <= epoch&0xFFFF; e++ {
+		for e := v; e <= epoch&0xFFFF; e++ {
 			drop = append(drop, e)
 		}
 

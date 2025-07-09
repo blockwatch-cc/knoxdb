@@ -22,7 +22,10 @@ type Decoder struct {
 
 func NewDecoder(buf []uint8) (*Decoder, []byte, error) {
 	dec := &Decoder{}
-	var code, pos uint32 = 0, 17
+	var (
+		code uint32
+		pos  uint32 = 17
+	)
 	lenHisto := [8]uint8{}
 
 	version := binary.LittleEndian.Uint64(buf[3:]) // first 3 bytes is discarded

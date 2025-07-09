@@ -51,7 +51,7 @@ func TestIterate(t *testing.T) {
 
 					var (
 						buf  [128]int // alloc once and reuse
-						last int      = -1
+						last = -1
 						i    int
 					)
 					for {

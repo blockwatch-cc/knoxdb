@@ -16,10 +16,10 @@ import (
 )
 
 func (idx *Index) ViewStats(i int) *stats.Record {
-	switch {
-	case i == -1:
+	switch i {
+	case -1:
 		return stats.NewRecordFromPack(idx.journal, 0)
-	case i == -2:
+	case -2:
 		return stats.NewRecordFromPack(idx.tomb, 0)
 	default:
 		pkg, n, err := idx.loadPack(i)

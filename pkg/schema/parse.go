@@ -150,11 +150,11 @@ func (p FloatParser[T]) ParseSlice(s string) (any, error) {
 // i128 parser
 type I128Parser struct{}
 
-func (_ I128Parser) ParseValue(s string) (any, error) {
+func (I128Parser) ParseValue(s string) (any, error) {
 	return num.ParseInt128(s)
 }
 
-func (_ I128Parser) ParseSlice(s string) (any, error) {
+func (I128Parser) ParseSlice(s string) (any, error) {
 	vv := strings.Split(s, ",")
 	slice := make([]num.Int128, len(vv))
 	for i, v := range vv {
@@ -170,11 +170,11 @@ func (_ I128Parser) ParseSlice(s string) (any, error) {
 // i256 parser
 type I256Parser struct{}
 
-func (_ I256Parser) ParseValue(s string) (any, error) {
+func (I256Parser) ParseValue(s string) (any, error) {
 	return num.ParseInt256(s)
 }
 
-func (_ I256Parser) ParseSlice(s string) (any, error) {
+func (I256Parser) ParseSlice(s string) (any, error) {
 	vv := strings.Split(s, ",")
 	slice := make([]num.Int256, len(vv))
 	for i, v := range vv {
@@ -282,7 +282,7 @@ func (p D256Parser) ParseSlice(s string) (any, error) {
 // string parser
 type StringParser struct{}
 
-func (_ StringParser) ParseValue(s string) (any, error) {
+func (StringParser) ParseValue(s string) (any, error) {
 	return []byte(s), nil
 }
 
@@ -293,14 +293,14 @@ func (p StringParser) ParseSlice(s string) (any, error) {
 // bytes parser
 type BytesParser struct{}
 
-func (_ BytesParser) ParseValue(s string) (any, error) {
+func (BytesParser) ParseValue(s string) (any, error) {
 	if strings.HasPrefix(s, "0x") {
 		return hex.DecodeString(s[2:])
 	}
 	return util.UnsafeGetBytes(s), nil
 }
 
-func (_ BytesParser) ParseSlice(s string) (any, error) {
+func (BytesParser) ParseSlice(s string) (any, error) {
 	if len(s) == 0 {
 		return nil, nil
 	}
@@ -348,7 +348,7 @@ func (p TimeParser) ParseSlice(s string) (any, error) {
 // bool parser
 type BoolParser struct{}
 
-func (_ BoolParser) ParseValue(s string) (any, error) {
+func (BoolParser) ParseValue(s string) (any, error) {
 	return strconv.ParseBool(s)
 }
 
@@ -368,7 +368,7 @@ func (p BoolParser) ParseSlice(s string) (any, error) {
 // bigint parser
 type BigIntParser struct{}
 
-func (_ BigIntParser) ParseValue(s string) (any, error) {
+func (BigIntParser) ParseValue(s string) (any, error) {
 	return num.ParseBig(s)
 }
 

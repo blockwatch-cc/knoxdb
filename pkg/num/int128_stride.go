@@ -74,8 +74,8 @@ func (src *Int128Stride) AppendTo(v BigIntWriter[Int128], sel []uint32) {
 		dst.X1 = append(dst.X1, src.X1...)
 	} else {
 		for v := range sel {
-			dst.X0 = append(dst.X0, src.X0[int(v)])
-			dst.X1 = append(dst.X1, src.X1[int(v)])
+			dst.X0 = append(dst.X0, src.X0[v])
+			dst.X1 = append(dst.X1, src.X1[v])
 		}
 	}
 }

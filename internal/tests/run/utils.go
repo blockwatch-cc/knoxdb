@@ -40,7 +40,7 @@ func InitStorage(t *testing.T) (*minio.Client, error) {
 		return nil, nil
 	}
 	if s3user == "" || s3secret == "" {
-		return nil, fmt.Errorf("Missing S3 credentails, set MINIO_USER and MINIO_SECRET.")
+		return nil, fmt.Errorf("missing S3 credentails, set MINIO_USER and MINIO_SECRET")
 	}
 	s3, err := minio.New(
 		s3endpoint,

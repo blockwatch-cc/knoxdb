@@ -54,7 +54,7 @@ func NewSymbol() Symbol {
 func (s Symbol) WithCode(c uint8, code uint64) Symbol {
 	val := Val{}
 	val.SetUint64(uint64(c))
-	s.icl = uint64((1 << 28) | (code << 16) | 56)
+	s.icl = (1 << 28) | (code << 16) | 56
 	s.val = val
 	return s
 }

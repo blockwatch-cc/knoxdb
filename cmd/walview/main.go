@@ -71,7 +71,7 @@ func run() (err error) {
 			case error:
 				err = x
 			default:
-				err = errors.New("Unknown panic")
+				err = errors.New("unknown panic")
 			}
 		}
 	}()
@@ -135,7 +135,7 @@ func run() (err error) {
 			"0x" + strconv.FormatUint(uint64(rec.Lsn), 16),
 			rec.Type,
 			rec.Tag,
-			strconv.FormatUint(rec.TxID, 10),
+			strconv.FormatUint(uint64(rec.TxID), 10),
 			"0x" + strconv.FormatUint(rec.Entity, 16),
 			LimitHexEllipsis(rec.Data, 64),
 		})

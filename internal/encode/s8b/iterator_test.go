@@ -4,7 +4,6 @@
 package s8b
 
 import (
-	"fmt"
 	"slices"
 	"testing"
 
@@ -15,7 +14,7 @@ import (
 
 func TestIterator(t *testing.T) {
 	for _, c := range stests.MakeTests[uint64]() {
-		t.Run(fmt.Sprintf("%s", c.Name), func(t *testing.T) {
+		t.Run(c.Name, func(t *testing.T) {
 			if c.Err {
 				t.Skip()
 			}
@@ -119,11 +118,11 @@ func TestIterator(t *testing.T) {
 
 			require.False(t, it.Seek(len(src)), "seek to end")
 			_, ok = it.Next()
-			require.False(t, it.Seek(len(src)), "seek to end")
+			require.False(t, ok, "next after seek to end")
 
 			require.False(t, it.Seek(len(src)+1), "seek beyond end")
 			_, ok = it.Next()
-			require.False(t, it.Seek(len(src)), "seek to end")
+			require.False(t, ok, "next after seek beyond end")
 
 			it.Close()
 		})

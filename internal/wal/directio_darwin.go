@@ -26,7 +26,7 @@ func OpenFile(name string, flag int, perm os.FileMode) (file *os.File, err error
 	//              data caching on.
 	_, _, errNo := syscall.Syscall(syscall.SYS_FCNTL, file.Fd(), syscall.F_NOCACHE, 1)
 	if errNo != 0 {
-		err = fmt.Errorf("Failed to enable direct i/o: %v", err)
+		err = fmt.Errorf("failed to enable direct i/o: %v", err)
 		file.Close()
 		file = nil
 	}

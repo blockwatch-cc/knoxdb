@@ -407,8 +407,8 @@ func (c *DictionaryContainer[T]) translateSet(s any) (any, uint16, bool) {
 	// In an attempt to be efficient we only allocate a new bitset if
 	// we have found more than one set value in the dict.
 	var (
-		l            int = c.Dict.Len()
-		first, last  T   = c.Dict.Get(0), c.Dict.Get(l - 1)
+		l            = c.Dict.Len()
+		first, last  = c.Dict.Get(0), c.Dict.Get(l - 1)
 		firstCode    uint16
 		hasFirstCode bool
 		cset         *xroar.Bitmap
@@ -431,10 +431,10 @@ next:
 
 		// find position of val using binary search (dict is sorted and values are unique)
 		var idx int
-		switch {
-		case val == first:
+		switch val {
+		case first:
 			idx = 0
-		case val == last:
+		case last:
 			idx = l - 1
 		default:
 			idx = sort.Search(l, func(i int) bool {

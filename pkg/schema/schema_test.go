@@ -100,7 +100,7 @@ type ModelName struct {
 	BaseModel // defines id as pk
 }
 
-func (_ ModelName) Key() string { return "model_name" }
+func (ModelName) Key() string { return "model_name" }
 
 type NoModelPrivate struct {
 	NoModelTagName         // anon embed will promote fields
@@ -163,7 +163,7 @@ func NewAllTypes(i int64) AllTypes {
 		Array:   [2]byte{byte(i >> 8 & 0xf), byte(i & 0xf)},
 		String:  util.U64Hex(uint64(i)),
 		MyEnum:  MyEnum("a"),
-		Big:     num.NewBig(int64(i)),
+		Big:     num.NewBig(i),
 	}
 }
 
@@ -231,11 +231,11 @@ type NoMarshalerSliceTypes struct {
 
 type MapType map[int]int
 
-func (_ MapType) MarshalBinary() ([]byte, error) {
+func (MapType) MarshalBinary() ([]byte, error) {
 	return []byte{}, nil
 }
 
-func (_ *MapType) UnmarshalBinary(_ []byte) error {
+func (*MapType) UnmarshalBinary(_ []byte) error {
 	return nil
 }
 

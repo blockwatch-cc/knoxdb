@@ -253,7 +253,7 @@ func (it *Iterator) combinedRange(b store.Bucket, key, ver uint32, n *filter.Nod
 
 		// load min value for this column
 		minx := minColIndex(n.Filter.Index)
-		minv := it.snode.spack.Block(int(minx)).Get(int(it.match[it.n]))
+		minv := it.snode.spack.Block(minx).Get(int(it.match[it.n]))
 
 		return idx.Query(n.Filter, minv, nRows)
 	}

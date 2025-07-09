@@ -101,7 +101,6 @@ func compare(src []byte, val uint64, bits *bitset.Bitset, cmp [16]cmpFunc, neg b
 	}
 
 	bits.ResetCount(-1)
-	return
 }
 
 func compare2(src []byte, val, val2 uint64, bits *bitset.Bitset, cmp [16]cmpFunc2) {

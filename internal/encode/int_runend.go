@@ -444,9 +444,8 @@ var runEndFactory = RunEndFactory{
 
 type RunEndIterator[T types.Integer] struct {
 	BaseIterator[T]
-	valIt  types.NumberIterator[T]
-	endIt  types.NumberIterator[uint32]
-	window [2]uint32
+	valIt types.NumberIterator[T]
+	endIt types.NumberIterator[uint32]
 }
 
 func NewRunEndIterator[T types.Integer](c *RunEndContainer[T]) *RunEndIterator[T] {

@@ -83,7 +83,7 @@ func CreateXXHash32Uint32TestCase(name string, input [][]byte, result []uint32, 
 	// create new slice by concat of given slice
 	// we make it a little bit longer check buffer overruns
 	var new_slice []uint32
-	var l int = length
+	l := length
 	for l > 0 {
 		new_slice = append(new_slice, slice...)
 		l -= len(slice)
@@ -124,7 +124,7 @@ func CreateXXHash32Int32TestCase(name string, input [][]byte, result []uint32, l
 	// create new slice by concat of given slice
 	// we make it a little bit longer check buffer overruns
 	var new_slice []int32
-	var l int = length
+	l := length
 	for l > 0 {
 		new_slice = append(new_slice, slice...)
 		l -= len(slice)
@@ -165,7 +165,7 @@ func CreateXXHash32Uint64TestCase(name string, input [][]byte, result []uint32, 
 	// create new slice by concat of given slice
 	// we make it a little bit longer check buffer overruns
 	var new_slice []uint64
-	var l int = length
+	l := length
 	for l > 0 {
 		new_slice = append(new_slice, slice...)
 		l -= len(slice)
@@ -206,7 +206,7 @@ func CreateXXHash32Int64TestCase(name string, input [][]byte, result []uint32, l
 	// create new slice by concat of given slice
 	// we make it a little bit longer check buffer overruns
 	var new_slice []int64
-	var l int = length
+	l := length
 	for l > 0 {
 		new_slice = append(new_slice, slice...)
 		l -= len(slice)

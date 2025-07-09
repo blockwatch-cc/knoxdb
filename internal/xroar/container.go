@@ -21,8 +21,6 @@ import (
 	"math"
 	"math/bits"
 	"strings"
-
-	"blockwatch.cc/knoxdb/internal/bitset"
 )
 
 // container uses extra 4 []uint16 in the front as header.
@@ -126,14 +124,14 @@ func (c array) find(x uint16) int {
 	return N
 }
 
-func (c array) rank(x uint16) int {
-	N := getCardinality(c)
-	idx := c.find(x)
-	if idx == N {
-		return -1
-	}
-	return idx
-}
+// func (c array) rank(x uint16) int {
+// 	N := getCardinality(c)
+// 	idx := c.find(x)
+// 	if idx == N {
+// 		return -1
+// 	}
+// 	return idx
+// }
 
 func (c array) has(x uint16) bool {
 	N := getCardinality(c)
@@ -446,21 +444,21 @@ func (b bitmap) has(x uint16) bool {
 	return has > 0
 }
 
-func (b bitmap) rank(x uint16) int {
-	idx := x >> 4
-	pos := x & 0xF
-	if b[startIdx+idx]&bitmapMask[pos] == 0 {
-		return -1
-	}
+// func (b bitmap) rank(x uint16) int {
+// 	idx := x >> 4
+// 	pos := x & 0xF
+// 	if b[startIdx+idx]&bitmapMask[pos] == 0 {
+// 		return -1
+// 	}
 
-	rank := bitset.NewFromBytes(toByteSlice(b[int(startIdx):int(startIdx+idx)]), 0).Count()
-	for p := uint16(0); p <= pos; p++ {
-		if b[startIdx+idx]&bitmapMask[p] > 0 {
-			rank++
-		}
-	}
-	return rank - 1
-}
+// 	rank := bitset.NewFromBytes(toByteSlice(b[int(startIdx):int(startIdx+idx)]), 0).Count()
+// 	for p := uint16(0); p <= pos; p++ {
+// 		if b[startIdx+idx]&bitmapMask[p] > 0 {
+// 			rank++
+// 		}
+// 	}
+// 	return rank - 1
+// }
 
 // TODO: This can perhaps be using SIMD instructions.
 func (b bitmap) andBitmap(other bitmap, out []uint16) []uint16 {

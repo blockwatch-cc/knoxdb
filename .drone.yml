@@ -48,7 +48,7 @@ steps:
       - name: cache
         path: /go
     commands:
-      - go vet $(go list ./... | grep -v /internal/cmp/avx | grep -v internal/tests/wasm/vfs | grep -v internal/filter | grep -v internal/hash | grep -v internal/s8b | grep -v internal/bitset )
+      - go vet $(go list ./... | grep -v /internal/cmp/avx | grep -v internal/tests/wasm/vfs | grep -v internal/filter/llb | grep -v internal/hash/xxhash | grep -v internal/encode/s8b/avx2 )
 
   - name: unit
     image: golang:1.24-alpine

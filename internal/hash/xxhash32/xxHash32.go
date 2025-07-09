@@ -259,9 +259,9 @@ func Checksum2(input []byte, seed0, seed1 uint32) (uint32, uint32) {
 func r4(p unsafe.Pointer) uint32 {
 	q := (*[4]byte)(p)
 	if cpu.IsBigEndian {
-		return uint32(uint32(q[3]) | uint32(q[2])<<8 | uint32(q[1])<<16 | uint32(q[0])<<24)
+		return uint32(q[3]) | uint32(q[2])<<8 | uint32(q[1])<<16 | uint32(q[0])<<24
 	} else {
-		return uint32(uint32(q[0]) | uint32(q[1])<<8 | uint32(q[2])<<16 | uint32(q[3])<<24)
+		return uint32(q[0]) | uint32(q[1])<<8 | uint32(q[2])<<16 | uint32(q[3])<<24
 	}
 }
 

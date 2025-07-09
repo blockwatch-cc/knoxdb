@@ -18,7 +18,6 @@ package xroar
 
 import (
 	"log"
-	"math"
 	"unsafe"
 
 	"github.com/pkg/errors"
@@ -31,12 +30,12 @@ func assert(b bool) {
 }
 
 // Returns sum of a and b. If the result overflows uint64, it returns math.MaxUint64.
-func addUint64(a, b uint64) uint64 {
-	if a > math.MaxUint64-b {
-		return math.MaxUint64
-	}
-	return a + b
-}
+// func addUint64(a, b uint64) uint64 {
+// 	if a > math.MaxUint64-b {
+// 		return math.MaxUint64
+// 	}
+// 	return a + b
+// }
 
 func toByteSlice(b []uint16) []byte {
 	return unsafe.Slice((*byte)(unsafe.Pointer(unsafe.SliceData(b))), len(b)*2)

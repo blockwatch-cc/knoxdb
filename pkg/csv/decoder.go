@@ -427,10 +427,7 @@ func (d *Decoder) decode(base unsafe.Pointer, line []string) error {
 
 		case types.FieldTypeBytes:
 			// decode hex to binary
-			s := line[i]
-			if strings.HasPrefix(s, "0x") {
-				s = s[2:]
-			}
+			s := strings.TrimPrefix(line[i], "0x")
 			if f.Fixed > 0 {
 				if len(s) != int(f.Fixed)*2 {
 					return &DecodeError{d.r.lineNo, i, f.Name,

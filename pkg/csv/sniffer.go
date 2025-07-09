@@ -29,7 +29,6 @@ var (
 	delims = ",;|\t"
 	NULL   = "null"
 	null   = []byte(NULL)
-	zerox  = []byte("0x")
 	nan1   = []byte("nan")
 	nan2   = []byte("NaN")
 	inf1   = []byte("inf")
@@ -61,7 +60,6 @@ type Sniffer struct {
 	res      SnifferResult       // result
 	buf      []byte              // reusable scan buffer
 	cnt      map[rune][2]int     // separator min/max counts
-	s        *schema.Schema      // constructed schema
 	head     []string            // header/field names (if present)
 	fields   []field             // detected field properties
 	userTime string              // user-defined time format (optional)
@@ -201,7 +199,7 @@ func (s *Sniffer) analyzeLines() {
 		var (
 			buf = line
 			tok []byte
-			ok  bool = true
+			ok  = true
 		)
 		if haveQuotes {
 			// be careful with quoted fields
@@ -508,7 +506,8 @@ func (f *field) update(buf []byte, tfm, dfm string) {
 		}
 		f.flag |= fOther
 	default:
-		if c >= '0' && c <= '9' {
+		switch {
+		case c >= '0' && c <= '9':
 			if len(buf) > 1 && buf[1] == 'x' {
 				f.flag |= fZerox
 				buf = buf[1:]
@@ -516,9 +515,9 @@ func (f *field) update(buf []byte, tfm, dfm string) {
 			} else {
 				f.flag |= fNum
 			}
-		} else if (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') {
+		case (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'):
 			f.flag |= fHex
-		} else {
+		default:
 			f.flag |= fOther
 		}
 	}
@@ -550,11 +549,12 @@ func (f *field) update(buf []byte, tfm, dfm string) {
 			}
 			f.flag |= fOther
 		default:
-			if c >= '0' && c <= '9' {
+			switch {
+			case c >= '0' && c <= '9':
 				f.flag |= fDecimal
-			} else if (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') {
+			case (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'):
 				f.flag |= fHex
-			} else {
+			default:
 				f.flag |= fOther
 			}
 		}

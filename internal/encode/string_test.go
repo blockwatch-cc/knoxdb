@@ -125,7 +125,7 @@ func testStringContainer(t *testing.T, scheme ContainerType) {
 
 func testStringEncode(t *testing.T, scheme ContainerType) {
 	for _, c := range MakeShortStringTests(scheme) {
-		t.Run(fmt.Sprintf("%s", c.Name), func(t *testing.T) {
+		t.Run(c.Name, func(t *testing.T) {
 			enc := NewString(scheme)
 
 			// analyze and encode data into container
@@ -286,12 +286,12 @@ func testStringCompareFunc2(t *testing.T, cmp StringCompareFunc2, src *stringx.S
 	bits.Zero()
 
 	// partial range
-	if src.Len() > 3 {
-		from, to := src.Get(2), src.Get(3)
-		if bytes.Compare(from, to) > 0 {
-			from, to = to, from
-		}
-	}
+	// if src.Len() > 3 {
+	// 	from, to := src.Get(2), src.Get(3)
+	// 	if bytes.Compare(from, to) > 0 {
+	// 		from, to = to, from
+	// 	}
+	// }
 
 	// out of bounds (over)
 	over := append([]byte{'z'}, maxv...)
@@ -345,7 +345,6 @@ func EnsureStringBits(t *testing.T, vals *stringx.StringPool, val, val2 []byte, 
 	if etests.ShowValues {
 		for i, v := range vals.Iterator() {
 			t.Logf("Val %d: %v", i, v)
-			i++
 		}
 		t.Logf("Bitset %x", bits.Bytes())
 	}

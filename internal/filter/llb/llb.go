@@ -25,8 +25,8 @@ func beta(ez float64) float64 {
 	zl := math.Log(ez + 1)
 	return -0.370393911*ez +
 		0.070471823*zl +
-		0.17393686*math.Pow(zl, 2) +
-		0.16339839*math.Pow(zl, 3) +
+		0.17393686*zl*zl +
+		0.16339839*zl*zl*zl +
 		-0.09237745*math.Pow(zl, 4) +
 		0.03738027*math.Pow(zl, 5) +
 		-0.005384159*math.Pow(zl, 6) +

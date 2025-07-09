@@ -153,7 +153,6 @@ func (c *FloatRunEndContainer[T]) AppendTo(dst []T, sel []uint32) []T {
 				dst[i] = val
 				i++
 			}
-			k++
 		}
 		arena.Free(ends)
 		arena.Free(vals)
