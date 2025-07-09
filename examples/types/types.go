@@ -204,7 +204,7 @@ func run() error {
 		// WithDebug(true).
 		Execute(ctx, &single)
 	if err != nil {
-		return fmt.Errorf("Single: %v", err)
+		return fmt.Errorf("single: %v", err)
 	}
 	log.Infof("Single value int64=%d pk=%d", single.Int64, single.Id)
 
@@ -218,7 +218,7 @@ func run() error {
 		// WithDebug(true).
 		Execute(ctx, &multi)
 	if err != nil {
-		return fmt.Errorf("Multi: %v", err)
+		return fmt.Errorf("multi: %v", err)
 	}
 	log.Infof("%d Multi values", len(multi))
 	// for i, v := range multi {

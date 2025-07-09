@@ -35,8 +35,10 @@ func DecodeUint8(dst []uint8, src []byte, minv uint8) (int, error) {
 		return 0, generic.ErrInvalidBufferLength
 	}
 
-	var max_pos int = pos
-	var num_val int
+	var (
+		max_pos = pos
+		num_val int
+	)
 	pos -= 8
 	for pos >= 0 && num_val < 6 {
 		v := binary.LittleEndian.Uint64(src[pos:])
@@ -61,8 +63,10 @@ func DecodeUint16(dst []uint16, src []byte, minv uint16) (int, error) {
 		return 0, generic.ErrInvalidBufferLength
 	}
 
-	var max_pos int = pos
-	var num_val int
+	var (
+		max_pos = pos
+		num_val int
+	)
 	pos -= 8
 	for pos >= 0 && num_val < 6 {
 		v := binary.LittleEndian.Uint64(src[pos:])
@@ -87,8 +91,10 @@ func DecodeUint32(dst []uint32, src []byte, minv uint32) (int, error) {
 		return 0, generic.ErrInvalidBufferLength
 	}
 
-	var max_pos int = pos
-	var num_val int
+	var (
+		max_pos = pos
+		num_val int
+	)
 	pos -= 8
 	for pos >= 0 && num_val < 3 {
 		v := binary.LittleEndian.Uint64(src[pos:])

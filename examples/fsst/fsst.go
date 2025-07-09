@@ -52,7 +52,7 @@ func run() error {
 	log.Infof("Loading file %s for fsst compression", path)
 
 	lvl := log.LevelInfo
-	switch true {
+	switch {
 	case trace:
 		lvl = log.LevelTrace
 	case debug:

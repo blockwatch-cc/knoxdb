@@ -4,6 +4,7 @@
 //go:build amd64 && !gccgo && !appengine
 // +build amd64,!gccgo,!appengine
 
+// nolint
 package avx512
 
 import (
