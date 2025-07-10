@@ -12,6 +12,8 @@ import (
 const (
 	// OSX doesn't need any alignment
 	alignSize = 0
+
+	O_DIRECT = 0
 )
 
 func OpenFile(name string, flag int, perm os.FileMode) (file *os.File, err error) {
@@ -32,4 +34,8 @@ func OpenFile(name string, flag int, perm os.FileMode) (file *os.File, err error
 	}
 
 	return
+}
+
+func setDirectIO(_ uintptr, _ bool) error {
+	return nil
 }

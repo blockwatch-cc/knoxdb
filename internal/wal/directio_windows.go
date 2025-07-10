@@ -16,6 +16,8 @@ const (
 	// Extra flags for windows
 	FILE_FLAG_NO_BUFFERING  = 0x20000000
 	FILE_FLAG_WRITE_THROUGH = 0x80000000
+
+	O_DIRECT = 0
 )
 
 // utf16FromString returns the UTF-16 encoding of the UTF-8 string
@@ -87,4 +89,8 @@ func OpenFile(path string, mode int, perm os.FileMode) (file *os.File, err error
 		return nil, &os.PathError{Op: "open", Path: path, Err: e}
 	}
 	return os.NewFile(uintptr(h), path), nil
+}
+
+func setDirectIO(_ uintptr, _ bool) error {
+	return nil
 }

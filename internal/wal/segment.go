@@ -20,8 +20,8 @@ const (
 )
 
 var (
-	createFlags = os.O_CREATE | os.O_EXCL | os.O_WRONLY | os.O_APPEND
-	writeFlags  = os.O_WRONLY | os.O_APPEND
+	createFlags = os.O_CREATE | os.O_EXCL | os.O_WRONLY | os.O_APPEND | O_DIRECT
+	writeFlags  = os.O_WRONLY | os.O_APPEND | O_DIRECT
 	readFlags   = os.O_RDONLY
 )
 
@@ -183,8 +183,37 @@ func (s *segment) Write(buf []byte) (int, error) {
 	if s.Cap() < len(buf) {
 		return 0, ErrSegmentOverflow
 	}
-	n, err := s.fd.Write(buf)
+
+	var (
+		n   int
+		err error
+	)
+	if isAligned(buf) && isAlignedLen(len(buf)) {
+		n, err = s.fd.Write(buf)
+	} else {
+		n, err = s.writeUnaligned(buf)
+	}
+
 	s.sz += n
+	return n, err
+}
+
+func (s *segment) writeUnaligned(buf []byte) (int, error) {
+	// Disable direct IO
+	err := setDirectIO(s.fd.Fd(), false)
+	if err != nil {
+		return 0, err
+	}
+
+	// write unaligned
+	n, err := s.fd.Write(buf)
+	if err != nil {
+		return n, err
+	}
+
+	// Enable direct IO back
+	err = setDirectIO(s.fd.Fd(), true)
+
 	return n, err
 }
 

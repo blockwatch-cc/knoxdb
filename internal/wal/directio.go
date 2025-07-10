@@ -24,6 +24,10 @@ func isAligned(block []byte) bool {
 	return alignment(block, alignSize) == 0
 }
 
+func isAlignedLen(l int) bool {
+	return l&(alignSize-1) == 0
+}
+
 // makeAligned returns []byte of size sz aligned to a multiple
 // of alignSize in memory (must be power of two)
 func makeAligned(sz int) []byte {
