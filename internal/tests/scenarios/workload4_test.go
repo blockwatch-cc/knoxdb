@@ -43,7 +43,6 @@ type UnifiedRow struct {
 }
 
 func TestWorkload4(t *testing.T) {
-	t.Setenv("KNOX_DRIVER", "mem")
 	// Setup the unified database
 	eng, cleanup := tests.NewDatabase(t, &UnifiedRow{})
 	t.Cleanup(func() {

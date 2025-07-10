@@ -25,7 +25,6 @@ type Ledger struct {
 }
 
 func TestWorkload3(t *testing.T) {
-	t.Setenv("KNOX_DRIVER", "mem")
 	eng, cleanup := tests.NewDatabase(t, &Ledger{})
 	t.Cleanup(func() {
 		cleanup()

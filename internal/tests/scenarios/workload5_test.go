@@ -48,7 +48,7 @@ func (c command) String() string {
 }
 
 const (
-	numCommands = 16 // 2048
+	numCommands = 2048
 	maxProcs    = 32
 	tableName   = "all_types"
 )
@@ -78,7 +78,7 @@ var (
 		query:    0.25,
 		stream:   0.25,
 		fsync:    0.02,
-		compact:  0.001,
+		compact:  0.0001,
 		snapshot: 0.0001,
 		restart:  0.01,
 		crash:    0.01,
@@ -163,7 +163,6 @@ func TestWorkload5(t *testing.T) {
 	// rand usage in other testcases does not impact the random selection here)
 	t.Logf("Random seed 0x%016x", seed)
 	util.RandInit(seed)
-	t.Setenv("KNOX_DRIVER", "mem")
 
 	// create new database and table
 	db := &dbProvider{}
@@ -254,7 +253,7 @@ func TestWorkload5(t *testing.T) {
 					return wrapErr(err)
 				}
 				atomic.AddInt64(&numTuples, 1)
-				t.Logf("%04d [%s] %d", i, cmd, pk)
+				t.Logf("%04d [%s] %d[%d]", i, cmd, pk, table.Engine().State().NextRid-1)
 				cmdCh <- cmd
 				return nil
 			})
@@ -268,7 +267,7 @@ func TestWorkload5(t *testing.T) {
 
 				// pick a random id (may not exist due to delete)
 				id := util.RandUint64n(uint64(atomic.LoadInt64(&numTuples)) + 1)
-				t.Logf("%04d [%s] %d", i, cmd, id)
+				t.Logf("%04d [%s] %d[%d]", i, cmd, id, table.Engine().State().NextRid)
 
 				// load record if exists
 				var val testType

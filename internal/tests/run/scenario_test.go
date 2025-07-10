@@ -71,6 +71,7 @@ func runTestInWasm(t *testing.T, dirPath string, w io.Writer) error {
 	cmdRuntime.Stderr = w
 	cmdRuntime.Stdout = w
 	t.Log(cmdRuntime)
+	cmdRuntime.Env = append(cmdRuntime.Environ(), "KNOX_DRIVER=mem")
 	return cmdRuntime.Run()
 }
 

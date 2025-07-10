@@ -18,7 +18,6 @@ import (
 )
 
 func TestWorkload1(t *testing.T) {
-	t.Setenv("KNOX_DRIVER", "mem")
 	eng, cleanup := tests.NewDatabase(t, &tests.Types{})
 	t.Cleanup(func() {
 		cleanup()
