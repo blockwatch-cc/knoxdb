@@ -77,11 +77,11 @@ func EncodeTest[T types.Integer](t *testing.T, enc EncodeFunc[T], dec DecodeFunc
 				n, err := dec(dst, buf, log2, minv)
 				require.NoError(t, err)
 
-				if !testing.Short() {
-					for i, v := range dst {
-						t.Logf("Val %s=%x unpacked %x %s", Chars.Get(i), src[i], v, WarnSym[src[i] == v])
-					}
-				}
+				// if !testing.Short() {
+				// 	for i, v := range dst {
+				// 		t.Logf("Val %s=%x unpacked %x %s", Chars.Get(i), src[i], v, WarnSym[src[i] == v])
+				// 	}
+				// }
 
 				if len(src) > 0 {
 					require.Equal(t, src, dst[:n])
