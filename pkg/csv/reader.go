@@ -285,7 +285,7 @@ func (r *Reader) SplitLine(line []byte) ([]string, error) {
 	if len(line) > 0 {
 		// log.Warn(string(src))
 		return nil, &DecodeError{
-			r.lineNo, 0,
+			r.lineNo, 0, "",
 			fmt.Sprintf("line contains more fields than expected (%d/%d)",
 				n+bytes.Count(line, sep)+1, r.numFields),
 			ErrParse,
@@ -296,7 +296,7 @@ func (r *Reader) SplitLine(line []byte) ([]string, error) {
 	if n < r.numFields {
 		// log.Warn(string(src))
 		return nil, &DecodeError{
-			r.lineNo, 0,
+			r.lineNo, 0, "",
 			fmt.Sprintf("line contains less fields than expected (%d/%d)", n, r.numFields),
 			ErrParse,
 		}

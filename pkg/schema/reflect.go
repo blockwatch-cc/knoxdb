@@ -208,7 +208,7 @@ func (s *Schema) StructType() reflect.Type {
 		if f.IsEnum() {
 			tag += ",enum"
 		}
-		if f.IsFixedSize() {
+		if f.IsFixedSize() && f.fixed > 0 {
 			tag += fmt.Sprintf(",fixed=%d", f.fixed)
 		}
 		if f.IsIndexed() {
@@ -218,7 +218,7 @@ func (s *Schema) StructType() reflect.Type {
 			if f.index == types.IndexTypeBloom {
 				tag += ":"
 			} else {
-				tag += strconv.Itoa(int(f.scale))
+				tag += fmt.Sprintf(",scale=%d", f.scale)
 			}
 		}
 		if f.IsCompressed() {

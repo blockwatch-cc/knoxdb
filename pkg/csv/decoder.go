@@ -14,6 +14,7 @@ import (
 	"time"
 	"unsafe"
 
+	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/schema"
@@ -38,6 +39,7 @@ type Decoder struct {
 	dateAs string    // date format override (optional)
 	timeAs string    // timestamp format override (optional)
 	buf    []byte    // user provided scan buffer
+	decode func(unsafe.Pointer, []string) error
 }
 
 type DecoderFlags byte
@@ -45,27 +47,39 @@ type DecoderFlags byte
 const (
 	DecoderFlagStrictSchema DecoderFlags = 1 << iota
 	DecoderFlagReadHeader                // read and check header fields against schema
+	DecoderFlagLogicalType               // output logical data types (num.Decimal, time.Time)
 )
 
 func NewDecoder(s *schema.Schema, r io.Reader) *Decoder {
-	typ := s.NativeStructType()
+	return &Decoder{
+		r:      NewReader(r, s.NumVisibleFields()),
+		s:      s,
+		flags:  DecoderFlagStrictSchema | DecoderFlagReadHeader,
+		dateAs: time.DateOnly,    // 2006-01-02
+		timeAs: time.RFC3339Nano, // 2006-01-02T15:04:05.999999999Z07:00
+	}
+}
+
+func (d *Decoder) initType() {
+	if d.typ != nil {
+		return
+	}
+	if d.flags&DecoderFlagLogicalType > 0 {
+		d.typ = d.s.StructType()
+		d.decode = d.decodeLogical
+	} else {
+		d.typ = d.s.NativeStructType()
+		d.decode = d.decodePhysical
+	}
 	var nStringFields int
-	for _, f := range s.Exported() {
+	for _, f := range d.s.Exported() {
 		switch f.Type {
 		case types.FieldTypeString, types.FieldTypeBytes:
 			nStringFields++
 		}
 	}
-	return &Decoder{
-		r:      NewReader(r, s.NumVisibleFields()),
-		s:      s,
-		flags:  DecoderFlagStrictSchema | DecoderFlagReadHeader,
-		typ:    typ,
-		pool:   stringx.NewStringPool(nStringFields * 1024),
-		ofs:    structFieldOffsets(typ),
-		dateAs: time.DateOnly,    // 2006-01-02
-		timeAs: time.RFC3339Nano, // 2006-01-02T15:04:05.999999999Z07:00
-	}
+	d.pool = stringx.NewStringPool(nStringFields * 1024)
+	d.ofs = structFieldOffsets(d.typ)
 }
 
 func structFieldOffsets(typ reflect.Type) []uintptr {
@@ -116,6 +130,15 @@ func (d *Decoder) WithStrictSchema(t bool) *Decoder {
 		d.flags |= DecoderFlagStrictSchema
 	} else {
 		d.flags &^= DecoderFlagStrictSchema
+	}
+	return d
+}
+
+func (d *Decoder) WithLogicalType(t bool) *Decoder {
+	if t {
+		d.flags |= DecoderFlagLogicalType
+	} else {
+		d.flags &^= DecoderFlagLogicalType
 	}
 	return d
 }
@@ -193,6 +216,9 @@ func (d *Decoder) Decode() (any, error) {
 		}
 	}
 
+	// init type (only on first call)
+	d.initType()
+
 	// create new struct
 	rval := reflect.New(d.typ)
 
@@ -217,6 +243,9 @@ func (d *Decoder) DecodeSlice(v []any) (int, error) {
 		return 0, ErrEmptySlice
 	}
 	v = v[:cap(v)]
+
+	// init type (only on first call)
+	d.initType()
 
 	// reset string pool
 	d.pool.Clear()
@@ -268,6 +297,57 @@ func (d *Decoder) DecodeSlice(v []any) (int, error) {
 	return n, nil
 }
 
+// Decodes multiple records up until pack capacity into pack format.
+// Pack and decoder schema must match.
+func (d *Decoder) DecodePack(pkg *pack.Package) (int, error) {
+	// check pack schema
+	if pkg.Schema().Hash() != d.s.Hash() {
+		return 0, schema.ErrSchemaMismatch
+	}
+	pkg.Clear()
+	defer pkg.UpdateLen()
+
+	// decode
+	var (
+		n int
+		c = pkg.FreeSpace()
+	)
+	for n < c {
+		// read line
+		line, err := d.r.Read()
+		if err != nil && err != io.EOF {
+			return n, err
+		}
+
+		// stop at EOF
+		if line == nil {
+			break
+		}
+
+		// read and validate header if requested
+		if d.flags&DecoderFlagReadHeader > 0 {
+			// validate schema fields
+			if err := d.validateHeader(line); err != nil {
+				return 0, err
+			}
+
+			// reset
+			d.flags &^= DecoderFlagReadHeader
+
+			// read another line
+			continue
+		}
+
+		// decode fields and append to pack blocks
+		err = d.decodePack(pkg, line)
+		if err != nil {
+			return n, err
+		}
+		n++
+	}
+	return n, nil
+}
+
 func (d *Decoder) validateHeader(line []string) error {
 	if d.flags&DecoderFlagStrictSchema == 0 {
 		return nil
@@ -289,7 +369,7 @@ func (d *Decoder) validateHeader(line []string) error {
 	return nil
 }
 
-func (d *Decoder) decode(base unsafe.Pointer, line []string) error {
+func (d *Decoder) decodePhysical(base unsafe.Pointer, line []string) error {
 	var i int
 	for _, f := range d.s.Exported() {
 		if !f.IsVisible {
@@ -305,13 +385,13 @@ func (d *Decoder) decode(base unsafe.Pointer, line []string) error {
 			if d.timeAs == "" {
 				tm, err := schema.TimeScale(f.Scale).Parse(line[i], false)
 				if err != nil {
-					return &DecodeError{d.r.lineNo, i, f.Name, err}
+					return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
 				}
 				*(*int64)(ptr) = tm
 			} else {
 				tm, err := time.Parse(d.timeAs, line[i])
 				if err != nil {
-					return &DecodeError{d.r.lineNo, i, f.Name, err}
+					return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
 				}
 				*(*int64)(ptr) = schema.TimeScale(f.Scale).ToUnix(tm)
 			}
@@ -319,13 +399,13 @@ func (d *Decoder) decode(base unsafe.Pointer, line []string) error {
 			if d.dateAs == "" {
 				tm, err := schema.TimeScale(f.Scale).Parse(line[i], false)
 				if err != nil {
-					return &DecodeError{d.r.lineNo, i, f.Name, err}
+					return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
 				}
 				*(*int64)(ptr) = tm
 			} else {
 				tm, err := time.Parse(d.dateAs, line[i])
 				if err != nil {
-					return &DecodeError{d.r.lineNo, i, f.Name, err}
+					return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
 				}
 				*(*int64)(ptr) = schema.TimeScale(f.Scale).ToUnix(tm)
 			}
@@ -333,89 +413,89 @@ func (d *Decoder) decode(base unsafe.Pointer, line []string) error {
 			if d.timeAs == "" {
 				tm, err := schema.TimeScale(f.Scale).Parse(line[i], true)
 				if err != nil {
-					return &DecodeError{d.r.lineNo, i, f.Name, err}
+					return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
 				}
 				*(*int64)(ptr) = tm
 			} else {
 				tm, err := time.Parse(d.timeAs, line[i])
 				if err != nil {
-					return &DecodeError{d.r.lineNo, i, f.Name, err}
+					return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
 				}
 				*(*int64)(ptr) = schema.TimeScale(f.Scale).ToUnix(tm)
 			}
 		case types.FieldTypeInt64:
 			val, err := strconv.ParseInt(line[i], 10, 64)
 			if err != nil {
-				return &DecodeError{d.r.lineNo, i, f.Name, err}
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
 			}
 			*(*int64)(ptr) = val
 		case types.FieldTypeInt32:
 			val, err := strconv.ParseInt(line[i], 10, 32)
 			if err != nil {
-				return &DecodeError{d.r.lineNo, i, f.Name, err}
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
 			}
 			*(*int32)(ptr) = int32(val)
 
 		case types.FieldTypeInt16:
 			val, err := strconv.ParseInt(line[i], 10, 16)
 			if err != nil {
-				return &DecodeError{d.r.lineNo, i, f.Name, err}
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
 			}
 			*(*int16)(ptr) = int16(val)
 
 		case types.FieldTypeInt8:
 			val, err := strconv.ParseInt(line[i], 10, 8)
 			if err != nil {
-				return &DecodeError{d.r.lineNo, i, f.Name, err}
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
 			}
 			*(*int8)(ptr) = int8(val)
 
 		case types.FieldTypeUint64:
 			val, err := strconv.ParseUint(line[i], 10, 64)
 			if err != nil {
-				return &DecodeError{d.r.lineNo, i, f.Name, err}
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
 			}
 			*(*uint64)(ptr) = val
 
 		case types.FieldTypeUint32:
 			val, err := strconv.ParseUint(line[i], 10, 32)
 			if err != nil {
-				return &DecodeError{d.r.lineNo, i, f.Name, err}
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
 			}
 			*(*uint32)(ptr) = uint32(val)
 
 		case types.FieldTypeUint16:
 			val, err := strconv.ParseUint(line[i], 10, 16)
 			if err != nil {
-				return &DecodeError{d.r.lineNo, i, f.Name, err}
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
 			}
 			*(*uint16)(ptr) = uint16(val)
 
 		case types.FieldTypeUint8:
 			val, err := strconv.ParseUint(line[i], 10, 8)
 			if err != nil {
-				return &DecodeError{d.r.lineNo, i, f.Name, err}
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
 			}
 			*(*uint8)(ptr) = uint8(val)
 
 		case types.FieldTypeFloat64:
 			val, err := strconv.ParseFloat(line[i], 64)
 			if err != nil {
-				return &DecodeError{d.r.lineNo, i, f.Name, err}
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
 			}
 			*(*float64)(ptr) = val
 
 		case types.FieldTypeFloat32:
 			val, err := strconv.ParseFloat(line[i], 32)
 			if err != nil {
-				return &DecodeError{d.r.lineNo, i, f.Name, err}
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
 			}
 			*(*float32)(ptr) = float32(val)
 
 		case types.FieldTypeBoolean:
 			val, err := strconv.ParseBool(line[i])
 			if err != nil {
-				return &DecodeError{d.r.lineNo, i, f.Name, err}
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
 			}
 			*(*bool)(ptr) = val
 
@@ -430,17 +510,17 @@ func (d *Decoder) decode(base unsafe.Pointer, line []string) error {
 			s := strings.TrimPrefix(line[i], "0x")
 			if f.Fixed > 0 {
 				if len(s) != int(f.Fixed)*2 {
-					return &DecodeError{d.r.lineNo, i, f.Name,
+					return &DecodeError{d.r.lineNo, i, f.Name, line[i],
 						fmt.Errorf("binary array [%d]byte mismatched hex len %d", f.Fixed, len(s))}
 				}
 				_, err := hex.Decode(unsafe.Slice((*byte)(ptr), f.Fixed), util.UnsafeGetBytes(s))
 				if err != nil {
-					return &DecodeError{d.r.lineNo, i, f.Name, err}
+					return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
 				}
 			} else {
 				res, err := hex.DecodeString(s)
 				if err != nil {
-					return &DecodeError{d.r.lineNo, i, f.Name, err}
+					return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
 				}
 				*(*[]byte)(ptr) = res
 			}
@@ -448,54 +528,527 @@ func (d *Decoder) decode(base unsafe.Pointer, line []string) error {
 		case types.FieldTypeInt256:
 			i256, err := num.ParseInt256(line[i])
 			if err != nil {
-				return &DecodeError{d.r.lineNo, i, f.Name, err}
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
 			}
 			*(*[32]byte)(ptr) = i256.Bytes32()
 
 		case types.FieldTypeInt128:
 			i128, err := num.ParseInt128(line[i])
 			if err != nil {
-				return &DecodeError{d.r.lineNo, i, f.Name, err}
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
 			}
 			*(*[16]byte)(ptr) = i128.Bytes16()
 
 		case types.FieldTypeDecimal256:
 			d256, err := num.ParseDecimal256(line[i])
 			if err != nil {
-				return &DecodeError{d.r.lineNo, i, f.Name, err}
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
 			}
 			*(*[32]byte)(ptr) = d256.Quantize(f.Scale).Int256().Bytes32()
 
 		case types.FieldTypeDecimal128:
 			d128, err := num.ParseDecimal128(line[i])
 			if err != nil {
-				return &DecodeError{d.r.lineNo, i, f.Name, err}
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
 			}
 			*(*[16]byte)(ptr) = d128.Quantize(f.Scale).Int128().Bytes16()
 
 		case types.FieldTypeDecimal64:
 			d64, err := num.ParseDecimal64(line[i])
 			if err != nil {
-				return &DecodeError{d.r.lineNo, i, f.Name, err}
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
 			}
 			*(*int64)(ptr) = d64.Quantize(f.Scale).Int64()
 
 		case types.FieldTypeDecimal32:
 			d32, err := num.ParseDecimal32(line[i])
 			if err != nil {
-				return &DecodeError{d.r.lineNo, i, f.Name, err}
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
 			}
 			*(*int32)(ptr) = d32.Quantize(f.Scale).Int32()
 
 		case types.FieldTypeBigint:
 			big, err := num.ParseBig(line[i])
 			if err != nil {
-				return &DecodeError{d.r.lineNo, i, f.Name, err}
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
 			}
 			*(*[]byte)(ptr) = bytes.Clone(big.Bytes()) // copy
 
 		default:
-			return &DecodeError{d.r.lineNo, i, f.Name, schema.ErrInvalidValueType}
+			return &DecodeError{d.r.lineNo, i, f.Name, line[i], schema.ErrInvalidValueType}
+		}
+		i++
+	}
+	return nil
+}
+
+func (d *Decoder) decodeLogical(base unsafe.Pointer, line []string) error {
+	var i int
+	for _, f := range d.s.Exported() {
+		if !f.IsVisible {
+			continue
+		}
+		if len(line[i]) == 0 || line[i] == NULL {
+			i++
+			continue
+		}
+		ptr := unsafe.Add(base, d.ofs[i])
+		switch f.Type {
+		case types.FieldTypeTimestamp:
+			if d.timeAs == "" {
+				tm, err := schema.TimeScale(f.Scale).ParseTime(line[i], false)
+				if err != nil {
+					return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+				}
+				*(*time.Time)(ptr) = tm
+			} else {
+				tm, err := time.Parse(d.timeAs, line[i])
+				if err != nil {
+					return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+				}
+				*(*time.Time)(ptr) = tm
+			}
+		case types.FieldTypeDate:
+			if d.dateAs == "" {
+				tm, err := schema.TimeScale(f.Scale).ParseTime(line[i], false)
+				if err != nil {
+					return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+				}
+				*(*time.Time)(ptr) = tm
+			} else {
+				tm, err := time.Parse(d.dateAs, line[i])
+				if err != nil {
+					return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+				}
+				*(*time.Time)(ptr) = tm
+			}
+		case types.FieldTypeTime:
+			if d.timeAs == "" {
+				tm, err := schema.TimeScale(f.Scale).ParseTime(line[i], true)
+				if err != nil {
+					return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+				}
+				*(*time.Time)(ptr) = tm
+			} else {
+				tm, err := time.Parse(d.timeAs, line[i])
+				if err != nil {
+					return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+				}
+				*(*time.Time)(ptr) = tm
+			}
+		case types.FieldTypeInt64:
+			val, err := strconv.ParseInt(line[i], 10, 64)
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			*(*int64)(ptr) = val
+		case types.FieldTypeInt32:
+			val, err := strconv.ParseInt(line[i], 10, 32)
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			*(*int32)(ptr) = int32(val)
+
+		case types.FieldTypeInt16:
+			val, err := strconv.ParseInt(line[i], 10, 16)
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			*(*int16)(ptr) = int16(val)
+
+		case types.FieldTypeInt8:
+			val, err := strconv.ParseInt(line[i], 10, 8)
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			*(*int8)(ptr) = int8(val)
+
+		case types.FieldTypeUint64:
+			val, err := strconv.ParseUint(line[i], 10, 64)
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			*(*uint64)(ptr) = val
+
+		case types.FieldTypeUint32:
+			val, err := strconv.ParseUint(line[i], 10, 32)
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			*(*uint32)(ptr) = uint32(val)
+
+		case types.FieldTypeUint16:
+			val, err := strconv.ParseUint(line[i], 10, 16)
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			*(*uint16)(ptr) = uint16(val)
+
+		case types.FieldTypeUint8:
+			val, err := strconv.ParseUint(line[i], 10, 8)
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			*(*uint8)(ptr) = uint8(val)
+
+		case types.FieldTypeFloat64:
+			val, err := strconv.ParseFloat(line[i], 64)
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			*(*float64)(ptr) = val
+
+		case types.FieldTypeFloat32:
+			val, err := strconv.ParseFloat(line[i], 32)
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			*(*float32)(ptr) = float32(val)
+
+		case types.FieldTypeBoolean:
+			val, err := strconv.ParseBool(line[i])
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			*(*bool)(ptr) = val
+
+		case types.FieldTypeString:
+			// use string pool to avoid string allocs
+			n := d.pool.Len()
+			d.pool.AppendString(line[i])
+			*(*string)(ptr) = d.pool.GetString(n)
+
+		case types.FieldTypeBytes:
+			// decode hex to binary
+			s := strings.TrimPrefix(line[i], "0x")
+			if f.Fixed > 0 {
+				if len(s) != int(f.Fixed)*2 {
+					return &DecodeError{d.r.lineNo, i, f.Name, line[i],
+						fmt.Errorf("binary array [%d]byte mismatched hex len %d", f.Fixed, len(s))}
+				}
+				_, err := hex.Decode(unsafe.Slice((*byte)(ptr), f.Fixed), util.UnsafeGetBytes(s))
+				if err != nil {
+					return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+				}
+			} else {
+				res, err := hex.DecodeString(s)
+				if err != nil {
+					return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+				}
+				*(*[]byte)(ptr) = res
+			}
+
+		case types.FieldTypeInt256:
+			i256, err := num.ParseInt256(line[i])
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			*(*num.Int256)(ptr) = i256
+
+		case types.FieldTypeInt128:
+			i128, err := num.ParseInt128(line[i])
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			*(*num.Int128)(ptr) = i128
+
+		case types.FieldTypeDecimal256:
+			d256, err := num.ParseDecimal256(line[i])
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			*(*num.Decimal256)(ptr) = d256.Quantize(f.Scale)
+
+		case types.FieldTypeDecimal128:
+			d128, err := num.ParseDecimal128(line[i])
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			*(*num.Decimal128)(ptr) = d128.Quantize(f.Scale)
+
+		case types.FieldTypeDecimal64:
+			d64, err := num.ParseDecimal64(line[i])
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			*(*num.Decimal64)(ptr) = d64.Quantize(f.Scale)
+
+		case types.FieldTypeDecimal32:
+			d32, err := num.ParseDecimal32(line[i])
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			*(*num.Decimal32)(ptr) = d32.Quantize(f.Scale)
+
+		case types.FieldTypeBigint:
+			big, err := num.ParseBig(line[i])
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			*(*num.Big)(ptr) = big
+
+		default:
+			return &DecodeError{d.r.lineNo, i, f.Name, line[i], schema.ErrInvalidValueType}
+		}
+		i++
+	}
+	return nil
+}
+
+var zeros [32]byte
+
+func (d *Decoder) decodePack(pkg *pack.Package, line []string) error {
+	var i int
+	for k, f := range pkg.Schema().Exported() {
+		// skip missing blocks (e.g. after schema change)
+		b := pkg.Block(k)
+		if b == nil {
+			continue
+		}
+
+		// fill internal metadata fields
+		if f.IsInternal {
+			switch b.Type() {
+			case types.BlockUint64:
+				b.Uint64().Append(0)
+			case types.BlockBool:
+				b.Bool().Append(false)
+			}
+			b.SetDirty()
+			continue
+		}
+
+		// fill zero for empty lines and null
+		if len(line[i]) == 0 || line[i] == NULL {
+			switch b.Type() {
+			case types.BlockUint64, types.BlockInt64, types.BlockFloat64:
+				b.Uint64().Append(0)
+			case types.BlockUint32, types.BlockInt32, types.BlockFloat32:
+				b.Uint32().Append(0)
+			case types.BlockUint16, types.BlockInt16:
+				b.Uint16().Append(0)
+			case types.BlockUint8, types.BlockInt8:
+				b.Uint8().Append(0)
+			case types.BlockBool:
+				b.Bool().Append(false)
+			case types.BlockBytes:
+				if fixed := f.Fixed; fixed > 0 {
+					if fixed <= 32 {
+						b.Bytes().Append(zeros[:fixed])
+					} else {
+						b.Bytes().Append(bytes.Repeat([]byte{0}, int(fixed)))
+					}
+				} else {
+					b.Bytes().Append(nil)
+				}
+			case types.BlockInt256:
+				b.Int256().Append(num.ZeroInt256)
+			case types.BlockInt128:
+				b.Int128().Append(num.ZeroInt128)
+				i++
+				continue
+			}
+		}
+
+		// decode strings
+		switch f.Type {
+		case types.FieldTypeTimestamp:
+			if d.timeAs == "" {
+				tm, err := schema.TimeScale(f.Scale).Parse(line[i], false)
+				if err != nil {
+					return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+				}
+				b.Int64().Append(tm)
+			} else {
+				tm, err := time.Parse(d.timeAs, line[i])
+				if err != nil {
+					return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+				}
+				b.Int64().Append(schema.TimeScale(f.Scale).ToUnix(tm))
+			}
+
+		case types.FieldTypeDate:
+			if d.dateAs == "" {
+				tm, err := schema.TimeScale(f.Scale).Parse(line[i], false)
+				if err != nil {
+					return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+				}
+				b.Int64().Append(tm)
+			} else {
+				tm, err := time.Parse(d.dateAs, line[i])
+				if err != nil {
+					return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+				}
+				b.Int64().Append(schema.TimeScale(f.Scale).ToUnix(tm))
+			}
+
+		case types.FieldTypeTime:
+			if d.timeAs == "" {
+				tm, err := schema.TimeScale(f.Scale).Parse(line[i], true)
+				if err != nil {
+					return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+				}
+				b.Int64().Append(tm)
+			} else {
+				tm, err := time.Parse(d.timeAs, line[i])
+				if err != nil {
+					return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+				}
+				b.Int64().Append(schema.TimeScale(f.Scale).ToUnix(tm))
+			}
+
+		case types.FieldTypeInt64:
+			val, err := strconv.ParseInt(line[i], 10, 64)
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			b.Int64().Append(val)
+
+		case types.FieldTypeInt32:
+			val, err := strconv.ParseInt(line[i], 10, 32)
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			b.Int32().Append(int32(val))
+
+		case types.FieldTypeInt16:
+			val, err := strconv.ParseInt(line[i], 10, 16)
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			b.Int16().Append(int16(val))
+
+		case types.FieldTypeInt8:
+			val, err := strconv.ParseInt(line[i], 10, 8)
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			b.Int8().Append(int8(val))
+
+		case types.FieldTypeUint64:
+			val, err := strconv.ParseUint(line[i], 10, 64)
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			b.Uint64().Append(val)
+
+		case types.FieldTypeUint32:
+			val, err := strconv.ParseUint(line[i], 10, 32)
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			b.Uint32().Append(uint32(val))
+
+		case types.FieldTypeUint16:
+			val, err := strconv.ParseUint(line[i], 10, 16)
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			b.Uint16().Append(uint16(val))
+
+		case types.FieldTypeUint8:
+			val, err := strconv.ParseUint(line[i], 10, 8)
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			b.Uint8().Append(uint8(val))
+
+		case types.FieldTypeFloat64:
+			val, err := strconv.ParseFloat(line[i], 64)
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			b.Float64().Append(val)
+
+		case types.FieldTypeFloat32:
+			val, err := strconv.ParseFloat(line[i], 32)
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			b.Float32().Append(float32(val))
+
+		case types.FieldTypeBoolean:
+			val, err := strconv.ParseBool(line[i])
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			b.Bool().Append(val)
+
+		case types.FieldTypeString:
+			b.Bytes().Append(util.UnsafeGetBytes(line[i]))
+
+		case types.FieldTypeBytes:
+			// decode hex to binary
+			s := strings.TrimPrefix(line[i], "0x")
+			var (
+				buf []byte
+				err error
+			)
+			if f.Fixed > 0 {
+				if len(s) != int(f.Fixed)*2 {
+					return &DecodeError{d.r.lineNo, i, f.Name, line[i],
+						fmt.Errorf("binary array [%d]byte mismatched hex len %d", f.Fixed, len(s))}
+				}
+				buf, err = hex.DecodeString(s)
+			} else {
+				buf, err = hex.DecodeString(s)
+			}
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			b.Bytes().Append(buf)
+
+		case types.FieldTypeInt256:
+			i256, err := num.ParseInt256(line[i])
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			b.Int256().Append(i256)
+
+		case types.FieldTypeInt128:
+			i128, err := num.ParseInt128(line[i])
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			b.Int128().Append(i128)
+
+		case types.FieldTypeDecimal256:
+			d256, err := num.ParseDecimal256(line[i])
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			b.Int256().Append(d256.Quantize(f.Scale).Int256())
+
+		case types.FieldTypeDecimal128:
+			d128, err := num.ParseDecimal128(line[i])
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			b.Int128().Append(d128.Quantize(f.Scale).Int128())
+
+		case types.FieldTypeDecimal64:
+			d64, err := num.ParseDecimal64(line[i])
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			b.Int64().Append(d64.Quantize(f.Scale).Int64())
+
+		case types.FieldTypeDecimal32:
+			d32, err := num.ParseDecimal32(line[i])
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			b.Int32().Append(d32.Quantize(f.Scale).Int32())
+
+		case types.FieldTypeBigint:
+			big, err := num.ParseBig(line[i])
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			b.Bytes().Append(big.Bytes())
+
+		default:
+			return &DecodeError{d.r.lineNo, i, f.Name, line[i], schema.ErrInvalidValueType}
 		}
 		i++
 	}

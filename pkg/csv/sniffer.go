@@ -119,7 +119,7 @@ func (s *Sniffer) Schema() *schema.Schema {
 	b := schema.NewBuilder()
 	for i, f := range s.fields {
 		b.AddField(s.head[i], f.Type())
-		if f.is(fFixed) {
+		if f.is(fFixed) && (f.Type() == types.FieldTypeBytes || f.Type() == types.FieldTypeString) {
 			l := uint16(f.len)
 			if f.is(fHex) {
 				l /= 2
@@ -128,6 +128,9 @@ func (s *Sniffer) Schema() *schema.Schema {
 		}
 		if f.isDateTime() {
 			b.SetFieldOpts(schema.Scale(f.scale))
+		}
+		if f.isDecimal() {
+			b.SetFieldOpts(schema.Scale(f.dot - 1))
 		}
 	}
 	return b.Finalize().Schema()
@@ -430,8 +433,9 @@ func (f field) isBytes() bool {
 }
 
 func (f field) maybeDateTime() bool {
-	return f.not(fQuoted) && f.not(fSign) && f.not(fExp) && f.not(fZerox) &&
-		f.is(fNum) && f.is(fDecimal) && f.is(fFixed) && (f.is(fDash) || f.is(fOther))
+	return f.not(fSign) && f.not(fExp) && f.not(fZerox) &&
+		(f.is(fQuoted) || f.is(fNum)) && f.is(fDecimal) && f.is(fFixed) &&
+		(f.is(fDash) || f.is(fOther))
 }
 
 func (f field) isDateTime() bool {
@@ -580,6 +584,9 @@ func (f *field) update(buf []byte, tfm, dfm string) {
 
 		// try time parsing (expensive, so only do this for the first non-null non-empty string)
 		if f.maybeDateTime() {
+			if f.is(fQuoted) {
+				src = bytes.Trim(src, `"`)
+			}
 			flag, format, scale := tryTime(src, tfm, dfm)
 			f.flag |= flag
 			f.tfm = format

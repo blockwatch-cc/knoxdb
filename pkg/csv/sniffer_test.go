@@ -257,7 +257,7 @@ var sniffTests = []sniffTest{
 			NumFields: 4,
 		},
 		[]types.FieldType{FT_STRING, FT_STRING, FT_STRING, FT_STRING},
-		[]string{"Hello_World", "Hello", "World", "World"},
+		[]string{"Hello_World", "Hello", "World", "World2"},
 	},
 	{
 		"dotnet",
@@ -303,6 +303,25 @@ var sniffTests = []sniffTest{
 		},
 		[]types.FieldType{FT_BYTES, FT_STRING, FT_U32, FT_U16, FT_U64, FT_TIMESTAMP, FT_STRING, FT_BYTES, FT_STRING, FT_STRING, FT_U64, FT_STRING},
 		[]string{"object_id", "type", "checkpoint", "epoch", "timestamp_ms", "timestamp", "owner_type", "owner_address", "object_status", "previous_transaction", "coin_balance", "coin_type"},
+	},
+	{
+		"neon",
+		"startDateTime,endDateTime,RHMean,RHMinimum,RHMaximum,RHVariance,RHNumPts,RHExpUncert,RHStdErMean,RHFinalQF,tempRHMean,tempRHMinimum,tempRHMaximum,tempRHVariance,tempRHNumPts,tempRHExpUncert,tempRHStdErMean,tempRHFinalQF,dewTempMean,dewTempMinimum,dewTempMaximum,dewTempVariance,dewTempNumPts,dewTempExpUncert,dewTempStdErMean,dewTempFinalQF\n\"2018-02-07T00:00:00Z\",\"2018-02-07T00:01:00Z\",83.66,83.66,83.66,0.00,1,0.19,,0,15.389,15.389,15.389,0.000,1,2.200,,0,12.592,12.592,12.592,0.000,1,0.885,,0",
+		SnifferResult{
+			NumFields:  26,
+			Sep:        ',',
+			HasQuotes:  true,
+			HasHeader:  true,
+			HasTime:    true,
+			TimeFormat: "2006-01-02T15:04:05Z07:00",
+		},
+		[]types.FieldType{
+			FT_TIMESTAMP, FT_TIMESTAMP, FT_D32, FT_D32, FT_D32, FT_D32,
+			FT_U8, FT_D32, FT_STRING, FT_U8, FT_D32, FT_D32, FT_D32, FT_D32,
+			FT_U8, FT_D32, FT_STRING, FT_U8, FT_D32, FT_D32, FT_D32, FT_D32,
+			FT_U8, FT_D32, FT_STRING, FT_U8,
+		},
+		[]string{"startDateTime", "endDateTime", "RHMean", "RHMinimum", "RHMaximum", "RHVariance", "RHNumPts", "RHExpUncert", "RHStdErMean", "RHFinalQF", "tempRHMean", "tempRHMinimum", "tempRHMaximum", "tempRHVariance", "tempRHNumPts", "tempRHExpUncert", "tempRHStdErMean", "tempRHFinalQF", "dewTempMean", "dewTempMinimum", "dewTempMaximum", "dewTempVariance", "dewTempNumPts", "dewTempExpUncert", "dewTempStdErMean", "dewTempFinalQF"},
 	},
 }
 

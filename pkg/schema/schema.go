@@ -748,7 +748,7 @@ func (s *Schema) Finalize() *Schema {
 	var styp reflect.Type
 	needLayout := len(s.fields) > 0 && s.fields[0].path == nil
 	if needLayout {
-		styp = s.StructType()
+		styp = s.StructType() // use logical types here
 	}
 
 	for i := range s.fields {

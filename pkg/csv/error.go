@@ -9,15 +9,16 @@ import (
 )
 
 type DecodeError struct {
-	lineNo  int
-	fieldNo int
-	hint    string
-	reason  error
+	lineNo    int
+	fieldNo   int
+	fieldName string
+	hint      string
+	reason    error
 }
 
 func (e *DecodeError) Error() string {
 	if e.fieldNo != 0 {
-		return fmt.Sprintf("csv: line %d field %d (%s): %v", e.lineNo, e.fieldNo, e.hint, e.reason)
+		return fmt.Sprintf("csv: line %d field %d (%s) %q: %v", e.lineNo, e.fieldNo, e.fieldName, e.hint, e.reason)
 	} else if e.reason == nil {
 		return fmt.Sprintf("csv: line %d: %s", e.lineNo, e.hint)
 	}

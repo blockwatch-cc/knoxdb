@@ -41,19 +41,32 @@ var (
 		"15:04:05",
 		"",
 	}
+	extraTimeFormats = [...]string{
+		time.RFC3339,
+		"2006-01-02T15:04:05Z",
+		time.ANSIC,
+		time.UnixDate,
+		time.RFC822,
+		time.RFC822Z,
+		time.RFC1123,
+		time.RFC1123Z,
+	}
+	extraNsTimeFormats = [...]string{
+		time.RFC3339Nano,
+	}
 )
 
 func ParseTimeScale(s string) (TimeScale, bool) {
 	switch s {
-	case "ns", "nano", "nanosecond":
+	case "0", "ns", "nano", "nanosecond":
 		return TIME_SCALE_NANO, true
-	case "us", "micro", "microsecond":
+	case "1", "us", "micro", "microsecond":
 		return TIME_SCALE_MICRO, true
-	case "ms", "milli", "millisecond":
+	case "2", "ms", "milli", "millisecond":
 		return TIME_SCALE_MILLI, true
-	case "s", "sec", "second":
+	case "3", "s", "sec", "second":
 		return TIME_SCALE_SECOND, true
-	case "d", "day":
+	case "4", "d", "day":
 		return TIME_SCALE_DAY, true
 	default:
 		return 0, false
@@ -124,19 +137,27 @@ func (s TimeScale) Format(t time.Time) string {
 }
 
 func (s TimeScale) Parse(v string, isTimeOnly bool) (int64, error) {
+	tm, err := s.ParseTime(v, isTimeOnly)
+	if err != nil {
+		return 0, err
+	}
+	return s.ToUnix(tm), nil
+}
+
+func (s TimeScale) ParseTime(v string, isTimeOnly bool) (time.Time, error) {
 	if isTimeOnly {
 		tm, err := time.Parse(timeOnlyFormats[s], v)
 		if err != nil {
-			return 0, err
+			return time.Time{}, err
 		}
 		// adjust date to UNIX epoch, Go parses as Jan 1, 0000
-		return s.ToUnix(tm.AddDate(1970, 0, 0)), nil
+		return tm.AddDate(1970, 0, 0), nil
 	} else {
 		tm, err := time.Parse(timeScaleFormats[s], v)
 		if err != nil {
-			return 0, err
+			return time.Time{}, err
 		}
-		return s.ToUnix(tm), nil
+		return tm, nil
 	}
 }
 
@@ -150,6 +171,16 @@ func DetectTimeFormat(s string) (string, TimeScale, bool, bool) {
 	for i, f := range timeOnlyFormats {
 		if _, err := time.Parse(f, s); err == nil {
 			return f, TimeScale(i), true, true
+		}
+	}
+	for _, f := range extraTimeFormats {
+		if _, err := time.Parse(f, s); err == nil {
+			return f, TIME_SCALE_SECOND, false, true
+		}
+	}
+	for _, f := range extraNsTimeFormats {
+		if _, err := time.Parse(f, s); err == nil {
+			return f, TIME_SCALE_NANO, false, true
 		}
 	}
 	if f, err := util.DetectTimeFormat(s); err == nil {

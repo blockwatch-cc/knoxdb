@@ -55,9 +55,9 @@ null,null,null,null`
 	CsvWithCRLF            = "s,i,f,b\r\nHello,42,23.45,true\r\nHello World,43,24.56,false\r\n"
 	CsvWithoutLF           = "s,i,f,b\nHello,42,23.45,true\nHello World,43,24.56,false"
 	CsvWithQuotes          = `"Hello",42,23.45,"true"`
-	CsvWithQuotesAndSep    = `"Hello,world","world, one",",two","three,"`         // + "\n"
-	CsvWithQuotesAndSepEnd = `"Hello,world","world, one","world","world,three"`   // + "\n"
-	CsvWithDoubleQuotes    = `"Hello ""World""","""Hello""" ,"""World","World"""` // + "\n"
+	CsvWithQuotesAndSep    = `"Hello,world","world, one",",two","three,"`          // + "\n"
+	CsvWithQuotesAndSepEnd = `"Hello,world","world, one","world","world,three"`    // + "\n"
+	CsvWithDoubleQuotes    = `"Hello ""World""","""Hello""" ,"""World","World2"""` // + "\n"
 
 	CsvWithUnquotedQuotes = `a"a"a,a""a,a"""a,a""a`                        // + "\n"
 	CsvWithMultipleQuotes = `"a"a","a"a"a","a"""a",""a",""a"a"",""","""""` // + "\n"
@@ -104,7 +104,7 @@ var (
 	// quote tests
 	Q1 = []string{`Hello,world`, `world, one`, `,two`, `three,`}       // CsvWithQuotesAndSep
 	Q2 = []string{`Hello,world`, `world, one`, `world`, `world,three`} // CsvWithQuotesAndSepEnd
-	Q3 = []string{`Hello "World"`, `"Hello"`, `"World`, `World"`}      // CsvWithDoubleQuotes
+	Q3 = []string{`Hello "World"`, `"Hello"`, `"World`, `World2"`}     // CsvWithDoubleQuotes
 	Q4 = []string{`Hello,World`, `Hello,my`, `World`, `"Hello" world`} // CsvWithTailQuotes
 
 	Q5 = []string{`a"a"a`, `a""a`, `a"""a`, `a""a`}                 // CsvWithUnquotedQuotes
