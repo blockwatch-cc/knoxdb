@@ -4,6 +4,7 @@
 package wal
 
 import (
+	"bufio"
 	"fmt"
 	"hash"
 	"io"
@@ -23,7 +24,6 @@ type WalReader interface {
 	WithTag(types.ObjectTag) WalReader
 	WithEntity(uint64) WalReader
 	WithTxID(types.XID) WalReader
-	WithCommitted(*CommitLog) WalReader
 }
 
 type RecordFilter struct {
@@ -31,7 +31,6 @@ type RecordFilter struct {
 	tag    types.ObjectTag
 	entity uint64
 	txid   types.XID
-	xlog   *CommitLog
 }
 
 func (f *RecordFilter) Match(r *Record) bool {
@@ -51,12 +50,6 @@ func (f *RecordFilter) Match(r *Record) bool {
 	if f.txid > 0 && r.TxID != f.txid {
 		return false
 	}
-	if f.xlog != nil {
-		ok, err := f.xlog.IsCommitted(r.TxID)
-		if !ok && err == nil {
-			return false
-		}
-	}
 	return true
 }
 
@@ -66,7 +59,7 @@ type Reader struct {
 	wal    *Wal
 	flt    *RecordFilter
 	seg    *segment
-	rd     *BufioReader
+	rd     *bufio.Reader
 	hash   hash.Hash64
 	csum   uint64
 	xid    types.XID
@@ -84,21 +77,13 @@ func (w *Wal) NewReader() WalReader {
 	defer w.mu.RUnlock()
 	return &Reader{
 		wal:    w,
-		rd:     NewBufioReaderSize(nil, WAL_BUFFER_SIZE),
+		rd:     bufio.NewReaderSize(nil, WAL_BUFFER_SIZE),
 		hash:   xxhash64.New(),
 		csum:   w.opts.Seed,
 		maxSz:  w.opts.MaxSegmentSize,
 		maxLsn: w.nextLsn,
 		rcmode: w.opts.RecoveryMode,
 	}
-}
-
-func (r *Reader) WithCommitted(xlog *CommitLog) WalReader {
-	if r.flt == nil {
-		r.flt = &RecordFilter{}
-	}
-	r.flt.xlog = xlog
-	return r
 }
 
 func (r *Reader) WithType(t RecordType) WalReader {

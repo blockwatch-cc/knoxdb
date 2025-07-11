@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/echa/log"
 )
 
 const (
@@ -20,8 +22,8 @@ const (
 )
 
 var (
-	createFlags = os.O_CREATE | os.O_EXCL | os.O_WRONLY | os.O_APPEND | O_DIRECT
-	writeFlags  = os.O_WRONLY | os.O_APPEND | O_DIRECT
+	createFlags = os.O_CREATE | os.O_EXCL | os.O_WRONLY | os.O_APPEND
+	writeFlags  = os.O_WRONLY | os.O_APPEND
 	readFlags   = os.O_RDONLY
 )
 
@@ -31,6 +33,7 @@ type segment struct {
 	sz  int
 	max int
 	ro  bool
+	log log.Logger
 }
 
 func (w *Wal) segmentName(id int) string {
@@ -50,7 +53,7 @@ func decodeSegmentName(name string) (int, error) {
 func (w *Wal) createSegment(id int) (*segment, error) {
 	name := w.segmentName(id)
 	w.log.Debugf("wal: create segment %s", name)
-	fd, err := OpenFile(name, createFlags, SEG_FILE_MODE)
+	fd, err := os.OpenFile(name, createFlags, SEG_FILE_MODE)
 	if err != nil {
 		return nil, err
 	}
@@ -70,6 +73,7 @@ func (w *Wal) createSegment(id int) (*segment, error) {
 		sz:  0,
 		max: w.opts.MaxSegmentSize,
 		ro:  false,
+		log: w.log,
 	}
 	return s, nil
 }
@@ -90,7 +94,7 @@ func (w *Wal) openSegment(id int, active bool) (*segment, error) {
 		flags = writeFlags
 	}
 	w.log.Debugf("wal: open segment %s active=%t", name, active)
-	fd, err := OpenFile(name, flags, SEG_FILE_MODE)
+	fd, err := os.OpenFile(name, flags, SEG_FILE_MODE)
 	if err != nil {
 		return nil, err
 	}
@@ -109,6 +113,7 @@ func (w *Wal) openSegment(id int, active bool) (*segment, error) {
 		sz:  int(stat.Size()),
 		max: w.opts.MaxSegmentSize,
 		ro:  !active,
+		log: w.log,
 	}
 	return s, nil
 }
@@ -184,36 +189,8 @@ func (s *segment) Write(buf []byte) (int, error) {
 		return 0, ErrSegmentOverflow
 	}
 
-	var (
-		n   int
-		err error
-	)
-	if isAligned(buf) && isAlignedLen(len(buf)) {
-		n, err = s.fd.Write(buf)
-	} else {
-		n, err = s.writeUnaligned(buf)
-	}
-
-	s.sz += n
-	return n, err
-}
-
-func (s *segment) writeUnaligned(buf []byte) (int, error) {
-	// Disable direct IO
-	err := setDirectIO(s.fd.Fd(), false)
-	if err != nil {
-		return 0, err
-	}
-
-	// write unaligned
 	n, err := s.fd.Write(buf)
-	if err != nil {
-		return n, err
-	}
-
-	// Enable direct IO back
-	err = setDirectIO(s.fd.Fd(), true)
-
+	s.sz += n
 	return n, err
 }
 

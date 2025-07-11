@@ -4,6 +4,7 @@
 package wal
 
 import (
+	"bufio"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -112,7 +113,7 @@ type Wal struct {
 	wg      sync.WaitGroup
 	opts    WalOptions
 	active  *segment
-	wr      *BufioWriter
+	wr      *bufio.Writer
 	req     chan *util.Future
 	close   chan struct{}
 	csum    uint64
@@ -138,7 +139,7 @@ func Create(opts WalOptions) (*Wal, error) {
 
 	wal := &Wal{
 		opts:    opts,
-		wr:      NewBufioWriterSize(nil, WAL_BUFFER_SIZE),
+		wr:      bufio.NewWriterSize(nil, WAL_BUFFER_SIZE),
 		hash:    xxhash64.New(),
 		csum:    opts.Seed,
 		req:     make(chan *util.Future, WAL_MAX_SYNC_REQUESTS),
@@ -178,7 +179,7 @@ func Open(lsn LSN, opts WalOptions) (*Wal, error) {
 
 	wal := &Wal{
 		opts:    opts,
-		wr:      NewBufioWriterSize(nil, WAL_BUFFER_SIZE),
+		wr:      bufio.NewWriterSize(nil, WAL_BUFFER_SIZE),
 		hash:    xxhash64.New(),
 		req:     make(chan *util.Future, WAL_MAX_SYNC_REQUESTS),
 		close:   make(chan struct{}),
