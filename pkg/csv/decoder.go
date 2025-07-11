@@ -845,9 +845,9 @@ func (d *Decoder) decodePack(pkg *pack.Package, line []string) error {
 				b.Int256().Append(num.ZeroInt256)
 			case types.BlockInt128:
 				b.Int128().Append(num.ZeroInt128)
-				i++
-				continue
 			}
+			i++
+			continue
 		}
 
 		// decode strings
