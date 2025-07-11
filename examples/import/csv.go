@@ -18,20 +18,20 @@ import (
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
+const CsvMaxRows = 128 << 10
+
 var (
 	_ operator.PullOperator = (*CsvImporter)(nil)
 )
 
 type CsvImporter struct {
-	enc     *schema.Encoder
-	dec     *csv.Decoder
-	pkg     *pack.Package
-	buf     *bytes.Buffer
-	sniff   *csv.Sniffer
-	in      *os.File
-	err     error
-	maxRows int
-	nRows   int
+	enc   *schema.Encoder
+	dec   *csv.Decoder
+	pkg   *pack.Package
+	buf   *bytes.Buffer
+	sniff *csv.Sniffer
+	in    *os.File
+	err   error
 }
 
 func OpenCsvImporter(fpath string) (*CsvImporter, error) {
@@ -55,21 +55,20 @@ func OpenCsvImporter(fpath string) (*CsvImporter, error) {
 	}
 
 	return &CsvImporter{
-		sniff:   sniff,
-		in:      f,
-		maxRows: 64 << 10,
+		sniff: sniff,
+		in:    f,
 	}, nil
 }
 
 func (c *CsvImporter) Next(_ context.Context) (*pack.Package, operator.Result) {
 	if c.pkg == nil {
-		sch := c.sniff.Schema()
+		sch := c.sniff.Schema().WithMeta()
 		c.enc = schema.NewEncoder(sch)
 		c.dec = c.sniff.NewDecoder(c.in)
 		c.pkg = pack.New().
 			WithKey(0).
 			WithVersion(0).
-			WithMaxRows(c.maxRows).
+			WithMaxRows(CsvMaxRows).
 			WithSchema(sch).
 			Alloc()
 		c.buf = c.enc.NewBuffer(1)
@@ -78,24 +77,16 @@ func (c *CsvImporter) Next(_ context.Context) (*pack.Package, operator.Result) {
 		c.pkg.Clear()
 	}
 
-	for !c.pkg.IsFull() {
-		v, err := c.dec.Decode()
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				break
-			}
+	n, err := c.dec.DecodePack(c.pkg)
+	if err != nil {
+		if !errors.Is(err, io.EOF) {
+			c.err = err
 			return nil, operator.ResultError
 		}
-
-		buf, err := c.enc.Encode(v, c.buf)
-		if err != nil {
-			return nil, operator.ResultError
-		}
-
-		c.buf.Reset()
-		c.pkg.AppendWire(buf, &schema.Meta{Rid: uint64(c.nRows), Ref: uint64(c.nRows), Xmin: 1})
 	}
-
+	if n == 0 {
+		return nil, operator.ResultDone
+	}
 	return c.pkg, operator.ResultOK
 }
 
