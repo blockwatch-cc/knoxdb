@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 
 	"blockwatch.cc/knoxdb/internal/operator"
+	importer "blockwatch.cc/knoxdb/internal/operator/import"
 )
 
 func Import(fpath string) error {
@@ -23,12 +24,12 @@ func Import(fpath string) error {
 
 	switch e := ext[1:]; e {
 	case "parquet":
-		importOperator, err = OpenParquetImporter(fpath)
+		importOperator, err = importer.OpenParquetImporter(fpath)
 		if err != nil {
 			return err
 		}
 	case "csv":
-		importOperator, err = OpenCsvImporter(fpath)
+		importOperator, err = importer.OpenCsvImporter(fpath)
 		if err != nil {
 			return err
 		}
