@@ -100,56 +100,8 @@ func (op *ParquetImporter) Next(ctx context.Context) (*pack.Package, operator.Re
 		block := op.pkg.Block(idx)
 		pages := col.Pages()
 
-		switch col.Type().Kind() {
-		case parquet.Int32:
-			for {
-				page, err := pages.ReadPage()
-				if err != nil {
-					if errors.Is(err, io.EOF) {
-						break
-					}
-					op.err = err
-					return nil, operator.ResultError
-				}
-
-				switch pVal := page.Values().(type) {
-				case parquet.Int32Reader:
-					values := block.Int32().Slice()[block.Len():block.Cap()]
-					sz, err := pVal.ReadInt32s(values)
-					if err != nil {
-						if !errors.Is(err, io.EOF) {
-							op.err = err
-							return nil, operator.ResultError
-						}
-					}
-					values = values[:sz]
-					if sz > 0 {
-						block.SetDirty()
-						block.AddLen(uint32(sz))
-						op.pkg.UpdateLen()
-					}
-				default:
-					sz, err := pVal.ReadValues(op.values)
-					if err != nil {
-						if !errors.Is(err, io.EOF) {
-							op.err = err
-							return nil, operator.ResultError
-						}
-					}
-					intLogicalType := col.Type().LogicalType().Integer
-					if intLogicalType.IsSigned {
-						for _, val := range op.values[:sz] {
-							block.Int32().Append(val.Int32())
-						}
-					} else {
-						for _, val := range op.values[:sz] {
-							block.Uint32().Append(val.Uint32())
-						}
-					}
-				}
-			}
-
-		case parquet.Int64:
+		switch block.Type() {
+		case types.BlockInt64:
 			for {
 				page, err := pages.ReadPage()
 				if err != nil {
@@ -174,7 +126,6 @@ func (op *ParquetImporter) Next(ctx context.Context) (*pack.Package, operator.Re
 					if sz > 0 {
 						block.SetDirty()
 						block.AddLen(uint32(sz))
-						op.pkg.UpdateLen()
 					}
 				default:
 					sz, err := pVal.ReadValues(op.values)
@@ -184,20 +135,97 @@ func (op *ParquetImporter) Next(ctx context.Context) (*pack.Package, operator.Re
 							return nil, operator.ResultError
 						}
 					}
-					intLogicalType := col.Type().LogicalType().Integer
-					if intLogicalType.IsSigned {
-						for _, val := range op.values[:sz] {
-							block.Int64().Append(val.Int64())
-						}
-					} else {
-						for _, val := range op.values[:sz] {
-							block.Uint64().Append(val.Uint64())
-						}
+					for _, val := range op.values[:sz] {
+						block.Int64().Append(val.Int64())
 					}
 				}
 			}
 
-		case parquet.Int96:
+		case types.BlockUint64:
+			for {
+				page, err := pages.ReadPage()
+				if err != nil {
+					if errors.Is(err, io.EOF) {
+						break
+					}
+					op.err = err
+					return nil, operator.ResultError
+				}
+				sz, err := page.Values().ReadValues(op.values)
+				if err != nil {
+					if !errors.Is(err, io.EOF) {
+						op.err = err
+						return nil, operator.ResultError
+					}
+				}
+				for _, val := range op.values[:sz] {
+					block.Uint64().Append(val.Uint64())
+				}
+			}
+
+		case types.BlockInt8, types.BlockInt16, types.BlockInt32:
+			for {
+				page, err := pages.ReadPage()
+				if err != nil {
+					if errors.Is(err, io.EOF) {
+						break
+					}
+					op.err = err
+					return nil, operator.ResultError
+				}
+
+				switch pVal := page.Values().(type) {
+				case parquet.Int32Reader:
+					values := block.Int32().Slice()[block.Len():block.Cap()]
+					sz, err := pVal.ReadInt32s(values)
+					if err != nil {
+						if !errors.Is(err, io.EOF) {
+							op.err = err
+							return nil, operator.ResultError
+						}
+					}
+					values = values[:sz]
+					if sz > 0 {
+						block.SetDirty()
+						block.AddLen(uint32(sz))
+					}
+				default:
+					sz, err := pVal.ReadValues(op.values)
+					if err != nil {
+						if !errors.Is(err, io.EOF) {
+							op.err = err
+							return nil, operator.ResultError
+						}
+					}
+					for _, val := range op.values[:sz] {
+						block.Int32().Append(val.Int32())
+					}
+				}
+			}
+
+		case types.BlockUint8, types.BlockUint16, types.BlockUint32:
+			for {
+				page, err := pages.ReadPage()
+				if err != nil {
+					if errors.Is(err, io.EOF) {
+						break
+					}
+					op.err = err
+					return nil, operator.ResultError
+				}
+				sz, err := page.Values().ReadValues(op.values)
+				if err != nil {
+					if !errors.Is(err, io.EOF) {
+						op.err = err
+						return nil, operator.ResultError
+					}
+				}
+				for _, val := range op.values[:sz] {
+					block.Uint32().Append(val.Uint32())
+				}
+			}
+
+		case types.BlockInt128:
 			for {
 				page, err := pages.ReadPage()
 				if err != nil {
@@ -223,7 +251,7 @@ func (op *ParquetImporter) Next(ctx context.Context) (*pack.Package, operator.Re
 				}
 			}
 
-		case parquet.Float:
+		case types.BlockFloat32:
 			for {
 				page, err := pages.ReadPage()
 				if err != nil {
@@ -248,7 +276,6 @@ func (op *ParquetImporter) Next(ctx context.Context) (*pack.Package, operator.Re
 					if sz > 0 {
 						block.SetDirty()
 						block.AddLen(uint32(sz))
-						op.pkg.UpdateLen()
 					}
 				default:
 					sz, err := pVal.ReadValues(op.values)
@@ -264,7 +291,7 @@ func (op *ParquetImporter) Next(ctx context.Context) (*pack.Package, operator.Re
 				}
 			}
 
-		case parquet.Double:
+		case types.BlockFloat64:
 			for {
 				page, err := pages.ReadPage()
 				if err != nil {
@@ -289,7 +316,6 @@ func (op *ParquetImporter) Next(ctx context.Context) (*pack.Package, operator.Re
 					if sz > 0 {
 						block.SetDirty()
 						block.AddLen(uint32(sz))
-						op.pkg.UpdateLen()
 					}
 				default:
 					sz, err := pVal.ReadValues(op.values)
@@ -305,7 +331,7 @@ func (op *ParquetImporter) Next(ctx context.Context) (*pack.Package, operator.Re
 				}
 			}
 
-		case parquet.ByteArray, parquet.FixedLenByteArray:
+		case types.BlockBytes:
 			for {
 				page, err := pages.ReadPage()
 				if err != nil {
@@ -323,11 +349,11 @@ func (op *ParquetImporter) Next(ctx context.Context) (*pack.Package, operator.Re
 					}
 				}
 				for _, val := range op.values[:sz] {
-					block.Bytes().Append(val.Bytes())
+					block.Bytes().Append(val.ByteArray())
 				}
 			}
 
-		case parquet.Boolean:
+		case types.BlockBool:
 			for {
 				page, err := pages.ReadPage()
 				if err != nil {
@@ -348,11 +374,13 @@ func (op *ParquetImporter) Next(ctx context.Context) (*pack.Package, operator.Re
 					block.Bool().Append(val.Boolean())
 				}
 			}
+
 		default:
 			op.err = fmt.Errorf("column %q kind is not supported", col.Type())
 			return nil, operator.ResultError
 		}
 
+		op.pkg.UpdateLen()
 		err := pages.Close()
 		if err != nil {
 			op.err = err
@@ -361,9 +389,7 @@ func (op *ParquetImporter) Next(ctx context.Context) (*pack.Package, operator.Re
 	}
 
 	op.cur++
-	if op.cur < len(op.rows) {
-		return op.pkg, operator.ResultMore
-	}
+
 	return op.pkg, operator.ResultOK
 }
 
@@ -375,33 +401,104 @@ func (p *ParquetImporter) Close() {
 	p.values = nil
 	p.pkg = nil
 	p.parqFile = nil
-
 }
 
 func BuildSchema(parqFile *parquet.File) (*schema.Schema, error) {
 	cols := parqFile.Root().Columns()
 	b := schema.NewBuilder()
 	for _, c := range cols {
+		var scale int
 		var ftyp types.FieldType
-		switch c.Type().Kind() {
-		case parquet.Int32:
-			ftyp = types.FieldTypeInt32
-		case parquet.Int64:
-			ftyp = types.FieldTypeInt64
-		case parquet.Int96:
-			ftyp = types.FieldTypeInt128
-		case parquet.Float:
-			ftyp = types.FieldTypeFloat32
-		case parquet.Double:
-			ftyp = types.FieldTypeFloat64
-		case parquet.ByteArray, parquet.FixedLenByteArray:
+
+		t := c.Type().LogicalType()
+		switch {
+		case t == nil:
+			switch c.Type().Kind() {
+			case parquet.Int32:
+				ftyp = types.FieldTypeInt32
+			case parquet.Int64:
+				ftyp = types.FieldTypeInt64
+			case parquet.Int96:
+				ftyp = types.FieldTypeInt128
+			case parquet.Float:
+				ftyp = types.FieldTypeFloat32
+			case parquet.Double:
+				ftyp = types.FieldTypeFloat64
+			case parquet.ByteArray, parquet.FixedLenByteArray:
+				ftyp = types.FieldTypeBytes
+			case parquet.Boolean:
+				ftyp = types.FieldTypeBoolean
+			}
+		case t.UTF8 != nil:
 			ftyp = types.FieldTypeBytes
-		case parquet.Boolean:
-			ftyp = types.FieldTypeBoolean
-		default:
+		case t.Map != nil:
+			ftyp = types.FieldTypeBytes
+		case t.List != nil:
+			ftyp = types.FieldTypeBytes
+		case t.Enum != nil:
+			ftyp = types.FieldTypeUint8
+		case t.Decimal != nil:
+			scale = int(t.Decimal.Scale)
+			ftyp = types.FieldTypeDecimal64
+		case t.Date != nil:
+			ftyp = types.FieldTypeDate
+		case t.Time != nil:
+			ftyp = types.FieldTypeTime
+			u := t.Timestamp.Unit
+			switch {
+			case u.Millis != nil:
+				scale = int(schema.TIME_SCALE_MILLI)
+			case u.Micros != nil:
+				scale = int(schema.TIME_SCALE_MICRO)
+			case u.Nanos != nil:
+				scale = int(schema.TIME_SCALE_NANO)
+			}
+		case t.Timestamp != nil:
+			ftyp = types.FieldTypeTimestamp
+			u := t.Timestamp.Unit
+			switch {
+			case u.Millis != nil:
+				scale = int(schema.TIME_SCALE_MILLI)
+			case u.Micros != nil:
+				scale = int(schema.TIME_SCALE_MICRO)
+			case u.Nanos != nil:
+				scale = int(schema.TIME_SCALE_NANO)
+			}
+		case t.Integer != nil:
+			if t.Integer.IsSigned {
+				switch t.Integer.BitWidth {
+				case 8, 16, 32:
+					ftyp = types.FieldTypeInt32
+				case 64:
+					ftyp = types.FieldTypeInt64
+				}
+			} else {
+				switch t.Integer.BitWidth {
+				case 8, 16, 32:
+					ftyp = types.FieldTypeUint32
+				case 64:
+					ftyp = types.FieldTypeUint64
+				}
+			}
+		case t.Unknown != nil:
+			ftyp = types.FieldTypeBytes
+		case t.Json != nil:
+			ftyp = types.FieldTypeBytes
+		case t.Bson != nil:
+			ftyp = types.FieldTypeBytes
+		case t.UUID != nil:
+			ftyp = types.FieldTypeBytes
+		case t.Variant != nil:
+			ftyp = types.FieldTypeBytes
+		case t.Geometry != nil:
+			ftyp = types.FieldTypeBytes
+		case t.Geography != nil:
+			ftyp = types.FieldTypeBytes
+		}
+		if ftyp == types.FieldTypeInvalid {
 			return nil, fmt.Errorf("field kind is not supported, name => %s, type => %s", c.Name(), c.Type())
 		}
-		b.AddField(c.Name(), ftyp)
+		b.AddField(c.Name(), ftyp, schema.Scale(scale))
 	}
 	return b.Finalize().Schema(), nil
 }
