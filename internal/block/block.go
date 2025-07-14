@@ -183,6 +183,10 @@ func (b *Block) Container() any {
 	return b.any
 }
 
+func (b *Block) AddLen(i uint32) {
+	b.len += i
+}
+
 func (b Block) Type() BlockType {
 	return b.typ
 }
