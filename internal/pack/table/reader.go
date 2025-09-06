@@ -61,7 +61,7 @@ var _ engine.TableReader = (*Reader)(nil)
 
 type Reader struct {
 	table     *Table                    // table back-reference
-	stats     *stats.Index              // active of statistics index
+	stats     *stats.Index              // active statistics index
 	it        *stats.Iterator           // statistics iterator
 	query     *query.QueryPlan          // related query plan may be empty
 	rx        int                       // row id vector position

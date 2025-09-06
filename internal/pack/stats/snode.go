@@ -313,6 +313,8 @@ func (n *SNode) Query(it *Iterator) error {
 				STATS_ROW_KEY+1,
 				STATS_ROW_VERSION+1,
 				STATS_ROW_NVALS+1,
+				uint16(minColIndex(it.idx.rx)+1), // min rid
+				uint16(maxColIndex(it.idx.rx)+1), // max rid
 			)
 		}
 
