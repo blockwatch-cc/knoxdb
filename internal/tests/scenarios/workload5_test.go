@@ -271,7 +271,7 @@ func TestWorkload5(t *testing.T) {
 
 				// load record if exists
 				var val testType
-				err = knox.NewGenericQuery[testType]().
+				_, err = knox.NewGenericQuery[testType]().
 					WithTag("update").
 					WithTable(table).
 					AndEqual("id", id).
@@ -309,7 +309,7 @@ func TestWorkload5(t *testing.T) {
 
 				// load record if exists
 				var val testType
-				err = knox.NewGenericQuery[testType]().
+				_, err = knox.NewGenericQuery[testType]().
 					WithTag("delete").
 					WithTable(table.Table()).
 					AndEqual("id", id).
@@ -353,7 +353,7 @@ func TestWorkload5(t *testing.T) {
 
 				// point query
 				var val testType
-				err = knox.NewGenericQuery[testType]().
+				_, err = knox.NewGenericQuery[testType]().
 					WithTag("query").
 					WithTable(table).
 					AndGte("id", id).
@@ -521,7 +521,7 @@ func TestWorkload5(t *testing.T) {
 
 		// range scan
 		var allTuples []*testType
-		err = knox.NewQuery().
+		_, err = knox.NewQuery().
 			WithTable(table).
 			Execute(ctx, &allTuples)
 		require.NoError(t, err, "range scan failed")
@@ -530,7 +530,7 @@ func TestWorkload5(t *testing.T) {
 		// point queries
 		for _, v := range allTuples {
 			var oneTuple testType
-			err = knox.NewQuery().
+			_, err = knox.NewQuery().
 				WithTable(table).
 				AndEqual("id", v.Id).
 				Execute(ctx, &oneTuple)

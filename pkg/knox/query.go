@@ -269,11 +269,24 @@ func (q Query) AndRange(field string, from, to any) Query {
 	return q.And(field, FilterModeRange, RangeValue{from, to})
 }
 
-func (q Query) Execute(ctx context.Context, val any) (err error) {
+// Runs query and writes result into val. Val must be non-nil pointer to
+// struct *T or pointer to slice of structs *[]T (or *[]*T). All struct
+// fields that match the table's schema are set, other fields are silently
+// ignored. Returns the number of matching records n or an error.
+//
+// When passing a struct pointer the query limit is implicitly set to 1.
+// When passing a pointer to a pre-allocated slice (len > 0), existing elements
+// are reused/overwritten up until limit. When no user-defined limit is set
+// for this query, the limit is inferred from result slice length.
+// Passing a pointer to a nil slice allocates a new slice with new elements
+// using the user-defined query limit. Note without explicit query limit
+// this may allocate large amounts of memory.
+func (q Query) Execute(ctx context.Context, val any) (n int, err error) {
 	// analyze result schema
 	var s *schema.Schema
 	s, err = schema.SchemaOf(val)
 	if err != nil {
+		err = fmt.Errorf("query %s: %v", q.tag, err)
 		return
 	}
 
@@ -282,9 +295,11 @@ func (q Query) Execute(ctx context.Context, val any) (err error) {
 		q = q.WithSchema(s)
 	}
 
+	// we expect a pointer to struct or pointer to slice
 	rval := reflect.ValueOf(val)
 	if rval.Kind() != reflect.Ptr {
-		return ErrNoPointer
+		err = fmt.Errorf("query %s: %v", q.tag, ErrNoPointer)
+		return
 	}
 	rval = reflect.Indirect(rval)
 
@@ -298,12 +313,29 @@ func (q Query) Execute(ctx context.Context, val any) (err error) {
 			q.limit = rval.Len()
 		}
 
-		// reuse existing slice elements
+		// ensure space
+		if rval.Len() < q.limit {
+			return 0, fmt.Errorf("query %s: insufficient slice length %d for limit %d", q.tag, rval.Len(), q.limit)
+		}
+
 		if rval.Len() > 0 {
-			n := -1
+			// reuse existing slice elements
 			err = q.table.Stream(ctx, q, func(r QueryRow) error {
-				n++
-				return r.Decode(rval.Index(n).Interface())
+				ev := rval.Index(n)
+				if ev.Kind() == reflect.Ptr {
+					// allocate when nil ptr
+					if ev.IsNil() {
+						ev.Set(reflect.New(ev.Type().Elem()))
+					}
+				} else {
+					// dereference when value type
+					ev = ev.Addr()
+				}
+				err = r.Decode(ev.Interface())
+				if err == nil {
+					n++
+				}
+				return err
 			})
 		} else {
 			// allocate new slice elements
@@ -325,6 +357,7 @@ func (q Query) Execute(ctx context.Context, val any) (err error) {
 
 				// append slice element
 				rval.Set(reflect.Append(rval, e.Elem()))
+				n++
 				return nil
 			})
 		}
@@ -333,6 +366,9 @@ func (q Query) Execute(ctx context.Context, val any) (err error) {
 		err = q.table.Stream(ctx, q.WithLimit(1), func(r QueryRow) error {
 			return r.Decode(val)
 		})
+		if err == nil {
+			n = 1
+		}
 	default:
 		err = fmt.Errorf("query %s: %T: %w", q.tag, val, schema.ErrInvalidResultType)
 	}
@@ -551,34 +587,109 @@ func (q GenericQuery[T]) AndRange(field string, from, to any) GenericQuery[T] {
 	return q
 }
 
-func (q GenericQuery[T]) Execute(ctx context.Context, val any) (err error) {
-	// validate val is any of *T, []T or []*T
+// Runs query and writes result into val. Val must be non-nil pointer to
+// struct *T or pointer to slice of structs *[]T (or *[]*T). All struct
+// fields that match the table's schema are set, other fields are silently
+// ignored. Returns the number of matching records n or an error.
+//
+// When passing a struct pointer the query limit is implicitly set to 1.
+// When passing a pointer to a pre-allocated slice (len > 0), existing elements
+// are reused/overwritten up until limit. When no user-defined limit is set
+// for this query, the limit is inferred from result slice length.
+// Passing a pointer to a nil slice allocates a new slice with new elements
+// using the user-defined query limit. Note without explicit query limit
+// this may allocate large amounts of memory.
+func (q GenericQuery[T]) Execute(ctx context.Context, val any) (n int, err error) {
+	// validate val is any of *T, *[]T or *[]*T
 	switch res := val.(type) {
 	case *T:
 		err = q.WithLimit(1).Stream(ctx, func(v *T) error {
 			*res = *v
+			n = 1
 			return nil
 		})
 	case *[]T:
-		if len(*res) > 0 {
-			q = q.WithLimit(len(*res))
-		} else if res == nil {
-			*res = make([]T, 0, q.limit)
+		// take limit from slice or user defined value
+		if q.limit == 0 {
+			q.limit = len(*res)
 		}
-		err = q.Stream(ctx, func(v *T) error {
-			*res = append(*res, *v)
-			return nil
-		})
+
+		// alloc when nil slice
+		if res == nil {
+			*res = make([]T, q.limit)
+		}
+
+		// ensure space (res may be nil slice)
+		if len(*res) < q.limit {
+			return 0, fmt.Errorf("query %s: insufficient slice length %d for limit %d", q.tag, len(*res), q.limit)
+		}
+
+		if q.limit > 0 {
+			// reuse existing slice elements
+			err = q.Query.Stream(ctx, func(r QueryRow) error {
+				err := r.Decode(&(*res)[n])
+				if err == nil {
+					n++
+				}
+				return err
+			})
+		} else {
+			// unbounded query, append new elements
+			err = q.Query.Stream(ctx, func(r QueryRow) error {
+				var t T
+				if err := r.Decode(&t); err != nil {
+					return err
+				}
+				*res = append(*res, t)
+				n++
+				return nil
+			})
+		}
 	case *[]*T:
-		if len(*res) > 0 {
-			q = q.WithLimit(len(*res))
-		} else if *res == nil {
-			*res = make([]*T, 0, q.limit)
+		// take limit from slice or user defined value
+		if q.limit == 0 {
+			q.limit = len(*res)
 		}
-		err = q.Stream(ctx, func(v *T) error {
-			*res = append(*res, v)
-			return nil
-		})
+
+		// alloc when nil slice
+		if res == nil {
+			*res = make([]*T, q.limit)
+		}
+
+		// ensure space
+		if len(*res) < q.limit {
+			return 0, fmt.Errorf("query %s: insufficient slice length %d for limit %d", q.tag, len(*res), q.limit)
+		}
+
+		if q.limit > 0 {
+			// bounded query, reuse existing slice elements
+			err = q.Query.Stream(ctx, func(r QueryRow) error {
+				// alloc element when nil
+				e := (*res)[n]
+				if e == nil {
+					e = new(T)
+				}
+				err := r.Decode(e)
+				if err == nil {
+					n++
+					(*res)[n] = e
+				}
+				return err
+			})
+
+		} else {
+			// unbounded query, append new elements
+			err = q.Query.Stream(ctx, func(r QueryRow) error {
+				t := new(T)
+				if err := r.Decode(t); err != nil {
+					return err
+				}
+				*res = append(*res, t)
+				n++
+				return nil
+			})
+		}
+
 	default:
 		err = fmt.Errorf("query %s: %T: %w", q.tag, val, schema.ErrInvalidResultType)
 	}

@@ -195,7 +195,7 @@ func run() error {
 
 	// read a single entry
 	var single Types
-	err = knox.NewGenericQuery[Types]().
+	_, err = knox.NewGenericQuery[Types]().
 		WithTable(table).
 		WithTag("two_conditions_single").
 		AndGte("int64", 42).
@@ -209,8 +209,8 @@ func run() error {
 	log.Infof("Single value int64=%d pk=%d", single.Int64, single.Id)
 
 	// read up to 10 records via query interface
-	multi := make([]*Types, 0)
-	err = knox.NewQuery().
+	multi := make([]Types, 10)
+	_, err = knox.NewQuery().
 		WithTable(table).
 		WithTag("no_condition_limit").
 		WithLimit(10).

@@ -145,7 +145,7 @@ func TestWorkload4(t *testing.T) {
 
 	// 1 Validate number of work rows
 	var workRows []*UnifiedRow
-	err = knox.NewGenericQuery[UnifiedRow]().
+	_, err = knox.NewGenericQuery[UnifiedRow]().
 		WithTable(table).
 		AndEqual("row_type", RowTypeWork).
 		Execute(ctx, &workRows)
@@ -155,7 +155,7 @@ func TestWorkload4(t *testing.T) {
 	// 2 run point queries
 	for _, r := range workRows {
 		var row UnifiedRow
-		err = knox.NewGenericQuery[UnifiedRow]().
+		_, err = knox.NewGenericQuery[UnifiedRow]().
 			WithTable(table).
 			AndEqual("id", r.Id).
 			Execute(ctx, &row)
@@ -174,7 +174,7 @@ func TestWorkload4(t *testing.T) {
 	}
 
 	var metaRows []*UnifiedRow
-	err = knox.NewGenericQuery[UnifiedRow]().
+	_, err = knox.NewGenericQuery[UnifiedRow]().
 		WithTable(table).
 		AndEqual("row_type", RowTypeMeta).
 		WithDebug(true).
@@ -194,7 +194,7 @@ func TestWorkload4(t *testing.T) {
 		}
 		// t.Logf("Looking for meta row TH-%d-TXN-%d", r.ThreadID, r.TxId)
 		var metarow UnifiedRow
-		err = knox.NewGenericQuery[UnifiedRow]().
+		_, err = knox.NewGenericQuery[UnifiedRow]().
 			WithTable(table).
 			AndEqual("row_type", RowTypeMeta).
 			AndEqual("thread_id", r.ThreadID).
@@ -216,7 +216,7 @@ func TestWorkload4(t *testing.T) {
 	for txId := 1; txId <= txnSize; txId++ {
 		for thId := 1; thId <= numThreads; thId++ {
 			var txMetaRow UnifiedRow
-			err = knox.NewGenericQuery[UnifiedRow]().
+			_, err = knox.NewGenericQuery[UnifiedRow]().
 				WithTable(table).
 				AndEqual("row_type", RowTypeMeta).
 				AndEqual("tx_id", txId).
@@ -226,7 +226,7 @@ func TestWorkload4(t *testing.T) {
 			require.NotEqual(t, txMetaRow.Id, uint64(0))
 
 			var txWorkRow1 UnifiedRow
-			err = knox.NewGenericQuery[UnifiedRow]().
+			_, err = knox.NewGenericQuery[UnifiedRow]().
 				WithTable(table).
 				AndEqual("row_type", RowTypeWork).
 				AndEqual("tx_id", txId).
@@ -237,7 +237,7 @@ func TestWorkload4(t *testing.T) {
 			require.NotEqual(t, uint(0), txWorkRow1.Id)
 
 			var txWorkRow2 UnifiedRow
-			err = knox.NewGenericQuery[UnifiedRow]().
+			_, err = knox.NewGenericQuery[UnifiedRow]().
 				WithTable(table).
 				AndEqual("row_type", RowTypeWork).
 				AndEqual("tx_id", txId).

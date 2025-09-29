@@ -62,7 +62,7 @@ func TestWorkload1(t *testing.T) {
 
 	for _, v := range data {
 		var res tests.Types
-		err := knox.NewGenericQuery[tests.Types]().
+		_, err := knox.NewGenericQuery[tests.Types]().
 			WithTable(table).
 			AndEqual("int64", v.Int64).
 			Execute(ctx, &res)

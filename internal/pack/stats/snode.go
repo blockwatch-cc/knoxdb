@@ -306,7 +306,7 @@ func (n *SNode) Query(it *Iterator) error {
 	var loadBlocks []uint16
 
 	if !n.spack.IsComplete() {
-		// we always need data pack keys, versions and num values
+		// we always need data pack keys, versions, num values and rid columns
 		if n.spack.Block(STATS_ROW_KEY) == nil {
 			// translate index to field id
 			loadBlocks = append(loadBlocks,

@@ -16,6 +16,7 @@ var (
 	ErrDatabaseExists = engine.ErrDatabaseExists
 	ErrNoDatabase     = engine.ErrNoDatabase
 	ErrNoPointer      = errors.New("expected pointer value")
+	ErrNilPointer     = errors.New("invalid nil pointer")
 
 	ErrNotImplemented = errors.New("not implemented")
 	ErrNoTable        = errors.New("missing table, use WithTable()")
