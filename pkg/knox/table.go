@@ -245,13 +245,13 @@ type GenericTable[T any] struct {
 	db     Database
 }
 
-func UseGenericTable[T any](name string, db Database) (*GenericTable[T], error) {
+func FindGenericTable[T any](name string, db Database) (*GenericTable[T], error) {
 	var t T
 	s, err := schema.SchemaOf(t)
 	if err != nil {
 		return nil, err
 	}
-	table, err := db.UseTable(name)
+	table, err := db.FindTable(name)
 	if err != nil {
 		return nil, err
 	}

@@ -216,7 +216,7 @@ func TestWorkload5(t *testing.T) {
 		for i := range ins {
 			ins[i] = NewTestValue(i + 1)
 		}
-		table, err := knox.UseGenericTable[testType](tableName, knox.WrapEngine(db.Get()))
+		table, err := knox.FindGenericTable[testType](tableName, knox.WrapEngine(db.Get()))
 		require.NoError(t, err)
 		_, err = table.Insert(ctx, ins)
 		require.NoError(t, err)
@@ -243,7 +243,7 @@ func TestWorkload5(t *testing.T) {
 		case insert:
 			errg.Go(func() error {
 				runtime.Gosched()
-				table, err := knox.UseGenericTable[testType](tableName, knox.WrapEngine(db.Get()))
+				table, err := knox.FindGenericTable[testType](tableName, knox.WrapEngine(db.Get()))
 				if err != nil {
 					return wrapErr(err)
 				}
@@ -260,7 +260,7 @@ func TestWorkload5(t *testing.T) {
 		case update:
 			errg.Go(func() error {
 				runtime.Gosched()
-				table, err := knox.WrapEngine(db.Get()).UseTable(tableName)
+				table, err := knox.WrapEngine(db.Get()).FindTable(tableName)
 				if err != nil {
 					return wrapErr(err)
 				}
@@ -298,7 +298,7 @@ func TestWorkload5(t *testing.T) {
 		case delete:
 			errg.Go(func() error {
 				runtime.Gosched()
-				table, err := knox.UseGenericTable[testType](tableName, knox.WrapEngine(db.Get()))
+				table, err := knox.FindGenericTable[testType](tableName, knox.WrapEngine(db.Get()))
 				if err != nil {
 					return wrapErr(err)
 				}
@@ -342,7 +342,7 @@ func TestWorkload5(t *testing.T) {
 		case query:
 			errg.Go(func() error {
 				runtime.Gosched()
-				table, err := knox.WrapEngine(db.Get()).UseTable(tableName)
+				table, err := knox.WrapEngine(db.Get()).FindTable(tableName)
 				if err != nil {
 					return wrapErr(err)
 				}
@@ -369,7 +369,7 @@ func TestWorkload5(t *testing.T) {
 				runtime.Gosched()
 				ctx, cancel := context.WithCancel(ctx)
 				defer cancel()
-				table, err := knox.WrapEngine(db.Get()).UseTable(tableName)
+				table, err := knox.WrapEngine(db.Get()).FindTable(tableName)
 				if err != nil {
 					return wrapErr(err)
 				}
@@ -495,7 +495,7 @@ func TestWorkload5(t *testing.T) {
 	// verify (wrapped into sub-test to catch panics)
 	t.Run("verify", func(t *testing.T) {
 		t.Log("Verifying data integrity.")
-		table, err := knox.WrapEngine(db.Get()).UseTable(tableName)
+		table, err := knox.WrapEngine(db.Get()).FindTable(tableName)
 		require.NoError(t, err, "use table")
 
 		// log metrics

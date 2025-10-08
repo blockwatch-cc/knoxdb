@@ -50,7 +50,7 @@ func TestWorkload4(t *testing.T) {
 		tests.SaveDatabaseFiles(t, eng)
 	})
 	db := knox.WrapEngine(eng)
-	table, err := db.UseTable("unified_row")
+	table, err := db.FindTable("unified_row")
 	require.NoError(t, err, "Missing table")
 
 	ctx := context.Background()

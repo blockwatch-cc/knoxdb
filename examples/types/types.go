@@ -349,7 +349,7 @@ func Open(ctx context.Context) (db knox.Database, table knox.Table, err error) {
 	}
 
 	log.Info("Use table types")
-	table, err = db.UseTable("types")
+	table, err = db.FindTable("types")
 	if err != nil {
 		return
 	}

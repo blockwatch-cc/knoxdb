@@ -66,7 +66,7 @@ func UseGenericStore[T any](name string, db Database) (*GenericStore[T], error) 
 	if err != nil {
 		return nil, err
 	}
-	store, err := db.UseStore(name)
+	store, err := db.FindStore(name)
 	if err != nil {
 		return nil, err
 	}

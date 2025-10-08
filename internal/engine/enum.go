@@ -37,7 +37,7 @@ func (e *Engine) NumEnums() int {
 	return len(e.enums.Map())
 }
 
-func (e *Engine) UseEnum(name string) (*schema.EnumDictionary, error) {
+func (e *Engine) FindEnum(name string) (*schema.EnumDictionary, error) {
 	if e.IsShutdown() {
 		return nil, ErrDatabaseShutdown
 	}

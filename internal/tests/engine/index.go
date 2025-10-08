@@ -109,7 +109,7 @@ func CreateIndex(t *testing.T, idxEngine engine.IndexEngine, tab engine.TableEng
 	t.Helper()
 	ctx := engine.WithEngine(context.Background(), e)
 	require.NoError(t, idxEngine.Create(ctx, tab, s, idxOpts))
-	tab.UseIndex(idxEngine)
+	tab.ConnectIndex(idxEngine)
 }
 
 func FillIndex(t *testing.T, e *engine.Engine, ti engine.IndexEngine) *pack.Package {

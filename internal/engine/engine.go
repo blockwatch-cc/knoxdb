@@ -424,7 +424,7 @@ func (e *Engine) Close(ctx context.Context) error {
 	// close all open indexes
 	e.log.Trace("Close indexes")
 	for _, idx := range e.indexes.Map() {
-		idx.Table().UnuseIndex(idx)
+		idx.Table().DisconnectIndex(idx)
 		name := idx.Schema().Name()
 		if !e.IsReadOnly() {
 			if err := idx.Sync(ctx); err != nil {
@@ -575,7 +575,7 @@ func (e *Engine) ForceShutdown() error {
 	// close engine storage backend files without journal flush and checkpointing
 	e.log.Trace("Close indexes")
 	for _, idx := range e.indexes.Map() {
-		idx.Table().UnuseIndex(idx)
+		idx.Table().DisconnectIndex(idx)
 		name := idx.Schema().Name()
 		if err := idx.Close(ctx); err != nil {
 			e.log.Errorf("Closing index %s: %v", name, err)

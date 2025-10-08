@@ -36,7 +36,7 @@ func (e *Engine) NumStores() int {
 	return len(e.stores.Map())
 }
 
-func (e *Engine) UseStore(name string) (StoreEngine, error) {
+func (e *Engine) FindStore(name string) (StoreEngine, error) {
 	if e.IsShutdown() {
 		return nil, ErrDatabaseShutdown
 	}

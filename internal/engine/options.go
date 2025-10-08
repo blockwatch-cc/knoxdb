@@ -180,6 +180,62 @@ func (o *TableOptions) UnmarshalBinary(buf []byte) error {
 	return err
 }
 
+func (o TableOptions) WithEngine(e TableKind) TableOptions {
+	o.Engine = e
+	return o
+}
+
+func (o TableOptions) WithDriver(n string) TableOptions {
+	o.Driver = n
+	return o
+}
+
+func (o TableOptions) WithPackSize(n int) TableOptions {
+	o.PackSize = n
+	return o
+}
+
+func (o TableOptions) WithJournalSize(n int) TableOptions {
+	o.JournalSize = n
+	return o
+}
+
+func (o TableOptions) WithJournalSegments(n int) TableOptions {
+	o.JournalSegments = n
+	return o
+}
+
+func (o TableOptions) WithPageSize(n int) TableOptions {
+	o.PageSize = n
+	return o
+}
+
+func (o TableOptions) WithTxMaxSize(n int) TableOptions {
+	o.TxMaxSize = n
+	return o
+}
+
+func (o TableOptions) WithPageFill(n float64) TableOptions {
+	o.PageFill = n
+	return o
+}
+
+func (o TableOptions) WithReadOnly() TableOptions {
+	o.ReadOnly = true
+	return o
+}
+
+func (o TableOptions) WithDangerousNoSync() TableOptions {
+	o.NoSync = true
+	o.NoGrowSync = true
+	return o
+}
+
+func (o TableOptions) WithLogger(l log.Logger) TableOptions {
+	o.Logger = l
+	return o
+}
+
 type StoreOptions struct {
 	Driver     string     // bolt, mem, ...
 	PageSize   int        // boltdb
@@ -214,6 +270,42 @@ func (o *StoreOptions) UnmarshalBinary(buf []byte) error {
 	dec := schema.NewGenericDecoder[StoreOptions]()
 	_, err := dec.Decode(buf, o)
 	return err
+}
+
+func (o StoreOptions) WithDriver(n string) StoreOptions {
+	o.Driver = n
+	return o
+}
+
+func (o StoreOptions) WithPageSize(n int) StoreOptions {
+	o.PageSize = n
+	return o
+}
+
+func (o StoreOptions) WithTxMaxSize(n int) StoreOptions {
+	o.TxMaxSize = n
+	return o
+}
+
+func (o StoreOptions) WithPageFill(n float64) StoreOptions {
+	o.PageFill = n
+	return o
+}
+
+func (o StoreOptions) WithReadOnly() StoreOptions {
+	o.ReadOnly = true
+	return o
+}
+
+func (o StoreOptions) WithDangerousNoSync() StoreOptions {
+	o.NoSync = true
+	o.NoGrowSync = true
+	return o
+}
+
+func (o StoreOptions) WithLogger(l log.Logger) StoreOptions {
+	o.Logger = l
+	return o
 }
 
 type IndexOptions struct {
@@ -258,4 +350,60 @@ func (o *IndexOptions) UnmarshalBinary(buf []byte) error {
 	dec := schema.NewGenericDecoder[IndexOptions]()
 	_, err := dec.Decode(buf, o)
 	return err
+}
+
+func (o IndexOptions) WithEngine(e IndexKind) IndexOptions {
+	o.Engine = e
+	return o
+}
+
+func (o IndexOptions) WithDriver(n string) IndexOptions {
+	o.Driver = n
+	return o
+}
+
+func (o IndexOptions) WithIndexType(t types.IndexType) IndexOptions {
+	o.Type = t
+	return o
+}
+
+func (o IndexOptions) WithPackSize(n int) IndexOptions {
+	o.PackSize = n
+	return o
+}
+
+func (o IndexOptions) WithJournalSize(n int) IndexOptions {
+	o.JournalSize = n
+	return o
+}
+
+func (o IndexOptions) WithPageSize(n int) IndexOptions {
+	o.PageSize = n
+	return o
+}
+
+func (o IndexOptions) WithTxMaxSize(n int) IndexOptions {
+	o.TxMaxSize = n
+	return o
+}
+
+func (o IndexOptions) WithPageFill(n float64) IndexOptions {
+	o.PageFill = n
+	return o
+}
+
+func (o IndexOptions) WithReadOnly() IndexOptions {
+	o.ReadOnly = true
+	return o
+}
+
+func (o IndexOptions) WithDangerousNoSync() IndexOptions {
+	o.NoSync = true
+	o.NoGrowSync = true
+	return o
+}
+
+func (o IndexOptions) WithLogger(l log.Logger) IndexOptions {
+	o.Logger = l
+	return o
 }

@@ -63,8 +63,8 @@ type TableEngine interface {
 	Stream(Context, QueryPlan, func(QueryRow) error) error
 
 	// index management
-	UseIndex(QueryableIndex)
-	UnuseIndex(QueryableIndex)
+	ConnectIndex(QueryableIndex)
+	DisconnectIndex(QueryableIndex)
 	Indexes() []QueryableIndex
 	PkIndex() (QueryableIndex, bool)
 

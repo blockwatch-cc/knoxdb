@@ -96,8 +96,16 @@ func (d *DB) CreateTable(ctx context.Context, s *schema.Schema, opts TableOption
 	return &TableImpl{d, t, nil, d.log}, nil
 }
 
-func (d *DB) UseTable(name string) (Table, error) {
-	t, err := d.engine.UseTable(name)
+func (d *DB) GetTable(tag uint64) (Table, bool) {
+	t, ok := d.engine.GetTable(tag)
+	if !ok {
+		return nil, false
+	}
+	return &TableImpl{d, t, nil, d.log}, true
+}
+
+func (d *DB) FindTable(name string) (Table, error) {
+	t, err := d.engine.FindTable(name)
 	if err != nil {
 		return nil, err
 	}
@@ -133,8 +141,8 @@ func (d *DB) CreateStore(ctx context.Context, s *schema.Schema, opts StoreOption
 	return &StoreImpl{store: st}, nil
 }
 
-func (d *DB) UseStore(name string) (Store, error) {
-	s, err := d.engine.UseStore(name)
+func (d *DB) FindStore(name string) (Store, error) {
+	s, err := d.engine.FindStore(name)
 	if err != nil {
 		return nil, err
 	}
@@ -150,8 +158,8 @@ func (d *DB) ListIndexes(name string) []string {
 	return d.engine.IndexNames(name)
 }
 
-func (d *DB) UseIndex(name string) (Index, error) {
-	i, err := d.engine.UseIndex(name)
+func (d *DB) FindIndex(name string) (Index, error) {
+	i, err := d.engine.FindIndex(name)
 	if err != nil {
 		return nil, err
 	}
@@ -176,8 +184,8 @@ func (d *DB) ListEnums() []string {
 	return d.engine.EnumNames()
 }
 
-func (d *DB) UseEnum(name string) (*schema.EnumDictionary, error) {
-	enum, err := d.engine.UseEnum(name)
+func (d *DB) FindEnum(name string) (*schema.EnumDictionary, error) {
+	enum, err := d.engine.FindEnum(name)
 	if err != nil {
 		return nil, err
 	}

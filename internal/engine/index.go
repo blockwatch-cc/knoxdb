@@ -49,7 +49,7 @@ func (e *Engine) NumTableIndexes(tableName string) int {
 	return len(table.Indexes())
 }
 
-func (e *Engine) UseIndex(name string) (IndexEngine, error) {
+func (e *Engine) FindIndex(name string) (IndexEngine, error) {
 	if idx, ok := e.indexes.Get(types.TaggedHash(types.ObjectTagIndex, name)); ok {
 		return idx, nil
 	}
@@ -125,7 +125,7 @@ func (e *Engine) CreateIndex(ctx context.Context, tableName string, s *schema.Sc
 	// register commit/abort callbacks
 	GetTx(ctx).OnCommit(func(ctx context.Context) error {
 		// add to table and engine
-		table.UseIndex(index)
+		table.ConnectIndex(index)
 
 		// register
 		e.indexes.Put(tag, index)
@@ -147,7 +147,7 @@ func (e *Engine) CreateIndex(ctx context.Context, tableName string, s *schema.Sc
 }
 
 func (e *Engine) RebuildIndex(ctx context.Context, name string) error {
-	idx, err := e.UseIndex(name)
+	idx, err := e.FindIndex(name)
 	if err != nil {
 		return err
 	}
@@ -167,7 +167,7 @@ func (e *Engine) RebuildIndex(ctx context.Context, name string) error {
 	}
 
 	// temporarily remove index from table to make it unavailable for queries
-	idx.Table().UnuseIndex(idx)
+	idx.Table().DisconnectIndex(idx)
 
 	// (set index state)
 
@@ -186,7 +186,7 @@ func (e *Engine) RebuildIndex(ctx context.Context, name string) error {
 		// (set index state)
 
 		// re-add index to table signalling its ready to use again
-		idx.Table().UseIndex(idx)
+		idx.Table().ConnectIndex(idx)
 
 		// commit tx (will release table read lock)
 		return commit()
@@ -230,7 +230,7 @@ func (e *Engine) DropIndex(ctx context.Context, name string) error {
 	// register commit callback
 	GetTx(ctx).OnCommit(func(ctx context.Context) error {
 		// remove index from table
-		index.Table().UnuseIndex(index)
+		index.Table().DisconnectIndex(index)
 
 		if err := index.Drop(ctx); err != nil {
 			e.log.Errorf("Drop index: %v", err)
@@ -282,7 +282,7 @@ func (e *Engine) openIndexes(ctx context.Context, table TableEngine) error {
 		if err := idx.Open(ctx, table, s, opts); err != nil {
 			return err
 		}
-		table.UseIndex(idx)
+		table.ConnectIndex(idx)
 		itag := types.TaggedHash(types.ObjectTagIndex, s.Name())
 		e.indexes.Put(itag, idx)
 		e.log.Debugf("Loaded index %s", s.Name())

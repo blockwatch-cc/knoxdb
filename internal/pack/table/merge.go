@@ -185,7 +185,7 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 
 	// init history writer
 	var hist engine.TableWriter
-	if ht, err := engine.GetEngine(ctx).UseTable(t.schema.Name() + "_history"); err == nil {
+	if ht, err := engine.GetEngine(ctx).FindTable(t.schema.Name() + "_history"); err == nil {
 		hist = ht.NewWriter(seg.Id())
 		defer hist.Close()
 	}

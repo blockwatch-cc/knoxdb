@@ -10,16 +10,34 @@ import (
 
 var (
 	DefaultDatabaseOptions = engine.DatabaseOptions{
-		PageSize:  1024,
-		PageFill:  0.8,
+		Driver:    "bolt",
+		PageSize:  16 * 1024,
+		PageFill:  1.0,
 		CacheSize: 16 * 1 << 20,
 		Logger:    log.New(nil).SetLevel(log.LevelInfo),
 	}
 	ReadonlyDatabaseOptions = engine.DatabaseOptions{
-		PageSize:  1024,
-		PageFill:  0.8,
+		Driver:    "bolt",
+		PageSize:  16 * 1024,
+		PageFill:  1.0,
 		CacheSize: 16 * 1 << 20,
 		ReadOnly:  true,
 		Logger:    log.New(nil).SetLevel(log.LevelInfo),
 	}
 )
+
+func NewDatabaseOptions() engine.DatabaseOptions {
+	return DefaultDatabaseOptions
+}
+
+func NewTableOptions() engine.TableOptions {
+	return engine.TableOptions{}
+}
+
+func NewIndexOptions() engine.IndexOptions {
+	return engine.IndexOptions{}
+}
+
+func NewStoreOptions() engine.StoreOptions {
+	return engine.StoreOptions{}
+}

@@ -257,7 +257,7 @@ func UpdateRowsTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine,
 	idxSchema, err := tab.Schema().SelectFieldIds(tab.Schema().PkId(), schema.MetaRid)
 	require.NoError(t, err)
 	idx := query.NewMockIndex(idxSchema, xroar.New())
-	tab.UseIndex(idx)
+	tab.ConnectIndex(idx)
 
 	enc := schema.NewEncoder(tab.Schema())
 	data := make([]*AllTypes, 10)

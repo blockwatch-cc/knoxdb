@@ -40,6 +40,8 @@ var (
 	Ge       = query.Ge       // func (col string, val any) Condition
 	Regexp   = query.Regexp   // func (col string, val any) Condition
 	Range    = query.Range    // func (col string, from, to any) Condition
+
+	ParseFilterMode = types.ParseFilterMode
 )
 
 const (
@@ -110,7 +112,7 @@ type Query struct {
 
 func NewQuery() Query {
 	return Query{
-		table: newErrorTable("query", ErrNoTable),
+		table: newErrorTable("query", ErrEmptyTable),
 		order: OrderAsc,
 		limit: 0,
 		log:   log.New(nil).SetLevel(log.LevelInfo),
@@ -402,7 +404,7 @@ func (q Query) Run(ctx context.Context) (QueryResult, error) {
 func (q Query) Encode() ([]byte, error) {
 	// // table must exist
 	// if q.Query.table == nil {
-	// 	return nil, engine.ErrNoTable
+	// 	return nil, engine.ErrEmptyTable
 	// }
 
 	// // validate T against table schema

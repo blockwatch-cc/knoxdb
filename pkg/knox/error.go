@@ -9,17 +9,28 @@ import (
 	"fmt"
 
 	"blockwatch.cc/knoxdb/internal/engine"
+	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
 var (
 	ErrDatabaseExists = engine.ErrDatabaseExists
 	ErrNoDatabase     = engine.ErrNoDatabase
+	ErrNoTable        = engine.ErrNoTable
+	ErrNoIndex        = engine.ErrNoIndex
+	ErrNoStore        = engine.ErrNoStore
+	ErrNoEnum         = engine.ErrNoEnum
+	EndStream         = types.EndStream
+
+	ErrTableExists = engine.ErrTableExists
+	ErrStoreExists = engine.ErrStoreExists
+	ErrIndexExists = engine.ErrIndexExists
+	ErrEnumExists  = engine.ErrEnumExists
+
 	ErrNoPointer      = errors.New("expected pointer value")
 	ErrNilPointer     = errors.New("invalid nil pointer")
-
 	ErrNotImplemented = errors.New("not implemented")
-	ErrNoTable        = errors.New("missing table, use WithTable()")
+	ErrEmptyTable     = errors.New("missing table, use WithTable()")
 )
 
 // placeholder for an undefined table, helps delay raising an error

@@ -34,7 +34,7 @@ func (e *Engine) NumTables() int {
 	return len(e.tables.Map())
 }
 
-func (e *Engine) UseTable(name string) (TableEngine, error) {
+func (e *Engine) FindTable(name string) (TableEngine, error) {
 	if e.IsShutdown() {
 		return nil, ErrDatabaseShutdown
 	}

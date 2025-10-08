@@ -164,11 +164,11 @@ func run() (err error) {
 
 //nolint:all
 func getTableOrIndexSchema(db knox.Database, name string) *schema.Schema {
-	t, err := db.UseTable(name)
+	t, err := db.FindTable(name)
 	if err == nil {
 		return t.Schema()
 	}
-	if idx, err := db.UseIndex(name); err == nil {
+	if idx, err := db.FindIndex(name); err == nil {
 		return idx.Schema()
 	}
 	panic(err)
@@ -192,11 +192,11 @@ type Viewer interface {
 
 //nolint:all
 func getTableOrIndexView(db knox.Database, name string) Viewer {
-	t, err := db.UseTable(name)
+	t, err := db.FindTable(name)
 	if err == nil {
 		return t.Engine().(*pt.Table)
 	}
-	if idx, err := db.UseIndex(name); err == nil {
+	if idx, err := db.FindIndex(name); err == nil {
 		return idx.Engine().(*pi.Index)
 	}
 	panic(err)
@@ -204,11 +204,11 @@ func getTableOrIndexView(db knox.Database, name string) Viewer {
 
 //nolint:all
 func getTableOrIndexStatsView(db knox.Database, name string) StatsViewer {
-	t, err := db.UseTable(name)
+	t, err := db.FindTable(name)
 	if err == nil {
 		return t.Engine().(*pt.Table)
 	}
-	if idx, err := db.UseIndex(name); err == nil {
+	if idx, err := db.FindIndex(name); err == nil {
 		return idx.Engine().(*pi.Index)
 	}
 	panic(err)

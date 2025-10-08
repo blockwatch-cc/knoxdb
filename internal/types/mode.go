@@ -4,6 +4,7 @@
 package types
 
 import (
+	"math"
 	"strings"
 )
 
@@ -93,4 +94,17 @@ func (m FilterMode) Symbol() string {
 
 func (m FilterMode) String() string {
 	return filterModeOperators[m]
+}
+
+func (m FilterMode) MaxValues() int {
+	switch m {
+	case FilterModeTrue, FilterModeFalse:
+		return 0
+	case FilterModeIn, FilterModeNotIn:
+		return math.MaxInt
+	case FilterModeRange:
+		return 2
+	default:
+		return 1
+	}
 }

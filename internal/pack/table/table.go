@@ -475,11 +475,11 @@ func (t *Table) Truncate(ctx context.Context) error {
 	return nil
 }
 
-func (t *Table) UseIndex(idx engine.QueryableIndex) {
+func (t *Table) ConnectIndex(idx engine.QueryableIndex) {
 	t.indexes = append(t.indexes, idx)
 }
 
-func (t *Table) UnuseIndex(idx engine.QueryableIndex) {
+func (t *Table) DisconnectIndex(idx engine.QueryableIndex) {
 	idxId := idx.Schema().TaggedHash(types.ObjectTagIndex)
 	t.indexes = slices.DeleteFunc(t.indexes, func(v engine.QueryableIndex) bool {
 		return v.Schema().TaggedHash(types.ObjectTagIndex) == idxId

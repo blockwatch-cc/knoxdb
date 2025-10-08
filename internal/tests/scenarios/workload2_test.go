@@ -27,7 +27,7 @@ func TestWorkload2(t *testing.T) {
 		tests.SaveDatabaseFiles(t, eng)
 	})
 	db := knox.WrapEngine(eng)
-	table, err := db.UseTable("types")
+	table, err := db.FindTable("types")
 	require.NoError(t, err, "Missing table")
 
 	ctx := context.Background()

@@ -101,7 +101,8 @@ type Database interface {
 	// tables
 	ListTables() []string
 	CreateTable(ctx context.Context, s *schema.Schema, opts TableOptions) (Table, error)
-	UseTable(name string) (Table, error)
+	FindTable(name string) (Table, error)
+	GetTable(tag uint64) (Table, bool)
 	DropTable(ctx context.Context, name string) error
 	AlterTable(ctx context.Context, name string, s *schema.Schema) error
 	TruncateTable(ctx context.Context, name string) error
@@ -109,7 +110,7 @@ type Database interface {
 
 	// indexes
 	ListIndexes(name string) []string
-	UseIndex(name string) (Index, error)
+	FindIndex(name string) (Index, error)
 	CreateIndex(ctx context.Context, name string, table Table, s *schema.Schema, opts IndexOptions) error
 	RebuildIndex(ctx context.Context, name string) error
 	DropIndex(ctx context.Context, name string) error
@@ -117,12 +118,12 @@ type Database interface {
 	// stores
 	ListStores() []string
 	CreateStore(ctx context.Context, s *schema.Schema, opts StoreOptions) (Store, error)
-	UseStore(name string) (Store, error)
+	FindStore(name string) (Store, error)
 	DropStore(ctx context.Context, name string) error
 
 	// enums
 	ListEnums() []string
-	UseEnum(name string) (*schema.EnumDictionary, error)
+	FindEnum(name string) (*schema.EnumDictionary, error)
 	CreateEnum(ctx context.Context, name string) (*schema.EnumDictionary, error)
 	ExtendEnum(ctx context.Context, name string, vals ...string) error
 	DropEnum(ctx context.Context, name string) error
