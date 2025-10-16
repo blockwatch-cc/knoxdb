@@ -1,10 +1,10 @@
 module blockwatch.cc/knoxdb
 
-go 1.24
+go 1.24.0
 
 require (
 	github.com/echa/config v1.1.2
-	github.com/echa/log v1.3.3
+	github.com/echa/log v1.3.4
 	github.com/gofrs/flock v0.12.1
 	github.com/google/btree v1.1.3
 	github.com/jedib0t/go-pretty/v6 v6.6.7
@@ -18,7 +18,7 @@ require (
 	go.etcd.io/bbolt v1.4.2
 	golang.org/x/exp v0.0.0-20250506013437-ce4c2cf36ca6
 	golang.org/x/sync v0.14.0
-	golang.org/x/sys v0.33.0
+	golang.org/x/sys v0.37.0
 	golang.org/x/time v0.10.0
 )
 
