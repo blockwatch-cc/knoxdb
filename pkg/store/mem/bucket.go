@@ -370,7 +370,7 @@ func (b *bucket) Get(key []byte) []byte {
 func (b *bucket) Delete(key []byte) error {
 	// Ensure transaction state is valid.
 	if b.tx.closed {
-		return nil
+		return store.ErrTxClosed
 	}
 
 	// Ensure the transaction is writable.

@@ -164,6 +164,9 @@ func (b *bucket) Writable() bool {
 // Put saves the specified key/value pair to the bucket.  Keys that do not
 // already exist are added and keys that already exist are overwritten.
 func (b *bucket) Put(key, value []byte) error {
+	if len(key) == 0 {
+		return store.ErrKeyRequired
+	}
 	return wrap(b.bucket.Put(key, value))
 }
 
@@ -185,11 +188,9 @@ func (b *bucket) Get(key []byte) []byte {
 // Delete removes the specified key from the bucket.  Deleting a key that does
 // not exist does not return an error.
 func (b *bucket) Delete(key []byte) error {
-	// Nothing to do if there is no key.
 	if len(key) == 0 {
-		return nil
+		return store.ErrKeyRequired
 	}
-
 	return wrap(b.bucket.Delete(key))
 }
 

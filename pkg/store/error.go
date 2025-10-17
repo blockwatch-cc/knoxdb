@@ -24,6 +24,7 @@ var (
 	ErrBucketExists      = errors.New("bucket exists")
 	ErrKeyRequired       = errors.New("key required")
 	ErrKeyTooLarge       = errors.New("key too large")
+	ErrKeyNotFound       = errors.New("key too found")
 	ErrValueTooLarge     = errors.New("value too large")
 	ErrIncompatibleValue = errors.New("incompatible delete (bucket/value mismatch)")
 	ErrMoveAcrossDbs     = errors.New("unsupported move across databases")
