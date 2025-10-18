@@ -4,8 +4,11 @@
 package bolt
 
 import (
+	"errors"
+
 	"blockwatch.cc/knoxdb/pkg/store"
 	bolt "go.etcd.io/bbolt"
+	bolterr "go.etcd.io/bbolt/errors"
 )
 
 // bucket is an internal type used to represent a collection of key/value pairs
@@ -35,6 +38,7 @@ func (b *bucket) Bucket(key []byte) store.Bucket {
 }
 
 // CreateBucket creates and returns a new nested bucket with the given key.
+// If the bucket already exists it returns it without error.
 func (b *bucket) CreateBucket(key []byte) (store.Bucket, error) {
 	var (
 		child *bolt.Bucket
@@ -46,25 +50,10 @@ func (b *bucket) CreateBucket(key []byte) (store.Bucket, error) {
 		child, err = b.bucket.CreateBucket(key)
 	}
 	if err != nil {
-		return nil, wrap(err)
-	}
-	child.FillPercent = b.tx.db.opts.PageFill
-	return &bucket{tx: b.tx, bucket: child}, nil
-}
-
-// CreateBucketIfNotExists creates and returns a new nested bucket with the
-// given key if it does not already exist.
-func (b *bucket) CreateBucketIfNotExists(key []byte) (store.Bucket, error) {
-	var (
-		child *bolt.Bucket
-		err   error
-	)
-	if b.bucket == nil {
-		child, err = b.tx.tx.CreateBucketIfNotExists(key)
-	} else {
-		child, err = b.bucket.CreateBucketIfNotExists(key)
-	}
-	if err != nil {
+		// use bucket if exists
+		if errors.Is(err, bolterr.ErrBucketExists) {
+			return b.Bucket(key), nil
+		}
 		return nil, wrap(err)
 	}
 	child.FillPercent = b.tx.db.opts.PageFill

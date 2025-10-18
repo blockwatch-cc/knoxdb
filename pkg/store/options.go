@@ -4,8 +4,13 @@
 package store
 
 import (
+	"strings"
+
 	"github.com/echa/log"
 )
+
+// default file extension
+const dbFileExt = ".db"
 
 type Option func(cfg *Options) error
 
@@ -30,7 +35,7 @@ type Options struct {
 func defaultOptions() Options {
 	return Options{
 		Driver:   "mem",
-		Path:     "./db",
+		Path:     "./db", // will append `mem.db`
 		Log:      log.Disabled,
 		PageFill: 0.5,
 	}
@@ -45,6 +50,12 @@ func WithDriver(d string) Option {
 
 func WithPath(p string) Option {
 	return func(cfg *Options) error {
+		if strings.HasSuffix(p, "/") {
+			p += cfg.Driver
+		}
+		if !strings.HasSuffix(p, dbFileExt) {
+			p += dbFileExt
+		}
 		cfg.Path = p
 		return nil
 	}

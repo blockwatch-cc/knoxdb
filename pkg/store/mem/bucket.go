@@ -55,6 +55,7 @@ func (b *bucket) Bucket(key []byte) store.Bucket {
 }
 
 // CreateBucket creates and returns a new nested bucket with the given key.
+// If the bucket already exists it returns it without error.
 func (b *bucket) CreateBucket(key []byte) (store.Bucket, error) {
 	// Ensure transaction state is valid.
 	if b.tx.closed {
@@ -71,10 +72,10 @@ func (b *bucket) CreateBucket(key []byte) (store.Bucket, error) {
 		return nil, store.ErrKeyRequired
 	}
 
-	// Ensure bucket does not already exist.
+	// Check if bucket exists.
 	childKey := bucketizedKey(b.id, key)
-	if _, ok := b.tx.db.bucketIds[string(childKey)]; ok {
-		return nil, store.ErrBucketExists
+	if childID, ok := b.tx.db.bucketIds[string(childKey)]; ok {
+		return &bucket{tx: b.tx, id: childID, key: childKey}, nil
 	}
 
 	// Find the appropriate next bucket ID to use for the new bucket.
@@ -89,26 +90,6 @@ func (b *bucket) CreateBucket(key []byte) (store.Bucket, error) {
 	b.tx.db.bucketIds[string(childKey)] = childID
 
 	return &bucket{tx: b.tx, id: childID, key: childKey}, nil
-}
-
-// CreateBucketIfNotExists creates and returns a new nested bucket with the
-// given key if it does not already exist.
-func (b *bucket) CreateBucketIfNotExists(key []byte) (store.Bucket, error) {
-	// Ensure transaction state is valid.
-	if b.tx.closed {
-		return nil, store.ErrTxClosed
-	}
-
-	// Ensure the transaction is writable.
-	if !b.tx.writable {
-		return nil, store.ErrTxReadonly
-	}
-
-	// Return existing bucket if it already exists, otherwise create it.
-	if bucket := b.Bucket(key); bucket != nil {
-		return bucket, nil
-	}
-	return b.CreateBucket(key)
 }
 
 // DeleteBucket removes a nested bucket with the given key.

@@ -90,6 +90,30 @@ func Open(opts ...Option) (DB, error) {
 	return drv.Open(cfg)
 }
 
+// OpenOrCreate is a helper that opens a database when it exists
+// of creates it otherwise.
+func OpenOrCreate(opts ...Option) (DB, error) {
+	cfg := defaultOptions()
+	for _, v := range opts {
+		if err := v(&cfg); err != nil {
+			return nil, err
+		}
+	}
+	drv, err := lookup(cfg.Driver)
+	if err != nil {
+		return nil, err
+	}
+	exists, err := drv.Exists(cfg.Path)
+	if err != nil {
+		return nil, err
+	}
+	if exists {
+		return drv.Open(cfg)
+	} else {
+		return drv.Create(cfg)
+	}
+}
+
 func Drop(driver string, path string) error {
 	drv, err := lookup(driver)
 	if err != nil {
@@ -104,4 +128,17 @@ func Exists(driver string, path string) (bool, error) {
 		return false, err
 	}
 	return drv.Exists(path)
+}
+
+// CommitAndContinue commits the current transaction and
+// opens a new transaction of the same type. This is useful
+// to batch commit large quantities of data in a loop.
+func CommitAndContinue(tx Tx) (Tx, error) {
+	db := tx.DB()
+	iswrite := tx.IsWriteable()
+	err := tx.Commit()
+	if err != nil {
+		return nil, err
+	}
+	return db.Begin(iswrite)
 }

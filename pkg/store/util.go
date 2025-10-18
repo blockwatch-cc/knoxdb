@@ -3,8 +3,6 @@
 
 package store
 
-import "errors"
-
 // Range is a key range.
 type Range struct {
 	// Start of the key range, include in the range.
@@ -28,32 +26,4 @@ func BytesPrefix(prefix []byte) *Range {
 		}
 	}
 	return &Range{prefix, limit}
-}
-
-// CommitAndContinue commits the current transaction and
-// opens a new transaction of the same type. This is useful
-// to batch commit large quantities of data in a loop.
-func CommitAndContinue(tx Tx) (Tx, error) {
-	db := tx.DB()
-	iswrite := tx.IsWriteable()
-	err := tx.Commit()
-	if err != nil {
-		return nil, err
-	}
-	return db.Begin(iswrite)
-}
-
-func CreateBucket(tx Tx, key []byte, errOnExist error) (Bucket, error) {
-	b, err := tx.Root().CreateBucket(key)
-	if err == nil {
-		return b, nil
-	}
-	if errors.Is(err, ErrBucketExists) {
-		if errOnExist == nil {
-			return tx.Bucket(key), nil
-		} else {
-			return nil, errOnExist
-		}
-	}
-	return nil, err
 }

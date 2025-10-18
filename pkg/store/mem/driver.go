@@ -18,9 +18,19 @@ const (
 	bucketIdLen int = 1
 )
 
+// ensure types implement store interface
+var (
+	_ store.Factory  = (*driver)(nil)
+	_ store.DB       = (*db)(nil)
+	_ store.Tx       = (*transaction)(nil)
+	_ store.Bucket   = (*bucket)(nil)
+	_ store.Sequence = (*sequence)(nil)
+	_ store.Cursor   = (*cursor)(nil)
+)
+
 func init() {
 	if err := store.RegisterDriver(&driver{}); err != nil {
-		panic(fmt.Errorf("Failed to register database driver %q: %v", dbType, err))
+		panic(fmt.Errorf("failed to register database driver %q: %v", dbType, err))
 	}
 }
 

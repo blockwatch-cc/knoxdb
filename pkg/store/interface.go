@@ -151,12 +151,8 @@ type Bucket interface {
 	Bucket(key []byte) Bucket
 
 	// CreateBucket creates and returns a new nested bucket with the given
-	// key.
+	// key. If the bucket already exists it returns it without error.
 	CreateBucket(key []byte) (Bucket, error)
-
-	// CreateBucketIfNotExists creates and returns a new nested bucket with
-	// the given key if it does not already exist.
-	CreateBucketIfNotExists(key []byte) (Bucket, error)
 
 	// DeleteBucket removes a nested bucket with the given key.  This also
 	// includes removing all nested buckets and keys under the bucket being
