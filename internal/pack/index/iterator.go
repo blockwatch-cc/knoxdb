@@ -334,7 +334,7 @@ func (it *ScanIterator) Close() {
 
 var (
 	FF  = []byte{0xFF}
-	END = num.EncodeUvarint(0xFFFFFFFFFFFFFFFF)
+	END = num.EncodeUvarint(uint64(0xFFFFFFFFFFFFFFFF))
 )
 
 // convert filter value to uvarint key

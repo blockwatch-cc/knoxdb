@@ -41,10 +41,39 @@ func UvarintLen[T Int](x T) int {
 	return PutUvarint(v[:], uint64(x))
 }
 
-func EncodeUvarint(x uint64) []byte {
+func UvarintValue[T Int](b []byte) T {
+	v, _ := Uvarint(b)
+	return T(v)
+}
+
+func UvarintMinLen(b byte) int {
+	if b <= 240 {
+		return 1
+	}
+	if b <= 248 {
+		return 2
+	}
+	return int(b - 246)
+}
+
+func ValidateUvarint(buf []byte) error {
+	if n := len(buf); n == 0 || n < UvarintMinLen(buf[0]) {
+		return io.ErrShortBuffer
+	}
+	return nil
+}
+
+func EncodeUvarint[T Int](x T) []byte {
 	var v [MaxVarintLen64]byte
-	n := PutUvarint(v[:], x)
+	n := PutUvarint(v[:], uint64(x))
 	return v[:n]
+}
+
+func DecodeUvarint[T Int](buf []byte) (T, error) {
+	if err := ValidateUvarint(buf); err != nil {
+		return 0, err
+	}
+	return UvarintValue[T](buf), nil
 }
 
 func AppendUvarint(b []byte, x uint64) []byte {
