@@ -6,11 +6,10 @@ package engine
 import (
 	"context"
 	"fmt"
-	"slices"
 
-	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
+	"blockwatch.cc/knoxdb/pkg/store"
 )
 
 var (
@@ -63,7 +62,7 @@ func (e *Engine) CreateStore(ctx context.Context, s *schema.Schema, opts StoreOp
 	if !ok {
 		return nil, fmt.Errorf("%s: %v", StoreKindKV, ErrNoEngine)
 	}
-	if !slices.Contains(store.SupportedDrivers(), opts.Driver) {
+	if !store.IsSupported(opts.Driver) {
 		return nil, fmt.Errorf("%s: %v", opts.Driver, ErrNoDriver)
 	}
 
@@ -176,7 +175,7 @@ func (e *Engine) openStores(ctx context.Context) error {
 			return ErrNoEngine
 		}
 
-		if !slices.Contains(store.SupportedDrivers(), opts.Driver) {
+		if !store.IsSupported(opts.Driver) {
 			return ErrNoDriver
 		}
 

@@ -38,6 +38,10 @@ type DB struct {
 // 	return c, nil
 // }
 
+func IsDatabaseExist(ctx context.Context, name string, opts DatabaseOptions) (bool, error) {
+	return engine.IsExist(ctx, name, opts)
+}
+
 func WrapEngine(e *engine.Engine) Database {
 	return &DB{engine: e, log: log.Log}
 }

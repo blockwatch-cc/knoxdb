@@ -12,9 +12,9 @@ import (
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/operator/filter"
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
+	"blockwatch.cc/knoxdb/pkg/store"
 	"github.com/stretchr/testify/require"
 )
 

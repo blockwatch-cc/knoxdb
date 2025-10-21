@@ -10,7 +10,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/internal/store"
+	"blockwatch.cc/knoxdb/pkg/store"
 	"blockwatch.cc/knoxdb/pkg/num"
 )
 
@@ -213,7 +213,7 @@ func (idx *Index) gcEpoch(tx store.Tx, epoch uint32) error {
 	ekey := num.EncodeUvarint(uint64(epoch))
 	ebucket := idx.tombBucket(tx).Bucket(ekey)
 	if ebucket == nil {
-		return store.ErrNoBucket
+		return store.ErrBucketNotFound
 	}
 	var (
 		start        = time.Now()

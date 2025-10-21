@@ -12,12 +12,12 @@ import (
 	"blockwatch.cc/knoxdb/internal/filter/fuse"
 	"blockwatch.cc/knoxdb/internal/filter/llb"
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/slicex"
+	"blockwatch.cc/knoxdb/pkg/store"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
@@ -106,7 +106,7 @@ func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
 	return idx.db.Update(func(tx store.Tx) error {
 		// create stats buckets if not exist
 		for k := range STATS_BUCKETS {
-			_, err := tx.Root().CreateBucketIfNotExists(idx.keys[k])
+			_, err := tx.Root().CreateBucket(idx.keys[k])
 			if err != nil {
 				return err
 			}
@@ -115,7 +115,7 @@ func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
 		if len(blooms) > 0 {
 			b := idx.filterBucket(tx)
 			if b == nil {
-				return store.ErrNoBucket
+				return store.ErrBucketNotFound
 			}
 			for k, buf := range blooms {
 				key := encodeFilterKey(pkg.Key(), pkg.Version(), k)
@@ -131,7 +131,7 @@ func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
 		if len(ranges) > 0 {
 			b := idx.rangeBucket(tx)
 			if b == nil {
-				return store.ErrNoBucket
+				return store.ErrBucketNotFound
 			}
 			for k, buf := range ranges {
 				key := encodeFilterKey(pkg.Key(), pkg.Version(), k)
@@ -147,7 +147,7 @@ func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
 		if len(bits) > 0 {
 			b := idx.filterBucket(tx)
 			if b == nil {
-				return store.ErrNoBucket
+				return store.ErrBucketNotFound
 			}
 			for k, buf := range bits {
 				key := encodeFilterKey(pkg.Key(), pkg.Version(), k)
@@ -163,7 +163,7 @@ func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
 		if len(fuses) > 0 {
 			b := idx.filterBucket(tx)
 			if b == nil {
-				return store.ErrNoBucket
+				return store.ErrBucketNotFound
 			}
 			for k, buf := range fuses {
 				key := encodeFilterKey(pkg.Key(), pkg.Version(), k)
@@ -190,7 +190,7 @@ func (idx Index) dropFilters(pkg *pack.Package) error {
 		} {
 			b := idx.bucket(tx, k)
 			if b == nil {
-				return store.ErrNoBucket
+				return store.ErrBucketNotFound
 			}
 			for _, f := range pkg.Schema().Exported() {
 				if f.Index == 0 {

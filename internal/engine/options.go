@@ -4,63 +4,85 @@
 package engine
 
 import (
+	"path/filepath"
 	"time"
 
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/wal"
 	"blockwatch.cc/knoxdb/pkg/schema"
+	"blockwatch.cc/knoxdb/pkg/store"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/echa/log"
 )
 
 type DatabaseOptions struct {
-	Path            string           // local filesystem
+	// engine options
 	Namespace       string           // unique db identifier
-	Driver          string           // bolt, mem, ...
-	PageSize        int              // boltdb
-	PageFill        float64          // boltdb
 	CacheSize       int              // in bytes
 	WalSegmentSize  int              // wal file size
 	WalRecoveryMode wal.RecoveryMode // howto recover from wal damage
 	LockTimeout     time.Duration    // lock manager timeout
 	TxWaitTimeout   time.Duration    // write tx timeout
-	NoSync          bool             // boltdb, no fsync on transactions (dangerous)
-	NoGrowSync      bool             // boltdb, skip fsync+alloc on grow
-	ReadOnly        bool             // read-only tx and no schema changes
 	MaxWorkers      int              // max number of parallel worker goroutines
 	MaxTasks        int              // max number of tasks waiting for execution
 	Logger          log.Logger       `knox:"-"`
+
+	// catalog store options
+	Path     string  // local filesystem
+	Driver   string  // bolt, mem, ...
+	PageSize int     // boltdb
+	PageFill float64 // boltdb
+	NoSync   bool    // boltdb, no fsync on transactions (dangerous)
+	ReadOnly bool    // read-only tx and no schema changes
 }
 
 func (o DatabaseOptions) Merge(o2 DatabaseOptions) DatabaseOptions {
-	o.Path = util.NonZero(o2.Path, o.Path)
 	o.Namespace = util.NonZero(o2.Namespace, o.Namespace)
-	o.Driver = util.NonZero(o2.Driver, o.Driver)
-	o.PageSize = util.NonZero(o2.PageSize, o.PageSize)
-	o.PageFill = util.NonZero(o2.PageFill, o.PageFill)
 	o.CacheSize = util.NonZero(o2.CacheSize, o.CacheSize)
 	o.WalSegmentSize = util.NonZero(o2.WalSegmentSize, o.WalSegmentSize)
 	o.WalRecoveryMode = util.NonZero(o2.WalRecoveryMode, o.WalRecoveryMode)
 	o.LockTimeout = util.NonZero(o2.LockTimeout, o.LockTimeout)
 	o.TxWaitTimeout = util.NonZero(o2.TxWaitTimeout, o.TxWaitTimeout)
-	o.ReadOnly = o2.ReadOnly
-	o.NoSync = o2.NoSync
-	o.NoGrowSync = o2.NoGrowSync
 	o.MaxTasks = util.NonZero(o2.MaxTasks, o.MaxTasks)
 	o.MaxWorkers = util.NonZero(o2.MaxWorkers, o.MaxWorkers)
+
+	o.Path = util.NonZero(o2.Path, o.Path)
+	o.Driver = util.NonZero(o2.Driver, o.Driver)
+	o.PageSize = util.NonZero(o2.PageSize, o.PageSize)
+	o.PageFill = util.NonZero(o2.PageFill, o.PageFill)
+	o.NoSync = o2.NoSync
+	o.ReadOnly = o2.ReadOnly
 	if o2.Logger != nil {
 		o.Logger = o2.Logger
 	}
 	return o
 }
 
-func (o DatabaseOptions) WithPath(n string) DatabaseOptions {
-	o.Path = n
-	return o
+func (o DatabaseOptions) CatalogOptions(dbName string) []store.Option {
+	opts := []store.Option{
+		store.WithPath(filepath.Join(o.Path, dbName, CATALOG_NAME)),
+		store.WithDriver(o.Driver),
+		store.WithPageSize(o.PageSize),
+		store.WithPageFill(o.PageFill),
+		store.WithLogger(o.Logger),
+		store.WithManifest(store.NewManifest(dbName, CATALOG_TYPE)),
+	}
+	if o.ReadOnly {
+		opts = append(opts, store.WithReadonly())
+	}
+	if o.NoSync {
+		opts = append(opts, store.WithNoSync())
+	}
+	return opts
 }
 
 func (o DatabaseOptions) WithNamespace(n string) DatabaseOptions {
 	o.Namespace = n
+	return o
+}
+
+func (o DatabaseOptions) WithPath(n string) DatabaseOptions {
+	o.Path = n
 	return o
 }
 
@@ -91,7 +113,6 @@ func (o DatabaseOptions) WithReadOnly() DatabaseOptions {
 
 func (o DatabaseOptions) WithDangerousNoSync() DatabaseOptions {
 	o.NoSync = true
-	o.NoGrowSync = true
 	return o
 }
 
@@ -137,36 +158,54 @@ func (o *DatabaseOptions) UnmarshalBinary(buf []byte) error {
 }
 
 type TableOptions struct {
+	// table options
 	Engine          TableKind  // pack, lsm, parquet, csv, remote
-	Driver          string     // bolt, mem, ...
 	PackSize        int        // pack engine
 	JournalSize     int        // pack engine
 	JournalSegments int        // pack engine
-	PageSize        int        // boltdb
-	PageFill        float64    // boltdb
-	ReadOnly        bool       // read-only tx and no schema changes
 	TxMaxSize       int        // maximum write size of low-level dbfile transactions
-	NoSync          bool       // boltdb, no fsync on transactions (dangerous)
-	NoGrowSync      bool       // boltdb, skip fsync+alloc on grow
 	Logger          log.Logger `knox:"-"` // custom logger
+
+	// store backend options
+	Driver   string  // bolt, mem, ...
+	PageSize int     // boltdb
+	PageFill float64 // boltdb
+	ReadOnly bool    // read-only tx and no schema changes
+	NoSync   bool    // boltdb, no fsync on transactions (dangerous)
 }
 
 func (o TableOptions) Merge(o2 TableOptions) TableOptions {
 	o.Engine = util.NonZero(o2.Engine, o.Engine)
-	o.Driver = util.NonZero(o2.Driver, o.Driver)
 	o.PackSize = types.ToChunkSize(util.NonZero(o2.PackSize, o.PackSize))
 	o.JournalSize = types.ToChunkSize(util.NonZero(o2.JournalSize, o.JournalSize))
 	o.JournalSegments = util.NonZero(o2.JournalSegments, o.JournalSegments)
-	o.PageSize = util.NonZero(o2.PageSize, o.PageSize)
-	o.PageFill = util.NonZero(o2.PageFill, o.PageFill)
 	o.TxMaxSize = util.NonZero(o2.TxMaxSize, o.TxMaxSize)
-	o.ReadOnly = o2.ReadOnly
-	o.NoSync = o2.NoSync
-	o.NoGrowSync = o2.NoGrowSync
 	if o2.Logger != nil {
 		o.Logger = o2.Logger
 	}
+
+	o.Driver = util.NonZero(o2.Driver, o.Driver)
+	o.PageSize = util.NonZero(o2.PageSize, o.PageSize)
+	o.PageFill = util.NonZero(o2.PageFill, o.PageFill)
+	o.ReadOnly = o2.ReadOnly
+	o.NoSync = o2.NoSync
 	return o
+}
+
+func (o TableOptions) StoreOptions() []store.Option {
+	opts := []store.Option{
+		store.WithDriver(o.Driver),
+		store.WithPageSize(o.PageSize),
+		store.WithPageFill(o.PageFill),
+		store.WithLogger(o.Logger),
+	}
+	if o.ReadOnly {
+		opts = append(opts, store.WithReadonly())
+	}
+	if o.NoSync {
+		opts = append(opts, store.WithNoSync())
+	}
+	return opts
 }
 
 func (o TableOptions) MarshalBinary() ([]byte, error) {
@@ -227,7 +266,6 @@ func (o TableOptions) WithReadOnly() TableOptions {
 
 func (o TableOptions) WithDangerousNoSync() TableOptions {
 	o.NoSync = true
-	o.NoGrowSync = true
 	return o
 }
 
@@ -237,14 +275,13 @@ func (o TableOptions) WithLogger(l log.Logger) TableOptions {
 }
 
 type StoreOptions struct {
-	Driver     string     // bolt, mem, ...
-	PageSize   int        // boltdb
-	PageFill   float64    // boltdb
-	ReadOnly   bool       // read-only tx only
-	NoSync     bool       // boltdb, no fsync on transactions (dangerous)
-	NoGrowSync bool       // boltdb, skip fsync+alloc on grow
-	TxMaxSize  int        // maximum write size of low-level dbfile transactions
-	Logger     log.Logger `knox:"-"` // custom logger
+	Driver    string     // bolt, mem, ...
+	PageSize  int        // boltdb
+	PageFill  float64    // boltdb
+	ReadOnly  bool       // read-only tx only
+	NoSync    bool       // boltdb, no fsync on transactions (dangerous)
+	TxMaxSize int        // maximum write size of low-level dbfile transactions
+	Logger    log.Logger `knox:"-"` // custom logger
 }
 
 func (o StoreOptions) Merge(o2 StoreOptions) StoreOptions {
@@ -254,11 +291,26 @@ func (o StoreOptions) Merge(o2 StoreOptions) StoreOptions {
 	o.TxMaxSize = util.NonZero(o2.TxMaxSize, o.TxMaxSize)
 	o.ReadOnly = o2.ReadOnly
 	o.NoSync = o2.NoSync
-	o.NoGrowSync = o2.NoGrowSync
 	if o2.Logger != nil {
 		o.Logger = o2.Logger
 	}
 	return o
+}
+
+func (o StoreOptions) StoreOptions() []store.Option {
+	opts := []store.Option{
+		store.WithDriver(o.Driver),
+		store.WithPageSize(o.PageSize),
+		store.WithPageFill(o.PageFill),
+		store.WithLogger(o.Logger),
+	}
+	if o.ReadOnly {
+		opts = append(opts, store.WithReadonly())
+	}
+	if o.NoSync {
+		opts = append(opts, store.WithNoSync())
+	}
+	return opts
 }
 
 func (o StoreOptions) MarshalBinary() ([]byte, error) {
@@ -299,7 +351,6 @@ func (o StoreOptions) WithReadOnly() StoreOptions {
 
 func (o StoreOptions) WithDangerousNoSync() StoreOptions {
 	o.NoSync = true
-	o.NoGrowSync = true
 	return o
 }
 
@@ -309,36 +360,54 @@ func (o StoreOptions) WithLogger(l log.Logger) StoreOptions {
 }
 
 type IndexOptions struct {
+	// table options
 	Engine      IndexKind       // pack, lsm
-	Driver      string          // bolt, mem, ...
 	Type        types.IndexType // hash, int, composite, bloom, bfuse, bits
 	PackSize    int             // pack engine
 	JournalSize int             // pack engine
-	PageSize    int             // boltdb
-	PageFill    float64         // boltdb
-	ReadOnly    bool            // read-only tx and no schema changes
 	TxMaxSize   int             // maximum write size of low-level dbfile transactions
-	NoSync      bool            // boltdb, no fsync on transactions (dangerous)
-	NoGrowSync  bool            // boltdb, skip fsync+alloc on grow
 	Logger      log.Logger      `knox:"-"` // custom logger
+
+	// store backend options
+	Driver   string  // bolt, mem, ...
+	PageSize int     // boltdb
+	PageFill float64 // boltdb
+	ReadOnly bool    // read-only tx and no schema changes
+	NoSync   bool    // boltdb, no fsync on transactions (dangerous)
 }
 
 func (o IndexOptions) Merge(o2 IndexOptions) IndexOptions {
 	o.Engine = util.NonZero(o2.Engine, o.Engine)
-	o.Driver = util.NonZero(o2.Driver, o.Driver)
 	o.Type = util.NonZero(o2.Type, o.Type)
 	o.PackSize = types.ToChunkSize(util.NonZero(o2.PackSize, o.PackSize))
 	o.JournalSize = types.ToChunkSize(util.NonZero(o2.JournalSize, o.JournalSize))
-	o.PageSize = util.NonZero(o2.PageSize, o.PageSize)
-	o.PageFill = util.NonZero(o2.PageFill, o.PageFill)
 	o.TxMaxSize = util.NonZero(o2.TxMaxSize, o.TxMaxSize)
-	o.ReadOnly = o2.ReadOnly
-	o.NoSync = o2.NoSync
-	o.NoGrowSync = o2.NoGrowSync
 	if o2.Logger != nil {
 		o.Logger = o2.Logger
 	}
+
+	o.Driver = util.NonZero(o2.Driver, o.Driver)
+	o.PageSize = util.NonZero(o2.PageSize, o.PageSize)
+	o.PageFill = util.NonZero(o2.PageFill, o.PageFill)
+	o.ReadOnly = o2.ReadOnly
+	o.NoSync = o2.NoSync
 	return o
+}
+
+func (o IndexOptions) StoreOptions() []store.Option {
+	opts := []store.Option{
+		store.WithDriver(o.Driver),
+		store.WithPageSize(o.PageSize),
+		store.WithPageFill(o.PageFill),
+		store.WithLogger(o.Logger),
+	}
+	if o.ReadOnly {
+		opts = append(opts, store.WithReadonly())
+	}
+	if o.NoSync {
+		opts = append(opts, store.WithNoSync())
+	}
+	return opts
 }
 
 func (o IndexOptions) MarshalBinary() ([]byte, error) {
@@ -399,7 +468,6 @@ func (o IndexOptions) WithReadOnly() IndexOptions {
 
 func (o IndexOptions) WithDangerousNoSync() IndexOptions {
 	o.NoSync = true
-	o.NoGrowSync = true
 	return o
 }
 

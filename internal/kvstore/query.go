@@ -8,7 +8,7 @@ import (
 	"context"
 	"sync/atomic"
 
-	"blockwatch.cc/knoxdb/internal/store"
+	"blockwatch.cc/knoxdb/pkg/store"
 	"blockwatch.cc/knoxdb/internal/types"
 )
 
@@ -20,7 +20,7 @@ func (kv *KVStore) Range(ctx context.Context, prefix []byte, fn func(ctx context
 	defer tx.Rollback()
 	bucket := tx.Bucket(kv.key)
 	if bucket == nil {
-		return store.ErrNoBucket
+		return store.ErrBucketNotFound
 	}
 	c := bucket.Range(prefix)
 	defer c.Close()
@@ -47,7 +47,7 @@ func (kv *KVStore) Scan(ctx context.Context, from, to []byte, fn func(ctx contex
 	defer tx.Rollback()
 	bucket := tx.Bucket(kv.key)
 	if bucket == nil {
-		return store.ErrNoBucket
+		return store.ErrBucketNotFound
 	}
 	c := bucket.Cursor()
 	defer c.Close()

@@ -6,11 +6,10 @@ package engine
 import (
 	"context"
 	"fmt"
-	"slices"
 
-	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
+	"blockwatch.cc/knoxdb/pkg/store"
 )
 
 var tableEngineRegistry = make(map[TableKind]TableFactory)
@@ -79,7 +78,7 @@ func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, opts TableOp
 	if !ok {
 		return nil, fmt.Errorf("%s: %v", opts.Engine, ErrNoEngine)
 	}
-	if !slices.Contains(store.SupportedDrivers(), opts.Driver) {
+	if !store.IsSupported(opts.Driver) {
 		return nil, fmt.Errorf("%s: %v", opts.Driver, ErrNoDriver)
 	}
 
@@ -319,7 +318,7 @@ func (e *Engine) openTables(ctx context.Context) error {
 		if !ok {
 			return ErrNoEngine
 		}
-		if !slices.Contains(store.SupportedDrivers(), opts.Driver) {
+		if !store.IsSupported(opts.Driver) {
 			return ErrNoDriver
 		}
 

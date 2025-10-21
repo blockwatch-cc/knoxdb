@@ -50,6 +50,12 @@ func Supported() []string {
 	return names
 }
 
+// IsSupported returns if the named driver is supported.
+func IsSupported(drv string) bool {
+	_, ok := backends[drv]
+	return ok
+}
+
 func lookup(name string) (Factory, error) {
 	f, exists := backends[name]
 	if !exists {

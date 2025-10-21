@@ -14,7 +14,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/operator/filter"
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/internal/store"
+	"blockwatch.cc/knoxdb/pkg/store"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/assert"
 	"blockwatch.cc/knoxdb/pkg/num"
@@ -62,7 +62,7 @@ func (it *LookupIterator) Next(ctx context.Context) (*pack.Package, uint64, erro
 			it.cur = bucket.Cursor()
 		} else {
 			tx.Rollback()
-			return nil, 0, store.ErrNoBucket
+			return nil, 0, store.ErrBucketNotFound
 		}
 		it.tx = tx
 	}
@@ -263,7 +263,7 @@ func (it *ScanIterator) Next(ctx context.Context) (*pack.Package, []uint32, erro
 			it.cur = bucket.Cursor()
 		} else {
 			tx.Rollback()
-			return nil, nil, store.ErrNoBucket
+			return nil, nil, store.ErrBucketNotFound
 		}
 		it.tx = tx
 		it.cur.Seek(it.from)

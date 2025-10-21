@@ -7,8 +7,8 @@ import (
 	etests "blockwatch.cc/knoxdb/internal/tests/engine"
 	"blockwatch.cc/knoxdb/internal/types"
 
-	_ "blockwatch.cc/knoxdb/internal/store/bolt"
-	_ "blockwatch.cc/knoxdb/internal/store/mem"
+	_ "blockwatch.cc/knoxdb/pkg/store/bolt"
+	_ "blockwatch.cc/knoxdb/pkg/store/mem"
 )
 
 func TestMain(m *testing.M) {

@@ -11,10 +11,10 @@ import (
 	"sort"
 
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/num"
+	"blockwatch.cc/knoxdb/pkg/store"
 )
 
 type Tomb struct {
@@ -230,7 +230,7 @@ func (t *Tomb) MergeVisible(set *xroar.Bitmap, snap *types.Snapshot) {
 
 func (t *Tomb) Load(ctx context.Context, bucket store.Bucket, id uint32) error {
 	if bucket == nil {
-		return store.ErrNoBucket
+		return store.ErrBucketNotFound
 	}
 	buf := bucket.Get(pack.EncodeBlockKey(id, 0, TombKey))
 	if buf == nil {
@@ -244,7 +244,7 @@ func (t *Tomb) Store(ctx context.Context, bucket store.Bucket, id uint32) error 
 		return nil
 	}
 	if bucket == nil {
-		return store.ErrNoBucket
+		return store.ErrBucketNotFound
 	}
 	key := pack.EncodeBlockKey(id, 0, TombKey)
 
@@ -267,7 +267,7 @@ func (t *Tomb) Store(ctx context.Context, bucket store.Bucket, id uint32) error 
 
 func (t *Tomb) Remove(ctx context.Context, bucket store.Bucket, id uint32) error {
 	if bucket == nil {
-		return store.ErrNoBucket
+		return store.ErrBucketNotFound
 	}
 	return bucket.Delete(pack.EncodeBlockKey(id, 0, TombKey))
 }

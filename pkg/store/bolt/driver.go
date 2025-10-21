@@ -12,7 +12,6 @@ import (
 	bolt "go.etcd.io/bbolt"
 
 	"blockwatch.cc/knoxdb/pkg/store"
-	"github.com/echa/log"
 )
 
 // Bolt Limits
@@ -73,7 +72,7 @@ func (d *driver) Create(opts store.Options) (store.DB, error) {
 		return nil, err
 	}
 
-	// opts.Logger.Debug("Creating database %s", opts.Path)
+	// opts.Log.Debug("Creating database %s", opts.Path)
 
 	// boltdb will create the database file
 	b, err := bolt.Open(opts.Path, permFile, makeBoltOpts(opts))
@@ -81,7 +80,7 @@ func (d *driver) Create(opts store.Options) (store.DB, error) {
 		return nil, wrap(err)
 	}
 
-	// opts.Logger.Debug("Initializing database.")
+	// opts.Log.Debug("Initializing database.")
 	m := opts.Manifest
 	if m == nil {
 		m = store.NewManifestFromOpts(opts)
@@ -109,7 +108,7 @@ func (d *driver) Open(opts store.Options) (store.DB, error) {
 		return nil, store.ErrDatabaseNotFound
 	}
 
-	// opts.Logger.Debug("Opening database %s", opts.Path)
+	// opts.Log.Debug("Opening database %s", opts.Path)
 	b, err := bolt.Open(opts.Path, permFile, makeBoltOpts(opts))
 	if err != nil {
 		return nil, wrap(err)
@@ -161,18 +160,18 @@ func makeBoltOpts(o store.Options) *bolt.Options {
 		PageSize:        o.PageSize,
 		MmapFlags:       o.MmapFlags,
 		InitialMmapSize: o.InitialMmapSize,
-		Logger:          logger{o.Log},
+		// Logger:          logger{o.Log},
 	}
 }
 
-type logger struct {
-	log.Logger
-}
+// type logger struct {
+// 	log.Logger
+// }
 
-func (l logger) Warning(v ...interface{}) {
-	l.Logger.Warn(v...)
-}
+// func (l logger) Warning(v ...interface{}) {
+// 	l.Logger.Warn(v...)
+// }
 
-func (l logger) Warningf(format string, v ...interface{}) {
-	l.Logger.Warnf(format, v...)
-}
+// func (l logger) Warningf(format string, v ...interface{}) {
+// 	l.Logger.Warnf(format, v...)
+// }

@@ -5,7 +5,6 @@ package main
 import (
 	"context"
 	"encoding/hex"
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -134,17 +133,9 @@ func run() error {
 
 	ctx := context.Background()
 
-	db, table, err := Open(ctx)
+	db, table, err := OpenOrCreate(ctx)
 	if err != nil {
-		if errors.Is(err, knox.ErrNoDatabase) {
-			var err2 error
-			db, table, err2 = Create(ctx)
-			if err2 != nil {
-				return err2
-			}
-		} else {
-			return err
-		}
+		return err
 	}
 	defer db.Close(ctx)
 
@@ -247,6 +238,22 @@ func run() error {
 	log.Info("Closing DB")
 
 	return nil
+}
+
+func OpenOrCreate(ctx context.Context) (db knox.Database, table knox.Table, err error) {
+	ok, err := knox.IsDatabaseExist(
+		ctx,
+		"types",
+		knox.DefaultDatabaseOptions.WithPath("./db"),
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+	if ok {
+		return Open(ctx)
+	} else {
+		return Create(ctx)
+	}
 }
 
 func Create(ctx context.Context) (db knox.Database, table knox.Table, err error) {

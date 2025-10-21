@@ -12,10 +12,10 @@ import (
 	"runtime"
 	"sync"
 
-	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/wal"
 	"blockwatch.cc/knoxdb/pkg/schema"
+	"blockwatch.cc/knoxdb/pkg/store"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/echa/log"
 )
@@ -105,7 +105,7 @@ var DefaultDatabaseOptions = DatabaseOptions{
 	Path:            "./db",
 	Driver:          "bolt",
 	PageSize:        1024,
-	PageFill:        0.8,
+	PageFill:        0.5,
 	CacheSize:       16 << 20,
 	WalSegmentSize:  128 << 20,
 	WalRecoveryMode: wal.RecoveryModeTruncate,
@@ -142,25 +142,12 @@ func (c *Catalog) WithWal(w *wal.Wal) *Catalog {
 
 func (c *Catalog) Create(ctx context.Context, opts DatabaseOptions) error {
 	c.log = opts.Logger
-	path := filepath.Join(opts.Path, c.name, CATALOG_NAME)
-	c.log.Debugf("Creating catalog at %s", path)
-	db, err := store.Create(opts.Driver, path, opts.ToDriverOpts())
+	c.path = filepath.Join(opts.Path, c.name)
+	c.log.Debugf("Creating catalog at %s", c.path)
+	db, err := store.Create(opts.CatalogOptions(c.name)...)
 	if err != nil {
-		if store.IsError(err, store.ErrDbExists) {
-			return fmt.Errorf("%s: creating catalog: %w", c.name, ErrDatabaseExists)
-		}
 		return fmt.Errorf("%s: creating catalog: %w", c.name, err)
 	}
-	err = db.SetManifest(store.Manifest{
-		Name:    c.name,
-		Schema:  CATALOG_TYPE,
-		Version: CATALOG_VERSION,
-	})
-	if err != nil {
-		_ = db.Close()
-		return err
-	}
-	c.path = filepath.Join(opts.Path, c.name)
 
 	// init table storage
 	err = db.Update(func(tx store.Tx) error {
@@ -194,32 +181,16 @@ func (c *Catalog) Create(ctx context.Context, opts DatabaseOptions) error {
 
 func (c *Catalog) Open(ctx context.Context, opts DatabaseOptions) error {
 	opts = DefaultDatabaseOptions.Merge(opts)
-	path := filepath.Join(opts.Path, c.name, CATALOG_NAME)
-	c.log = opts.Logger
 
-	c.log.Debugf("Opening catalog at %s", path)
-	db, err := store.Open(opts.Driver, path, opts.ToDriverOpts())
+	c.log = opts.Logger
+	c.path = filepath.Join(opts.Path, c.name)
+
+	c.log.Debugf("Opening catalog at %s", c.path)
+	db, err := store.Open(opts.CatalogOptions(c.name)...)
 	if err != nil {
-		if store.IsError(err, store.ErrDbDoesNotExist) {
-			return ErrNoDatabase
-		}
 		c.log.Errorf("opening catalog %s: %v", c.name, err)
 		return ErrDatabaseCorrupt
 	}
-
-	mft, err := db.Manifest()
-	if err != nil {
-		c.log.Errorf("missing manifest: %v", err)
-		db.Close()
-		return ErrDatabaseCorrupt
-	}
-	err = mft.Validate(c.name, "*", CATALOG_TYPE, CATALOG_VERSION)
-	if err != nil {
-		c.log.Errorf("schema mismatch: %v", err)
-		db.Close()
-		return schema.ErrSchemaMismatch
-	}
-	c.path = filepath.Join(opts.Path, c.name)
 
 	// load catalog checkpoint
 	err = db.View(func(tx store.Tx) error {
@@ -469,7 +440,7 @@ func (c *Catalog) AddTable(ctx context.Context, key uint64, s *schema.Schema, o 
 	if bucket == nil {
 		return ErrDatabaseCorrupt
 	}
-	bucket, err = bucket.CreateBucketIfNotExists(util.U64Bytes(key))
+	bucket, err = bucket.CreateBucket(util.U64Bytes(key))
 	if err != nil {
 		return err
 	}

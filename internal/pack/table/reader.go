@@ -16,10 +16,10 @@ import (
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/pack/stats"
 	"blockwatch.cc/knoxdb/internal/query"
-	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/schema"
+	"blockwatch.cc/knoxdb/pkg/store"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/echa/log"
 )

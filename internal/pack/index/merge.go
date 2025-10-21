@@ -14,7 +14,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/encode"
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/internal/store"
+	"blockwatch.cc/knoxdb/pkg/store"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/assert"
 	"blockwatch.cc/knoxdb/pkg/util"
@@ -198,7 +198,7 @@ func (it *MergeIterator) Store(pkg *pack.Package) error {
 	// init data bucket
 	bucket := it.idx.dataBucket(it.tx)
 	if bucket == nil {
-		return store.ErrNoBucket
+		return store.ErrBucketNotFound
 	}
 
 	// keep loaded keys or compute new block keys from first record when zero
@@ -287,7 +287,7 @@ func (it *MergeIterator) Next(ctx context.Context, id MergeValue) (*pack.Package
 		if bucket := it.idx.dataBucket(it.tx); bucket != nil {
 			it.cur = bucket.Cursor()
 		} else {
-			return nil, MergeValue{}, store.ErrNoBucket
+			return nil, MergeValue{}, store.ErrBucketNotFound
 		}
 		if e := engine.GetEngine(ctx); e != nil {
 			it.bcache = e.BlockCache(it.idx.id)

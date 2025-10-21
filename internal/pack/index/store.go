@@ -10,7 +10,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/hash/xxhash64"
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/internal/store"
+	"blockwatch.cc/knoxdb/pkg/store"
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
@@ -88,7 +88,7 @@ func (idx *Index) storeTomb(ctx context.Context, epoch uint32) error {
 	err := idx.db.Update(func(tx store.Tx) error {
 		b := tx.Bucket(append([]byte(idx.name), engine.TombKeySuffix...))
 		if b == nil {
-			return store.ErrNoBucket
+			return store.ErrBucketNotFound
 		}
 		_, err := idx.tomb.StoreToDisk(ctx, b)
 		return err
@@ -113,7 +113,7 @@ func (idx *Index) loadTomb(ctx context.Context, key, epoch uint32) (*pack.Packag
 	err := idx.db.View(func(tx store.Tx) error {
 		b := tx.Bucket(append([]byte(idx.name), engine.TombKeySuffix...))
 		if b == nil {
-			return store.ErrNoBucket
+			return store.ErrBucketNotFound
 		}
 		_, err := pkg.LoadFromDisk(ctx, b, nil, 0)
 		return err
@@ -140,7 +140,7 @@ func (idx *Index) dropTomb(_ context.Context, key, epoch uint32) error {
 	return idx.db.Update(func(tx store.Tx) error {
 		b := tx.Bucket(append([]byte(idx.name), engine.TombKeySuffix...))
 		if b == nil {
-			return store.ErrNoBucket
+			return store.ErrBucketNotFound
 		}
 		for _, f := range idx.idxSchema.Exported() {
 			if err := b.Delete(pack.EncodeBlockKey(key, epoch, f.Id)); err != nil {

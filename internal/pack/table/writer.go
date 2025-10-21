@@ -12,7 +12,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/pack/stats"
-	"blockwatch.cc/knoxdb/internal/store"
+	"blockwatch.cc/knoxdb/pkg/store"
 	"github.com/echa/log"
 )
 

@@ -6,11 +6,10 @@ package engine
 import (
 	"context"
 	"fmt"
-	"slices"
 
-	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
+	"blockwatch.cc/knoxdb/pkg/store"
 )
 
 var indexEngineRegistry = make(map[IndexKind]IndexFactory)
@@ -80,7 +79,7 @@ func (e *Engine) CreateIndex(ctx context.Context, tableName string, s *schema.Sc
 	if !ok {
 		return nil, fmt.Errorf("%s: %v", opts.Engine, ErrNoEngine)
 	}
-	if !slices.Contains(store.SupportedDrivers(), opts.Driver) {
+	if !store.IsSupported(opts.Driver) {
 		return nil, fmt.Errorf("%s: %v", opts.Driver, ErrNoDriver)
 	}
 

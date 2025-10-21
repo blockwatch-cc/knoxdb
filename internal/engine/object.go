@@ -10,7 +10,7 @@ import (
 	"io"
 	"path/filepath"
 
-	"blockwatch.cc/knoxdb/internal/store"
+	"blockwatch.cc/knoxdb/pkg/store"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/wal"
 	"blockwatch.cc/knoxdb/pkg/schema"

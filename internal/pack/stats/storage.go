@@ -10,8 +10,8 @@ import (
 	"slices"
 
 	"blockwatch.cc/knoxdb/internal/engine"
-	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/pkg/num"
+	"blockwatch.cc/knoxdb/pkg/store"
 )
 
 const STATS_BUCKETS = 6
@@ -86,7 +86,7 @@ func decodeNodeKey(buf []byte) (kind byte, id, key, ver uint32) {
 func (idx *Index) Store(ctx context.Context, tx store.Tx) error {
 	// create buckets if not exist
 	for _, k := range idx.keys {
-		if _, err := tx.Root().CreateBucketIfNotExists(k); err != nil {
+		if _, err := tx.Root().CreateBucket(k); err != nil {
 			return err
 		}
 	}
@@ -95,7 +95,7 @@ func (idx *Index) Store(ctx context.Context, tx store.Tx) error {
 	tree := idx.treeBucket(tx)
 	blocks := idx.statsBucket(tx)
 	if tree == nil || blocks == nil {
-		return store.ErrNoBucket
+		return store.ErrBucketNotFound
 	}
 
 	// identify empty snodes for garbage collection
@@ -252,11 +252,11 @@ func (idx *Index) Load(ctx context.Context, tx store.Tx) error {
 	// load tree
 	tree := idx.treeBucket(tx)
 	if tree == nil {
-		return store.ErrNoBucket
+		return store.ErrBucketNotFound
 	}
 	blocks := idx.statsBucket(tx)
 	if blocks == nil {
-		return store.ErrNoBucket
+		return store.ErrBucketNotFound
 	}
 
 	// check if we need to GC after crash

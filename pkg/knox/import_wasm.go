@@ -7,7 +7,7 @@ package knox
 
 import (
 	// import stores
-	_ "blockwatch.cc/knoxdb/internal/store/mem"
+	_ "blockwatch.cc/knoxdb/pkg/store/mem"
 
 	// import table engines
 	// _ "blockwatch.cc/knoxdb/internal/lsm/table"

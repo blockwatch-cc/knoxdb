@@ -70,6 +70,7 @@ func (f *file) Pread(buf []byte, off int64) (n int, errno experimentalsys.Errno)
 	return
 }
 
+//golint:nolint
 func (f *file) Seek(offset int64, whence int) (newOffset int64, errno experimentalsys.Errno) {
 	newOffset, errno = f.internal.Seek(offset, whence)
 	if errno == 0 {

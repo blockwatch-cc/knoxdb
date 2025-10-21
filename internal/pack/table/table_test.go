@@ -5,7 +5,7 @@ import (
 
 	etests "blockwatch.cc/knoxdb/internal/tests/engine"
 
-	_ "blockwatch.cc/knoxdb/internal/store/bolt"
+	_ "blockwatch.cc/knoxdb/pkg/store/bolt"
 )
 
 func TestMain(m *testing.M) {

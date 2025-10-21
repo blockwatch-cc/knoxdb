@@ -32,16 +32,14 @@ func NewTestDatabaseOptions(t *testing.T, driver string) engine.DatabaseOptions 
 		log.Log.SetLevel(log.LevelDebug)
 	}
 	return engine.DatabaseOptions{
-		Path:       t.TempDir(),
-		Namespace:  "cx.bwd.knoxdb.testdb",
-		Driver:     driver,
-		PageSize:   4096,
-		PageFill:   1.0,
-		CacheSize:  1 << 20,
-		NoSync:     false,
-		NoGrowSync: false,
-		ReadOnly:   false,
-		Logger:     log.Log,
+		Path:      t.TempDir(),
+		Driver:    driver,
+		PageSize:  4096,
+		PageFill:  1.0,
+		CacheSize: 1 << 20,
+		NoSync:    false,
+		ReadOnly:  false,
+		Logger:    log.Log,
 	}
 }
 
@@ -60,7 +58,6 @@ func NewTestTableOptions(t *testing.T, driver, eng string) engine.TableOptions {
 		PackSize:    1 << 11,
 		JournalSize: 1 << 10,
 		NoSync:      false,
-		NoGrowSync:  false,
 		ReadOnly:    false,
 		Logger:      log.Log,
 	}
@@ -83,7 +80,6 @@ func NewTestIndexOptions(t *testing.T, driver, eng string, indexType types.Index
 		PackSize:    1 << 11,
 		ReadOnly:    false,
 		NoSync:      false,
-		NoGrowSync:  false,
 		Logger:      log.Log,
 	}
 }

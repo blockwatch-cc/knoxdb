@@ -6,7 +6,7 @@ package engine
 import (
 	"context"
 
-	"blockwatch.cc/knoxdb/internal/store"
+	"blockwatch.cc/knoxdb/pkg/store"
 	"blockwatch.cc/knoxdb/internal/wal"
 	"blockwatch.cc/knoxdb/pkg/num"
 )

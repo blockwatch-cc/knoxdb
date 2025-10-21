@@ -34,10 +34,11 @@ type Options struct {
 
 func defaultOptions() Options {
 	return Options{
-		Driver:   "mem",
-		Path:     "./db", // will append `mem.db`
-		Log:      log.Disabled,
-		PageFill: 0.5,
+		Driver:      "mem",
+		Path:        "./db", // will append `mem.db`
+		Log:         log.Disabled,
+		PageFill:    0.5,
+		KeepOnClose: true,
 	}
 }
 
@@ -127,6 +128,13 @@ func WithNoGrowSync() Option {
 func WithKeepOnClose() Option {
 	return func(cfg *Options) error {
 		cfg.KeepOnClose = true
+		return nil
+	}
+}
+
+func WithDeleteOnClose() Option {
+	return func(cfg *Options) error {
+		cfg.KeepOnClose = false
 		return nil
 	}
 }

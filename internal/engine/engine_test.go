@@ -22,7 +22,6 @@ const TEST_DB_NAME = "test"
 func NewTestDatabaseOptions(t testing.TB, driver string) DatabaseOptions {
 	return DatabaseOptions{
 		Path:          t.TempDir(),
-		Namespace:     "cx.bwd.knoxdb.testdb",
 		Driver:        driver,
 		PageSize:      4096,
 		PageFill:      1.0,
@@ -30,7 +29,6 @@ func NewTestDatabaseOptions(t testing.TB, driver string) DatabaseOptions {
 		LockTimeout:   time.Second,
 		TxWaitTimeout: 0,
 		NoSync:        false,
-		NoGrowSync:    false,
 		ReadOnly:      false,
 		Logger:        log.Log,
 	}

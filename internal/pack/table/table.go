@@ -5,6 +5,7 @@ package table
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -14,10 +15,10 @@ import (
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack/journal"
 	"blockwatch.cc/knoxdb/internal/pack/stats"
-	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/wal"
 	"blockwatch.cc/knoxdb/pkg/schema"
+	"blockwatch.cc/knoxdb/pkg/store"
 	"github.com/echa/log"
 )
 
@@ -31,28 +32,26 @@ func init() {
 var (
 	DefaultTableOptions = engine.TableOptions{
 		Driver:          "bolt",
+		NoSync:          true,
+		ReadOnly:        false,
+		PageSize:        1 << 16, // 64kB
+		PageFill:        1.0,     // append only
 		PackSize:        1 << 14, // 16k
 		JournalSize:     1 << 15, // 32k
 		JournalSegments: 16,      // max 256 (unused)
-		PageSize:        1 << 16, // 64kB
-		PageFill:        1.0,     // append only
 		TxMaxSize:       1 << 24, // 16 MB,
-		ReadOnly:        false,
-		NoSync:          true,
-		NoGrowSync:      false,
 		Logger:          log.Disabled,
 	}
 
 	DefaultHistoryOptions = engine.TableOptions{
-		Driver:     "bolt",
-		PackSize:   1 << 14, // 16k
-		PageSize:   1 << 16, // 64kB
-		PageFill:   1.0,     // append only
-		TxMaxSize:  1 << 24, // 16 MB,
-		ReadOnly:   false,
-		NoSync:     true,
-		NoGrowSync: false,
-		Logger:     log.Disabled,
+		Driver:    "bolt",
+		NoSync:    true,
+		ReadOnly:  false,
+		PageSize:  1 << 16, // 64kB
+		PageFill:  1.0,     // append only
+		PackSize:  1 << 14, // 16k
+		TxMaxSize: 1 << 24, // 16 MB,
+		Logger:    log.Disabled,
 	}
 )
 
@@ -168,29 +167,30 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 		return err
 	}
 
-	t.log.Debugf("Created table %s", name)
+	t.log.Debugf("table[%s]: backend successfully created", name)
 	return nil
 }
 
 func (t *Table) createBackend(ctx context.Context) error {
 	// setup backend db file
-	typ := t.schema.TypeLabel(t.engine.Namespace())
-	path := filepath.Join(t.engine.RootPath(), t.schema.Name()+".db")
-	t.log.Debugf("Creating %s table %q at %q with opts %#v",
-		t.opts.Engine, t.schema.Name(), path, t.opts)
+	name := t.schema.Name()
+	path := filepath.Join(t.engine.RootPath(), t.schema.Name())
+	t.log.Debugf("table[%s]: creating backend=%s path=%s opts=%#v",
+		name, t.opts.Engine, path, t.opts)
 
-	db, err := store.Create(t.opts.Driver, path, t.opts.ToDriverOpts())
+	opts := append(
+		t.opts.StoreOptions(),
+		store.WithPath(path),
+		store.WithManifest(
+			store.NewManifest(
+				name,
+				t.schema.TypeLabel(t.engine.Namespace()),
+			),
+		),
+	)
+	db, err := store.Create(opts...)
 	if err != nil {
-		return fmt.Errorf("creating table %s: %v", typ, err)
-	}
-	err = db.SetManifest(store.Manifest{
-		Name:    t.schema.Name(),
-		Schema:  typ,
-		Version: int(t.schema.Version()),
-	})
-	if err != nil {
-		db.Close()
-		return err
+		return fmt.Errorf("creating table %s: %v", name, err)
 	}
 	t.db = db
 
@@ -204,8 +204,11 @@ func (t *Table) createBackend(ctx context.Context) error {
 		engine.DataKeySuffix,
 		engine.StateKeySuffix,
 	} {
-		key := append([]byte(t.schema.Name()), v...)
-		if _, err := store.CreateBucket(tx, key, engine.ErrTableExists); err != nil {
+		key := append([]byte(name), v...)
+		if _, err := tx.Root().CreateBucket(key); err != nil {
+			if errors.Is(err, store.ErrBucketExists) {
+				return engine.ErrTableExists
+			}
 			return err
 		}
 	}
@@ -300,25 +303,24 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 
 func (t *Table) openBackend(ctx context.Context) error {
 	name := t.schema.Name()
-	typ := t.schema.TypeLabel(t.engine.Namespace())
-	path := filepath.Join(t.engine.RootPath(), name+".db")
+	path := filepath.Join(t.engine.RootPath(), name)
 	t.log.Debugf("table[%s]: open backend=%s path=%s opts=%#v",
 		name, t.opts.Engine, path, t.opts)
-
-	db, err := store.Open(t.opts.Driver, path, t.opts.ToDriverOpts())
+	opts := append(
+		t.opts.StoreOptions(),
+		store.WithPath(path),
+		store.WithManifest(
+			store.NewManifest(
+				name,
+				t.schema.TypeLabel(t.engine.Namespace()),
+			),
+		),
+	)
+	db, err := store.Open(opts...)
 	if err != nil {
-		return fmt.Errorf("backend: %v", err)
+		return fmt.Errorf("table[%s] open: %v", name, err)
 	}
 	t.db = db
-
-	// check manifest matches
-	mft, err := t.db.Manifest()
-	if err != nil {
-		return fmt.Errorf("manifest: %v", err)
-	}
-	if err := mft.Validate(name, "*", typ, -1); err != nil {
-		return fmt.Errorf("backend: %v: %v", schema.ErrSchemaMismatch, err)
-	}
 
 	// load table state
 	err = t.db.View(func(tx store.Tx) error {
@@ -329,7 +331,7 @@ func (t *Table) openBackend(ctx context.Context) error {
 		} {
 			key := append([]byte(name), v...)
 			if tx.Bucket(key) == nil {
-				return fmt.Errorf("bucket %s: %v", string(key), store.ErrNoBucket)
+				return fmt.Errorf("bucket %s: %v", string(key), store.ErrBucketNotFound)
 			}
 		}
 

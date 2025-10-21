@@ -7,10 +7,10 @@ import (
 	"context"
 	"testing"
 
-	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
+	"blockwatch.cc/knoxdb/pkg/store"
 	"github.com/stretchr/testify/require"
 )
 
@@ -69,7 +69,11 @@ func TestTombLoadStore(t *testing.T) {
 	tomb.Append(1, 2, true)
 	require.True(t, tomb.dirty)
 	ctx := context.Background()
-	db, err := store.Create("mem", "tombtest")
+	db, err := store.Create(
+		store.WithDriver("mem"),
+		store.WithPath("tomb_test"),
+		store.WithDeleteOnClose(),
+	)
 	require.NoError(t, err)
 	defer db.Close()
 	err = db.Update(func(tx store.Tx) error {

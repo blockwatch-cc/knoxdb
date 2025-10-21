@@ -17,6 +17,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/wal"
 	"blockwatch.cc/knoxdb/pkg/schema"
+	"blockwatch.cc/knoxdb/pkg/store"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/echa/log"
 	"github.com/gofrs/flock"
@@ -133,6 +134,12 @@ func (e *Engine) IsShutdown() bool {
 
 func (e *Engine) IsReadOnly() bool {
 	return e.opts.ReadOnly
+}
+
+// checks if catalog backend file exists
+func IsExist(ctx context.Context, name string, opts DatabaseOptions) (bool, error) {
+	opts = DefaultDatabaseOptions.Merge(opts)
+	return store.Exists(opts.Driver, filepath.Join(opts.Path, name, CATALOG_NAME))
 }
 
 func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, error) {

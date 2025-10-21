@@ -11,9 +11,9 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
+	"blockwatch.cc/knoxdb/pkg/store"
 	"github.com/echa/log"
 )
 
@@ -41,11 +41,10 @@ var (
 		PackSize:    1 << 11, // 2k
 		JournalSize: 1 << 17, // 128k
 		PageSize:    1 << 16,
-		PageFill:    1.0,
+		PageFill:    0.5,
 		TxMaxSize:   1 << 20, // 1 MB
 		ReadOnly:    false,
 		NoSync:      true,
-		NoGrowSync:  false,
 		Logger:      log.Disabled,
 	}
 )
@@ -123,23 +122,23 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 
 func (idx *Index) createBackend(ctx context.Context) error {
 	// setup backend db file
-	typ := idx.srcSchema.TypeLabel(idx.engine.Namespace())
-	path := filepath.Join(idx.engine.RootPath(), idx.name+".db")
+	path := filepath.Join(idx.engine.RootPath(), idx.name)
 	idx.log.Debugf("index[%s]: creating backend=%s table=%s path=%q opts=%#v",
 		idx.name, idx.opts.Engine, idx.table.Schema().Name(), path, idx.opts)
 
-	db, err := store.Create(idx.opts.Driver, path, idx.opts.ToDriverOpts())
+	opts := append(
+		idx.opts.StoreOptions(),
+		store.WithPath(path),
+		store.WithManifest(
+			store.NewManifest(
+				idx.name,
+				idx.srcSchema.TypeLabel(idx.engine.Namespace()),
+			),
+		),
+	)
+	db, err := store.Create(opts...)
 	if err != nil {
 		return fmt.Errorf("creating index %s: %v", idx.name, err)
-	}
-	err = db.SetManifest(store.Manifest{
-		Name:    idx.name,
-		Schema:  typ,
-		Version: int(idx.srcSchema.Version()),
-	})
-	if err != nil {
-		db.Close()
-		return err
 	}
 	idx.db = db
 
@@ -155,7 +154,7 @@ func (idx *Index) createBackend(ctx context.Context) error {
 		engine.StateKeySuffix,
 	} {
 		key := append([]byte(idx.name), v...)
-		if _, err := store.CreateBucket(tx, key, engine.ErrIndexExists); err != nil {
+		if _, err := tx.Root().CreateBucket(key); err != nil {
 			return err
 		}
 	}
@@ -212,36 +211,35 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 		}
 	}
 
-	idx.log.Debugf("index[%s]: open with %d entries", name, idx.state.NRows)
+	idx.log.Debugf("index[%s]: opened with %d entries", name, idx.state.NRows)
 
 	return nil
 }
 
 func (idx *Index) openBackend(ctx context.Context) error {
-	// open db
-	typ := idx.srcSchema.TypeLabel(idx.engine.Namespace())
-	path := filepath.Join(idx.engine.RootPath(), idx.name+".db")
-	idx.log.Debugf("index[%s]: opening backend=%s path=%s opts=%#v",
+	// open backend
+	path := filepath.Join(idx.engine.RootPath(), idx.name)
+	idx.log.Debugf("index[%s]: open backend=%s path=%s opts=%#v",
 		idx.name, idx.opts.Engine, path, idx.opts)
 
-	db, err := store.Open(idx.opts.Driver, path, idx.opts.ToDriverOpts())
+	opts := append(
+		idx.opts.StoreOptions(),
+		store.WithPath(path),
+		store.WithManifest(
+			store.NewManifest(
+				idx.name,
+				idx.srcSchema.TypeLabel(idx.engine.Namespace()),
+			),
+		),
+	)
+	db, err := store.Open(opts...)
 	if err != nil {
 		return fmt.Errorf("open: %v", err)
 	}
 	idx.db = db
 
-	// check manifest matches
-	mft, err := idx.db.Manifest()
-	if err != nil {
-		return fmt.Errorf("loading manifest: %v", err)
-	}
-	if err := mft.Validate(idx.name, "*", typ, -1); err != nil {
-		return schema.ErrSchemaMismatch
-	}
-
-	// load table state
+	// load index state
 	err = idx.db.View(func(tx store.Tx) error {
-		// check table storage
 		for _, v := range [][]byte{
 			engine.DataKeySuffix,
 			engine.TombKeySuffix,
@@ -249,7 +247,7 @@ func (idx *Index) openBackend(ctx context.Context) error {
 		} {
 			key := append([]byte(idx.name), v...)
 			if tx.Bucket(key) == nil {
-				return fmt.Errorf("%q: %v", string(key), store.ErrNoBucket)
+				return fmt.Errorf("%q: %v", string(key), store.ErrBucketNotFound)
 			}
 		}
 
@@ -265,7 +263,7 @@ func (idx *Index) openBackend(ctx context.Context) error {
 
 func (idx *Index) Close(ctx context.Context) (err error) {
 	if idx.db != nil {
-		idx.log.Debugf("index[%s]: closing db", idx.name)
+		idx.log.Debugf("index[%s]: closing", idx.name)
 		err = idx.db.Close()
 		idx.db = nil
 	}
@@ -518,7 +516,7 @@ func (idx *Index) Cleanup(ctx context.Context, epoch uint32) error {
 	err := idx.db.View(func(tx store.Tx) error {
 		b := tx.Bucket(append([]byte(idx.name), engine.TombKeySuffix...))
 		if b == nil {
-			return store.ErrNoBucket
+			return store.ErrBucketNotFound
 		}
 		c := b.Cursor()
 		defer c.Close()

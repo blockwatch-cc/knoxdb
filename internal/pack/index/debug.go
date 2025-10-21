@@ -11,7 +11,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/pack/stats"
-	"blockwatch.cc/knoxdb/internal/store"
+	"blockwatch.cc/knoxdb/pkg/store"
 	"blockwatch.cc/knoxdb/internal/xroar"
 )
 
@@ -68,7 +68,7 @@ func (idx *Index) loadPack(i int) (*pack.Package, int, error) {
 	err := idx.db.View(func(tx store.Tx) error {
 		bkt := idx.dataBucket(tx)
 		if bkt == nil {
-			return store.ErrNoBucket
+			return store.ErrBucketNotFound
 		}
 		cur := bkt.Cursor()
 		defer cur.Close()

@@ -132,13 +132,13 @@ func (db *db) Sync() error {
 func (db *db) Dump(w io.Writer) error {
 	// backup may run in parallel to any tx and will be using a snapshot copy
 	err := db.store.View(func(tx *bolt.Tx) error {
-		db.store.Logger().Debugf("Exporting database of size %s (this may take a while)...",
+		db.opts.Log.Debugf("Exporting database of size %s (this may take a while)...",
 			util.ByteSize(tx.Size()).String())
 		n, err := tx.WriteTo(w)
 		if err != nil {
 			return err
 		}
-		db.store.Logger().Debugf("Successfully wrote %s of data.", util.ByteSize(n).String())
+		db.opts.Log.Debugf("Successfully wrote %s of data.", util.ByteSize(n).String())
 		return nil
 	})
 	return wrap(err)
@@ -162,7 +162,7 @@ func (db *db) GC(ctx context.Context, ratio float64) error {
 	start := time.Now()
 	srcPath := db.store.Path()
 	dstPath := srcPath + ".temp"
-	log := db.store.Logger()
+	log := db.opts.Log
 
 	// sync db file
 	if err := db.Sync(); err != nil {

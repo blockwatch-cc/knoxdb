@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 
 	"blockwatch.cc/knoxdb/internal/engine"
-	"blockwatch.cc/knoxdb/internal/store"
+	"blockwatch.cc/knoxdb/pkg/store"
 	"blockwatch.cc/knoxdb/internal/wal"
 )
 
@@ -34,7 +34,7 @@ func (kv *KVStore) Get(ctx context.Context, key []byte) ([]byte, error) {
 	defer tx.Rollback()
 	bucket := tx.Bucket(kv.key)
 	if bucket == nil {
-		return nil, store.ErrNoBucket
+		return nil, store.ErrBucketNotFound
 	}
 	buf := bucket.Get(key)
 	if buf == nil {
@@ -64,7 +64,7 @@ func (kv *KVStore) Put(ctx context.Context, key, val []byte) error {
 	defer tx.Rollback()
 	bucket := tx.Bucket(kv.key)
 	if bucket == nil {
-		return store.ErrNoBucket
+		return store.ErrBucketNotFound
 	}
 	bucket.FillPercent(kv.opts.PageFill)
 	buf := bucket.Get(key)
@@ -108,7 +108,7 @@ func (kv *KVStore) Del(ctx context.Context, key []byte) error {
 	defer tx.Rollback()
 	bucket := tx.Bucket(kv.key)
 	if bucket == nil {
-		return store.ErrNoBucket
+		return store.ErrBucketNotFound
 	}
 	buf := bucket.Get(key)
 	if buf != nil {

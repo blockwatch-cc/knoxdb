@@ -6,10 +6,10 @@ package stats
 import (
 	"fmt"
 
-	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/schema"
+	"blockwatch.cc/knoxdb/pkg/store"
 )
 
 const (
@@ -145,13 +145,13 @@ func (t *Tomb) AddDataPack(tx store.Tx, key, ver uint32) error {
 func (t *Tomb) bucket(tx store.Tx, kind byte) (store.Bucket, error) {
 	tb := tx.Bucket(t.tkey)
 	if tb == nil {
-		return nil, fmt.Errorf("tomb: %v", store.ErrNoBucket)
+		return nil, fmt.Errorf("tomb: %v", store.ErrBucketNotFound)
 	}
 	eb := tb.Bucket(t.ekey)
 	var err error
 	if eb == nil {
 		// fmt.Printf("Create tomb bucket %x for epoch %d\n", t.ekey, t.epoch)
-		eb, err = tb.CreateBucketIfNotExists(t.ekey)
+		eb, err = tb.CreateBucket(t.ekey)
 		if err != nil {
 			return nil, fmt.Errorf("create epoch bucket: %v", err)
 		}
@@ -159,7 +159,7 @@ func (t *Tomb) bucket(tx store.Tx, kind byte) (store.Bucket, error) {
 	kb := eb.Bucket([]byte{kind})
 	if kb == nil {
 		// fmt.Printf("Create kind bucket %x for epoch %d\n", kind, t.epoch)
-		kb, err = eb.CreateBucketIfNotExists([]byte{kind})
+		kb, err = eb.CreateBucket([]byte{kind})
 		if err != nil {
 			return nil, fmt.Errorf("create kind bucket: %v", err)
 		}

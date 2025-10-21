@@ -9,9 +9,9 @@ import (
 	"slices"
 
 	"blockwatch.cc/knoxdb/internal/block"
-	"blockwatch.cc/knoxdb/internal/store"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
+	"blockwatch.cc/knoxdb/pkg/store"
 )
 
 // The storage model stores serialized blocks in a storage bucket. Each block is
@@ -130,7 +130,7 @@ func (p *Package) DropFromCache(bcache block.BlockCachePartition) {
 // Loads missing blocks from disk, blocks are read-only
 func (p *Package) LoadFromDisk(ctx context.Context, bucket store.Bucket, fids []uint16, nRows int) (int, error) {
 	if bucket == nil {
-		return 0, store.ErrNoBucket
+		return 0, store.ErrBucketNotFound
 	}
 
 	var n int
@@ -196,7 +196,7 @@ func (p *Package) LoadFromDisk(ctx context.Context, bucket store.Bucket, fids []
 // store all blocks
 func (p *Package) StoreToDisk(ctx context.Context, bucket store.Bucket) (int, error) {
 	if bucket == nil {
-		return 0, store.ErrNoBucket
+		return 0, store.ErrBucketNotFound
 	}
 
 	var n int
@@ -252,7 +252,7 @@ func (p *Package) StoreToDisk(ctx context.Context, bucket store.Bucket) (int, er
 // uses deferred deletion)
 // func (p *Package) RemoveFromDisk(ctx context.Context, bucket store.Bucket) error {
 // 	if bucket == nil {
-// 		return store.ErrNoBucket
+// 		return store.ErrBucketNotFound
 // 	}
 
 // 	for _, f := range p.schema.Exported() {

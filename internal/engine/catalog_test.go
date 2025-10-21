@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"blockwatch.cc/knoxdb/internal/store"
-	_ "blockwatch.cc/knoxdb/internal/store/mem"
+	"blockwatch.cc/knoxdb/pkg/store"
+	_ "blockwatch.cc/knoxdb/pkg/store/mem"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"github.com/stretchr/testify/require"
 )
