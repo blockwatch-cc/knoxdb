@@ -555,10 +555,12 @@ func TestFieldEncode(t *testing.T) {
 
 // TestFieldUtilityMethods verifies the correctness of various utility methods on the Field struct.
 func TestFieldUtilityMethods(t *testing.T) {
+	// unsuported field type generates error
 	marshalTypeOf := reflect.TypeOf(MarshalerTypes{})
-	interfaceField, err := reflectStructField(marshalTypeOf.Field(2), TAG_NAME)
-	require.NoError(t, err)
+	_, err := reflectStructField(marshalTypeOf.Field(2), TAG_NAME)
+	require.Error(t, err)
 
+	// supported field types work
 	allTypeOf := reflect.TypeOf(AllTypes{})
 	arrayField, err := reflectStructField(allTypeOf.Field(20), TAG_NAME)
 	require.NoError(t, err)
@@ -569,7 +571,6 @@ func TestFieldUtilityMethods(t *testing.T) {
 		expectedValid   bool
 		expectedVisible bool
 		expectedFixed   bool
-		expectedIface   bool
 	}{
 		{
 			name:            "Valid and visible field",
@@ -577,7 +578,6 @@ func TestFieldUtilityMethods(t *testing.T) {
 			expectedValid:   true,
 			expectedVisible: true,
 			expectedFixed:   true,
-			expectedIface:   false,
 		},
 		{
 			name:            "Invalid field (no name)",
@@ -585,7 +585,6 @@ func TestFieldUtilityMethods(t *testing.T) {
 			expectedValid:   false,
 			expectedVisible: true,
 			expectedFixed:   true,
-			expectedIface:   false,
 		},
 		{
 			name:            "Invisible field",
@@ -593,7 +592,6 @@ func TestFieldUtilityMethods(t *testing.T) {
 			expectedValid:   true,
 			expectedVisible: false,
 			expectedFixed:   true,
-			expectedIface:   false,
 		},
 		{
 			name:            "Variable-size field",
@@ -601,15 +599,6 @@ func TestFieldUtilityMethods(t *testing.T) {
 			expectedValid:   true,
 			expectedVisible: true,
 			expectedFixed:   false,
-			expectedIface:   false,
-		},
-		{
-			name:            "Interface field",
-			field:           interfaceField,
-			expectedValid:   true,
-			expectedVisible: true,
-			expectedFixed:   false,
-			expectedIface:   true,
 		},
 		{
 			name:            "Array field",
@@ -617,7 +606,6 @@ func TestFieldUtilityMethods(t *testing.T) {
 			expectedValid:   true,
 			expectedVisible: true,
 			expectedFixed:   true,
-			expectedIface:   false,
 		},
 		{
 			name:            "Array field with fixed size",
@@ -625,7 +613,6 @@ func TestFieldUtilityMethods(t *testing.T) {
 			expectedValid:   true,
 			expectedVisible: true,
 			expectedFixed:   true,
-			expectedIface:   false,
 		},
 		{
 			name:            "String",
@@ -633,7 +620,6 @@ func TestFieldUtilityMethods(t *testing.T) {
 			expectedValid:   true,
 			expectedVisible: true,
 			expectedFixed:   false,
-			expectedIface:   false,
 		},
 		{
 			name:            "Bytes",
@@ -641,7 +627,6 @@ func TestFieldUtilityMethods(t *testing.T) {
 			expectedValid:   true,
 			expectedVisible: true,
 			expectedFixed:   false,
-			expectedIface:   false,
 		},
 		{
 			name:            "FixedBytes",
@@ -649,7 +634,6 @@ func TestFieldUtilityMethods(t *testing.T) {
 			expectedValid:   true,
 			expectedVisible: true,
 			expectedFixed:   true,
-			expectedIface:   false,
 		},
 		{
 			name:            "BytesArray",
@@ -657,7 +641,6 @@ func TestFieldUtilityMethods(t *testing.T) {
 			expectedValid:   true,
 			expectedVisible: true,
 			expectedFixed:   true,
-			expectedIface:   false,
 		},
 		{
 			name:            "FixedBytesArray",
@@ -665,7 +648,6 @@ func TestFieldUtilityMethods(t *testing.T) {
 			expectedValid:   true,
 			expectedVisible: true,
 			expectedFixed:   true,
-			expectedIface:   false,
 		},
 		{
 			name:            "Float64",
@@ -673,7 +655,6 @@ func TestFieldUtilityMethods(t *testing.T) {
 			expectedValid:   true,
 			expectedVisible: true,
 			expectedFixed:   true,
-			expectedIface:   false,
 		},
 	}
 
@@ -682,26 +663,14 @@ func TestFieldUtilityMethods(t *testing.T) {
 			assert.Equal(t, tt.expectedValid, tt.field.IsValid())
 			assert.Equal(t, tt.expectedVisible, tt.field.IsVisible())
 			assert.Equal(t, tt.expectedFixed, tt.field.IsFixedSize())
-			assert.Equal(t, tt.expectedIface, tt.field.IsInterface())
 		})
 	}
 }
 
 // TestFieldCodecSpecialCases verifies that Field correctly handles special codec cases.
 func TestFieldCodecSpecialCases(t *testing.T) {
-	marshalTypeOf := reflect.TypeOf(MarshalerTypes{})
-	byterField, err := reflectStructField(marshalTypeOf.Field(2), TAG_NAME)
-	require.NoError(t, err)
-
-	marshalField, err := reflectStructField(marshalTypeOf.Field(1), TAG_NAME)
-	require.NoError(t, err)
-
 	allTypeOf := reflect.TypeOf(AllTypes{})
 	arrayField, err := reflectStructField(allTypeOf.Field(20), TAG_NAME)
-	require.NoError(t, err)
-
-	personTypeOf := reflect.TypeOf(Person{})
-	stringerField, err := reflectStructField(personTypeOf.Field(0), TAG_NAME)
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -711,9 +680,6 @@ func TestFieldCodecSpecialCases(t *testing.T) {
 	}{
 		{"FixedString", NewField(FT_STRING).WithFixed(10), OC_FIXSTRING},
 		{"Enum", NewField(FT_U16).WithFlags(types.FieldFlagEnum), OC_ENUM},
-		{"TextMarshaler", marshalField, OC_MSHTXT},
-		{"Stringer", stringerField, OC_MSHSTR},
-		{"BinaryMarshaler", byterField, OC_MSHBIN},
 		{"FixedBytes", arrayField, OC_FIXBYTES},
 	}
 
@@ -788,7 +754,6 @@ func TestFieldExported(t *testing.T) {
 		Compress:  originalField.Compress(),
 		Index:     originalField.Index(),
 		IsVisible: originalField.IsVisible(),
-		Iface:     originalField.iface,
 		Scale:     originalField.Scale(),
 		Fixed:     originalField.Fixed(),
 		Offset:    originalField.Offset(),
@@ -803,7 +768,6 @@ func TestFieldExported(t *testing.T) {
 		assert.Equal(t, originalField.Compress(), exported.Compress)
 		assert.Equal(t, originalField.Index(), exported.Index)
 		assert.Equal(t, originalField.IsVisible(), exported.IsVisible)
-		assert.Equal(t, originalField.iface, exported.Iface)
 		assert.Equal(t, originalField.Scale(), exported.Scale)
 		assert.Equal(t, originalField.Fixed(), exported.Fixed)
 		assert.Equal(t, originalField.Offset(), exported.Offset)

@@ -4,9 +4,7 @@
 package schema
 
 import (
-	"encoding"
 	"encoding/binary"
-	"fmt"
 	"io"
 	"math"
 	"reflect"
@@ -104,15 +102,6 @@ func EncodeBytes(w io.Writer, val any, fixed uint16, layout binary.ByteOrder) (e
 	var b []byte
 	// type cast values
 	switch v := val.(type) {
-	case encoding.BinaryMarshaler:
-		b, err = v.MarshalBinary()
-
-	case encoding.TextMarshaler:
-		b, err = v.MarshalText()
-
-	case fmt.Stringer:
-		b = []byte(v.String())
-
 	case string:
 		b = []byte(v)
 

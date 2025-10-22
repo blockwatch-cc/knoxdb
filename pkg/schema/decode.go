@@ -5,7 +5,6 @@ package schema
 
 import (
 	"bytes"
-	"encoding"
 	"fmt"
 	"io"
 	"reflect"
@@ -86,29 +85,20 @@ func (d *GenericDecoder[T]) DecodeSlice(buf []byte, res []T) ([]T, error) {
 }
 
 type Decoder struct {
-	schema  *Schema
-	enums   *EnumRegistry
-	buf     *bytes.Buffer
-	needsif bool
+	schema *Schema
+	enums  *EnumRegistry
+	buf    *bytes.Buffer
 }
 
 func NewDecoder(s *Schema) *Decoder {
-	var needsif bool
-	for _, c := range s.decode {
-		if c.NeedsInterface() {
-			needsif = true
-			break
-		}
-	}
 	enums := s.Enums()
 	if enums == nil {
 		enums = &GlobalRegistry
 	}
 	return &Decoder{
-		schema:  s,
-		needsif: needsif,
-		enums:   enums,
-		buf:     bytes.NewBuffer(make([]byte, 0, s.maxWireSize)),
+		schema: s,
+		enums:  enums,
+		buf:    bytes.NewBuffer(make([]byte, 0, s.maxWireSize)),
 	}
 }
 
@@ -206,25 +196,6 @@ func (d *Decoder) Read(r io.Reader, val any) error {
 			// explicit copy
 			*(*[]byte)(ptr) = bytes.Clone(d.buf.Next(int(l)))
 
-		case OpCodeUnmarshalBinary, OpCodeUnmarshalText:
-			l := LE.Uint32(d.buf.Next(4))
-			n, err = io.CopyN(d.buf, r, int64(l)) // may realloc!
-			if err != nil {
-				return err
-			}
-			if n != int64(l) {
-				return ErrShortBuffer
-			}
-
-			// need reflection to access interface
-			dst := field.StructValue(rval)
-			ri := dst.Addr().Interface()
-			if code == OpCodeUnmarshalBinary {
-				err = ri.(encoding.BinaryUnmarshaler).UnmarshalBinary(d.buf.Next(int(l)))
-			} else {
-				err = ri.(encoding.TextUnmarshaler).UnmarshalText(d.buf.Next(int(l)))
-			}
-
 		case OpCodeTimestamp, OpCodeTime, OpCodeDate:
 			ts := int64(LE.Uint64(d.buf.Next(8)))
 			*(*time.Time)(ptr) = TimeScale(field.scale).FromUnix(ts)
@@ -288,29 +259,13 @@ func (d *Decoder) Decode(buf []byte, val any) error {
 	}
 	rval := reflect.Indirect(reflect.ValueOf(val))
 	base := rval.Addr().UnsafePointer()
-	if d.needsif {
-		for op, code := range d.schema.decode {
-			if code == OpCodeSkip {
-				continue
-			}
-			field := &d.schema.fields[op]
-			if code.NeedsInterface() {
-				dst := field.StructValue(rval)
-				buf = readReflectField(code, dst.Addr().Interface(), buf)
-			} else {
-				ptr := unsafe.Add(base, field.offset)
-				buf = readField(code, field, ptr, buf, d.enums)
-			}
+	for op, code := range d.schema.decode {
+		if code == OpCodeSkip {
+			continue
 		}
-	} else {
-		for op, code := range d.schema.decode {
-			if code == OpCodeSkip {
-				continue
-			}
-			field := &d.schema.fields[op]
-			ptr := unsafe.Add(base, field.offset)
-			buf = readField(code, field, ptr, buf, d.enums)
-		}
+		field := &d.schema.fields[op]
+		ptr := unsafe.Add(base, field.offset)
+		buf = readField(code, field, ptr, buf, d.enums)
 	}
 	return nil
 }
@@ -326,61 +281,18 @@ func (d *Decoder) DecodeSlice(buf []byte, slice any) (int, error) {
 	ops := d.schema.decode
 
 	var i int
-	if d.needsif {
-		for i = 0; i < num && len(buf) > 0; i++ {
-			rval := rslice.Index(i)
-			for op, code := range ops {
-				if code == OpCodeSkip {
-					continue
-				}
-				field := &d.schema.fields[op]
-				if code.NeedsInterface() {
-					dst := field.StructValue(rval)
-					buf = readReflectField(code, dst.Addr().Interface(), buf)
-				} else {
-					ptr := unsafe.Add(base, field.offset)
-					buf = readField(code, field, ptr, buf, d.enums)
-				}
+	for i = 0; i < num && len(buf) > 0; i++ {
+		for op, code := range ops {
+			if code == OpCodeSkip {
+				continue
 			}
-			base = unsafe.Add(base, sz)
+			field := &d.schema.fields[op]
+			ptr := unsafe.Add(base, field.offset)
+			buf = readField(code, field, ptr, buf, d.enums)
 		}
-	} else {
-		for i = 0; i < num && len(buf) > 0; i++ {
-			for op, code := range ops {
-				if code == OpCodeSkip {
-					continue
-				}
-				field := &d.schema.fields[op]
-				ptr := unsafe.Add(base, field.offset)
-				buf = readField(code, field, ptr, buf, d.enums)
-			}
-			base = unsafe.Add(base, sz)
-		}
+		base = unsafe.Add(base, sz)
 	}
 	return i, nil
-}
-
-func readReflectField(code OpCode, rval any, buf []byte) []byte {
-	switch code {
-	case OpCodeUnmarshalBinary:
-		l := LE.Uint32(buf)
-		buf = buf[4:]
-		if l > 0 {
-			_ = buf[l-1]
-			_ = rval.(encoding.BinaryUnmarshaler).UnmarshalBinary(buf[:l])
-			buf = buf[l:]
-		}
-
-	case OpCodeUnmarshalText:
-		l := LE.Uint32(buf)
-		buf = buf[4:]
-		if l > 0 {
-			_ = buf[l-1]
-			_ = rval.(encoding.TextUnmarshaler).UnmarshalText(buf[:l])
-			buf = buf[l:]
-		}
-	}
-	return buf
 }
 
 func readField(code OpCode, field *Field, ptr unsafe.Pointer, buf []byte, enums *EnumRegistry) []byte {

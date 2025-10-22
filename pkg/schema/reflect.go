@@ -4,7 +4,6 @@
 package schema
 
 import (
-	"encoding"
 	"fmt"
 	"math/bits"
 	"reflect"
@@ -256,13 +255,9 @@ func sanitize(s string) string {
 }
 
 var (
-	textUnmarshalerType   = reflect.TypeOf((*encoding.TextUnmarshaler)(nil)).Elem()
-	textMarshalerType     = reflect.TypeOf((*encoding.TextMarshaler)(nil)).Elem()
-	binaryUnmarshalerType = reflect.TypeOf((*encoding.BinaryUnmarshaler)(nil)).Elem()
-	binaryMarshalerType   = reflect.TypeOf((*encoding.BinaryMarshaler)(nil)).Elem()
-	stringerType          = reflect.TypeOf((*fmt.Stringer)(nil)).Elem()
-	byteSliceType         = reflect.TypeOf([]byte(nil))
-	modelType             = reflect.TypeOf((*Model)(nil)).Elem()
+	uint8Type     = reflect.TypeOf(uint8(0))
+	byteSliceType = reflect.TypeOf([]byte(nil))
+	modelType     = reflect.TypeOf((*Model)(nil)).Elem()
 )
 
 func reflectStructField(f reflect.StructField, tagName string) (field Field, err error) {
@@ -313,29 +308,11 @@ func reflectStructField(f reflect.StructField, tagName string) (field Field, err
 
 func (f *Field) ParseType(r reflect.StructField) error {
 	var (
-		iface types.IfaceFlags
 		typ   types.FieldType
 		flags types.FieldFlags
 		fixed uint16
 		scale uint8
 	)
-
-	// detect marshaler types
-	if r.Type.Implements(binaryMarshalerType) {
-		iface |= types.IfaceBinaryMarshaler
-	}
-	if reflect.PointerTo(r.Type).Implements(binaryUnmarshalerType) {
-		iface |= types.IfaceBinaryUnmarshaler
-	}
-	if r.Type.Implements(textMarshalerType) {
-		iface |= types.IfaceTextMarshaler
-	}
-	if reflect.PointerTo(r.Type).Implements(textUnmarshalerType) {
-		iface |= types.IfaceTextUnmarshaler
-	}
-	if r.Type.Implements(stringerType) {
-		iface |= types.IfaceStringer
-	}
 
 	// field must have supported kind
 	switch r.Type.Kind() {
@@ -390,24 +367,12 @@ func (f *Field) ParseType(r reflect.StructField) error {
 	case reflect.Bool:
 		typ = FT_BOOL
 	case reflect.Map:
-		switch {
-		case iface.Is(types.IfaceBinaryMarshaler):
-			typ = FT_BYTES
-		case iface.Is(types.IfaceTextMarshaler) || iface.Is(types.IfaceStringer):
-			typ = FT_STRING
-		default:
-			return fmt.Errorf("unsupported map type %s, should implement BinaryMarshaler", r.Type)
-		}
+		return fmt.Errorf("unsupported map type %s", r.Type)
 	case reflect.Slice:
-		switch {
-		case iface.Is(types.IfaceBinaryMarshaler):
+		if r.Type == byteSliceType {
 			typ = FT_BYTES
-		case iface.Is(types.IfaceTextMarshaler) || iface.Is(types.IfaceStringer):
-			typ = FT_STRING
-		case r.Type == byteSliceType:
-			typ = FT_BYTES
-		default:
-			return fmt.Errorf("unsupported slice type %s, should implement BinaryMarshaler", r.Type)
+		} else {
+			return fmt.Errorf("unsupported slice type %s", r.Type)
 		}
 	case reflect.Struct:
 		// string-check is much quicker
@@ -430,14 +395,7 @@ func (f *Field) ParseType(r reflect.StructField) error {
 		case "num.Big":
 			typ = FT_BIGINT
 		default:
-			switch {
-			case iface.Is(types.IfaceBinaryMarshaler):
-				typ = FT_BYTES
-			case iface.Is(types.IfaceTextMarshaler) || iface.Is(types.IfaceStringer):
-				typ = FT_STRING
-			default:
-				return fmt.Errorf("unsupported nested struct type %s, should implement BinaryMarshaler", r.Type)
-			}
+			return fmt.Errorf("unsupported nested struct type %s", r.Type)
 		}
 	case reflect.Array:
 		// string-check is much quicker
@@ -447,23 +405,17 @@ func (f *Field) ParseType(r reflect.StructField) error {
 		case "num.Int256":
 			typ = FT_I256
 		default:
-			switch {
-			case iface.Is(types.IfaceBinaryMarshaler):
-				typ = FT_BYTES
-			case iface.Is(types.IfaceTextMarshaler) || iface.Is(types.IfaceStringer):
-				typ = FT_STRING
-			case r.Type.Elem().Kind() == reflect.Uint8:
+			if r.Type.Elem() == uint8Type {
 				typ = FT_BYTES
 				fixed = uint16(r.Type.Len())
-			default:
-				return fmt.Errorf("unsupported array type %s, should implement BinaryMarshaler", r.Type)
+			} else {
+				return fmt.Errorf("unsupported array type %s", r.Type)
 			}
 		}
 	default:
 		return fmt.Errorf("unsupported type %s (%v)", r.Type, r.Type.Kind())
 	}
 
-	f.iface = iface
 	f.typ = typ
 	f.flags = flags
 	f.fixed = fixed
@@ -705,46 +657,20 @@ func compileCodecs(s *Schema) (enc []OpCode, dec []OpCode) {
 			dc, ec = OpCodeBool, OpCodeBool
 
 		case FT_STRING:
-			// encoder side
-			switch {
-			case f.fixed > 0:
+			if f.fixed > 0 {
 				ec = OpCodeFixedString
-			case f.Can(types.IfaceTextMarshaler):
-				ec = OpCodeMarshalText
-			case f.Can(types.IfaceStringer):
-				ec = OpCodeStringer
-			default:
-				ec = OpCodeString
-			}
-
-			// decoder side
-			switch {
-			case f.fixed > 0:
 				dc = OpCodeFixedString
-			case f.Can(types.IfaceTextUnmarshaler):
-				dc = OpCodeUnmarshalText
-			default:
+			} else {
+				ec = OpCodeString
 				dc = OpCodeString
 			}
 
 		case FT_BYTES:
-			// encoder side
-			switch {
-			case f.Can(types.IfaceBinaryMarshaler):
-				ec = OpCodeMarshalBinary
-			case f.fixed > 0:
+			if f.fixed > 0 {
 				ec = OpCodeFixedBytes
-			default:
-				ec = OpCodeBytes
-			}
-
-			// decoder side
-			switch {
-			case f.Can(types.IfaceBinaryUnmarshaler):
-				dc = OpCodeUnmarshalBinary
-			case f.fixed > 0:
 				dc = OpCodeFixedBytes
-			default:
+			} else {
+				ec = OpCodeBytes
 				dc = OpCodeBytes
 			}
 

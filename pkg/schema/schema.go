@@ -34,7 +34,6 @@ type Schema struct {
 	minWireSize int
 	maxWireSize int
 	isFixedSize bool
-	isInterface bool
 	version     uint32
 	encode      []OpCode
 	decode      []OpCode
@@ -108,10 +107,6 @@ func (s *Schema) NewBuffer(sz int) *bytes.Buffer {
 
 func (s *Schema) IsValid() bool {
 	return len(s.name) != 0 && len(s.fields) != 0 && len(s.encode) != 0
-}
-
-func (s *Schema) IsInterface() bool {
-	return s.isInterface
 }
 
 func (s *Schema) IsFixedSize() bool {
@@ -734,7 +729,6 @@ func (s *Schema) Finalize() *Schema {
 	s.minWireSize = 0
 	s.maxWireSize = 0
 	s.isFixedSize = true
-	s.isInterface = false
 	s.schemaHash = 0
 
 	var b [4]byte
@@ -766,9 +760,6 @@ func (s *Schema) Finalize() *Schema {
 			LE.PutUint16(b[:], s.fields[i].id)
 			h.Write(b[:2])
 			h.Write([]byte{byte(s.fields[i].typ)})
-
-			// cache whether we need interface access
-			s.isInterface = s.isInterface || s.fields[i].IsInterface()
 
 			// fill struct type info
 			if needLayout {
@@ -813,7 +804,6 @@ func (s *Schema) Finalize() *Schema {
 			IsNullable: s.fields[i].IsNullable(),
 			IsInternal: s.fields[i].IsInternal(),
 			IsEnum:     s.fields[i].IsEnum(),
-			Iface:      s.fields[i].iface,
 			Scale:      s.fields[i].scale,
 			Fixed:      s.fields[i].fixed,
 			Offset:     s.fields[i].offset,

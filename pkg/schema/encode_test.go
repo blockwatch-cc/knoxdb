@@ -10,7 +10,6 @@ import (
 	"os"
 	"reflect"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -53,7 +52,6 @@ type encodeTestStruct struct {
 	HashArray [20]byte       `knox:"hash,index=bloom=3"`
 	HashFixed Hash           `knox:"hash_fixed,index=bloom,zip=snappy"`
 	String    string         `knox:"str"`
-	Stringer  Stringer       `knox:"strlist"`
 	Bool      bool           `knox:"bool"`
 	Enum      MyEnum         `knox:"my_enum,enum"`
 	Int64     int64          `knox:"i64"`
@@ -83,7 +81,6 @@ func makeTestData(sz int) (res []encodeTestStruct) {
 			HashArray: [20]byte(randBytes(20)),
 			HashFixed: randFixed[Hash](),
 			String:    hex.EncodeToString(randBytes(4)),
-			Stringer:  strings.SplitAfter(hex.EncodeToString(randBytes(32)), "a"),
 			Bool:      true,
 			Enum:      MyEnum(myEnum.MustValue(uint16(i%4 + 1))),
 			Int64:     int64(i),

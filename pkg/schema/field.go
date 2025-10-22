@@ -75,10 +75,9 @@ type Field struct {
 	scale    uint8                  // 0..255 fixed point scale, time scale, bloom error probability 1/x (1..4)
 
 	// encoder values for INSERT, UPDATE, QUERY
-	path     []int            // reflect struct nested positions
-	offset   uintptr          // struct field offset from reflect
-	wireSize uint16           // wire encoding field size in bytes, min size for []byte & string
-	iface    types.IfaceFlags // Go encoder default interfaces
+	path     []int   // reflect struct nested positions
+	offset   uintptr // struct field offset from reflect
+	wireSize uint16  // wire encoding field size in bytes, min size for []byte & string
 }
 
 // ExportedField is a performance improved version of Field
@@ -94,7 +93,6 @@ type ExportedField struct {
 	IsInternal bool
 	IsNullable bool
 	IsEnum     bool
-	Iface      types.IfaceFlags
 	Scale      uint8
 	Fixed      uint16
 	Offset     uintptr
@@ -126,10 +124,6 @@ func (f *Field) Path() []int {
 
 func (f *Field) Flags() FieldFlags {
 	return f.flags
-}
-
-func (f *Field) Can(v types.IfaceFlags) bool {
-	return f.iface.Is(v)
 }
 
 func (f *Field) Compress() types.BlockCompression {
@@ -195,10 +189,6 @@ func (f *Field) IsFixedSize() bool {
 	default:
 		return true
 	}
-}
-
-func (f *Field) IsInterface() bool {
-	return f.iface != 0
 }
 
 func (f *Field) IsCompressed() bool {
@@ -412,24 +402,16 @@ func (f *Field) Codec() OpCode {
 		return OpCodeBool
 
 	case FT_STRING:
-		switch {
-		case f.fixed > 0:
+		if f.fixed > 0 {
 			return OpCodeFixedString
-		case f.Can(types.IfaceTextMarshaler):
-			return OpCodeMarshalText
-		case f.Can(types.IfaceStringer):
-			return OpCodeStringer
-		default:
+		} else {
 			return OpCodeString
 		}
 
 	case FT_BYTES:
-		switch {
-		case f.Can(types.IfaceBinaryMarshaler):
-			return OpCodeMarshalBinary
-		case f.fixed > 0:
+		if f.fixed > 0 {
 			return OpCodeFixedBytes
-		default:
+		} else {
 			return OpCodeBytes
 		}
 
@@ -459,8 +441,9 @@ func (f *Field) Codec() OpCode {
 	}
 }
 
-// Simple per field encoder used to wire-encode individual typed values
-// found in query conditions.
+// Encoder to serialize individual field values to wire format.
+// Use to generate composite indexes or hashes for joins. Note
+// this function encodes length-prefixed inline strings.
 func (f *Field) Encode(w io.Writer, val any, layout binary.ByteOrder) (err error) {
 	if val == nil {
 		return ErrNilValue
@@ -476,10 +459,7 @@ func (f *Field) Encode(w io.Writer, val any, layout binary.ByteOrder) (err error
 	case OpCodeFixedString,
 		OpCodeFixedBytes,
 		OpCodeString,
-		OpCodeStringer,
-		OpCodeBytes,
-		OpCodeMarshalBinary,
-		OpCodeMarshalText:
+		OpCodeBytes:
 
 		err = EncodeBytes(w, val, f.fixed, layout)
 
@@ -563,149 +543,149 @@ func (f *Field) Encode(w io.Writer, val any, layout binary.ByteOrder) (err error
 	return
 }
 
-// Simple per field decoder used to wire-decode individual typed values
-// found in query conditions.
-func (f *Field) Decode(r io.Reader, layout binary.ByteOrder) (val any, err error) {
-	var (
-		buf [32]byte
-		n   int
-	)
-	switch f.typ {
-	case FT_TIMESTAMP, FT_TIME:
-		_, err = r.Read(buf[:8])
-		val = time.Unix(0, int64(layout.Uint64(buf[:8]))).UTC()
+// // Simple per field decoder used to wire-decode individual typed values
+// // found in query conditions.
+// func (f *Field) Decode(r io.Reader, layout binary.ByteOrder) (val any, err error) {
+// 	var (
+// 		buf [32]byte
+// 		n   int
+// 	)
+// 	switch f.typ {
+// 	case FT_TIMESTAMP, FT_TIME:
+// 		_, err = r.Read(buf[:8])
+// 		val = time.Unix(0, int64(layout.Uint64(buf[:8]))).UTC()
 
-	case FT_DATE:
-		_, err = r.Read(buf[:8])
-		val = FromUnixDays(int64(layout.Uint64(buf[:8])))
+// 	case FT_DATE:
+// 		_, err = r.Read(buf[:8])
+// 		val = FromUnixDays(int64(layout.Uint64(buf[:8])))
 
-	case FT_I64:
-		_, err = r.Read(buf[:8])
-		val = int64(layout.Uint64(buf[:8]))
+// 	case FT_I64:
+// 		_, err = r.Read(buf[:8])
+// 		val = int64(layout.Uint64(buf[:8]))
 
-	case FT_I32:
-		_, err = r.Read(buf[:4])
-		val = int32(layout.Uint32(buf[:4]))
+// 	case FT_I32:
+// 		_, err = r.Read(buf[:4])
+// 		val = int32(layout.Uint32(buf[:4]))
 
-	case FT_I16:
-		_, err = r.Read(buf[:2])
-		val = int16(layout.Uint16(buf[:2]))
+// 	case FT_I16:
+// 		_, err = r.Read(buf[:2])
+// 		val = int16(layout.Uint16(buf[:2]))
 
-	case FT_I8:
-		_, err = r.Read(buf[:1])
-		val = int8(buf[0])
+// 	case FT_I8:
+// 		_, err = r.Read(buf[:1])
+// 		val = int8(buf[0])
 
-	case FT_U64:
-		_, err = r.Read(buf[:8])
-		val = layout.Uint64(buf[:8])
+// 	case FT_U64:
+// 		_, err = r.Read(buf[:8])
+// 		val = layout.Uint64(buf[:8])
 
-	case FT_U32:
-		_, err = r.Read(buf[:4])
-		val = layout.Uint32(buf[:4])
+// 	case FT_U32:
+// 		_, err = r.Read(buf[:4])
+// 		val = layout.Uint32(buf[:4])
 
-	case FT_U16:
-		_, err = r.Read(buf[:2])
-		val = layout.Uint16(buf[:2])
+// 	case FT_U16:
+// 		_, err = r.Read(buf[:2])
+// 		val = layout.Uint16(buf[:2])
 
-	case FT_U8:
-		_, err = r.Read(buf[:1])
-		val = buf[0]
+// 	case FT_U8:
+// 		_, err = r.Read(buf[:1])
+// 		val = buf[0]
 
-	case FT_F64:
-		_, err = r.Read(buf[:8])
-		val = math.Float64frombits(layout.Uint64(buf[:8]))
+// 	case FT_F64:
+// 		_, err = r.Read(buf[:8])
+// 		val = math.Float64frombits(layout.Uint64(buf[:8]))
 
-	case FT_F32:
-		_, err = r.Read(buf[:4])
-		val = math.Float32frombits(layout.Uint32(buf[:4]))
+// 	case FT_F32:
+// 		_, err = r.Read(buf[:4])
+// 		val = math.Float32frombits(layout.Uint32(buf[:4]))
 
-	case FT_BOOL:
-		_, err = r.Read(buf[:1])
-		val = buf[0] > 0
+// 	case FT_BOOL:
+// 		_, err = r.Read(buf[:1])
+// 		val = buf[0] > 0
 
-	case FT_STRING:
-		if f.fixed > 0 {
-			b := make([]byte, f.fixed)
-			n, err = r.Read(b)
-			if n < int(f.fixed) {
-				return nil, ErrShortBuffer
-			}
-			val = string(b[:n])
-		} else {
-			_, err = r.Read(buf[:4])
-			if err != nil {
-				return
-			}
-			u32 := layout.Uint32(buf[:4])
-			b := make([]byte, int(u32))
-			n, err = r.Read(b)
-			val = string(b[:n])
-		}
+// 	case FT_STRING:
+// 		if f.fixed > 0 {
+// 			b := make([]byte, f.fixed)
+// 			n, err = r.Read(b)
+// 			if n < int(f.fixed) {
+// 				return nil, ErrShortBuffer
+// 			}
+// 			val = string(b[:n])
+// 		} else {
+// 			_, err = r.Read(buf[:4])
+// 			if err != nil {
+// 				return
+// 			}
+// 			u32 := layout.Uint32(buf[:4])
+// 			b := make([]byte, int(u32))
+// 			n, err = r.Read(b)
+// 			val = string(b[:n])
+// 		}
 
-	case FT_BYTES:
-		if f.fixed > 0 {
-			b := make([]byte, f.fixed)
-			n, err = r.Read(b)
-			if n < int(f.fixed) {
-				return nil, ErrShortBuffer
-			}
-			val = string(b[:n])
-		} else {
-			_, err = r.Read(buf[:4])
-			if err != nil {
-				return
-			}
-			u32 := layout.Uint32(buf[:4])
-			b := make([]byte, int(u32))
-			n, err = r.Read(b)
-			val = b[:n]
-		}
+// 	case FT_BYTES:
+// 		if f.fixed > 0 {
+// 			b := make([]byte, f.fixed)
+// 			n, err = r.Read(b)
+// 			if n < int(f.fixed) {
+// 				return nil, ErrShortBuffer
+// 			}
+// 			val = string(b[:n])
+// 		} else {
+// 			_, err = r.Read(buf[:4])
+// 			if err != nil {
+// 				return
+// 			}
+// 			u32 := layout.Uint32(buf[:4])
+// 			b := make([]byte, int(u32))
+// 			n, err = r.Read(b)
+// 			val = b[:n]
+// 		}
 
-	case FT_I256:
-		_, err = r.Read(buf[:32])
-		i256 := num.Int256FromBytes(buf[:32])
-		val = i256
+// 	case FT_I256:
+// 		_, err = r.Read(buf[:32])
+// 		i256 := num.Int256FromBytes(buf[:32])
+// 		val = i256
 
-	case FT_I128:
-		_, err = r.Read(buf[:16])
-		i128 := num.Int128FromBytes(buf[:16])
-		val = i128
+// 	case FT_I128:
+// 		_, err = r.Read(buf[:16])
+// 		i128 := num.Int128FromBytes(buf[:16])
+// 		val = i128
 
-	case FT_D256:
-		_, err = r.Read(buf[:32])
-		d256 := num.NewDecimal256(num.Int256FromBytes(buf[:32]), f.scale)
-		val = d256
+// 	case FT_D256:
+// 		_, err = r.Read(buf[:32])
+// 		d256 := num.NewDecimal256(num.Int256FromBytes(buf[:32]), f.scale)
+// 		val = d256
 
-	case FT_D128:
-		_, err = r.Read(buf[:16])
-		d128 := num.NewDecimal128(num.Int128FromBytes(buf[:16]), f.scale)
-		val = d128
+// 	case FT_D128:
+// 		_, err = r.Read(buf[:16])
+// 		d128 := num.NewDecimal128(num.Int128FromBytes(buf[:16]), f.scale)
+// 		val = d128
 
-	case FT_D64:
-		_, err = r.Read(buf[:8])
-		d64 := num.NewDecimal64(int64(layout.Uint64(buf[:8])), f.scale)
-		val = d64
+// 	case FT_D64:
+// 		_, err = r.Read(buf[:8])
+// 		d64 := num.NewDecimal64(int64(layout.Uint64(buf[:8])), f.scale)
+// 		val = d64
 
-	case FT_D32:
-		_, err = r.Read(buf[:4])
-		d32 := num.NewDecimal32(int32(layout.Uint32(buf[:4])), f.scale)
-		val = d32
+// 	case FT_D32:
+// 		_, err = r.Read(buf[:4])
+// 		d32 := num.NewDecimal32(int32(layout.Uint32(buf[:4])), f.scale)
+// 		val = d32
 
-	case FT_BIGINT:
-		_, err = r.Read(buf[:4])
-		if err != nil {
-			return
-		}
-		u32 := layout.Uint32(buf[:4])
-		b := make([]byte, int(u32))
-		n, err = r.Read(b)
-		val = num.NewBigFromBytes(b[:n])
+// 	case FT_BIGINT:
+// 		_, err = r.Read(buf[:4])
+// 		if err != nil {
+// 			return
+// 		}
+// 		u32 := layout.Uint32(buf[:4])
+// 		b := make([]byte, int(u32))
+// 		n, err = r.Read(b)
+// 		val = num.NewBigFromBytes(b[:n])
 
-	default:
-		err = ErrInvalidField
-	}
-	return
-}
+// 	default:
+// 		err = ErrInvalidField
+// 	}
+// 	return
+// }
 
 // StructValue resolves a struct field from a struct. When the field
 // is a pointer it allocates the target type and dereferences it
@@ -733,12 +713,9 @@ func (f *ExportedField) StructValue(rval reflect.Value) reflect.Value {
 }
 
 func (f *ExportedField) WireSize() int {
-	// switch f.Type {
-	// case FT_STRING, types.FieldTypeBytes:
 	if f.Fixed > 0 {
 		return int(f.Fixed)
 	}
-	// }
 	return f.Type.Size()
 }
 

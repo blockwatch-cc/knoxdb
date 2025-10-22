@@ -4,7 +4,6 @@
 package pack
 
 import (
-	"encoding"
 	"fmt"
 	"reflect"
 	"time"
@@ -253,40 +252,17 @@ func (p *Package) SetValue(col, row int, val any) error {
 		case reflect.Int, reflect.Int64:
 			b.Int64().Set(row, rval.Int())
 		default:
-			// for all other types, check if they implement marshalers
-			// this is unlikely due to the internal use of this feature
-			// but allows for future extension of DB internals like
-			// aggregators, reducers, etc
+			// oh, its a type we don't support yet
 			f := p.schema.Field(col)
-			switch {
-			case f.Can(types.IfaceBinaryMarshaler):
-				buf, err := val.(encoding.BinaryMarshaler).MarshalBinary()
-				if err != nil {
-					return fmt.Errorf("set_value: marshal failed on %s field %s: %v",
-						f.Type(), f.Name(), err)
-				}
-				b.Bytes().Set(row, buf)
-			case f.Can(types.IfaceTextMarshaler):
-				buf, err := val.(encoding.TextMarshaler).MarshalText()
-				if err != nil {
-					return fmt.Errorf("set_value: marshal failed on %s field %s: %v",
-						f.Type(), f.Name(), err)
-				}
-				b.Bytes().Set(row, buf)
-			case f.Can(types.IfaceStringer):
-				b.Bytes().Set(row, util.UnsafeGetBytes(val.((fmt.Stringer)).String()))
-			default:
-				// oh, its a type we don't support yet
-				assert.Unreachable("unhandled value type",
-					"rtype", rval.Type().String(),
-					"rkind", rval.Kind().String(),
-					"field", f.Name(),
-					"type", f.Type().String(),
-					"pack", p.key,
-					"schema", p.schema.Name(),
-					"version", p.schema.Version(),
-				)
-			}
+			assert.Unreachable("unhandled value type",
+				"rtype", rval.Type().String(),
+				"rkind", rval.Kind().String(),
+				"field", f.Name(),
+				"type", f.Type().String(),
+				"pack", p.key,
+				"schema", p.schema.Name(),
+				"version", p.schema.Version(),
+			)
 		}
 		b.SetDirty()
 	}

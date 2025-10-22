@@ -184,17 +184,3 @@ func (i FieldFlags) String() string {
 	}
 	return b.String()
 }
-
-type IfaceFlags byte
-
-const (
-	IfaceBinaryMarshaler IfaceFlags = 1 << iota
-	IfaceBinaryUnmarshaler
-	IfaceTextMarshaler
-	IfaceTextUnmarshaler
-	IfaceStringer
-)
-
-func (i IfaceFlags) Is(f IfaceFlags) bool {
-	return i&f > 0
-}

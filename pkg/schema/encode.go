@@ -5,7 +5,6 @@ package schema
 
 import (
 	"bytes"
-	"encoding"
 	"fmt"
 	"reflect"
 	"time"
@@ -58,27 +57,18 @@ func (e *GenericEncoder[T]) EncodePtrSlice(slice []*T, buf *bytes.Buffer) ([]byt
 }
 
 type Encoder struct {
-	schema  *Schema
-	enums   *EnumRegistry
-	needsif bool
+	schema *Schema
+	enums  *EnumRegistry
 }
 
 func NewEncoder(s *Schema) *Encoder {
-	var needsif bool
-	for _, c := range s.encode {
-		if c.NeedsInterface() {
-			needsif = true
-			break
-		}
-	}
 	enums := s.Enums()
 	if enums == nil {
 		enums = &GlobalRegistry
 	}
 	return &Encoder{
-		schema:  s,
-		enums:   enums,
-		needsif: needsif,
+		schema: s,
+		enums:  enums,
 	}
 }
 
@@ -105,34 +95,15 @@ func (e *Encoder) Encode(val any, buf *bytes.Buffer) ([]byte, error) {
 		buf = e.NewBuffer(1)
 	}
 	var err error
-	if e.needsif {
-		for op, code := range e.schema.encode {
-			if code == OpCodeSkip {
-				continue
-			}
-			field := &e.schema.fields[op]
-			if code.NeedsInterface() {
-				err = writeReflectField(buf, code, rval.FieldByIndex(field.path).Interface())
-			} else {
-				ptr := unsafe.Add(base, field.offset)
-				err = writeField(buf, code, field, ptr, e.enums)
-			}
-			if err != nil {
-				return nil, err
-			}
+	for op, code := range e.schema.encode {
+		if code == OpCodeSkip {
+			continue
 		}
-
-	} else {
-		for op, code := range e.schema.encode {
-			if code == OpCodeSkip {
-				continue
-			}
-			field := &e.schema.fields[op]
-			ptr := unsafe.Add(base, field.offset)
-			err = writeField(buf, code, field, ptr, e.enums)
-			if err != nil {
-				return nil, err
-			}
+		field := &e.schema.fields[op]
+		ptr := unsafe.Add(base, field.offset)
+		err = writeField(buf, code, field, ptr, e.enums)
+		if err != nil {
+			return nil, err
 		}
 	}
 	return buf.Bytes(), nil
@@ -157,41 +128,19 @@ func (e *Encoder) EncodeSlice(slice any, buf *bytes.Buffer) ([]byte, error) {
 	}
 
 	var err error
-	if e.needsif {
-		for i, l := 0, rslice.Len(); i < l; i++ {
-			rval := rslice.Index(i)
-			for op, code := range e.schema.encode {
-				if code == OpCodeSkip {
-					continue
-				}
-				field := &e.schema.fields[op]
-				if !code.NeedsInterface() {
-					ptr := unsafe.Add(base, field.offset)
-					err = writeField(buf, code, field, ptr, e.enums)
-				} else {
-					err = writeReflectField(buf, code, rval.FieldByIndex(field.path).Interface())
-				}
-				if err != nil {
-					return nil, err
-				}
+	for i, l := 0, rslice.Len(); i < l; i++ {
+		for op, code := range e.schema.encode {
+			if code == OpCodeSkip {
+				continue
 			}
-			base = unsafe.Add(base, sz)
-		}
-	} else {
-		for i, l := 0, rslice.Len(); i < l; i++ {
-			for op, code := range e.schema.encode {
-				if code == OpCodeSkip {
-					continue
-				}
-				field := &e.schema.fields[op]
-				ptr := unsafe.Add(base, field.offset)
-				err = writeField(buf, code, field, ptr, e.enums)
-				if err != nil {
-					return nil, err
-				}
+			field := &e.schema.fields[op]
+			ptr := unsafe.Add(base, field.offset)
+			err = writeField(buf, code, field, ptr, e.enums)
+			if err != nil {
+				return nil, err
 			}
-			base = unsafe.Add(base, sz)
 		}
+		base = unsafe.Add(base, sz)
 	}
 	return buf.Bytes(), nil
 }
@@ -210,77 +159,21 @@ func (e *Encoder) EncodePtrSlice(slice any, buf *bytes.Buffer) ([]byte, error) {
 		buf = e.NewBuffer(rslice.Len())
 	}
 	var err error
-	if e.needsif {
-		for i, l := 0, rslice.Len(); i < l; i++ {
-			rval := rslice.Index(i)
-			base := rval.UnsafePointer()
-			for op, code := range e.schema.encode {
-				if code == OpCodeSkip {
-					continue
-				}
-				field := &e.schema.fields[op]
-				if !code.NeedsInterface() {
-					ptr := unsafe.Add(base, field.offset)
-					err = writeField(buf, code, field, ptr, e.enums)
-				} else {
-					err = writeReflectField(buf, code, rval.Elem().FieldByIndex(field.path).Interface())
-				}
-				if err != nil {
-					return nil, err
-				}
+	for i, l := 0, rslice.Len(); i < l; i++ {
+		base := rslice.Index(i).UnsafePointer()
+		for op, code := range e.schema.encode {
+			if code == OpCodeSkip {
+				continue
 			}
-		}
-	} else {
-		for i, l := 0, rslice.Len(); i < l; i++ {
-			base := rslice.Index(i).UnsafePointer()
-			for op, code := range e.schema.encode {
-				if code == OpCodeSkip {
-					continue
-				}
-				field := &e.schema.fields[op]
-				ptr := unsafe.Add(base, field.offset)
-				err = writeField(buf, code, field, ptr, e.enums)
-				if err != nil {
-					return nil, err
-				}
+			field := &e.schema.fields[op]
+			ptr := unsafe.Add(base, field.offset)
+			err = writeField(buf, code, field, ptr, e.enums)
+			if err != nil {
+				return nil, err
 			}
 		}
 	}
 	return buf.Bytes(), nil
-}
-
-func writeReflectField(buf *bytes.Buffer, code OpCode, rval any) error {
-	var (
-		err error
-		b   []byte
-		sz  [4]byte
-	)
-	switch code {
-	case OpCodeMarshalBinary:
-		b, err = rval.(encoding.BinaryMarshaler).MarshalBinary()
-		if err != nil {
-			return err
-		}
-		LE.PutUint32(sz[:], uint32(len(b)))
-		buf.Write(sz[:])
-		_, err = buf.Write(b)
-
-	case OpCodeMarshalText:
-		b, err = rval.(encoding.TextMarshaler).MarshalText()
-		if err != nil {
-			return err
-		}
-		LE.PutUint32(sz[:], uint32(len(b)))
-		buf.Write(sz[:])
-		_, err = buf.Write(b)
-
-	case OpCodeStringer:
-		s := rval.(fmt.Stringer).String()
-		LE.PutUint32(sz[:], uint32(len(s)))
-		buf.Write(sz[:])
-		_, err = buf.Write(unsafe.Slice(unsafe.StringData(s), len(s)))
-	}
-	return err
 }
 
 func writeField(buf *bytes.Buffer, code OpCode, field *Field, ptr unsafe.Pointer, enums *EnumRegistry) error {

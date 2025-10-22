@@ -34,6 +34,7 @@ type schemaTest struct {
 	iserr     bool
 }
 
+// not supported, used for error checks only
 type Stringer []string
 
 func (s Stringer) String() string {
@@ -49,17 +50,19 @@ func (s *Stringer) UnmarshalText(b []byte) error {
 	return nil
 }
 
-type Byter [20]byte
+// not supported, used for error checks only
+type Byter [][]byte
 
 func (b Byter) MarshalBinary() ([]byte, error) {
-	return b[:], nil
+	return bytes.Join(b, []byte{0}), nil
 }
 
 func (b *Byter) UnmarshalBinary(buf []byte) error {
-	copy((*b)[:], buf)
+	*b = bytes.Split(buf, []byte{0})
 	return nil
 }
 
+// not supported, used for error checks only
 type StringerStruct struct{}
 
 func (s StringerStruct) MarshalText() ([]byte, error) {
@@ -70,6 +73,7 @@ func (s *StringerStruct) UnmarshalText(b []byte) error {
 	return nil
 }
 
+// not supported, used for error checks only
 type ByterStruct struct{}
 
 func (s ByterStruct) MarshalBinary() ([]byte, error) {
@@ -77,6 +81,17 @@ func (s ByterStruct) MarshalBinary() ([]byte, error) {
 }
 
 func (s *ByterStruct) UnmarshalBinary(b []byte) error {
+	return nil
+}
+
+// not supported, used for error checks only
+type MapType map[int]int
+
+func (MapType) MarshalBinary() ([]byte, error) {
+	return []byte{}, nil
+}
+
+func (*MapType) UnmarshalBinary(_ []byte) error {
 	return nil
 }
 
@@ -227,16 +242,6 @@ type NoMarshalerTypes struct {
 type NoMarshalerSliceTypes struct {
 	BaseModel
 	Slice []int64 `knox:"no_marshalers"`
-}
-
-type MapType map[int]int
-
-func (MapType) MarshalBinary() ([]byte, error) {
-	return []byte{}, nil
-}
-
-func (*MapType) UnmarshalBinary(_ []byte) error {
-	return nil
 }
 
 type OtherStruct struct {
@@ -407,11 +412,6 @@ const (
 	OC_D64       = OpCodeDecimal64
 	OC_D128      = OpCodeDecimal128
 	OC_D256      = OpCodeDecimal256
-	OC_MSHBIN    = OpCodeMarshalBinary
-	OC_MSHTXT    = OpCodeMarshalText
-	OC_MSHSTR    = OpCodeStringer
-	OC_USHBIN    = OpCodeUnmarshalBinary
-	OC_USHTXT    = OpCodeUnmarshalText
 	OC_ENUM      = OpCodeEnum
 	OC_SKIP      = OpCodeSkip
 	OC_BIGINT    = OpCodeBigInt
@@ -575,47 +575,47 @@ var schemaTestCases = []schemaTest{
 		decode:  []OpCode{OC_U64, OC_FIXBYTES, OC_FIXSTRING},
 	},
 
-	// struct with binary & text (un)marshaler
-	{
-		name:    "marshaler_struct_types",
-		build:   GenericSchema[MarshalerStructTypes],
-		fields:  "id,stringer,byter",
-		typs:    []FieldType{FT_U64, FT_STRING, FT_BYTES},
-		flags:   []FieldFlags{F_PRIMARY | F_INDEXED, 0, 0},
-		scales:  []uint8{0, 0, 0},
-		fixed:   []uint16{0, 0, 0},
-		isFixed: false,
-		encode:  []OpCode{OC_U64, OC_MSHTXT, OC_MSHBIN},
-		decode:  []OpCode{OC_U64, OC_USHTXT, OC_USHBIN},
-	},
+	// // struct with binary & text (un)marshaler
+	// {
+	// 	name:    "marshaler_struct_types",
+	// 	build:   GenericSchema[MarshalerStructTypes],
+	// 	fields:  "id,stringer,byter",
+	// 	typs:    []FieldType{FT_U64, FT_STRING, FT_BYTES},
+	// 	flags:   []FieldFlags{F_PRIMARY | F_INDEXED, 0, 0},
+	// 	scales:  []uint8{0, 0, 0},
+	// 	fixed:   []uint16{0, 0, 0},
+	// 	isFixed: false,
+	// 	encode:  []OpCode{OC_U64, OC_MSHTXT, OC_MSHBIN},
+	// 	decode:  []OpCode{OC_U64, OC_USHTXT, OC_USHBIN},
+	// },
 
-	// map with binary & text (un)marshaler
-	{
-		name:    "marshaler_map_types",
-		build:   GenericSchema[MarshalerMapTypes],
-		fields:  "id,map",
-		typs:    []FieldType{FT_U64, FT_BYTES},
-		flags:   []FieldFlags{F_PRIMARY | F_INDEXED, 0},
-		scales:  []uint8{0, 0},
-		fixed:   []uint16{0, 0},
-		isFixed: false,
-		encode:  []OpCode{OC_U64, OC_MSHBIN},
-		decode:  []OpCode{OC_U64, OC_USHBIN},
-	},
+	// // map with binary & text (un)marshaler
+	// {
+	// 	name:    "marshaler_map_types",
+	// 	build:   GenericSchema[MarshalerMapTypes],
+	// 	fields:  "id,map",
+	// 	typs:    []FieldType{FT_U64, FT_BYTES},
+	// 	flags:   []FieldFlags{F_PRIMARY | F_INDEXED, 0},
+	// 	scales:  []uint8{0, 0},
+	// 	fixed:   []uint16{0, 0},
+	// 	isFixed: false,
+	// 	encode:  []OpCode{OC_U64, OC_MSHBIN},
+	// 	decode:  []OpCode{OC_U64, OC_USHBIN},
+	// },
 
-	// slice with binary & text (un)marshaler
-	{
-		name:    "marshaler_types",
-		build:   GenericSchema[MarshalerTypes],
-		fields:  "id,stringer,byter",
-		typs:    []FieldType{FT_U64, FT_STRING, FT_BYTES},
-		flags:   []FieldFlags{F_PRIMARY | F_INDEXED, 0, 0},
-		scales:  []uint8{0, 0, 0},
-		fixed:   []uint16{0, 0, 0},
-		isFixed: false,
-		encode:  []OpCode{OC_U64, OC_MSHTXT, OC_MSHBIN},
-		decode:  []OpCode{OC_U64, OC_USHTXT, OC_USHBIN},
-	},
+	// // slice with binary & text (un)marshaler
+	// {
+	// 	name:    "marshaler_types",
+	// 	build:   GenericSchema[MarshalerTypes],
+	// 	fields:  "id,stringer,byter",
+	// 	typs:    []FieldType{FT_U64, FT_STRING, FT_BYTES},
+	// 	flags:   []FieldFlags{F_PRIMARY | F_INDEXED, 0, 0},
+	// 	scales:  []uint8{0, 0, 0},
+	// 	fixed:   []uint16{0, 0, 0},
+	// 	isFixed: false,
+	// 	encode:  []OpCode{OC_U64, OC_MSHTXT, OC_MSHBIN},
+	// 	decode:  []OpCode{OC_U64, OC_USHTXT, OC_USHBIN},
+	// },
 
 	// native int/uint
 	{
@@ -643,6 +643,27 @@ var schemaTestCases = []schemaTest{
 		isFixed: true,
 		encode:  []OpCode{OC_TIMESTAMP, OC_TIMESTAMP, OC_TIMESTAMP, OC_TIMESTAMP, OC_TIME, OC_TIME, OC_TIME, OC_TIME, OC_DATE},
 		decode:  []OpCode{OC_TIMESTAMP, OC_TIMESTAMP, OC_TIMESTAMP, OC_TIMESTAMP, OC_TIME, OC_TIME, OC_TIME, OC_TIME, OC_DATE},
+	},
+
+	// error: unsupported struct binary & text (un)marshaler
+	{
+		name:  "struct (un)marshaler",
+		build: GenericSchema[MarshalerStructTypes],
+		iserr: true,
+	},
+
+	// error: unsupported map binary & text (un)marshaler
+	{
+		name:  "struct (un)marshaler",
+		build: GenericSchema[MarshalerMapTypes],
+		iserr: true,
+	},
+
+	// error: unsupported slice binary & text (un)marshaler
+	{
+		name:  "slice (un)marshaler",
+		build: GenericSchema[MarshalerTypes],
+		iserr: true,
 	},
 
 	// error: unsupported struct type without marshaler

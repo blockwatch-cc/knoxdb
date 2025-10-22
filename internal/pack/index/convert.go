@@ -116,10 +116,12 @@ func (c *RelinkConverter) ConvertPack(pkg *pack.Package, mode pack.WriteMode) *p
 	return ipkg
 }
 
+// SimpleHashConverter produces a new index pack by hashing a single
+// source column and optionally appending extra source columns as is.
 type SimpleHashConverter struct {
 	schema    *schema.Schema
-	srcBlocks []int // ordered list of table blocks to link
-	hashBlock int   // table source block used for hashing
+	srcBlocks []int // ordered list of src blocks to link
+	hashBlock int   // single source block used for hashing
 }
 
 func (c *SimpleHashConverter) ConvertPack(pkg *pack.Package, mode pack.WriteMode) *pack.Package {
@@ -173,11 +175,13 @@ func (*SimpleHashConverter) QueryNode(_ *filter.Node) *filter.Node {
 	return nil
 }
 
+// CompositeHashConverter produces a new index pack from multiple source columns
+// which are hashed in order. Optionally appends multiple source columns as is.
 type CompositeHashConverter struct {
 	idxSchema  *schema.Schema
 	srcSchema  *schema.Schema
 	srcBlocks  []int // ordered list of src blocks to link
-	hashBlocks []int // ordered list of blocks to hash
+	hashBlocks []int // ordered list of src blocks to hash
 }
 
 func (c *CompositeHashConverter) ConvertPack(pkg *pack.Package, mode pack.WriteMode) *pack.Package {

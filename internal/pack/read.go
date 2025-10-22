@@ -5,7 +5,6 @@ package pack
 
 import (
 	"bytes"
-	"encoding"
 	"encoding/binary"
 	"fmt"
 	"math"
@@ -297,13 +296,9 @@ func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, maps []
 			*(*bool)(fptr) = b.Bool().Get(row)
 
 		case types.FieldTypeBytes:
-			switch {
-			case field.Iface&types.IfaceBinaryUnmarshaler > 0:
-				rfield := field.StructValue(rval)
-				err = rfield.Addr().Interface().(encoding.BinaryUnmarshaler).UnmarshalBinary(b.Bytes().Get(row))
-			case field.Fixed > 0:
+			if field.Fixed > 0 {
 				copy(unsafe.Slice((*byte)(fptr), field.Fixed), b.Bytes().Get(row))
-			default:
+			} else {
 				// b := b.Bytes().Get(row)
 				// if cap(*(*[]byte)(fptr)) < len(b) {
 				// 	*(*[]byte)(fptr) = make([]byte, len(b))
@@ -315,15 +310,11 @@ func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, maps []
 			}
 
 		case types.FieldTypeString:
-			switch {
-			case field.Iface&types.IfaceTextUnmarshaler > 0:
-				rfield := field.StructValue(rval)
-				err = rfield.Addr().Interface().(encoding.TextUnmarshaler).UnmarshalText(b.Bytes().Get(row))
-			default:
-				// safe version with copy
-				// *(*string)(fptr) = string(b.Bytes().Get(row))
-				*(*string)(fptr) = util.UnsafeGetString(b.Bytes().Get(row))
-			}
+			// safe version with copy
+			// *(*string)(fptr) = string(b.Bytes().Get(row))
+
+			// unsafe zero-copy
+			*(*string)(fptr) = util.UnsafeGetString(b.Bytes().Get(row))
 
 		case types.FieldTypeInt256:
 			*(*num.Int256)(fptr) = b.Int256().Get(row)
