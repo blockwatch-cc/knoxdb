@@ -543,149 +543,149 @@ func (f *Field) Encode(w io.Writer, val any, layout binary.ByteOrder) (err error
 	return
 }
 
-// // Simple per field decoder used to wire-decode individual typed values
-// // found in query conditions.
-// func (f *Field) Decode(r io.Reader, layout binary.ByteOrder) (val any, err error) {
-// 	var (
-// 		buf [32]byte
-// 		n   int
-// 	)
-// 	switch f.typ {
-// 	case FT_TIMESTAMP, FT_TIME:
-// 		_, err = r.Read(buf[:8])
-// 		val = time.Unix(0, int64(layout.Uint64(buf[:8]))).UTC()
+// Simple per field decoder used to wire-decode individual typed values
+// found in query conditions.
+func (f *Field) Decode(r io.Reader, layout binary.ByteOrder) (val any, err error) {
+	var (
+		buf [32]byte
+		n   int
+	)
+	switch f.typ {
+	case FT_TIMESTAMP, FT_TIME:
+		_, err = r.Read(buf[:8])
+		val = time.Unix(0, int64(layout.Uint64(buf[:8]))).UTC()
 
-// 	case FT_DATE:
-// 		_, err = r.Read(buf[:8])
-// 		val = FromUnixDays(int64(layout.Uint64(buf[:8])))
+	case FT_DATE:
+		_, err = r.Read(buf[:8])
+		val = FromUnixDays(int64(layout.Uint64(buf[:8])))
 
-// 	case FT_I64:
-// 		_, err = r.Read(buf[:8])
-// 		val = int64(layout.Uint64(buf[:8]))
+	case FT_I64:
+		_, err = r.Read(buf[:8])
+		val = int64(layout.Uint64(buf[:8]))
 
-// 	case FT_I32:
-// 		_, err = r.Read(buf[:4])
-// 		val = int32(layout.Uint32(buf[:4]))
+	case FT_I32:
+		_, err = r.Read(buf[:4])
+		val = int32(layout.Uint32(buf[:4]))
 
-// 	case FT_I16:
-// 		_, err = r.Read(buf[:2])
-// 		val = int16(layout.Uint16(buf[:2]))
+	case FT_I16:
+		_, err = r.Read(buf[:2])
+		val = int16(layout.Uint16(buf[:2]))
 
-// 	case FT_I8:
-// 		_, err = r.Read(buf[:1])
-// 		val = int8(buf[0])
+	case FT_I8:
+		_, err = r.Read(buf[:1])
+		val = int8(buf[0])
 
-// 	case FT_U64:
-// 		_, err = r.Read(buf[:8])
-// 		val = layout.Uint64(buf[:8])
+	case FT_U64:
+		_, err = r.Read(buf[:8])
+		val = layout.Uint64(buf[:8])
 
-// 	case FT_U32:
-// 		_, err = r.Read(buf[:4])
-// 		val = layout.Uint32(buf[:4])
+	case FT_U32:
+		_, err = r.Read(buf[:4])
+		val = layout.Uint32(buf[:4])
 
-// 	case FT_U16:
-// 		_, err = r.Read(buf[:2])
-// 		val = layout.Uint16(buf[:2])
+	case FT_U16:
+		_, err = r.Read(buf[:2])
+		val = layout.Uint16(buf[:2])
 
-// 	case FT_U8:
-// 		_, err = r.Read(buf[:1])
-// 		val = buf[0]
+	case FT_U8:
+		_, err = r.Read(buf[:1])
+		val = buf[0]
 
-// 	case FT_F64:
-// 		_, err = r.Read(buf[:8])
-// 		val = math.Float64frombits(layout.Uint64(buf[:8]))
+	case FT_F64:
+		_, err = r.Read(buf[:8])
+		val = math.Float64frombits(layout.Uint64(buf[:8]))
 
-// 	case FT_F32:
-// 		_, err = r.Read(buf[:4])
-// 		val = math.Float32frombits(layout.Uint32(buf[:4]))
+	case FT_F32:
+		_, err = r.Read(buf[:4])
+		val = math.Float32frombits(layout.Uint32(buf[:4]))
 
-// 	case FT_BOOL:
-// 		_, err = r.Read(buf[:1])
-// 		val = buf[0] > 0
+	case FT_BOOL:
+		_, err = r.Read(buf[:1])
+		val = buf[0] > 0
 
-// 	case FT_STRING:
-// 		if f.fixed > 0 {
-// 			b := make([]byte, f.fixed)
-// 			n, err = r.Read(b)
-// 			if n < int(f.fixed) {
-// 				return nil, ErrShortBuffer
-// 			}
-// 			val = string(b[:n])
-// 		} else {
-// 			_, err = r.Read(buf[:4])
-// 			if err != nil {
-// 				return
-// 			}
-// 			u32 := layout.Uint32(buf[:4])
-// 			b := make([]byte, int(u32))
-// 			n, err = r.Read(b)
-// 			val = string(b[:n])
-// 		}
+	case FT_STRING:
+		if f.fixed > 0 {
+			b := make([]byte, f.fixed)
+			n, err = r.Read(b)
+			if n < int(f.fixed) {
+				return nil, ErrShortBuffer
+			}
+			val = string(b[:n])
+		} else {
+			_, err = r.Read(buf[:4])
+			if err != nil {
+				return
+			}
+			u32 := layout.Uint32(buf[:4])
+			b := make([]byte, int(u32))
+			n, err = r.Read(b)
+			val = string(b[:n])
+		}
 
-// 	case FT_BYTES:
-// 		if f.fixed > 0 {
-// 			b := make([]byte, f.fixed)
-// 			n, err = r.Read(b)
-// 			if n < int(f.fixed) {
-// 				return nil, ErrShortBuffer
-// 			}
-// 			val = string(b[:n])
-// 		} else {
-// 			_, err = r.Read(buf[:4])
-// 			if err != nil {
-// 				return
-// 			}
-// 			u32 := layout.Uint32(buf[:4])
-// 			b := make([]byte, int(u32))
-// 			n, err = r.Read(b)
-// 			val = b[:n]
-// 		}
+	case FT_BYTES:
+		if f.fixed > 0 {
+			b := make([]byte, f.fixed)
+			n, err = r.Read(b)
+			if n < int(f.fixed) {
+				return nil, ErrShortBuffer
+			}
+			val = string(b[:n])
+		} else {
+			_, err = r.Read(buf[:4])
+			if err != nil {
+				return
+			}
+			u32 := layout.Uint32(buf[:4])
+			b := make([]byte, int(u32))
+			n, err = r.Read(b)
+			val = b[:n]
+		}
 
-// 	case FT_I256:
-// 		_, err = r.Read(buf[:32])
-// 		i256 := num.Int256FromBytes(buf[:32])
-// 		val = i256
+	case FT_I256:
+		_, err = r.Read(buf[:32])
+		i256 := num.Int256FromBytes(buf[:32])
+		val = i256
 
-// 	case FT_I128:
-// 		_, err = r.Read(buf[:16])
-// 		i128 := num.Int128FromBytes(buf[:16])
-// 		val = i128
+	case FT_I128:
+		_, err = r.Read(buf[:16])
+		i128 := num.Int128FromBytes(buf[:16])
+		val = i128
 
-// 	case FT_D256:
-// 		_, err = r.Read(buf[:32])
-// 		d256 := num.NewDecimal256(num.Int256FromBytes(buf[:32]), f.scale)
-// 		val = d256
+	case FT_D256:
+		_, err = r.Read(buf[:32])
+		d256 := num.NewDecimal256(num.Int256FromBytes(buf[:32]), f.scale)
+		val = d256
 
-// 	case FT_D128:
-// 		_, err = r.Read(buf[:16])
-// 		d128 := num.NewDecimal128(num.Int128FromBytes(buf[:16]), f.scale)
-// 		val = d128
+	case FT_D128:
+		_, err = r.Read(buf[:16])
+		d128 := num.NewDecimal128(num.Int128FromBytes(buf[:16]), f.scale)
+		val = d128
 
-// 	case FT_D64:
-// 		_, err = r.Read(buf[:8])
-// 		d64 := num.NewDecimal64(int64(layout.Uint64(buf[:8])), f.scale)
-// 		val = d64
+	case FT_D64:
+		_, err = r.Read(buf[:8])
+		d64 := num.NewDecimal64(int64(layout.Uint64(buf[:8])), f.scale)
+		val = d64
 
-// 	case FT_D32:
-// 		_, err = r.Read(buf[:4])
-// 		d32 := num.NewDecimal32(int32(layout.Uint32(buf[:4])), f.scale)
-// 		val = d32
+	case FT_D32:
+		_, err = r.Read(buf[:4])
+		d32 := num.NewDecimal32(int32(layout.Uint32(buf[:4])), f.scale)
+		val = d32
 
-// 	case FT_BIGINT:
-// 		_, err = r.Read(buf[:4])
-// 		if err != nil {
-// 			return
-// 		}
-// 		u32 := layout.Uint32(buf[:4])
-// 		b := make([]byte, int(u32))
-// 		n, err = r.Read(b)
-// 		val = num.NewBigFromBytes(b[:n])
+	case FT_BIGINT:
+		_, err = r.Read(buf[:4])
+		if err != nil {
+			return
+		}
+		u32 := layout.Uint32(buf[:4])
+		b := make([]byte, int(u32))
+		n, err = r.Read(b)
+		val = num.NewBigFromBytes(b[:n])
 
-// 	default:
-// 		err = ErrInvalidField
-// 	}
-// 	return
-// }
+	default:
+		err = ErrInvalidField
+	}
+	return
+}
 
 // StructValue resolves a struct field from a struct. When the field
 // is a pointer it allocates the target type and dereferences it

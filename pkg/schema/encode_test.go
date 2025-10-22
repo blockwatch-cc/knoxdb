@@ -335,7 +335,7 @@ func BenchmarkEncodeVal(b *testing.B) {
 		_, _ = enc.Encode(slice[0], buf)
 		buf.Reset()
 	}
-	b.ReportMetric(float64(b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+	b.ReportMetric(float64(b.N*1000000000)/float64(b.Elapsed().Nanoseconds()), "recs/s")
 }
 
 func BenchmarkEncodeValSkip(b *testing.B) {
@@ -354,7 +354,7 @@ func BenchmarkEncodeValSkip(b *testing.B) {
 		_, _ = enc.Encode(slice[0], buf)
 		buf.Reset()
 	}
-	b.ReportMetric(float64(b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+	b.ReportMetric(float64(b.N*1000000000)/float64(b.Elapsed().Nanoseconds()), "recs/s")
 }
 
 func BenchmarkEncodePtr(b *testing.B) {
@@ -368,7 +368,7 @@ func BenchmarkEncodePtr(b *testing.B) {
 		_, _ = enc.EncodePtr(&slice[0], buf)
 		buf.Reset()
 	}
-	b.ReportMetric(float64(b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+	b.ReportMetric(float64(b.N*1000000000)/float64(b.Elapsed().Nanoseconds()), "recs/s")
 }
 
 func BenchmarkEncodeSlice(b *testing.B) {
@@ -384,7 +384,7 @@ func BenchmarkEncodeSlice(b *testing.B) {
 				_, _ = enc.EncodeSlice(slice, buf)
 				buf.Reset()
 			}
-			b.ReportMetric(float64(n.num*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+			b.ReportMetric(float64(n.num*b.N*1000000000)/float64(b.Elapsed().Nanoseconds()), "recs/s")
 		})
 	}
 }
@@ -406,7 +406,7 @@ func BenchmarkEncodePtrSlice(b *testing.B) {
 				_, _ = enc.EncodePtrSlice(ptrslice, buf)
 				buf.Reset()
 			}
-			b.ReportMetric(float64(n.num*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+			b.ReportMetric(float64(n.num*b.N*1000000000)/float64(b.Elapsed().Nanoseconds()), "recs/s")
 		})
 	}
 }
@@ -426,12 +426,12 @@ func BenchmarkMemcopy(b *testing.B) {
 			for b.Loop() {
 				copy(dst, buf.Bytes())
 			}
-			b.ReportMetric(float64(n.num*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+			b.ReportMetric(float64(n.num*b.N*1000000000)/float64(b.Elapsed().Nanoseconds()), "recs/s")
 		})
 	}
 }
 
-func BenchmarkDecodeVal(b *testing.B) {
+func BenchmarkDecodeAlloc(b *testing.B) {
 	slice, sz := makeBenchData(1)
 	enc := NewGenericEncoder[encodeBenchStruct]()
 	dec := NewGenericDecoder[encodeBenchStruct]()
@@ -444,10 +444,10 @@ func BenchmarkDecodeVal(b *testing.B) {
 	for b.Loop() {
 		_, _ = dec.Decode(buf.Bytes(), nil)
 	}
-	b.ReportMetric(float64(b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+	b.ReportMetric(float64(b.N*1000000000)/float64(b.Elapsed().Nanoseconds()), "recs/s")
 }
 
-func BenchmarkDecodeTo(b *testing.B) {
+func BenchmarkDecodeNoAlloc(b *testing.B) {
 	slice, sz := makeBenchData(1)
 	enc := NewGenericEncoder[encodeBenchStruct]()
 	dec := NewGenericDecoder[encodeBenchStruct]()
@@ -461,7 +461,7 @@ func BenchmarkDecodeTo(b *testing.B) {
 	for b.Loop() {
 		_, _ = dec.Decode(buf.Bytes(), &val)
 	}
-	b.ReportMetric(float64(b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+	b.ReportMetric(float64(b.N*1000000000)/float64(b.Elapsed().Nanoseconds()), "recs/s")
 }
 
 func BenchmarkDecodeSlice(b *testing.B) {
@@ -478,7 +478,7 @@ func BenchmarkDecodeSlice(b *testing.B) {
 			for b.Loop() {
 				_, _ = dec.DecodeSlice(buf.Bytes(), nil)
 			}
-			b.ReportMetric(float64(n.num*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+			b.ReportMetric(float64(n.num*b.N*1000000000)/float64(b.Elapsed().Nanoseconds()), "recs/s")
 		})
 	}
 }
@@ -498,7 +498,7 @@ func BenchmarkDecodeSliceNoAlloc(b *testing.B) {
 			for b.Loop() {
 				_, _ = dec.DecodeSlice(buf.Bytes(), res)
 			}
-			b.ReportMetric(float64(n.num*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+			b.ReportMetric(float64(n.num*b.N*1000000000)/float64(b.Elapsed().Nanoseconds()), "recs/s")
 		})
 	}
 }
@@ -523,7 +523,7 @@ func BenchmarkDecodeSliceRead(b *testing.B) {
 					}
 				}
 			}
-			b.ReportMetric(float64(n.num*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+			b.ReportMetric(float64(n.num*b.N*1000000000)/float64(b.Elapsed().Nanoseconds()), "recs/s")
 		})
 	}
 }

@@ -37,24 +37,6 @@ func (d *GenericDecoder[T]) WithEnums(reg *EnumRegistry) *GenericDecoder[T] {
 	return d
 }
 
-// Read reads wire encoded data from r and decodes into val based on
-// the schema for T.
-//
-// When wire size is fixed we can read and decode in one step.
-// Otherwise we take a slow path that reads variable length data
-// as length fields are encountered. This issues multiple calls
-// to the underlying reader, likely a host-side io.Stream.
-//
-// Reading is staged through an internal decoder buffer
-// with an inital size of minWireSize bytes. This buffer gets
-// extended whenever a dynamic data type length is found so
-// that it contains at least the bytes for the dynamic data
-// plus all fixed bytes for following fields a that time.
-// Because the buffer may grow and reallocate it is NOT SAFE
-// to reference memory for strings and byte slices and hence
-// we make explicit copies. Moreover, a copy is necessary to
-// safely retain returned objects since the internal buffer is
-// re-used between calls.
 func (d *GenericDecoder[T]) Read(r io.Reader) (val *T, err error) {
 	val = new(T)
 	err = d.dec.Read(r, val)
@@ -65,8 +47,8 @@ func (d *GenericDecoder[T]) Decode(buf []byte, val *T) (*T, error) {
 	if val == nil {
 		val = new(T)
 	}
-	err := d.dec.Decode(buf, val)
-	return val, err
+	d.dec.DecodePtr(buf, unsafe.Pointer(val))
+	return val, nil
 }
 
 func (d *GenericDecoder[T]) DecodeSlice(buf []byte, res []T) ([]T, error) {
@@ -74,12 +56,15 @@ func (d *GenericDecoder[T]) DecodeSlice(buf []byte, res []T) ([]T, error) {
 		// We slightly over-allocate the result slice when data contains
 		// long strings/bytes, however this single allocation is still
 		// much more performant than growing the slice multiple times.
-		// For fixed-size schemas, the single allocation is all we need.
+		// For fixed-size schemas, a single allocation is all we need.
 		res = make([]T, len(buf)/max(d.dec.schema.minWireSize, 1))
 	}
-	n, err := d.dec.DecodeSlice(buf, res)
-	if err != nil {
-		return nil, err
+	var n int
+	for n = range res {
+		if len(buf) == 0 {
+			break
+		}
+		buf = d.dec.DecodePtr(buf, unsafe.Pointer(&res[n]))
 	}
 	return res[:n], nil
 }
@@ -111,13 +96,13 @@ func (d *Decoder) WithEnums(reg *EnumRegistry) *Decoder {
 	return d
 }
 
-// Read reads wire encoded data from r and decodes into val based on
-// the schema for T.
+// Read reads wire encoded data from r and decodes into a
+// new heap allocated elemen of type T.
 //
 // When wire size is fixed we can read and decode in one step.
 // Otherwise we take a slow path that reads variable length data
-// as length fields are encountered. This issues multiple calls
-// to the underlying reader, likely a host-side io.Stream.
+// as length fields are encountered. This requires multiple calls
+// to the underlying reader.
 //
 // Reading is staged through an internal decoder buffer
 // with an inital size of minWireSize bytes. This buffer gets
@@ -155,7 +140,7 @@ func (d *Decoder) Read(r io.Reader, val any) error {
 	base := rval.Addr().UnsafePointer()
 
 	for op, code := range d.schema.decode {
-		field := d.schema.fields[op]
+		field := &d.schema.fields[op]
 		ptr := unsafe.Add(base, field.offset)
 		switch code {
 		default:
@@ -259,6 +244,11 @@ func (d *Decoder) Decode(buf []byte, val any) error {
 	}
 	rval := reflect.Indirect(reflect.ValueOf(val))
 	base := rval.Addr().UnsafePointer()
+	d.DecodePtr(buf, base)
+	return nil
+}
+
+func (d *Decoder) DecodePtr(buf []byte, base unsafe.Pointer) []byte {
 	for op, code := range d.schema.decode {
 		if code == OpCodeSkip {
 			continue
@@ -267,7 +257,7 @@ func (d *Decoder) Decode(buf []byte, val any) error {
 		ptr := unsafe.Add(base, field.offset)
 		buf = readField(code, field, ptr, buf, d.enums)
 	}
-	return nil
+	return buf
 }
 
 func (d *Decoder) DecodeSlice(buf []byte, slice any) (int, error) {
@@ -278,11 +268,10 @@ func (d *Decoder) DecodeSlice(buf []byte, slice any) (int, error) {
 	base := rslice.UnsafePointer()
 	sz := rslice.Type().Elem().Size()
 	num := rslice.Len()
-	ops := d.schema.decode
 
 	var i int
 	for i = 0; i < num && len(buf) > 0; i++ {
-		for op, code := range ops {
+		for op, code := range d.schema.decode {
 			if code == OpCodeSkip {
 				continue
 			}
