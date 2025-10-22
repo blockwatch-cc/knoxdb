@@ -35,7 +35,12 @@ const StringPoolDefaultSize = 64
 
 // StringPool is a memory efficient pool for variable length strings.
 // Its main purpose is to manage a slice of strings without the 24-byte
-// slice header overheads of [][]byte.
+// slice header overheads of [][]byte. Even though space savings are
+// great, they come at a 8x increased cost for random access. The main
+// reason for this cost is that function calls to Get() or iterator
+// yield callbacks are not inlined which makes them massively more
+// expensive than direct addressing `slice[i]` or `for i, v := range slice {}`
+// loops.
 type StringPool struct {
 	buf []byte   // buffer pool
 	ptr []uint64 // string offsets/lengths in buf
@@ -170,9 +175,9 @@ func (p *StringPool) Values() iter.Seq[[]byte] {
 		if len(p.buf) > 0 {
 			base = unsafe.Pointer(&p.buf[0])
 		}
+		var buf []byte
 		for _, ptr := range p.ptr {
 			ofs, len := ptr2pair(ptr)
-			var buf []byte
 			if len == 0 {
 				buf = p.buf[:0:0]
 			} else {
@@ -193,9 +198,9 @@ func (p *StringPool) Iterator() iter.Seq2[int, []byte] {
 		if len(p.buf) > 0 {
 			base = unsafe.Pointer(&p.buf[0])
 		}
+		var buf []byte
 		for i, ptr := range p.ptr {
 			ofs, len := ptr2pair(ptr)
-			var buf []byte
 			if len == 0 {
 				buf = p.buf[:0:0]
 			} else {
@@ -212,33 +217,46 @@ func (p *StringPool) Chunks() types.StringIterator {
 	return NewIterator(p)
 }
 
-// Append adds a new element and will reuse existing strings.
-func (p *StringPool) Append(val []byte) {
+// Append adds a new element and returns its position in the pool.
+func (p *StringPool) Append(val []byte) int {
 	vlen := uint32(len(val))
-	// append empty string
 	if vlen == 0 {
+		// append empty string
 		p.ptr = append(p.ptr, 0)
-		return
+	} else {
+		vofs := uint32(len(p.buf))
+		p.ptr = append(p.ptr, pair2ptr(vofs, vlen))
+		p.buf = append(p.buf, val...)
 	}
-	vofs := uint32(len(p.buf))
-	p.ptr = append(p.ptr, pair2ptr(vofs, vlen))
-	p.buf = append(p.buf, val...)
+	return len(p.ptr) - 1
 }
 
-func (p *StringPool) AppendMany(vals ...[]byte) {
+// AppendMany appends multiple strings and returns the position of
+// the first new value in the pool.
+func (p *StringPool) AppendMany(vals ...[]byte) int {
+	if len(vals) == 0 {
+		return -1
+	}
+	n := len(p.ptr)
 	for _, v := range vals {
 		p.Append(v)
 	}
+	return n
 }
 
-func (p *StringPool) AppendString(val string) {
-	p.Append(util.UnsafeGetBytes(val))
+func (p *StringPool) AppendString(val string) int {
+	return p.Append(util.UnsafeGetBytes(val))
 }
 
-func (p *StringPool) AppendManyStrings(vals ...string) {
+func (p *StringPool) AppendManyStrings(vals ...string) int {
+	if len(vals) == 0 {
+		return -1
+	}
+	n := len(p.ptr)
 	for _, v := range vals {
 		p.Append(util.UnsafeGetBytes(v))
 	}
+	return n
 }
 
 // AppendTo adds selected strings to a destination pool or all if sel is nil.

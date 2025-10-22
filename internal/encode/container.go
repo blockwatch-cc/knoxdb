@@ -121,7 +121,7 @@ type readOnlyContainer[T types.Number | []byte | num.Int128 | num.Int256 | bool]
 func (_ *readOnlyContainer[T]) Set(_ int, _ T)           {}
 func (_ *readOnlyContainer[T]) Delete(_, _ int)          {}
 func (_ *readOnlyContainer[T]) Clear()                   {}
-func (_ *readOnlyContainer[T]) Append(_ T)               {}
+func (_ *readOnlyContainer[T]) Append(_ T) int           { return -1 }
 func (_ *readOnlyContainer[T]) Cap() (n int)             { return }
 func (_ *readOnlyContainer[T]) Slice() (s []T)           { return }
 func (_ *readOnlyContainer[T]) MinMax() (minv T, maxv T) { return }

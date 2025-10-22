@@ -81,11 +81,12 @@ func (s *Int256Stride) Cmp(i, j int) int {
 	}
 }
 
-func (s *Int256Stride) Append(val Int256) {
+func (s *Int256Stride) Append(val Int256) int {
 	s.X0 = append(s.X0, int64(val[0]))
 	s.X1 = append(s.X1, val[1])
 	s.X2 = append(s.X2, val[2])
 	s.X3 = append(s.X3, val[3])
+	return len(s.X0) - 1
 }
 
 func (src *Int256Stride) AppendTo(v BigIntWriter[Int256], sel []uint32) {

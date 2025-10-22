@@ -18,7 +18,7 @@ type StringMatcher interface {
 }
 
 type StringWriter interface {
-	Append([]byte)
+	Append([]byte) int
 	Set(int, []byte)
 	Delete(int, int)
 	Clear()

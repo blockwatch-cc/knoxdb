@@ -149,7 +149,7 @@ func (a Accessor[T]) Cmp(i, j int) int {
 // NumberWriter interface
 //
 
-func (a Accessor[T]) Append(v T) {
+func (a Accessor[T]) Append(v T) int {
 	assert.Always(a.block != nil, "append: nil block")
 	assert.Always(a.block.IsMaterialized(), "append: block not materialized")
 	assert.Always(a.block.len < a.block.cap, "append: block capacity exhausted", "len", a.block.len, "cap", a.block.cap)
@@ -160,6 +160,7 @@ func (a Accessor[T]) Append(v T) {
 	*(*T)(ptr) = v
 	a.block.len++
 	a.block.SetDirty()
+	return int(a.block.len) - 1
 }
 
 func (a Accessor[T]) Set(n int, v T) {

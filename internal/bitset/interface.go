@@ -18,7 +18,7 @@ type BitmapMatcher interface {
 }
 
 type BitmapWriter interface {
-	Append(bool)
+	Append(bool) int
 	Set(int)
 	Unset(int)
 	Delete(int, int)

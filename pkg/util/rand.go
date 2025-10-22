@@ -149,6 +149,14 @@ func RandIntsRange[T constraints.Signed](sz int, min, max T) []T {
 	return s
 }
 
+func RandIntRange[T constraints.Signed](min, max T) (T, T) {
+	a, b := RandIntn(int(max-min)), RandIntn(int(max-min))
+	if a > b {
+		a, b = b, a
+	}
+	return T(a) + min, T(b) + min
+}
+
 func RandUints[T constraints.Unsigned](sz int) []T {
 	s := make([]T, sz)
 	for i := 0; i < sz; i++ {

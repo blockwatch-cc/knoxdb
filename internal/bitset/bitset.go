@@ -541,11 +541,12 @@ func (s *Bitset) Fill(b byte) *Bitset {
 }
 
 // Append grows bitset by 1 and sets the trailing bit to val
-func (s *Bitset) Append(val bool) {
+func (s *Bitset) Append(val bool) int {
 	s.Grow(1)
 	if val {
 		s.setbit(s.size - 1)
 	}
+	return s.size - 1
 }
 
 // AppendTo appends selected values to dst.

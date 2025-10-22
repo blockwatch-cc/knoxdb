@@ -62,9 +62,10 @@ func (s *Int128Stride) Cmp(i, j int) int {
 	}
 }
 
-func (s *Int128Stride) Append(val Int128) {
+func (s *Int128Stride) Append(val Int128) int {
 	s.X0 = append(s.X0, int64(val[0]))
 	s.X1 = append(s.X1, val[1])
+	return len(s.X0) - 1
 }
 
 func (src *Int128Stride) AppendTo(v BigIntWriter[Int128], sel []uint32) {

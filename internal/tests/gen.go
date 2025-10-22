@@ -18,11 +18,6 @@ import (
 
 const BENCH_WIDTH = 60
 
-// var (
-// 	f64 = math.Float64frombits
-// 	f32 = math.Float32frombits
-// )
-
 var Generators = []Generator{
 	NumGenerator[int8]{},
 	NumGenerator[int16]{},
