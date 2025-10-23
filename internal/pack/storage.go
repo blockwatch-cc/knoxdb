@@ -55,7 +55,6 @@ func DecodeBlockKey(buf []byte) (packkey uint32, version uint32, blockId uint16)
 
 // Loads missing blocks from cache
 func (p *Package) LoadFromCache(bcache block.BlockCachePartition, fids []uint16) int {
-	fields := p.schema.Exported()
 	var n, nRows int
 	bcache.Lock()
 	for i, b := range p.blocks {
@@ -65,12 +64,12 @@ func (p *Package) LoadFromCache(bcache block.BlockCachePartition, fids []uint16)
 		}
 
 		// skip excluded blocks, load full schema when fids is nil
-		if fids != nil && !slices.Contains(fids, fields[i].Id) {
+		if fids != nil && !slices.Contains(fids, p.schema.Fields[i].Id) {
 			continue
 		}
 
 		// try cache lookup, will inc refcount
-		block, _ := bcache.GetLocked(cacheKey(p.key, p.version, fields[i].Id))
+		block, _ := bcache.GetLocked(cacheKey(p.key, p.version, p.schema.Fields[i].Id))
 		if block != nil {
 			p.blocks[i] = block
 			n++
@@ -104,25 +103,23 @@ func (p *Package) LoadFromCache(bcache block.BlockCachePartition, fids []uint16)
 }
 
 func (p *Package) AddToCache(bcache block.BlockCachePartition) {
-	fields := p.schema.Exported()
 	bcache.Lock()
 	for i, b := range p.blocks {
 		if b == nil {
 			continue
 		}
-		bcache.ContainsOrAddLocked(cacheKey(p.key, p.version, fields[i].Id), b)
+		bcache.ContainsOrAddLocked(cacheKey(p.key, p.version, p.schema.Fields[i].Id), b)
 	}
 	bcache.Unlock()
 }
 
 func (p *Package) DropFromCache(bcache block.BlockCachePartition) {
-	fields := p.schema.Exported()
 	bcache.Lock()
 	for i, b := range p.blocks {
 		if b == nil {
 			continue
 		}
-		bcache.RemoveLocked(cacheKey(p.key, p.version, fields[i].Id))
+		bcache.RemoveLocked(cacheKey(p.key, p.version, p.schema.Fields[i].Id))
 	}
 	bcache.Unlock()
 }
@@ -134,7 +131,7 @@ func (p *Package) LoadFromDisk(ctx context.Context, bucket store.Bucket, fids []
 	}
 
 	var n int
-	for i, f := range p.schema.Exported() {
+	for i, f := range p.schema.Fields {
 		// skip already loaded blocks
 		if p.blocks[i] != nil {
 			continue
@@ -200,7 +197,7 @@ func (p *Package) StoreToDisk(ctx context.Context, bucket store.Bucket) (int, er
 	}
 
 	var n int
-	for i, f := range p.schema.Exported() {
+	for i, f := range p.schema.Fields {
 		// skip empty blocks, deleted fields; write all blocks for consistent version
 		b := p.blocks[i]
 		if b == nil || f.Flags.Is(types.FieldFlagDeleted) {

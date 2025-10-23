@@ -398,7 +398,7 @@ func (idx *Index) tombBucket(tx store.Tx) store.Bucket {
 }
 
 func (idx *Index) tableBucket(tx store.Tx) store.Bucket {
-	return tx.Bucket(append([]byte(idx.schema.Name()), engine.DataKeySuffix...))
+	return tx.Bucket(append([]byte(idx.schema.Name), engine.DataKeySuffix...))
 }
 
 func (idx *Index) bucket(tx store.Tx, id int) store.Bucket {

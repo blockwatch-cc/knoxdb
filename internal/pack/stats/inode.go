@@ -107,7 +107,7 @@ func (n *INode) Update(view *schema.View, wr *schema.Writer, left, right Node) b
 	// merge left and right data when changed
 	wr.Reset()
 
-	for i, f := range view.Schema().Exported() {
+	for i, f := range view.Schema().Fields {
 		typ := f.Type.BlockType()
 		lval, _ := view.Reset(left.Bytes()).GetPhy(i)
 		rval, _ := view.Reset(right.Bytes()).GetPhy(i)

@@ -171,7 +171,7 @@ func (d *DB) FindIndex(name string) (Index, error) {
 }
 
 func (d *DB) CreateIndex(ctx context.Context, name string, table Table, s *schema.Schema, opts IndexOptions) error {
-	_, err := d.engine.CreateIndex(ctx, table.Schema().Name(), s, opts)
+	_, err := d.engine.CreateIndex(ctx, table.Schema().Name, s, opts)
 	return err
 }
 

@@ -30,14 +30,14 @@ type Filter struct {
 }
 
 func NewFilter(f *schema.Field, idx int, mode FilterMode, val any) *Filter {
-	m := newFactory(f.Type().BlockType()).New(mode)
+	m := newFactory(f.Type.BlockType()).New(mode)
 	m.WithValue(val)
 	return &Filter{
-		Name:    f.Name(),
-		Type:    f.Type().BlockType(),
+		Name:    f.Name,
+		Type:    f.Type.BlockType(),
 		Mode:    mode,
 		Index:   idx,
-		Id:      f.Id(),
+		Id:      f.Id,
 		Value:   val,
 		Matcher: m,
 	}

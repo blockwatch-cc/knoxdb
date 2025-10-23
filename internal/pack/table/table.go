@@ -110,8 +110,8 @@ func validateSchemaAndOptions(s *schema.Schema, opts engine.TableOptions) (*sche
 		if !s.HasMeta() {
 			s, _ = s.WithMeta().ResetPk(schema.MetaRid)
 		}
-		if s.Pk().Id() != schema.MetaRid {
-			return nil, opts, fmt.Errorf("invalid pk %q on history table %q", s.Pk().Name(), s.Name())
+		if s.Pk().Id != schema.MetaRid {
+			return nil, opts, fmt.Errorf("invalid pk %q on history table %q", s.Pk().Name, s.Name)
 		}
 
 	} else {
@@ -139,7 +139,6 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 	if err != nil {
 		return err
 	}
-	name := s.Name()
 
 	// setup table
 	t.engine = engine.GetEngine(ctx)
@@ -147,8 +146,8 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 	t.id = s.TaggedHash(types.ObjectTagTable)
 	t.px = s.PkIndex()
 	t.opts = opts
-	t.state = engine.NewObjectState(name)
-	t.metrics = engine.NewTableMetrics(name)
+	t.state = engine.NewObjectState(s.Name)
+	t.metrics = engine.NewTableMetrics(s.Name)
 	t.log = opts.Logger
 
 	// write initial checkpoint
@@ -167,14 +166,14 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 		return err
 	}
 
-	t.log.Debugf("table[%s]: backend successfully created", name)
+	t.log.Debugf("table[%s]: backend successfully created", s.Name)
 	return nil
 }
 
 func (t *Table) createBackend(ctx context.Context) error {
 	// setup backend db file
-	name := t.schema.Name()
-	path := filepath.Join(t.engine.RootPath(), t.schema.Name())
+	name := t.schema.Name
+	path := filepath.Join(t.engine.RootPath(), name)
 	t.log.Debugf("table[%s]: creating backend=%s path=%s opts=%#v",
 		name, t.opts.Engine, path, t.opts)
 
@@ -250,7 +249,6 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 	if err != nil {
 		return err
 	}
-	name := s.Name()
 
 	// setup table
 	t.engine = engine.GetEngine(ctx)
@@ -258,13 +256,13 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 	t.id = s.TaggedHash(types.ObjectTagTable)
 	t.px = s.PkIndex()
 	t.opts = opts
-	t.state = engine.NewObjectState(name)
-	t.metrics = engine.NewTableMetrics(name)
-	t.log = opts.Logger.WithTag(name)
+	t.state = engine.NewObjectState(s.Name)
+	t.metrics = engine.NewTableMetrics(s.Name)
+	t.log = opts.Logger.WithTag(s.Name)
 
 	// open db backend and load latest state
 	if err := t.openBackend(ctx); err != nil {
-		t.log.Errorf("table[%s]: open: %v", name, err)
+		t.log.Errorf("table[%s]: open: %v", s.Name, err)
 		_ = t.Close(ctx)
 		return engine.ErrDatabaseCorrupt
 	}
@@ -285,24 +283,24 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 
 		// replay wal from latest checkpoint
 		if err := t.ReplayWal(ctx); err != nil {
-			t.log.Errorf("table[%s]: replay wal: %v", name, err)
+			t.log.Errorf("table[%s]: replay wal: %v", s.Name, err)
 			if err2 := t.Close(ctx); err2 != nil {
-				t.log.Errorf("table[%s]: close: %v", name, err2)
+				t.log.Errorf("table[%s]: close: %v", s.Name, err2)
 			}
 			return err
 		}
 		t.log.Debugf("table[%s]: opened with %d rows, %d/%d journal entries, seq=%d",
-			name, t.state.NRows, t.journal.NumTuples(), t.journal.NumTombstones(),
+			s.Name, t.state.NRows, t.journal.NumTuples(), t.journal.NumTombstones(),
 			t.state.NextPk)
 	} else {
-		t.log.Debugf("table[%s]: opened with %d rows seq=%d", name, t.state.NRows, t.state.NextPk)
+		t.log.Debugf("table[%s]: opened with %d rows seq=%d", s.Name, t.state.NRows, t.state.NextPk)
 	}
 
 	return nil
 }
 
 func (t *Table) openBackend(ctx context.Context) error {
-	name := t.schema.Name()
+	name := t.schema.Name
 	path := filepath.Join(t.engine.RootPath(), name)
 	t.log.Debugf("table[%s]: open backend=%s path=%s opts=%#v",
 		name, t.opts.Engine, path, t.opts)
@@ -341,7 +339,7 @@ func (t *Table) openBackend(ctx context.Context) error {
 		}
 
 		t.log.Tracef("table[%s]: state pk=%d rid=%d nrows=%d epoch=%d lsn=0x%x",
-			t.schema.Name(), t.state.NextPk, t.state.NextRid, t.state.NRows,
+			t.schema.Name, t.state.NextPk, t.state.NextRid, t.state.NRows,
 			t.state.Epoch, t.state.Checkpoint)
 
 		// init statistics index
@@ -371,7 +369,7 @@ func (t *Table) openBackend(ctx context.Context) error {
 
 func (t *Table) Close(ctx context.Context) (err error) {
 	if t.db != nil {
-		t.log.Debugf("table[%s]: closing", t.schema.Name())
+		t.log.Debugf("table[%s]: closing", t.schema.Name)
 		err = t.db.Close()
 		t.db = nil
 	}
@@ -413,7 +411,7 @@ func (t *Table) Metrics() engine.TableMetrics {
 }
 
 func (t *Table) Drop(ctx context.Context) error {
-	name, drv, path := t.schema.Name(), t.opts.Driver, t.db.Path()
+	name, drv, path := t.schema.Name, t.opts.Driver, t.db.Path()
 	if err := t.Close(ctx); err != nil {
 		return err
 	}
@@ -440,7 +438,7 @@ func (t *Table) Truncate(ctx context.Context) error {
 			engine.DataKeySuffix,
 			engine.StateKeySuffix,
 		} {
-			key := append([]byte(t.schema.Name()), v...)
+			key := append([]byte(t.schema.Name), v...)
 			if err := tx.Root().DeleteBucket(key); err != nil {
 				return err
 			}
@@ -496,10 +494,10 @@ func (t *Table) CommitTx(ctx context.Context, xid types.XID) error {
 	if canMerge {
 		// cascading merge calls on high tx volume are scheduled, but may
 		// bail out when segment merge takes too long
-		t.log.Debugf("table[%s]: scheduling merge task", t.schema.Name())
+		t.log.Debugf("table[%s]: scheduling merge task", t.schema.Name)
 		ok := t.engine.Schedule(engine.NewTask(t.Merge))
 		if !ok {
-			t.log.Warnf("table[%s]: merge task queue full", t.schema.Name())
+			t.log.Warnf("table[%s]: merge task queue full", t.schema.Name)
 		}
 	}
 	return nil
@@ -513,10 +511,10 @@ func (t *Table) AbortTx(ctx context.Context, xid types.XID) error {
 	if canMerge {
 		// cascading merge calls on high tx volume are scheduled, but may
 		// bail out when segment merge takes too long
-		t.log.Debugf("table[%s]: scheduling merge task", t.schema.Name())
+		t.log.Debugf("table[%s]: scheduling merge task", t.schema.Name)
 		ok := t.engine.Schedule(engine.NewTask(t.Merge))
 		if !ok {
-			t.log.Warnf("table[%s]: merge task queue full", t.schema.Name())
+			t.log.Warnf("table[%s]: merge task queue full", t.schema.Name)
 		}
 	}
 	return nil
@@ -540,7 +538,7 @@ func (t *Table) Checkpoint(ctx context.Context) error {
 }
 
 func (t *Table) dataBucket(tx store.Tx) store.Bucket {
-	key := append([]byte(t.schema.Name()), engine.DataKeySuffix...)
+	key := append([]byte(t.schema.Name), engine.DataKeySuffix...)
 	b := tx.Bucket(key)
 	if b != nil {
 		b.FillPercent(t.opts.PageFill)

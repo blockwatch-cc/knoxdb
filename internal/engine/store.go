@@ -26,7 +26,7 @@ func RegisterStoreFactory(n StoreKind, fn StoreFactory) {
 func (e *Engine) StoreNames() []string {
 	names := make([]string, 0)
 	for _, v := range e.stores.Map() {
-		names = append(names, v.Schema().Name())
+		names = append(names, v.Schema().Name)
 	}
 	return names
 }
@@ -54,7 +54,7 @@ func (e *Engine) CreateStore(ctx context.Context, s *schema.Schema, opts StoreOp
 	tag := s.TaggedHash(types.ObjectTagStore)
 	_, ok := e.stores.Get(tag)
 	if ok {
-		return nil, fmt.Errorf("%s: %v", s.Name(), ErrStoreExists)
+		return nil, fmt.Errorf("%s: %v", s.Name, ErrStoreExists)
 	}
 
 	// check driver

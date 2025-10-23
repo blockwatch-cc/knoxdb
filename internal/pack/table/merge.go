@@ -142,7 +142,7 @@ func (t *Table) Merge(ctx context.Context) error {
 	err = t.mergeJournal(ctx, seg)
 	if err != nil {
 		// notify journal, will keep segment in memory and retry
-		t.log.Errorf("table[%s]: merge epoch %d: %v", t.schema.Name(), seg.Id(), err)
+		t.log.Errorf("table[%s]: merge epoch %d: %v", t.schema.Name, seg.Id(), err)
 		t.mu.Lock()
 		t.journal.AbortMerged(seg)
 		t.mu.Unlock()
@@ -185,7 +185,7 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 
 	// init history writer
 	var hist engine.TableWriter
-	if ht, err := engine.GetEngine(ctx).FindTable(t.schema.Name() + "_history"); err == nil {
+	if ht, err := engine.GetEngine(ctx).FindTable(t.schema.Name + "_history"); err == nil {
 		hist = ht.NewWriter(seg.Id())
 		defer hist.Close()
 	}
@@ -348,7 +348,7 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 	nBytes = atomic.LoadInt64(&t.metrics.BytesWritten) - nBytes
 
 	t.log.Debugf("table[%s]: merged packs=%d records=%d tombs=%d heap=%s stored=%s comp=%.2f%% in %s",
-		t.schema.Name(), nPacks, nAdd, nStones, util.ByteSize(nHeap), util.ByteSize(nBytes),
+		t.schema.Name, nPacks, nAdd, nStones, util.ByteSize(nHeap), util.ByteSize(nBytes),
 		float64(nBytes)*100/float64(nHeap), dur)
 
 	return nil

@@ -256,9 +256,9 @@ func separateTarget(s string) TableDescriptor {
 func PrintSchema(s *schema.Schema, w io.Writer) {
 	t := table.NewWriter()
 	t.SetOutputMirror(w)
-	t.SetTitle("Schema %s [0x%x] - %d fields - %d bytes", s.Name(), s.Hash(), s.NumFields(), s.WireSize())
+	t.SetTitle("Schema %s [0x%x] - %d fields - %d bytes", s.Name, s.Hash, s.NumFields(), s.WireSize())
 	t.AppendHeader(table.Row{"#", "Name", "Type", "Flags", "Index", "Size", "Compress"})
-	for _, f := range s.Exported() {
+	for _, f := range s.Fields {
 		var (
 			typ    string
 			findex string
@@ -276,8 +276,8 @@ func PrintSchema(s *schema.Schema, w io.Writer) {
 		if typ == "" {
 			typ = f.Type.String()
 		}
-		if f.Index > 0 {
-			findex = f.Index.String() + ":" + strconv.Itoa(int(f.Scale))
+		if f.Index != nil {
+			findex = f.Index.Type.String() + ":" + strconv.Itoa(int(f.Scale))
 		}
 		t.AppendRow([]any{
 			f.Id,
@@ -298,7 +298,7 @@ func PrintMetadata(view StatsViewer, desc TableDescriptor, w io.Writer) {
 	t := table.NewWriter()
 	t.SetPageSize(headRepeat)
 	t.SetOutputMirror(w)
-	t.SetTitle("%s - %d fields - #%016x", s.Name(), s.NumFields(), s.Hash())
+	t.SetTitle("%s - %d fields - #%016x", s.Name, s.NumFields(), s.Hash)
 	t.AppendHeader(table.Row{"#", "Key", "Version", "Records", "RID min", "RID max", "Size"})
 	var (
 		i, n      int
@@ -340,7 +340,7 @@ type InfoView interface {
 func PrintDetail(view Viewer, desc TableDescriptor, w io.Writer) {
 	s := view.Schema()
 	t := table.NewWriter()
-	fields := s.Exported()
+	fields := s.Fields
 	t.SetOutputMirror(w)
 	t.AppendHeader(table.Row{"#", "Name", "Type", "Min", "Max", "Size", "Info"})
 	var (
@@ -361,7 +361,7 @@ func PrintDetail(view Viewer, desc TableDescriptor, w io.Writer) {
 			break
 		}
 		t.SetTitle("%s - Pack 0x%08x[v%d] - %s records - Size %s",
-			s.Name(),
+			s.Name,
 			md.Key,
 			md.Version,
 			util.PrettyInt(int(md.NValues)),
@@ -400,13 +400,13 @@ func PrintDetail(view Viewer, desc TableDescriptor, w io.Writer) {
 	}
 }
 
-func printValue(s *schema.Schema, f *schema.ExportedField, val any) any {
+func printValue(s *schema.Schema, f *schema.Field, val any) any {
 	switch f.Type {
 	case types.FieldTypeBytes:
 		return util.LimitStringEllipsis(util.ToString(val), 33)
 	case types.FieldTypeUint16:
 		if f.Flags.Is(types.FieldFlagEnum) && s.HasEnums() {
-			if lut, ok := s.Enums().Lookup(f.Name); ok {
+			if lut, ok := s.Enums.Lookup(f.Name); ok {
 				enum, ok := lut.Value(val.(uint16))
 				if ok {
 					return enum
@@ -431,7 +431,7 @@ func PrintContent(ctx context.Context, view ContentViewer, desc TableDescriptor,
 
 	// analyze schema and set custom text transformer for byte and enum columns
 	var cfgs []table.ColumnConfig
-	for _, field := range s.Exported() {
+	for _, field := range s.Fields {
 		switch field.Type {
 		case types.FieldTypeBytes:
 			cfgs = append(cfgs, table.ColumnConfig{
@@ -442,7 +442,7 @@ func PrintContent(ctx context.Context, view ContentViewer, desc TableDescriptor,
 			})
 		case types.FieldTypeUint16:
 			if field.Flags.Is(types.FieldFlagEnum) && s.HasEnums() {
-				if lut, ok := s.Enums().Lookup(field.Name); ok {
+				if lut, ok := s.Enums.Lookup(field.Name); ok {
 					cfgs = append(cfgs, table.ColumnConfig{
 						Name: field.Name,
 						Transformer: func(val any) string {

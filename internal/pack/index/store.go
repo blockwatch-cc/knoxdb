@@ -10,8 +10,8 @@ import (
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/hash/xxhash64"
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/pkg/store"
 	"blockwatch.cc/knoxdb/pkg/num"
+	"blockwatch.cc/knoxdb/pkg/store"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
@@ -142,7 +142,7 @@ func (idx *Index) dropTomb(_ context.Context, key, epoch uint32) error {
 		if b == nil {
 			return store.ErrBucketNotFound
 		}
-		for _, f := range idx.idxSchema.Exported() {
+		for _, f := range idx.idxSchema.Fields {
 			if err := b.Delete(pack.EncodeBlockKey(key, epoch, f.Id)); err != nil {
 				return err
 			}

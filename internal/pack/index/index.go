@@ -81,7 +81,6 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 	}
 
 	// init names
-	name := s.Name()
 	opts = DefaultIndexOptions.Merge(opts)
 
 	// storage schema depends on index type
@@ -95,10 +94,10 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 	idx.idxSchema = indexSchema
 	idx.srcSchema = s
 	idx.id = s.TaggedHash(types.ObjectTagIndex)
-	idx.name = name
+	idx.name = s.Name
 	idx.opts = opts
 	idx.table = t
-	idx.state = engine.NewObjectState(name)
+	idx.state = engine.NewObjectState(s.Name)
 	idx.journal = pack.New().
 		WithMaxRows(opts.JournalSize).
 		WithSchema(indexSchema).
@@ -108,7 +107,7 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 		WithSchema(indexSchema).
 		Alloc()
 	idx.convert = convert
-	idx.metrics = engine.NewIndexMetrics(name)
+	idx.metrics = engine.NewIndexMetrics(s.Name)
 	idx.log = opts.Logger
 
 	// create backend and store initial state
@@ -116,7 +115,7 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 		return err
 	}
 
-	idx.log.Debugf("Created index %s", name)
+	idx.log.Debugf("Created index %s", s.Name)
 	return nil
 }
 
@@ -124,7 +123,7 @@ func (idx *Index) createBackend(ctx context.Context) error {
 	// setup backend db file
 	path := filepath.Join(idx.engine.RootPath(), idx.name)
 	idx.log.Debugf("index[%s]: creating backend=%s table=%s path=%q opts=%#v",
-		idx.name, idx.opts.Engine, idx.table.Schema().Name(), path, idx.opts)
+		idx.name, idx.opts.Engine, idx.table.Schema().Name, path, idx.opts)
 
 	opts := append(
 		idx.opts.StoreOptions(),
@@ -174,17 +173,16 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 	if err != nil {
 		return err
 	}
-	name := s.Name()
 
 	// setup index
 	idx.engine = engine.GetEngine(ctx)
 	idx.idxSchema = indexSchema
 	idx.srcSchema = s
 	idx.id = s.TaggedHash(types.ObjectTagIndex)
-	idx.name = name
+	idx.name = s.Name
 	idx.opts = DefaultIndexOptions.Merge(opts)
 	idx.table = t
-	idx.state = engine.NewObjectState(name)
+	idx.state = engine.NewObjectState(s.Name)
 	idx.journal = pack.New().
 		WithMaxRows(opts.JournalSize).
 		WithSchema(indexSchema).
@@ -194,12 +192,12 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 		WithSchema(indexSchema).
 		Alloc()
 	idx.convert = convert
-	idx.metrics = engine.NewIndexMetrics(name)
+	idx.metrics = engine.NewIndexMetrics(s.Name)
 	idx.log = opts.Logger
 
 	// open db backend and load latest state
 	if err := idx.openBackend(ctx); err != nil {
-		idx.log.Errorf("index[%s]: %v", name, err)
+		idx.log.Errorf("index[%s]: %v", s.Name, err)
 		_ = idx.Close(ctx)
 		return engine.ErrDatabaseCorrupt
 	}
@@ -211,7 +209,7 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 		}
 	}
 
-	idx.log.Debugf("index[%s]: opened with %d entries", name, idx.state.NRows)
+	idx.log.Debugf("index[%s]: opened with %d entries", s.Name, idx.state.NRows)
 
 	return nil
 }

@@ -250,7 +250,7 @@ func (j *Journal) updatePackWithWal(src *pack.Package, xid types.XID, w *wal.Wal
 		}
 		bits.Set(i)
 		changed = append(changed, i)
-		sz += j.schema.Field(i).WireSize()
+		sz += j.schema.Fields[i].WireSize()
 	}
 
 	// dimension WAL write buffer (may still with grow with long strings)

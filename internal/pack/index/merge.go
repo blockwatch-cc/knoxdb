@@ -14,9 +14,9 @@ import (
 	"blockwatch.cc/knoxdb/internal/encode"
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/pkg/store"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/assert"
+	"blockwatch.cc/knoxdb/pkg/store"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
@@ -378,7 +378,7 @@ func (it *MergeIterator) loadNextPack(search MergeValue) error {
 
 		// create and decode block
 		b, err := block.Decode(
-			it.idx.idxSchema.Field(i).Type().BlockType(),
+			it.idx.idxSchema.Fields[i].Type.BlockType(),
 			it.cur.Value(),
 		)
 		if err != nil {

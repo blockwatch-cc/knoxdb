@@ -14,9 +14,9 @@ import (
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/operator/filter"
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/pkg/store"
 	"blockwatch.cc/knoxdb/pkg/assert"
 	"blockwatch.cc/knoxdb/pkg/schema"
+	"blockwatch.cc/knoxdb/pkg/store"
 )
 
 type SNode struct {
@@ -143,7 +143,7 @@ func (n *SNode) AppendPack(pkg *pack.Package) bool {
 	// append meta statistics
 	n.spack.Block(STATS_ROW_KEY).Uint32().Append(pkg.Key())
 	n.spack.Block(STATS_ROW_VERSION).Uint32().Append(pkg.Version())
-	n.spack.Block(STATS_ROW_SCHEMA).Uint64().Append(pkg.Schema().Hash())
+	n.spack.Block(STATS_ROW_SCHEMA).Uint64().Append(pkg.Schema().Hash)
 	n.spack.Block(STATS_ROW_NVALS).Uint64().Append(uint64(pkg.Len()))
 	n.spack.Block(STATS_ROW_SIZE).Int64().Append(pkg.Stats().SizeDiff())
 
@@ -229,8 +229,8 @@ func (n *SNode) UpdatePack(pkg *pack.Package) bool {
 		n.spack.Block(STATS_ROW_VERSION).Set(k, pkg.Version())
 		n.dirty = true
 	}
-	if sid := n.spack.Uint64(STATS_ROW_SCHEMA, k); sid != pkg.Schema().Hash() {
-		n.spack.Block(STATS_ROW_SCHEMA).Set(k, pkg.Schema().Hash())
+	if sid := n.spack.Uint64(STATS_ROW_SCHEMA, k); sid != pkg.Schema().Hash {
+		n.spack.Block(STATS_ROW_SCHEMA).Set(k, pkg.Schema().Hash)
 		n.dirty = true
 	}
 	if nvals := n.spack.Uint64(STATS_ROW_NVALS, k); nvals != uint64(pkg.Len()) {
@@ -385,7 +385,7 @@ func (n *SNode) Query(it *Iterator) error {
 
 			// use cache with a private partition key
 			if it.idx.use.Is(FeatUseCache) {
-				cache = engine.GetEngine(it.ctx).BlockCache(it.idx.schema.Hash())
+				cache = engine.GetEngine(it.ctx).BlockCache(it.idx.schema.Hash)
 				loadedBlocks = n.spack.LoadFromCache(cache, loadBlocks)
 			}
 

@@ -37,9 +37,9 @@ func (*RelinkConverter) QueryKeys(_ *filter.Node) []uint64 {
 func (c *RelinkConverter) QueryNode(node *filter.Node) *filter.Node {
 	// rewrite filter node to match the index pack structure
 	// Note: index storage is u64
-	f0 := c.schema.Fields()[0]
+	f0 := c.schema.Fields[0]
 	flt := node.Filter
-	if f0.Type() == types.FieldTypeUint64 {
+	if f0.Type == types.FieldTypeUint64 {
 		return &filter.Node{
 			Filter: &filter.Filter{
 				Name:    "int",
@@ -55,7 +55,7 @@ func (c *RelinkConverter) QueryNode(node *filter.Node) *filter.Node {
 		if err != nil {
 			panic(fmt.Errorf("cast index query value %T to u64: %v", flt.Value, err))
 		}
-		matcher := filter.NewFactory(f0.Type()).New(flt.Mode)
+		matcher := filter.NewFactory(f0.Type).New(flt.Mode)
 		matcher.WithValue(val)
 		return filter.NewNode().AddLeaf(&filter.Filter{
 			Name:    "int",
@@ -139,7 +139,7 @@ func (c *SimpleHashConverter) ConvertPack(pkg *pack.Package, mode pack.WriteMode
 func (c *SimpleHashConverter) QueryKeys(node *filter.Node) []uint64 {
 	// produce output hash (uint64) from query filter value encoded to LE wire format
 	// use schema field encoding helper to translate Go types from query
-	f0 := c.schema.Fields()[0]
+	f0 := c.schema.Fields[0]
 	buf := bytes.NewBuffer(nil)
 	flt := node.Filter
 
@@ -268,8 +268,8 @@ func (c *CompositeHashConverter) QueryKeys(node *filter.Node) []uint64 {
 	// all index fields must be available
 	buf := new(bytes.Buffer)
 	nfields := c.srcSchema.NumFields()
-	for _, field := range c.srcSchema.Fields()[:nfields-1] {
-		name := field.Name()
+	for _, field := range c.srcSchema.Fields[:nfields-1] {
+		name := field.Name
 		node, ok := eq[name]
 		if !ok {
 			// empty result if we cannot build a hash from all index fields

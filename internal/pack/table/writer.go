@@ -60,7 +60,7 @@ func (t *Table) NewWriter(epoch uint32) engine.TableWriter {
 		stats:   s,
 		log:     t.log,
 		vtail:   0,
-		name:    t.schema.Name(),
+		name:    t.schema.Name,
 		wasFull: s.IsTailFull(),
 		start:   time.Now().UTC(),
 	}

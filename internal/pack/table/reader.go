@@ -92,7 +92,7 @@ func (t *Table) NewReader() engine.TableReader {
 		hits:      arena.AllocUint32(t.opts.PackSize),
 		bits:      bitset.New(t.opts.PackSize),
 		log:       t.log,
-		name:      t.schema.Name(),
+		name:      t.schema.Name,
 		useCache:  true,
 	}
 }

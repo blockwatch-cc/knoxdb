@@ -62,7 +62,7 @@ type Encoder struct {
 }
 
 func NewEncoder(s *Schema) *Encoder {
-	enums := s.Enums()
+	enums := s.Enums
 	if enums == nil {
 		enums = &GlobalRegistry
 	}
@@ -95,12 +95,12 @@ func (e *Encoder) Encode(val any, buf *bytes.Buffer) ([]byte, error) {
 		buf = e.NewBuffer(1)
 	}
 	var err error
-	for op, code := range e.schema.encode {
+	for op, code := range e.schema.Encode {
 		if code == OpCodeSkip {
 			continue
 		}
-		field := &e.schema.fields[op]
-		ptr := unsafe.Add(base, field.offset)
+		field := e.schema.Fields[op]
+		ptr := unsafe.Add(base, field.Offset)
 		err = writeField(buf, code, field, ptr, e.enums)
 		if err != nil {
 			return nil, err
@@ -129,12 +129,12 @@ func (e *Encoder) EncodeSlice(slice any, buf *bytes.Buffer) ([]byte, error) {
 
 	var err error
 	for i, l := 0, rslice.Len(); i < l; i++ {
-		for op, code := range e.schema.encode {
+		for op, code := range e.schema.Encode {
 			if code == OpCodeSkip {
 				continue
 			}
-			field := &e.schema.fields[op]
-			ptr := unsafe.Add(base, field.offset)
+			field := e.schema.Fields[op]
+			ptr := unsafe.Add(base, field.Offset)
 			err = writeField(buf, code, field, ptr, e.enums)
 			if err != nil {
 				return nil, err
@@ -161,12 +161,12 @@ func (e *Encoder) EncodePtrSlice(slice any, buf *bytes.Buffer) ([]byte, error) {
 	var err error
 	for i, l := 0, rslice.Len(); i < l; i++ {
 		base := rslice.Index(i).UnsafePointer()
-		for op, code := range e.schema.encode {
+		for op, code := range e.schema.Encode {
 			if code == OpCodeSkip {
 				continue
 			}
-			field := &e.schema.fields[op]
-			ptr := unsafe.Add(base, field.offset)
+			field := e.schema.Fields[op]
+			ptr := unsafe.Add(base, field.Offset)
 			err = writeField(buf, code, field, ptr, e.enums)
 			if err != nil {
 				return nil, err
@@ -184,14 +184,14 @@ func writeField(buf *bytes.Buffer, code OpCode, field *Field, ptr unsafe.Pointer
 	switch code {
 	default:
 		// int, uint, float, bool
-		_, err = buf.Write(unsafe.Slice((*byte)(ptr), field.wireSize))
+		_, err = buf.Write(unsafe.Slice((*byte)(ptr), field.Size))
 
 	case OpCodeFixedBytes:
-		_, err = buf.Write(unsafe.Slice((*byte)(ptr), field.fixed))
+		_, err = buf.Write(unsafe.Slice((*byte)(ptr), field.Fixed))
 
 	case OpCodeFixedString:
 		s := *(*string)(ptr)
-		_, err = buf.Write(unsafe.Slice(unsafe.StringData(s), field.fixed))
+		_, err = buf.Write(unsafe.Slice(unsafe.StringData(s), field.Fixed))
 
 	case OpCodeString:
 		s := *(*string)(ptr)
@@ -208,7 +208,7 @@ func writeField(buf *bytes.Buffer, code OpCode, field *Field, ptr unsafe.Pointer
 	case OpCodeTimestamp, OpCodeTime, OpCodeDate:
 		tm := *(*time.Time)(ptr)
 		var b [8]byte
-		LE.PutUint64(b[:], uint64(TimeScale(field.scale).ToUnix(tm)))
+		LE.PutUint64(b[:], uint64(TimeScale(field.Scale).ToUnix(tm)))
 		_, err = buf.Write(b[:])
 
 	case OpCodeInt256:
@@ -237,14 +237,14 @@ func writeField(buf *bytes.Buffer, code OpCode, field *Field, ptr unsafe.Pointer
 		if enums == nil {
 			return ErrEnumUndefined
 		}
-		enum, ok := enums.Lookup(field.name)
+		enum, ok := enums.Lookup(field.Name)
 		if !ok {
 			return ErrEnumUndefined
 		}
 		v := *(*string)(ptr)
 		code, ok := enum.Code(v)
 		if !ok {
-			return fmt.Errorf("%s: invalid enum value %q", field.name, v)
+			return fmt.Errorf("%s: invalid enum value %q", field.Name, v)
 		}
 		var b [2]byte
 		LE.PutUint16(b[:], code)

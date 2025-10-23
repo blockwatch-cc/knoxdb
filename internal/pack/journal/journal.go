@@ -53,7 +53,7 @@ type Journal struct {
 func NewJournal(s *schema.Schema, maxsz, maxseg int) *Journal {
 	return &Journal{
 		schema: s,
-		key:    []byte(s.Name() + "_journal"),
+		key:    []byte(s.Name + "_journal"),
 		id:     s.TaggedHash(types.ObjectTagTable),
 		tip:    newSegment(s, 0, maxsz),
 		tail:   make([]*Segment, 0, maxseg),
@@ -565,7 +565,7 @@ func (j *Journal) ReplayWalRecord(ctx context.Context, rec *wal.Record, rd engin
 			cids := make([]uint16, 0, cset.Count())
 			cols := make([]int, 0, cset.Count())
 			for i := range cset.Iterator() {
-				cids = append(cids, j.schema.Field(i).Id())
+				cids = append(cids, j.schema.Fields[i].Id)
 				cols = append(cols, i)
 			}
 			cschema, err := j.schema.SelectFieldIds(cids...)

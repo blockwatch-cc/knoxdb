@@ -106,21 +106,21 @@ func makeTestData(sz int) (res []encodeTestStruct) {
 }
 
 type visibilityTestStruct struct {
-	Id               uint64 `knox:"id,pk"`
-	FDeleted         uint64 `knox:"f_deleted"`
-	FInternal        uint64 `knox:"f_internal,internal"`
-	FInternalDeleted uint64 `knox:"f_internal_deleted,internal"`
-	HashFixed        Hash   `knox:"hash_fixed"`
+	Id           uint64 `knox:"id,pk"`
+	FDeleted     uint64 `knox:"f_deleted"`
+	FMeta        uint64 `knox:"f_meta,metadata"`
+	FMetaDeleted uint64 `knox:"f_meta_deleted,metadata"`
+	HashFixed    Hash   `knox:"hash_fixed"`
 }
 
 func makeVisibilityTestData(sz int) (res []visibilityTestStruct) {
 	for i := 1; i <= sz; i++ {
 		res = append(res, visibilityTestStruct{
-			Id:               0,
-			FDeleted:         0xfafafafafafafafa,
-			FInternal:        0xfbfbfbfbfbfbfbfb,
-			FInternalDeleted: 0xfcfcfcfcfcfcfcfc,
-			HashFixed:        randFixed[Hash](),
+			Id:           0,
+			FDeleted:     0xfafafafafafafafa,
+			FMeta:        0xfbfbfbfbfbfbfbfb,
+			FMetaDeleted: 0xfcfcfcfcfcfcfcfc,
+			HashFixed:    randFixed[Hash](),
 		})
 	}
 	return
@@ -139,8 +139,8 @@ func TestEncodeVal(t *testing.T) {
 func TestEncodeValWithVisibility(t *testing.T) {
 	// visibility tests (internal & deleted fields)
 	s, err := SchemaOf(visibilityTestStruct{})
-	val := makeVisibilityTestData(1)[0]
 	require.NoError(t, err)
+	val := makeVisibilityTestData(1)[0]
 	s, err = s.DeleteField(2)
 	require.NoError(t, err)
 	s, err = s.DeleteField(3)
@@ -190,9 +190,9 @@ func TestEncodeRoundtripWithVisibility(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, val.Id, val2.Id)
 	require.Equal(t, val.HashFixed, val2.HashFixed, "hash_fixed")
-	require.Equal(t, uint64(0), val2.FInternal, "internal")
+	require.Equal(t, uint64(0), val2.FMeta, "meta")
 	require.Equal(t, uint64(0), val2.FDeleted, "deleted")
-	require.Equal(t, uint64(0), val2.FInternalDeleted, "internal_deleted")
+	require.Equal(t, uint64(0), val2.FMetaDeleted, "meta_deleted")
 }
 
 func TestDecoderRead(t *testing.T) {

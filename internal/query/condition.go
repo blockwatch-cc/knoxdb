@@ -81,12 +81,12 @@ func ParseCondition(key, val string, s *schema.Schema) (c Condition, err error) 
 		err = fmt.Errorf("invalid filter mode '%s'", mode)
 		return
 	}
-	c.Name = field.Name()
+	c.Name = field.Name
 	var enum *schema.EnumDictionary
 	if s.HasEnums() {
-		enum, _ = s.Enums().Lookup(c.Name)
+		enum, _ = s.Enums.Lookup(c.Name)
 	}
-	parser := schema.NewParser(field.Type(), field.Scale(), enum)
+	parser := schema.NewParser(field.Type, field.Scale, enum)
 	switch c.Mode {
 	case types.FilterModeRange:
 		v1, v2, ok := strings.Cut(val, ",")
@@ -156,8 +156,8 @@ func (c Condition) Compile(s *schema.Schema) (*filter.Node, error) {
 	if c.IsEmpty() {
 		node := filter.NewNode().AddLeaf(
 			&filter.Filter{
-				Name:    s.Pk().Name(),
-				Type:    s.Pk().Type().BlockType(),
+				Name:    s.Pk().Name,
+				Type:    s.Pk().Type.BlockType(),
 				Mode:    types.FilterModeTrue,
 				Index:   s.PkIndex(),
 				Id:      s.PkId(),
@@ -175,11 +175,11 @@ func (c Condition) Compile(s *schema.Schema) (*filter.Node, error) {
 		if !ok {
 			return nil, fmt.Errorf("unknown column %q", c.Name)
 		}
-		fx, ok := s.FieldIndexById(field.Id())
+		fx, ok := s.FieldIndexById(field.Id)
 		if !ok {
 			return nil, fmt.Errorf("unknown column %q", c.Name)
 		}
-		typ := field.Type()
+		typ := field.Type
 		blockType := typ.BlockType()
 
 		// Use matcher factory to generate matcher impl for type and mode
@@ -190,9 +190,9 @@ func (c Condition) Compile(s *schema.Schema) (*filter.Node, error) {
 		// schema field types.
 		var enum *schema.EnumDictionary
 		if s.HasEnums() {
-			enum, _ = s.Enums().Lookup(c.Name)
+			enum, _ = s.Enums.Lookup(c.Name)
 		}
-		caster := schema.NewCaster(typ, field.Scale(), enum)
+		caster := schema.NewCaster(typ, field.Scale, enum)
 
 		// init matcher impl from value(s)
 		var (
@@ -227,7 +227,7 @@ func (c Condition) Compile(s *schema.Schema) (*filter.Node, error) {
 							Type:    blockType,
 							Mode:    types.FilterModeEqual,
 							Index:   fx,
-							Id:      field.Id(),
+							Id:      field.Id,
 							Value:   val,
 							Matcher: matcher,
 						})
@@ -246,7 +246,7 @@ func (c Condition) Compile(s *schema.Schema) (*filter.Node, error) {
 							Type:    blockType,
 							Mode:    types.FilterModeNotEqual,
 							Index:   fx,
-							Id:      field.Id(),
+							Id:      field.Id,
 							Value:   val,
 							Matcher: matcher,
 						})
@@ -285,7 +285,7 @@ func (c Condition) Compile(s *schema.Schema) (*filter.Node, error) {
 				Type:    typ.BlockType(),
 				Mode:    c.Mode,
 				Index:   fx,
-				Id:      field.Id(),
+				Id:      field.Id,
 				Value:   c.Value,
 				Matcher: matcher,
 			})

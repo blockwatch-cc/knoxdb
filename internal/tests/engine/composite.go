@@ -117,7 +117,7 @@ func DropCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngi
 	CreateIndex(t, ti, tab, e, io, is)
 	ctx := engine.WithEngine(context.Background(), e)
 
-	dbpath := filepath.Join(e.RootPath(), is.Name()+".db")
+	dbpath := filepath.Join(e.RootPath(), is.Name)
 	ok, err := store.Exists(io.Driver, dbpath)
 	require.NoError(t, err, "access error")
 	require.True(t, ok, "db not exists")

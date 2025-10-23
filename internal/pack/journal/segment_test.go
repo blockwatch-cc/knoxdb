@@ -162,7 +162,7 @@ func TestSegmentMatch(t *testing.T) {
 
 	// all matches
 	fltAll := filter.NewNode().AddLeaf(
-		filter.NewFilter(testSchema.Field(0), 0, types.FilterModeTrue, nil))
+		filter.NewFilter(testSchema.Fields[0], 0, types.FilterModeTrue, nil))
 	bits := bitset.New(seg.Len())
 	seg.Match(fltAll, snap, set, bits)
 	require.Equal(t, 1, bits.Count(), "all match count")
@@ -173,7 +173,7 @@ func TestSegmentMatch(t *testing.T) {
 
 	// should not match anything
 	fltNonExistAborted := filter.NewNode().AddLeaf(
-		filter.NewFilter(testSchema.Field(0), 0, types.FilterModeEqual, uint64(2)))
+		filter.NewFilter(testSchema.Fields[0], 0, types.FilterModeEqual, uint64(2)))
 	bits = bitset.New(seg.Len())
 	seg.Match(fltNonExistAborted, snap, set, bits)
 	require.Equal(t, 0, bits.Count(), "none match count")

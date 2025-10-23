@@ -171,7 +171,7 @@ func TestViewSet(t *testing.T) {
 
 	// Test setting invalid index
 	safeSet(t, view, -1, 42)
-	safeSet(t, view, len(baseSchema.fields), 42)
+	safeSet(t, view, len(baseSchema.Fields), 42)
 
 	// Test setting incompatible type
 	originalId, ok := view.Get(0)
@@ -237,7 +237,7 @@ func TestViewAppend(t *testing.T) {
 				}
 			}()
 
-			if tt.fieldIdx < 0 || tt.fieldIdx >= len(baseSchema.fields) {
+			if tt.fieldIdx < 0 || tt.fieldIdx >= len(baseSchema.Fields) {
 				t.Logf("Skipping test for field %s due to invalid index %d", tt.name, tt.fieldIdx)
 				return
 			}
@@ -341,7 +341,7 @@ func TestViewAppend(t *testing.T) {
 		result := view.Append(nil, -1)
 		require.Nil(t, result, "Appending with negative index should return nil")
 
-		result = view.Append(nil, len(baseSchema.fields))
+		result = view.Append(nil, len(baseSchema.Fields))
 		require.Nil(t, result, "Appending with out-of-bounds index should return nil")
 	})
 

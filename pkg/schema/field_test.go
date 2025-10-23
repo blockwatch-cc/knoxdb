@@ -36,12 +36,12 @@ func TestFieldNew(t *testing.T) {
 	testCases := []struct {
 		name      string
 		fieldType types.FieldType
-		expected  Field
+		expected  *Field
 	}{
-		{"Int32", FT_I32, Field{typ: FT_I32, wireSize: 4}},
-		{"String", FT_STRING, Field{typ: FT_STRING, wireSize: 4}},
-		{"DateTime", FT_TIMESTAMP, Field{typ: FT_TIMESTAMP, wireSize: 8}},
-		{"Boolean", FT_BOOL, Field{typ: FT_BOOL, wireSize: 1}},
+		{"Int32", FT_I32, &Field{Type: FT_I32, Size: 4}},
+		{"String", FT_STRING, &Field{Type: FT_STRING, Size: 4}},
+		{"DateTime", FT_TIMESTAMP, &Field{Type: FT_TIMESTAMP, Size: 8}},
+		{"Boolean", FT_BOOL, &Field{Type: FT_BOOL, Size: 1}},
 	}
 
 	for _, tc := range testCases {
@@ -58,7 +58,7 @@ func TestFieldWithMethods(t *testing.T) {
 
 	t.Run("WithName", func(t *testing.T) {
 		field := baseField.WithName("new_name")
-		assert.Equal(t, "new_name", field.Name())
+		assert.Equal(t, "new_name", field.Name)
 	})
 
 	t.Run("WithFlags", func(t *testing.T) {
@@ -68,17 +68,17 @@ func TestFieldWithMethods(t *testing.T) {
 
 	t.Run("WithFixed", func(t *testing.T) {
 		field := NewField(FT_STRING).WithFixed(10)
-		assert.Equal(t, uint16(10), field.Fixed())
+		assert.Equal(t, uint16(10), field.Fixed)
 	})
 
 	t.Run("WithScale", func(t *testing.T) {
 		field := NewField(FT_D64).WithScale(2)
-		assert.Equal(t, uint8(2), field.Scale())
+		assert.Equal(t, uint8(2), field.Scale)
 	})
 
 	t.Run("WithIndex", func(t *testing.T) {
 		field := baseField.WithIndex(types.IndexTypeInt)
-		assert.Equal(t, types.IndexTypeInt, field.Index())
+		assert.Equal(t, types.IndexTypeInt, field.Index.Type)
 		assert.True(t, field.Is(types.FieldFlagIndexed))
 	})
 }
@@ -97,17 +97,17 @@ func TestFieldReflectField(t *testing.T) {
 		// field := NewField(FT_I32)
 		field, err := reflectStructField(structType.Field(0), TAG_NAME)
 		require.NoError(t, err)
-		assert.Equal(t, uint16(4), field.wireSize)
-		assert.Equal(t, []int{0}, field.Path())
-		assert.Equal(t, uintptr(0), field.Offset())
+		assert.Equal(t, uint16(4), field.Size)
+		assert.Equal(t, []int{0}, field.Path)
+		assert.Equal(t, uintptr(0), field.Offset)
 	})
 
 	t.Run("StringField", func(t *testing.T) {
 		// field := NewField(FT_STRING)
 		field, err := reflectStructField(structType.Field(1), TAG_NAME)
 		require.NoError(t, err)
-		assert.Equal(t, []int{1}, field.Path())
-		assert.Equal(t, uint16(4), field.wireSize)
+		assert.Equal(t, []int{1}, field.Path)
+		assert.Equal(t, uint16(4), field.Size)
 	})
 }
 
@@ -115,7 +115,7 @@ func TestFieldReflectField(t *testing.T) {
 func TestFieldValidation(t *testing.T) {
 	testCases := []struct {
 		name      string
-		field     Field
+		field     *Field
 		expectErr bool
 	}{
 		{
@@ -176,7 +176,7 @@ func TestFieldValidation(t *testing.T) {
 func TestFieldCodecMapping(t *testing.T) {
 	testCases := []struct {
 		name     string
-		field    Field
+		field    *Field
 		expected OpCode
 	}{
 		{"Datetime", NewField(FT_TIMESTAMP), OC_TIMESTAMP},
@@ -267,7 +267,7 @@ func TestFieldStructValueRetrieval(t *testing.T) {
 
 	testCases := []struct {
 		name     string
-		field    Field
+		field    *Field
 		expected any
 	}{
 		{
@@ -294,7 +294,7 @@ func TestFieldStructValueRetrieval(t *testing.T) {
 }
 
 // Helper function for encoding and decoding
-func encodeDecodeField(t *testing.T, field Field, value any) any {
+func encodeDecodeField(t *testing.T, field *Field, value any) any {
 	t.Helper()
 	var buf bytes.Buffer
 	err := field.Encode(&buf, value, binary.NativeEndian)
@@ -310,7 +310,7 @@ func encodeDecodeField(t *testing.T, field Field, value any) any {
 func TestFieldEncodingDecoding(t *testing.T) {
 	testCases := []struct {
 		name     string
-		field    Field
+		field    *Field
 		value    any
 		expected any
 	}{
@@ -342,7 +342,7 @@ func TestFieldEncodingDecoding(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			decoded := encodeDecodeField(t, tc.field, tc.value)
-			if tc.field.Type() == FT_TIMESTAMP {
+			if tc.field.Type == FT_TIMESTAMP {
 				assert.WithinDuration(t, tc.expected.(time.Time), decoded.(time.Time), time.Millisecond)
 			} else {
 				assert.Equal(t, tc.expected, decoded)
@@ -367,14 +367,14 @@ func TestFieldSerializationRoundTrip(t *testing.T) {
 	err = readField.ReadFrom(&buf)
 	require.NoError(t, err)
 
-	assert.Equal(t, original.name, readField.name)
-	assert.Equal(t, original.id, readField.id)
-	assert.Equal(t, original.typ, readField.typ)
-	assert.Equal(t, original.flags, readField.flags)
-	assert.Equal(t, original.compress, readField.compress)
-	assert.Equal(t, original.index, readField.index)
-	assert.Equal(t, original.fixed, readField.fixed)
-	assert.Equal(t, original.scale, readField.scale)
+	assert.Equal(t, original.Name, readField.Name)
+	assert.Equal(t, original.Id, readField.Id)
+	assert.Equal(t, original.Type, readField.Type)
+	assert.Equal(t, original.Flags, readField.Flags)
+	assert.Equal(t, original.Compress, readField.Compress)
+	assert.Equal(t, original.Index, readField.Index)
+	assert.Equal(t, original.Fixed, readField.Fixed)
+	assert.Equal(t, original.Scale, readField.Scale)
 }
 
 // TestFieldRangeAndOverflow verifies the handling of valid ranges and overflow scenarios for all integer types.
@@ -567,7 +567,7 @@ func TestFieldUtilityMethods(t *testing.T) {
 
 	tests := []struct {
 		name            string
-		field           Field
+		field           *Field
 		expectedValid   bool
 		expectedVisible bool
 		expectedFixed   bool
@@ -675,7 +675,7 @@ func TestFieldCodecSpecialCases(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		field    Field
+		field    *Field
 		expected OpCode
 	}{
 		{"FixedString", NewField(FT_STRING).WithFixed(10), OC_FIXSTRING},
@@ -713,7 +713,7 @@ func TestFieldStructValueComplexCases(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		field    Field
+		field    *Field
 		expected any
 	}{
 		{
@@ -737,52 +737,4 @@ func TestFieldStructValueComplexCases(t *testing.T) {
 			assert.Equal(t, tt.expected, result.Interface())
 		})
 	}
-}
-
-// TestFieldExported verifies that ExportedField correctly represents and handles Field properties, and can retrieve values from structs.
-func TestFieldExported(t *testing.T) {
-	originalField := NewField(FT_U16).
-		WithName("test_field").
-		WithFlags(types.FieldFlagIndexed | types.FieldFlagEnum).
-		WithIndex(types.IndexTypeHash)
-
-	exported := ExportedField{
-		Name:      originalField.Name(),
-		Id:        originalField.Id(),
-		Type:      originalField.Type(),
-		Flags:     originalField.Flags(),
-		Compress:  originalField.Compress(),
-		Index:     originalField.Index(),
-		IsVisible: originalField.IsVisible(),
-		Scale:     originalField.Scale(),
-		Fixed:     originalField.Fixed(),
-		Offset:    originalField.Offset(),
-		path:      originalField.Path(),
-	}
-
-	t.Run("ExportedField properties", func(t *testing.T) {
-		assert.Equal(t, originalField.Name(), exported.Name)
-		assert.Equal(t, originalField.Id(), exported.Id)
-		assert.Equal(t, originalField.Type(), exported.Type)
-		assert.Equal(t, originalField.Flags(), exported.Flags)
-		assert.Equal(t, originalField.Compress(), exported.Compress)
-		assert.Equal(t, originalField.Index(), exported.Index)
-		assert.Equal(t, originalField.IsVisible(), exported.IsVisible)
-		assert.Equal(t, originalField.Scale(), exported.Scale)
-		assert.Equal(t, originalField.Fixed(), exported.Fixed)
-		assert.Equal(t, originalField.Offset(), exported.Offset)
-		assert.Equal(t, originalField.Path(), exported.path)
-	})
-
-	t.Run("ExportedField StructValue", func(t *testing.T) {
-		type TestStruct struct {
-			Test int32
-		}
-		testStruct := TestStruct{Test: 42}
-		rval := reflect.ValueOf(testStruct)
-
-		result := exported.StructValue(rval)
-		assert.Equal(t, reflect.Struct, result.Kind())  // Change to expect Struct instead of Int32
-		assert.Equal(t, testStruct, result.Interface()) // Compare with the whole struct
-	})
 }

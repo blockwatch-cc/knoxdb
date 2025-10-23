@@ -33,7 +33,7 @@ func (p *Package) ReadWireFields(buf *bytes.Buffer, row int, cols []int) error {
 	for _, v := range cols {
 		var (
 			b   = p.blocks[v]
-			f   = p.schema.Field(v)
+			f   = p.schema.Fields[v]
 			x   [8]byte
 			err error
 		)
@@ -70,8 +70,8 @@ func (p *Package) ReadWireFields(buf *bytes.Buffer, row int, cols []int) error {
 			v := b.Bool().Get(row)
 			err = buf.WriteByte(*(*byte)(unsafe.Pointer(&v)))
 		case types.BlockBytes:
-			if fixed := f.Fixed(); fixed > 0 {
-				_, err = buf.Write(b.Bytes().Get(row)[:fixed])
+			if f.Fixed > 0 {
+				_, err = buf.Write(b.Bytes().Get(row)[:f.Fixed])
 			} else {
 				v := b.Bytes().Get(row)
 				LE.PutUint32(x[:], uint32(len(v)))
@@ -87,12 +87,12 @@ func (p *Package) ReadWireFields(buf *bytes.Buffer, row int, cols []int) error {
 		default:
 			// oh, its a type we don't support yet
 			assert.Unreachable("unhandled field type",
-				"typeid", int(f.Type()),
+				"typeid", int(f.Type),
 				"type", b.Type().String(),
-				"field", f.Name(),
+				"field", f.Name,
 				"pack", p.key,
-				"schema", p.schema.Name(),
-				"version", p.schema.Version(),
+				"schema", p.schema.Name,
+				"version", p.schema.Version,
 			)
 		}
 		if err != nil {
@@ -111,13 +111,13 @@ func (p *Package) ReadWireBuffer(buf *bytes.Buffer, row int) error {
 	assert.Always(row >= 0 && row < p.nRows, "invalid row",
 		"row", row,
 		"pack", p.key,
-		"schema", p.schema.Name(),
-		"version", p.schema.Version(),
+		"schema", p.schema.Name,
+		"version", p.schema.Version,
 	)
 
-	for i, field := range p.schema.Exported() {
+	for i, field := range p.schema.Fields {
 		// skip deleted and internal fields
-		if !field.IsVisible {
+		if !field.IsVisible() {
 			continue
 		}
 
@@ -190,8 +190,8 @@ func (p *Package) ReadWireBuffer(buf *bytes.Buffer, row int) error {
 				"type", b.Type().String(),
 				"field", field.Name,
 				"pack", p.key,
-				"schema", p.schema.Name(),
-				"version", p.schema.Version(),
+				"schema", p.schema.Name,
+				"version", p.schema.Version,
 			)
 		}
 		if err != nil {
@@ -214,9 +214,9 @@ func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, maps []
 	assert.Always(maps != nil, "nil target mapping")
 
 	var err error
-	enums := dstSchema.Enums()
+	enums := dstSchema.Enums
 	base := rval.Addr().UnsafePointer()
-	for i, field := range dstSchema.Exported() {
+	for i, field := range dstSchema.Fields {
 		// identify source field
 		srcId := maps[i]
 
@@ -268,7 +268,7 @@ func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, maps []
 			*(*int16)(fptr) = b.Int16().Get(row)
 
 		case types.FieldTypeUint16:
-			if field.IsEnum && enums != nil {
+			if field.IsEnum() && enums != nil {
 				enum, ok := enums.Lookup(field.Name)
 				if !ok {
 					return fmt.Errorf("%s: missing enum dictionary", field.Name)
@@ -347,8 +347,8 @@ func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, maps []
 				"field", field.Name,
 				"type", field.Type.String(),
 				"pack", p.key,
-				"schema", p.schema.Name(),
-				"version", p.schema.Version(),
+				"schema", p.schema.Name,
+				"version", p.schema.Version,
 			)
 		}
 		if err != nil {
@@ -441,8 +441,7 @@ func (p *Package) Bool(col, row int) bool {
 
 func (p *Package) Time(col, row int) time.Time {
 	if ts := p.blocks[col].Int64().Get(row); ts > 0 {
-		f, _ := p.schema.FieldByIndex(col)
-		return schema.TimeScale(f.Scale()).FromUnix(ts)
+		return schema.TimeScale(p.schema.Fields[col].Scale).FromUnix(ts)
 	} else {
 		return zeroTime
 	}
@@ -457,23 +456,19 @@ func (p *Package) Int128(col, row int) num.Int128 {
 }
 
 func (p *Package) Decimal256(col, row int) num.Decimal256 {
-	f, _ := p.schema.FieldByIndex(col)
-	return num.NewDecimal256(p.blocks[col].Int256().Get(row), f.Scale())
+	return num.NewDecimal256(p.blocks[col].Int256().Get(row), p.schema.Fields[col].Scale)
 }
 
 func (p *Package) Decimal128(col, row int) num.Decimal128 {
-	f, _ := p.schema.FieldByIndex(col)
-	return num.NewDecimal128(p.blocks[col].Int128().Get(row), f.Scale())
+	return num.NewDecimal128(p.blocks[col].Int128().Get(row), p.schema.Fields[col].Scale)
 }
 
 func (p *Package) Decimal64(col, row int) num.Decimal64 {
-	f, _ := p.schema.FieldByIndex(col)
-	return num.NewDecimal64(p.blocks[col].Int64().Get(row), f.Scale())
+	return num.NewDecimal64(p.blocks[col].Int64().Get(row), p.schema.Fields[col].Scale)
 }
 
 func (p *Package) Decimal32(col, row int) num.Decimal32 {
-	f, _ := p.schema.FieldByIndex(col)
-	return num.NewDecimal32(p.blocks[col].Int32().Get(row), f.Scale())
+	return num.NewDecimal32(p.blocks[col].Int32().Get(row), p.schema.Fields[col].Scale)
 }
 
 func (p *Package) Big(col, row int) num.Big {

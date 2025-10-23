@@ -184,26 +184,26 @@ func (j JoinTable) Validate(kind string) error {
 		return fmt.Errorf("missing %s field", kind)
 	}
 	if !j.On.IsValid() {
-		return fmt.Errorf("invalid %s field '%s'", kind, j.On.Name())
+		return fmt.Errorf("invalid %s field '%s'", kind, j.On.Name)
 	}
 
 	// out schema is selectable
 	s := j.Table.Schema()
 	if j.Select == nil {
-		return fmt.Errorf("missing select schema for table %s", s.Name())
+		return fmt.Errorf("missing select schema for table %s", s.Name)
 	}
 	if err := s.CanSelect(j.Select); err != nil {
-		return fmt.Errorf("invalid select term for table %s: %v", s.Name(), err)
+		return fmt.Errorf("invalid select term for table %s: %v", s.Name, err)
 	}
 
 	// join predicate fields are selected
-	if f, ok := j.Select.FieldByName(j.On.Name()); !ok || f.Id() != j.On.Id() {
-		return fmt.Errorf("predicate field %s.%s not selected", s.Name(), j.On.Name())
+	if f, ok := j.Select.FieldByName(j.On.Name); !ok || f.Id != j.On.Id {
+		return fmt.Errorf("predicate field %s.%s not selected", s.Name, j.On.Name)
 	}
 
 	// table fields and alias list has same length
 	if x, y := j.Select.NumFields(), len(j.As); x != y && y != 0 {
-		return fmt.Errorf("mismatched aliases for table %s: %d fields, %d aliases", s.Name(), x, y)
+		return fmt.Errorf("mismatched aliases for table %s: %d fields, %d aliases", s.Name, x, y)
 	}
 
 	// filter trees must be valid
@@ -216,13 +216,13 @@ func (j JoinTable) Validate(kind string) error {
 
 func (p *JoinPlan) Name() string {
 	return strings.Join([]string{
-		p.Left.Table.Schema().Name(),
+		p.Left.Table.Schema().Name,
 		p.Type.String(),
-		p.Right.Table.Schema().Name(),
+		p.Right.Table.Schema().Name,
 		"on",
-		p.Left.On.Name(),
+		p.Left.On.Name,
 		p.Mode.String(),
-		p.Right.On.Name(),
+		p.Right.On.Name,
 	}, "_")
 }
 
@@ -258,7 +258,7 @@ func (p *JoinPlan) Validate() error {
 	}
 
 	// join condition type matches
-	if lt, rt := p.Left.On.Type(), p.Right.On.Type(); lt != rt {
+	if lt, rt := p.Left.On.Type, p.Right.On.Type; lt != rt {
 		return fmt.Errorf("field type mismatch '%s'/'%s'", rt, lt)
 	}
 
@@ -285,37 +285,37 @@ func (p *JoinPlan) Compile(ctx context.Context) error {
 	// set pk field (optimization) and remember block type
 	p.Left.PkIdx = ltab.PkIndex()
 	p.Right.PkIdx = rtab.PkIndex()
-	p.Left.Typ = p.Left.On.Type().BlockType()
-	p.Right.Typ = p.Right.On.Type().BlockType()
-	p.Left.OnIdx, _ = ltab.FieldIndexById(p.Left.On.Id())
-	p.Right.OnIdx, _ = ltab.FieldIndexById(p.Right.On.Id())
+	p.Left.Typ = p.Left.On.Type.BlockType()
+	p.Right.Typ = p.Right.On.Type.BlockType()
+	p.Left.OnIdx, _ = ltab.FieldIndexById(p.Left.On.Id)
+	p.Right.OnIdx, _ = ltab.FieldIndexById(p.Right.On.Id)
 
 	// default names {table_name}.{field_name}
-	for i, field := range p.Left.Select.Fields() {
+	for i, field := range p.Left.Select.Fields {
 		alias := p.Left.As[i]
 		if alias == "" {
-			alias = ltab.Name() + "." + field.Name()
+			alias = ltab.Name + "." + field.Name
 		}
 		p.schema.WithField(
-			schema.NewField(field.Type()).
+			schema.NewField(field.Type).
 				WithName(alias).
-				WithFixed(field.Fixed()).
-				WithScale(field.Scale()).
-				WithFlags(field.Flags()),
+				WithFixed(field.Fixed).
+				WithScale(field.Scale).
+				WithFlags(field.Flags),
 		)
 	}
 
-	for i, field := range p.Right.Select.Fields() {
+	for i, field := range p.Right.Select.Fields {
 		alias := p.Right.As[i]
 		if alias == "" {
-			alias = rtab.Name() + "." + field.Name()
+			alias = rtab.Name + "." + field.Name
 		}
 		p.schema.WithField(
-			schema.NewField(field.Type()).
+			schema.NewField(field.Type).
 				WithName(alias).
-				WithFixed(field.Fixed()).
-				WithScale(field.Scale()).
-				WithFlags(field.Flags()),
+				WithFixed(field.Fixed).
+				WithScale(field.Scale).
+				WithFlags(field.Flags),
 		)
 	}
 
@@ -330,7 +330,7 @@ func (p *JoinPlan) Compile(ctx context.Context) error {
 
 	// construct and compile query plans, run index scans
 	p.Left.Plan = query.NewQueryPlan().
-		WithTag(p.schema.Name()).
+		WithTag(p.schema.Name).
 		WithTable(p.Left.Table).
 		WithSchema(p.Left.Select).
 		WithFilters(p.Left.Where).
@@ -344,7 +344,7 @@ func (p *JoinPlan) Compile(ctx context.Context) error {
 	}
 
 	p.Right.Plan = query.NewQueryPlan().
-		WithTag(p.schema.Name()).
+		WithTag(p.schema.Name).
 		WithTable(p.Right.Table).
 		WithSchema(p.Right.Select).
 		WithFilters(p.Right.Where).
@@ -391,14 +391,14 @@ func (p *JoinPlan) Compile(ctx context.Context) error {
 
 	// pk cursor on large side
 	pkField := x.Table.Schema().Pk()
-	pkBlockTyp := pkField.Type().BlockType()
-	matcher := filter.NewFactory(pkField.Type()).New(types.FilterModeGt)
+	pkBlockTyp := pkField.Type.BlockType()
+	matcher := filter.NewFactory(pkField.Type).New(types.FilterModeGt)
 	x.Filter = &Filter{
-		Name:    pkField.Name(),
+		Name:    pkField.Name,
 		Type:    pkBlockTyp,
 		Mode:    types.FilterModeGt,
 		Index:   x.PkIdx,
-		Id:      pkField.Id(),
+		Id:      pkField.Id,
 		Matcher: matcher, // zero
 		Value:   matcher.Value(),
 	}
@@ -410,14 +410,14 @@ func (p *JoinPlan) Compile(ctx context.Context) error {
 	// IN condition for join predicate column on small side ONLY for equi-joins
 	if p.IsEquiJoin() {
 		joinField := y.On
-		joinBlockType := joinField.Type().BlockType()
-		matcher = filter.NewFactory(joinField.Type()).New(types.FilterModeIn)
+		joinBlockType := joinField.Type.BlockType()
+		matcher = filter.NewFactory(joinField.Type).New(types.FilterModeIn)
 		y.Filter = &Filter{
-			Name:    joinField.Name(),
+			Name:    joinField.Name,
 			Type:    joinBlockType,
 			Mode:    types.FilterModeIn,
 			Index:   y.OnIdx,
-			Id:      joinField.Id(),
+			Id:      joinField.Id,
 			Matcher: matcher, // updated during processing
 			Value:   nil,     // updated during processing
 		}
@@ -615,7 +615,7 @@ func (p *JoinPlan) doJoin(ctx context.Context, out QueryResultConsumer) error {
 
 func (p *JoinPlan) doQuery(ctx context.Context, x, y JoinTable) (xRes QueryResult, yRes QueryResult, err error) {
 	// fetch names once for debugging
-	xname, yname := x.Table.Schema().Name(), y.Table.Schema().Name()
+	xname, yname := x.Table.Schema().Name, y.Table.Schema().Name
 
 	// 1  query first side of the join
 	if p.Flags.IsDebug() {
@@ -753,12 +753,12 @@ func mergeJoinInner(p *JoinPlan, left, right QueryResult, out QueryResultConsume
 	//
 	// sort left result by predicate column unless it's the primary key
 	if !p.Left.On.Is(types.FieldFlagPrimary) {
-		left.SortBy(p.Left.On.Name(), types.OrderAsc)
+		left.SortBy(p.Left.On.Name, types.OrderAsc)
 	}
 
 	// sort right result by predicate column unless it's the primary key
 	if !p.Right.On.Is(types.FieldFlagPrimary) {
-		right.SortBy(p.Right.On.Name(), types.OrderAsc)
+		right.SortBy(p.Right.On.Name, types.OrderAsc)
 	}
 
 	// loop until one result set is exhausted
@@ -864,12 +864,12 @@ func mergeJoinLeft(p *JoinPlan, left, right QueryResult, out QueryResultConsumer
 	//
 	// sort left result by predicate column unless it's the primary key
 	if !p.Left.On.Is(types.FieldFlagPrimary) {
-		left.SortBy(p.Left.On.Name(), types.OrderAsc)
+		left.SortBy(p.Left.On.Name, types.OrderAsc)
 	}
 
 	// sort right result by predicate column unless it's the primary key
 	if !p.Right.On.Is(types.FieldFlagPrimary) {
-		right.SortBy(p.Right.On.Name(), types.OrderAsc)
+		right.SortBy(p.Right.On.Name, types.OrderAsc)
 	}
 
 	// loop until one result set is exhausted

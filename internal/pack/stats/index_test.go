@@ -84,8 +84,8 @@ func makeFilter(name string, mode types.FilterMode, val, val2 any) *filter.Node 
 	if !ok {
 		panic(fmt.Errorf("missing field %s in schema %s", name, TestSchema))
 	}
-	m := filter.NewFactory(field.Type()).New(mode)
-	c := schema.NewCaster(field.Type(), field.Scale(), nil)
+	m := filter.NewFactory(field.Type).New(mode)
+	c := schema.NewCaster(field.Type, field.Scale, nil)
 	var err error
 	switch mode {
 	case types.FilterModeRange:
@@ -107,11 +107,11 @@ func makeFilter(name string, mode types.FilterMode, val, val2 any) *filter.Node 
 	m.WithValue(val)
 	return &filter.Node{
 		Filter: &filter.Filter{
-			Name:    field.Name(),
-			Type:    field.Type().BlockType(),
+			Name:    field.Name,
+			Type:    field.Type.BlockType(),
 			Mode:    mode,
-			Index:   int(field.Id() - 1), // valid for test schema without metadata
-			Id:      field.Id(),
+			Index:   int(field.Id - 1), // valid for test schema without metadata
+			Id:      field.Id,
 			Value:   val,
 			Matcher: m,
 		},

@@ -10,10 +10,10 @@ import (
 	"io"
 	"path/filepath"
 
-	"blockwatch.cc/knoxdb/pkg/store"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/wal"
 	"blockwatch.cc/knoxdb/pkg/schema"
+	"blockwatch.cc/knoxdb/pkg/store"
 )
 
 type ActionType = wal.RecordType
@@ -74,7 +74,7 @@ func (o *TableObject) Create(ctx context.Context) error {
 func (o *TableObject) Drop(ctx context.Context) error {
 	// remove files (only if table data was found in catalog during decode)
 	if o.schema != nil && !o.opts.ReadOnly {
-		_ = store.Drop(o.opts.Driver, filepath.Join(o.cat.path, o.schema.Name()))
+		_ = store.Drop(o.opts.Driver, filepath.Join(o.cat.path, o.schema.Name))
 	}
 	return o.cat.DropTable(ctx, o.id)
 }
@@ -190,7 +190,7 @@ func (o *StoreObject) Create(ctx context.Context) error {
 func (o *StoreObject) Drop(ctx context.Context) error {
 	// remove files (only if table data was found in catalog during decode)
 	if o.schema != nil && !o.opts.ReadOnly {
-		_ = store.Drop(o.opts.Driver, filepath.Join(o.cat.path, o.schema.Name()))
+		_ = store.Drop(o.opts.Driver, filepath.Join(o.cat.path, o.schema.Name))
 	}
 	return o.cat.DropStore(ctx, o.id)
 }
@@ -413,7 +413,7 @@ func (o *IndexObject) Create(ctx context.Context) error {
 func (o *IndexObject) Drop(ctx context.Context) error {
 	// remove files (only if table data was found in catalog during decode)
 	if o.schema != nil && !o.opts.ReadOnly {
-		_ = store.Drop(o.opts.Driver, filepath.Join(o.cat.path, o.schema.Name()))
+		_ = store.Drop(o.opts.Driver, filepath.Join(o.cat.path, o.schema.Name))
 	}
 	return o.cat.DropIndex(ctx, o.id)
 }

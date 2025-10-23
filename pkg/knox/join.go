@@ -319,7 +319,7 @@ func (j Join) MakePlan() (*join.JoinPlan, error) {
 	if !ok {
 		return nil, fmt.Errorf("join %s: invalid ON field %q", j.tag, j.right.On)
 	}
-	plan.WithOn(&lpred, &rpred, j.mode)
+	plan.WithOn(lpred, rpred, j.mode)
 
 	return plan, nil
 }

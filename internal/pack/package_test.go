@@ -6,7 +6,6 @@ package pack
 import (
 	"bytes"
 	"reflect"
-	"strings"
 	"time"
 
 	"blockwatch.cc/knoxdb/pkg/num"
@@ -117,17 +116,6 @@ func makeZeroStruct(v any) any {
 }
 
 type Enum uint16
-
-type Stringer []string
-
-func (s Stringer) MarshalText() ([]byte, error) {
-	return []byte(strings.Join(s, ",")), nil
-}
-
-func (s *Stringer) UnmarshalText(b []byte) error {
-	*s = strings.Split(string(b), ",")
-	return nil
-}
 
 type Encodable interface {
 	Encode() []byte
@@ -321,16 +309,15 @@ func (s *tradeStruct) Decode(buf []byte) error {
 }
 
 type specialStruct struct {
-	Id       uint64         `knox:"id,pk"`
-	Enum     Enum           `knox:"enum"`
-	Stringer Stringer       `knox:"strlist"`
-	D32      num.Decimal32  `knox:"d32,scale=5"`
-	D64      num.Decimal64  `knox:"d64,scale=15"`
-	D128     num.Decimal128 `knox:"d128,scale=18"`
-	D256     num.Decimal256 `knox:"d256,scale=24"`
-	I128     num.Int128     `knox:"i128"`
-	I256     num.Int256     `knox:"i256"`
-	Z        num.Big        `knox:"Z"`
+	Id   uint64         `knox:"id,pk"`
+	Enum Enum           `knox:"enum"`
+	D32  num.Decimal32  `knox:"d32,scale=5"`
+	D64  num.Decimal64  `knox:"d64,scale=15"`
+	D128 num.Decimal128 `knox:"d128,scale=18"`
+	D256 num.Decimal256 `knox:"d256,scale=24"`
+	I128 num.Int128     `knox:"i128"`
+	I256 num.Int256     `knox:"i256"`
+	Z    num.Big        `knox:"Z"`
 }
 
 func (s *specialStruct) Encode() []byte {
@@ -356,29 +343,28 @@ func (s specialStruct) init() {
 }
 
 type encodeTestStruct struct {
-	Id       uint64         `knox:"id,pk"`
-	Time     time.Time      `knox:"time"`
-	Hash     OpHash         `knox:"hash,index=bloom:3"`
-	String   string         `knox:"str"`
-	Stringer Stringer       `knox:"strlist"`
-	Bool     bool           `knox:"bool"`
-	Enum     string         `knox:"my_enum,enum"`
-	Int64    int64          `knox:"i64"`
-	Int32    int32          `knox:"i32"`
-	Int16    int16          `knox:"i16"`
-	Int8     int8           `knox:"i8"`
-	Uint64   uint64         `knox:"u64,index=bloom"`
-	Uint32   uint32         `knox:"u32"`
-	Uint16   uint16         `knox:"u16"`
-	Uint8    uint8          `knox:"u8"`
-	Float64  float64        `knox:"f64"`
-	Float32  float32        `knox:"f32"`
-	D32      num.Decimal32  `knox:"d32,scale=5"`
-	D64      num.Decimal64  `knox:"d64,scale=15"`
-	D128     num.Decimal128 `knox:"d128,scale=18"`
-	D256     num.Decimal256 `knox:"d256,scale=24"`
-	I128     num.Int128     `knox:"i128"`
-	I256     num.Int256     `knox:"i256"`
+	Id      uint64         `knox:"id,pk"`
+	Time    time.Time      `knox:"time"`
+	Hash    OpHash         `knox:"hash,index=bloom:3"`
+	String  string         `knox:"str"`
+	Bool    bool           `knox:"bool"`
+	Enum    string         `knox:"my_enum,enum"`
+	Int64   int64          `knox:"i64"`
+	Int32   int32          `knox:"i32"`
+	Int16   int16          `knox:"i16"`
+	Int8    int8           `knox:"i8"`
+	Uint64  uint64         `knox:"u64,index=bloom"`
+	Uint32  uint32         `knox:"u32"`
+	Uint16  uint16         `knox:"u16"`
+	Uint8   uint8          `knox:"u8"`
+	Float64 float64        `knox:"f64"`
+	Float32 float32        `knox:"f32"`
+	D32     num.Decimal32  `knox:"d32,scale=5"`
+	D64     num.Decimal64  `knox:"d64,scale=15"`
+	D128    num.Decimal128 `knox:"d128,scale=18"`
+	D256    num.Decimal256 `knox:"d256,scale=24"`
+	I128    num.Int128     `knox:"i128"`
+	I256    num.Int256     `knox:"i256"`
 }
 
 func (s *encodeTestStruct) Encode() []byte {
@@ -406,6 +392,6 @@ func (s encodeTestStruct) init() {
 type encodeTestSubStruct struct {
 	Id    uint64    `knox:"id,pk"`
 	Int64 int64     `knox:"i64"`
-	Hash  OpHash    `knox:"hash"`
+	Hash  OpHash    `knox:"hash,index=bloom:3"`
 	Time  time.Time `knox:"time"`
 }

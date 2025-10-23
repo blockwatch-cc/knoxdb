@@ -43,44 +43,46 @@ func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
 	fuses := make(map[uint16][]byte)
 	ranges := make(map[uint16][]byte)
 	pstats := pkg.Stats()
-	for i, f := range pkg.Schema().Exported() {
+	for i, f := range pkg.Schema().Fields {
 		b := pkg.Block(i)
 		if b == nil || !pstats.WasDirty[i] {
 			continue
 		}
 
-		switch f.Index {
-		case types.IndexTypeBloom:
-			if idx.use.Is(FeatBloomFilter) {
-				// use cardinality from pack analyze step if exists, otherwise
-				// fall back to cardinality estimation
-				card := pstats.Unique[i]
-				if card <= 0 {
-					card = EstimateCardinality(b, 8)
+		if f.Index != nil {
+			switch f.Index.Type {
+			case types.IndexTypeBloom:
+				if idx.use.Is(FeatBloomFilter) {
+					// use cardinality from pack analyze step if exists, otherwise
+					// fall back to cardinality estimation
+					card := pstats.Unique[i]
+					if card <= 0 {
+						card = EstimateCardinality(b, 8)
+					}
+					if flt := BuildBloomFilter(b, card, int(f.Scale)); flt != nil {
+						blooms[f.Id] = flt.Bytes()
+					}
 				}
-				if flt := BuildBloomFilter(b, card, int(f.Scale)); flt != nil {
-					blooms[f.Id] = flt.Bytes()
+			case types.IndexTypeBfuse:
+				if idx.use.Is(FeatFuseFilter) {
+					// TODO: use unique values from pack analyis step
+					flt, err := BuildFuseFilter(b)
+					if err != nil {
+						return err
+					}
+					fuses[f.Id], _ = flt.MarshalBinary()
 				}
-			}
-		case types.IndexTypeBfuse:
-			if idx.use.Is(FeatFuseFilter) {
-				// TODO: use unique values from pack analyis step
-				flt, err := BuildFuseFilter(b)
-				if err != nil {
-					return err
-				}
-				fuses[f.Id], _ = flt.MarshalBinary()
-			}
-		case types.IndexTypeBits:
-			if idx.use.Is(FeatBitsFilter) {
-				// use cardinality from pack analyze step if exists, otherwise
-				// fall back to cardinality estimation
-				card := pstats.Unique[i]
-				if card <= 0 {
-					card = EstimateCardinality(b, 8)
-				}
-				if flt := BuildBitsFilter(b, card); flt != nil {
-					bits[f.Id] = flt.Bytes()
+			case types.IndexTypeBits:
+				if idx.use.Is(FeatBitsFilter) {
+					// use cardinality from pack analyze step if exists, otherwise
+					// fall back to cardinality estimation
+					card := pstats.Unique[i]
+					if card <= 0 {
+						card = EstimateCardinality(b, 8)
+					}
+					if flt := BuildBitsFilter(b, card); flt != nil {
+						bits[f.Id] = flt.Bytes()
+					}
 				}
 			}
 		}
@@ -192,8 +194,8 @@ func (idx Index) dropFilters(pkg *pack.Package) error {
 			if b == nil {
 				return store.ErrBucketNotFound
 			}
-			for _, f := range pkg.Schema().Exported() {
-				if f.Index == 0 {
+			for _, f := range pkg.Schema().Fields {
+				if f.Index == nil {
 					continue
 				}
 				_ = b.Delete(encodeFilterKey(pkg.Key(), pkg.Version(), f.Id))

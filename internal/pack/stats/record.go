@@ -85,7 +85,7 @@ func NewRecordFromPack(pkg *pack.Package, n int) *Record {
 	rec := &Record{
 		Key:      pkg.Key(),
 		Version:  pkg.Version(),
-		SchemaId: pkg.Schema().Hash(),
+		SchemaId: pkg.Schema().Hash,
 		NValues:  uint64(pkg.Len()),
 		DiskSize: int64(n),
 		view:     schema.NewView(s),
@@ -94,7 +94,7 @@ func NewRecordFromPack(pkg *pack.Package, n int) *Record {
 	wr := schema.NewWriter(s, binary.LittleEndian)
 	wr.Write(STATS_ROW_KEY, pkg.Key())
 	wr.Write(STATS_ROW_VERSION, pkg.Version())
-	wr.Write(STATS_ROW_SCHEMA, pkg.Schema().Hash())
+	wr.Write(STATS_ROW_SCHEMA, pkg.Schema().Hash)
 	wr.Write(STATS_ROW_NVALS, uint64(pkg.Len()))
 	wr.Write(STATS_ROW_SIZE, pstats.SizeDiff())
 
@@ -127,7 +127,7 @@ func (r *Record) Update(pkg *pack.Package) {
 	wr := schema.NewWriter(r.view.Schema(), binary.LittleEndian)
 	wr.Write(STATS_ROW_KEY, pkg.Key())
 	wr.Write(STATS_ROW_VERSION, pkg.Version())
-	wr.Write(STATS_ROW_SCHEMA, pkg.Schema().Hash())
+	wr.Write(STATS_ROW_SCHEMA, pkg.Schema().Hash)
 	wr.Write(STATS_ROW_NVALS, uint64(pkg.Len()))
 	wr.Write(STATS_ROW_SIZE, r.DiskSize+pstats.SizeDiff())
 

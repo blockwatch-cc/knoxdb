@@ -3,6 +3,8 @@
 
 package store
 
+import "strings"
+
 // Factory defines a structure for backend drivers to use when they register
 // themselves as a backend which implements the DB interface.
 type Factory interface {
@@ -132,6 +134,9 @@ func Exists(driver string, path string) (bool, error) {
 	drv, err := lookup(driver)
 	if err != nil {
 		return false, err
+	}
+	if !strings.HasSuffix(path, dbFileExt) {
+		path += dbFileExt
 	}
 	return drv.Exists(path)
 }

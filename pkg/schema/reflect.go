@@ -84,16 +84,16 @@ func SchemaOfTag(m any, tag string) (*Schema, error) {
 
 	// create new schema
 	s := &Schema{
-		name:        util.FromCamelCase(typ.Name(), "_"),
-		fields:      make([]Field, 0),
-		isFixedSize: true,
-		version:     1,
+		Name:        util.FromCamelCase(typ.Name(), "_"),
+		Fields:      make([]*Field, 0),
+		IsFixedSize: true,
+		Version:     1,
 	}
 
 	// use table name when type implements the Model interface
 	if typ.Implements(modelType) {
 		if n := val.Interface().(Model).Key(); len(n) > 0 {
-			s.name = n
+			s.Name = n
 		}
 	}
 
@@ -111,16 +111,16 @@ func SchemaOfTag(m any, tag string) (*Schema, error) {
 		}
 
 		// catch duplicates
-		if exist, ok := s.FieldByName(field.name); ok {
+		if exist, ok := s.FieldByName(field.Name); ok {
 			return nil, fmt.Errorf("%s field %q conflicts with field %q",
-				field.typ, field.name, exist.name)
+				field.Type, field.Name, exist.Name)
 		}
 
 		// assign id starting at 1, allow pre-assigned ids
-		if field.id == 0 {
-			field.id = uint16(len(s.fields)) + 1
+		if field.Id == 0 {
+			field.Id = uint16(len(s.Fields)) + 1
 		}
-		s.fields = append(s.fields, field)
+		s.Fields = append(s.Fields, field)
 	}
 
 	// compile encoder/decoder opcodes, calculate wire size, lookup enums
@@ -140,13 +140,13 @@ func SchemaOfTag(m any, tag string) (*Schema, error) {
 // Produces a dynamic struct type only using native types like int64 for Decimal64
 // [16]byte for Int128, etc.
 func (s *Schema) NativeStructType() reflect.Type {
-	sfields := make([]reflect.StructField, 0, len(s.fields))
-	for _, f := range s.fields {
+	sfields := make([]reflect.StructField, 0, len(s.Fields))
+	for _, f := range s.Fields {
 		if !f.IsVisible() {
 			continue
 		}
 		var rtyp reflect.Type
-		switch f.typ {
+		switch f.Type {
 		case FT_TIMESTAMP, FT_TIME, FT_DATE, FT_I64, FT_D64:
 			rtyp = reflect.TypeFor[int64]()
 		case FT_U64:
@@ -158,8 +158,8 @@ func (s *Schema) NativeStructType() reflect.Type {
 		case FT_STRING:
 			rtyp = reflect.TypeFor[string]()
 		case FT_BYTES, FT_BIGINT:
-			if f.fixed > 0 {
-				rtyp = reflect.ArrayOf(int(f.fixed), reflect.TypeFor[byte]())
+			if f.Fixed > 0 {
+				rtyp = reflect.ArrayOf(int(f.Fixed), reflect.TypeFor[byte]())
 			} else {
 				rtyp = reflect.TypeFor[[]byte]()
 			}
@@ -185,7 +185,7 @@ func (s *Schema) NativeStructType() reflect.Type {
 			continue
 		}
 		sfields = append(sfields, reflect.StructField{
-			Name: util.ToTitle(sanitize(f.name)),
+			Name: util.ToTitle(sanitize(f.Name)),
 			Type: rtyp,
 		})
 	}
@@ -195,37 +195,37 @@ func (s *Schema) NativeStructType() reflect.Type {
 // Produces a dynamic struct type compatible with SchemaOf which uses custom types
 // for large numeric values (num.Int128) and decimals (num.Decimal64).
 func (s *Schema) StructType() reflect.Type {
-	sfields := make([]reflect.StructField, 0, len(s.fields))
-	for _, f := range s.fields {
+	sfields := make([]reflect.StructField, 0, len(s.Fields))
+	for _, f := range s.Fields {
 		if !f.IsVisible() {
 			continue
 		}
-		tag := fmt.Sprintf(`knox:"%s,id=%d`, f.name, f.id)
+		tag := fmt.Sprintf(`knox:"%s,id=%d`, f.Name, f.Id)
 		if f.IsPrimary() {
 			tag += ",pk"
 		}
 		if f.IsEnum() {
 			tag += ",enum"
 		}
-		if f.IsFixedSize() && f.fixed > 0 {
-			tag += fmt.Sprintf(",fixed=%d", f.fixed)
+		if f.IsFixedSize() && f.Fixed > 0 {
+			tag += fmt.Sprintf(",fixed=%d", f.Fixed)
 		}
 		if f.IsIndexed() {
-			tag += fmt.Sprintf(",index=%s", f.index)
+			tag += fmt.Sprintf(",index=%s", f.Index.Type)
 		}
-		if f.scale > 0 {
-			if f.index == types.IndexTypeBloom {
+		if f.Scale > 0 {
+			if f.Index != nil && f.Index.Type == types.IndexTypeBloom {
 				tag += ":"
 			} else {
-				tag += fmt.Sprintf(",scale=%d", f.scale)
+				tag += fmt.Sprintf(",scale=%d", f.Scale)
 			}
 		}
 		if f.IsCompressed() {
-			tag += ",zip=" + f.compress.String()
+			tag += ",zip=" + f.Compress.String()
 		}
 		tag += `"`
 		sfields = append(sfields, reflect.StructField{
-			Name: util.ToTitle(sanitize(f.name)),
+			Name: util.ToTitle(sanitize(f.Name)),
 			Type: f.GoType(),
 			Tag:  reflect.StructTag(tag),
 		})
@@ -260,48 +260,49 @@ var (
 	modelType     = reflect.TypeOf((*Model)(nil)).Elem()
 )
 
-func reflectStructField(f reflect.StructField, tagName string) (field Field, err error) {
+func reflectStructField(f reflect.StructField, tagName string) (field *Field, err error) {
 	tag := f.Tag.Get(tagName)
-	field.name = f.Name
-
+	field = &Field{
+		Name: f.Name,
+	}
 	// extract alias name
 	if n, _, _ := strings.Cut(tag, ","); n != "" {
-		field.name = n
+		field.Name = n
 	}
 
 	// clean name
-	field.name = strings.ToLower(strings.TrimSpace(field.name))
+	field.Name = strings.ToLower(strings.TrimSpace(field.Name))
 
 	// identify field type from Go type
 	err = field.ParseType(f)
 	if err != nil {
-		err = fmt.Errorf("field %s: %v", field.name, err)
+		err = fmt.Errorf("field %s: %v", field.Name, err)
 		return
 	}
 
 	// parse tags, allow type & fixed override
 	err = field.ParseTag(tag)
 	if err != nil {
-		err = fmt.Errorf("field %s: %v", field.name, err)
+		err = fmt.Errorf("field %s: %v", field.Name, err)
 		return
 	}
 
 	// Validate field
 
 	// pk field must be of type uint64
-	if field.flags&F_PRIMARY > 0 {
+	if field.Flags&F_PRIMARY > 0 {
 		switch f.Type.Kind() {
 		case reflect.Uint64:
 		default:
-			err = fmt.Errorf("field %s: invalid primary key type %s", field.name, f.Type)
+			err = fmt.Errorf("field %s: invalid primary key type %s", field.Name, f.Type)
 			return
 		}
 	}
 
 	// fill en/decoder info
-	field.path = f.Index
-	field.offset = f.Offset
-	field.wireSize = uint16(field.WireSize())
+	field.Path = f.Index
+	field.Offset = f.Offset
+	field.Size = uint16(field.Type.Size())
 
 	return
 }
@@ -416,10 +417,10 @@ func (f *Field) ParseType(r reflect.StructField) error {
 		return fmt.Errorf("unsupported type %s (%v)", r.Type, r.Type.Kind())
 	}
 
-	f.typ = typ
-	f.flags = flags
-	f.fixed = fixed
-	f.scale = scale
+	f.Type = typ
+	f.Flags = flags
+	f.Fixed = fixed
+	f.Scale = scale
 
 	return nil
 }
@@ -433,9 +434,9 @@ func (f *Field) ParseTag(tag string) error {
 
 	var (
 		scale    uint8
-		fixed    = f.fixed
+		fixed    = f.Fixed
 		maxFixed = MAX_FIXED
-		maxScale = f.scale
+		maxScale = f.Scale
 		flags    types.FieldFlags
 		compress types.BlockCompression
 		index    types.IndexType
@@ -455,15 +456,15 @@ func (f *Field) ParseTag(tag string) error {
 			case "hash":
 				index = I_HASH
 			case "int":
-				switch f.typ {
+				switch f.Type {
 				case FT_I64, FT_I32, FT_I16, FT_I8, FT_U64, FT_U32, FT_U16, FT_U8:
 				default:
-					return fmt.Errorf("integer index unsupported on type %s", f.typ)
+					return fmt.Errorf("integer index unsupported on type %s", f.Type)
 				}
 				index = I_INT
 			case "pk":
-				if f.typ != FT_U64 || !f.IsPrimary() {
-					return fmt.Errorf("pk index on invalid field %s type %s", f.name, f.typ)
+				if f.Type != FT_U64 || !f.IsPrimary() {
+					return fmt.Errorf("pk index on invalid field %s type %s", f.Name, f.Type)
 				}
 				index = I_PK
 			case "bits":
@@ -510,8 +511,8 @@ func (f *Field) ParseTag(tag string) error {
 			}
 		case "fixed":
 			// only compatible with strings, bytes must use [n]byte arrays):
-			if f.typ != FT_STRING {
-				return fmt.Errorf("fixed tag unsupported on type %s", f.typ)
+			if f.Type != FT_STRING {
+				return fmt.Errorf("fixed tag unsupported on type %s", f.Type)
 			}
 			if ok {
 				fx, err := parseInt(val, "fixed", 1, int(maxFixed))
@@ -526,7 +527,7 @@ func (f *Field) ParseTag(tag string) error {
 			// only compatible with:
 			// - decimal types
 			// - datetime
-			switch f.typ {
+			switch f.Type {
 			case FT_D32, FT_D64, FT_D128, FT_D256:
 				if ok {
 					sc, err := parseInt(val, "scale", 0, int(maxScale))
@@ -544,48 +545,50 @@ func (f *Field) ParseTag(tag string) error {
 				}
 				scale = s.AsUint()
 			default:
-				return fmt.Errorf("scale tag unsupported on type %s", f.typ)
+				return fmt.Errorf("scale tag unsupported on type %s", f.Type)
 			}
 		case "enum":
-			switch f.typ {
+			switch f.Type {
 			case FT_STRING, FT_U16:
 				// ok
 				flags |= F_ENUM
-				f.typ = FT_U16
+				f.Type = FT_U16
 			default:
-				return fmt.Errorf("unsupported enum type %s", f.typ)
+				return fmt.Errorf("unsupported enum type %s", f.Type)
 			}
-		case "internal":
-			flags |= F_INTERNAL
+		case "metadata":
+			flags |= F_METADATA
 		case "id":
 			num, err := strconv.ParseUint(val, 0, 16)
 			if err != nil {
 				return fmt.Errorf("invalid field id %q: %v", val, err)
 			}
-			f.id = uint16(num)
+			f.Id = uint16(num)
 		case "null":
 			flags |= F_NULLABLE
 		case "notnull":
 			flags &^= F_NULLABLE
 		case "timestamp":
-			f.typ = FT_TIMESTAMP
+			f.Type = FT_TIMESTAMP
 			scale = TIME_SCALE_NANO.AsUint()
 		case "date":
-			f.typ = FT_DATE
+			f.Type = FT_DATE
 			scale = TIME_SCALE_DAY.AsUint()
 		case "time":
-			f.typ = FT_TIME
+			f.Type = FT_TIME
 			scale = TIME_SCALE_SECOND.AsUint()
 		default:
 			return fmt.Errorf("unsupported struct tag '%s'", key)
 		}
 	}
 
-	f.scale = scale
-	f.fixed = fixed
-	f.flags = flags
-	f.compress = compress
-	f.index = index
+	f.Scale = scale
+	f.Fixed = fixed
+	f.Flags = flags
+	f.Compress = compress
+	if index > 0 {
+		f.Index = NewIndexInfo(f, index)
+	}
 
 	return nil
 }
@@ -606,10 +609,11 @@ func validateInt(name string, n, minVal, maxVal int) (int, error) {
 }
 
 func compileCodecs(s *Schema) (enc []OpCode, dec []OpCode) {
-	for i := range s.fields {
-		f := &s.fields[i]
+	enc = make([]OpCode, len(s.Fields))
+	dec = make([]OpCode, len(s.Fields))
+	for i, f := range s.Fields {
 		ec, dc := OpCodeSkip, OpCodeSkip
-		switch f.typ {
+		switch f.Type {
 		case FT_TIMESTAMP:
 			dc, ec = OpCodeTimestamp, OpCodeTimestamp
 
@@ -638,7 +642,7 @@ func compileCodecs(s *Schema) (enc []OpCode, dec []OpCode) {
 			dc, ec = OpCodeUint32, OpCodeUint32
 
 		case FT_U16:
-			if f.flags.Is(types.FieldFlagEnum) {
+			if f.Flags.Is(types.FieldFlagEnum) {
 				dc, ec = OpCodeEnum, OpCodeEnum
 			} else {
 				dc, ec = OpCodeUint16, OpCodeUint16
@@ -657,7 +661,7 @@ func compileCodecs(s *Schema) (enc []OpCode, dec []OpCode) {
 			dc, ec = OpCodeBool, OpCodeBool
 
 		case FT_STRING:
-			if f.fixed > 0 {
+			if f.Fixed > 0 {
 				ec = OpCodeFixedString
 				dc = OpCodeFixedString
 			} else {
@@ -666,7 +670,7 @@ func compileCodecs(s *Schema) (enc []OpCode, dec []OpCode) {
 			}
 
 		case FT_BYTES:
-			if f.fixed > 0 {
+			if f.Fixed > 0 {
 				ec = OpCodeFixedBytes
 				dc = OpCodeFixedBytes
 			} else {
@@ -700,8 +704,7 @@ func compileCodecs(s *Schema) (enc []OpCode, dec []OpCode) {
 			ec, dc = OpCodeSkip, OpCodeSkip
 		}
 
-		enc = append(enc, ec)
-		dec = append(dec, dc)
+		enc[i], dec[i] = ec, dc
 	}
 	return
 }

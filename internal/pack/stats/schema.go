@@ -27,11 +27,11 @@ import (
 // used to skip/remove statistics when columns are marked as deleted.
 func MakeSchema(s *schema.Schema) *schema.Schema {
 	statsSchema := schema.NewSchema().
-		WithName(s.Name()).
-		WithVersion(s.Version())
+		WithName(s.Name).
+		WithVersion(s.Version)
 
 	// add pack stats fields
-	for _, f := range schema.MustSchemaOf(&Record{}).Fields() {
+	for _, f := range schema.MustSchemaOf(&Record{}).Fields {
 		statsSchema.WithField(f)
 	}
 
@@ -40,16 +40,21 @@ func MakeSchema(s *schema.Schema) *schema.Schema {
 	// - use schema builder
 
 	// add min/max fields interleaved
-	for _, src := range s.Fields() {
+	for _, src := range s.Fields {
 		// generate clean field from source
-		f := schema.NewField(src.Type()).
-			WithName("min_" + src.Name()).
-			WithScale(src.Scale()).
-			WithFixed(src.Fixed()).
-			WithFlags(src.Flags() & types.FieldFlagDeleted). // only keep deleted flag
-			WithIndex(src.Index())                           // keep index (in case its bloom)
+		f := schema.NewField(src.Type).
+			WithName("min_" + src.Name).
+			WithScale(src.Scale).
+			WithFixed(src.Fixed).
+			WithFlags(src.Flags & types.FieldFlagDeleted) // only keep deleted flag
+
+			// keep index (in case its bloom)
+		if src.IsIndexed() {
+			f.WithIndex(src.Index.Type)
+		}
+
 		statsSchema.WithField(f)
-		statsSchema.WithField(f.WithName("max_" + src.Name()))
+		statsSchema.WithField(f.WithName("max_" + src.Name))
 	}
 
 	return statsSchema.Finalize()

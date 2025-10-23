@@ -36,19 +36,21 @@ func NewTomb() *Tomb {
 func (t *Tomb) WithSchema(tableSchema, metaSchema *schema.Schema, use Features) *Tomb {
 	t.nSpackFields = metaSchema.NumFields()
 	t.activeFields = tableSchema.ActiveFieldIds()
-	for _, f := range tableSchema.Exported() {
-		switch f.Index {
-		case types.IndexTypeBloom:
-			if use.Is(FeatBloomFilter) {
-				t.filteredFields = append(t.filteredFields, f.Id)
-			}
-		case types.IndexTypeBfuse:
-			if use.Is(FeatFuseFilter) {
-				t.filteredFields = append(t.filteredFields, f.Id)
-			}
-		case types.IndexTypeBits:
-			if use.Is(FeatBitsFilter) {
-				t.filteredFields = append(t.filteredFields, f.Id)
+	for _, f := range tableSchema.Fields {
+		if f.IsIndexed() {
+			switch f.Index.Type {
+			case types.IndexTypeBloom:
+				if use.Is(FeatBloomFilter) {
+					t.filteredFields = append(t.filteredFields, f.Id)
+				}
+			case types.IndexTypeBfuse:
+				if use.Is(FeatFuseFilter) {
+					t.filteredFields = append(t.filteredFields, f.Id)
+				}
+			case types.IndexTypeBits:
+				if use.Is(FeatBitsFilter) {
+					t.filteredFields = append(t.filteredFields, f.Id)
+				}
 			}
 		}
 		if use.Is(FeatRangeFilter) && f.Type.BlockType().IsInt() {

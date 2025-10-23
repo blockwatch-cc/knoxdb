@@ -29,7 +29,7 @@ func (p *Package) AppendWire(buf []byte, meta *schema.Meta) {
 	// 	"len", len(buf),
 	// 	"wiresz", p.schema.WireSize(),
 	// )
-	for i, field := range p.schema.Exported() {
+	for i, field := range p.schema.Fields {
 		// skip missing blocks (e.g. after schema change)
 		b := p.blocks[i]
 		if b == nil {
@@ -37,7 +37,7 @@ func (p *Package) AppendWire(buf []byte, meta *schema.Meta) {
 		}
 
 		// fill internal fields from metadata
-		if field.IsInternal {
+		if field.IsMeta() {
 			if meta != nil {
 				switch field.Id {
 				case schema.MetaRid:
@@ -64,7 +64,7 @@ func (p *Package) AppendWire(buf []byte, meta *schema.Meta) {
 		}
 
 		// deleted and internal fields are invisible
-		if !field.IsVisible {
+		if !field.IsVisible() {
 			continue
 		}
 
@@ -114,8 +114,8 @@ func (p *Package) AppendWire(buf []byte, meta *schema.Meta) {
 				"field", field.Name,
 				"type", b.Type().String(),
 				"pack", p.key,
-				"schema", p.schema.Name(),
-				"version", p.schema.Version(),
+				"schema", p.schema.Name,
+				"version", p.schema.Version,
 			)
 		}
 		b.SetDirty()
@@ -199,8 +199,7 @@ func (p *Package) SetValue(col, row int, val any) error {
 		if v.IsZero() {
 			b.Int64().Set(row, 0)
 		} else {
-			f := p.schema.Field(col)
-			b.Int64().Set(row, schema.TimeScale(f.Scale()).ToUnix(v))
+			b.Int64().Set(row, schema.TimeScale(p.schema.Fields[col].Scale).ToUnix(v))
 		}
 	case bool:
 		if v {
@@ -218,17 +217,13 @@ func (p *Package) SetValue(col, row int, val any) error {
 		b.Int128().Set(row, v)
 	case num.Decimal256:
 		// re-quantize nums to allow table joins, etc
-		f := p.schema.Field(col)
-		b.Int256().Set(row, v.Quantize(f.Scale()).Int256())
+		b.Int256().Set(row, v.Quantize(p.schema.Fields[col].Scale).Int256())
 	case num.Decimal128:
-		f := p.schema.Field(col)
-		b.Int128().Set(row, v.Quantize(f.Scale()).Int128())
+		b.Int128().Set(row, v.Quantize(p.schema.Fields[col].Scale).Int128())
 	case num.Decimal64:
-		f := p.schema.Field(col)
-		b.Int64().Set(row, v.Quantize(f.Scale()).Int64())
+		b.Int64().Set(row, v.Quantize(p.schema.Fields[col].Scale).Int64())
 	case num.Decimal32:
-		f := p.schema.Field(col)
-		b.Int32().Set(row, v.Quantize(f.Scale()).Int32())
+		b.Int32().Set(row, v.Quantize(p.schema.Fields[col].Scale).Int32())
 	case num.Big:
 		b.Bytes().Set(row, v.Bytes())
 	default:
@@ -253,15 +248,15 @@ func (p *Package) SetValue(col, row int, val any) error {
 			b.Int64().Set(row, rval.Int())
 		default:
 			// oh, its a type we don't support yet
-			f := p.schema.Field(col)
+			f := p.schema.Fields[col]
 			assert.Unreachable("unhandled value type",
 				"rtype", rval.Type().String(),
 				"rkind", rval.Kind().String(),
-				"field", f.Name(),
-				"type", f.Type().String(),
+				"field", f.Name,
+				"type", f.Type.String(),
 				"pack", p.key,
-				"schema", p.schema.Name(),
-				"version", p.schema.Version(),
+				"schema", p.schema.Name,
+				"version", p.schema.Version,
 			)
 		}
 		b.SetDirty()
@@ -280,9 +275,9 @@ func (p *Package) SetWire(row int, buf []byte) {
 	// 	"cap", p.maxRows,
 	// )
 
-	for i, field := range p.schema.Exported() {
+	for i, field := range p.schema.Fields {
 		// deleted and internal fields are invisible
-		if !field.IsVisible {
+		if !field.IsVisible() {
 			continue
 		}
 		// skipped and new blocks in old packages are missing
@@ -340,8 +335,8 @@ func (p *Package) SetWire(row int, buf []byte) {
 				"field", field.Name,
 				"type", field.Type.String(),
 				"pack", p.key,
-				"schema", p.schema.Name(),
-				"version", p.schema.Version(),
+				"schema", p.schema.Name,
+				"version", p.schema.Version,
 			)
 		}
 		b.SetDirty()

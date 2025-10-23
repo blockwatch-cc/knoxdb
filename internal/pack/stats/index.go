@@ -17,10 +17,10 @@ import (
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/operator/filter"
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/pkg/store"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/assert"
 	"blockwatch.cc/knoxdb/pkg/schema"
+	"blockwatch.cc/knoxdb/pkg/store"
 	"github.com/echa/log"
 )
 
@@ -266,7 +266,7 @@ func (idx *Index) WithDB(db store.DB) *Index {
 
 func (idx *Index) WithSchema(s *schema.Schema) *Index {
 	idx.schema = MakeSchema(s)
-	idx.keys = makeStorageKeys([]byte(idx.schema.Name()))
+	idx.keys = makeStorageKeys([]byte(idx.schema.Name))
 	idx.rx, idx.px = s.RowIdIndex(), s.PkIndex()
 	if idx.rx < 0 {
 		idx.rx = idx.px
@@ -823,16 +823,18 @@ func (idx *Index) Query(ctx context.Context, flt *filter.Node, dir types.OrderTy
 			}
 
 			// translate table column index into min statistics column
-			field, _ := idx.schema.FieldByIndex(minColIndex(f.Index))
+			field := idx.schema.Fields[minColIndex(f.Index)]
 
 			// check if this field has any filters enabled
-			switch field.Index() {
-			case types.IndexTypeBloom:
-				use |= FeatBloomFilter
-			case types.IndexTypeBfuse:
-				use |= FeatFuseFilter
-			case types.IndexTypeBits:
-				use |= FeatBitsFilter
+			if field.IsIndexed() {
+				switch field.Index.Type {
+				case types.IndexTypeBloom:
+					use |= FeatBloomFilter
+				case types.IndexTypeBfuse:
+					use |= FeatFuseFilter
+				case types.IndexTypeBits:
+					use |= FeatBitsFilter
+				}
 			}
 			return nil
 		})
@@ -1090,7 +1092,7 @@ func (idx *Index) rebuildInodeTree(ver uint32) {
 
 func (idx *Index) makeRidFilter(mode types.FilterMode, rid uint64) *filter.Node {
 	// when schema has no metadata (px == rx) fall back to pk field
-	field, _ := idx.schema.FieldByIndex(minColIndex(idx.rx))
+	field := idx.schema.Fields[minColIndex(idx.rx)]
 	m := filter.NewFactory(types.FieldTypeUint64).New(mode)
 	m.WithValue(rid)
 	id := schema.MetaRid
@@ -1099,7 +1101,7 @@ func (idx *Index) makeRidFilter(mode types.FilterMode, rid uint64) *filter.Node 
 	}
 	return &filter.Node{
 		Filter: &filter.Filter{
-			Name:    strings.TrimPrefix(field.Name(), "min_"),
+			Name:    strings.TrimPrefix(field.Name, "min_"),
 			Type:    types.BlockUint64,
 			Mode:    mode,
 			Index:   idx.rx,

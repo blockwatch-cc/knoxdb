@@ -314,7 +314,7 @@ func (c *Catalog) PutSchema(ctx context.Context, s *schema.Schema) error {
 	if err != nil {
 		return err
 	}
-	return bucket.Put(util.U64Bytes(s.Hash()), buf)
+	return bucket.Put(util.U64Bytes(s.Hash), buf)
 }
 
 func (c *Catalog) DelSchema(ctx context.Context, key uint64) error {
@@ -444,10 +444,10 @@ func (c *Catalog) AddTable(ctx context.Context, key uint64, s *schema.Schema, o 
 	if err != nil {
 		return err
 	}
-	if err := bucket.Put(schemaKey, util.U64Bytes(s.Hash())); err != nil {
+	if err := bucket.Put(schemaKey, util.U64Bytes(s.Hash)); err != nil {
 		return err
 	}
-	if err := bucket.Put(nameKey, []byte(s.Name())); err != nil {
+	if err := bucket.Put(nameKey, []byte(s.Name)); err != nil {
 		return err
 	}
 
@@ -561,10 +561,10 @@ func (c *Catalog) AddIndex(ctx context.Context, ikey, tkey uint64, s *schema.Sch
 	if err != nil {
 		return err
 	}
-	if err := bucket.Put(schemaKey, util.U64Bytes(s.Hash())); err != nil {
+	if err := bucket.Put(schemaKey, util.U64Bytes(s.Hash)); err != nil {
 		return err
 	}
-	if err := bucket.Put(nameKey, []byte(s.Name())); err != nil {
+	if err := bucket.Put(nameKey, []byte(s.Name)); err != nil {
 		return err
 	}
 	if err := bucket.Put(tableKey, util.U64Bytes(tkey)); err != nil {
@@ -659,10 +659,10 @@ func (c *Catalog) AddStore(ctx context.Context, key uint64, s *schema.Schema, o 
 	if err != nil {
 		return err
 	}
-	if err := bucket.Put(schemaKey, util.U64Bytes(s.Hash())); err != nil {
+	if err := bucket.Put(schemaKey, util.U64Bytes(s.Hash)); err != nil {
 		return err
 	}
-	if err := bucket.Put(nameKey, []byte(s.Name())); err != nil {
+	if err := bucket.Put(nameKey, []byte(s.Name)); err != nil {
 		return err
 	}
 	return nil

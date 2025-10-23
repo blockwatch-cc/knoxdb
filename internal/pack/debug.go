@@ -34,8 +34,7 @@ func (p *Package) ReadRow(row int, dst []any) []any {
 	} else {
 		dst = dst[:maxFields]
 	}
-	for i := range p.schema.NumFields() {
-		f := p.schema.Field(i)
+	for i, f := range p.schema.Fields {
 		// skip deleted fields
 		if !f.IsActive() {
 			continue
@@ -44,12 +43,12 @@ func (p *Package) ReadRow(row int, dst []any) []any {
 		// insert zero value when block is not available (e.g. after schema change)
 		b := p.blocks[i]
 		if b == nil {
-			dst = append(dst, f.Type().Zero())
+			dst = append(dst, f.Type.Zero())
 			continue
 		}
 
 		// add to result
-		dst = append(dst, p.ReadValue(i, row, f.Type(), f.Scale()))
+		dst = append(dst, p.ReadValue(i, row, f.Type, f.Scale))
 	}
 	return dst
 }
@@ -126,8 +125,8 @@ func (p *Package) ReadValue(col, row int, typ types.FieldType, scale uint8) any 
 			"typeid":  int(typ),
 			"type":    typ.String(),
 			"pack":    p.key,
-			"schema":  p.schema.Name(),
-			"version": p.schema.Version(),
+			"schema":  p.schema.Name,
+			"version": p.schema.Version,
 		})
 	}
 	return nil

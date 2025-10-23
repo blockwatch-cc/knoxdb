@@ -103,7 +103,7 @@ func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, error) {
 // mix of materialized and not materialized, with or without selection vector)
 func (t *Table) InsertInto(ctx context.Context, src *pack.Package) (uint64, error) {
 	// ensure pack schemas match
-	if !src.Schema().EqualHash(t.schema.Hash()) {
+	if !src.Schema().Equal(t.schema) {
 		return 0, schema.ErrSchemaMismatch
 	}
 

@@ -51,7 +51,7 @@ const (
 	F_INDEXED  = types.FieldFlagIndexed
 	F_ENUM     = types.FieldFlagEnum
 	F_DELETED  = types.FieldFlagDeleted
-	F_INTERNAL = types.FieldFlagInternal
+	F_METADATA = types.FieldFlagMetadata
 	F_NULLABLE = types.FieldFlagNullable
 
 	I_HASH      = types.IndexTypeHash
@@ -65,209 +65,156 @@ const (
 
 type Field struct {
 	// schema values for CREATE TABLE
-	name     string                 // field name from struct tag or variable name
-	id       uint16                 // unique lifetime id of the field
-	typ      FieldType              // schema field type from struct tag or Go type
-	flags    FieldFlags             // schema flags from struct tag
-	compress types.BlockCompression // data compression from struct tag
-	index    IndexType              // index type: none, hash, int, bloom
-	fixed    uint16                 // 0..65535 fixed size array/bytes/string length
-	scale    uint8                  // 0..255 fixed point scale, time scale, bloom error probability 1/x (1..4)
+	Name     string                 // field name from struct tag or variable name
+	Id       uint16                 // unique lifetime id of the field
+	Type     FieldType              // schema field type from struct tag or Go type
+	Flags    FieldFlags             // schema flags from struct tag
+	Compress types.BlockCompression // data compression from struct tag
+	Fixed    uint16                 // 0..65535 fixed size array/bytes/string length
+	Scale    uint8                  // 0..255 fixed point scale, time scale, bloom error probability 1/x (1..4)
+	Index    *IndexInfo             // field index (optional)
 
 	// encoder values for INSERT, UPDATE, QUERY
-	path     []int   // reflect struct nested positions
-	offset   uintptr // struct field offset from reflect
-	wireSize uint16  // wire encoding field size in bytes, min size for []byte & string
+	Path   []int   // reflect struct nested positions
+	Offset uintptr // struct field offset from reflect
+	Size   uint16  // wire encoding field size in bytes, min size for []byte & string
 }
 
-// ExportedField is a performance improved version of Field
-// containing exported fields for direct access from external packages
-type ExportedField struct {
-	Name       string
-	Id         uint16
-	Type       FieldType
-	Flags      FieldFlags
-	Compress   types.BlockCompression
-	Index      IndexType
-	IsVisible  bool
-	IsInternal bool
-	IsNullable bool
-	IsEnum     bool
-	Scale      uint8
-	Fixed      uint16
-	Offset     uintptr
-	path       []int
-}
-
-func NewField(typ FieldType) Field {
-	return Field{
-		typ:      typ,
-		wireSize: uint16(typ.Size()),
+func NewField(typ FieldType) *Field {
+	return &Field{
+		Type: typ,
+		Size: uint16(typ.Size()),
 	}
 }
 
-func (f *Field) Name() string {
-	return f.name
+func (f *Field) Clone() *Field {
+	clone := *f
+	return &clone
 }
 
-func (f *Field) Id() uint16 {
-	return f.id
-}
-
-func (f *Field) Type() FieldType {
-	return f.typ
-}
-
-func (f *Field) Path() []int {
-	return f.path
-}
-
-func (f *Field) Flags() FieldFlags {
-	return f.flags
-}
-
-func (f *Field) Compress() types.BlockCompression {
-	return f.compress
-}
-
-func (f *Field) Index() IndexType {
-	return f.index
-}
-
-func (f *Field) Offset() uintptr {
-	return f.offset
-}
-
-func (f *Field) Scale() uint8 {
-	return f.scale
-}
-
-func (f *Field) Fixed() uint16 {
-	return f.fixed
+func (f *Field) WireSize() int {
+	switch f.Type {
+	case FT_STRING, FT_BYTES:
+		if f.Fixed > 0 {
+			return int(f.Fixed)
+		}
+	}
+	return int(f.Size)
 }
 
 func (f *Field) IsValid() bool {
-	return len(f.name) > 0 && f.typ.IsValid()
+	return len(f.Name) > 0 && f.Type.IsValid()
 }
 
 func (f *Field) Is(v FieldFlags) bool {
-	return f.flags.Is(v)
+	return f.Flags.Is(v)
 }
 
 func (f *Field) IsVisible() bool {
-	return f.flags&(F_DELETED|F_INTERNAL) == 0
+	return f.Flags&(F_DELETED|F_METADATA) == 0
 }
 
 func (f *Field) IsActive() bool {
-	return !f.flags.Is(F_DELETED)
+	return !f.Flags.Is(F_DELETED)
 }
 
-func (f *Field) IsInternal() bool {
-	return f.flags.Is(F_INTERNAL)
+func (f *Field) IsMeta() bool {
+	return f.Flags.Is(F_METADATA)
 }
 
 func (f *Field) IsPrimary() bool {
-	return f.flags.Is(F_PRIMARY)
+	return f.Flags.Is(F_PRIMARY)
 }
 
 func (f *Field) IsIndexed() bool {
-	return f.flags.Is(F_INDEXED)
+	return f.Flags.Is(F_INDEXED)
 }
 
 func (f *Field) IsNullable() bool {
-	return f.flags.Is(F_NULLABLE)
+	return f.Flags.Is(F_NULLABLE)
 }
 
 func (f *Field) IsEnum() bool {
-	return f.flags.Is(F_ENUM)
+	return f.Flags.Is(F_ENUM)
 }
 
 func (f *Field) IsFixedSize() bool {
-	switch f.typ {
+	switch f.Type {
 	case FT_STRING, FT_BYTES:
-		return f.fixed > 0
+		return f.Fixed > 0
 	default:
 		return true
 	}
 }
 
 func (f *Field) IsCompressed() bool {
-	return f.compress > types.BlockCompressNone
-}
-
-func (f *Field) WireSize() int {
-	switch f.typ {
-	case FT_STRING, FT_BYTES:
-		if f.fixed > 0 {
-			return int(f.fixed)
-		}
-	}
-	return f.typ.Size()
+	return f.Compress > types.BlockCompressNone
 }
 
 func (f *Field) TimeFormat() string {
-	switch f.typ {
+	switch f.Type {
 	case FT_TIMESTAMP, FT_DATE:
-		return timeScaleFormats[f.scale]
+		return timeScaleFormats[f.Scale]
 	case FT_TIME:
-		return timeOnlyFormats[f.scale]
+		return timeOnlyFormats[f.Scale]
 	default:
 		return ""
 	}
 }
 
 func (f *Field) GoType() reflect.Type {
-	if f.typ == FT_BYTES && f.fixed > 0 {
-		return reflect.ArrayOf(int(f.fixed), reflect.TypeFor[byte]())
+	if f.Type == FT_BYTES && f.Fixed > 0 {
+		return reflect.ArrayOf(int(f.Fixed), reflect.TypeFor[byte]())
 	}
-	if f.typ == FT_U16 && f.IsEnum() {
+	if f.Type == FT_U16 && f.IsEnum() {
 		return reflect.TypeFor[string]()
 	}
-	return reflect.TypeOf(f.typ.Zero())
+	return reflect.TypeOf(f.Type.Zero())
 }
 
 // WithXXX methods do not use pointer receivers and always return a
 // changed copy of the field.
-func (f Field) WithName(n string) Field {
-	f.name = n
+func (f *Field) WithName(n string) *Field {
+	f.Name = n
 	return f
 }
 
-func (f Field) WithFlags(v types.FieldFlags) Field {
-	f.flags = v
+func (f *Field) WithFlags(v types.FieldFlags) *Field {
+	f.Flags = v
 	return f
 }
 
-func (f Field) WithCompression(c types.BlockCompression) Field {
-	f.compress = c
+func (f *Field) WithCompression(c types.BlockCompression) *Field {
+	f.Compress = c
 	return f
 }
 
-func (f Field) WithFixed(n uint16) Field {
-	f.fixed = n
+func (f *Field) WithFixed(n uint16) *Field {
+	f.Fixed = n
 	return f
 }
 
-func (f Field) WithScale(n uint8) Field {
-	f.scale = n
+func (f *Field) WithScale(n uint8) *Field {
+	f.Scale = n
 	return f
 }
 
-func (f Field) WithIndex(kind types.IndexType) Field {
-	f.index = kind
-	if kind != 0 {
-		f.flags |= F_INDEXED
+func (f *Field) WithIndex(typ IndexType) *Field {
+	if typ > 0 {
+		f.Flags |= F_INDEXED
+		f.Index = NewIndexInfo(f, typ)
 	} else {
-		f.flags &^= F_INDEXED
+		f.Flags &^= F_INDEXED
+		f.Index = nil
 	}
 	return f
 }
 
 func (f *Field) Validate() error {
 	// require scale on decimal fields only
-	if f.scale != 0 {
+	if f.Scale != 0 {
 		var minScale, maxScale uint8
-		switch f.typ {
+		switch f.Type {
 		case FT_D32:
 			maxScale = num.MaxDecimal32Precision
 		case FT_D64:
@@ -284,67 +231,70 @@ func (f *Field) Validate() error {
 			minScale = uint8(TIME_SCALE_DAY)
 			maxScale = uint8(TIME_SCALE_DAY)
 		default:
-			if f.index == I_BLOOM {
+			if f.Index != nil && f.Index.Type == I_BLOOM {
 				minScale, maxScale = 1, 4
 			} else {
-				return fmt.Errorf("scale unsupported on type %s", f.typ)
+				return fmt.Errorf("field[%s]: scale unsupported on type %s", f.Name, f.Type)
 			}
 		}
-		if _, err := validateInt("scale", int(f.scale), int(minScale), int(maxScale)); err != nil {
-			return err
+		if _, err := validateInt("scale", int(f.Scale), int(minScale), int(maxScale)); err != nil {
+			return fmt.Errorf("field[%s]: %v", f.Name, err)
 		}
 	}
 
 	// require fixed on string/byte fields only
-	if f.fixed != 0 {
-		if _, err := validateInt("fixed", int(f.fixed), 1, int(MAX_FIXED)); err != nil {
-			return err
+	if f.Fixed != 0 {
+		if _, err := validateInt("fixed", int(f.Fixed), 1, int(MAX_FIXED)); err != nil {
+			return fmt.Errorf("field[%s]: %v", f.Name, err)
 		}
-		switch f.typ {
+		switch f.Type {
 		case FT_BYTES, FT_STRING:
 			// ok
 		default:
-			return fmt.Errorf("fixed unsupported on type %s", f.typ)
+			return fmt.Errorf("field[%s]: fixed unsupported on type %s", f.Name, f.Type)
 		}
 	}
 
-	// require index kind in range
-	if !f.index.IsValid() {
-		return fmt.Errorf("invalid index kind %d", f.index)
-	}
+	// validate index
+	if f.Index != nil {
 
-	// require index flag when index is != none
-	if f.index > 0 && f.flags&F_INDEXED == 0 {
-		return fmt.Errorf("missing indexed flag with index kind set")
-	}
-
-	// require integer index on int fields only
-	if f.index == I_INT {
-		switch f.typ {
-		case FT_I64, FT_I32, FT_I16, FT_I8, FT_U64, FT_U32, FT_U16, FT_U8:
-			// ok
-		default:
-			return fmt.Errorf("unsupported integer index on type %s", f.typ)
+		// require index kind in range
+		if !f.Index.IsValid() {
+			return fmt.Errorf("field[%s]: invalid index kind %d", f.Name, f.Index.Type)
 		}
-	}
 
-	// require pk index on pk field only
-	if f.index == I_PK {
-		if f.typ != FT_U64 || f.flags&F_PRIMARY == 0 {
-			return fmt.Errorf("unsupported pk index on non pk field %s type %s", f.name, f.typ)
+		// require index flag when index is != none
+		if f.Index.Type > 0 && f.Flags&F_INDEXED == 0 {
+			return fmt.Errorf("field[%s]: missing indexed flag with index kind set", f.Name)
 		}
-	}
 
-	// require bloom scale 1..4
-	if f.index == I_BLOOM {
-		if _, err := validateInt("bloom factor", int(f.scale), 1, 4); err != nil {
-			return err
+		switch f.Index.Type {
+		case I_INT:
+			// require integer index on int fields only
+			switch f.Type {
+			case FT_I64, FT_I32, FT_I16, FT_I8, FT_U64, FT_U32, FT_U16, FT_U8:
+				// ok
+			default:
+				return fmt.Errorf("field[%s]: unsupported integer index on type %s", f.Name, f.Type)
+			}
+
+		case I_PK:
+			// require pk index on pk field only
+			if f.Type != FT_U64 || f.Flags&F_PRIMARY == 0 {
+				return fmt.Errorf("field[%s]: pk index on unsupported type %s", f.Name, f.Type)
+			}
+
+		case I_BLOOM:
+			// require bloom scale 1..4
+			if _, err := validateInt("bloom factor", int(f.Scale), 1, 4); err != nil {
+				return fmt.Errorf("field[%s]: %v", f.Name, err)
+			}
 		}
 	}
 
 	// require uint16 for enum types
-	if f.flags.Is(F_ENUM) && f.typ != FT_U16 {
-		return fmt.Errorf("invalid type %s for enum, requires uint16", f.typ)
+	if f.Flags.Is(F_ENUM) && f.Type != FT_U16 {
+		return fmt.Errorf("field[%s]: invalid type %s for enum, requires uint16", f.Name, f.Type)
 	}
 
 	return nil
@@ -355,7 +305,7 @@ func (f *Field) Codec() OpCode {
 		return OpCodeSkip
 	}
 
-	switch f.typ {
+	switch f.Type {
 	case FT_TIMESTAMP:
 		return OpCodeTimestamp
 
@@ -384,7 +334,7 @@ func (f *Field) Codec() OpCode {
 		return OpCodeUint32
 
 	case FT_U16:
-		if f.flags.Is(F_ENUM) {
+		if f.Flags.Is(F_ENUM) {
 			return OpCodeEnum
 		}
 		return OpCodeUint16
@@ -402,14 +352,14 @@ func (f *Field) Codec() OpCode {
 		return OpCodeBool
 
 	case FT_STRING:
-		if f.fixed > 0 {
+		if f.Fixed > 0 {
 			return OpCodeFixedString
 		} else {
 			return OpCodeString
 		}
 
 	case FT_BYTES:
-		if f.fixed > 0 {
+		if f.Fixed > 0 {
 			return OpCodeFixedBytes
 		} else {
 			return OpCodeBytes
@@ -461,7 +411,7 @@ func (f *Field) Encode(w io.Writer, val any, layout binary.ByteOrder) (err error
 		OpCodeString,
 		OpCodeBytes:
 
-		err = EncodeBytes(w, val, f.fixed, layout)
+		err = EncodeBytes(w, val, f.Fixed, layout)
 
 	case OpCodeBool:
 		b, ok := val.(bool)
@@ -476,7 +426,7 @@ func (f *Field) Encode(w io.Writer, val any, layout binary.ByteOrder) (err error
 	case OpCodeTimestamp, OpCodeDate, OpCodeTime:
 		tv, ok := val.(time.Time)
 		if ok {
-			err = EncodeInt(w, OpCodeUint64, TimeScale(f.scale).ToUnix(tv), layout)
+			err = EncodeInt(w, OpCodeUint64, TimeScale(f.Scale).ToUnix(tv), layout)
 		}
 
 	case OpCodeFloat32:
@@ -550,7 +500,7 @@ func (f *Field) Decode(r io.Reader, layout binary.ByteOrder) (val any, err error
 		buf [32]byte
 		n   int
 	)
-	switch f.typ {
+	switch f.Type {
 	case FT_TIMESTAMP, FT_TIME:
 		_, err = r.Read(buf[:8])
 		val = time.Unix(0, int64(layout.Uint64(buf[:8]))).UTC()
@@ -604,10 +554,10 @@ func (f *Field) Decode(r io.Reader, layout binary.ByteOrder) (val any, err error
 		val = buf[0] > 0
 
 	case FT_STRING:
-		if f.fixed > 0 {
-			b := make([]byte, f.fixed)
+		if f.Fixed > 0 {
+			b := make([]byte, f.Fixed)
 			n, err = r.Read(b)
-			if n < int(f.fixed) {
+			if n < int(f.Fixed) {
 				return nil, ErrShortBuffer
 			}
 			val = string(b[:n])
@@ -623,10 +573,10 @@ func (f *Field) Decode(r io.Reader, layout binary.ByteOrder) (val any, err error
 		}
 
 	case FT_BYTES:
-		if f.fixed > 0 {
-			b := make([]byte, f.fixed)
+		if f.Fixed > 0 {
+			b := make([]byte, f.Fixed)
 			n, err = r.Read(b)
-			if n < int(f.fixed) {
+			if n < int(f.Fixed) {
 				return nil, ErrShortBuffer
 			}
 			val = string(b[:n])
@@ -653,22 +603,22 @@ func (f *Field) Decode(r io.Reader, layout binary.ByteOrder) (val any, err error
 
 	case FT_D256:
 		_, err = r.Read(buf[:32])
-		d256 := num.NewDecimal256(num.Int256FromBytes(buf[:32]), f.scale)
+		d256 := num.NewDecimal256(num.Int256FromBytes(buf[:32]), f.Scale)
 		val = d256
 
 	case FT_D128:
 		_, err = r.Read(buf[:16])
-		d128 := num.NewDecimal128(num.Int128FromBytes(buf[:16]), f.scale)
+		d128 := num.NewDecimal128(num.Int128FromBytes(buf[:16]), f.Scale)
 		val = d128
 
 	case FT_D64:
 		_, err = r.Read(buf[:8])
-		d64 := num.NewDecimal64(int64(layout.Uint64(buf[:8])), f.scale)
+		d64 := num.NewDecimal64(int64(layout.Uint64(buf[:8])), f.Scale)
 		val = d64
 
 	case FT_D32:
 		_, err = r.Read(buf[:4])
-		d32 := num.NewDecimal32(int32(layout.Uint32(buf[:4])), f.scale)
+		d32 := num.NewDecimal32(int32(layout.Uint32(buf[:4])), f.Scale)
 		val = d32
 
 	case FT_BIGINT:
@@ -691,7 +641,7 @@ func (f *Field) Decode(r io.Reader, layout binary.ByteOrder) (val any, err error
 // is a pointer it allocates the target type and dereferences it
 // so that the return value can consistently be used for interface calls.
 func (f *Field) StructValue(rval reflect.Value) reflect.Value {
-	dst := rval.FieldByIndex(f.path)
+	dst := rval.FieldByIndex(f.Path)
 	if dst.Kind() == reflect.Ptr {
 		if dst.IsNil() && dst.CanSet() {
 			dst.Set(reflect.New(dst.Type().Elem()))
@@ -701,45 +651,33 @@ func (f *Field) StructValue(rval reflect.Value) reflect.Value {
 	return dst
 }
 
-func (f *ExportedField) StructValue(rval reflect.Value) reflect.Value {
-	dst := rval.FieldByIndex(f.path)
-	if dst.Kind() == reflect.Ptr {
-		if dst.IsNil() && dst.CanSet() {
-			dst.Set(reflect.New(dst.Type().Elem()))
-		}
-		dst = dst.Elem()
-	}
-	return dst
-}
-
-func (f *ExportedField) WireSize() int {
-	if f.Fixed > 0 {
-		return int(f.Fixed)
-	}
-	return f.Type.Size()
-}
-
-func (f Field) WriteTo(w *bytes.Buffer) error {
+func (f *Field) WriteTo(w *bytes.Buffer) error {
 	// id: u16
-	binary.Write(w, LE, f.id)
+	binary.Write(w, LE, f.Id)
 
 	// name: string
-	binary.Write(w, LE, uint16(len(f.name)))
-	w.WriteString(f.name)
+	binary.Write(w, LE, uint16(len(f.Name)))
+	w.WriteString(f.Name)
 
-	// typ, flags, compression, index: byte
+	// typ, flags, compression: byte
 	binary.Write(w, LE, []byte{
-		byte(f.typ),
-		byte(f.flags),
-		byte(f.compress),
-		byte(f.index),
+		byte(f.Type),
+		byte(f.Flags),
+		byte(f.Compress),
 	})
 
+	// index: byte
+	if f.Index != nil {
+		w.WriteByte(byte(f.Index.Type))
+	} else {
+		w.WriteByte(0)
+	}
+
 	// fixed: u16
-	binary.Write(w, LE, f.fixed)
+	binary.Write(w, LE, f.Fixed)
 
 	// scale: u8
-	binary.Write(w, LE, f.scale)
+	binary.Write(w, LE, f.Scale)
 
 	return nil
 }
@@ -750,7 +688,7 @@ func (f *Field) ReadFrom(buf *bytes.Buffer) (err error) {
 	}
 
 	// id: u16
-	err = binary.Read(buf, LE, &f.id)
+	err = binary.Read(buf, LE, &f.Id)
 	if err != nil {
 		return
 	}
@@ -761,28 +699,32 @@ func (f *Field) ReadFrom(buf *bytes.Buffer) (err error) {
 	if err != nil {
 		return
 	}
-	f.name = string(buf.Next(int(l)))
-	if len(f.name) != int(l) {
+	f.Name = string(buf.Next(int(l)))
+	if len(f.Name) != int(l) {
 		return io.ErrShortBuffer
 	}
 
-	// typ, flags, compression, index: byte
+	// typ, flags, compression: byte
 	if buf.Len() < 7 {
 		return io.ErrShortBuffer
 	}
-	f.typ = types.FieldType(buf.Next(1)[0])
-	f.flags = types.FieldFlags(buf.Next(1)[0])
-	f.compress = types.BlockCompression(buf.Next(1)[0])
-	f.index = types.IndexType(buf.Next(1)[0])
+	f.Type = types.FieldType(buf.Next(1)[0])
+	f.Flags = types.FieldFlags(buf.Next(1)[0])
+	f.Compress = types.BlockCompression(buf.Next(1)[0])
+
+	// index: byte
+	if idx := types.IndexType(buf.Next(1)[0]); idx > 0 {
+		f.Index = NewIndexInfo(f, idx)
+	}
 
 	// fixed: u16
-	binary.Read(buf, LE, &f.fixed)
+	binary.Read(buf, LE, &f.Fixed)
 
 	// scale: u8
-	binary.Read(buf, LE, &f.scale)
+	binary.Read(buf, LE, &f.Scale)
 
 	// init related properties
-	f.wireSize = uint16(f.typ.Size())
+	f.Size = uint16(f.Type.Size())
 
 	return f.Validate()
 }

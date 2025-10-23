@@ -38,7 +38,7 @@ func (idx *Index) CanMatch(c engine.QueryCondition) bool {
 	// check composite case first (all fields must have matching EQ conditions)
 	// but order does not matter; compare all but last schema field (= pk)
 	nfields := idx.srcSchema.NumFields()
-	for _, field := range idx.srcSchema.Exported()[:nfields-1] {
+	for _, field := range idx.srcSchema.Fields[:nfields-1] {
 		var canMatchField bool
 		for _, c := range node.Children {
 			if !c.IsLeaf() {

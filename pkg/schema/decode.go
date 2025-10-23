@@ -57,7 +57,7 @@ func (d *GenericDecoder[T]) DecodeSlice(buf []byte, res []T) ([]T, error) {
 		// long strings/bytes, however this single allocation is still
 		// much more performant than growing the slice multiple times.
 		// For fixed-size schemas, a single allocation is all we need.
-		res = make([]T, len(buf)/max(d.dec.schema.minWireSize, 1))
+		res = make([]T, len(buf)/max(d.dec.schema.MinWireSize, 1))
 	}
 	var n int
 	for n = range res {
@@ -76,14 +76,14 @@ type Decoder struct {
 }
 
 func NewDecoder(s *Schema) *Decoder {
-	enums := s.Enums()
+	enums := s.Enums
 	if enums == nil {
 		enums = &GlobalRegistry
 	}
 	return &Decoder{
 		schema: s,
 		enums:  enums,
-		buf:    bytes.NewBuffer(make([]byte, 0, s.maxWireSize)),
+		buf:    bytes.NewBuffer(make([]byte, 0, s.MaxWireSize)),
 	}
 }
 
@@ -119,16 +119,16 @@ func (d *Decoder) Read(r io.Reader, val any) error {
 	d.buf.Reset()
 
 	// read first chunk of data (this is sufficient when schema is fixed size)
-	n, err := io.CopyN(d.buf, r, int64(d.schema.minWireSize))
+	n, err := io.CopyN(d.buf, r, int64(d.schema.MinWireSize))
 	if err != nil {
 		return err
 	}
-	if n != int64(d.schema.minWireSize) {
+	if n != int64(d.schema.MinWireSize) {
 		return ErrShortBuffer
 	}
 
 	// fast path decode fixed size data
-	if d.schema.isFixedSize {
+	if d.schema.IsFixedSize {
 		return d.Decode(d.buf.Bytes(), val)
 	}
 
@@ -139,23 +139,23 @@ func (d *Decoder) Read(r io.Reader, val any) error {
 	rval := reflect.Indirect(reflect.ValueOf(val))
 	base := rval.Addr().UnsafePointer()
 
-	for op, code := range d.schema.decode {
-		field := &d.schema.fields[op]
-		ptr := unsafe.Add(base, field.offset)
+	for op, code := range d.schema.Decode {
+		field := d.schema.Fields[op]
+		ptr := unsafe.Add(base, field.Offset)
 		switch code {
 		default:
 			// int, uint, float, bool
-			_, err = d.buf.Read(unsafe.Slice((*byte)(ptr), field.wireSize))
+			_, err = d.buf.Read(unsafe.Slice((*byte)(ptr), field.Size))
 
 		case OpCodeSkip:
 			// noop
 
 		case OpCodeFixedBytes:
-			_, err = d.buf.Read(unsafe.Slice((*byte)(ptr), field.fixed))
+			_, err = d.buf.Read(unsafe.Slice((*byte)(ptr), field.Fixed))
 
 		case OpCodeFixedString:
 			// explicit copy
-			*(*string)(ptr) = string(d.buf.Next(int(field.fixed)))
+			*(*string)(ptr) = string(d.buf.Next(int(field.Fixed)))
 
 		case OpCodeString:
 			l := LE.Uint32(d.buf.Next(4))
@@ -183,7 +183,7 @@ func (d *Decoder) Read(r io.Reader, val any) error {
 
 		case OpCodeTimestamp, OpCodeTime, OpCodeDate:
 			ts := int64(LE.Uint64(d.buf.Next(8)))
-			*(*time.Time)(ptr) = TimeScale(field.scale).FromUnix(ts)
+			*(*time.Time)(ptr) = TimeScale(field.Scale).FromUnix(ts)
 
 		case OpCodeInt128:
 			*(*num.Int128)(ptr) = num.Int128FromBytes(d.buf.Next(16))
@@ -193,30 +193,30 @@ func (d *Decoder) Read(r io.Reader, val any) error {
 
 		case OpCodeDecimal32:
 			(*(*num.Decimal32)(ptr)).Set(int32(LE.Uint32(d.buf.Next(4))))
-			(*(*num.Decimal32)(ptr)).SetScale(field.Scale())
+			(*(*num.Decimal32)(ptr)).SetScale(field.Scale)
 
 		case OpCodeDecimal64:
 			(*(*num.Decimal64)(ptr)).Set(int64(LE.Uint64(d.buf.Next(8))))
-			(*(*num.Decimal64)(ptr)).SetScale(field.scale)
+			(*(*num.Decimal64)(ptr)).SetScale(field.Scale)
 
 		case OpCodeDecimal128:
 			(*(*num.Decimal128)(ptr)).Set(num.Int128FromBytes(d.buf.Next(16)))
-			(*(*num.Decimal128)(ptr)).SetScale(field.scale)
+			(*(*num.Decimal128)(ptr)).SetScale(field.Scale)
 
 		case OpCodeDecimal256:
 			(*(*num.Decimal256)(ptr)).Set(num.Int256FromBytes(d.buf.Next(32)))
-			(*(*num.Decimal256)(ptr)).SetScale(field.scale)
+			(*(*num.Decimal256)(ptr)).SetScale(field.Scale)
 
 		case OpCodeEnum:
 			u16 := LE.Uint16(d.buf.Next(2))
-			if enum, ok := d.enums.Lookup(field.name); ok {
+			if enum, ok := d.enums.Lookup(field.Name); ok {
 				val, ok := enum.Value(u16)
 				if !ok {
-					err = fmt.Errorf("%s: invalid enum value %d", field.name, u16)
+					err = fmt.Errorf("%s: invalid enum value %d", field.Name, u16)
 				}
 				*(*string)(ptr) = val
 			} else {
-				err = fmt.Errorf("translation for enum %q not registered", field.name)
+				err = fmt.Errorf("translation for enum %q not registered", field.Name)
 			}
 		case OpCodeBigInt:
 			// read as raw bytes and create num.Big
@@ -249,12 +249,12 @@ func (d *Decoder) Decode(buf []byte, val any) error {
 }
 
 func (d *Decoder) DecodePtr(buf []byte, base unsafe.Pointer) []byte {
-	for op, code := range d.schema.decode {
+	for op, code := range d.schema.Decode {
 		if code == OpCodeSkip {
 			continue
 		}
-		field := &d.schema.fields[op]
-		ptr := unsafe.Add(base, field.offset)
+		field := d.schema.Fields[op]
+		ptr := unsafe.Add(base, field.Offset)
 		buf = readField(code, field, ptr, buf, d.enums)
 	}
 	return buf
@@ -271,12 +271,12 @@ func (d *Decoder) DecodeSlice(buf []byte, slice any) (int, error) {
 
 	var i int
 	for i = 0; i < num && len(buf) > 0; i++ {
-		for op, code := range d.schema.decode {
+		for op, code := range d.schema.Decode {
 			if code == OpCodeSkip {
 				continue
 			}
-			field := &d.schema.fields[op]
-			ptr := unsafe.Add(base, field.offset)
+			field := d.schema.Fields[op]
+			ptr := unsafe.Add(base, field.Offset)
 			buf = readField(code, field, ptr, buf, d.enums)
 		}
 		base = unsafe.Add(base, sz)
@@ -308,14 +308,14 @@ func readField(code OpCode, field *Field, ptr unsafe.Pointer, buf []byte, enums 
 		buf = buf[1:]
 
 	case OpCodeFixedBytes:
-		_ = buf[field.fixed-1]
-		copy(unsafe.Slice((*byte)(ptr), field.fixed), buf[:field.fixed])
-		buf = buf[field.fixed:]
+		_ = buf[field.Fixed-1]
+		copy(unsafe.Slice((*byte)(ptr), field.Fixed), buf[:field.Fixed])
+		buf = buf[field.Fixed:]
 
 	case OpCodeFixedString:
-		_ = buf[field.fixed-1]
-		*(*string)(ptr) = unsafe.String(unsafe.SliceData(buf), field.fixed)
-		buf = buf[field.fixed:]
+		_ = buf[field.Fixed-1]
+		*(*string)(ptr) = unsafe.String(unsafe.SliceData(buf), field.Fixed)
+		buf = buf[field.Fixed:]
 
 	case OpCodeString:
 		l := LE.Uint32(buf)
@@ -337,7 +337,7 @@ func readField(code OpCode, field *Field, ptr unsafe.Pointer, buf []byte, enums 
 
 	case OpCodeTimestamp, OpCodeTime, OpCodeDate:
 		ts := int64(LE.Uint64(buf))
-		*(*time.Time)(ptr) = TimeScale(field.scale).FromUnix(ts)
+		*(*time.Time)(ptr) = TimeScale(field.Scale).FromUnix(ts)
 		buf = buf[8:]
 
 	case OpCodeInt128:
@@ -352,39 +352,39 @@ func readField(code OpCode, field *Field, ptr unsafe.Pointer, buf []byte, enums 
 
 	case OpCodeDecimal32:
 		(*(*num.Decimal32)(ptr)).Set(int32(LE.Uint32(buf)))
-		(*(*num.Decimal32)(ptr)).SetScale(field.Scale())
+		(*(*num.Decimal32)(ptr)).SetScale(field.Scale)
 		buf = buf[4:]
 
 	case OpCodeDecimal64:
 		(*(*num.Decimal64)(ptr)).Set(int64(LE.Uint64(buf)))
-		(*(*num.Decimal64)(ptr)).SetScale(field.scale)
+		(*(*num.Decimal64)(ptr)).SetScale(field.Scale)
 		buf = buf[8:]
 
 	case OpCodeDecimal128:
 		_ = buf[15]
 		(*(*num.Decimal128)(ptr)).Set(num.Int128FromBytes(buf[:16]))
-		(*(*num.Decimal128)(ptr)).SetScale(field.scale)
+		(*(*num.Decimal128)(ptr)).SetScale(field.Scale)
 		buf = buf[16:]
 
 	case OpCodeDecimal256:
 		_ = buf[31]
 		(*(*num.Decimal256)(ptr)).Set(num.Int256FromBytes(buf[:32]))
-		(*(*num.Decimal256)(ptr)).SetScale(field.scale)
+		(*(*num.Decimal256)(ptr)).SetScale(field.Scale)
 		buf = buf[32:]
 
 	case OpCodeEnum:
 		if enums == nil {
-			panic(fmt.Errorf("nil enum registry when decoding enum %q", field.name))
+			panic(fmt.Errorf("nil enum registry when decoding enum %q", field.Name))
 		}
 		u16 := LE.Uint16(buf)
 		buf = buf[2:]
-		enum, ok := enums.Lookup(field.name)
+		enum, ok := enums.Lookup(field.Name)
 		if !ok {
-			panic(fmt.Errorf("translation for enum %q not registered", field.name))
+			panic(fmt.Errorf("translation for enum %q not registered", field.Name))
 		}
 		val, ok := enum.Value(u16)
 		if !ok {
-			panic(fmt.Errorf("%s: invalid enum value %d, have %#v", field.name, u16, enum))
+			panic(fmt.Errorf("%s: invalid enum value %d, have %#v", field.Name, u16, enum))
 		}
 		*(*string)(ptr) = val // FIXME: may break when enum dict grows
 

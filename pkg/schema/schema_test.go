@@ -383,9 +383,9 @@ type InvalidIndexBloomScaleTooLarge struct {
 	B []byte `knox:",index=bloom:10"`
 }
 
-type InternalFields struct {
+type MetaFields struct {
 	BaseModel
-	I64 int64  `knox:"i64,internal"`
+	I64 int64  `knox:"i64,metadata"`
 	U64 uint64 `knox:"u64"`
 }
 
@@ -900,14 +900,14 @@ var schemaTestCases = []schemaTest{
 	},
 
 	//
-	// Internal tests
+	// Metadata tests
 	// -----------------
 	{
-		name:    "internal_fields",
-		build:   GenericSchema[InternalFields],
+		name:    "meta_fields",
+		build:   GenericSchema[MetaFields],
 		fields:  "id,i64,u64",
 		typs:    []FieldType{FT_U64, FT_I64, FT_U64},
-		flags:   []FieldFlags{F_PRIMARY | F_INDEXED, types.FieldFlagInternal, 0},
+		flags:   []FieldFlags{F_PRIMARY | F_INDEXED, types.FieldFlagMetadata, 0},
 		scales:  []uint8{0, 0, 0},
 		fixed:   []uint16{0, 0, 0},
 		isFixed: true,
@@ -945,16 +945,16 @@ func TestSchemaDetect(t *testing.T) {
 				require.NoError(t, s.Validate())
 			}
 			// schema name
-			require.Equal(t, c.name, s.name, "schema name")
+			require.Equal(t, c.name, s.Name, "schema name")
 			// field names
 			require.ElementsMatch(t, strings.Split(c.fields, ","), s.AllFieldNames(), "field names")
 			// field types
-			for i := range s.fields {
-				require.Equal(t, c.typs[i], s.fields[i].typ, "field types for "+s.fields[i].name)
+			for i, f := range s.Fields {
+				require.Equal(t, c.typs[i], f.Type, "field types for "+f.Name)
 			}
 			// field flags
-			for i := range s.fields {
-				require.Equal(t, c.flags[i], s.fields[i].flags, "field flags for "+s.fields[i].name)
+			for i, f := range s.Fields {
+				require.Equal(t, c.flags[i], f.Flags, "field flags for "+f.Name)
 			}
 			if len(c.idxfields) > 0 {
 				allIndexNames := strings.Split(c.idxfields, ",")
@@ -962,31 +962,32 @@ func TestSchemaDetect(t *testing.T) {
 				for _, v := range allIndexNames {
 					f, ok := s.FieldByName(v)
 					require.True(t, ok)
-					require.NotZero(t, f.index)
+					require.NotNil(t, f.Index)
+					require.NotZero(t, f.Index.Type)
 				}
 				// every detected index is expected and has correct type
 				for i, f := range s.Indexes() {
 					// index name is expected
-					require.Contains(t, allIndexNames, f.name, "index unexpected for "+f.name)
+					require.Contains(t, allIndexNames, f.Name, "index unexpected for "+f.Name)
 					// index types
-					require.Equal(t, c.idxtyps[i], f.index, "index type for "+f.name)
+					require.Equal(t, c.idxtyps[i], f.Index.Type, "index type for "+f.Name)
 				}
 			}
 			// scale values
-			for i := range s.fields {
-				require.Equal(t, c.scales[i], s.fields[i].scale, "scale for "+s.fields[i].name)
+			for i, f := range s.Fields {
+				require.Equal(t, c.scales[i], f.Scale, "scale for "+f.Name)
 			}
 
 			// fixed values
-			for i := range s.fields {
-				require.Equal(t, c.fixed[i], s.fields[i].fixed, "fixed for "+s.fields[i].name)
+			for i, f := range s.Fields {
+				require.Equal(t, c.fixed[i], f.Fixed, "fixed for "+f.Name)
 			}
 			// is fixed
-			require.Equal(t, c.isFixed, s.isFixedSize, "is_fixed")
+			require.Equal(t, c.isFixed, s.IsFixedSize, "is_fixed")
 			// encoder opcodes
-			require.ElementsMatch(t, c.encode, s.encode, "encoders")
+			require.ElementsMatch(t, c.encode, s.Encode, "encoders")
 			// decoder opcodes
-			require.ElementsMatch(t, c.decode, s.decode, "decoders")
+			require.ElementsMatch(t, c.decode, s.Decode, "decoders")
 		})
 	}
 }
@@ -1002,20 +1003,20 @@ func TestSchemaMarshal(t *testing.T) {
 	err = r.UnmarshalBinary(buf)
 	require.NoError(t, err)
 
-	assert.True(t, s.EqualHash(r.Hash()))
-	assert.Equal(t, s.Hash(), r.Hash())
-	assert.Equal(t, s.Version(), r.Version())
-	assert.Equal(t, s.Name(), r.Name())
-	assert.Equal(t, s.IsFixedSize(), r.IsFixedSize())
+	assert.True(t, s.EqualHash(r.Hash))
+	assert.Equal(t, s.Hash, r.Hash)
+	assert.Equal(t, s.Version, r.Version)
+	assert.Equal(t, s.Name, r.Name)
+	assert.Equal(t, s.IsFixedSize, r.IsFixedSize)
 	assert.Equal(t, s.WireSize(), r.WireSize())
 	assert.Equal(t, s.NumFields(), r.NumFields())
 	assert.Equal(t, s.NumActiveFields(), r.NumActiveFields())
 	assert.Equal(t, s.NumVisibleFields(), r.NumVisibleFields())
-	assert.Equal(t, s.NumInternalFields(), r.NumInternalFields())
+	assert.Equal(t, s.NumMetaFields(), r.NumMetaFields())
 	assert.Equal(t, s.AllFieldNames(), r.AllFieldNames())
 	assert.Equal(t, s.AllFieldIds(), r.AllFieldIds())
 	assert.Equal(t, s.VisibleFieldIds(), r.VisibleFieldIds())
-	assert.Equal(t, s.InternalFieldIds(), r.InternalFieldIds())
+	assert.Equal(t, s.MetaFieldIds(), r.MetaFieldIds())
 	assert.Equal(t, s.PkId(), r.PkId())
 	assert.Equal(t, s.PkIndex(), r.PkIndex())
 }
@@ -1026,7 +1027,7 @@ func TestSchemaIsValid(t *testing.T) {
 	s := NewSchema().WithName("test")
 	require.False(t, s.IsValid())
 
-	s.WithField(Field{name: "field1", typ: FT_I64})
+	s.WithField(&Field{Name: "field1", Type: FT_I64})
 	require.False(t, s.IsValid())
 
 	s.Finalize()
@@ -1037,20 +1038,20 @@ func TestSchemaIsValid(t *testing.T) {
 // the correct capacity based on the schema's maxWireSize.
 func TestSchemaNewBuffer(t *testing.T) {
 	s := NewSchema().WithName("test").
-		WithField(Field{name: "field1", typ: FT_I64}).
+		WithField(&Field{Name: "field1", Type: FT_I64}).
 		Finalize()
 
 	buf := s.NewBuffer(10)
 	require.NotNil(t, buf)
-	require.Equal(t, 10*s.maxWireSize, buf.Cap())
+	require.Equal(t, 10*s.MaxWireSize, buf.Cap())
 }
 
 // TestSchemaNumFields ensures that Schema.NumFields() returns the correct
 // number of fields in the schema.
 func TestSchemaNumFields(t *testing.T) {
 	s := NewSchema().WithName("test").
-		WithField(Field{name: "field1", typ: FT_I64}).
-		WithField(Field{name: "field2", typ: FT_STRING}).
+		WithField(&Field{Name: "field1", Type: FT_I64}).
+		WithField(&Field{Name: "field2", Type: FT_STRING}).
 		Finalize()
 
 	require.Equal(t, 2, s.NumFields())
@@ -1060,24 +1061,24 @@ func TestSchemaNumFields(t *testing.T) {
 // flags and whether returned field info is in correct order.
 func TestSchemaFieldVisibility(t *testing.T) {
 	s := NewSchema().WithName("test").
-		WithField(Field{
-			name: "field1",
-			typ:  FT_I64,
+		WithField(&Field{
+			Name: "field1",
+			Type: FT_I64,
 		}).
-		WithField(Field{
-			name:  "field2",
-			typ:   FT_STRING,
-			flags: types.FieldFlagInternal,
+		WithField(&Field{
+			Name:  "field2",
+			Type:  FT_STRING,
+			Flags: types.FieldFlagMetadata,
 		}).
-		WithField(Field{
-			name:  "field3",
-			typ:   FT_U64,
-			flags: types.FieldFlagDeleted,
+		WithField(&Field{
+			Name:  "field3",
+			Type:  FT_U64,
+			Flags: types.FieldFlagDeleted,
 		}).
-		WithField(Field{
-			name:  "field4",
-			typ:   FT_U64,
-			flags: types.FieldFlagInternal | types.FieldFlagDeleted,
+		WithField(&Field{
+			Name:  "field4",
+			Type:  FT_U64,
+			Flags: types.FieldFlagMetadata | types.FieldFlagDeleted,
 		}).
 		Finalize()
 
@@ -1085,19 +1086,19 @@ func TestSchemaFieldVisibility(t *testing.T) {
 	require.Equal(t, 4, s.NumFields())
 	require.Equal(t, 1, s.NumVisibleFields())
 	require.Equal(t, 2, s.NumActiveFields())
-	require.Equal(t, 1, s.NumInternalFields())
+	require.Equal(t, 1, s.NumMetaFields())
 
 	// ids
 	require.Equal(t, []uint16{1, 2, 3, 4}, s.AllFieldIds())
 	require.Equal(t, []uint16{1}, s.VisibleFieldIds())
 	require.Equal(t, []uint16{1, 2}, s.ActiveFieldIds())
-	require.Equal(t, []uint16{2}, s.InternalFieldIds())
+	require.Equal(t, []uint16{2}, s.MetaFieldIds())
 
 	// names
 	require.Equal(t, []string{"field1", "field2", "field3", "field4"}, s.AllFieldNames())
 	require.Equal(t, []string{"field1", "field2"}, s.ActiveFieldNames())
 	require.Equal(t, []string{"field1"}, s.VisibleFieldNames())
-	require.Equal(t, []string{"field2"}, s.InternalFieldNames())
+	require.Equal(t, []string{"field2"}, s.MetaFieldNames())
 
 	// by name should hide deleted fields
 	_, ok := s.FieldByName("field1")
@@ -1134,24 +1135,24 @@ func TestSchemaFieldVisibility(t *testing.T) {
 // identifies when a set of field names matches the schema.
 func TestSchemaCanMatchFields(t *testing.T) {
 	s := NewSchema().WithName("test").
-		WithField(Field{
-			name: "field1",
-			typ:  FT_I64,
+		WithField(&Field{
+			Name: "field1",
+			Type: FT_I64,
 		}).
-		WithField(Field{
-			name:  "field2",
-			typ:   FT_STRING,
-			flags: types.FieldFlagInternal,
+		WithField(&Field{
+			Name:  "field2",
+			Type:  FT_STRING,
+			Flags: types.FieldFlagMetadata,
 		}).
-		WithField(Field{
-			name:  "field3",
-			typ:   FT_U64,
-			flags: types.FieldFlagDeleted,
+		WithField(&Field{
+			Name:  "field3",
+			Type:  FT_U64,
+			Flags: types.FieldFlagDeleted,
 		}).
-		WithField(Field{
-			name:  "field4",
-			typ:   FT_U64,
-			flags: types.FieldFlagInternal | types.FieldFlagDeleted,
+		WithField(&Field{
+			Name:  "field4",
+			Type:  FT_U64,
+			Flags: types.FieldFlagMetadata | types.FieldFlagDeleted,
 		}).
 		Finalize()
 
@@ -1164,58 +1165,58 @@ func TestSchemaCanMatchFields(t *testing.T) {
 // if one schema can be selected from another.
 func TestSchemaCanSelect(t *testing.T) {
 	s := NewSchema().WithName("test").
-		WithField(Field{
-			name: "field1",
-			typ:  FT_I64,
+		WithField(&Field{
+			Name: "field1",
+			Type: FT_I64,
 		}).
-		WithField(Field{
-			name:  "field2",
-			typ:   FT_STRING,
-			flags: types.FieldFlagInternal,
+		WithField(&Field{
+			Name:  "field2",
+			Type:  FT_STRING,
+			Flags: types.FieldFlagMetadata,
 		}).
-		WithField(Field{
-			name:  "field3",
-			typ:   FT_U64,
-			flags: types.FieldFlagDeleted,
+		WithField(&Field{
+			Name:  "field3",
+			Type:  FT_U64,
+			Flags: types.FieldFlagDeleted,
 		}).
-		WithField(Field{
-			name:  "field4",
-			typ:   FT_U64,
-			flags: types.FieldFlagInternal | types.FieldFlagDeleted,
+		WithField(&Field{
+			Name:  "field4",
+			Type:  FT_U64,
+			Flags: types.FieldFlagMetadata | types.FieldFlagDeleted,
 		}).
 		Finalize()
 
 	// active field
 	s1 := NewSchema().WithName("test1").
-		WithField(Field{name: "field1", typ: FT_I64}).
+		WithField(&Field{Name: "field1", Type: FT_I64}).
 		Finalize()
 
 	require.NoError(t, s.CanSelect(s1))
 
 	// active internal field
 	s2 := NewSchema().WithName("test2").
-		WithField(Field{name: "field2", typ: FT_STRING}).
+		WithField(&Field{Name: "field2", Type: FT_STRING}).
 		Finalize()
 
 	require.NoError(t, s.CanSelect(s2))
 
 	// deleted field
 	s3 := NewSchema().WithName("test3").
-		WithField(Field{name: "field3", typ: FT_U64}).
+		WithField(&Field{Name: "field3", Type: FT_U64}).
 		Finalize()
 
 	require.Error(t, s.CanSelect(s3))
 
 	// deleted internal field
 	s4 := NewSchema().WithName("test4").
-		WithField(Field{name: "field4", typ: FT_U64}).
+		WithField(&Field{Name: "field4", Type: FT_U64}).
 		Finalize()
 
 	require.Error(t, s.CanSelect(s4))
 
 	// non existing field
 	s5 := NewSchema().WithName("test5").
-		WithField(Field{name: "field5", typ: FT_U64}).
+		WithField(&Field{Name: "field5", Type: FT_U64}).
 		Finalize()
 
 	require.Error(t, s.CanSelect(s5))
@@ -1225,50 +1226,50 @@ func TestSchemaCanSelect(t *testing.T) {
 // of the schema alphabetically by name.
 func TestSchemaSort(t *testing.T) {
 	s := NewSchema().WithName("test").
-		WithField(Field{name: "field2", typ: FT_STRING}).
-		WithField(Field{name: "field1", typ: FT_I64}).
+		WithField(&Field{Name: "field2", Type: FT_STRING}).
+		WithField(&Field{Name: "field1", Type: FT_I64}).
 		Finalize()
 
 	// The fields should already be sorted by ID after Finalize()
-	require.Equal(t, "field2", s.fields[0].name, "First field should be 'field2' (id=1)")
-	require.Equal(t, "field1", s.fields[1].name, "Second field should be 'field1' (id=2)")
+	require.Equal(t, "field2", s.Fields[0].Name, "First field should be 'field2' (id=1)")
+	require.Equal(t, "field1", s.Fields[1].Name, "Second field should be 'field1' (id=2)")
 
 	// Calling Sort() shouldn't change the order
 	s.Sort()
 
-	require.Equal(t, "field2", s.fields[0].name, "First field should still be 'field2' (id=1) after sorting")
-	require.Equal(t, "field1", s.fields[1].name, "Second field should still be 'field1' (id=2) after sorting")
+	require.Equal(t, "field2", s.Fields[0].Name, "First field should still be 'field2' (id=1) after sorting")
+	require.Equal(t, "field1", s.Fields[1].Name, "Second field should still be 'field1' (id=2) after sorting")
 }
 
 // TestSchemaMapTo verifies that Schema.MapTo() correctly maps fields
 // from one schema to another, even if the field order is different.
 func TestSchemaMapTo(t *testing.T) {
 	s := NewSchema().WithName("test").
-		WithField(Field{
-			name: "field1",
-			typ:  FT_I64,
+		WithField(&Field{
+			Name: "field1",
+			Type: FT_I64,
 		}).
-		WithField(Field{
-			name:  "field2",
-			typ:   FT_STRING,
-			flags: types.FieldFlagInternal,
+		WithField(&Field{
+			Name:  "field2",
+			Type:  FT_STRING,
+			Flags: types.FieldFlagMetadata,
 		}).
-		WithField(Field{
-			name:  "field3",
-			typ:   FT_U64,
-			flags: types.FieldFlagDeleted,
+		WithField(&Field{
+			Name:  "field3",
+			Type:  FT_U64,
+			Flags: types.FieldFlagDeleted,
 		}).
-		WithField(Field{
-			name:  "field4",
-			typ:   FT_U64,
-			flags: types.FieldFlagInternal | types.FieldFlagDeleted,
+		WithField(&Field{
+			Name:  "field4",
+			Type:  FT_U64,
+			Flags: types.FieldFlagMetadata | types.FieldFlagDeleted,
 		}).
 		Finalize()
 
 	// active fields
 	s1 := NewSchema().WithName("test1").
-		WithField(Field{name: "field3", typ: FT_U64}).
-		WithField(Field{name: "field1", typ: FT_I64}).
+		WithField(&Field{Name: "field3", Type: FT_U64}).
+		WithField(&Field{Name: "field1", Type: FT_I64}).
 		Finalize()
 
 	// inactive fields are hidden
@@ -1278,10 +1279,10 @@ func TestSchemaMapTo(t *testing.T) {
 
 	// deleted fields are ignored
 	s2 := NewSchema().WithName("test2").
-		WithField(Field{name: "field2", typ: FT_STRING}).
-		WithField(Field{name: "field4", typ: FT_U64}).
-		WithField(Field{name: "field3", typ: FT_U64}).
-		WithField(Field{name: "field1", typ: FT_I64}).
+		WithField(&Field{Name: "field2", Type: FT_STRING}).
+		WithField(&Field{Name: "field4", Type: FT_U64}).
+		WithField(&Field{Name: "field3", Type: FT_U64}).
+		WithField(&Field{Name: "field1", Type: FT_I64}).
 		Finalize()
 
 	mapping, err = s.MapTo(s2)
@@ -1294,15 +1295,15 @@ func TestSchemaDeleteField(t *testing.T) {
 	require.NoError(t, err)
 	beforeSz := s.WireSize()
 	beforeLen := s.NumFields()
-	beforeHash := s.Hash()
-	beforeVersion := s.Version()
+	beforeHash := s.Hash
+	beforeVersion := s.Version
 	beforeFieldNames := s.AllFieldNames()
 	beforeFieldIds := s.AllFieldIds()
 
 	s, err = s.DeleteField(2)
 	require.NoError(t, err)
 
-	require.Len(t, s.Fields(), beforeLen)
+	require.Len(t, s.Fields, beforeLen)
 	require.Equal(t, beforeFieldNames, s.AllFieldNames())
 	require.Equal(t, beforeFieldIds, s.AllFieldIds())
 	require.NotEqual(t, beforeFieldNames, s.ActiveFieldNames())
@@ -1313,8 +1314,8 @@ func TestSchemaDeleteField(t *testing.T) {
 	require.Equal(t, s.NumFields()-1, s.NumVisibleFields(), "num visible fields must change")
 	require.Equal(t, s.NumFields()-1, s.NumActiveFields(), "num active fields must change")
 	require.Less(t, s.WireSize(), beforeSz, "wire size must change")
-	require.NotEqual(t, beforeHash, s.Hash(), "hash must change")
-	require.Less(t, beforeVersion, s.Version(), "version must increase")
+	require.NotEqual(t, beforeHash, s.Hash, "hash must change")
+	require.Less(t, beforeVersion, s.Version, "version must increase")
 
 	_, ok := s.FieldByName("i64")
 	require.False(t, ok, "deleted field is no longer accessible by name")

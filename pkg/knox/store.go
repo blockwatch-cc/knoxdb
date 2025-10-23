@@ -71,7 +71,7 @@ func UseGenericStore[T any](name string, db Database) (*GenericStore[T], error) 
 		return nil, err
 	}
 	// check schema matches
-	if store.Schema().Hash() != s.Hash() {
+	if store.Schema().Hash != s.Hash {
 		return nil, schema.ErrSchemaMismatch
 	}
 	return &GenericStore[T]{

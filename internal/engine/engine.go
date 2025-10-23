@@ -432,7 +432,7 @@ func (e *Engine) Close(ctx context.Context) error {
 	e.log.Trace("Close indexes")
 	for _, idx := range e.indexes.Map() {
 		idx.Table().DisconnectIndex(idx)
-		name := idx.Schema().Name()
+		name := idx.Schema().Name
 		if !e.IsReadOnly() {
 			if err := idx.Sync(ctx); err != nil {
 				e.log.Errorf("Syncing index %s: %v", name, err)
@@ -447,7 +447,7 @@ func (e *Engine) Close(ctx context.Context) error {
 	// close all open tables (set checkpoints)
 	e.log.Trace("Close tables")
 	for _, t := range e.tables.Map() {
-		name := t.Schema().Name()
+		name := t.Schema().Name
 		if !e.IsReadOnly() {
 			if err := t.Sync(ctx); err != nil {
 				e.log.Errorf("Syncing table %s: %v", name, err)
@@ -462,7 +462,7 @@ func (e *Engine) Close(ctx context.Context) error {
 	// close all open stores (set checkpoints)
 	e.log.Trace("Close stores")
 	for _, s := range e.stores.Map() {
-		name := s.Schema().Name()
+		name := s.Schema().Name
 		if !e.IsReadOnly() {
 			if err := s.Sync(ctx); err != nil {
 				e.log.Errorf("Syncing store %s: %v", name, err)
@@ -583,7 +583,7 @@ func (e *Engine) ForceShutdown() error {
 	e.log.Trace("Close indexes")
 	for _, idx := range e.indexes.Map() {
 		idx.Table().DisconnectIndex(idx)
-		name := idx.Schema().Name()
+		name := idx.Schema().Name
 		if err := idx.Close(ctx); err != nil {
 			e.log.Errorf("Closing index %s: %v", name, err)
 		}
@@ -594,7 +594,7 @@ func (e *Engine) ForceShutdown() error {
 	e.log.Trace("Close tables")
 	for _, t := range e.tables.Map() {
 		if err := t.Close(ctx); err != nil {
-			e.log.Errorf("Closing table %s: %v", t.Schema().Name(), err)
+			e.log.Errorf("Closing table %s: %v", t.Schema().Name, err)
 		}
 	}
 	e.tables.Clear()
@@ -603,7 +603,7 @@ func (e *Engine) ForceShutdown() error {
 	e.log.Trace("Close stores")
 	for _, s := range e.stores.Map() {
 		if err := s.Close(ctx); err != nil {
-			e.log.Errorf("Closing store %s: %v", s.Schema().Name(), err)
+			e.log.Errorf("Closing store %s: %v", s.Schema().Name, err)
 		}
 	}
 	e.stores.Clear()
@@ -699,7 +699,7 @@ func (e *Engine) GCWal(ctx context.Context) error {
 		for _, t := range e.tables.Map() {
 			// write table checkpoints when older than 5 segments
 			if t.State().Checkpoint < walSize-5*segSize {
-				e.log.Tracef("engine: checkpoint table %s", t.Schema().Name())
+				e.log.Tracef("engine: checkpoint table %s", t.Schema().Name)
 				if err := t.Checkpoint(ctx); err != nil {
 					return err
 				}

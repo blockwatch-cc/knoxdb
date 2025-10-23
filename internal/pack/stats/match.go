@@ -11,10 +11,10 @@ import (
 	"blockwatch.cc/knoxdb/internal/filter/fuse"
 	"blockwatch.cc/knoxdb/internal/operator/filter"
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/pkg/store"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/schema"
+	"blockwatch.cc/knoxdb/pkg/store"
 )
 
 var _ engine.StatsReader = (*ViewReader)(nil)
@@ -183,13 +183,15 @@ func matchFilterVector(f *filter.Filter, pkg *pack.Package, bits, mask *bitset.B
 }
 
 // TODO: replace with filter tree node flags (FilterFlagUseBloom)
-func filterType(f *filter.Filter, pkg *pack.Package, id int) types.IndexType {
+func filterType(f *filter.Filter, pkg *pack.Package, idx int) types.IndexType {
 	switch f.Mode {
 	case types.FilterModeEqual, types.FilterModeIn:
-		typ := pkg.Schema().Field(id).Index()
-		switch typ {
-		case types.IndexTypeBloom, types.IndexTypeBfuse, types.IndexTypeBits:
-			return typ
+		field := pkg.Schema().Fields[idx]
+		if field.IsIndexed() {
+			switch field.Index.Type {
+			case types.IndexTypeBloom, types.IndexTypeBfuse, types.IndexTypeBits:
+				return field.Index.Type
+			}
 		}
 	}
 	return types.IndexTypeNone

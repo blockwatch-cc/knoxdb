@@ -278,7 +278,7 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 		// this will select all single-field indexes and all
 		// composite indexes where the first index field is used as
 		// query condition (they may use prefix key matches)
-		if !slicex.Contains(filterFieldIds, idx.Schema().Field(0).Id()) {
+		if !slicex.Contains(filterFieldIds, idx.Schema().Fields[0].Id) {
 			continue
 		}
 		p.Indexes = append(p.Indexes, idx)

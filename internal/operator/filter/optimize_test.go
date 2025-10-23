@@ -292,23 +292,23 @@ func TestOptimizeExtended(t *testing.T) {
 }
 
 // makeNode constructs a Node with a specified filter mode, field index, and value, setting up the appropriate matcher.
-func makeNode(field schema.Field, mode FilterMode, value any) *Node {
+func makeNode(field *schema.Field, mode FilterMode, value any) *Node {
 	tree := &Node{}
 	// Log the initial value and its type
 	// log.Printf("makeNode called with mode: %v, fieldIndex: %d, value: %v (type: %T)", mode, fieldIndex, value, value)
 
-	blockType := field.Type().BlockType()
+	blockType := field.Type.BlockType()
 	f := &Filter{
-		Name:    field.Name(),
+		Name:    field.Name,
 		Mode:    mode,
-		Index:   int(field.Id() - 1), // index = id - 1 (for regular fields)
-		Id:      field.Id(),
+		Index:   int(field.Id - 1), // index = id - 1 (for regular fields)
+		Id:      field.Id,
 		Type:    blockType,
 		Value:   value,
 		Matcher: newFactory(blockType).New(mode),
 	}
 
-	caster := schema.NewCaster(field.Type(), field.Scale(), nil)
+	caster := schema.NewCaster(field.Type, field.Scale, nil)
 
 	// Handle different modes appropriately
 	switch mode {
@@ -385,62 +385,62 @@ func makeOrTree(children ...*Node) *Node {
 }
 
 // makeEqualNode constructs a Node for an equality condition with a specified integer value.
-func makeEqualNode(field schema.Field, val any) *Node {
+func makeEqualNode(field *schema.Field, val any) *Node {
 	return makeNode(field, FilterModeEqual, val)
 }
 
 // makeRangeNode constructs a Node for a range condition between two integer values.
-func makeRangeNode(field schema.Field, from, to any) *Node {
+func makeRangeNode(field *schema.Field, from, to any) *Node {
 	return makeNode(field, FilterModeRange, RangeValue{from, to})
 }
 
 // makeRegexNode constructs a Node for a regular expression condition with a specified string.
 // makeRegexNode constructs a Node for a regexp conditions.
-func makeRegexNode(field schema.Field, s string) *Node {
+func makeRegexNode(field *schema.Field, s string) *Node {
 	return makeNode(field, FilterModeRegexp, s)
 }
 
 // makeInNode constructs a Node for an IN condition with a list of integer values.
-func makeInNode(field schema.Field, vals any) *Node {
+func makeInNode(field *schema.Field, vals any) *Node {
 	return makeNode(field, FilterModeIn, vals)
 }
 
 // makeNiNode constructs a Node for an Not IN condition with a list of integer values.
-func makeNotInNode(field schema.Field, vals any) *Node {
+func makeNotInNode(field *schema.Field, vals any) *Node {
 	return makeNode(field, FilterModeNotIn, vals)
 }
 
 // makeNotEqualNode constructs a Node for a not-equal condition with a specified integer value.
-func makeNotEqualNode(field schema.Field, val any) *Node {
+func makeNotEqualNode(field *schema.Field, val any) *Node {
 	return makeNode(field, FilterModeNotEqual, val)
 }
 
 // makeGtNode constructs a Node for a greater-than condition with a specified integer value.
-func makeGtNode(field schema.Field, val any) *Node {
+func makeGtNode(field *schema.Field, val any) *Node {
 	return makeNode(field, FilterModeGt, val)
 }
 
 // makeLtNode constructs a Node for a less-than condition with a specified integer value.
-func makeLtNode(field schema.Field, val any) *Node {
+func makeLtNode(field *schema.Field, val any) *Node {
 	return makeNode(field, FilterModeLt, val)
 }
 
 // makeGeNode constructs a Node for a greater-than-or-equal condition with a specified integer value.
-func makeGeNode(field schema.Field, val any) *Node {
+func makeGeNode(field *schema.Field, val any) *Node {
 	return makeNode(field, FilterModeGe, val)
 }
 
 // makeLeNode constructs a Node for a less-than-or-equal condition with a specified integer value.
-func makeLeNode(field schema.Field, val any) *Node {
+func makeLeNode(field *schema.Field, val any) *Node {
 	return makeNode(field, FilterModeLe, val)
 }
 
 // makeFalseNode constructs a Node for a false condition.
-func makeFalseNode(field schema.Field) *Node {
+func makeFalseNode(field *schema.Field) *Node {
 	return makeNode(field, FilterModeFalse, nil)
 }
 
 // makeTrueNode constructs a Node for a true condition.
-func makeTrueNode(field schema.Field) *Node {
+func makeTrueNode(field *schema.Field) *Node {
 	return makeNode(field, FilterModeTrue, nil)
 }

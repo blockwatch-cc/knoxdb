@@ -16,11 +16,11 @@ const (
 
 // Internal schema for record metadata
 type Meta struct {
-	Rid   uint64    `knox:"$rid,internal,id=0xffff"`  // unique row id
-	Ref   uint64    `knox:"$ref,internal,id=0xfffe"`  // previous version, ref == rid on first insert
-	Xmin  types.XID `knox:"$xmin,internal,id=0xfffd"` // txid where this row was created
-	Xmax  types.XID `knox:"$xmax,internal,id=0xfffc"` // txid where this row was deleted
-	IsDel bool      `knox:"$del,internal,id=0xfffb"`  // record was deleted (true) or updated (false)
+	Rid   uint64    `knox:"$rid,metadata,id=0xffff"`  // unique row id
+	Ref   uint64    `knox:"$ref,metadata,id=0xfffe"`  // previous version, ref == rid on first insert
+	Xmin  types.XID `knox:"$xmin,metadata,id=0xfffd"` // txid where this row was created
+	Xmax  types.XID `knox:"$xmax,metadata,id=0xfffc"` // txid where this row was deleted
+	IsDel bool      `knox:"$del,metadata,id=0xfffb"`  // record was deleted (true) or updated (false)
 }
 
 var (
@@ -35,12 +35,12 @@ func (s *Schema) WithMeta() *Schema {
 	}
 
 	// ensure no collision with user defined fields
-	for _, v := range s.fields {
-		for _, vv := range MetaSchema.fields {
-			if v.name == vv.name {
+	for _, v := range s.Fields {
+		for _, vv := range MetaSchema.Fields {
+			if v.Name == vv.Name {
 				return s
 			}
-			if v.id == vv.id {
+			if v.Id == vv.Id {
 				return s
 			}
 		}
@@ -48,7 +48,7 @@ func (s *Schema) WithMeta() *Schema {
 
 	// add metadata fields (internal fields don't change hash)
 	clone := s.Clone()
-	clone.fields = append(clone.fields, MetaSchema.fields...)
+	clone.Fields = append(clone.Fields, MetaSchema.Fields...)
 	return clone.Finalize()
 }
 

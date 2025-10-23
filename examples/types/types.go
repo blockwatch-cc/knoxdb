@@ -285,7 +285,7 @@ func Create(ctx context.Context) (db knox.Database, table knox.Table, err error)
 		return
 	}
 
-	log.Infof("Creating Table %s", s.Name())
+	log.Infof("Creating Table %s", s.Name)
 	log.Debugf("Schema %s", s)
 	table, err = db.CreateTable(ctx, s, knox.TableOptions{
 		Engine:      "pack",
@@ -325,7 +325,7 @@ func Create(ctx context.Context) (db knox.Database, table knox.Table, err error)
 		return
 	}
 	s.WithName("types_pk_index")
-	log.Infof("Creating Index %s", s.Name())
+	log.Infof("Creating Index %s", s.Name)
 	log.Debugf("Schema %s", s)
 	err = db.CreateIndex(ctx, "types_pk_index", table, s, knox.IndexOptions{
 		Engine:      "pack",

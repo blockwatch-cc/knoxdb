@@ -24,7 +24,7 @@ func RegisterTableFactory(n TableKind, fn TableFactory) {
 func (e *Engine) TableNames() []string {
 	names := make([]string, 0)
 	for _, v := range e.tables.Map() {
-		names = append(names, v.Schema().Name())
+		names = append(names, v.Schema().Name)
 	}
 	return names
 }
@@ -52,7 +52,7 @@ func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, opts TableOp
 	tag := s.TaggedHash(types.ObjectTagTable)
 	_, ok := e.tables.Get(tag)
 	if ok {
-		return nil, fmt.Errorf("%s: %v", s.Name(), ErrTableExists)
+		return nil, fmt.Errorf("%s: %v", s.Name, ErrTableExists)
 	}
 
 	// check enums exist and collect
@@ -332,7 +332,7 @@ func (e *Engine) openTables(ctx context.Context) error {
 		if err := table.Open(ctx, s, opts); err != nil {
 			return err
 		}
-		e.log.Debugf("Loaded table %s", s.Name())
+		e.log.Debugf("Loaded table %s", s.Name)
 
 		// open indexes
 		if err := e.openIndexes(ctx, table); err != nil {

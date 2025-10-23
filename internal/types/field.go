@@ -155,12 +155,12 @@ const (
 	FieldFlagIndexed
 	FieldFlagEnum
 	FieldFlagDeleted
-	FieldFlagInternal
+	FieldFlagMetadata
 	FieldFlagNullable
 )
 
 var (
-	fieldFlagNames = "primary_indexed_enum_deleted_internal_nullable"
+	fieldFlagNames = "primary_indexed_enum_deleted_metadata_nullable"
 	fieldFlagIdx   = [...]int{0, 8, 16, 21, 29, 38, 47}
 )
 

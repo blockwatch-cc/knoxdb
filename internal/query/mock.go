@@ -41,11 +41,7 @@ func (idx *MockIndex) IsComposite() bool {
 }
 
 func (idx *MockIndex) CanMatch(node engine.QueryCondition) bool {
-	f, ok := idx.schema.FieldByIndex(0)
-	if !ok {
-		return false
-	}
-	return f.Name() == node.Fields()[0]
+	return idx.schema.Fields[0].Name == node.Fields()[0]
 }
 
 func (idx *MockIndex) Query(_ context.Context, _ engine.QueryCondition) (*xroar.Bitmap, bool, error) {

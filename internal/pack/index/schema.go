@@ -23,8 +23,8 @@ func convertSchema(s, ts *schema.Schema, typ types.IndexType) (*schema.Schema, C
 	}
 
 	// last field must be row id
-	rid := s.Fields()[s.NumFields()-1]
-	if rid.Id() != schema.MetaRid {
+	rid := s.Fields[s.NumFields()-1]
+	if rid.Id != schema.MetaRid {
 		return nil, nil, fmt.Errorf("last schema field must be row id")
 	}
 
@@ -37,17 +37,17 @@ func convertSchema(s, ts *schema.Schema, typ types.IndexType) (*schema.Schema, C
 			return nil, nil, fmt.Errorf("too many schema fields for hash index")
 		}
 		ixs := schema.NewBuilder().
-			WithName(s.Name()).
-			WithVersion(s.Version()).
+			WithName(s.Name).
+			WithVersion(s.Version).
 			Uint64("hash").
-			Uint64(rid.Name()).
+			Uint64(rid.Name).
 			Finalize().
 			Schema()
 
 		c := &SimpleHashConverter{
 			schema: s,
 		}
-		for n, f := range s.Exported() {
+		for n, f := range s.Fields {
 			i, _ := ts.FieldIndexById(f.Id)
 			if n == 0 {
 				c.hashBlock = i
@@ -65,10 +65,10 @@ func convertSchema(s, ts *schema.Schema, typ types.IndexType) (*schema.Schema, C
 			return nil, nil, fmt.Errorf("too many schema columns for integer index")
 		}
 
-		f, _ := s.FieldByIndex(0)
-		switch f.Type() {
+		f := s.Fields[0]
+		switch f.Type {
 		default:
-			return nil, nil, fmt.Errorf("invalid field type %s for integer index", f.Type())
+			return nil, nil, fmt.Errorf("invalid field type %s for integer index", f.Type)
 		case types.FieldTypeTimestamp,
 			types.FieldTypeDate,
 			types.FieldTypeTime,
@@ -82,17 +82,17 @@ func convertSchema(s, ts *schema.Schema, typ types.IndexType) (*schema.Schema, C
 			types.FieldTypeUint8:
 
 			ixs := schema.NewBuilder().
-				WithName(s.Name()).
-				WithVersion(s.Version()).
+				WithName(s.Name).
+				WithVersion(s.Version).
 				Uint64("int").
-				Uint64(rid.Name()).
+				Uint64(rid.Name).
 				Finalize().
 				Schema()
 
 			c := &RelinkConverter{
 				schema: s,
 			}
-			for _, f := range s.Exported() {
+			for _, f := range s.Fields {
 				i, _ := ts.FieldIndexById(f.Id)
 				c.srcBlocks = append(c.srcBlocks, i)
 			}
@@ -105,23 +105,23 @@ func convertSchema(s, ts *schema.Schema, typ types.IndexType) (*schema.Schema, C
 			return nil, nil, fmt.Errorf("too many schema columns for pk index")
 		}
 
-		f, _ := s.FieldByIndex(0)
-		if !f.Flags().Is(types.FieldFlagPrimary) || f.Type() != types.FieldTypeUint64 {
-			return nil, nil, fmt.Errorf("invalid field %s (%s) for pk index", f.Name(), f.Type())
+		f := s.Fields[0]
+		if !f.IsPrimary() || f.Type != types.FieldTypeUint64 {
+			return nil, nil, fmt.Errorf("invalid field %s (%s) for pk index", f.Name, f.Type)
 		}
 
 		ixs := schema.NewBuilder().
-			WithName(s.Name()).
-			WithVersion(s.Version()).
-			Uint64(f.Name(), schema.Primary()).
-			Uint64(rid.Name()).
+			WithName(s.Name).
+			WithVersion(s.Version).
+			Uint64(f.Name, schema.Primary()).
+			Uint64(rid.Name).
 			Finalize().
 			Schema()
 
 		c := &RelinkConverter{
 			schema: s,
 		}
-		for _, f := range s.Exported() {
+		for _, f := range s.Fields {
 			i, _ := ts.FieldIndexById(f.Id)
 			c.srcBlocks = append(c.srcBlocks, i)
 		}
@@ -132,10 +132,10 @@ func convertSchema(s, ts *schema.Schema, typ types.IndexType) (*schema.Schema, C
 		// first column: hash value (uint64)
 		// second column: rid
 		ixs := schema.NewBuilder().
-			WithName(s.Name()).
-			WithVersion(s.Version()).
+			WithName(s.Name).
+			WithVersion(s.Version).
 			Uint64("hash").
-			Uint64(rid.Name()).
+			Uint64(rid.Name).
 			Finalize().
 			Schema()
 
@@ -144,11 +144,11 @@ func convertSchema(s, ts *schema.Schema, typ types.IndexType) (*schema.Schema, C
 			srcSchema: s,
 		}
 		n := s.NumFields()
-		for _, f := range s.Exported()[:n-1] {
+		for _, f := range s.Fields[:n-1] {
 			i, _ := ts.FieldIndexById(f.Id)
 			c.hashBlocks = append(c.hashBlocks, i)
 		}
-		i, _ := ts.FieldIndexById(s.Exported()[n-1].Id)
+		i, _ := ts.FieldIndexById(s.Fields[n-1].Id)
 		c.srcBlocks = append(c.srcBlocks, i)
 		return ixs, c, nil
 

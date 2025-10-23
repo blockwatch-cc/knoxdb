@@ -16,58 +16,58 @@ import (
 var LE = binary.LittleEndian
 
 type View struct {
-	schema   *Schema
-	buf      []byte
-	ofs      []int
-	len      []int
-	minsz    int
-	pki      int
-	fixed    bool
-	internal bool
+	schema *Schema
+	buf    []byte
+	ofs    []int
+	len    []int
+	minsz  int
+	pki    int
+	fixed  bool
+	meta   bool
 }
 
 func NewView(s *Schema) *View {
 	view := &View{
-		schema:   s,
-		ofs:      make([]int, len(s.fields)),
-		len:      make([]int, len(s.fields)),
-		fixed:    true,
-		internal: false,
-		pki:      -1,
+		schema: s,
+		ofs:    make([]int, len(s.Fields)),
+		len:    make([]int, len(s.Fields)),
+		fixed:  true,
+		meta:   false,
+		pki:    -1,
 	}
 	return view.buildFromSchema()
 }
 
-func NewInternalView(s *Schema) *View {
+func NewMetaView(s *Schema) *View {
 	view := &View{
-		schema:   s,
-		ofs:      make([]int, len(s.fields)),
-		len:      make([]int, len(s.fields)),
-		fixed:    true,
-		internal: true,
-		pki:      -1,
+		schema: s,
+		ofs:    make([]int, len(s.Fields)),
+		len:    make([]int, len(s.Fields)),
+		fixed:  true,
+		meta:   true,
+		pki:    -1,
 	}
 	return view.buildFromSchema()
 }
 
 func (v *View) buildFromSchema() *View {
 	var ofs int
-	for i, f := range v.schema.fields {
+	for i, f := range v.schema.Fields {
 		if !f.IsActive() {
 			// deleted fields do not appear in wire format
 			v.ofs[i] = -2
 			continue
 		}
-		if f.IsInternal() && !v.internal {
+		if f.IsMeta() && !v.meta {
 			// internal fields do not appear in wire format
 			v.ofs[i] = -2
 			continue
 		}
-		sz := f.typ.Size()
-		if f.fixed > 0 {
-			sz = int(f.fixed)
+		sz := f.Type.Size()
+		if f.Fixed > 0 {
+			sz = int(f.Fixed)
 		}
-		if v.pki < 0 && f.flags.Is(types.FieldFlagPrimary) && f.typ == FT_U64 {
+		if v.pki < 0 && f.Flags.Is(types.FieldFlagPrimary) && f.Type == FT_U64 {
 			// remember the first uint64 primary key field
 			v.pki = i
 		}
@@ -106,8 +106,8 @@ func (v View) IsFixed() bool {
 	return v.fixed
 }
 
-func (v View) IsInternal() bool {
-	return v.internal
+func (v View) HasMeta() bool {
+	return v.meta
 }
 
 func (v *View) Len() int {
@@ -123,13 +123,13 @@ func (v View) Get(i int) (val any, ok bool) {
 		return
 	}
 	x, y := v.ofs[i], v.ofs[i]+v.len[i]
-	field := &v.schema.fields[i]
+	field := v.schema.Fields[i]
 	if x == -2 {
 		return nil, false
 	}
-	switch field.typ {
+	switch field.Type {
 	case FT_TIMESTAMP, FT_TIME, FT_DATE:
-		val, ok = TimeScale(field.scale).FromUnix(int64(LE.Uint64(v.buf[x:y]))), true
+		val, ok = TimeScale(field.Scale).FromUnix(int64(LE.Uint64(v.buf[x:y]))), true
 	case FT_I64:
 		val, ok = int64(LE.Uint64(v.buf[x:y])), true
 	case FT_U64:
@@ -161,13 +161,13 @@ func (v View) Get(i int) (val any, ok bool) {
 	case FT_I128:
 		val, ok = num.Int128FromBytes(v.buf[x:y]), true
 	case FT_D256:
-		val, ok = num.NewDecimal256(num.Int256FromBytes(v.buf[x:y]), field.scale), true
+		val, ok = num.NewDecimal256(num.Int256FromBytes(v.buf[x:y]), field.Scale), true
 	case FT_D128:
-		val, ok = num.NewDecimal128(num.Int128FromBytes(v.buf[x:y]), field.scale), true
+		val, ok = num.NewDecimal128(num.Int128FromBytes(v.buf[x:y]), field.Scale), true
 	case FT_D64:
-		val, ok = num.NewDecimal64(int64(LE.Uint64(v.buf[x:y])), field.scale), true
+		val, ok = num.NewDecimal64(int64(LE.Uint64(v.buf[x:y])), field.Scale), true
 	case FT_D32:
-		val, ok = num.NewDecimal32(int32(LE.Uint32(v.buf[x:y])), field.scale), true
+		val, ok = num.NewDecimal32(int32(LE.Uint32(v.buf[x:y])), field.Scale), true
 	case FT_BIGINT:
 		val, ok = num.NewBigFromBytes(v.buf[x:y]), true
 	}
@@ -179,11 +179,11 @@ func (v View) GetPhy(i int) (val any, ok bool) {
 		return
 	}
 	x, y := v.ofs[i], v.ofs[i]+v.len[i]
-	field := &v.schema.fields[i]
+	field := v.schema.Fields[i]
 	if x == -2 {
 		return nil, false
 	}
-	switch field.typ {
+	switch field.Type {
 	case FT_TIMESTAMP, FT_TIME, FT_DATE, FT_I64, FT_D64:
 		val, ok = int64(LE.Uint64(v.buf[x:y])), true
 	case FT_U64:
@@ -225,16 +225,16 @@ func (v View) Append(val any, i int) any {
 		return val
 	}
 	x, y := v.ofs[i], v.ofs[i]+v.len[i]
-	field := &v.schema.fields[i]
+	field := v.schema.Fields[i]
 	if x == -2 {
 		return val
 	}
-	switch field.typ {
+	switch field.Type {
 	case FT_TIMESTAMP, FT_TIME, FT_DATE:
 		if val == nil {
 			val = make([]time.Time, 0)
 		}
-		val = append(val.([]time.Time), TimeScale(field.scale).FromUnix(int64(LE.Uint64(v.buf[x:y]))))
+		val = append(val.([]time.Time), TimeScale(field.Scale).FromUnix(int64(LE.Uint64(v.buf[x:y]))))
 	case FT_I64:
 		if val == nil {
 			val = make([]int64, 0)
@@ -314,22 +314,22 @@ func (v View) Append(val any, i int) any {
 		if val == nil {
 			val = make([]num.Decimal256, 0)
 		}
-		val = append(val.([]num.Decimal256), num.NewDecimal256(num.Int256FromBytes(v.buf[x:y]), field.scale))
+		val = append(val.([]num.Decimal256), num.NewDecimal256(num.Int256FromBytes(v.buf[x:y]), field.Scale))
 	case FT_D128:
 		if val == nil {
 			val = make([]num.Decimal128, 0)
 		}
-		val = append(val.([]num.Decimal128), num.NewDecimal128(num.Int128FromBytes(v.buf[x:y]), field.scale))
+		val = append(val.([]num.Decimal128), num.NewDecimal128(num.Int128FromBytes(v.buf[x:y]), field.Scale))
 	case FT_D64:
 		if val == nil {
 			val = make([]num.Decimal64, 0)
 		}
-		val = append(val.([]num.Decimal64), num.NewDecimal64(int64(LE.Uint64(v.buf[x:y])), field.scale))
+		val = append(val.([]num.Decimal64), num.NewDecimal64(int64(LE.Uint64(v.buf[x:y])), field.Scale))
 	case FT_D32:
 		if val == nil {
 			val = make([]num.Decimal32, 0)
 		}
-		val = append(val.([]num.Decimal32), num.NewDecimal32(int32(LE.Uint32(v.buf[x:y])), field.scale))
+		val = append(val.([]num.Decimal32), num.NewDecimal32(int32(LE.Uint32(v.buf[x:y])), field.Scale))
 	case FT_BIGINT:
 		if val == nil {
 			val = make([]num.Big, 0)
@@ -357,11 +357,11 @@ func (v View) Set(i int, val any) {
 		return
 	}
 	x, y := v.ofs[i], v.ofs[i]+v.len[i]
-	field := &v.schema.fields[i]
+	field := v.schema.Fields[i]
 	if x == -2 {
 		return
 	}
-	switch field.typ {
+	switch field.Type {
 	case FT_U64:
 		if u64, ok := val.(uint64); ok {
 			LE.PutUint64(v.buf[x:y], u64)
@@ -370,7 +370,7 @@ func (v View) Set(i int, val any) {
 		// unsupported, may alter length
 	case FT_TIMESTAMP, FT_TIME, FT_DATE:
 		if tm, ok := val.(time.Time); ok {
-			LE.PutUint64(v.buf[x:y], uint64(TimeScale(field.scale).ToUnix(tm)))
+			LE.PutUint64(v.buf[x:y], uint64(TimeScale(field.Scale).ToUnix(tm)))
 		}
 	case FT_I64:
 		if i64, ok := val.(int64); ok {
@@ -452,13 +452,12 @@ func (v *View) Reset(buf []byte) *View {
 	var ofs int
 	if !v.fixed {
 		skip := true
-		for i := range v.schema.fields {
-			f := &v.schema.fields[i]
+		for i, f := range v.schema.Fields {
 			if !f.IsActive() {
 				v.ofs[i] = -2
 				continue
 			}
-			if f.IsInternal() && !v.internal {
+			if f.IsMeta() && !v.meta {
 				v.ofs[i] = -2
 				continue
 			}
@@ -467,12 +466,12 @@ func (v *View) Reset(buf []byte) *View {
 				continue
 			}
 			skip = false
-			switch f.typ {
+			switch f.Type {
 			case FT_STRING, FT_BYTES, FT_BIGINT:
-				if f.fixed > 0 {
+				if f.Fixed > 0 {
 					v.ofs[i] = ofs
-					v.len[i] = int(f.fixed)
-					ofs += int(f.fixed)
+					v.len[i] = int(f.Fixed)
+					ofs += int(f.Fixed)
 				} else {
 					u32 := LE.Uint32(buf[ofs:])
 					ofs += 4

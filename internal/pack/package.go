@@ -145,7 +145,7 @@ func (p *Package) Alloc() *Package {
 	}
 
 	// alloc missing block storage
-	for i, field := range p.schema.Fields() {
+	for i, field := range p.schema.Fields {
 		// skip existing blocks
 		if p.blocks[i] != nil {
 			continue
@@ -157,7 +157,7 @@ func (p *Package) Alloc() *Package {
 		}
 
 		// allocate block
-		p.blocks[i] = block.New(field.Type().BlockType(), p.maxRows)
+		p.blocks[i] = block.New(field.Type.BlockType(), p.maxRows)
 	}
 
 	return p
@@ -289,7 +289,7 @@ func (p *Package) MaterializeBlock(i int) *Package {
 func (p *Package) IsMaterialized() bool {
 	for i, b := range p.blocks {
 		if b == nil {
-			if !p.schema.Field(i).Is(types.FieldFlagDeleted) {
+			if !p.schema.Fields[i].Is(types.FieldFlagDeleted) {
 				return false
 			}
 		}
@@ -303,7 +303,7 @@ func (p *Package) IsMaterialized() bool {
 func (p *Package) IsComplete() bool {
 	for i, b := range p.blocks {
 		if b == nil {
-			if !p.schema.Field(i).Is(types.FieldFlagDeleted) {
+			if !p.schema.Fields[i].Is(types.FieldFlagDeleted) {
 				return false
 			}
 		}

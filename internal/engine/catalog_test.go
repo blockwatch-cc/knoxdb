@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/store"
 	_ "blockwatch.cc/knoxdb/pkg/store/mem"
-	"blockwatch.cc/knoxdb/pkg/schema"
 	"github.com/stretchr/testify/require"
 )
 
@@ -135,8 +135,8 @@ func TestCatalogAddTable(t *testing.T) {
 	s2, opts2, err := cat.GetTable(tctx, 1)
 	require.NoError(t, err)
 	require.NotNil(t, s2)
-	require.Equal(t, s2.Name(), s.Name())
-	require.Equal(t, s2.Hash(), s.Hash())
+	require.Equal(t, s2.Name, s.Name)
+	require.Equal(t, s2.Hash, s.Hash)
 	require.Equal(t, opts2, opts)
 	require.NoError(t, abort())
 
@@ -170,7 +170,7 @@ func TestCatalogAddIndex(t *testing.T) {
 	defer abort()
 	s, err := schema.SchemaOf(&TestTable{})
 	require.NoError(t, err)
-	s.WithName(s.Name() + "_index")
+	s.WithName(s.Name + "_index")
 	opts := IndexOptions{
 		Engine:   "pack",
 		Driver:   "mem",
@@ -192,8 +192,8 @@ func TestCatalogAddIndex(t *testing.T) {
 	s2, opts2, err := cat.GetIndex(tctx, 2)
 	require.NoError(t, err)
 	require.NotNil(t, s2)
-	require.Equal(t, s2.Name(), s.Name())
-	require.Equal(t, s2.Hash(), s.Hash())
+	require.Equal(t, s2.Name, s.Name)
+	require.Equal(t, s2.Hash, s.Hash)
 	require.Equal(t, opts2, opts)
 	require.NoError(t, abort())
 
@@ -227,7 +227,7 @@ func TestCatalogAddStore(t *testing.T) {
 	defer abort()
 	s, err := schema.SchemaOf(&TestTable{})
 	require.NoError(t, err)
-	s.WithName(s.Name() + "_store")
+	s.WithName(s.Name + "_store")
 	opts := StoreOptions{
 		Driver:   "mem",
 		PageSize: 1024,
@@ -248,8 +248,8 @@ func TestCatalogAddStore(t *testing.T) {
 	s2, opts2, err := cat.GetStore(tctx, 1)
 	require.NoError(t, err)
 	require.NotNil(t, s2)
-	require.Equal(t, s2.Name(), s.Name())
-	require.Equal(t, s2.Hash(), s.Hash())
+	require.Equal(t, s2.Name, s.Name)
+	require.Equal(t, s2.Hash, s.Hash)
 	require.Equal(t, opts2, opts)
 	require.NoError(t, abort())
 

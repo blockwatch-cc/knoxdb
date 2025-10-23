@@ -13,43 +13,43 @@ type BuilderOption func(*Builder)
 
 func Fixed[T int | uint16](n T) BuilderOption {
 	return func(b *Builder) {
-		b.currentField().fixed = uint16(n)
+		b.currentField().Fixed = uint16(n)
 	}
 }
 
 func Scale[T int | uint8](n T) BuilderOption {
 	return func(b *Builder) {
-		b.currentField().scale = uint8(n)
+		b.currentField().Scale = uint8(n)
 	}
 }
 
 func Index(i types.IndexType) BuilderOption {
 	return func(b *Builder) {
-		b.currentField().index = i
+		b.currentField().Index = NewIndexInfo(b.currentField(), i)
 	}
 }
 
 func Compression(c types.BlockCompression) BuilderOption {
 	return func(b *Builder) {
-		b.currentField().compress = c
+		b.currentField().Compress = c
 	}
 }
 
 func Primary() BuilderOption {
 	return func(b *Builder) {
-		b.currentField().flags |= types.FieldFlagPrimary
+		b.currentField().Flags |= types.FieldFlagPrimary
 	}
 }
 
 func Nullable() BuilderOption {
 	return func(b *Builder) {
-		b.currentField().flags |= types.FieldFlagNullable
+		b.currentField().Flags |= types.FieldFlagNullable
 	}
 }
 
 func Id(id uint16) BuilderOption {
 	return func(b *Builder) {
-		b.currentField().id = id
+		b.currentField().Id = id
 	}
 }
 
@@ -87,12 +87,12 @@ func (b *Builder) WithVersion(v uint32) *Builder {
 }
 
 func (b *Builder) currentField() *Field {
-	return &b.s.fields[len(b.s.fields)-1]
+	return b.s.Fields[len(b.s.Fields)-1]
 }
 
 func (b *Builder) addField(typ types.FieldType, name string, opts ...BuilderOption) *Builder {
 	if name == "" {
-		name = "F" + strconv.Itoa(len(b.s.fields))
+		name = "F" + strconv.Itoa(len(b.s.Fields))
 	}
 	b.s.WithField(NewField(typ).WithName(name))
 	for _, o := range opts {

@@ -30,7 +30,7 @@ func (e *Engine) IndexNames(tableName string) []string {
 	idxs := table.Indexes()
 	names := make([]string, 0, len(idxs))
 	for _, v := range idxs {
-		names = append(names, v.Schema().Name())
+		names = append(names, v.Schema().Name)
 	}
 	return names
 }
@@ -84,10 +84,10 @@ func (e *Engine) CreateIndex(ctx context.Context, tableName string, s *schema.Sc
 	}
 
 	// lookup index
-	tag := types.TaggedHash(types.ObjectTagIndex, s.Name())
+	tag := types.TaggedHash(types.ObjectTagIndex, s.Name)
 	_, ok = e.indexes.Get(tag)
 	if ok {
-		return nil, fmt.Errorf("%s: %v", s.Name(), ErrIndexExists)
+		return nil, fmt.Errorf("%s: %v", s.Name, ErrIndexExists)
 	}
 
 	// create index engine
@@ -258,7 +258,7 @@ func (e *Engine) DropIndex(ctx context.Context, name string) error {
 }
 
 func (e *Engine) openIndexes(ctx context.Context, table TableEngine) error {
-	tag := types.TaggedHash(types.ObjectTagTable, table.Schema().Name())
+	tag := types.TaggedHash(types.ObjectTagTable, table.Schema().Name)
 
 	// filter indexes by table in catalog
 	keys, err := e.cat.ListIndexes(ctx, tag)
@@ -282,9 +282,9 @@ func (e *Engine) openIndexes(ctx context.Context, table TableEngine) error {
 			return err
 		}
 		table.ConnectIndex(idx)
-		itag := types.TaggedHash(types.ObjectTagIndex, s.Name())
+		itag := types.TaggedHash(types.ObjectTagIndex, s.Name)
 		e.indexes.Put(itag, idx)
-		e.log.Debugf("Loaded index %s", s.Name())
+		e.log.Debugf("Loaded index %s", s.Name)
 	}
 
 	return nil

@@ -45,10 +45,10 @@ func (t TableImpl) Insert(ctx context.Context, val any) (uint64, error) {
 		return 0, err
 	}
 	// check schema matches
-	if !t.table.Schema().EqualHash(s.Hash()) {
+	if t.table.Schema().Hash != s.Hash {
 		return 0, schema.ErrSchemaMismatch
 	}
-	s.WithEnums(t.table.Schema().Enums())
+	s.WithEnums(t.table.Schema().Enums)
 
 	// encode wire (single or slice) - schema is guaranteed the same
 	// but we must use the one derived from Go type for struct read
@@ -88,10 +88,10 @@ func (t TableImpl) Update(ctx context.Context, val any) (uint64, error) {
 		return 0, err
 	}
 	// check schema matches
-	if !t.table.Schema().EqualHash(s.Hash()) {
+	if t.table.Schema().Hash != s.Hash {
 		return 0, schema.ErrSchemaMismatch
 	}
-	s.WithEnums(t.table.Schema().Enums())
+	s.WithEnums(t.table.Schema().Enums)
 
 	// encode wire (single or slice) - schema is guaranteed the same
 	// but we must use the one derived from Go type for struct read
@@ -256,7 +256,7 @@ func FindGenericTable[T any](name string, db Database) (*GenericTable[T], error)
 		return nil, err
 	}
 	// check schema matches
-	if !table.Schema().EqualHash(s.Hash()) {
+	if table.Schema().Hash != s.Hash {
 		return nil, schema.ErrSchemaMismatch
 	}
 	return &GenericTable[T]{
@@ -267,7 +267,7 @@ func FindGenericTable[T any](name string, db Database) (*GenericTable[T], error)
 }
 
 func (t *GenericTable[T]) Name() string {
-	return t.schema.Name()
+	return t.schema.Name
 }
 
 func (t *GenericTable[T]) Schema() *schema.Schema {
@@ -299,7 +299,7 @@ func (t *GenericTable[T]) Insert(ctx context.Context, val any) (uint64, error) {
 		err error
 	)
 	if t.enc == nil {
-		t.enc = schema.NewGenericEncoder[T]().WithEnums(t.Schema().Enums())
+		t.enc = schema.NewGenericEncoder[T]().WithEnums(t.Schema().Enums)
 	}
 	switch v := val.(type) {
 	case *T:
@@ -333,7 +333,7 @@ func (t *GenericTable[T]) Insert(ctx context.Context, val any) (uint64, error) {
 	}
 
 	// assign primary keys to all values, return above is first sequential pk assigned
-	pkOffset := t.schema.Pk().Offset()
+	pkOffset := t.schema.Pk().Offset
 	switch v := val.(type) {
 	case *T:
 		*(*uint64)(unsafe.Add(unsafe.Pointer(v), pkOffset)) = n
@@ -358,7 +358,7 @@ func (t *GenericTable[T]) Update(ctx context.Context, val any) (uint64, error) {
 		err error
 	)
 	if t.enc == nil {
-		t.enc = schema.NewGenericEncoder[T]().WithEnums(t.Schema().Enums())
+		t.enc = schema.NewGenericEncoder[T]().WithEnums(t.Schema().Enums)
 	}
 	switch v := val.(type) {
 	case *T:
