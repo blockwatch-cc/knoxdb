@@ -126,7 +126,7 @@ func matchFilterVector(f *filter.Filter, pkg *pack.Package, bits, mask *bitset.B
 	}
 
 	ftyp := filterType(f, pkg, minx)
-	if ftyp == types.IndexTypeNone {
+	if ftyp == types.FilterTypeNone {
 		return 0, bits
 	}
 
@@ -152,15 +152,20 @@ func matchFilterVector(f *filter.Filter, pkg *pack.Package, bits, mask *bitset.B
 
 		// load filter from bucket and check
 		switch ftyp {
-		case types.IndexTypeBloom:
+		case types.FilterTypeBloom2b, types.FilterTypeBloom3b,
+			types.FilterTypeBloom4b, types.FilterTypeBloom5b:
 			buf := b[STATS_FILTER_KEY].Get(bkey)
 			n += len(buf)
 			flt, err = bloom.NewFilterBuffer(buf)
-		case types.IndexTypeBfuse:
+		case types.FilterTypeBfuse8:
 			buf := b[STATS_FILTER_KEY].Get(bkey)
 			n += len(buf)
 			flt, err = fuse.NewBinaryFuseFromBytes[uint8](buf)
-		case types.IndexTypeBits:
+		case types.FilterTypeBfuse16:
+			buf := b[STATS_FILTER_KEY].Get(bkey)
+			n += len(buf)
+			flt, err = fuse.NewBinaryFuseFromBytes[uint16](buf)
+		case types.FilterTypeBits:
 			buf := b[STATS_FILTER_KEY].Get(bkey)
 			if len(buf) > 0 {
 				n += len(buf)
@@ -183,18 +188,15 @@ func matchFilterVector(f *filter.Filter, pkg *pack.Package, bits, mask *bitset.B
 }
 
 // TODO: replace with filter tree node flags (FilterFlagUseBloom)
-func filterType(f *filter.Filter, pkg *pack.Package, idx int) types.IndexType {
+func filterType(f *filter.Filter, pkg *pack.Package, idx int) types.FilterType {
 	switch f.Mode {
 	case types.FilterModeEqual, types.FilterModeIn:
 		field := pkg.Schema().Fields[idx]
-		if field.IsIndexed() {
-			switch field.Index.Type {
-			case types.IndexTypeBloom, types.IndexTypeBfuse, types.IndexTypeBits:
-				return field.Index.Type
-			}
+		if field.Filter > 0 {
+			return field.Filter
 		}
 	}
-	return types.IndexTypeNone
+	return types.FilterTypeNone
 }
 
 // matchVectorAnd aggregates match bitsets and stops eary when no more match is possible.

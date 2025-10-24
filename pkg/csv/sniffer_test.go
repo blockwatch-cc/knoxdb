@@ -332,7 +332,7 @@ func TestSniffer(t *testing.T) {
 			require.NoError(t, s.Sniff())
 			require.Equal(t, c.res, s.Result())
 			sc := s.Schema()
-			for i, f := range sc.Exported() {
+			for i, f := range sc.Fields {
 				require.Equal(t, c.names[i], f.Name)
 				require.Equal(t, c.typs[i], f.Type, "field=%s[%d] want=%s have=%s", f.Name, i, c.typs[i], f.Type)
 			}

@@ -72,7 +72,7 @@ func (d *Decoder) initType() {
 		d.decode = d.decodePhysical
 	}
 	var nStringFields int
-	for _, f := range d.s.Exported() {
+	for _, f := range d.s.Fields {
 		switch f.Type {
 		case types.FieldTypeString, types.FieldTypeBytes:
 			nStringFields++
@@ -301,7 +301,7 @@ func (d *Decoder) DecodeSlice(v []any) (int, error) {
 // Pack and decoder schema must match.
 func (d *Decoder) DecodePack(pkg *pack.Package) (int, error) {
 	// check pack schema
-	if pkg.Schema().Hash() != d.s.Hash() {
+	if pkg.Schema().Hash != d.s.Hash {
 		return 0, schema.ErrSchemaMismatch
 	}
 	pkg.Clear()
@@ -356,8 +356,8 @@ func (d *Decoder) validateHeader(line []string) error {
 		return schema.ErrSchemaMismatch
 	}
 	var i int
-	for _, f := range d.s.Exported() {
-		if !f.IsVisible {
+	for _, f := range d.s.Fields {
+		if !f.IsVisible() {
 			continue
 		}
 		if SanitizeFieldName(line[i], i) != f.Name {
@@ -371,8 +371,8 @@ func (d *Decoder) validateHeader(line []string) error {
 
 func (d *Decoder) decodePhysical(base unsafe.Pointer, line []string) error {
 	var i int
-	for _, f := range d.s.Exported() {
-		if !f.IsVisible {
+	for _, f := range d.s.Fields {
+		if !f.IsVisible() {
 			continue
 		}
 		if len(line[i]) == 0 || line[i] == NULL {
@@ -584,8 +584,8 @@ func (d *Decoder) decodePhysical(base unsafe.Pointer, line []string) error {
 
 func (d *Decoder) decodeLogical(base unsafe.Pointer, line []string) error {
 	var i int
-	for _, f := range d.s.Exported() {
-		if !f.IsVisible {
+	for _, f := range d.s.Fields {
+		if !f.IsVisible() {
 			continue
 		}
 		if len(line[i]) == 0 || line[i] == NULL {
@@ -799,7 +799,7 @@ var zeros [32]byte
 
 func (d *Decoder) decodePack(pkg *pack.Package, line []string) error {
 	var i int
-	for k, f := range pkg.Schema().Exported() {
+	for k, f := range pkg.Schema().Fields {
 		// skip missing blocks (e.g. after schema change)
 		b := pkg.Block(k)
 		if b == nil {
@@ -807,7 +807,7 @@ func (d *Decoder) decodePack(pkg *pack.Package, line []string) error {
 		}
 
 		// fill internal metadata fields
-		if f.IsInternal {
+		if f.IsMeta() {
 			switch b.Type() {
 			case types.BlockUint64:
 				b.Uint64().Append(0)

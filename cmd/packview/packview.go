@@ -261,7 +261,7 @@ func PrintSchema(s *schema.Schema, w io.Writer) {
 	for _, f := range s.Fields {
 		var (
 			typ    string
-			findex string
+			filter string
 		)
 		switch f.Type {
 		case schema.FT_TIME, schema.FT_TIMESTAMP:
@@ -276,15 +276,15 @@ func PrintSchema(s *schema.Schema, w io.Writer) {
 		if typ == "" {
 			typ = f.Type.String()
 		}
-		if f.Index != nil {
-			findex = f.Index.Type.String() + ":" + strconv.Itoa(int(f.Scale))
+		if f.Filter > 0 {
+			filter = f.Filter.String()
 		}
 		t.AppendRow([]any{
 			f.Id,
 			f.Name,
 			typ,
 			f.Flags.String(),
-			findex,
+			filter,
 			f.Type.Size(),
 			f.Compress,
 		})

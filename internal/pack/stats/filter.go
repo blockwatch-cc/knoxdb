@@ -49,40 +49,48 @@ func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
 			continue
 		}
 
-		if f.Index != nil {
-			switch f.Index.Type {
-			case types.IndexTypeBloom:
-				if idx.use.Is(FeatBloomFilter) {
-					// use cardinality from pack analyze step if exists, otherwise
-					// fall back to cardinality estimation
-					card := pstats.Unique[i]
-					if card <= 0 {
-						card = EstimateCardinality(b, 8)
-					}
-					if flt := BuildBloomFilter(b, card, int(f.Scale)); flt != nil {
-						blooms[f.Id] = flt.Bytes()
-					}
+		switch f.Filter {
+		case types.FilterTypeBloom2b, types.FilterTypeBloom3b,
+			types.FilterTypeBloom4b, types.FilterTypeBloom5b:
+			if idx.use.Is(FeatBloomFilter) {
+				// use cardinality from pack analyze step if exists, otherwise
+				// fall back to cardinality estimation
+				card := pstats.Unique[i]
+				if card <= 0 {
+					card = EstimateCardinality(b, 8)
 				}
-			case types.IndexTypeBfuse:
-				if idx.use.Is(FeatFuseFilter) {
-					// TODO: use unique values from pack analyis step
-					flt, err := BuildFuseFilter(b)
-					if err != nil {
-						return err
-					}
-					fuses[f.Id], _ = flt.MarshalBinary()
+				if flt := BuildBloomFilter(b, card, f.Filter.Factor()); flt != nil {
+					blooms[f.Id] = flt.Bytes()
 				}
-			case types.IndexTypeBits:
-				if idx.use.Is(FeatBitsFilter) {
-					// use cardinality from pack analyze step if exists, otherwise
-					// fall back to cardinality estimation
-					card := pstats.Unique[i]
-					if card <= 0 {
-						card = EstimateCardinality(b, 8)
-					}
-					if flt := BuildBitsFilter(b, card); flt != nil {
-						bits[f.Id] = flt.Bytes()
-					}
+			}
+		case types.FilterTypeBfuse8:
+			if idx.use.Is(FeatFuseFilter) {
+				// TODO: use unique values from pack analyis step
+				flt, err := BuildFuseFilter[uint8](b)
+				if err != nil {
+					return err
+				}
+				fuses[f.Id], _ = flt.MarshalBinary()
+			}
+		case types.FilterTypeBfuse16:
+			if idx.use.Is(FeatFuseFilter) {
+				// TODO: use unique values from pack analyis step
+				flt, err := BuildFuseFilter[uint16](b)
+				if err != nil {
+					return err
+				}
+				fuses[f.Id], _ = flt.MarshalBinary()
+			}
+		case types.FilterTypeBits:
+			if idx.use.Is(FeatBitsFilter) {
+				// use cardinality from pack analyze step if exists, otherwise
+				// fall back to cardinality estimation
+				card := pstats.Unique[i]
+				if card <= 0 {
+					card = EstimateCardinality(b, 8)
+				}
+				if flt := BuildBitsFilter(b, card); flt != nil {
+					bits[f.Id] = flt.Bytes()
 				}
 			}
 		}
@@ -195,7 +203,7 @@ func (idx Index) dropFilters(pkg *pack.Package) error {
 				return store.ErrBucketNotFound
 			}
 			for _, f := range pkg.Schema().Fields {
-				if f.Index == nil {
+				if f.Filter == 0 {
 					continue
 				}
 				_ = b.Delete(encodeFilterKey(pkg.Key(), pkg.Version(), f.Id))
@@ -282,17 +290,22 @@ func EstimateCardinality(b *block.Block, precision int) int {
 	}
 }
 
-func BuildBloomFilter(b *block.Block, cardinality, factor int) *bloom.Filter {
+func BuildBloomFilter(b *block.Block, cardinality int, factor int) *bloom.Filter {
 	if cardinality <= 0 || factor <= 0 {
 		return nil
 	}
 
-	// dimension filter for cardinality and factor to control its false positive rate
-	// (bloom expects size in bits)
+	// dimension filter for cardinality and factor to control its
+	// false positive rate (bloom.NewFilter expects size in bits)
+	// factor directly controls filter size in bytes per value
 	//
-	// - 2% for m = set cardinality * 2
-	// - 0.2% for m = set cardinality * 3
-	// - 0.02% for m = set cardinality * 4
+	// factor   p          p(%)      false positive rate
+	// -------------------------------------------------
+	// 1        0.023968   2.4%      1 in 42
+	// 2        0.002394   0.2%      1 in 418
+	// 3        0.000555   0.05%     1 in 1,800
+	// 4        0.000190   0.02%     1 in 5,246
+	// 5        0.000082   0.008%    1 in 12,194
 	flt := bloom.NewFilter(cardinality * factor * 8)
 
 	switch b.Type() {
@@ -377,7 +390,7 @@ func BuildBitsFilter(b *block.Block, cardinality int) *xroar.Bitmap {
 	return flt
 }
 
-func BuildFuseFilter(b *block.Block) (*fuse.BinaryFuse[uint8], error) {
+func BuildFuseFilter[T uint8 | uint16](b *block.Block) (*fuse.BinaryFuse[T], error) {
 	if !b.IsMaterialized() {
 		return nil, block.ErrBlockNotMaterialized
 	}
@@ -424,5 +437,5 @@ func BuildFuseFilter(b *block.Block) (*fuse.BinaryFuse[uint8], error) {
 
 	// need unique values for filter construction
 	u64 = slicex.Unique(u64)
-	return fuse.NewBinaryFuse[uint8](u64)
+	return fuse.NewBinaryFuse[T](u64)
 }

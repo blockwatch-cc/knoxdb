@@ -6,13 +6,21 @@ package bloom
 // This package implements a custom bloom filter implementation loosely based on
 // Will Fitzgerald's bloom & bitset packages. It uses a vectorized zero-allocation
 // xxhash32 implementation, limits the filter size to powers of 2 and fixes the
-// number of hash functions to 4. The empirical false positive rate of this filter is
+// number of hash functions to 4. The empirical false positive rate of this filter
+// is pow(1 - exp(-4 / (m / n)), 4). A good way is to dimension the filter based
+// on set cardinality while applying a scaling factor (multiply by 8 because
+// NewFilter() counts in bits). This way factor directly controls filter size
+// in bytes per value:
 //
-// - 2% for m = set cardinality * 2
-// - 0.2% for m = set cardinality * 3
-// - 0.02% for m = set cardinality * 4
+// factor   p          p(%)      false positive rate
+// -------------------------------------------------
+// 1        0.023968   2.4%      1 in 42
+// 2        0.002394   0.2%      1 in 418
+// 3        0.000555   0.05%     1 in 1,800
+// 4        0.000190   0.02%     1 in 5,246
+// 5        0.000082   0.008%    1 in 12,194
 //
-// etc.
+// see https://hur.st/bloomfilter
 
 import (
 	"bytes"

@@ -177,7 +177,7 @@ func (req Request) RunQuery(ctx context.Context, plan *query.QueryPlan) (*Result
 		if !ok {
 			return nil, fmt.Errorf("unknown group_by field %q", req.GroupBy)
 		}
-		groupByEnum, ok = req.table.Schema().Enums().Lookup(f.Name())
+		groupByEnum, ok = req.table.Schema().Enums.Lookup(f.Name)
 		if !ok {
 			return nil, fmt.Errorf("missing enum dictionary for field %q", req.GroupBy)
 		}

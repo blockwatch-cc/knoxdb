@@ -29,6 +29,7 @@ type Schema struct {
 	Name        string
 	Hash        uint64
 	Fields      []*Field
+	Indexes     []*IndexSchema
 	Enums       *EnumRegistry
 	MinWireSize int
 	MaxWireSize int
@@ -104,12 +105,8 @@ func (s *Schema) IsValid() bool {
 	return len(s.Name) != 0 && len(s.Fields) != 0 && len(s.Encode) != 0
 }
 
-func (s *Schema) TypeLabel(vendor string) string {
+func (s *Schema) Label() string {
 	var b strings.Builder
-	if vendor != "" {
-		b.WriteString(vendor)
-		b.WriteByte('.')
-	}
 	b.WriteString(s.Name)
 	b.WriteString(".v")
 	b.WriteString(strconv.Itoa(int(s.Version)))
@@ -274,13 +271,6 @@ func (s *Schema) FieldById(id uint16) (f *Field, ok bool) {
 	return
 }
 
-// func (s *Schema) FieldByIndex(i int) (f *Field, ok bool) {
-// 	if i < len(s.Fields) {
-// 		return s.Fields[i], true
-// 	}
-// 	return
-// }
-
 func (s *Schema) FieldIndexByName(name string) (idx int, ok bool) {
 	for i, f := range s.Fields {
 		if f.Name == name && f.IsActive() {
@@ -309,18 +299,8 @@ func (s *Schema) Pk() *Field {
 			return f
 		}
 	}
-	return &Field{} // nil?
+	return &Field{}
 }
-
-// func (s *Schema) CompositePk() []*Field {
-// 	res := make([]*Field, 0)
-// 	for _, v := range s.Fields {
-// 		if v.index.Is(types.IndexTypeComposite) && v.IsActive() {
-// 			res = append(res, v)
-// 		}
-// 	}
-// 	return res
-// }
 
 func (s *Schema) PkId() uint16 {
 	for _, f := range s.Fields {
@@ -340,6 +320,15 @@ func (s *Schema) PkIndex() int {
 	return -1
 }
 
+func (s *Schema) RowId() *Field {
+	for _, f := range s.Fields {
+		if f.Id == MetaRid && f.IsMeta() && f.IsActive() {
+			return f
+		}
+	}
+	return &Field{}
+}
+
 func (s *Schema) RowIdIndex() int {
 	for i, f := range s.Fields {
 		if f.Id == MetaRid && f.IsMeta() && f.IsActive() {
@@ -349,20 +338,11 @@ func (s *Schema) RowIdIndex() int {
 	return -1
 }
 
-// TODO: return []*IndexInfo
-func (s *Schema) Indexes() (list []*Field) {
-	for _, f := range s.Fields {
-		if f.IsIndexed() && f.IsActive() {
-			list = append(list, f)
-		}
-	}
-	return
-}
-
 func (s *Schema) Clone() *Schema {
 	return &Schema{
 		Name:    s.Name,
 		Fields:  slices.Clone(s.Fields),
+		Indexes: slices.Clone(s.Indexes),
 		Enums:   s.Enums,
 		Version: s.Version,
 	}
@@ -393,9 +373,6 @@ func (s *Schema) DeleteField(id uint16) (*Schema, error) {
 		}
 		if v.IsPrimary() {
 			return nil, ErrDeletePrimary
-		}
-		if v.IsIndexed() {
-			return nil, ErrDeleteIndexed
 		}
 		// delete changes schema version
 		clone := s.Clone()
@@ -631,6 +608,18 @@ func (s *Schema) Validate() error {
 		return fmt.Errorf("schema %s: %d fields without decoder opcodes", s.Name, a-b)
 	}
 
+	// validate indexes if defined
+	clear(uniqueNames)
+	for _, v := range s.Indexes {
+		if _, ok := uniqueNames[v.Name]; ok {
+			return fmt.Errorf("schema %s: duplicate index %s", s.Name, v.Name)
+		}
+		uniqueNames[v.Name] = struct{}{}
+		if err := v.Validate(); err != nil {
+			return fmt.Errorf("schema %s: %v", s.Name, err)
+		}
+	}
+
 	return nil
 }
 
@@ -729,10 +718,14 @@ func (s *Schema) Finalize() *Schema {
 				s.MaxWireSize += defaultVarFieldSize
 			}
 
-			// hash id, type
+			// hash: id, type, flags, fixed, scale (not: filter, compress, name)
 			LE.PutUint16(b[:], f.Id)
 			h.Write(b[:2])
 			h.Write([]byte{byte(f.Type)})
+			h.Write([]byte{byte(f.Flags)})
+			LE.PutUint16(b[:], f.Fixed)
+			h.Write(b[:2])
+			h.Write([]byte{f.Scale})
 
 			// fill struct type info
 			if needLayout {
@@ -799,8 +792,8 @@ func (s *Schema) String() string {
 			typ = f.Type.String()
 		}
 		flags := f.Flags.String()
-		if f.Index != nil {
-			flags += "," + f.Index.Type.String() + ":" + strconv.Itoa(int(f.Scale))
+		if f.Filter > 0 {
+			flags += "," + f.Filter.String()
 		}
 		fmt.Fprintf(&b, "\n%02d F#%02d %[3]*[4]s %-15s %s",
 			i,

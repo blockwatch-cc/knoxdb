@@ -826,15 +826,14 @@ func (idx *Index) Query(ctx context.Context, flt *filter.Node, dir types.OrderTy
 			field := idx.schema.Fields[minColIndex(f.Index)]
 
 			// check if this field has any filters enabled
-			if field.IsIndexed() {
-				switch field.Index.Type {
-				case types.IndexTypeBloom:
-					use |= FeatBloomFilter
-				case types.IndexTypeBfuse:
-					use |= FeatFuseFilter
-				case types.IndexTypeBits:
-					use |= FeatBitsFilter
-				}
+			switch field.Filter {
+			case types.FilterTypeBloom2b, types.FilterTypeBloom3b,
+				types.FilterTypeBloom4b, types.FilterTypeBloom5b:
+				use |= FeatBloomFilter
+			case types.FilterTypeBfuse8, types.FilterTypeBfuse16:
+				use |= FeatFuseFilter
+			case types.FilterTypeBits:
+				use |= FeatBitsFilter
 			}
 			return nil
 		})

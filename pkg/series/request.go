@@ -134,15 +134,15 @@ func (r *Request) MakeBucket(expr Expr, s *schema.Schema) (reducer.Bucket, error
 	if !ok {
 		return nil, fmt.Errorf("unknown column %q", expr.Field)
 	}
-	b := reducer.NewBucket(f.Type())
+	b := reducer.NewBucket(f.Type)
 	if b == nil {
-		return nil, fmt.Errorf("unsupported column type %q", f.Type())
+		return nil, fmt.Errorf("unsupported column type %q", f.Type)
 	}
 	if v, ok := r.TypeMap[expr.Field]; ok {
 		b = b.WithTypeOf(v)
 	}
 	return b.WithName(expr.Field).
-		WithIndex(int(f.Id())).
+		WithIndex(int(f.Id)).
 		WithReducer(expr.Reduce).
 		WithDimensions(r.Range, r.Interval).
 		WithLimit(r.Limit).

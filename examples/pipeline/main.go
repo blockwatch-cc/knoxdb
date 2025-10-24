@@ -129,7 +129,7 @@ type Record struct {
 	Id        uint64         `knox:"id,pk"`
 	Timestamp time.Time      `knox:"time"`
 	Date      time.Time      `knox:"date,date"`
-	Hash      [32]byte       `knox:"hash,index=bloom:3"`
+	Hash      [32]byte       `knox:"hash,filter=bloom3b"`
 	String    string         `knox:"string"`
 	Bool      bool           `knox:"bool"`
 	MyEnum    MyEnum         `knox:"my_enum,enum"`
@@ -138,7 +138,7 @@ type Record struct {
 	Int16     int16          `knox:"int16"`
 	Int8      int8           `knox:"int8"`
 	Int_64    int            `knox:"int_as_int64"`
-	Uint64    uint64         `knox:"uint64,index=bloom:2"`
+	Uint64    uint64         `knox:"uint64,filter=bloom2b"`
 	Uint32    uint32         `knox:"uint32"`
 	Uint16    uint16         `knox:"uint16"`
 	Uint8     uint8          `knox:"uint8"`

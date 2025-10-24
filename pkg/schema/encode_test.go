@@ -49,8 +49,8 @@ type Hash [32]byte
 type encodeTestStruct struct {
 	Id        uint64         `knox:"id,pk"`
 	Time      time.Time      `knox:"time"`
-	HashArray [20]byte       `knox:"hash,index=bloom=3"`
-	HashFixed Hash           `knox:"hash_fixed,index=bloom,zip=snappy"`
+	HashArray [20]byte       `knox:"hash,filter=bloom3b"`
+	HashFixed Hash           `knox:"hash_fixed,filter=bloom5b,zip=snappy"`
 	String    string         `knox:"str"`
 	Bool      bool           `knox:"bool"`
 	Enum      MyEnum         `knox:"my_enum,enum"`
@@ -58,7 +58,7 @@ type encodeTestStruct struct {
 	Int32     int32          `knox:"i32"`
 	Int16     int16          `knox:"i16"`
 	Int8      int8           `knox:"i8"`
-	Uint64    uint64         `knox:"u64,index=bloom"`
+	Uint64    uint64         `knox:"u64,filter=bloom2b"`
 	Uint32    uint32         `knox:"u32"`
 	Uint16    uint16         `knox:"u16"`
 	Uint8     uint8          `knox:"u8"`
@@ -267,7 +267,7 @@ var encodeBenchmarkSizes = []struct {
 type encodeBenchStruct struct {
 	Id      uint64         `knox:"id,pk"`
 	Time    time.Time      `knox:"time"`
-	Hash    [20]byte       `knox:"hash,index=bloom=3"`
+	Hash    [20]byte       `knox:"hash,filter=bloom3b"`
 	String  string         `knox:"str"`
 	Bool    bool           `knox:"bool"`
 	Enum    MyEnum         `knox:"my_enum,enum"`
@@ -275,7 +275,7 @@ type encodeBenchStruct struct {
 	Int32   int32          `knox:"i32"`
 	Int16   int16          `knox:"i16"`
 	Int8    int8           `knox:"i8"`
-	Uint64  uint64         `knox:"u64,index=bloom"`
+	Uint64  uint64         `knox:"u64,filter=bloom2b"`
 	Uint32  uint32         `knox:"u32"`
 	Uint16  uint16         `knox:"u16"`
 	Uint8   uint8          `knox:"u8"`

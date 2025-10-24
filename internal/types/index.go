@@ -13,9 +13,6 @@ const (
 	IndexTypeInt
 	IndexTypePk
 	IndexTypeComposite
-	IndexTypeBloom
-	IndexTypeBfuse
-	IndexTypeBits
 )
 
 func (i IndexType) Is(f IndexType) bool {
@@ -23,19 +20,19 @@ func (i IndexType) Is(f IndexType) bool {
 }
 
 var (
-	indexTypeString  = "__hash_int_pk_composite_bloom_bfuse_bits"
-	indexTypeIdx     = [...]int{0, 2, 7, 11, 14, 24, 30, 36, 41}
+	indexTypeString  = "__hash_int_pk_composite"
+	indexTypeIdx     = [...]int{0, 2, 7, 11, 14, 24}
 	indexTypeReverse = map[string]IndexType{}
 )
 
 func init() {
-	for t := IndexTypeNone; t <= IndexTypeBits; t++ {
+	for t := IndexTypeNone; t <= IndexTypeComposite; t++ {
 		indexTypeReverse[t.String()] = t
 	}
 }
 
 func (t IndexType) IsValid() bool {
-	return t >= IndexTypeNone && t <= IndexTypeBits
+	return t > IndexTypeNone && t <= IndexTypeComposite
 }
 
 func (t IndexType) String() string {

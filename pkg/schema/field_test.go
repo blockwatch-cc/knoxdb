@@ -62,8 +62,8 @@ func TestFieldWithMethods(t *testing.T) {
 	})
 
 	t.Run("WithFlags", func(t *testing.T) {
-		field := baseField.WithFlags(types.FieldFlagIndexed)
-		assert.True(t, field.Is(types.FieldFlagIndexed))
+		field := baseField.WithFlags(types.FieldFlagTimebase)
+		assert.True(t, field.Is(types.FieldFlagTimebase))
 	})
 
 	t.Run("WithFixed", func(t *testing.T) {
@@ -76,10 +76,9 @@ func TestFieldWithMethods(t *testing.T) {
 		assert.Equal(t, uint8(2), field.Scale)
 	})
 
-	t.Run("WithIndex", func(t *testing.T) {
-		field := baseField.WithIndex(types.IndexTypeInt)
-		assert.Equal(t, types.IndexTypeInt, field.Index.Type)
-		assert.True(t, field.Is(types.FieldFlagIndexed))
+	t.Run("WithFilter", func(t *testing.T) {
+		field := baseField.WithFilter(types.FilterTypeBits)
+		assert.Equal(t, types.FilterTypeBits, field.Filter)
 	})
 }
 
@@ -144,19 +143,19 @@ func TestFieldValidation(t *testing.T) {
 			expectErr: false,
 		},
 		{
-			name:      "Invalid index kind",
-			field:     NewField(FT_I32).WithName("test_field").WithIndex(types.IndexType(100)),
+			name:      "Invalid filter kind",
+			field:     NewField(FT_I32).WithName("test_field").WithFilter(types.FilterType(100)),
 			expectErr: true,
 		},
 		{
-			name:      "Valid int field with int index",
-			field:     NewField(FT_I32).WithName("test_field").WithIndex(types.IndexTypeInt),
+			name:      "Valid int field with filter",
+			field:     NewField(FT_I32).WithName("test_field").WithFilter(types.FilterTypeBits),
 			expectErr: false,
 		},
 		{
-			name:      "Invalid int index on non-int field",
-			field:     NewField(FT_STRING).WithName("test_field").WithIndex(types.IndexTypeInt),
-			expectErr: true,
+			name:      "Valid string field with filter",
+			field:     NewField(FT_STRING).WithName("test_field").WithFilter(types.FilterTypeBloom2b),
+			expectErr: false,
 		},
 	}
 
@@ -355,8 +354,8 @@ func TestFieldEncodingDecoding(t *testing.T) {
 func TestFieldSerializationRoundTrip(t *testing.T) {
 	original := NewField(FT_STRING).
 		WithName("test_field").
-		WithFlags(types.FieldFlagIndexed).
-		WithIndex(types.IndexTypeHash).
+		WithFlags(types.FieldFlagTimebase).
+		WithFilter(types.FilterTypeBloom2b).
 		WithFixed(10)
 
 	var buf bytes.Buffer
@@ -372,7 +371,7 @@ func TestFieldSerializationRoundTrip(t *testing.T) {
 	assert.Equal(t, original.Type, readField.Type)
 	assert.Equal(t, original.Flags, readField.Flags)
 	assert.Equal(t, original.Compress, readField.Compress)
-	assert.Equal(t, original.Index, readField.Index)
+	assert.Equal(t, original.Filter, readField.Filter)
 	assert.Equal(t, original.Fixed, readField.Fixed)
 	assert.Equal(t, original.Scale, readField.Scale)
 }

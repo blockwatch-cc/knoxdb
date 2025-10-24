@@ -160,8 +160,8 @@ func (e *Encoder) writeHeader() error {
 		return nil
 	}
 	var i int
-	for _, f := range e.s.Exported() {
-		if !f.IsVisible {
+	for _, f := range e.s.Fields {
+		if !f.IsVisible() {
 			continue
 		}
 		if i > 0 {
@@ -186,8 +186,8 @@ func (e *Encoder) encode(base unsafe.Pointer) error {
 		i int
 	)
 	e.buf = e.buf[:0]
-	for _, f := range e.s.Exported() {
-		if !f.IsVisible {
+	for _, f := range e.s.Fields {
+		if !f.IsVisible() {
 			continue
 		}
 		if i > 0 {

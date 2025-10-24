@@ -44,9 +44,14 @@ const (
 	IndexTypeHash      = types.IndexTypeHash
 	IndexTypeInt       = types.IndexTypeInt
 	IndexTypeComposite = types.IndexTypeComposite
-	IndexTypeBloom     = types.IndexTypeBloom
-	IndexTypeBfuse     = types.IndexTypeBfuse
-	IndexTypeBits      = types.IndexTypeBits
+
+	FilterTypeBloom2b = types.FilterTypeBloom2b
+	FilterTypeBloom3b = types.FilterTypeBloom3b
+	FilterTypeBloom4b = types.FilterTypeBloom4b
+	FilterTypeBloom5b = types.FilterTypeBloom5b
+	FilterTypeBfuse8  = types.FilterTypeBfuse8
+	FilterTypeBfuse16 = types.FilterTypeBfuse16
+	FilterTypeBits    = types.FilterTypeBits
 )
 
 // type QueryResult interface {

@@ -20,6 +20,7 @@ type (
 	FieldType  = types.FieldType
 	FieldFlags = types.FieldFlags
 	IndexType  = types.IndexType
+	FilterType = types.FilterType
 )
 
 const (
@@ -48,7 +49,7 @@ const (
 	FT_DATE      = types.FieldTypeDate
 
 	F_PRIMARY  = types.FieldFlagPrimary
-	F_INDEXED  = types.FieldFlagIndexed
+	F_TIMEBASE = types.FieldFlagTimebase
 	F_ENUM     = types.FieldFlagEnum
 	F_DELETED  = types.FieldFlagDeleted
 	F_METADATA = types.FieldFlagMetadata
@@ -58,9 +59,14 @@ const (
 	I_INT       = types.IndexTypeInt
 	I_PK        = types.IndexTypePk
 	I_COMPOSITE = types.IndexTypeComposite
-	I_BLOOM     = types.IndexTypeBloom
-	I_BFUSE     = types.IndexTypeBfuse
-	I_BITS      = types.IndexTypeBits
+
+	FL_BITS    = types.FilterTypeBits
+	FL_BLOOM2B = types.FilterTypeBloom2b
+	FL_BLOOM3B = types.FilterTypeBloom3b
+	FL_BLOOM4B = types.FilterTypeBloom4b
+	FL_BLOOM5B = types.FilterTypeBloom5b
+	FL_BFUSE8  = types.FilterTypeBfuse8
+	FL_BFUSE16 = types.FilterTypeBfuse16
 )
 
 type Field struct {
@@ -70,9 +76,9 @@ type Field struct {
 	Type     FieldType              // schema field type from struct tag or Go type
 	Flags    FieldFlags             // schema flags from struct tag
 	Compress types.BlockCompression // data compression from struct tag
+	Filter   FilterType             // metadata filter type
 	Fixed    uint16                 // 0..65535 fixed size array/bytes/string length
 	Scale    uint8                  // 0..255 fixed point scale, time scale, bloom error probability 1/x (1..4)
-	Index    *IndexInfo             // field index (optional)
 
 	// encoder values for INSERT, UPDATE, QUERY
 	Path   []int   // reflect struct nested positions
@@ -126,8 +132,8 @@ func (f *Field) IsPrimary() bool {
 	return f.Flags.Is(F_PRIMARY)
 }
 
-func (f *Field) IsIndexed() bool {
-	return f.Flags.Is(F_INDEXED)
+func (f *Field) IsTimebase() bool {
+	return f.Flags.Is(F_TIMEBASE)
 }
 
 func (f *Field) IsNullable() bool {
@@ -172,8 +178,6 @@ func (f *Field) GoType() reflect.Type {
 	return reflect.TypeOf(f.Type.Zero())
 }
 
-// WithXXX methods do not use pointer receivers and always return a
-// changed copy of the field.
 func (f *Field) WithName(n string) *Field {
 	f.Name = n
 	return f
@@ -199,14 +203,8 @@ func (f *Field) WithScale(n uint8) *Field {
 	return f
 }
 
-func (f *Field) WithIndex(typ IndexType) *Field {
-	if typ > 0 {
-		f.Flags |= F_INDEXED
-		f.Index = NewIndexInfo(f, typ)
-	} else {
-		f.Flags &^= F_INDEXED
-		f.Index = nil
-	}
+func (f *Field) WithFilter(typ FilterType) *Field {
+	f.Filter = typ
 	return f
 }
 
@@ -231,14 +229,17 @@ func (f *Field) Validate() error {
 			minScale = uint8(TIME_SCALE_DAY)
 			maxScale = uint8(TIME_SCALE_DAY)
 		default:
-			if f.Index != nil && f.Index.Type == I_BLOOM {
-				minScale, maxScale = 1, 4
-			} else {
-				return fmt.Errorf("field[%s]: scale unsupported on type %s", f.Name, f.Type)
-			}
+			return fmt.Errorf("field[%s]: scale unsupported on type %s", f.Name, f.Type)
 		}
 		if _, err := validateInt("scale", int(f.Scale), int(minScale), int(maxScale)); err != nil {
 			return fmt.Errorf("field[%s]: %v", f.Name, err)
+		}
+	}
+
+	// require valid filter types
+	if f.Filter > 0 {
+		if !f.Filter.IsValid() {
+			return fmt.Errorf("field[%s]: invalid filter type %d", f.Name, f.Filter)
 		}
 	}
 
@@ -252,43 +253,6 @@ func (f *Field) Validate() error {
 			// ok
 		default:
 			return fmt.Errorf("field[%s]: fixed unsupported on type %s", f.Name, f.Type)
-		}
-	}
-
-	// validate index
-	if f.Index != nil {
-
-		// require index kind in range
-		if !f.Index.IsValid() {
-			return fmt.Errorf("field[%s]: invalid index kind %d", f.Name, f.Index.Type)
-		}
-
-		// require index flag when index is != none
-		if f.Index.Type > 0 && f.Flags&F_INDEXED == 0 {
-			return fmt.Errorf("field[%s]: missing indexed flag with index kind set", f.Name)
-		}
-
-		switch f.Index.Type {
-		case I_INT:
-			// require integer index on int fields only
-			switch f.Type {
-			case FT_I64, FT_I32, FT_I16, FT_I8, FT_U64, FT_U32, FT_U16, FT_U8:
-				// ok
-			default:
-				return fmt.Errorf("field[%s]: unsupported integer index on type %s", f.Name, f.Type)
-			}
-
-		case I_PK:
-			// require pk index on pk field only
-			if f.Type != FT_U64 || f.Flags&F_PRIMARY == 0 {
-				return fmt.Errorf("field[%s]: pk index on unsupported type %s", f.Name, f.Type)
-			}
-
-		case I_BLOOM:
-			// require bloom scale 1..4
-			if _, err := validateInt("bloom factor", int(f.Scale), 1, 4); err != nil {
-				return fmt.Errorf("field[%s]: %v", f.Name, err)
-			}
 		}
 	}
 
@@ -664,14 +628,8 @@ func (f *Field) WriteTo(w *bytes.Buffer) error {
 		byte(f.Type),
 		byte(f.Flags),
 		byte(f.Compress),
+		byte(f.Filter),
 	})
-
-	// index: byte
-	if f.Index != nil {
-		w.WriteByte(byte(f.Index.Type))
-	} else {
-		w.WriteByte(0)
-	}
 
 	// fixed: u16
 	binary.Write(w, LE, f.Fixed)
@@ -704,18 +662,14 @@ func (f *Field) ReadFrom(buf *bytes.Buffer) (err error) {
 		return io.ErrShortBuffer
 	}
 
-	// typ, flags, compression: byte
+	// typ, flags, compression, filter: byte
 	if buf.Len() < 7 {
 		return io.ErrShortBuffer
 	}
 	f.Type = types.FieldType(buf.Next(1)[0])
 	f.Flags = types.FieldFlags(buf.Next(1)[0])
 	f.Compress = types.BlockCompression(buf.Next(1)[0])
-
-	// index: byte
-	if idx := types.IndexType(buf.Next(1)[0]); idx > 0 {
-		f.Index = NewIndexInfo(f, idx)
-	}
+	f.Filter = types.FilterType(buf.Next(1)[0])
 
 	// fixed: u16
 	binary.Read(buf, LE, &f.Fixed)

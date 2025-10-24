@@ -104,6 +104,11 @@ func SchemaOfTag(m any, tag string) (*Schema, error) {
 			continue
 		}
 
+		// skip empty structs (used to define composite indexes)
+		if f.Type == emptyType {
+			continue
+		}
+
 		// analyze field
 		field, err := reflectStructField(f, tag)
 		if err != nil {
@@ -122,6 +127,13 @@ func SchemaOfTag(m any, tag string) (*Schema, error) {
 		}
 		s.Fields = append(s.Fields, field)
 	}
+
+	// detect indexes
+	idxs, err := IndexesOfTag(reflect.New(typ).Interface(), tag, s)
+	if err != nil {
+		return nil, err
+	}
+	s.Indexes = idxs
 
 	// compile encoder/decoder opcodes, calculate wire size, lookup enums
 	s.Finalize()
@@ -210,15 +222,11 @@ func (s *Schema) StructType() reflect.Type {
 		if f.IsFixedSize() && f.Fixed > 0 {
 			tag += fmt.Sprintf(",fixed=%d", f.Fixed)
 		}
-		if f.IsIndexed() {
-			tag += fmt.Sprintf(",index=%s", f.Index.Type)
-		}
+		// if f.IsIndexed() {
+		// 	tag += fmt.Sprintf(",index=%s", f.Index.Type)
+		// }
 		if f.Scale > 0 {
-			if f.Index != nil && f.Index.Type == types.IndexTypeBloom {
-				tag += ":"
-			} else {
-				tag += fmt.Sprintf(",scale=%d", f.Scale)
-			}
+			tag += fmt.Sprintf(",scale=%d", f.Scale)
 		}
 		if f.IsCompressed() {
 			tag += ",zip=" + f.Compress.String()
@@ -255,6 +263,7 @@ func sanitize(s string) string {
 }
 
 var (
+	emptyType     = reflect.TypeOf(struct{}{})
 	uint8Type     = reflect.TypeOf(uint8(0))
 	byteSliceType = reflect.TypeOf([]byte(nil))
 	modelType     = reflect.TypeOf((*Model)(nil)).Elem()
@@ -439,7 +448,7 @@ func (f *Field) ParseTag(tag string) error {
 		maxScale = f.Scale
 		flags    types.FieldFlags
 		compress types.BlockCompression
-		index    types.IndexType
+		filter   types.FilterType
 	)
 
 	for _, flag := range tokens[1:] {
@@ -447,54 +456,28 @@ func (f *Field) ParseTag(tag string) error {
 		key = strings.TrimSpace(key)
 		val = strings.TrimSpace(val)
 		switch key {
+		case "index", "fields", "extra":
+			// skip here
 		case "pk":
-			flags |= F_PRIMARY | F_INDEXED
-			index = I_PK
-		case "index":
-			flags |= F_INDEXED
+			flags |= F_PRIMARY
+		case "filter":
 			switch val {
-			case "hash":
-				index = I_HASH
-			case "int":
-				switch f.Type {
-				case FT_I64, FT_I32, FT_I16, FT_I8, FT_U64, FT_U32, FT_U16, FT_U8:
-				default:
-					return fmt.Errorf("integer index unsupported on type %s", f.Type)
-				}
-				index = I_INT
-			case "pk":
-				if f.Type != FT_U64 || !f.IsPrimary() {
-					return fmt.Errorf("pk index on invalid field %s type %s", f.Name, f.Type)
-				}
-				index = I_PK
 			case "bits":
-				index = I_BITS
-			case "bloom":
-				index = I_BLOOM
-				scale = 2
-			case "bfuse":
-				index = I_BFUSE
+				filter = FL_BITS
+			case "bloom2b":
+				filter = FL_BLOOM2B
+			case "bloom3b":
+				filter = FL_BLOOM3B
+			case "bloom4b":
+				filter = FL_BLOOM4B
+			case "bloom5b":
+				filter = FL_BLOOM5B
+			case "bfuse8":
+				filter = FL_BFUSE8
+			case "bfuse16":
+				filter = FL_BFUSE16
 			default:
-				if val == "" || strings.HasPrefix(val, "bloom") {
-					index = I_BLOOM
-					scale = 2
-					// accept = and :
-					val = strings.ReplaceAll(val, "=", ":")
-					if _, num, ok := strings.Cut(val, ":"); ok {
-						// bloom filter factor
-						// 1: 2% false positive rate (1 byte per item)
-						// 2: 0.2% false positive rate (2 bytes per item)
-						// 3: 0.02% false positive rate (3 bytes per item)
-						// 4: 0.002% false positive rate (4 bytes per item)
-						sc, err := parseInt(num, "bloom filter factor", 1, 4)
-						if err != nil {
-							return err
-						}
-						scale = uint8(sc)
-					}
-				} else {
-					return fmt.Errorf("unsupported index type %q", val)
-				}
+				return fmt.Errorf("unsupported filter type %q", val)
 			}
 		case "zip":
 			switch val {
@@ -577,6 +560,8 @@ func (f *Field) ParseTag(tag string) error {
 		case "time":
 			f.Type = FT_TIME
 			scale = TIME_SCALE_SECOND.AsUint()
+		case "timebase":
+			flags |= F_TIMEBASE
 		default:
 			return fmt.Errorf("unsupported struct tag '%s'", key)
 		}
@@ -586,9 +571,7 @@ func (f *Field) ParseTag(tag string) error {
 	f.Fixed = fixed
 	f.Flags = flags
 	f.Compress = compress
-	if index > 0 {
-		f.Index = NewIndexInfo(f, index)
-	}
+	f.Filter = filter
 
 	return nil
 }

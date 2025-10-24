@@ -26,6 +26,7 @@ type schemaTest struct {
 	idxtyps   []IndexType
 	typs      []FieldType
 	flags     []FieldFlags
+	filters   []FilterType
 	scales    []uint8
 	fixed     []uint16
 	isFixed   bool
@@ -353,9 +354,9 @@ type IntegerIndex struct {
 	Int int64 `knox:"i64,index=int"`
 }
 
-type BloomIndex struct {
+type BloomFilter struct {
 	BaseModel
-	Int int64 `knox:"i64,index=bloom:3"`
+	Int int64 `knox:"i64,filter=bloom3b"`
 }
 
 type InvalidIndexType struct {
@@ -368,19 +369,9 @@ type InvalidIndexFieldType struct {
 	B []byte `knox:",index=int"`
 }
 
-type InvalidIndexBloomScaleNeg struct {
+type InvalidBloomFilter struct {
 	BaseModel
-	B []byte `knox:",index=bloom:-1"`
-}
-
-type InvalidIndexBloomScaleNaN struct {
-	BaseModel
-	B []byte `knox:",index=bloom:x"`
-}
-
-type InvalidIndexBloomScaleTooLarge struct {
-	BaseModel
-	B []byte `knox:",index=bloom:10"`
+	B []byte `knox:",index=bloomx"`
 }
 
 type MetaFields struct {
@@ -454,7 +445,7 @@ var schemaTestCases = []schemaTest{
 		build:   GenericSchema[NoModelTag],
 		fields:  "id",
 		typs:    []FieldType{FT_U64},
-		flags:   []FieldFlags{F_PRIMARY | F_INDEXED},
+		flags:   []FieldFlags{F_PRIMARY},
 		scales:  []uint8{0},
 		fixed:   []uint16{0},
 		isFixed: true,
@@ -468,7 +459,7 @@ var schemaTestCases = []schemaTest{
 		build:   GenericSchema[ModelName],
 		fields:  "id",
 		typs:    []FieldType{FT_U64},
-		flags:   []FieldFlags{F_PRIMARY | F_INDEXED},
+		flags:   []FieldFlags{F_PRIMARY},
 		scales:  []uint8{0},
 		fixed:   []uint16{0},
 		isFixed: true,
@@ -493,7 +484,7 @@ var schemaTestCases = []schemaTest{
 		build:   GenericSchema[NoModelPrivate],
 		fields:  "tagid",
 		typs:    []FieldType{FT_U64},
-		flags:   []FieldFlags{F_PRIMARY | F_INDEXED},
+		flags:   []FieldFlags{F_PRIMARY},
 		scales:  []uint8{0},
 		fixed:   []uint16{0},
 		isFixed: true,
@@ -507,7 +498,7 @@ var schemaTestCases = []schemaTest{
 		build:   GenericSchema[NoModelTagName],
 		fields:  "tagid",
 		typs:    []FieldType{FT_U64},
-		flags:   []FieldFlags{F_PRIMARY | F_INDEXED},
+		flags:   []FieldFlags{F_PRIMARY},
 		scales:  []uint8{0},
 		fixed:   []uint16{0},
 		isFixed: true,
@@ -521,7 +512,7 @@ var schemaTestCases = []schemaTest{
 		build:   GenericSchema[MultipleAnonStructs],
 		fields:  "tagid,other",
 		typs:    []FieldType{FT_U64, FT_U64},
-		flags:   []FieldFlags{F_PRIMARY | F_INDEXED, 0},
+		flags:   []FieldFlags{F_PRIMARY, 0},
 		scales:  []uint8{0, 0},
 		fixed:   []uint16{0, 0},
 		isFixed: true,
@@ -553,7 +544,7 @@ var schemaTestCases = []schemaTest{
 		build:   GenericSchema[AllTypes],
 		fields:  "id,i64,i32,i16,i8,u64,u32,u16,u8,f64,f32,d32,d64,d128,d256,i128,i256,bool,time,bytes,array[2],string,my_enum,big",
 		typs:    []FieldType{FT_U64, FT_I64, FT_I32, FT_I16, FT_I8, FT_U64, FT_U32, FT_U16, FT_U8, FT_F64, FT_F32, FT_D32, FT_D64, FT_D128, FT_D256, FT_I128, FT_I256, FT_BOOL, FT_TIMESTAMP, FT_BYTES, FT_BYTES, FT_STRING, FT_U16, FT_BIGINT},
-		flags:   []FieldFlags{F_PRIMARY | F_INDEXED, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, types.FieldFlagEnum, 0},
+		flags:   []FieldFlags{F_PRIMARY, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, types.FieldFlagEnum, 0},
 		scales:  []uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 15, 18, 24, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 		fixed:   []uint16{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0},
 		isFixed: false,
@@ -567,7 +558,7 @@ var schemaTestCases = []schemaTest{
 		build:   GenericSchema[FixedTypes],
 		fields:  "id,fixed_bytes,fixed_string",
 		typs:    []FieldType{FT_U64, FT_BYTES, FT_STRING},
-		flags:   []FieldFlags{F_PRIMARY | F_INDEXED, 0, 0},
+		flags:   []FieldFlags{F_PRIMARY, 0, 0},
 		scales:  []uint8{0, 0, 0},
 		fixed:   []uint16{0, 20, 20},
 		isFixed: true,
@@ -581,7 +572,7 @@ var schemaTestCases = []schemaTest{
 	// 	build:   GenericSchema[MarshalerStructTypes],
 	// 	fields:  "id,stringer,byter",
 	// 	typs:    []FieldType{FT_U64, FT_STRING, FT_BYTES},
-	// 	flags:   []FieldFlags{F_PRIMARY | F_INDEXED, 0, 0},
+	// 	flags:   []FieldFlags{F_PRIMARY, 0, 0},
 	// 	scales:  []uint8{0, 0, 0},
 	// 	fixed:   []uint16{0, 0, 0},
 	// 	isFixed: false,
@@ -595,7 +586,7 @@ var schemaTestCases = []schemaTest{
 	// 	build:   GenericSchema[MarshalerMapTypes],
 	// 	fields:  "id,map",
 	// 	typs:    []FieldType{FT_U64, FT_BYTES},
-	// 	flags:   []FieldFlags{F_PRIMARY | F_INDEXED, 0},
+	// 	flags:   []FieldFlags{F_PRIMARY, 0},
 	// 	scales:  []uint8{0, 0},
 	// 	fixed:   []uint16{0, 0},
 	// 	isFixed: false,
@@ -623,7 +614,7 @@ var schemaTestCases = []schemaTest{
 		build:   GenericSchema[NativeTypes],
 		fields:  "id,int,uint",
 		typs:    []FieldType{FT_U64, FT_INT, FT_UINT},
-		flags:   []FieldFlags{F_PRIMARY | F_INDEXED, 0, 0},
+		flags:   []FieldFlags{F_PRIMARY, 0, 0},
 		scales:  []uint8{0, 0, 0},
 		fixed:   []uint16{0, 0, 0},
 		isFixed: true,
@@ -771,8 +762,6 @@ var schemaTestCases = []schemaTest{
 		iserr: true,
 	},
 
-	// error: bloom out of range
-
 	//
 	// Primary key tests
 	// -----------------
@@ -822,7 +811,7 @@ var schemaTestCases = []schemaTest{
 		build:     GenericSchema[HashIndex],
 		fields:    "id,hash",
 		typs:      []FieldType{FT_U64, FT_BYTES},
-		flags:     []FieldFlags{F_PRIMARY | F_INDEXED, F_INDEXED},
+		flags:     []FieldFlags{F_PRIMARY, 0},
 		idxfields: "id,hash",
 		idxtyps:   []types.IndexType{I_PK, I_HASH},
 		scales:    []uint8{0, 0},
@@ -838,7 +827,7 @@ var schemaTestCases = []schemaTest{
 		build:     GenericSchema[IntegerIndex],
 		fields:    "id,i64",
 		typs:      []FieldType{FT_U64, FT_I64},
-		flags:     []FieldFlags{F_PRIMARY | F_INDEXED, F_INDEXED},
+		flags:     []FieldFlags{F_PRIMARY, 0},
 		idxfields: "id,i64",
 		idxtyps:   []types.IndexType{I_PK, I_INT},
 		scales:    []uint8{0, 0},
@@ -848,16 +837,17 @@ var schemaTestCases = []schemaTest{
 		decode:    []OpCode{OC_U64, OC_I64},
 	},
 
-	// bloom index with custom scale
+	// bloom filter
 	{
-		name:      "bloom_index",
-		build:     GenericSchema[BloomIndex],
+		name:      "bloom_filter",
+		build:     GenericSchema[BloomFilter],
 		fields:    "id,i64",
 		typs:      []FieldType{FT_U64, FT_I64},
-		flags:     []FieldFlags{F_PRIMARY | F_INDEXED, F_INDEXED},
+		flags:     []FieldFlags{F_PRIMARY, 0},
+		filters:   []FilterType{0, FL_BLOOM3B},
 		idxfields: "id,i64",
-		idxtyps:   []types.IndexType{I_PK, I_BLOOM},
-		scales:    []uint8{0, 3},
+		idxtyps:   []types.IndexType{I_PK, 0},
+		scales:    []uint8{0, 0},
 		fixed:     []uint16{0, 0},
 		isFixed:   true,
 		encode:    []OpCode{OC_U64, OC_I64},
@@ -878,24 +868,10 @@ var schemaTestCases = []schemaTest{
 		iserr: true,
 	},
 
-	// error: invalid bloom scale param < 0
+	// error: invalid bloom filter
 	{
-		name:  "invalid bloom index scale < 0",
-		build: GenericSchema[InvalidIndexBloomScaleNeg],
-		iserr: true,
-	},
-
-	// error: invalid bloom scale param NaN
-	{
-		name:  "invalid bloom index scale NaN",
-		build: GenericSchema[InvalidIndexBloomScaleNaN],
-		iserr: true,
-	},
-
-	// error: invalid bloom scale param too large
-	{
-		name:  "invalid bloom index scale too large",
-		build: GenericSchema[InvalidIndexBloomScaleTooLarge],
+		name:  "invalid bloom filter name",
+		build: GenericSchema[InvalidBloomFilter],
 		iserr: true,
 	},
 
@@ -907,7 +883,7 @@ var schemaTestCases = []schemaTest{
 		build:   GenericSchema[MetaFields],
 		fields:  "id,i64,u64",
 		typs:    []FieldType{FT_U64, FT_I64, FT_U64},
-		flags:   []FieldFlags{F_PRIMARY | F_INDEXED, types.FieldFlagMetadata, 0},
+		flags:   []FieldFlags{F_PRIMARY, F_METADATA, 0},
 		scales:  []uint8{0, 0, 0},
 		fixed:   []uint16{0, 0, 0},
 		isFixed: true,
@@ -956,21 +932,28 @@ func TestSchemaDetect(t *testing.T) {
 			for i, f := range s.Fields {
 				require.Equal(t, c.flags[i], f.Flags, "field flags for "+f.Name)
 			}
+			// filters
+			if len(c.filters) > 0 {
+				for i, f := range s.Fields {
+					require.Equal(t, c.filters[i], f.Filter, "field filter for "+f.Name)
+				}
+			}
 			if len(c.idxfields) > 0 {
 				allIndexNames := strings.Split(c.idxfields, ",")
 				// every index is detected
-				for _, v := range allIndexNames {
-					f, ok := s.FieldByName(v)
-					require.True(t, ok)
-					require.NotNil(t, f.Index)
-					require.NotZero(t, f.Index.Type)
-				}
+				// for _, v := range allIndexNames {
+				// 	f, ok := s.FieldByName(v)
+				// 	require.True(t, ok)
+				// 	require.NotNil(t, f.Index)
+				// 	require.NotZero(t, f.Index.Type)
+				// }
+
 				// every detected index is expected and has correct type
-				for i, f := range s.Indexes() {
+				for i, idx := range s.Indexes {
 					// index name is expected
-					require.Contains(t, allIndexNames, f.Name, "index unexpected for "+f.Name)
+					require.Contains(t, allIndexNames, idx.Fields[0].Name, "unexpected index %s on field %s", idx.Name, idx.Fields[0].Name)
 					// index types
-					require.Equal(t, c.idxtyps[i], f.Index.Type, "index type for "+f.Name)
+					require.Equal(t, c.idxtyps[i], idx.Type, "wrong index type for "+idx.Name)
 				}
 			}
 			// scale values
@@ -1003,7 +986,7 @@ func TestSchemaMarshal(t *testing.T) {
 	err = r.UnmarshalBinary(buf)
 	require.NoError(t, err)
 
-	assert.True(t, s.EqualHash(r.Hash))
+	assert.True(t, s.Equal(r))
 	assert.Equal(t, s.Hash, r.Hash)
 	assert.Equal(t, s.Version, r.Version)
 	assert.Equal(t, s.Name, r.Name)

@@ -258,8 +258,8 @@ type (
 
 type tradeStruct struct {
 	Id          TradeID       `knox:"id,pk"`
-	Pool        PoolID        `knox:"pool,index=bloom:3"`
-	Entity      Entity        `knox:"entity,index=bloom:3"`
+	Pool        PoolID        `knox:"pool,filter=bloom3b"`
+	Entity      Entity        `knox:"entity,filter=bloom3b"`
 	Counter     int           `knox:"counter"`
 	Side        Direction     `knox:"side"`
 	VolumeA     num.Big       `knox:"volume_a,zip=snappy"`
@@ -286,12 +286,12 @@ type tradeStruct struct {
 	PriceUSD    num.Big       `knox:"price_usd,zip=snappy"`
 	FeesUSD     num.Big       `knox:"fees_usd,zip=snappy"`
 	VolumeUSD   num.Big       `knox:"volume_usd,zip=snappy"`
-	Signer      AccountID     `knox:"signer,index=bloom:3"`
-	Sender      AccountID     `knox:"sender,index=bloom:3"`
-	Receiver    AccountID     `knox:"receiver,index=bloom:3"`
+	Signer      AccountID     `knox:"signer,filter=bloom3b"`
+	Sender      AccountID     `knox:"sender,filter=bloom3b"`
+	Receiver    AccountID     `knox:"receiver,filter=bloom3b"`
 	Router      AccountID     `knox:"router"`
 	IsWash      bool          `knox:"is_wash_trade"`
-	TxHash      OpHash        `knox:"tx_hash,index=bloom:3"`
+	TxHash      OpHash        `knox:"tx_hash,filter=bloom3b"`
 	TxFee       int64         `knox:"tx_fee"`
 	Block       int64         `knox:"block"`
 	Time        time.Time     `knox:"time"`
@@ -345,7 +345,7 @@ func (s specialStruct) init() {
 type encodeTestStruct struct {
 	Id      uint64         `knox:"id,pk"`
 	Time    time.Time      `knox:"time"`
-	Hash    OpHash         `knox:"hash,index=bloom:3"`
+	Hash    OpHash         `knox:"hash,filter=bloom3b"`
 	String  string         `knox:"str"`
 	Bool    bool           `knox:"bool"`
 	Enum    string         `knox:"my_enum,enum"`
@@ -353,7 +353,7 @@ type encodeTestStruct struct {
 	Int32   int32          `knox:"i32"`
 	Int16   int16          `knox:"i16"`
 	Int8    int8           `knox:"i8"`
-	Uint64  uint64         `knox:"u64,index=bloom"`
+	Uint64  uint64         `knox:"u64,filter=bloom2b"`
 	Uint32  uint32         `knox:"u32"`
 	Uint16  uint16         `knox:"u16"`
 	Uint8   uint8          `knox:"u8"`
@@ -392,6 +392,6 @@ func (s encodeTestStruct) init() {
 type encodeTestSubStruct struct {
 	Id    uint64    `knox:"id,pk"`
 	Int64 int64     `knox:"i64"`
-	Hash  OpHash    `knox:"hash,index=bloom:3"`
+	Hash  OpHash    `knox:"hash,filter=bloom3b"`
 	Time  time.Time `knox:"time"`
 }

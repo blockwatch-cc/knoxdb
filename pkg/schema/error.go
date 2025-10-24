@@ -25,4 +25,5 @@ var (
 	ErrDeletePrimary     = errors.New("cannot delete primary key field")
 	ErrDeleteIndexed     = errors.New("cannot delete indexed field")
 	ErrRenameEnum        = errors.New("cannot rename enum field")
+	ErrNoMeta            = errors.New("missing metadata fields")
 )

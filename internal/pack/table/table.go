@@ -183,7 +183,7 @@ func (t *Table) createBackend(ctx context.Context) error {
 		store.WithManifest(
 			store.NewManifest(
 				name,
-				t.schema.TypeLabel(t.engine.Namespace()),
+				t.engine.Namespace()+"."+t.schema.Label(),
 			),
 		),
 	)
@@ -310,7 +310,7 @@ func (t *Table) openBackend(ctx context.Context) error {
 		store.WithManifest(
 			store.NewManifest(
 				name,
-				t.schema.TypeLabel(t.engine.Namespace()),
+				t.engine.Namespace()+"."+t.schema.Label(),
 			),
 		),
 	)

@@ -10,6 +10,8 @@ import (
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
+// TODO: use schema.IndexSchema
+
 // convertSchema constructs a physical index schema and a converter for an index.
 func convertSchema(s, ts *schema.Schema, typ types.IndexType) (*schema.Schema, Converter, error) {
 	// requires at least two fields

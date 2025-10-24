@@ -73,7 +73,7 @@ func (kv *KVStore) Create(ctx context.Context, s *schema.Schema, opts engine.Sto
 			store.WithManifest(
 				store.NewManifest(
 					s.Name,
-					s.TypeLabel(e.Namespace()),
+					e.Namespace()+"."+s.Label(),
 				),
 			),
 		)
@@ -134,7 +134,7 @@ func (kv *KVStore) Open(ctx context.Context, s *schema.Schema, opts engine.Store
 			store.WithManifest(
 				store.NewManifest(
 					s.Name,
-					s.TypeLabel(e.Namespace()),
+					e.Namespace()+"."+s.Label(),
 				),
 			),
 		)
@@ -222,7 +222,7 @@ func (kv *KVStore) Metrics() engine.StoreMetrics {
 }
 
 func (kv *KVStore) Drop(ctx context.Context) error {
-	typ := kv.schema.TypeLabel(kv.engine.Namespace())
+	typ := kv.engine.Namespace() + "." + kv.schema.Label()
 	if kv.noClose {
 		kv.log.Debugf("dropping store %s", typ)
 		tx, err := kv.db.Begin(true)

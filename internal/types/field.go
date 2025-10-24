@@ -152,7 +152,7 @@ type FieldFlags byte
 
 const (
 	FieldFlagPrimary FieldFlags = 1 << iota
-	FieldFlagIndexed
+	FieldFlagTimebase
 	FieldFlagEnum
 	FieldFlagDeleted
 	FieldFlagMetadata
@@ -160,8 +160,8 @@ const (
 )
 
 var (
-	fieldFlagNames = "primary_indexed_enum_deleted_metadata_nullable"
-	fieldFlagIdx   = [...]int{0, 8, 16, 21, 29, 38, 47}
+	fieldFlagNames = "primary_timebase_enum_deleted_metadata_nullable"
+	fieldFlagIdx   = [...]int{0, 8, 17, 22, 30, 39, 48}
 )
 
 func (i FieldFlags) Is(f FieldFlags) bool {

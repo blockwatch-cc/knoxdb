@@ -25,10 +25,10 @@ import (
 // we use a test struct without metadata (i.e. rid == pk)
 type TestStruct struct {
 	Id  uint64 `knox:"id,pk"`
-	I64 int64  `knox:"i64,index=bloom:2"`
-	I32 int32  `knox:"i32,index=bfuse"`
+	I64 int64  `knox:"i64,filter=bloom2b"`
+	I32 int32  `knox:"i32,filter=bfuse"`
 	I16 int16  `knox:"i16"`
-	I8  int8   `knox:"i8,index=bits"`
+	I8  int8   `knox:"i8,filter=bits"`
 	Buf []byte `knox:"buf"`
 }
 

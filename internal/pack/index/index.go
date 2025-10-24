@@ -131,7 +131,7 @@ func (idx *Index) createBackend(ctx context.Context) error {
 		store.WithManifest(
 			store.NewManifest(
 				idx.name,
-				idx.srcSchema.TypeLabel(idx.engine.Namespace()),
+				idx.engine.Namespace()+"."+idx.srcSchema.Label(),
 			),
 		),
 	)
@@ -226,7 +226,7 @@ func (idx *Index) openBackend(ctx context.Context) error {
 		store.WithManifest(
 			store.NewManifest(
 				idx.name,
-				idx.srcSchema.TypeLabel(idx.engine.Namespace()),
+				idx.engine.Namespace()+"."+idx.srcSchema.Label(),
 			),
 		),
 	)

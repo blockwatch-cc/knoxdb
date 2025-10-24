@@ -118,7 +118,7 @@ func (s *Sniffer) Schema() *schema.Schema {
 	// construct a schema from discovered fields
 	b := schema.NewBuilder()
 	for i, f := range s.fields {
-		b.AddField(s.head[i], f.Type())
+		b.Add(s.head[i], f.Type())
 		if f.is(fFixed) && (f.Type() == types.FieldTypeBytes || f.Type() == types.FieldTypeString) {
 			l := uint16(f.len)
 			if f.is(fHex) {
