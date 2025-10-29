@@ -23,7 +23,6 @@ const (
 	allocTypeUint8
 	allocTypeFloat64
 	allocTypeFloat32
-	allocTypeBytes
 	allocTypeBytesSlice
 )
 
@@ -70,7 +69,7 @@ func AllocFloat32(sz int) []float32 {
 }
 
 func AllocBytes(sz int) []byte {
-	return _arena.Alloc(allocTypeBytes, sz).([]byte)
+	return _arena.Alloc(allocTypeUint8, sz).([]byte)
 }
 
 func AllocByteSlice(sz int) [][]byte {
@@ -145,14 +144,14 @@ func Clone[T Number | []byte](val []T) []T {
 }
 
 // TODO: we could allocate []byte (and [][]byte) only and unsafe-cast
-// to user types, this would safe 10x16 sync pools
+// to user types, this would safe 12x8 sync pools
 type arena struct {
-	alloc [12]Allocator
+	alloc [11]Allocator
 }
 
 func newArena() *arena {
 	return &arena{
-		alloc: [12]Allocator{
+		alloc: [11]Allocator{
 			newAllocator[int64](),
 			newAllocator[int32](),
 			newAllocator[int16](),
@@ -163,7 +162,6 @@ func newArena() *arena {
 			newAllocator[uint8](),
 			newAllocator[float64](),
 			newAllocator[float32](),
-			newAllocator[byte](),
 			newAllocator[[]byte](),
 		},
 	}
