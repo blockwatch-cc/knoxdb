@@ -6,6 +6,7 @@ package alp
 import (
 	"slices"
 	"sync"
+	"sync/atomic"
 
 	"blockwatch.cc/knoxdb/internal/cpu"
 	"blockwatch.cc/knoxdb/internal/encode/alp/avx2"
@@ -14,6 +15,8 @@ import (
 )
 
 type Decoder[T Float, E Int] struct {
+	_init         atomic.Bool
+	_mu           sync.Mutex
 	f             T
 	e             T
 	patch_values  []T
@@ -69,6 +72,7 @@ func (d *Decoder[T, E]) Close() {
 	if d.patch_values != nil {
 		d.patch_values = nil
 		d.patch_indices = nil
+		d._init.Store(false)
 		clear(d.patch_map)
 	}
 	putAlpDecoder(d)
@@ -92,17 +96,27 @@ func (d *Decoder[T, E]) Patches() (vals []T, pos []uint32) {
 func (d *Decoder[T, E]) DecodeValue(val E, pos int) T {
 	if d.patch_values != nil {
 		// lazy init patch map on first access
-		if d.patch_map == nil {
-			d.patch_map = make(map[uint32]T, len(d.patch_values))
-			for i, v := range d.patch_values {
-				d.patch_map[d.patch_indices[i]] = v
-			}
+		if !d._init.Load() {
+			d.initPatchMap()
 		}
 		if e, ok := d.patch_map[uint32(pos)]; ok {
 			return e
 		}
 	}
 	return d.decode(val)
+}
+
+// implements the sync.Once pattern
+func (d *Decoder[T, E]) initPatchMap() {
+	d._mu.Lock()
+	defer d._mu.Unlock()
+	if !d._init.Load() {
+		defer d._init.Store(true)
+		d.patch_map = make(map[uint32]T, len(d.patch_values))
+		for i, v := range d.patch_values {
+			d.patch_map[d.patch_indices[i]] = v
+		}
+	}
 }
 
 func (d *Decoder[T, E]) decode(val E) T {
