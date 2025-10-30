@@ -232,8 +232,8 @@ func (c *FloatDictionaryContainer[T]) MatchLessEqual(val T, bits, mask *Bitset) 
 		return c.Dict.Get(i) >= val
 	})
 
-	// adjust index for search values > last dict entry
-	if idx == l {
+	// adjust when we reached the end or no exact match was found
+	if idx == l || val < c.Dict.Get(idx) {
 		idx--
 	}
 
@@ -257,14 +257,12 @@ func (c *FloatDictionaryContainer[T]) MatchGreater(val T, bits, mask *Bitset) {
 
 	// find position of val using binary search (dict is sorted and values are unique)
 	idx := sort.Search(l, func(i int) bool {
-		return c.Dict.Get(i) >= val
+		return c.Dict.Get(i) > val
 	})
 
-	// If found we are good. If not found, we have at least found the index of
-	// the first value larger than val which is ok too. At this point
-	// we know idx is between 0 and l-1, so we can directly translate to a
-	// less(code) search.
-	c.Codes.MatchGreater(uint16(idx), bits, mask)
+	// Since we are searching for strictly greater dict entries we found the
+	// next higher code (or end of dict). Use GE for code match.
+	c.Codes.MatchGreaterEqual(uint16(idx), bits, mask)
 }
 
 func (c *FloatDictionaryContainer[T]) MatchGreaterEqual(val T, bits, mask *Bitset) {

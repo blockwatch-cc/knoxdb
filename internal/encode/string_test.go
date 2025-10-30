@@ -131,7 +131,7 @@ func testStringEncode(t *testing.T, scheme ContainerType) {
 			// analyze and encode data into container
 			ctx := AnalyzeString(c.Data)
 			enc.Encode(ctx, c.Data)
-			t.Logf("Info: %s", enc.Info())
+			// t.Logf("Info: %s", enc.Info())
 
 			// validate contents
 			require.Equal(t, c.N, enc.Len())
