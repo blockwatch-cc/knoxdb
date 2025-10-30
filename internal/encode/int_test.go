@@ -178,6 +178,22 @@ func testIntEncodeT[T types.Integer](t *testing.T) {
 	}
 }
 
+// we cannot run some test combinations on delta encoded containers because
+// data may wrap (sequence is too long for type width and delta value). this
+// typically affects uint8 and int8 cases.
+func isCompatibleTest[T types.Integer](scheme ContainerType, ctx *Context[T]) bool {
+	maxv := uint64(1<<(util.SizeOf[T]()*8) - 1)
+	if types.IsSigned[T]() {
+		maxv >>= 1
+	}
+	if scheme == TIntDelta {
+		if uint64(ctx.NumValues) > maxv || ctx.Delta == 0 {
+			return false
+		}
+	}
+	return true
+}
+
 func testIntContainer[T types.Integer](t *testing.T, scheme ContainerType) {
 	// general
 	testIntContainerEncode[T](t, scheme)
@@ -205,6 +221,12 @@ func testIntContainerEncode[T types.Integer](t *testing.T, scheme ContainerType)
 
 			// analyze and encode data into container
 			ctx := AnalyzeInt(c.Data, true).WithLevel(1)
+
+			if !isCompatibleTest[T](scheme, ctx) {
+				t.Logf("Skipping int test %s for %s/%T", c.Name, scheme, T(0))
+				t.Skip()
+			}
+
 			enc.Encode(ctx, c.Data)
 			t.Logf("Info: %s", enc.Info())
 
@@ -254,19 +276,6 @@ func testIntContainerEncode[T types.Integer](t *testing.T, scheme ContainerType)
 			t.FailNow()
 		}
 	}
-}
-
-func isCompatibleTest[T types.Integer](scheme ContainerType, ctx *Context[T]) bool {
-	maxv := uint64(1<<(util.SizeOf[T]()*8) - 1)
-	if types.IsSigned[T]() {
-		maxv >>= 1
-	}
-	if scheme == TIntDelta {
-		if uint64(ctx.NumValues) > maxv || ctx.Delta == 0 {
-			return false
-		}
-	}
-	return true
 }
 
 func testIntContainerCompare[T types.Integer](t *testing.T, scheme ContainerType) {
@@ -344,10 +353,22 @@ func testCompareFunc[T types.Number](t *testing.T, cmp CompareFunc[T], src []T, 
 	bits := bitset.New(len(src))
 	minv, maxv := slices.Min(src), slices.Max(src)
 
-	// single value
+	// choose existing value
 	val := src[len(src)/2]
 	cmp(val, bits, nil)
 	etests.EnsureBits(t, src, val, val, bits, nil, mode)
+	bits.Zero()
+	require.Equal(t, 0, bits.Count(), "cleared")
+
+	// value one less
+	cmp(val-1, bits, nil)
+	etests.EnsureBits(t, src, val-1, val-1, bits, nil, mode)
+	bits.Zero()
+	require.Equal(t, 0, bits.Count(), "cleared")
+
+	// value one more
+	cmp(val+1, bits, nil)
+	etests.EnsureBits(t, src, val+1, val+1, bits, nil, mode)
 	bits.Zero()
 	require.Equal(t, 0, bits.Count(), "cleared")
 
@@ -434,6 +455,12 @@ func testIntContainerIterator[T types.Integer](t *testing.T, scheme ContainerTyp
 			src := etests.GenForIntScheme[T](int(scheme), sz)
 			enc := NewInt[T](scheme)
 			ctx := AnalyzeInt(src, true).WithLevel(1)
+
+			if !isCompatibleTest[T](scheme, ctx) {
+				t.Logf("Skipping int iterator test for sz=%d %s/%T", sz, scheme, T(0))
+				t.Skip()
+			}
+
 			enc.Encode(ctx, src)
 
 			// --------------------------

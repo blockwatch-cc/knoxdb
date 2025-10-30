@@ -158,6 +158,9 @@ func (c *DeltaContainer[T]) MatchEqual(val T, bits, _ *Bitset) {
 		}
 	}
 
+	fmt.Printf("Delta-EQ for=%d delta=%d val=%d v64=%d div=%d mod=%d\n",
+		c.For, c.Delta, val, val-c.For, (val-c.For)/c.Delta, (val-c.For)%c.Delta)
+
 	val -= c.For // may wrap
 
 	if val%c.Delta == 0 {
@@ -213,7 +216,7 @@ func (c *DeltaContainer[T]) MatchLess(val T, bits, _ *Bitset) {
 		// calculate val position
 		n := int(v64 / d64)
 
-		// strict less, sub 1 when val is in match set
+		// strict less, sub 1 when modulo is zero (val is exact match)
 		if v64%d64 == 0 {
 			n--
 		}
@@ -237,10 +240,8 @@ func (c *DeltaContainer[T]) MatchLess(val T, bits, _ *Bitset) {
 		// calculate val position
 		n := int(v64 / d64)
 
-		// strict less: add 1 when val is in match set
-		if v64%d64 == 0 {
-			n++
-		}
+		// strict less: always add 1
+		n++
 
 		bits.SetRange(n, c.N-1)
 	}
@@ -283,7 +284,14 @@ func (c *DeltaContainer[T]) MatchLessEqual(val T, bits, _ *Bitset) {
 		}
 
 		// calculate val position
-		bits.SetRange(int(v64/d64), c.N-1)
+		n := int(v64 / d64)
+
+		// add 1 when modulo is non-zero
+		if v64%d64 != 0 {
+			n++
+		}
+
+		bits.SetRange(n, c.N-1)
 	}
 }
 
@@ -309,10 +317,8 @@ func (c *DeltaContainer[T]) MatchGreater(val T, bits, _ *Bitset) {
 		// calculate val position
 		n := int(v64 / d64)
 
-		// strict greater, add 1 when val is in match set
-		if v64%d64 == 0 {
-			n++
-		}
+		// strict greater, always add 1
+		n++
 
 		bits.SetRange(n, c.N-1)
 
@@ -333,7 +339,7 @@ func (c *DeltaContainer[T]) MatchGreater(val T, bits, _ *Bitset) {
 		// calculate val position
 		n := int(v64 / d64)
 
-		// strict greater, sub 1 when val is in match set
+		// strict greater, sub 1 when modulo is zero (exact match)
 		if v64%d64 == 0 {
 			n--
 		}
@@ -362,7 +368,14 @@ func (c *DeltaContainer[T]) MatchGreaterEqual(val T, bits, _ *Bitset) {
 		}
 
 		// calculate val position
-		bits.SetRange(int(v64/d64), c.N-1)
+		n := int(v64 / d64)
+
+		// add 1 when modulo is non-zero
+		if v64%d64 > 0 {
+			n++
+		}
+
+		bits.SetRange(n, c.N-1)
 
 	} else {
 		// negative delta: [for-d*(n-1) ... for]
@@ -379,7 +392,9 @@ func (c *DeltaContainer[T]) MatchGreaterEqual(val T, bits, _ *Bitset) {
 		}
 
 		// calculate val position
-		bits.SetRange(0, int(v64/d64))
+		n := int(v64 / d64)
+
+		bits.SetRange(0, n)
 	}
 }
 
@@ -425,8 +440,8 @@ func (c *DeltaContainer[T]) MatchBetween(a, b T, bits, _ *Bitset) {
 		nb := int(b64 / d64)
 
 		// adjust a for non-direct match
-		if a64%d64 != 0 {
-			na--
+		if b64%d64 != 0 {
+			nb++
 		}
 
 		// adjust for out of bounds b

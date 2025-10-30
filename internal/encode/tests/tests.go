@@ -77,7 +77,7 @@ func MakeIntTest[T types.Integer](s string, n int, data ...int) TestCase[T] {
 		Data: make([]T, n),
 	}
 	if len(data) > 0 {
-		for i := 0; i < n; i++ {
+		for i := range n {
 			c.Data[i] = T(data[i])
 		}
 	} else {
@@ -90,8 +90,8 @@ func MakeIntTests[T types.Integer](n int) []TestCase[T] {
 	name := strconv.Itoa(n)
 	return []TestCase[T]{
 		{"const_" + name, tests.GenConst[T](n, 42)},
-		{"delta-_" + name, tests.GenSeq[T](n, 1)},
-		{"delta+_" + name, tests.GenSeq[T](n, -1)},
+		{"delta-_" + name, tests.GenSeq[T](n, 3)},
+		{"delta+_" + name, tests.GenSeq[T](n, -3)},
 		{"dups_" + name, tests.GenDups[T](n, n/10, -1)},
 		{"runs_" + name, tests.GenRuns[T](n, 5, -1)},
 		{"rand_" + name, tests.GenRnd[T](n)},

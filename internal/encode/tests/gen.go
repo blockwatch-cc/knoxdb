@@ -17,8 +17,12 @@ func GenForIntScheme[T types.Number](scheme, n int) []T {
 	switch scheme {
 	case 1: // TIntConstant,
 		return tests.GenConst[T](n, 42)
-	case 2: // TIntDelta,
-		return tests.GenSeq[T](n, 0)
+	case 2: // TIntDelta (every n offset by n)
+		seq := tests.GenSeq[T](n, 2)
+		for i := range seq {
+			seq[i] += T(1)
+		}
+		return seq
 	case 3: // TIntRunEnd,
 		return tests.GenRuns[T](n, min(n, 5), sz*2)
 	case 4: // TIntBitpacked,

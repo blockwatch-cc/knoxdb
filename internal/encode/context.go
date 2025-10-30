@@ -4,6 +4,7 @@
 package encode
 
 import (
+	"fmt"
 	"math/bits"
 	"sync"
 	"unsafe"
@@ -110,14 +111,32 @@ func AnalyzeInt[T types.Integer](vals []T, checkUnique bool) *Context[T] {
 		c.Min, c.Max, c.Delta, c.NumRuns = T(minv), T(maxv), T(delta), nruns
 	}
 
-	// count unique only if necessary
-	doCountUnique := checkUnique && c.Min != c.Max && c.Delta == 0
+	// init unique and bits
 	c.NumUnique = min(c.NumRuns, int(c.Max)-int(c.Min)+1)
 	c.UseBits = types.Log2Range(c.Min, c.Max)
 	if c.NumUnique < 0 {
 		c.NumUnique = c.NumRuns
 	}
 
+	// reset delta if the sequence wraps
+	switch {
+	case c.Delta > 0:
+		needBits := bits.Len64(uint64(c.NumValues) * uint64(c.Delta))
+		if needBits > c.PhyBits {
+			fmt.Printf("Reset +delta(%d) need(%d) > phy(%d)\n", c.Delta, needBits, c.PhyBits)
+			c.Delta = 0
+		}
+
+	case c.Delta < 0:
+		needBits := bits.Len64(uint64(c.NumValues) * uint64(-c.Delta))
+		if needBits > c.PhyBits {
+			fmt.Printf("Reset -delta(%d) need(%d) > phy(%d)\n", c.Delta, needBits, c.PhyBits)
+			c.Delta = 0
+		}
+	}
+
+	// count unique only if necessary
+	doCountUnique := checkUnique && c.Min != c.Max && c.Delta == 0
 	if doCountUnique {
 		switch c.PhyBits {
 		case 64:
