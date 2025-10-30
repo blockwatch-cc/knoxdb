@@ -28,7 +28,7 @@ import (
 //
 // For metadata updates we require the current PK -> RID mapping as visible
 // under MVCC snapshot isolation rules. This mapping was looked up prior to
-// the call to UpdateRecords and is in pkMap. This map will be updated by
+// the call to UpdateRecords and is in ridMap. This map will be updated by
 // the call to retain the most recent rid in case a batch contains multiple
 // updates of the same pk.
 //

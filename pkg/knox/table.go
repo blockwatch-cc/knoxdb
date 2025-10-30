@@ -38,15 +38,15 @@ func (t TableImpl) DB() Database {
 	return t.db
 }
 
-func (t TableImpl) Insert(ctx context.Context, val any) (uint64, error) {
+func (t TableImpl) Insert(ctx context.Context, val any) (uint64, int, error) {
 	// analyze reflect
 	s, err := schema.SchemaOf(val)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	// check schema matches
 	if t.table.Schema().Hash != s.Hash {
-		return 0, schema.ErrSchemaMismatch
+		return 0, 0, schema.ErrSchemaMismatch
 	}
 	s.WithEnums(t.table.Schema().Enums)
 
@@ -57,31 +57,31 @@ func (t TableImpl) Insert(ctx context.Context, val any) (uint64, error) {
 	}
 	buf, err := t.enc.Encode(val, nil)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 
 	// use or open tx
 	ctx, commit, abort, err := t.db.Begin(ctx)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	defer abort()
 
 	// call backend
-	n, err := t.table.InsertRows(ctx, buf)
+	pk, n, err := t.table.InsertRows(ctx, buf)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 
 	// commit/abort
 	if err := commit(); err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 
-	return n, nil
+	return pk, n, nil
 }
 
-func (t TableImpl) Update(ctx context.Context, val any) (uint64, error) {
+func (t TableImpl) Update(ctx context.Context, val any) (int, error) {
 	// analyze reflect
 	s, err := schema.SchemaOf(val)
 	if err != nil {
@@ -123,7 +123,7 @@ func (t TableImpl) Update(ctx context.Context, val any) (uint64, error) {
 	return n, nil
 }
 
-func (t TableImpl) Delete(ctx context.Context, q QueryRequest) (uint64, error) {
+func (t TableImpl) Delete(ctx context.Context, q QueryRequest) (int, error) {
 	plan, err := q.MakePlan()
 	if err != nil {
 		return 0, err
@@ -152,7 +152,7 @@ func (t TableImpl) Delete(ctx context.Context, q QueryRequest) (uint64, error) {
 	return n, nil
 }
 
-func (t TableImpl) Count(ctx context.Context, q QueryRequest) (uint64, error) {
+func (t TableImpl) Count(ctx context.Context, q QueryRequest) (int, error) {
 	plan, err := q.MakePlan()
 	if err != nil {
 		return 0, err
@@ -260,7 +260,7 @@ func FindGenericTable[T any](name string, db Database) (*GenericTable[T], error)
 		return nil, schema.ErrSchemaMismatch
 	}
 	return &GenericTable[T]{
-		schema: s,
+		schema: table.Schema(),
 		table:  table.(*TableImpl).table,
 		db:     db,
 	}, nil
@@ -293,7 +293,7 @@ func (t *GenericTable[T]) DB() Database {
 	return t.db
 }
 
-func (t *GenericTable[T]) Insert(ctx context.Context, val any) (uint64, error) {
+func (t *GenericTable[T]) Insert(ctx context.Context, val any) (uint64, int, error) {
 	var (
 		buf []byte
 		err error
@@ -309,50 +309,50 @@ func (t *GenericTable[T]) Insert(ctx context.Context, val any) (uint64, error) {
 	case []*T:
 		buf, err = t.enc.EncodePtrSlice(v, nil)
 	default:
-		return 0, fmt.Errorf("insert: %T %w", val, schema.ErrInvalidValueType)
+		return 0, 0, fmt.Errorf("insert: %T %w", val, schema.ErrInvalidValueType)
 	}
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 
 	// use or open tx
 	ctx, commit, abort, err := t.db.Begin(ctx)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	defer abort()
 
 	// call backend
-	n, err := t.table.InsertRows(ctx, buf)
+	pk, n, err := t.table.InsertRows(ctx, buf)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 
 	if err := commit(); err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 
 	// assign primary keys to all values, return above is first sequential pk assigned
 	pkOffset := t.schema.Pk().Offset
 	switch v := val.(type) {
 	case *T:
-		*(*uint64)(unsafe.Add(unsafe.Pointer(v), pkOffset)) = n
+		*(*uint64)(unsafe.Add(unsafe.Pointer(v), pkOffset)) = pk
 	case []T:
 		for i := range v {
-			*(*uint64)(unsafe.Add(unsafe.Pointer(&v[i]), pkOffset)) = n
+			*(*uint64)(unsafe.Add(unsafe.Pointer(&v[i]), pkOffset)) = pk
 			n++
 		}
 	case []*T:
 		for i := range v {
-			*(*uint64)(unsafe.Add(unsafe.Pointer(v[i]), pkOffset)) = n
+			*(*uint64)(unsafe.Add(unsafe.Pointer(v[i]), pkOffset)) = pk
 			n++
 		}
 	}
 
-	return n, nil
+	return pk, n, nil
 }
 
-func (t *GenericTable[T]) Update(ctx context.Context, val any) (uint64, error) {
+func (t *GenericTable[T]) Update(ctx context.Context, val any) (int, error) {
 	var (
 		buf []byte
 		err error
@@ -394,7 +394,7 @@ func (t *GenericTable[T]) Update(ctx context.Context, val any) (uint64, error) {
 	return n, nil
 }
 
-func (t *GenericTable[T]) Delete(ctx context.Context, q QueryRequest) (uint64, error) {
+func (t *GenericTable[T]) Delete(ctx context.Context, q QueryRequest) (int, error) {
 	plan, err := q.MakePlan()
 	if err != nil {
 		return 0, err
@@ -423,7 +423,7 @@ func (t *GenericTable[T]) Delete(ctx context.Context, q QueryRequest) (uint64, e
 	return n, nil
 }
 
-func (t *GenericTable[T]) Count(ctx context.Context, q QueryRequest) (uint64, error) {
+func (t *GenericTable[T]) Count(ctx context.Context, q QueryRequest) (int, error) {
 	plan, err := q.MakePlan()
 	if err != nil {
 		return 0, err

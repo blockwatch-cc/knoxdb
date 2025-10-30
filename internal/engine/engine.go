@@ -177,7 +177,7 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 		e.tasks.WithLogger(opts.Logger)
 	}
 
-	e.log.Debugf("Creating database %q at %q", name, e.path)
+	e.log.Debugf("create database %q at %q", name, e.path)
 
 	// set exclusive directory lock
 	lock := flock.New(filepath.Join(opts.Path, ENGINE_LOCK_NAME))
@@ -270,7 +270,7 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 		e.tasks.WithLogger(opts.Logger)
 	}
 
-	e.log.Debugf("Opening database %q at %q", name, e.path)
+	e.log.Debugf("open database %q at %q", name, e.path)
 
 	// set exclusive directory lock
 	lock := flock.New(filepath.Join(opts.Path, ENGINE_LOCK_NAME))
@@ -335,7 +335,7 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 		Logger:         e.log,
 	}
 
-	e.log.Debugf("Opening wal at %q lsn 0x%x", wopts.Path, e.cat.Checkpoint())
+	e.log.Debugf("open wal at %q lsn 0x%x", wopts.Path, e.cat.Checkpoint())
 	e.wal, err = wal.Open(e.cat.Checkpoint(), wopts)
 	if err != nil {
 		return nil, err
@@ -387,7 +387,7 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 }
 
 func (e *Engine) Close(ctx context.Context) error {
-	e.log.Debugf("Closing database %s at %s", e.cat.name, e.path)
+	e.log.Debugf("close database %s at %s", e.cat.name, e.path)
 
 	// export engine
 	ctx = WithEngine(ctx, e)
@@ -397,7 +397,7 @@ func (e *Engine) Close(ctx context.Context) error {
 
 	// cancel pending transaction, tx contexts
 	for _, tx := range e.txs {
-		e.log.Tracef("Kill tx id %d", tx.id)
+		e.log.Tracef("kill tx id %d", tx.id)
 		tx.Kill(ErrDatabaseShutdown)
 	}
 
@@ -413,48 +413,48 @@ func (e *Engine) Close(ctx context.Context) error {
 	defer e.mu.Unlock()
 
 	// stop services
-	e.log.Trace("Stop services")
+	e.log.Trace("stop services")
 	if e.tasks != nil {
 		e.tasks.Stop()
 		e.tasks = nil
 	}
 
 	// wait for transactions and services to release all locks
-	e.log.Trace("Wait LM")
+	e.log.Trace("wait LM")
 	e.lm.Wait()
 	e.lm = nil
 
 	// clear caches
-	e.log.Trace("Purge caches")
+	e.log.Trace("purge caches")
 	e.PurgeCache()
 
 	// close all open indexes
-	e.log.Trace("Close indexes")
+	e.log.Trace("close indexes")
 	for _, idx := range e.indexes.Map() {
 		idx.Table().DisconnectIndex(idx)
 		name := idx.Schema().Name
 		if !e.IsReadOnly() {
 			if err := idx.Sync(ctx); err != nil {
-				e.log.Errorf("Syncing index %s: %v", name, err)
+				e.log.Errorf("sync index %s: %v", name, err)
 			}
 		}
 		if err := idx.Close(ctx); err != nil {
-			e.log.Errorf("Closing index %s: %v", name, err)
+			e.log.Errorf("close index %s: %v", name, err)
 		}
 	}
 	e.indexes.Clear()
 
 	// close all open tables (set checkpoints)
-	e.log.Trace("Close tables")
+	e.log.Trace("close tables")
 	for _, t := range e.tables.Map() {
 		name := t.Schema().Name
 		if !e.IsReadOnly() {
 			if err := t.Sync(ctx); err != nil {
-				e.log.Errorf("Syncing table %s: %v", name, err)
+				e.log.Errorf("sync table %s: %v", name, err)
 			}
 		}
 		if err := t.Close(ctx); err != nil {
-			e.log.Errorf("Closing table %s: %v", name, err)
+			e.log.Errorf("close table %s: %v", name, err)
 		}
 	}
 	e.tables.Clear()
@@ -465,17 +465,17 @@ func (e *Engine) Close(ctx context.Context) error {
 		name := s.Schema().Name
 		if !e.IsReadOnly() {
 			if err := s.Sync(ctx); err != nil {
-				e.log.Errorf("Syncing store %s: %v", name, err)
+				e.log.Errorf("sync store %s: %v", name, err)
 			}
 		}
 		if err := s.Close(ctx); err != nil {
-			e.log.Errorf("Closing store %s: %v", name, err)
+			e.log.Errorf("close store %s: %v", name, err)
 		}
 	}
 	e.stores.Clear()
 
 	// close enums
-	e.log.Trace("Close enums")
+	e.log.Trace("close enums")
 	for _, enum := range e.enums.Map() {
 		schema.UnregisterEnum(e.dbId, enum)
 	}
@@ -483,25 +483,25 @@ func (e *Engine) Close(ctx context.Context) error {
 
 	// close catalog (set checkpoint)
 	if e.cat != nil {
-		e.log.Trace("Close catalog")
+		e.log.Trace("close catalog")
 		if err := e.cat.Close(ctx); err != nil {
-			e.log.Errorf("Closing catalog: %v", err)
+			e.log.Errorf("close catalog: %v", err)
 		}
 		e.cat = nil
 	}
 
 	// close and sync wal
 	if e.wal != nil {
-		e.log.Trace("Close wal")
+		e.log.Trace("close wal")
 		if err := e.wal.Close(); err != nil {
-			e.log.Errorf("Closing wal: %v", err)
+			e.log.Errorf("close wal: %v", err)
 		}
 		e.wal = nil
 	}
 
 	// release directory lock
 	if e.flock != nil {
-		e.log.Trace("Free flock")
+		e.log.Trace("free flock")
 		e.flock.Close()
 		e.flock = nil
 	}
@@ -510,7 +510,7 @@ func (e *Engine) Close(ctx context.Context) error {
 }
 
 func (e *Engine) ForceShutdown() error {
-	e.log.Debugf("Force shutdown database %s at %s", e.cat.name, e.path)
+	e.log.Debugf("force shutdown database %s at %s", e.cat.name, e.path)
 
 	// set shutdown flag to prevent new transactions
 	e.shutdown.Store(true)
@@ -536,42 +536,42 @@ func (e *Engine) ForceShutdown() error {
 
 	// abort storage backend transactions
 	for _, tx := range e.txs {
-		e.log.Tracef("Kill tx id %d", tx.id)
+		e.log.Tracef("kill tx id %d", tx.id)
 		tx.Kill(ErrDatabaseShutdown)
 	}
 
 	// stop services
-	e.log.Trace("Stop services")
+	e.log.Trace("stop services")
 	if e.tasks != nil {
 		e.tasks.Kill()
 		e.tasks = nil
 	}
 
 	// release/cleanup locks
-	e.log.Trace("Clear LM")
+	e.log.Trace("clear LM")
 	e.lm.Clear()
 	e.lm = nil
 
 	// clear caches
-	e.log.Trace("Purge caches")
+	e.log.Trace("purge caches")
 	e.PurgeCache()
 
 	// close wal without flush&sync
-	e.log.Trace("Close wal")
+	e.log.Trace("close wal")
 	if err := e.wal.ForceClose(); err != nil {
 		e.log.Errorf("close wal: %v", err)
 	}
 	e.wal = nil
 
 	// close catalog without checkpointing
-	e.log.Trace("Close catalog")
+	e.log.Trace("close catalog")
 	if err := e.cat.ForceClose(); err != nil {
 		e.log.Errorf("close catalog: %v", err)
 	}
 	e.cat = nil
 
 	// close enums
-	e.log.Trace("Close enums")
+	e.log.Trace("close enums")
 	for _, enum := range e.enums.Map() {
 		schema.UnregisterEnum(e.dbId, enum)
 	}
@@ -580,37 +580,37 @@ func (e *Engine) ForceShutdown() error {
 	ctx := context.Background()
 
 	// close engine storage backend files without journal flush and checkpointing
-	e.log.Trace("Close indexes")
+	e.log.Trace("close indexes")
 	for _, idx := range e.indexes.Map() {
 		idx.Table().DisconnectIndex(idx)
 		name := idx.Schema().Name
 		if err := idx.Close(ctx); err != nil {
-			e.log.Errorf("Closing index %s: %v", name, err)
+			e.log.Errorf("close index %s: %v", name, err)
 		}
 	}
 	e.indexes.Clear()
 
 	// close all open tables (without checkpoints)
-	e.log.Trace("Close tables")
+	e.log.Trace("close tables")
 	for _, t := range e.tables.Map() {
 		if err := t.Close(ctx); err != nil {
-			e.log.Errorf("Closing table %s: %v", t.Schema().Name, err)
+			e.log.Errorf("close table %s: %v", t.Schema().Name, err)
 		}
 	}
 	e.tables.Clear()
 
 	// close all open stores (without checkpoints)
-	e.log.Trace("Close stores")
+	e.log.Trace("close stores")
 	for _, s := range e.stores.Map() {
 		if err := s.Close(ctx); err != nil {
-			e.log.Errorf("Closing store %s: %v", s.Schema().Name, err)
+			e.log.Errorf("close store %s: %v", s.Schema().Name, err)
 		}
 	}
 	e.stores.Clear()
 
 	// release directory lock
 	if e.flock != nil {
-		e.log.Trace("Free flock")
+		e.log.Trace("free flock")
 		e.flock.Close()
 		e.flock = nil
 	}
@@ -678,6 +678,14 @@ func (e *Engine) Schedule(t *Task) bool {
 
 // WAL GC is triggered after table engines have merged new journal checkpoints.
 func (e *Engine) GCWal(ctx context.Context) error {
+	// ensure we don't call this function concurrently
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if e.IsShutdown() {
+		return ErrDatabaseShutdown
+	}
+
 	// identify WAL watermark
 	lsn := e.cat.Checkpoint()
 	for _, t := range e.tables.Map() {
@@ -689,6 +697,8 @@ func (e *Engine) GCWal(ctx context.Context) error {
 	// a background merge to progress.
 	walSize, segSize := e.wal.Next(), wal.LSN(e.opts.WalSegmentSize)
 	if lsn < walSize-5*segSize {
+		e.log.Debugf("WAL watermark %d older than 5 segments, checkpointing all tables", lsn)
+
 		// write catalog checkpoint when older than one segment
 		if e.cat.Checkpoint() < walSize-segSize {
 			if err := e.cat.doCheckpoint(ctx); err != nil {
@@ -699,7 +709,7 @@ func (e *Engine) GCWal(ctx context.Context) error {
 		for _, t := range e.tables.Map() {
 			// write table checkpoints when older than 5 segments
 			if t.State().Checkpoint < walSize-5*segSize {
-				e.log.Tracef("engine: checkpoint table %s", t.Schema().Name)
+				e.log.Debugf("checkpoint table %s", t.Schema().Name)
 				if err := t.Checkpoint(ctx); err != nil {
 					return err
 				}
@@ -711,21 +721,30 @@ func (e *Engine) GCWal(ctx context.Context) error {
 			return fmt.Errorf("sync wal: %v", err)
 		}
 
-		// wait some time for checkpoints to flush
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(time.Second):
-		}
+		// wait some time for checkpoints to flush (we do this in a goroutine
+		// to not lock the table for too long)
+		go func() {
+			// wait
+			<-time.After(time.Second)
 
-		// re-compute WAL watermark
-		lsn = e.cat.Checkpoint()
-		for _, t := range e.tables.Map() {
-			lsn = min(lsn, t.State().Checkpoint)
-		}
+			e.mu.Lock()
+			defer e.mu.Unlock()
+			if e.IsShutdown() {
+				return
+			}
+
+			// re-compute WAL watermark
+			lsn := e.cat.Checkpoint()
+			for _, t := range e.tables.Map() {
+				lsn = min(lsn, t.State().Checkpoint)
+			}
+
+			// run WAL GC
+			e.log.Debugf("wal gc before LSN 0x%016x", lsn)
+			if err := e.wal.GC(lsn); err != nil {
+				e.log.Errorf("wal gc before LSN 0x%016x", lsn)
+			}
+		}()
 	}
-
-	// run WAL GC
-	e.log.Tracef("engine: wal gc before LSN 0x%016x", lsn)
-	return e.wal.GC(lsn)
+	return nil
 }

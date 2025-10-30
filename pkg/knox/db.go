@@ -170,8 +170,8 @@ func (d *DB) FindIndex(name string) (Index, error) {
 	return &IndexImpl{i, d, d.log}, nil
 }
 
-func (d *DB) CreateIndex(ctx context.Context, name string, table Table, s *schema.Schema, opts IndexOptions) error {
-	_, err := d.engine.CreateIndex(ctx, table.Schema().Name, s, opts)
+func (d *DB) CreateIndex(ctx context.Context, s *schema.IndexSchema, opts IndexOptions) error {
+	_, err := d.engine.CreateIndex(ctx, s, opts)
 	return err
 }
 

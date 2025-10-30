@@ -74,8 +74,8 @@ type Reader struct {
 	bcache    block.BlockCachePartition // block cache reference
 	mode      engine.ReadMode           // exclude or include masked row ids
 	log       log.Logger
-	name      string // table name (for logging)
-	useCache  bool   // use cache
+	useCache  bool // use cache
+	freeSel   bool // can free selection vector on next
 }
 
 func (t *Table) NewReader() engine.TableReader {
@@ -92,16 +92,16 @@ func (t *Table) NewReader() engine.TableReader {
 		hits:      arena.AllocUint32(t.opts.PackSize),
 		bits:      bitset.New(t.opts.PackSize),
 		log:       t.log,
-		name:      t.schema.Name,
 		useCache:  true,
+		freeSel:   false,
 	}
 }
 
 func (r *Reader) WithQuery(p engine.QueryPlan) engine.TableReader {
 	r.query = p.(*query.QueryPlan)
 	r.useCache = !r.query.Flags.IsNoCache()
-	r.reqFields = r.query.RequestSchema.AllFieldIds()
-	r.resFields = r.query.ResultSchema.ActiveFieldIds()
+	r.reqFields = r.query.RequestSchema.Ids()
+	r.resFields = r.query.ResultSchema.ActiveIds()
 	// r.log.Warnf("Reader REQ schema %s", r.query.RequestSchema)
 	// r.log.Warnf("Using REQ fields %v", r.reqFields)
 	r.log = r.query.Log
@@ -116,6 +116,7 @@ func (r *Reader) WithFields(fids []uint16) engine.TableReader {
 func (r *Reader) WithMask(mask *xroar.Bitmap, mode engine.ReadMode) engine.TableReader {
 	r.mask = mask
 	r.mode = mode
+	r.freeSel = mode == engine.ReadModeIncludeMask
 	return r
 }
 
@@ -129,6 +130,10 @@ func (r *Reader) Epoch() uint32 {
 
 func (r *Reader) Reset() {
 	if r.pack != nil {
+		if r.freeSel {
+			arena.Free(r.pack.Selected())
+		}
+		r.pack.WithSelection(nil)
 		r.pack.Release()
 		r.pack = nil
 	}
@@ -151,6 +156,10 @@ func (r *Reader) Reset() {
 
 func (r *Reader) Close() {
 	if r.pack != nil {
+		if r.freeSel {
+			arena.Free(r.pack.Selected())
+		}
+		r.pack.WithSelection(nil)
 		r.pack.Release()
 		r.pack = nil
 	}
@@ -184,9 +193,19 @@ func (r *Reader) Close() {
 func (r *Reader) Next(ctx context.Context) (*pack.Package, error) {
 	// release last pack, but clear selection vector first to prevent early free
 	if r.pack != nil {
+		if r.freeSel {
+			arena.Free(r.pack.Selected())
+		}
 		r.pack.WithSelection(nil)
 		r.pack.Release()
 		r.pack = nil
+	}
+
+	// check for abort
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
 	}
 
 	// init cache on first call
@@ -394,8 +413,8 @@ func (r *Reader) nextQueryMatch(ctx context.Context) (*pack.Package, error) {
 		}
 
 		// pmin, pmax := r.bits.MinMax()
-		// r.log.Debugf("table[%s]: read pack %08x[v%d] with %d/%d matches between [%d:%d]",
-		// 	r.name, r.pack.Key(), r.pack.Version(), r.bits.Count(), r.pack.Len(), pmin, pmax)
+		// r.log.Debugf("read pack %08x[v%d] with %d/%d matches between [%d:%d]",
+		// 	r.pack.Key(), r.pack.Version(), r.bits.Count(), r.pack.Len(), pmin, pmax)
 
 		// set pack selection vector
 		r.pack.WithSelection(r.bits.Indexes(r.hits))
@@ -447,7 +466,7 @@ func (r *Reader) Read(ctx context.Context, key uint32) (*pack.Package, error) {
 }
 
 func (r *Reader) loadPack(ctx context.Context, key, ver uint32, nval int, fids []uint16) error {
-	// r.log.Debugf("table[%s]: loading pack=%08x[v%d] len=%d fields=%v", r.name, key, ver, nval, fids)
+	// r.log.Debugf("loading pack=%08x[v%d] len=%d fields=%v", key, ver, nval, fids)
 
 	// prepare an empty pack without block storage
 	if r.pack == nil {

@@ -162,7 +162,7 @@ func (it *LookupIterator) loadNextPack(ctx context.Context) (bool, error) {
 
 		// we're at the correct pack now, load blocks into package
 		it.pack = pack.New().
-			WithSchema(it.idx.idxSchema).
+			WithSchema(it.idx.sstore).
 			WithMaxRows(it.idx.opts.PackSize)
 
 		// try load block pair from cache
@@ -185,7 +185,7 @@ func (it *LookupIterator) loadNextPack(ctx context.Context) (bool, error) {
 			// decode when not already found in cache
 			if it.pack.Block(i) == nil {
 				// it.idx.log.Infof("Loading block 0x%016x:%016x:%d", bik, brid, i)
-				f := it.idx.idxSchema.Fields[i]
+				f := it.idx.sstore.Fields[i]
 				b, err := block.Decode(f.Type.BlockType(), it.cur.Value())
 				if err != nil {
 					return false, fmt.Errorf("decoding block 0x%016x:%016x:%d: %v", bkey, brid, bid, err)
@@ -401,7 +401,7 @@ func (it *ScanIterator) loadPack(ctx context.Context) error {
 
 	// load pack
 	it.pack = pack.New().
-		WithSchema(it.idx.idxSchema).
+		WithSchema(it.idx.sstore).
 		WithMaxRows(it.idx.opts.PackSize)
 
 	// try load block pair from cache
@@ -419,7 +419,7 @@ func (it *ScanIterator) loadPack(ctx context.Context) error {
 	for i := range []int{0, 1} {
 		if it.pack.Block(i) == nil {
 			// it.idx.log.Infof("Loading block 0x%016x:%016x:%d", ik, pk, i)
-			f := it.idx.idxSchema.Fields[i]
+			f := it.idx.sstore.Fields[i]
 			b, err := block.Decode(f.Type.BlockType(), it.cur.Value())
 			if err != nil {
 				return fmt.Errorf("loading block 0x%016x:%016x:%d: %v", ik, pk, i, err)

@@ -69,7 +69,6 @@ func MatchAnd(n *Node, pkg *pack.Package, r engine.StatsReader, bits *bitset.Bit
 			// packs of that kind (except the journal)
 			if r != nil {
 				min, max := r.MinMax(f.Index)
-				// typ := blockInfo.Type
 				switch f.Mode {
 				case types.FilterModeEqual:
 					// condition is always true iff min == max == f.Value

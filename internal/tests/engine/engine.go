@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"blockwatch.cc/knoxdb/internal/engine"
-	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/echa/log"
@@ -39,7 +38,7 @@ func NewTestDatabaseOptions(t *testing.T, driver string) engine.DatabaseOptions 
 		CacheSize: 1 << 20,
 		NoSync:    false,
 		ReadOnly:  false,
-		Logger:    log.Log,
+		Logger:    log.Log.Clone(),
 	}
 }
 
@@ -59,11 +58,11 @@ func NewTestTableOptions(t *testing.T, driver, eng string) engine.TableOptions {
 		JournalSize: 1 << 10,
 		NoSync:      false,
 		ReadOnly:    false,
-		Logger:      log.Log,
+		Logger:      log.Log.Clone(),
 	}
 }
 
-func NewTestIndexOptions(t *testing.T, driver, eng string, indexType types.IndexType) engine.IndexOptions {
+func NewTestIndexOptions(t *testing.T, driver, eng string) engine.IndexOptions {
 	t.Helper()
 	driver = util.NonEmptyString(driver, os.Getenv("KNOX_DRIVER"), "bolt")
 	eng = util.NonEmptyString(eng, os.Getenv("KNOX_ENGINE"), "pack")
@@ -73,14 +72,13 @@ func NewTestIndexOptions(t *testing.T, driver, eng string, indexType types.Index
 	return engine.IndexOptions{
 		Driver:      driver,
 		Engine:      engine.IndexKind(eng),
-		Type:        indexType,
 		JournalSize: 1 << 10,
 		PageSize:    4096,
 		PageFill:    0.9,
 		PackSize:    1 << 11,
 		ReadOnly:    false,
 		NoSync:      false,
-		Logger:      log.Log,
+		Logger:      log.Log.Clone(),
 	}
 }
 
@@ -106,28 +104,28 @@ func NewDatabase(t *testing.T, typs ...any) (*engine.Engine, func()) {
 	db := NewTestEngine(t, dbo)
 
 	ctx := context.Background()
+	// t.Logf("NEW enum=my_enum")
 	_, err := db.CreateEnum(ctx, "my_enum")
 	require.NoError(t, err, "Failed to create enum")
 
 	err = db.ExtendEnum(ctx, "my_enum", myEnums...)
 	require.NoError(t, err, "Failed to extend enum")
 
-	// Create tables for given types
+	// Create tables and indexes for given types
 	for _, typ := range typs {
 		s, err := schema.SchemaOf(typ)
 		require.NoError(t, err, "Failed to generate schema for type %T", typ)
+		s = s.WithMeta()
 		opts := NewTestTableOptions(t, "", "")
-		tab, err := db.CreateTable(ctx, s, opts)
-		require.NoError(t, err, "Failed to create table for type %T", typ)
 		t.Logf("NEW table=%s driver=%s engine=%s", s.Name, opts.Driver, opts.Engine)
+		_, err = db.CreateTable(ctx, s, opts)
+		require.NoError(t, err, "Failed to create table for type %T", typ)
 
-		// create primary key index
-		if s.PkIndex() >= 0 {
-			is, err := tab.Schema().PkIndexSchema()
-			require.NoError(t, err, "pk index schema")
-			iopts := NewTestIndexOptions(t, "", "", types.IndexTypePk)
-			_, err = db.CreateIndex(ctx, s.Name, is, iopts)
-			require.NoError(t, err, "creaet pk index")
+		// create indexes for type
+		for _, is := range s.Indexes {
+			iopts := NewTestIndexOptions(t, "", "")
+			_, err = db.CreateIndex(ctx, is, iopts)
+			require.NoError(t, err, "create pk index")
 		}
 	}
 

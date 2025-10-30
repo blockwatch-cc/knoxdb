@@ -189,8 +189,8 @@ func (p *QueryPlan) Validate() error {
 	// check user-provided request schema
 	if p.RequestSchema != nil {
 		// schemas must match table
-		if err := p.Table.Schema().CanSelect(p.RequestSchema); err != nil {
-			return p.Errorf("request schema: %v", err)
+		if !p.Table.Schema().ContainsSchema(p.RequestSchema) {
+			return p.Errorf("request schema: %v", schema.ErrSchemaMismatch)
 		}
 	}
 
@@ -200,8 +200,8 @@ func (p *QueryPlan) Validate() error {
 		if p.ResultSchema.PkIndex() < 0 {
 			return p.Errorf("result schema: %v", engine.ErrNoPk)
 		}
-		if err := p.Table.Schema().CanSelect(p.ResultSchema); err != nil {
-			return p.Errorf("result schema: %v", err)
+		if !p.Table.Schema().ContainsSchema(p.ResultSchema) {
+			return p.Errorf("result schema: %v", schema.ErrSchemaMismatch)
 		}
 	}
 
@@ -263,7 +263,7 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 
 	// construct request schema
 	if p.RequestSchema == nil {
-		s, err := p.Table.Schema().SelectFieldIds(filterFieldIds...)
+		s, err := p.Table.Schema().SelectIds(filterFieldIds...)
 		if err != nil {
 			return p.Errorf("make request schema: %v", err)
 		}
@@ -345,8 +345,8 @@ func (p *QueryPlan) QueryIndexes(ctx context.Context) error {
 		slicex.Unique(append(p.Filters.FieldIds(), schema.MetaFieldIds...)),
 	)
 	if len(drop) > 0 {
-		keep := slicex.Remove(p.RequestSchema.AllFieldIds(), drop)
-		s, err := p.Table.Schema().SelectFieldIds(keep...)
+		keep := slicex.Remove(p.RequestSchema.Ids(), drop)
+		s, err := p.Table.Schema().SelectIds(keep...)
 		if err != nil {
 			return p.Errorf("update request schema: %v", err)
 		}

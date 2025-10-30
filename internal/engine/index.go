@@ -59,19 +59,19 @@ func (e *Engine) GetIndex(tag uint64) (IndexEngine, bool) {
 	return e.indexes.Get(tag)
 }
 
-func (e *Engine) CreateIndex(ctx context.Context, tableName string, s *schema.Schema, opts IndexOptions) (IndexEngine, error) {
+func (e *Engine) CreateIndex(ctx context.Context, s *schema.IndexSchema, opts IndexOptions) (IndexEngine, error) {
 	// lookup table
-	tableTag := types.TaggedHash(types.ObjectTagTable, tableName)
+	tableTag := types.TaggedHash(types.ObjectTagTable, s.Base.Name)
 
 	// lookup
 	table, ok := e.tables.Get(tableTag)
 	if !ok {
-		return nil, fmt.Errorf("%s: %v", tableName, ErrNoTable)
+		return nil, fmt.Errorf("%s: %v", s.Base.Name, ErrNoTable)
 	}
 
 	// schema must be a child of table schema
-	if err := table.Schema().CanSelect(s); err != nil {
-		return nil, err
+	if !table.Schema().Equal(s.Base) {
+		return nil, schema.ErrSchemaMismatch
 	}
 
 	// check engine and driver
@@ -95,7 +95,7 @@ func (e *Engine) CreateIndex(ctx context.Context, tableName string, s *schema.Sc
 
 	// ensure logger
 	if opts.Logger == nil {
-		opts.Logger = e.log
+		opts.Logger = e.log.Clone()
 	}
 
 	// start (or use) transaction and amend context
@@ -112,7 +112,7 @@ func (e *Engine) CreateIndex(ctx context.Context, tableName string, s *schema.Sc
 	}
 
 	// schedule create
-	if err := e.cat.AppendIndexCmd(ctx, CREATE, s, opts, tableName); err != nil {
+	if err := e.cat.AppendIndexCmd(ctx, CREATE, s, opts); err != nil {
 		return nil, err
 	}
 
@@ -128,8 +128,6 @@ func (e *Engine) CreateIndex(ctx context.Context, tableName string, s *schema.Sc
 
 		// register
 		e.indexes.Put(tag, index)
-
-		// TODO: update table schema (set indexed flag) and store in catalog
 
 		// TODO: rebuild in background
 		// index.Rebuild(ctx)
@@ -222,7 +220,7 @@ func (e *Engine) DropIndex(ctx context.Context, name string) error {
 	}
 
 	// write wal and schedule drop on commit
-	if err := e.cat.AppendIndexCmd(ctx, DROP, index.Schema(), IndexOptions{}, ""); err != nil {
+	if err := e.cat.AppendIndexCmd(ctx, DROP, index.IndexSchema(), IndexOptions{}); err != nil {
 		return err
 	}
 
@@ -237,8 +235,6 @@ func (e *Engine) DropIndex(ctx context.Context, name string) error {
 		if err := index.Close(ctx); err != nil {
 			e.log.Errorf("Close index: %v", err)
 		}
-
-		// TODO: update table schema (remove indexed flag) and store in catalog
 
 		e.indexes.Del(tag)
 
@@ -276,7 +272,7 @@ func (e *Engine) openIndexes(ctx context.Context, table TableEngine) error {
 			return ErrNoEngine
 		}
 		idx := factory()
-		opts.Logger = e.log
+		opts.Logger = e.log.Clone() // FIXME: register logger to set level later
 		opts.ReadOnly = e.opts.ReadOnly
 		if err := idx.Open(ctx, table, s, opts); err != nil {
 			return err

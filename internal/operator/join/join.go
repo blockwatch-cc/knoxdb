@@ -192,12 +192,12 @@ func (j JoinTable) Validate(kind string) error {
 	if j.Select == nil {
 		return fmt.Errorf("missing select schema for table %s", s.Name)
 	}
-	if err := s.CanSelect(j.Select); err != nil {
-		return fmt.Errorf("invalid select term for table %s: %v", s.Name, err)
+	if !s.ContainsSchema(j.Select) {
+		return fmt.Errorf("invalid select term for table %s: %v", s.Name, schema.ErrSchemaMismatch)
 	}
 
 	// join predicate fields are selected
-	if f, ok := j.Select.FieldByName(j.On.Name); !ok || f.Id != j.On.Id {
+	if f, ok := j.Select.Find(j.On.Name); !ok || f.Id != j.On.Id {
 		return fmt.Errorf("predicate field %s.%s not selected", s.Name, j.On.Name)
 	}
 
@@ -287,8 +287,8 @@ func (p *JoinPlan) Compile(ctx context.Context) error {
 	p.Right.PkIdx = rtab.PkIndex()
 	p.Left.Typ = p.Left.On.Type.BlockType()
 	p.Right.Typ = p.Right.On.Type.BlockType()
-	p.Left.OnIdx, _ = ltab.FieldIndexById(p.Left.On.Id)
-	p.Right.OnIdx, _ = ltab.FieldIndexById(p.Right.On.Id)
+	p.Left.OnIdx, _ = ltab.IndexId(p.Left.On.Id)
+	p.Right.OnIdx, _ = ltab.IndexId(p.Right.On.Id)
 
 	// default names {table_name}.{field_name}
 	for i, field := range p.Left.Select.Fields {

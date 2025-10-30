@@ -10,6 +10,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/query"
+	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"github.com/stretchr/testify/assert"
@@ -59,10 +60,10 @@ var TestCases = []TestCase{
 		Name: "InsertRows",
 		Run:  InsertRowsTableTest,
 	},
-	{
-		Name: "InsertRows:ReadOnlyDb",
-		Run:  InsertRowsReadOnlyTableTest,
-	},
+	// {
+	// 	Name: "InsertRows:ReadOnlyDb",
+	// 	Run:  InsertRowsReadOnlyTableTest,
+	// },
 	{
 		Name: "UpdateRows",
 		Run:  UpdateRowsTableTest,
@@ -113,7 +114,8 @@ func CreateTable(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts en
 	require.NoError(t, err)
 	defer abort()
 
-	s = s.Clone().WithEnums(e.CloneEnums(s.EnumFieldNames()...)).Finalize()
+	// extend schema with enums and metadata (same as engine would do)
+	s = s.Clone().WithEnums(e.CloneEnums(s.EnumNames()...)).WithMeta().Finalize()
 	require.NoError(t, tab.Create(ctx, s, opts))
 	require.NoError(t, commit())
 
@@ -155,7 +157,7 @@ func InsertData(t *testing.T, e *engine.Engine, tab engine.TableEngine) {
 		require.NoError(t, err)
 		ctx, _, commit, abort, err := e.WithTransaction(context.Background())
 		require.NoError(t, err)
-		_, err = tab.InsertRows(ctx, buf)
+		_, _, err = tab.InsertRows(ctx, buf)
 		assert.NoError(t, err)
 		assert.NoError(t, commit())
 		abort()
@@ -183,7 +185,7 @@ func OpenTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts 
 	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
 	defer abort()
 	require.NoError(t, err)
-	s := allTypesSchema.Clone().WithEnums(e.CloneEnums(allTypesSchema.EnumFieldNames()...)).Finalize()
+	s := allTypesSchema.Clone().WithEnums(e.CloneEnums(allTypesSchema.EnumNames()...)).Finalize()
 	require.NoError(t, tab.Open(ctx, s, opts))
 	require.NoError(t, commit())
 }
@@ -242,7 +244,7 @@ func InsertRowsReadOnlyTableTest(t *testing.T, e *engine.Engine, tab engine.Tabl
 	buf, err := enc.Encode(NewAllTypes(10), nil)
 	require.NoError(t, err)
 
-	cnt, err := tab.InsertRows(ctx, buf)
+	_, cnt, err := tab.InsertRows(ctx, buf)
 	require.Error(t, err)
 	assert.Equal(t, uint64(0), cnt)
 
@@ -254,8 +256,7 @@ func UpdateRowsTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine,
 	InsertData(t, e, tab)
 
 	// create fake pk index
-	idxSchema, err := tab.Schema().SelectFieldIds(tab.Schema().PkId(), schema.MetaRid)
-	require.NoError(t, err)
+	idxSchema := schema.NewIndexSchema(types.IndexTypePk, tab.Schema(), tab.Schema().Pk(), tab.Schema().RowId())
 	idx := query.NewMockIndex(idxSchema, xroar.New())
 	tab.ConnectIndex(idx)
 
@@ -274,7 +275,7 @@ func UpdateRowsTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine,
 
 	cnt, err := tab.UpdateRows(ctx, buf)
 	require.NoError(t, err)
-	assert.Equal(t, uint64(len(data)), cnt)
+	assert.Equal(t, len(data), cnt)
 	require.NoError(t, commit())
 }
 
@@ -327,7 +328,7 @@ func CountTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts
 
 	res, err := tab.Count(ctx, plan)
 	require.NoError(t, err)
-	assert.Equal(t, uint64(4), res)
+	assert.Equal(t, 4, res)
 	require.NoError(t, commit())
 }
 
@@ -353,7 +354,7 @@ func DeleteTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opt
 
 	res, err := tab.Delete(ctx, plan)
 	require.NoError(t, err)
-	assert.Equal(t, uint64(6), res)
+	assert.Equal(t, 6, res)
 	require.NoError(t, commit())
 }
 

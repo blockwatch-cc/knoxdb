@@ -4,6 +4,7 @@
 package journal
 
 import (
+	"math"
 	"unsafe"
 
 	"blockwatch.cc/knoxdb/internal/bitset"
@@ -354,7 +355,6 @@ func (s *Segment) NotifyDelete(xid types.XID, rid uint64) {
 	// same segment delete
 	if s.ContainsRid(rid) {
 		s.setXmax(xid, rid, true)
-		// s.nDelete++
 	}
 	s.nDelete++
 }
@@ -587,14 +587,6 @@ func (s *Segment) Match(node *filter.Node, snap *types.Snapshot, tomb *xroar.Bit
 				return
 			}
 		}
-		// // remove in-segment deletes (note del is only set for true deletes, not updates)
-		// if s.nDelete > 0 {
-		// 	bits.AndNot(s.data.Dels().Writer())
-		// 	if bits.None() {
-		// 		log.Infof("> empty match after dels")
-		// 		return
-		// 	}
-		// }
 
 		// remove records deleted outside this segment and records replaced
 		// by in-segment updates using the global tomb view
@@ -686,6 +678,7 @@ func (s *Segment) MergeDeleted(set *xroar.Bitmap, snap *types.Snapshot) {
 }
 
 // Map most recent visible row id to primary key. Used during full record updates.
+// For visibly deleted records use MAX_U64 as special marker.
 func (s *Segment) LookupRids(ridMap map[uint64]uint64, snap *types.Snapshot) {
 	// check empty state and return early
 	if s.state == SegmentStateEmpty || s.IsEmpty() {
@@ -697,6 +690,9 @@ func (s *Segment) LookupRids(ridMap map[uint64]uint64, snap *types.Snapshot) {
 	if s.xmin >= snap.Xmax {
 		return
 	}
+
+	// TODO: do vector scan on pk slice if len(ridMap) == 1 (single row update)
+	// and clear bits for aborted/replaced records
 
 	// optimization: if the segment is complete (no more open tx) and all xids are
 	// visible to the snapshot, we can merge all records
@@ -710,6 +706,9 @@ func (s *Segment) LookupRids(ridMap map[uint64]uint64, snap *types.Snapshot) {
 				if s.aborted.Contains(i) {
 					continue // skip aborted records
 				}
+				if s.replaced != nil && s.replaced.Contains(i) {
+					continue // skip deleted/replaced records
+				}
 				rid, ok := ridMap[pk]
 				if !ok {
 					continue // skip rids we're not looking for in this query
@@ -722,6 +721,9 @@ func (s *Segment) LookupRids(ridMap map[uint64]uint64, snap *types.Snapshot) {
 				rid, ok := ridMap[pk]
 				if !ok {
 					continue // skip rids we're not looking for in this query
+				}
+				if s.replaced != nil && s.replaced.Contains(i) {
+					continue // skip deleted/replaced records
 				}
 				ridMap[pk] = max(rid, rids[i])
 			}
@@ -757,6 +759,37 @@ func (s *Segment) LookupRids(ridMap map[uint64]uint64, snap *types.Snapshot) {
 					continue // skip MVCC invisible records
 				}
 				ridMap[pk] = max(rid, rids[i])
+			}
+		}
+	}
+
+	// check tomb for deleted rids; every pk and every rid is unique and
+	// not reused post update or delete, hence we can set rid = MAX_U64
+	// once we find a true delete in a journal segment. Note we must skip
+	// tomb records for updates and tomb records for deletes that are not
+	// yet visible under MVCC. The tomb clears records on abort, so all
+	// records we find here are valid.
+	if len(s.tomb.stones) > 0 {
+		for pk, rid := range ridMap {
+			if rid == 0 || rid == math.MaxUint64 {
+				continue // skip unresolved and deleted records
+			}
+			if !s.tomb.rids.Contains(rid) {
+				continue // skip if not in tomb at all
+			}
+			// find the tombstone record for this pk/rid combination
+			for _, stone := range s.tomb.stones {
+				if !stone.IsDel {
+					continue // skip update tombstones
+				}
+				if stone.Rid != rid {
+					continue // skip unrelated tombstones
+				}
+				if snap != nil && !snap.IsVisible(stone.Xid) {
+					continue // skip  MVCC invisible tombstones
+				}
+				// this rid is truly deleted
+				ridMap[pk] = math.MaxUint64
 			}
 		}
 	}

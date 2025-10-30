@@ -14,15 +14,16 @@ import (
 )
 
 type (
-	Context    = context.Context
-	Schema     = schema.Schema
-	View       = schema.View
-	Bitmap     = xroar.Bitmap
-	OrderType  = types.OrderType
-	FilterMode = types.FilterMode
-	Package    = pack.Package
-	WriteMode  = pack.WriteMode
-	XID        = types.XID
+	Context     = context.Context
+	Schema      = schema.Schema
+	IndexSchema = schema.IndexSchema
+	View        = schema.View
+	Bitmap      = xroar.Bitmap
+	OrderType   = types.OrderType
+	FilterMode  = types.FilterMode
+	Package     = pack.Package
+	WriteMode   = pack.WriteMode
+	XID         = types.XID
 )
 
 type TableKind string
@@ -50,16 +51,16 @@ type TableEngine interface {
 	Checkpoint(Context) error
 
 	// data ingress
-	InsertRows(Context, []byte) (uint64, error) // wire encoded rows
-	UpdateRows(Context, []byte) (uint64, error) // wire encoded rows
-	InsertInto(Context, *Package) (uint64, error)
-	ImportInto(Context, *Package) (uint64, error)
+	InsertRows(Context, []byte) (uint64, int, error) // wire encoded rows
+	InsertInto(Context, *Package) (uint64, int, error)
+	ImportInto(Context, *Package) (uint64, int, error)
+	UpdateRows(Context, []byte) (int, error) // wire encoded rows
+	Update(Context, QueryPlan) (int, error)
 
 	// data egress
 	Query(Context, QueryPlan) (QueryResult, error)
-	Count(Context, QueryPlan) (uint64, error)
-	Update(Context, QueryPlan) (uint64, error)
-	Delete(Context, QueryPlan) (uint64, error)
+	Count(Context, QueryPlan) (int, error)
+	Delete(Context, QueryPlan) (int, error)
 	Stream(Context, QueryPlan, func(QueryRow) error) error
 
 	// index management
@@ -130,6 +131,7 @@ type QueryCondition interface {
 }
 
 type QueryableIndex interface {
+	IndexSchema() *IndexSchema
 	Schema() *Schema
 	IsComposite() bool
 	IsPk() bool
@@ -186,9 +188,10 @@ type IndexFactory func() IndexEngine
 
 // internal interface required for all index engines
 type IndexEngine interface {
-	Create(Context, TableEngine, *Schema, IndexOptions) error
-	Open(Context, TableEngine, *Schema, IndexOptions) error
+	Create(Context, TableEngine, *IndexSchema, IndexOptions) error
+	Open(Context, TableEngine, *IndexSchema, IndexOptions) error
 	Close(Context) error
+	IndexSchema() *IndexSchema
 	Schema() *Schema
 	Table() TableEngine
 	Metrics() IndexMetrics

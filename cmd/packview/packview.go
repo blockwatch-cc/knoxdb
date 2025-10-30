@@ -257,7 +257,7 @@ func PrintSchema(s *schema.Schema, w io.Writer) {
 	t := table.NewWriter()
 	t.SetOutputMirror(w)
 	t.SetTitle("Schema %s [0x%x] - %d fields - %d bytes", s.Name, s.Hash, s.NumFields(), s.WireSize())
-	t.AppendHeader(table.Row{"#", "Name", "Type", "Flags", "Index", "Size", "Compress"})
+	t.AppendHeader(table.Row{"#", "Name", "Type", "Flags", "Filter", "Size", "Compress"})
 	for _, f := range s.Fields {
 		var (
 			typ    string
@@ -474,7 +474,7 @@ func PrintContent(ctx context.Context, view ContentViewer, desc TableDescriptor,
 		pkg := view.ViewPackage(ctx, desc.PackId)
 		tomb := view.ViewTomb(desc.PackId)
 		rx := s.RowIdIndex()
-		t.AppendHeader(append(table.Row{"DEL"}, util.StringList(s.AllFieldNames()).AsInterface()...))
+		t.AppendHeader(append(table.Row{"DEL"}, util.StringList(s.Names()).AsInterface()...))
 		for r := 0; r < pkg.Len(); r++ {
 			res = pkg.ReadRow(r, res)
 			var live string
@@ -498,7 +498,7 @@ func PrintContent(ctx context.Context, view ContentViewer, desc TableDescriptor,
 		i = desc.PackId
 		stopAfter = true
 	}
-	t.AppendHeader(util.StringList(s.AllFieldNames()).AsInterface())
+	t.AppendHeader(util.StringList(s.Names()).AsInterface())
 	for {
 		pkg := view.ViewPackage(ctx, i)
 		if pkg == nil {

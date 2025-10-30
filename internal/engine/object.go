@@ -377,17 +377,17 @@ type IndexObject struct {
 	action wal.RecordType
 	cat    *Catalog
 	table  string
-	schema *schema.Schema
+	schema *schema.IndexSchema
 	opts   IndexOptions
 }
 
-func (c *Catalog) AppendIndexCmd(ctx context.Context, act ActionType, s *schema.Schema, opts IndexOptions, table string) error {
+func (c *Catalog) AppendIndexCmd(ctx context.Context, act ActionType, s *schema.IndexSchema, opts IndexOptions) error {
 	obj := &IndexObject{
 		cat:    c,
 		id:     s.TaggedHash(types.ObjectTagIndex),
 		schema: s,
 		opts:   opts,
-		table:  table,
+		table:  s.Base.Name,
 		action: act,
 	}
 	return c.append(ctx, obj)
@@ -483,7 +483,7 @@ func (o *IndexObject) Decode(ctx context.Context, rec *wal.Record) error {
 
 	// read schema
 	n = int(LE.Uint32(buf.Next(4)))
-	o.schema = schema.NewSchema()
+	o.schema = &schema.IndexSchema{}
 	if err := o.schema.UnmarshalBinary(buf.Next(n)); err != nil {
 		return err
 	}

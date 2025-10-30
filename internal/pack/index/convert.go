@@ -18,6 +18,45 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
+func convertSchema(is *schema.IndexSchema) (*schema.Schema, Converter, error) {
+	s, err := is.StorageSchema()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	switch is.Type {
+	case types.IndexTypeHash:
+		hx, _ := is.Base.IndexId(is.Fields[0].Id)
+		c := &SimpleHashConverter{
+			sout: s,
+			hash: hx,
+			link: append([]int{is.Base.RowIdIndex()}, is.ExtraIndices()...),
+		}
+		return s, c, nil
+	case types.IndexTypeInt, types.IndexTypePk:
+		ix, _ := is.Base.IndexId(is.Fields[0].Id)
+		c := &RelinkConverter{
+			sout: s,
+			use:  ix,
+			link: append([]int{is.Base.RowIdIndex()}, is.ExtraIndices()...),
+		}
+		return s, c, nil
+
+	case types.IndexTypeComposite:
+		c := &CompositeHashConverter{
+			sout: s,
+			sidx: is,
+			hash: is.Indices(),
+			link: append([]int{is.Base.RowIdIndex()}, is.ExtraIndices()...),
+		}
+		return s, c, nil
+
+	default:
+		// unsupported
+		return nil, nil, fmt.Errorf("unsupported index type %q", is.Type)
+	}
+}
+
 type Converter interface {
 	ConvertPack(pkg *pack.Package, mode pack.WriteMode) *pack.Package
 	QueryKeys(node *filter.Node) []uint64
@@ -25,8 +64,9 @@ type Converter interface {
 }
 
 type RelinkConverter struct {
-	schema    *schema.Schema
-	srcBlocks []int // ordered list of src blocks to link
+	sout *schema.Schema // output schema
+	use  int            // position oif block to use or convert
+	link []int          // ordered list of extra blocks to link
 }
 
 func (*RelinkConverter) QueryKeys(_ *filter.Node) []uint64 {
@@ -37,7 +77,7 @@ func (*RelinkConverter) QueryKeys(_ *filter.Node) []uint64 {
 func (c *RelinkConverter) QueryNode(node *filter.Node) *filter.Node {
 	// rewrite filter node to match the index pack structure
 	// Note: index storage is u64
-	f0 := c.schema.Fields[0]
+	f0 := c.sout.Fields[0]
 	flt := node.Filter
 	if f0.Type == types.FieldTypeUint64 {
 		return &filter.Node{
@@ -69,48 +109,56 @@ func (c *RelinkConverter) QueryNode(node *filter.Node) *filter.Node {
 }
 
 func (c *RelinkConverter) ConvertPack(pkg *pack.Package, mode pack.WriteMode) *pack.Package {
-	ipkg := pack.New().WithSchema(c.schema).WithMaxRows(pkg.Cap())
-	for i, v := range c.srcBlocks {
-		b := pkg.Block(v)
+	ipkg := pack.New().WithSchema(c.sout).WithMaxRows(pkg.Cap())
 
-		// convert first block to u64
-		if i == 0 && b.Type() != block.BlockUint64 {
-			u64 := block.New(block.BlockUint64, pkg.Len())
-			acc := u64.Uint64()
-			switch b.Type() {
-			case block.BlockInt64:
-				copy(u64.Int64().Slice(), b.Int64().Slice())
-			case block.BlockInt32:
-				for _, v := range b.Int32().Slice() {
-					acc.Append(uint64(v))
-				}
-			case block.BlockInt16:
-				for _, v := range b.Int16().Slice() {
-					acc.Append(uint64(v))
-				}
-			case block.BlockInt8:
-				for _, v := range b.Int8().Slice() {
-					acc.Append(uint64(v))
-				}
-			case block.BlockUint32:
-				for _, v := range b.Uint32().Slice() {
-					acc.Append(uint64(v))
-				}
-			case block.BlockUint16:
-				for _, v := range b.Uint16().Slice() {
-					acc.Append(uint64(v))
-				}
-			case block.BlockUint8:
-				for _, v := range b.Uint8().Slice() {
-					acc.Append(uint64(v))
-				}
+	// convert first block to u64
+	if b := pkg.Block(c.use); b.Type() != block.BlockUint64 {
+		// convert
+		u64 := block.New(block.BlockUint64, pkg.Len())
+		acc := u64.Uint64()
+		switch b.Type() {
+		case block.BlockInt64:
+			copy(u64.Int64().Slice(), b.Int64().Slice())
+		case block.BlockInt32:
+			for _, v := range b.Int32().Slice() {
+				acc.Append(uint64(v))
 			}
-			b = u64
-		} else {
-			b.Ref()
+		case block.BlockInt16:
+			for _, v := range b.Int16().Slice() {
+				acc.Append(uint64(v))
+			}
+		case block.BlockInt8:
+			for _, v := range b.Int8().Slice() {
+				acc.Append(uint64(v))
+			}
+		case block.BlockUint32:
+			for _, v := range b.Uint32().Slice() {
+				acc.Append(uint64(v))
+			}
+		case block.BlockUint16:
+			for _, v := range b.Uint16().Slice() {
+				acc.Append(uint64(v))
+			}
+		case block.BlockUint8:
+			for _, v := range b.Uint8().Slice() {
+				acc.Append(uint64(v))
+			}
 		}
-		ipkg.WithBlock(i, b)
+		ipkg.WithBlock(0, u64)
+	} else {
+		// link as is
+		b.Ref()
+		ipkg.WithBlock(0, b)
 	}
+
+	// link remaining blocks
+	for i, v := range c.link {
+		b := pkg.Block(v)
+		b.Ref()
+		ipkg.WithBlock(i+1, b)
+	}
+
+	// set pack length
 	ipkg.UpdateLen()
 
 	return ipkg
@@ -119,15 +167,15 @@ func (c *RelinkConverter) ConvertPack(pkg *pack.Package, mode pack.WriteMode) *p
 // SimpleHashConverter produces a new index pack by hashing a single
 // source column and optionally appending extra source columns as is.
 type SimpleHashConverter struct {
-	schema    *schema.Schema
-	srcBlocks []int // ordered list of src blocks to link
-	hashBlock int   // single source block used for hashing
+	sout *schema.Schema // output schema
+	link []int          // ordered list of src blocks to link
+	hash int            // single source block used for hashing
 }
 
 func (c *SimpleHashConverter) ConvertPack(pkg *pack.Package, mode pack.WriteMode) *pack.Package {
-	ipkg := pack.New().WithSchema(c.schema).WithMaxRows(pkg.Cap())
-	ipkg.WithBlock(0, pkg.Block(c.hashBlock).Hash())
-	for i, v := range c.srcBlocks {
+	ipkg := pack.New().WithSchema(c.sout).WithMaxRows(pkg.Cap())
+	ipkg.WithBlock(0, pkg.Block(c.hash).Hash())
+	for i, v := range c.link {
 		b := pkg.Block(v)
 		b.Ref()
 		ipkg.WithBlock(i+1, b)
@@ -139,7 +187,7 @@ func (c *SimpleHashConverter) ConvertPack(pkg *pack.Package, mode pack.WriteMode
 func (c *SimpleHashConverter) QueryKeys(node *filter.Node) []uint64 {
 	// produce output hash (uint64) from query filter value encoded to LE wire format
 	// use schema field encoding helper to translate Go types from query
-	f0 := c.schema.Fields[0]
+	f0 := c.sout.Fields[0]
 	buf := bytes.NewBuffer(nil)
 	flt := node.Filter
 
@@ -178,22 +226,22 @@ func (*SimpleHashConverter) QueryNode(_ *filter.Node) *filter.Node {
 // CompositeHashConverter produces a new index pack from multiple source columns
 // which are hashed in order. Optionally appends multiple source columns as is.
 type CompositeHashConverter struct {
-	idxSchema  *schema.Schema
-	srcSchema  *schema.Schema
-	srcBlocks  []int // ordered list of src blocks to link
-	hashBlocks []int // ordered list of src blocks to hash
+	sout *schema.Schema      // output schema
+	sidx *schema.IndexSchema // index schema
+	hash []int               // ordered list of src blocks to hash
+	link []int               // ordered list of src blocks to link
 }
 
 func (c *CompositeHashConverter) ConvertPack(pkg *pack.Package, mode pack.WriteMode) *pack.Package {
 	// construct a new package
-	ipkg := pack.New().WithSchema(c.idxSchema).WithMaxRows(pkg.Cap())
+	ipkg := pack.New().WithSchema(c.sout).WithMaxRows(pkg.Cap())
 
 	// use a new allocated hash block
 	hashBlock := block.New(block.BlockUint64, pkg.Len())
 	ipkg.WithBlock(0, hashBlock)
 
 	// relink other source blocks in index schema order
-	for i, v := range c.srcBlocks {
+	for i, v := range c.link {
 		b := pkg.Block(v)
 		b.Ref()
 		ipkg.WithBlock(i+1, b)
@@ -224,7 +272,7 @@ func (c *CompositeHashConverter) ConvertPack(pkg *pack.Package, mode pack.WriteM
 		hasher.Reset()
 
 		// assemble hash from multiple data blocks
-		for _, n := range c.hashBlocks {
+		for _, n := range c.hash {
 			b := pkg.Block(n)
 			switch b.Type() {
 			case block.BlockInt64, block.BlockUint64, block.BlockFloat64:
@@ -267,10 +315,8 @@ func (c *CompositeHashConverter) QueryKeys(node *filter.Node) []uint64 {
 	// try combine multiple AND leaf conditions into longer index key,
 	// all index fields must be available
 	buf := new(bytes.Buffer)
-	nfields := c.srcSchema.NumFields()
-	for _, field := range c.srcSchema.Fields[:nfields-1] {
-		name := field.Name
-		node, ok := eq[name]
+	for _, field := range c.sidx.Fields {
+		node, ok := eq[field.Name]
 		if !ok {
 			// empty result if we cannot build a hash from all index fields
 			return nil
@@ -278,7 +324,7 @@ func (c *CompositeHashConverter) QueryKeys(node *filter.Node) []uint64 {
 		field.Encode(buf, node.Filter.Value, LE)
 		// set skip flags signalling this condition has been processed
 		node.Skip = true
-		delete(eq, name)
+		delete(eq, field.Name)
 	}
 
 	// create single hash key from composite EQ conditions

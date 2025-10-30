@@ -85,7 +85,7 @@ func (s *Schema) nextFieldId() uint16 {
 		return 0
 	}
 	for {
-		_, ok := s.FieldById(id)
+		_, ok := s.FindId(id)
 		if !ok {
 			return id
 		}
@@ -133,7 +133,7 @@ func (s *Schema) NumFields() int {
 	return len(s.Fields)
 }
 
-func (s *Schema) NumActiveFields() int {
+func (s *Schema) NumActive() int {
 	var n int
 	for _, f := range s.Fields {
 		if f.IsActive() {
@@ -143,7 +143,7 @@ func (s *Schema) NumActiveFields() int {
 	return n
 }
 
-func (s *Schema) NumVisibleFields() int {
+func (s *Schema) NumVisible() int {
 	var n int
 	for _, f := range s.Fields {
 		if f.IsVisible() {
@@ -153,7 +153,7 @@ func (s *Schema) NumVisibleFields() int {
 	return n
 }
 
-func (s *Schema) NumMetaFields() int {
+func (s *Schema) NumMeta() int {
 	var n int
 	for _, f := range s.Fields {
 		if f.IsMeta() && f.IsActive() {
@@ -163,7 +163,7 @@ func (s *Schema) NumMetaFields() int {
 	return n
 }
 
-func (s *Schema) AllFieldNames() []string {
+func (s *Schema) Names() []string {
 	list := make([]string, len(s.Fields))
 	for i, f := range s.Fields {
 		list[i] = f.Name
@@ -171,7 +171,7 @@ func (s *Schema) AllFieldNames() []string {
 	return list
 }
 
-func (s *Schema) ActiveFieldNames() []string {
+func (s *Schema) ActiveNames() []string {
 	list := make([]string, 0, len(s.Fields))
 	for _, f := range s.Fields {
 		if f.IsActive() {
@@ -181,7 +181,7 @@ func (s *Schema) ActiveFieldNames() []string {
 	return list
 }
 
-func (s *Schema) VisibleFieldNames() []string {
+func (s *Schema) VisibleNames() []string {
 	list := make([]string, 0, len(s.Fields))
 	for _, f := range s.Fields {
 		if f.IsVisible() {
@@ -191,7 +191,7 @@ func (s *Schema) VisibleFieldNames() []string {
 	return list
 }
 
-func (s *Schema) MetaFieldNames() []string {
+func (s *Schema) MetaNames() []string {
 	list := make([]string, 0, len(s.Fields))
 	for _, f := range s.Fields {
 		if f.IsMeta() && f.IsActive() {
@@ -201,7 +201,7 @@ func (s *Schema) MetaFieldNames() []string {
 	return list
 }
 
-func (s *Schema) EnumFieldNames() []string {
+func (s *Schema) EnumNames() []string {
 	list := make([]string, 0)
 	for _, f := range s.Fields {
 		if f.IsEnum() {
@@ -211,7 +211,7 @@ func (s *Schema) EnumFieldNames() []string {
 	return list
 }
 
-func (s *Schema) AllFieldIds() []uint16 {
+func (s *Schema) Ids() []uint16 {
 	list := make([]uint16, len(s.Fields))
 	for i, f := range s.Fields {
 		list[i] = f.Id
@@ -219,7 +219,7 @@ func (s *Schema) AllFieldIds() []uint16 {
 	return list
 }
 
-func (s *Schema) ActiveFieldIds() []uint16 {
+func (s *Schema) ActiveIds() []uint16 {
 	list := make([]uint16, 0, len(s.Fields))
 	for _, f := range s.Fields {
 		if f.IsActive() {
@@ -229,7 +229,7 @@ func (s *Schema) ActiveFieldIds() []uint16 {
 	return list
 }
 
-func (s *Schema) VisibleFieldIds() []uint16 {
+func (s *Schema) VisibleIds() []uint16 {
 	list := make([]uint16, 0, len(s.Fields))
 	for _, f := range s.Fields {
 		if f.IsVisible() {
@@ -239,7 +239,7 @@ func (s *Schema) VisibleFieldIds() []uint16 {
 	return list
 }
 
-func (s *Schema) MetaFieldIds() []uint16 {
+func (s *Schema) MetaIds() []uint16 {
 	list := make([]uint16, 0, len(s.Fields))
 	for _, f := range s.Fields {
 		if f.IsMeta() && f.IsActive() {
@@ -249,7 +249,7 @@ func (s *Schema) MetaFieldIds() []uint16 {
 	return list
 }
 
-func (s *Schema) FieldByName(name string) (f *Field, ok bool) {
+func (s *Schema) Find(name string) (f *Field, ok bool) {
 	for _, v := range s.Fields {
 		if v.Name == name && v.IsActive() {
 			ok = true
@@ -260,7 +260,7 @@ func (s *Schema) FieldByName(name string) (f *Field, ok bool) {
 	return
 }
 
-func (s *Schema) FieldById(id uint16) (f *Field, ok bool) {
+func (s *Schema) FindId(id uint16) (f *Field, ok bool) {
 	for _, v := range s.Fields {
 		if v.Id == id {
 			ok = true
@@ -271,7 +271,7 @@ func (s *Schema) FieldById(id uint16) (f *Field, ok bool) {
 	return
 }
 
-func (s *Schema) FieldIndexByName(name string) (idx int, ok bool) {
+func (s *Schema) Index(name string) (idx int, ok bool) {
 	for i, f := range s.Fields {
 		if f.Name == name && f.IsActive() {
 			ok = true
@@ -282,7 +282,7 @@ func (s *Schema) FieldIndexByName(name string) (idx int, ok bool) {
 	return
 }
 
-func (s *Schema) FieldIndexById(id uint16) (idx int, ok bool) {
+func (s *Schema) IndexId(id uint16) (idx int, ok bool) {
 	for i, f := range s.Fields {
 		if f.Id == id {
 			ok = true
@@ -339,13 +339,26 @@ func (s *Schema) RowIdIndex() int {
 }
 
 func (s *Schema) Clone() *Schema {
-	return &Schema{
+	clone := &Schema{
 		Name:    s.Name,
 		Fields:  slices.Clone(s.Fields),
 		Indexes: slices.Clone(s.Indexes),
 		Enums:   s.Enums,
 		Version: s.Version,
 	}
+	for i := range clone.Fields {
+		clone.Fields[i] = clone.Fields[i].Clone()
+	}
+	for i := range clone.Indexes {
+		clone.Indexes[i].Base = clone
+		for k, v := range clone.Indexes[i].Fields {
+			clone.Indexes[i].Fields[k], _ = clone.FindId(v.Id)
+		}
+		for k, v := range clone.Indexes[i].Extra {
+			clone.Indexes[i].Extra[k], _ = clone.FindId(v.Id)
+		}
+	}
+	return clone
 }
 
 func (s *Schema) AddField(f *Field) (*Schema, error) {
@@ -353,7 +366,7 @@ func (s *Schema) AddField(f *Field) (*Schema, error) {
 		return nil, err
 	}
 	// ensure field is unique
-	if _, ok := s.FieldByName(f.Name); ok {
+	if _, ok := s.Find(f.Name); ok {
 		return nil, ErrDuplicateName
 	}
 	clone := s.Clone()
@@ -363,7 +376,7 @@ func (s *Schema) AddField(f *Field) (*Schema, error) {
 	return clone.Finalize(), nil
 }
 
-func (s *Schema) DeleteField(id uint16) (*Schema, error) {
+func (s *Schema) DeleteId(id uint16) (*Schema, error) {
 	for i, v := range s.Fields {
 		if v.Id != id {
 			continue
@@ -384,7 +397,7 @@ func (s *Schema) DeleteField(id uint16) (*Schema, error) {
 	return nil, ErrInvalidField
 }
 
-func (s *Schema) RenameField(id uint16, name string) (*Schema, error) {
+func (s *Schema) RenameId(id uint16, name string) (*Schema, error) {
 	// check pre-conditions
 	var pos = -1
 	for i, v := range s.Fields {
@@ -417,20 +430,21 @@ func (s *Schema) RenameField(id uint16, name string) (*Schema, error) {
 
 // switch primary key field to id if exists
 func (s *Schema) ResetPk(id uint16) (*Schema, bool) {
-	oldPkIdx := s.PkIndex()
-	newPkIdx, ok := s.FieldIndexById(id)
-	if !ok || s.Fields[newPkIdx].Type != FT_U64 {
+	fnew, ok := s.FindId(id)
+	if !ok || fnew.Type != FT_U64 {
 		return s, false
 	}
+	clone := s.Clone()
+	fold := clone.Pk()
+	fnew, _ = clone.FindId(id)
 	// flip primary key flag
-	if oldPkIdx >= 0 {
-		s.Fields[oldPkIdx].Flags &^= types.FieldFlagPrimary
-	}
-	s.Fields[newPkIdx].Flags |= types.FieldFlagPrimary
-	return s, true
+	// FIXME: changes schema hash (effect on catalog?)
+	fold.Flags &^= types.FieldFlagPrimary
+	fnew.Flags |= types.FieldFlagPrimary
+	return clone, true
 }
 
-func (s *Schema) CanMatchFields(names ...string) bool {
+func (s *Schema) CanMatch(names ...string) bool {
 	if len(names) == 0 || len(names) > len(s.Fields) {
 		return false
 	}
@@ -449,28 +463,39 @@ func (s *Schema) CanMatchFields(names ...string) bool {
 	return true
 }
 
-func (s *Schema) CanSelect(x *Schema) error {
+func (s *Schema) Contains(names ...string) bool {
+	if len(names) == 0 {
+		return false
+	}
+	for _, v := range names {
+		if _, ok := s.Find(v); !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *Schema) ContainsSchema(x *Schema) bool {
 	if x == nil {
-		return ErrNilValue
+		return false
 	}
 	for _, xf := range x.Fields {
-		sf, ok := s.FieldByName(xf.Name)
+		sf, ok := s.Find(xf.Name)
 		if !ok {
-			return fmt.Errorf("%w: missing field %s", ErrSchemaMismatch, xf.Name)
+			return false
 		}
 		if xf.Type != sf.Type {
-			return fmt.Errorf("%w on field %s: type mismatch have=%s want=%s",
-				ErrSchemaMismatch, xf.Name, sf.Type, xf.Type)
+			return false
 		}
 	}
-	return nil
+	return true
 }
 
 func (s *Schema) SelectSchema(x *Schema) (*Schema, error) {
-	return s.SelectFields(x.ActiveFieldNames()...)
+	return s.SelectIds(x.ActiveIds()...)
 }
 
-func (s *Schema) SelectFieldIds(fieldIds ...uint16) (*Schema, error) {
+func (s *Schema) SelectIds(fieldIds ...uint16) (*Schema, error) {
 	ns := &Schema{
 		Fields:      make([]*Field, 0, len(fieldIds)),
 		IsFixedSize: true,
@@ -479,9 +504,9 @@ func (s *Schema) SelectFieldIds(fieldIds ...uint16) (*Schema, error) {
 	}
 
 	for _, fid := range fieldIds {
-		f, ok := s.FieldById(fid)
+		f, ok := s.FindId(fid)
 		if !ok || !f.IsActive() {
-			return nil, fmt.Errorf("%w: missing field id %d in schema %s", ErrInvalidField, fid, s.Name)
+			return nil, fmt.Errorf("missing field id %d in schema %s", fid, s.Name)
 		}
 		ns.Fields = append(ns.Fields, f)
 	}
@@ -489,7 +514,7 @@ func (s *Schema) SelectFieldIds(fieldIds ...uint16) (*Schema, error) {
 	return ns.Finalize(), nil
 }
 
-func (s *Schema) SelectFields(fields ...string) (*Schema, error) {
+func (s *Schema) Select(fields ...string) (*Schema, error) {
 	ns := &Schema{
 		Fields:      make([]*Field, 0, len(fields)),
 		IsFixedSize: true,
@@ -498,7 +523,7 @@ func (s *Schema) SelectFields(fields ...string) (*Schema, error) {
 	}
 
 	for _, fname := range fields {
-		f, ok := s.FieldByName(fname)
+		f, ok := s.Find(fname)
 		if !ok {
 			return nil, fmt.Errorf("%w: missing field name %s in schema %s", ErrInvalidField, fname, s.Name)
 		}
@@ -506,10 +531,6 @@ func (s *Schema) SelectFields(fields ...string) (*Schema, error) {
 	}
 
 	return ns.Finalize(), nil
-}
-
-func (s *Schema) PkIndexSchema() (*Schema, error) {
-	return s.SelectFieldIds(s.PkId(), MetaRid)
 }
 
 func (s *Schema) Sort() *Schema {
@@ -524,7 +545,7 @@ func (s *Schema) Sort() *Schema {
 // fields to source schema field positions. Iterating over child fields and
 // using this mapping yields the order in which source schema data is encoded or
 // layed out in storage containers (i.e. packages of blocks/vectors),
-func (s *Schema) MapTo(dst *Schema) ([]int, error) {
+func (s *Schema) MapSchema(dst *Schema) ([]int, error) {
 	maps := make([]int, 0, len(dst.Fields))
 	for _, dstField := range dst.Fields {
 		var (
@@ -574,27 +595,36 @@ func (s *Schema) Validate() error {
 	// count special fields, require no duplicate names and ids
 	uniqueNames := make(map[string]struct{})
 	uniqueIds := make(map[uint16]struct{})
+	var firstTimebase *Field
 
-	for i := range s.Fields {
+	for _, f := range s.Fields {
 		// fields must validate
-		if err := s.Fields[i].Validate(); err != nil {
-			return fmt.Errorf("schema %s: field %s: %v", s.Name, s.Fields[i].Name, err)
+		if err := f.Validate(); err != nil {
+			return fmt.Errorf("schema %s: field %s: %v", s.Name, f.Name, err)
 		}
 
 		// check name uniqueness
-		n := s.Fields[i].Name
-		if _, ok := uniqueNames[n]; ok {
-			return fmt.Errorf("schema %s: duplicate field name %s", s.Name, n)
+		if _, ok := uniqueNames[f.Name]; ok {
+			return fmt.Errorf("schema %s: duplicate field name %s", s.Name, f.Name)
 		} else {
-			uniqueNames[n] = struct{}{}
+			uniqueNames[f.Name] = struct{}{}
 		}
 
 		// check id uniqueness
-		id := s.Fields[i].Id
-		if _, ok := uniqueIds[id]; ok {
-			return fmt.Errorf("schema %s: duplicate field id %d", s.Name, id)
+		if _, ok := uniqueIds[f.Id]; ok {
+			return fmt.Errorf("schema %s: duplicate field id %d", s.Name, f.Id)
 		} else {
-			uniqueIds[id] = struct{}{}
+			uniqueIds[f.Id] = struct{}{}
+		}
+
+		// check timebase flag is unique
+		if f.Flags.Is(F_TIMEBASE) {
+			if firstTimebase != nil {
+				return fmt.Errorf("schema %s: timebase flag on multiple fields %q and %q",
+					s.Name, firstTimebase.Name, f.Name)
+			} else {
+				firstTimebase = f
+			}
 		}
 	}
 
@@ -685,9 +715,6 @@ func (s *Schema) UnmarshalBinary(b []byte) (err error) {
 }
 
 func (s *Schema) Finalize() *Schema {
-	if len(s.Encode) > 0 {
-		return s
-	}
 	s.MinWireSize = 0
 	s.MaxWireSize = 0
 	s.IsFixedSize = true
@@ -793,7 +820,10 @@ func (s *Schema) String() string {
 		}
 		flags := f.Flags.String()
 		if f.Filter > 0 {
-			flags += "," + f.Filter.String()
+			if flags != "" {
+				flags += ","
+			}
+			flags += f.Filter.String()
 		}
 		fmt.Fprintf(&b, "\n%02d F#%02d %[3]*[4]s %-15s %s",
 			i,

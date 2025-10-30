@@ -27,7 +27,7 @@ func (t *Table) ReplayWal(ctx context.Context) error {
 	var xmax types.XID // highest xid seen
 	start := time.Now()
 
-	t.log.Debugf("table[%s]: recovering journals from wal lsn 0x%x", t.schema.Name, t.state.Checkpoint)
+	t.log.Debugf("recovering journals from wal lsn 0x%x", t.state.Checkpoint)
 	r := t.engine.Wal().NewReader().WithEntity(t.id)
 	defer r.Close()
 	if err := r.Seek(t.state.Checkpoint); err != nil {
@@ -70,15 +70,15 @@ func (t *Table) ReplayWal(ctx context.Context) error {
 
 	// abort all remaining pending tx
 	nAborted, canMerge := t.journal.AbortActiveTx()
-	t.log.Debugf("table[%s]: processed %d wal records, aborted %d txn in %s",
-		t.schema.Name, nProcessed, nAborted, time.Since(start))
+	t.log.Debugf("processed %d wal records, aborted %d txn in %s",
+		nProcessed, nAborted, time.Since(start))
 
 	// merge journal after crash recovery when segments are ready
 	if canMerge {
-		t.log.Debugf("table[%s]: scheduling merge task", t.schema.Name)
+		t.log.Debug("scheduling merge task")
 		ok := t.engine.Schedule(engine.NewTask(t.Merge))
 		if !ok {
-			t.log.Warnf("table[%s]: merge task queue full", t.schema.Name)
+			t.log.Warn("merge task queue full")
 		}
 	}
 

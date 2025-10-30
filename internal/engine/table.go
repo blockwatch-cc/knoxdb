@@ -16,7 +16,7 @@ var tableEngineRegistry = make(map[TableKind]TableFactory)
 
 func RegisterTableFactory(n TableKind, fn TableFactory) {
 	if _, ok := tableEngineRegistry[n]; ok {
-		panic(fmt.Errorf("knox: table engine %s factory already registered", n))
+		panic(fmt.Errorf("table engine %s factory already registered", n))
 	}
 	tableEngineRegistry[n] = fn
 }
@@ -58,7 +58,7 @@ func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, opts TableOp
 	// check enums exist and collect
 	enums := schema.NewEnumRegistry()
 	var err error
-	for _, n := range s.EnumFieldNames() {
+	for _, n := range s.EnumNames() {
 		enum, ok := e.enums.Lookup(n)
 		if !ok {
 			err = fmt.Errorf("missing enum %q", n)
@@ -73,6 +73,23 @@ func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, opts TableOp
 	// connect schema enums
 	s.WithEnums(&enums)
 
+	// ensure table has metadata, may clone & extend schema
+	if !s.HasMeta() {
+		s = s.WithMeta()
+	}
+
+	// ensure we have a pk field, use $rid when missing, may clone & alter schema
+	if s.PkId() == 0 {
+		s, _ = s.ResetPk(schema.MetaRid)
+	}
+
+	// on history tables set pk to $rid, may clone & alter schema
+	if opts.Engine == TableKindHistory {
+		if s.PkId() != schema.MetaRid {
+			s, _ = s.ResetPk(schema.MetaRid)
+		}
+	}
+
 	// check engine and driver
 	factory, ok := tableEngineRegistry[opts.Engine]
 	if !ok {
@@ -84,7 +101,7 @@ func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, opts TableOp
 
 	// ensure logger
 	if opts.Logger == nil {
-		opts.Logger = e.log
+		opts.Logger = e.log.Clone()
 	}
 	// create table engine
 	table := factory()
@@ -216,10 +233,10 @@ func (e *Engine) DropTable(ctx context.Context, name string) error {
 	// register commit callback
 	GetTx(ctx).OnCommit(func(ctx context.Context) error {
 		if err := t.Drop(ctx); err != nil {
-			e.log.Errorf("Drop table: %v", err)
+			e.log.Errorf("dop table: %v", err)
 		}
 		if err := t.Close(ctx); err != nil {
-			e.log.Errorf("Close table: %v", err)
+			e.log.Errorf("close table: %v", err)
 		}
 		e.tables.Del(tag)
 
@@ -311,7 +328,7 @@ func (e *Engine) openTables(ctx context.Context) error {
 		}
 
 		// lookup schema enums
-		s.WithEnums(e.CloneEnums(s.EnumFieldNames()...))
+		s.WithEnums(e.CloneEnums(s.EnumNames()...))
 
 		// get table factory
 		factory, ok := tableEngineRegistry[opts.Engine]
@@ -325,14 +342,13 @@ func (e *Engine) openTables(ctx context.Context) error {
 		table := factory()
 
 		// ensure logger and override flags
-		opts.Logger = e.log
+		opts.Logger = e.log.Clone() // FIXME: register logger to set level later
 		opts.ReadOnly = e.opts.ReadOnly
 
 		// open the table, load journals, replay wal after crash
 		if err := table.Open(ctx, s, opts); err != nil {
 			return err
 		}
-		e.log.Debugf("Loaded table %s", s.Name)
 
 		// open indexes
 		if err := e.openIndexes(ctx, table); err != nil {

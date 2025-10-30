@@ -107,8 +107,8 @@ func matchVector(n *filter.Node, pkg *pack.Package, b map[int]store.Bucket, bits
 // where the match is successful.
 //
 // Note statistics are min/max ranges, hence to find a potential match we translate
-// each filter condition into a min/max range. Low level vectors matches are
-// vectorized using custom assembly routines.
+// each filter condition into a min/max range. Low level vector matching algos use
+// SIMD.
 func matchFilterVector(f *filter.Filter, pkg *pack.Package, bits, mask *bitset.Bitset, b map[int]store.Bucket) (int, *bitset.Bitset) {
 	if bits == nil {
 		bits = bitset.New(pkg.Len())

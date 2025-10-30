@@ -33,7 +33,7 @@ var (
 )
 
 type CountResult struct {
-	n uint64
+	n int
 }
 
 func NewCountResult() *CountResult {
@@ -42,19 +42,19 @@ func NewCountResult() *CountResult {
 
 func (r *CountResult) Append(_ context.Context, src *pack.Package) error {
 	if sel := src.Selected(); sel != nil {
-		r.n += uint64(len(sel))
+		r.n += len(sel)
 	} else {
-		r.n += uint64(src.Len())
+		r.n += src.Len()
 	}
 	return nil
 }
 
-func (r *CountResult) Count() uint64 {
+func (r *CountResult) Count() int {
 	return r.n
 }
 
 func (r *CountResult) Len() int {
-	return int(r.n)
+	return r.n
 }
 
 type StreamCallback func(engine.QueryRow) error
@@ -282,7 +282,7 @@ func (r *Result) SortBy(name string, order types.OrderType) {
 	if r.pkg.Len() == 0 {
 		return
 	}
-	idx, ok := r.pkg.Schema().FieldIndexByName(name)
+	idx, ok := r.pkg.Schema().Index(name)
 	if !ok {
 		return
 	}
@@ -330,7 +330,7 @@ func (r *Row) Decode(val any) error {
 		return err
 	}
 	if r.schema == nil || r.schema != s {
-		maps, err := r.res.Schema().MapTo(s)
+		maps, err := r.res.Schema().MapSchema(s)
 		if err != nil {
 			return err
 		}

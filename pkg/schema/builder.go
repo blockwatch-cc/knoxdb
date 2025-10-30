@@ -64,7 +64,7 @@ func Id(id uint16) BuilderOption {
 
 func IndexField(name string) IndexOption {
 	return func(idx *IndexSchema) {
-		f, ok := idx.Base.FieldByName(name)
+		f, ok := idx.Base.Find(name)
 		if ok {
 			idx.Fields = append(idx.Fields, f)
 		}
@@ -73,7 +73,7 @@ func IndexField(name string) IndexOption {
 
 func ExtraField(name string) IndexOption {
 	return func(idx *IndexSchema) {
-		f, ok := idx.Base.FieldByName(name)
+		f, ok := idx.Base.Find(name)
 		if ok {
 			idx.Extra = append(idx.Extra, f)
 		}
@@ -81,8 +81,9 @@ func ExtraField(name string) IndexOption {
 }
 
 type Builder struct {
-	s    *Schema
-	meta bool
+	s     *Schema
+	meta  bool
+	final bool
 }
 
 func NewBuilder() *Builder {
@@ -97,30 +98,36 @@ func (b *Builder) Validate() error {
 
 func (b *Builder) Finalize() *Builder {
 	if b.meta && !b.s.HasMeta() {
-		for _, f := range MetaSchema.Fields {
-			b.s.Fields = append(b.s.Fields, f.Clone())
-		}
+		b.s = b.s.WithMeta() // clones and calls finalize
+	} else {
+		b.s.Finalize()
 	}
-	b.s.Finalize()
+	b.final = true
 	return b
 }
 
 func (b *Builder) Schema() *Schema {
+	if !b.final {
+		b.Finalize()
+	}
 	return b.s
 }
 
 func (b *Builder) WithName(s string) *Builder {
 	b.s.WithName(s)
+	b.final = false
 	return b
 }
 
 func (b *Builder) WithMeta(v bool) *Builder {
 	b.meta = v
+	b.final = false
 	return b
 }
 
 func (b *Builder) WithVersion(v uint32) *Builder {
 	b.s.WithVersion(v)
+	b.final = false
 	return b
 }
 
@@ -136,6 +143,7 @@ func (b *Builder) addField(typ types.FieldType, name string, opts ...BuilderOpti
 	for _, o := range opts {
 		o(b)
 	}
+	b.final = false
 	return b
 }
 
@@ -143,6 +151,7 @@ func (b *Builder) Field(fields ...*Field) *Builder {
 	for _, f := range fields {
 		b.s.WithField(f.Clone())
 	}
+	b.final = false
 	return b
 }
 
@@ -262,6 +271,7 @@ func (b *Builder) AddIndex(name string, typ types.IndexType, opts ...IndexOption
 		o(idx)
 	}
 	b.s.Indexes = append(b.s.Indexes, idx)
+	b.final = false
 	return b
 }
 

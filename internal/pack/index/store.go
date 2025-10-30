@@ -73,8 +73,8 @@ func (idx *Index) encodeCacheKey(ik, pk uint64, id int) uint64 {
 }
 
 func (idx *Index) storeTomb(ctx context.Context, epoch uint32) error {
-	idx.log.Debugf("index[%s]: store tomb %d[v%d] with len=%d",
-		idx.name, idx.tomb.Key(), epoch, idx.tomb.Len())
+	idx.log.Debugf("store tomb %d[v%d] with len=%d",
+		idx.tomb.Key(), epoch, idx.tomb.Len())
 
 	// set tomb version
 	idx.tomb.WithVersion(epoch)
@@ -107,7 +107,7 @@ func (idx *Index) storeTomb(ctx context.Context, epoch uint32) error {
 func (idx *Index) loadTomb(ctx context.Context, key, epoch uint32) (*pack.Package, error) {
 	pkg := pack.New().
 		WithMaxRows(idx.opts.JournalSize).
-		WithSchema(idx.idxSchema).
+		WithSchema(idx.sstore).
 		WithKey(key).
 		WithVersion(epoch)
 	err := idx.db.View(func(tx store.Tx) error {
@@ -130,19 +130,19 @@ func (idx *Index) loadTomb(ctx context.Context, key, epoch uint32) (*pack.Packag
 		return nil, nil
 	}
 
-	idx.log.Debugf("index[%s]: load tomb %d[v%d]", idx.name, key, epoch)
+	idx.log.Debugf("load tomb %d[v%d]", key, epoch)
 
 	return pkg, nil
 }
 
 func (idx *Index) dropTomb(_ context.Context, key, epoch uint32) error {
-	idx.log.Debugf("index[%s]: drop tomb %d[v%d]", idx.name, key, epoch)
+	idx.log.Debugf("drop tomb %d[v%d]", key, epoch)
 	return idx.db.Update(func(tx store.Tx) error {
 		b := tx.Bucket(append([]byte(idx.name), engine.TombKeySuffix...))
 		if b == nil {
 			return store.ErrBucketNotFound
 		}
-		for _, f := range idx.idxSchema.Fields {
+		for _, f := range idx.sstore.Fields {
 			if err := b.Delete(pack.EncodeBlockKey(key, epoch, f.Id)); err != nil {
 				return err
 			}

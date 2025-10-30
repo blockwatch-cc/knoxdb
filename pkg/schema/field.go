@@ -261,6 +261,11 @@ func (f *Field) Validate() error {
 		return fmt.Errorf("field[%s]: invalid type %s for enum, requires uint16", f.Name, f.Type)
 	}
 
+	// require timebase flag only to be used with timestamp fields
+	if f.Flags.Is(F_TIMEBASE) && f.Type != FT_TIMESTAMP {
+		return fmt.Errorf("field[%s]: invalid use of timebase flag on type %s", f.Name, f.Type)
+	}
+
 	return nil
 }
 

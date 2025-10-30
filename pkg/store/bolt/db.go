@@ -192,7 +192,7 @@ func (db *db) GC(ctx context.Context, ratio float64) error {
 	}(dst, dstPath)
 
 	// Run compaction.
-	log.Infof("[GC] Compacting database %s (%s).", srcPath, util.ByteSize(initialSize))
+	log.Infof("[GC] compacting database %s (%s).", srcPath, util.ByteSize(initialSize))
 	if err = compact(ctx, dst, db.store, compactTxSize, ratio); err != nil {
 		return wrap(err)
 	}
@@ -210,7 +210,7 @@ func (db *db) GC(ctx context.Context, ratio float64) error {
 	if fi.Size() == 0 {
 		return fmt.Errorf("zero size after compaction")
 	}
-	log.Infof("[GC] Database %s successfully compacted %s -> %s (gain=%.2fx) in %s.",
+	log.Infof("[GC] backend %s successfully compacted %s -> %s (gain=%.2fx) in %s.",
 		srcPath,
 		util.ByteSize(initialSize),
 		util.ByteSize(fi.Size()),
@@ -234,7 +234,7 @@ func (db *db) GC(ctx context.Context, ratio float64) error {
 
 	// fsync directory here
 	if err := syncDir(filepath.Dir(srcPath)); err != nil {
-		log.Errorf("Sync directory: %v", err)
+		log.Errorf("sync directory: %v", err)
 	}
 
 	// reopen compacted db
@@ -242,11 +242,11 @@ func (db *db) GC(ctx context.Context, ratio float64) error {
 	if err != nil {
 		return wrap(err)
 	}
-	log.Debugf("[GC] Database %s reopened successfully.", db.Path())
+	log.Debugf("[GC] backend %s reopened successfully.", db.Path())
 
 	// when all is good, remove the backup file, ignoring errors
 	_ = os.Remove(srcPath + ".backup")
-	log.Info("[GC] Using compacted database from now.")
+	log.Info("[GC] using compacted backend from now.")
 	return nil
 }
 

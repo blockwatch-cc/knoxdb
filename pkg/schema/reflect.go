@@ -116,7 +116,7 @@ func SchemaOfTag(m any, tag string) (*Schema, error) {
 		}
 
 		// catch duplicates
-		if exist, ok := s.FieldByName(field.Name); ok {
+		if exist, ok := s.Find(field.Name); ok {
 			return nil, fmt.Errorf("%s field %q conflicts with field %q",
 				field.Type, field.Name, exist.Name)
 		}
@@ -531,12 +531,11 @@ func (f *Field) ParseTag(tag string) error {
 				return fmt.Errorf("scale tag unsupported on type %s", f.Type)
 			}
 		case "enum":
-			switch f.Type {
-			case FT_STRING, FT_U16:
+			if f.Type == FT_STRING {
 				// ok
 				flags |= F_ENUM
 				f.Type = FT_U16
-			default:
+			} else {
 				return fmt.Errorf("unsupported enum type %s", f.Type)
 			}
 		case "metadata":

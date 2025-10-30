@@ -21,6 +21,7 @@ import (
 func (idx *Index) CanMatch(c engine.QueryCondition) bool {
 	node, ok := c.(*filter.Node)
 	if !ok {
+		idx.log.Error("no filer node")
 		return false
 	}
 
@@ -37,8 +38,7 @@ func (idx *Index) CanMatch(c engine.QueryCondition) bool {
 
 	// check composite case first (all fields must have matching EQ conditions)
 	// but order does not matter; compare all but last schema field (= pk)
-	nfields := idx.srcSchema.NumFields()
-	for _, field := range idx.srcSchema.Fields[:nfields-1] {
+	for _, field := range idx.sindex.Fields {
 		var canMatchField bool
 		for _, c := range node.Children {
 			if !c.IsLeaf() {
@@ -57,20 +57,20 @@ func (idx *Index) CanMatch(c engine.QueryCondition) bool {
 }
 
 func (idx *Index) canMatchFilter(f *filter.Filter) bool {
-	if !idx.srcSchema.CanMatchFields(f.Name) {
+	if !idx.sindex.Contains(f.Name) {
 		return false
 	}
 	switch f.Mode {
 	case types.FilterModeEqual:
 		return true
 	case types.FilterModeIn:
-		return idx.opts.Type == types.IndexTypeHash
+		return idx.sindex.Type == types.IndexTypeHash
 	case types.FilterModeLt,
 		types.FilterModeLe,
 		types.FilterModeGt,
 		types.FilterModeGe,
 		types.FilterModeRange:
-		return idx.opts.Type == types.IndexTypeInt
+		return idx.sindex.Type == types.IndexTypeInt
 	default:
 		return false
 	}
@@ -96,7 +96,7 @@ func (idx *Index) Query(ctx context.Context, c engine.QueryCondition) (*xroar.Bi
 		bits *xroar.Bitmap
 		err  error
 	)
-	switch idx.opts.Type {
+	switch idx.sindex.Type {
 	case types.IndexTypeHash:
 		// convert query values to hash values and lookup
 		bits, err = idx.lookupKeys(ctx, idx.convert.QueryKeys(node))
@@ -110,7 +110,7 @@ func (idx *Index) Query(ctx context.Context, c engine.QueryCondition) (*xroar.Bi
 	}
 
 	// collide depend on method
-	canCollide := idx.opts.Type == types.IndexTypeHash
+	canCollide := idx.sindex.Type == types.IndexTypeHash
 	return bits, canCollide, err
 }
 
@@ -178,7 +178,7 @@ func (idx *Index) queryKeys(ctx context.Context, node *filter.Node) (*xroar.Bitm
 			}
 
 			// add to result
-			// idx.log.Infof("Set key %d", rid)
+			// idx.log.Infof("set key %d", rid)
 			bits.Set(rid)
 		}
 	}
@@ -210,9 +210,10 @@ func (idx *Index) lookupKeys(ctx context.Context, keys []uint64) (*xroar.Bitmap,
 	}()
 
 	// stop when all inputs are matched
-	for nKeys < nKeysMatched {
+	for nKeysMatched < nKeys {
 		// check context
 		if err := ctx.Err(); err != nil {
+			idx.log.Error(err)
 			return nil, err
 		}
 
@@ -224,10 +225,10 @@ func (idx *Index) lookupKeys(ctx context.Context, keys []uint64) (*xroar.Bitmap,
 
 		// finish when no more packs or no more keys are available
 		if pkg == nil {
-			// idx.log.Infof("No more packs")
+			// idx.log.Infof("no more packs")
 			break
 		}
-		// idx.log.Infof("Next pack len=%d up to max key=0x%016x", pkg.Len(), kmax)
+		// idx.log.Infof("next pack len=%d up to max key=0x%016x", pkg.Len(), kmax)
 
 		// access key columns (used for binary search below)
 		k0 := pkg.Block(0).Uint64() // index pks
@@ -237,11 +238,11 @@ func (idx *Index) lookupKeys(ctx context.Context, keys []uint64) (*xroar.Bitmap,
 		// loop over the remaining (unresolved) keys, packs are sorted by pk
 		pos := 0
 		for _, key := range in[next:] {
-			// idx.log.Infof("Looking for key=0x%016x", key)
+			// idx.log.Infof("looking for key=0x%016x", key)
 
 			// no more matches in this pack?
 			if kmax < key || k0.Get(pos) > maxKey {
-				// idx.log.Infof("No more matches in this pack")
+				// idx.log.Infof("no more matches in this pack")
 				break
 			}
 
@@ -250,16 +251,16 @@ func (idx *Index) lookupKeys(ctx context.Context, keys []uint64) (*xroar.Bitmap,
 
 			// skip when not found
 			if pos+n >= packLen || k0.Get(pos+n) != key {
-				// idx.log.Infof("Lookup key not found")
+				// idx.log.Infof("lookup key not found")
 				next++
 				continue
 			}
-			// idx.log.Infof("At pos %d found=%016x", pos+n, k0.Get(pos+n))
+			// idx.log.Infof("at pos %d found=%016x", pos+n, k0.Get(pos+n))
 			pos += n
 
 			// on match, add row id to result
 			nKeysMatched++
-			// idx.log.Infof("Add Result %d", k1.Get(pos))
+			// idx.log.Infof("add Result %d", k1.Get(pos))
 			bits.Set(k1.Get(pos))
 
 			// Note: index may not be unique as updates merge duplicates which
@@ -372,11 +373,11 @@ func (idx *Index) Lookup(ctx context.Context, keys []uint64, ridMap map[uint64]u
 		// loop over the remaining (unresolved) keys, packs are sorted by pk
 		pos := 0
 		for _, key := range in[next:] {
-			// idx.log.Infof("Looking for ik=0x%016x", ik)
+			// idx.log.Infof("looking for ik=0x%016x", ik)
 
 			// no more matches in this pack?
 			if kmax < key || k0.Get(pos) > maxKey {
-				// idx.log.Infof("No more matches in this pack")
+				// idx.log.Infof("no more matches in this pack")
 				break
 			}
 
@@ -385,16 +386,16 @@ func (idx *Index) Lookup(ctx context.Context, keys []uint64, ridMap map[uint64]u
 
 			// skip when not found
 			if pos+n >= packLen || k0.Get(pos+n) != key {
-				// idx.log.Infof("Lookup key not found")
+				// idx.log.Infof("lookup key not found")
 				next++
 				continue
 			}
-			// idx.log.Infof("At pos %d found=%016x", pos+n, k0.Get(pos+n))
+			// idx.log.Infof("at pos %d found=%016x", pos+n, k0.Get(pos+n))
 			pos += n
 
 			// on match, add row id to result
 			nKeysMatched++
-			// idx.log.Infof("Add Result %d", k1.Get(pos))
+			// idx.log.Infof("add Result %d", k1.Get(pos))
 			ridMap[key] = k1.Get(pos)
 
 			// Note: index may not be unique as updates merge duplicates which

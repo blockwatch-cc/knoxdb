@@ -54,21 +54,21 @@ type BadCompositeIndexMissingField struct {
 	BaseModel
 	Int1 int64    `knox:"i64"`
 	Int2 int64    `knox:"i66"`
-	_    struct{} `knox:"c1,index=composite,fields=i62+i66"`
+	_    struct{} `knox:"c1,index=composite,fields=i62+i66"` // illegal
 }
 
 type BadCompositeIndexDuplicateField struct {
 	BaseModel
 	Int1 int64    `knox:"i64"`
 	Int2 int64    `knox:"i66"`
-	_    struct{} `knox:"c1,index=composite,fields=i64+i64+i66"`
+	_    struct{} `knox:"c1,index=composite,fields=i64+i64+i66"` // illegal
 }
 
 type BadCompositeIndexDuplicateExtraField struct {
 	BaseModel
 	Int1 int64    `knox:"i64"`
 	Int2 int64    `knox:"i66"`
-	_    struct{} `knox:"c1,index=composite,fields=i64+i66,extra=i64+i64+i66"`
+	_    struct{} `knox:"c1,index=composite,fields=i64+i66,extra=i64+i64+i66"` // illegal
 }
 
 var indexTestCases = []indexTest{

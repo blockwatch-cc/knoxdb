@@ -179,9 +179,8 @@ func (j Join) Execute(ctx context.Context, val any) error {
 	}
 
 	// check compatibility with join plan result
-	err = plan.Schema().CanSelect(s)
-	if err != nil {
-		return err
+	if !plan.Schema().ContainsSchema(s) {
+		return schema.ErrSchemaMismatch
 	}
 
 	switch rval.Kind() {
@@ -300,22 +299,22 @@ func (j Join) MakePlan() (*join.JoinPlan, error) {
 	plan.WithFilters(ltree, rtree)
 
 	// lookup select fields
-	lfields, err := ls.SelectFields(j.left.Select...)
+	lfields, err := ls.Select(j.left.Select...)
 	if err != nil {
 		return nil, err
 	}
-	rfields, err := rs.SelectFields(j.right.Select...)
+	rfields, err := rs.Select(j.right.Select...)
 	if err != nil {
 		return nil, err
 	}
 	plan.WithSelects(lfields, rfields)
 
 	// predicates
-	lpred, ok := ls.FieldByName(j.left.On)
+	lpred, ok := ls.Find(j.left.On)
 	if !ok {
 		return nil, fmt.Errorf("join %s: invalid ON field %q", j.tag, j.left.On)
 	}
-	rpred, ok := rs.FieldByName(j.right.On)
+	rpred, ok := rs.Find(j.right.On)
 	if !ok {
 		return nil, fmt.Errorf("join %s: invalid ON field %q", j.tag, j.right.On)
 	}

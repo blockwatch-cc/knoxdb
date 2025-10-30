@@ -361,12 +361,11 @@ func (o StoreOptions) WithLogger(l log.Logger) StoreOptions {
 
 type IndexOptions struct {
 	// table options
-	Engine      IndexKind       // pack, lsm
-	Type        types.IndexType // hash, int, composite, bloom, bfuse, bits
-	PackSize    int             // pack engine
-	JournalSize int             // pack engine
-	TxMaxSize   int             // maximum write size of low-level dbfile transactions
-	Logger      log.Logger      `knox:"-"` // custom logger
+	Engine      IndexKind  // pack, lsm
+	PackSize    int        // pack engine
+	JournalSize int        // pack engine
+	TxMaxSize   int        // maximum write size of low-level dbfile transactions
+	Logger      log.Logger `knox:"-"` // custom logger
 
 	// store backend options
 	Driver   string  // bolt, mem, ...
@@ -378,7 +377,6 @@ type IndexOptions struct {
 
 func (o IndexOptions) Merge(o2 IndexOptions) IndexOptions {
 	o.Engine = util.NonZero(o2.Engine, o.Engine)
-	o.Type = util.NonZero(o2.Type, o.Type)
 	o.PackSize = types.ToChunkSize(util.NonZero(o2.PackSize, o.PackSize))
 	o.JournalSize = types.ToChunkSize(util.NonZero(o2.JournalSize, o.JournalSize))
 	o.TxMaxSize = util.NonZero(o2.TxMaxSize, o.TxMaxSize)
@@ -428,11 +426,6 @@ func (o IndexOptions) WithEngine(e IndexKind) IndexOptions {
 
 func (o IndexOptions) WithDriver(n string) IndexOptions {
 	o.Driver = n
-	return o
-}
-
-func (o IndexOptions) WithIndexType(t types.IndexType) IndexOptions {
-	o.Type = t
 	return o
 }
 

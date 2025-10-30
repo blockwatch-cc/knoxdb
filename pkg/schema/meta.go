@@ -28,9 +28,12 @@ var (
 	MetaFieldIds = []uint16{MetaRid, MetaRef, MetaXmin, MetaXmax, MetaDel}
 )
 
+// WithMeta extends a schema with metadata fields. The extended schema
+// will have the same identity as the original. Metadata is treated
+// as internal info and skipped by struct encoders.
 func (s *Schema) WithMeta() *Schema {
 	// check if metadata fields already exist
-	if _, ok := s.FieldById(MetaRid); ok {
+	if _, ok := s.FindId(MetaRid); ok {
 		return s
 	}
 

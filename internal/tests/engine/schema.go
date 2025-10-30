@@ -139,11 +139,11 @@ func NewSecurity(i int) Security {
 }
 
 func makeFilter(s *schema.Schema, name string, mode types.FilterMode, val, val2 any) *filter.Node {
-	field, ok := s.FieldByName(name)
+	field, ok := s.Find(name)
 	if !ok {
 		panic(fmt.Errorf("missing field %s in schema %s", name, s))
 	}
-	idx, _ := s.FieldIndexById(field.Id)
+	idx, _ := s.IndexId(field.Id)
 	m := filter.NewFactory(field.Type).New(mode)
 	c := schema.NewCaster(field.Type, field.Scale, nil)
 	switch mode {

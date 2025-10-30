@@ -16,6 +16,9 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	// import mem driver
+	_ "blockwatch.cc/knoxdb/pkg/store/mem"
 )
 
 // -------------------------------------------------------------
@@ -26,7 +29,7 @@ import (
 type TestStruct struct {
 	Id  uint64 `knox:"id,pk"`
 	I64 int64  `knox:"i64,filter=bloom2b"`
-	I32 int32  `knox:"i32,filter=bfuse"`
+	I32 int32  `knox:"i32,filter=bfuse8"`
 	I16 int16  `knox:"i16"`
 	I8  int8   `knox:"i8,filter=bits"`
 	Buf []byte `knox:"buf"`
@@ -80,7 +83,7 @@ func makeTestPackage(t testing.TB, key int, pk uint64) *pack.Package {
 }
 
 func makeFilter(name string, mode types.FilterMode, val, val2 any) *filter.Node {
-	field, ok := TestSchema.FieldByName(name)
+	field, ok := TestSchema.Find(name)
 	if !ok {
 		panic(fmt.Errorf("missing field %s in schema %s", name, TestSchema))
 	}

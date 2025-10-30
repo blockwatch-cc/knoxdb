@@ -22,7 +22,7 @@ func NewPhysicalTableImporter(t engine.TableEngine) *PhysicalTableImporter {
 }
 
 func (op *PhysicalTableImporter) Process(ctx context.Context, src *pack.Package) (*pack.Package, Result) {
-	_, err := op.table.ImportInto(ctx, src)
+	_, _, err := op.table.ImportInto(ctx, src)
 	if err != nil {
 		op.err = err
 		return nil, ResultError

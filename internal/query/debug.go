@@ -62,7 +62,7 @@ func (c Condition) FilterString() string {
 
 func (q QueryPlan) String() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "SELECT ( %s ) WHERE ", strings.Join(q.ResultSchema.AllFieldNames(), ", "))
+	fmt.Fprintf(&b, "SELECT ( %s ) WHERE ", strings.Join(q.ResultSchema.Names(), ", "))
 	q.Filters.WriteString(0, &b)
 	if q.Order != types.OrderAsc {
 		fmt.Fprintf(&b, " ORDER BY ID %s", strings.ToUpper(q.Order.String()))

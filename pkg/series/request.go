@@ -130,7 +130,7 @@ func (r *Request) MakeBucket(expr Expr, s *schema.Schema) (reducer.Bucket, error
 			WithLimit(r.Limit).
 			WithFill(r.Fill), nil
 	}
-	f, ok := s.FieldByName(expr.Field)
+	f, ok := s.Find(expr.Field)
 	if !ok {
 		return nil, fmt.Errorf("unknown column %q", expr.Field)
 	}

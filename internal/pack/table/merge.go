@@ -37,14 +37,15 @@ import (
 //
 // Storage writes use micro-transactions for each pack written which makes
 // changes gradually visible as merge progresses. To protect consistency of
-// concurrent queries all queries use MVCC metadata and journal merge-on-query
-// to mask issues (TODO: verify). No explicit syncronization or logging is
-// performed. Inconsistent backend data on crash is prevented by micro-transactions
-// which guarantee atomic updates to all column vectors of any given pack.
+// concurrent queries we use MVCC metadata and journal merge-on-query. Explicit
+// syncronization or logging is not required. On potential crash already written
+// backend data is overwritten by the next merge process. All backend data is
+// versioned (with versions appended to keys) so that new backend writes are
+// not used until the metadata index version is updated on merge success.
 //
-// Merge appends new row versions from insert/update operations at the end of
-// a table's data vectors and removes old row versions replaced by update/delete.
-// When history is enabled, pre-images of old rows are moved to history table packs.
+// Merge appends new row from insert/update operations at the end of
+// a table's data vectors and removes old rows replaced by update/delete.
+// When history is enabled, pre-images of old rows are moved to a history table.
 //
 // Merge does not block readers or writers (other than by very short-lived exclusive
 // backend write transactions) but it is not concurrency safe itself. Callers to merge
@@ -70,8 +71,8 @@ import (
 // - updates table statistics (single-writer private copy, copy-on-write updates)
 //   - writes to a private stats index clone during merge
 //   - all stats index changes are copy-on-write (re-uses tree and pack structure)
-//   - when done, atomically replaces stats index ptr in table in TableWriter.Finalize()
-// - updates indexes
+//   - when done, atomically replaces stats index ptr in table (see TableWriter.Finalize())
+// - updates indexes (using versioned keys for on-disk data blocks)
 // - replaces stored data blocks on disk
 //   - atomic backend write of all blocks in a single pack
 //   - followed by cache flush of all blocks (under cache and tx locks)
@@ -103,8 +104,7 @@ import (
 
 // Merge is called as background task and operates concurrent to journal
 // writes and query readers. If another segment from the same journal
-// is currently in merging state, the tasks yields to other tasks and
-// retries.
+// is currently in merging state, the task yield and retries later.
 func (t *Table) Merge(ctx context.Context) error {
 	var (
 		seg      *journal.Segment
@@ -117,14 +117,14 @@ func (t *Table) Merge(ctx context.Context) error {
 	}
 
 	for {
-		// get next segment, will mark segment as merge in progress
+		// get next mergable segment, will atomically mark as merge in progress
 		t.mu.RLock()
 		seg, err = t.journal.NextMergable()
 		t.mu.RUnlock()
-		if err == nil || nRetries < 0 {
+		nRetries--
+		if err == nil || nRetries <= 0 {
 			break
 		}
-		nRetries--
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -138,21 +138,33 @@ func (t *Table) Merge(ctx context.Context) error {
 		return nil
 	}
 
-	// run concurrent merge
+	// run merge
+	t.log.Debugf("merging journal segment %d", seg.Id())
 	err = t.mergeJournal(ctx, seg)
 	if err != nil {
 		// notify journal, will keep segment in memory and retry
-		t.log.Errorf("table[%s]: merge epoch %d: %v", t.schema.Name, seg.Id(), err)
+		t.log.Errorf("merge epoch %d: %v", seg.Id(), err)
 		t.mu.Lock()
 		t.journal.AbortMerged(seg)
 		t.mu.Unlock()
 	} else {
+		// cross-check cancel state
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
 		// gc journal segment
 		t.mu.Lock()
 		t.journal.ConfirmMerged(ctx, seg)
 		t.mu.Unlock()
 
-		// gc wal
+		// gc wal after merge. this ensures that we don't keep a large amount
+		// of wal files at high write volume. internally GCWal() may rotate and
+		// checkpoint all table journals if too much wal data has accumulated.
+		// I this happens a new merge task is scheduled. Busy tables will have
+		// fresh journal segments to merge, others may have empty segments.
 		if err := t.engine.GCWal(ctx); err != nil {
 			t.log.Warnf("wal gc: %v", err)
 		}
@@ -181,7 +193,7 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 		t.log.Error(err)
 	}
 
-	// t.log.Debugf("table[%s]: merge epoch %d", t.schema.Name(), seg.Id())
+	// t.log.Debugf("merge epoch %d", seg.Id())
 
 	// init history writer
 	var hist engine.TableWriter
@@ -197,9 +209,9 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 	replaced := seg.Replaced()    // bitset of updated/deleted records, nil when empty
 	nStones = len(stones)
 
-	if mask != nil && mask.Any() {
-		// t.log.Debugf("table[%s]: merge phase 1: %d/%d tombstones: some=%v",
-		// 	t.schema.Name(), mask.Count(), len(stones), stones[:min(32, len(stones))])
+	if mask != nil && mask.Any() && mask.Min() < t.stats.Get().GlobalMaxRid() {
+		t.log.Debugf("merge phase 1: %d/%d tombstones: some=%v",
+			mask.Count(), len(stones), stones[:min(32, len(stones))])
 		src := t.NewReader().WithMask(mask, engine.ReadModeIncludeMask)
 		defer src.Close()
 		for {
@@ -212,15 +224,15 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 			}
 			nPacks++
 			nDel++
-			// t.log.Debugf("table[%s]: merge pack %08x[v%d] with %d tombs",
-			// 	t.schema.Name(), pkg.Key(), pkg.Version(), len(pkg.Selected()))
+			t.log.Debugf("merge pack 0x%08x[v%d] with %d tombs",
+				pkg.Key(), pkg.Version(), len(pkg.Selected()))
 
 			if hist != nil {
 				// TODO: patch xmax in history pack (which is writable)
 
 				// set xmax for deleted/replaced rows, set del flag for deleted rows
-				xmaxId, ok := pkg.Schema().FieldIndexById(schema.MetaXmax)
-				delId, ok2 := pkg.Schema().FieldIndexById(schema.MetaDel)
+				xmaxId, ok := pkg.Schema().IndexId(schema.MetaXmax)
+				delId, ok2 := pkg.Schema().IndexId(schema.MetaDel)
 				if ok && ok2 {
 					pkg.MaterializeBlock(xmaxId)
 					pkg.MaterializeBlock(delId)
@@ -251,10 +263,10 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 			// rewrite table pack excluding deleted rows
 			sel := pkg.Selected()
 			neg := types.NegateSelection(sel, pkg.Len())
-			// t.log.Debugf("table[%s]: merge neg sel %d+%d=%d(%d) body=%v",
-			// 	t.schema.Name(), len(sel), len(neg), len(sel)+len(neg), pkg.Len(),
-			// 	neg[:min(32, len(neg))],
-			// )
+			t.log.Debugf("merge neg sel %d+%d=%d(%d) body=%v",
+				len(sel), len(neg), len(sel)+len(neg), pkg.Len(),
+				neg[:min(32, len(neg))],
+			)
 			pkg.WithSelection(neg)
 			if err := table.Replace(ctx, pkg, pack.WriteModeIncludeSelected); err != nil {
 				return err
@@ -309,8 +321,10 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 			if err := table.Append(ctx, pkg, pack.WriteModeIncludeSelected); err != nil {
 				return err
 			}
+			t.log.Debugf("merge appended %d records", pkg.NumSelected())
 
 			// free copy
+			arena.Free(pkg.Selected())
 			pkg.Release()
 
 		} else {
@@ -323,11 +337,10 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 			if err := table.Append(ctx, pkg, pack.WriteModeAll); err != nil {
 				return err
 			}
+			t.log.Debugf("merge appended all %d records", pkg.Len())
 		}
 	}
 
-	// finalize writers will flush remaining data to disk, update table state
-	// and make new epoch visible
 	if hist != nil {
 		// FIXME: howto track history table state?
 		if err := hist.Finalize(ctx, seg.State()); err != nil {
@@ -335,6 +348,10 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 		}
 	}
 
+	// finalize will flush remaining writer packs to disk, update table state
+	// and make new epoch visible by atomically replacing the table stats index
+	// with the new version produced during merge
+	t.log.Debugf("finalize merge")
 	if err := table.Finalize(ctx, seg.State()); err != nil {
 		return err
 	}
@@ -347,8 +364,8 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 	atomic.StoreInt64(&t.metrics.LastMergeDuration, int64(dur))
 	nBytes = atomic.LoadInt64(&t.metrics.BytesWritten) - nBytes
 
-	t.log.Debugf("table[%s]: merged packs=%d records=%d tombs=%d heap=%s stored=%s comp=%.2f%% in %s",
-		t.schema.Name, nPacks, nAdd, nStones, util.ByteSize(nHeap), util.ByteSize(nBytes),
+	t.log.Debugf("merged packs=%d records=%d tombs=%d heap=%s stored=%s comp=%.2f%% in %s",
+		nPacks, nAdd, nStones, util.ByteSize(nHeap), util.ByteSize(nBytes),
 		float64(nBytes)*100/float64(nHeap), dur)
 
 	return nil

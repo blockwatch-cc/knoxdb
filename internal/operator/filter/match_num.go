@@ -352,7 +352,7 @@ func (m numEqualMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitse
 }
 
 func (m numEqualMatcher[T]) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) {
-	// min <= v && max >= v, mask is optional
+	// min <= v <= max, mask is optional
 	f := newFactory(mins.Type())
 	le, ge := f.New(FilterModeLe), f.New(FilterModeGe)
 	le.WithValue(m.val)

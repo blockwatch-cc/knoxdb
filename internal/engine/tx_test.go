@@ -350,6 +350,7 @@ func TestTxWait(t *testing.T) {
 			close(e.txchan)
 		}()
 		require.Eventually(t, func() bool {
+			time.Sleep(100 * time.Millisecond)
 			_, _, _, _, err := e.WithTransaction(ctx)
 			require.Error(t, err)
 			require.ErrorIs(t, err, ErrDatabaseShutdown)

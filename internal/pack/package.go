@@ -8,7 +8,6 @@ import (
 	"time"
 	"unsafe"
 
-	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/assert"
@@ -62,7 +61,11 @@ func (p *Package) WithMaxRows(sz int) *Package {
 }
 
 func (p *Package) WithSchema(s *schema.Schema) *Package {
-	p.blocks = make([]*block.Block, s.NumFields())
+	if cap(p.blocks) >= s.NumFields() {
+		p.blocks = p.blocks[:s.NumFields()]
+	} else {
+		p.blocks = make([]*block.Block, s.NumFields())
+	}
 	p.px = s.PkIndex()
 	p.rx = s.RowIdIndex()
 	p.schema = s
@@ -229,7 +232,7 @@ func (p *Package) Clear() {
 	}
 	p.nRows = 0
 	if p.selected != nil {
-		arena.Free(p.selected[:0])
+		// don't free selected, its owned by outside callers
 		p.selected = nil
 	}
 }
@@ -249,7 +252,7 @@ func (p *Package) Release() {
 		p.stats = nil
 	}
 	if p.selected != nil {
-		arena.Free(p.selected[:0])
+		// don't release. selection vector almost always comes from outside
 		p.selected = nil
 	}
 	p.key = 0

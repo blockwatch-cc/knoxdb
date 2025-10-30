@@ -50,20 +50,20 @@ var (
 )
 
 type Index struct {
-	engine    *engine.Engine      // engine access
-	idxSchema *schema.Schema      // index storage schema [u64, u64, ... extra]
-	srcSchema *schema.Schema      // index source schema [n index cols, rid, extra]
-	id        uint64              // unique tagged name hash
-	name      string              // index name (for logging)
-	opts      engine.IndexOptions // copy of config options
-	table     engine.TableEngine  // related table
-	state     engine.ObjectState  // volatile state
-	db        store.DB            // storage backend
-	journal   *pack.Package       // in-memory updates
-	tomb      *pack.Package       // in-memory deletes
-	convert   Converter           // table to index schema converter
-	metrics   engine.IndexMetrics // usage statistics
-	log       log.Logger          // log instance
+	engine  *engine.Engine      // engine access
+	sindex  *schema.IndexSchema // index schema spec
+	sstore  *schema.Schema      // on-disk storage schema
+	id      uint64              // unique tagged name hash
+	name    string              // index name (for logging)
+	opts    engine.IndexOptions // copy of config options
+	table   engine.TableEngine  // related table
+	state   engine.ObjectState  // volatile state
+	db      store.DB            // storage backend
+	journal *pack.Package       // in-memory updates
+	tomb    *pack.Package       // in-memory deletes
+	convert Converter           // table to index schema converter
+	metrics engine.IndexMetrics // usage statistics
+	log     log.Logger          // log instance
 }
 
 func NewIndex() engine.IndexEngine {
@@ -74,9 +74,9 @@ func (idx *Index) IsReadOnly() bool {
 	return idx.opts.ReadOnly
 }
 
-func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Schema, opts engine.IndexOptions) error {
+func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.IndexSchema, opts engine.IndexOptions) error {
 	// require primary key
-	if !s.HasMeta() {
+	if !s.Base.HasMeta() {
 		return engine.ErrNoMeta
 	}
 
@@ -84,15 +84,15 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 	opts = DefaultIndexOptions.Merge(opts)
 
 	// storage schema depends on index type
-	indexSchema, convert, err := convertSchema(s, t.Schema(), opts.Type)
+	sout, conv, err := convertSchema(s)
 	if err != nil {
 		return err
 	}
 
 	// setup index
 	idx.engine = engine.GetEngine(ctx)
-	idx.idxSchema = indexSchema
-	idx.srcSchema = s
+	idx.sindex = s
+	idx.sstore = sout
 	idx.id = s.TaggedHash(types.ObjectTagIndex)
 	idx.name = s.Name
 	idx.opts = opts
@@ -100,38 +100,39 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.Sc
 	idx.state = engine.NewObjectState(s.Name)
 	idx.journal = pack.New().
 		WithMaxRows(opts.JournalSize).
-		WithSchema(indexSchema).
+		WithSchema(sout).
 		Alloc()
 	idx.tomb = pack.New().
 		WithMaxRows(opts.JournalSize).
-		WithSchema(indexSchema).
+		WithSchema(sout).
 		Alloc()
-	idx.convert = convert
+	idx.convert = conv
 	idx.metrics = engine.NewIndexMetrics(s.Name)
-	idx.log = opts.Logger
+	idx.log = idx.opts.Logger.WithTag(fmt.Sprintf("index[%s]:", s.Name))
 
 	// create backend and store initial state
 	if err := idx.createBackend(ctx); err != nil {
 		return err
 	}
 
-	idx.log.Debugf("Created index %s", s.Name)
+	idx.log.Debugf("create successful")
 	return nil
 }
 
 func (idx *Index) createBackend(ctx context.Context) error {
 	// setup backend db file
 	path := filepath.Join(idx.engine.RootPath(), idx.name)
-	idx.log.Debugf("index[%s]: creating backend=%s table=%s path=%q opts=%#v",
-		idx.name, idx.opts.Engine, idx.table.Schema().Name, path, idx.opts)
+	idx.log.Debugf("creating type=%s backend=%s table=%s path=%q opts=%#v",
+		idx.sindex.Type, idx.opts.Engine, idx.table.Schema().Name, path, idx.opts)
 
 	opts := append(
 		idx.opts.StoreOptions(),
+		store.WithLogger(idx.log),
 		store.WithPath(path),
 		store.WithManifest(
 			store.NewManifest(
 				idx.name,
-				idx.engine.Namespace()+"."+idx.srcSchema.Label(),
+				idx.engine.Namespace()+"."+idx.sstore.Label(),
 			),
 		),
 	)
@@ -167,17 +168,17 @@ func (idx *Index) createBackend(ctx context.Context) error {
 	return tx.Commit()
 }
 
-func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Schema, opts engine.IndexOptions) error {
+func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.IndexSchema, opts engine.IndexOptions) error {
 	// storage schema depends on index type
-	indexSchema, convert, err := convertSchema(s, t.Schema(), opts.Type)
+	sout, conv, err := convertSchema(s)
 	if err != nil {
 		return err
 	}
 
 	// setup index
 	idx.engine = engine.GetEngine(ctx)
-	idx.idxSchema = indexSchema
-	idx.srcSchema = s
+	idx.sindex = s
+	idx.sstore = sout
 	idx.id = s.TaggedHash(types.ObjectTagIndex)
 	idx.name = s.Name
 	idx.opts = DefaultIndexOptions.Merge(opts)
@@ -185,19 +186,19 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 	idx.state = engine.NewObjectState(s.Name)
 	idx.journal = pack.New().
 		WithMaxRows(opts.JournalSize).
-		WithSchema(indexSchema).
+		WithSchema(sout).
 		Alloc()
 	idx.tomb = pack.New().
 		WithMaxRows(opts.JournalSize).
-		WithSchema(indexSchema).
+		WithSchema(sout).
 		Alloc()
-	idx.convert = convert
+	idx.convert = conv
 	idx.metrics = engine.NewIndexMetrics(s.Name)
-	idx.log = opts.Logger
+	idx.log = idx.opts.Logger.WithTag(fmt.Sprintf("index[%s]:", s.Name))
 
 	// open db backend and load latest state
 	if err := idx.openBackend(ctx); err != nil {
-		idx.log.Errorf("index[%s]: %v", s.Name, err)
+		idx.log.Error(err)
 		_ = idx.Close(ctx)
 		return engine.ErrDatabaseCorrupt
 	}
@@ -209,7 +210,7 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 		}
 	}
 
-	idx.log.Debugf("index[%s]: opened with %d entries", s.Name, idx.state.NRows)
+	idx.log.Debugf("opened with %d entries", idx.state.NRows)
 
 	return nil
 }
@@ -217,16 +218,17 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Sche
 func (idx *Index) openBackend(ctx context.Context) error {
 	// open backend
 	path := filepath.Join(idx.engine.RootPath(), idx.name)
-	idx.log.Debugf("index[%s]: open backend=%s path=%s opts=%#v",
-		idx.name, idx.opts.Engine, path, idx.opts)
+	idx.log.Debugf("open type=%s backend=%s path=%s opts=%#v",
+		idx.sindex.Type, idx.opts.Engine, path, idx.opts)
 
 	opts := append(
 		idx.opts.StoreOptions(),
+		store.WithLogger(idx.log),
 		store.WithPath(path),
 		store.WithManifest(
 			store.NewManifest(
 				idx.name,
-				idx.engine.Namespace()+"."+idx.srcSchema.Label(),
+				idx.engine.Namespace()+"."+idx.sstore.Label(),
 			),
 		),
 	)
@@ -261,13 +263,13 @@ func (idx *Index) openBackend(ctx context.Context) error {
 
 func (idx *Index) Close(ctx context.Context) (err error) {
 	if idx.db != nil {
-		idx.log.Debugf("index[%s]: closing", idx.name)
+		idx.log.Debug("closing")
 		err = idx.db.Close()
 		idx.db = nil
 	}
 	idx.engine = nil
-	idx.idxSchema = nil
-	idx.srcSchema = nil
+	idx.sindex = nil
+	idx.sstore = nil
 	idx.table = nil
 	idx.id = 0
 	idx.db = nil
@@ -282,8 +284,12 @@ func (idx *Index) Close(ctx context.Context) (err error) {
 	return
 }
 
+func (idx *Index) IndexSchema() *schema.IndexSchema {
+	return idx.sindex
+}
+
 func (idx *Index) Schema() *schema.Schema {
-	return idx.srcSchema
+	return idx.sstore
 }
 
 func (idx *Index) Table() engine.TableEngine {
@@ -291,11 +297,11 @@ func (idx *Index) Table() engine.TableEngine {
 }
 
 func (idx *Index) IsComposite() bool {
-	return idx.opts.Type == types.IndexTypeComposite
+	return idx.sindex.Type == types.IndexTypeComposite
 }
 
 func (idx *Index) IsPk() bool {
-	return idx.opts.Type == types.IndexTypePk
+	return idx.sindex.Type == types.IndexTypePk
 }
 
 func (idx *Index) Sync(ctx context.Context) error {
@@ -314,7 +320,7 @@ func (idx *Index) Drop(ctx context.Context) error {
 	path := idx.db.Path()
 	idx.db.Close()
 	idx.db = nil
-	idx.log.Debugf("index[%s]: dropping file %s", idx.name, path)
+	idx.log.Debugf("dropping file %s", path)
 	return store.Drop(idx.opts.Driver, path)
 }
 
@@ -358,7 +364,7 @@ func (idx *Index) Truncate(ctx context.Context) error {
 
 func (idx *Index) Rebuild(ctx context.Context) error {
 	// walk all table packs
-	rd := idx.table.NewReader().WithFields(idx.srcSchema.AllFieldIds())
+	rd := idx.table.NewReader().WithFields(idx.sindex.Ids())
 	defer rd.Close()
 
 	for {
@@ -400,7 +406,7 @@ func (idx *Index) AddPack(ctx context.Context, pkg *pack.Package, mode pack.Writ
 		// store when journal is full
 		if idx.journal.IsFull() {
 			if err := idx.mergeAppend(ctx); err != nil {
-				idx.log.Debugf("index[%s]: merge failed: %v", idx.name, err)
+				idx.log.Debugf("merge failed: %v", err)
 				return err
 			}
 		}
@@ -485,7 +491,7 @@ func (idx *Index) Finalize(ctx context.Context, epoch uint32) error {
 }
 
 func (idx *Index) GC(ctx context.Context, epoch uint32) error {
-	idx.log.Debugf("index[%s]: gc epoch %d", idx.name, epoch)
+	idx.log.Debugf("gc epoch %d", epoch)
 	var key uint32
 	for {
 		pkg, err := idx.loadTomb(ctx, key, epoch)
@@ -509,7 +515,7 @@ func (idx *Index) GC(ctx context.Context, epoch uint32) error {
 
 // GC all tombstones <= epoch. Called in startup
 func (idx *Index) Cleanup(ctx context.Context, epoch uint32) error {
-	idx.log.Debugf("index[%s]: cleanup until epoch %d", idx.name, epoch)
+	idx.log.Debugf("cleanup until epoch %d", epoch)
 	var drop []uint32
 	err := idx.db.View(func(tx store.Tx) error {
 		b := tx.Bucket(append([]byte(idx.name), engine.TombKeySuffix...))
@@ -537,7 +543,7 @@ func (idx *Index) Cleanup(ctx context.Context, epoch uint32) error {
 		return nil
 	}
 
-	idx.log.Debugf("index[%s]: gc %d epochs", idx.name, len(drop))
+	idx.log.Debugf("gc %d epochs", len(drop))
 	for _, e := range drop {
 		if err := idx.GC(ctx, e); err != nil {
 			return fmt.Errorf("gc epoch %d: %v", e, err)

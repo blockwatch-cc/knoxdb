@@ -23,6 +23,9 @@ import (
 	"github.com/echa/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	// import mem driver
+	_ "blockwatch.cc/knoxdb/pkg/store/mem"
 )
 
 func TestJournalInsert(t *testing.T) {

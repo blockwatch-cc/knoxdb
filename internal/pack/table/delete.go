@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"sync/atomic"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/pack/journal"
@@ -33,6 +34,8 @@ func (d *DeleteAdapter) Append(ctx context.Context, src *pack.Package) error {
 	// read selection info
 	sel := src.Selected()
 	nsel := src.NumSelected()
+	release := false
+	orig := sel
 
 	// apply offset and limit to selection vector, generate selection vector if necessary
 	if d.offset > 0 || d.limit > 0 {
@@ -51,6 +54,7 @@ func (d *DeleteAdapter) Append(ctx context.Context, src *pack.Package) error {
 				// create selection vector for some tail portion of src
 				sel = types.NewRange(d.offset, nsel).AsSelection()
 				nsel = src.Len() - d.offset
+				release = true
 			}
 			d.offset = 0
 		}
@@ -64,6 +68,7 @@ func (d *DeleteAdapter) Append(ctx context.Context, src *pack.Package) error {
 				} else {
 					// create selection vector
 					sel = types.NewRange(0, d.limit).AsSelection()
+					release = true
 				}
 			}
 		}
@@ -73,6 +78,12 @@ func (d *DeleteAdapter) Append(ctx context.Context, src *pack.Package) error {
 	n, err := d.j.DeletePack(ctx, src)
 	d.n += n
 
+	// reset to old selection vector and free alloc
+	src.WithSelection(orig)
+	if release {
+		arena.Free(sel)
+	}
+
 	// stop when limit is reached
 	if d.limit > 0 && d.n >= d.limit {
 		return types.EndStream
@@ -80,7 +91,7 @@ func (d *DeleteAdapter) Append(ctx context.Context, src *pack.Package) error {
 	return err
 }
 
-func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (uint64, error) {
+func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (int, error) {
 	// unpack query plan
 	plan, ok := q.(*query.QueryPlan)
 	if !ok {
@@ -100,7 +111,7 @@ func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (uint64, error) 
 	}
 
 	// amend query plan to only output rid field
-	rs, err := t.schema.SelectFieldIds(schema.MetaRid)
+	rs, err := t.schema.SelectIds(schema.MetaRid)
 	if err != nil {
 		return 0, err
 	}
@@ -135,5 +146,5 @@ func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (uint64, error) 
 	atomic.AddInt64(&t.metrics.DeletedTuples, int64(res.Len()))
 	atomic.AddInt64(&t.metrics.DeleteCalls, 1)
 
-	return uint64(res.Len()), nil
+	return res.Len(), nil
 }

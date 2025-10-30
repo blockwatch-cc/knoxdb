@@ -8,7 +8,6 @@ import (
 	"io"
 
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/internal/types"
 	"github.com/jedib0t/go-pretty/v6/table"
 )
 
@@ -28,18 +27,14 @@ func (d *Describer) Process(_ context.Context, src *pack.Package) (*pack.Package
 	t := table.NewWriter()
 	t.SetOutputMirror(d.w)
 	t.SetTitle("Schema %s [0x%x] - %d fields", s.Name, s.Hash, s.NumFields())
-	t.AppendHeader(table.Row{"#", "Name", "Type", "Flags", "Index", "Visible", "Scale", "Size", "Fixed", "Compress"})
+	t.AppendHeader(table.Row{"#", "Name", "Type", "Flags", "Filter", "Visible", "Scale", "Size", "Fixed", "Compress"})
 	for _, field := range s.Fields {
-		var idx types.IndexType
-		if field.Index != nil {
-			idx = field.Index.Type
-		}
 		t.AppendRow([]any{
 			field.Id,
 			field.Name,
 			field.Type,
 			field.Flags,
-			idx,
+			field.Filter,
 			field.IsVisible(),
 			field.Scale,
 			field.Type.Size(),

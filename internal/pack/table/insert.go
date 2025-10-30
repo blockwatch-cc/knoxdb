@@ -51,18 +51,18 @@ import (
 //   - next segment references parent and inherits counters
 //   - merge only ever merges one fork
 
-func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, error) {
+func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, int, error) {
 	// reject invalid messages
 	if len(buf) == 0 {
-		return 0, nil
+		return 0, 0, nil
 	}
 	if len(buf) < t.schema.WireSize() {
-		return 0, engine.ErrShortMessage
+		return 0, 0, engine.ErrShortMessage
 	}
 
 	// check table state
 	if t.opts.ReadOnly {
-		return 0, engine.ErrTableReadOnly
+		return 0, 0, engine.ErrTableReadOnly
 	}
 	atomic.AddInt64(&t.metrics.InsertCalls, 1)
 
@@ -70,7 +70,7 @@ func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, error) {
 	tx := engine.GetTx(ctx)
 	err := tx.RLock(ctx, t.id)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 
 	// register state reset callback only once
@@ -92,24 +92,24 @@ func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, error) {
 	// insert to journal, write WAL
 	pk, n, err := t.journal.InsertRecords(ctx, buf)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	atomic.AddInt64(&t.metrics.InsertedTuples, int64(n))
 
-	return pk, nil
+	return pk, n, nil
 }
 
 // Insert into journal from query (pack or result, likely joined/computed columns,
 // mix of materialized and not materialized, with or without selection vector)
-func (t *Table) InsertInto(ctx context.Context, src *pack.Package) (uint64, error) {
+func (t *Table) InsertInto(ctx context.Context, src *pack.Package) (uint64, int, error) {
 	// ensure pack schemas match
 	if !src.Schema().Equal(t.schema) {
-		return 0, schema.ErrSchemaMismatch
+		return 0, 0, schema.ErrSchemaMismatch
 	}
 
 	// check table state
 	if t.opts.ReadOnly {
-		return 0, engine.ErrTableReadOnly
+		return 0, 0, engine.ErrTableReadOnly
 	}
 	atomic.AddInt64(&t.metrics.InsertCalls, 1)
 
@@ -117,7 +117,7 @@ func (t *Table) InsertInto(ctx context.Context, src *pack.Package) (uint64, erro
 	tx := engine.GetTx(ctx)
 	err := tx.RLock(ctx, t.id)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 
 	// register state reset callback only once
@@ -139,14 +139,14 @@ func (t *Table) InsertInto(ctx context.Context, src *pack.Package) (uint64, erro
 	// insert to journal, write WAL
 	pk, n, err := t.journal.InsertPack(ctx, src)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	atomic.AddInt64(&t.metrics.InsertedTuples, int64(n))
 
-	return pk, nil
+	return pk, n, nil
 }
 
-func (t *Table) ImportInto(ctx context.Context, pkg *pack.Package) (uint64, error) {
+func (t *Table) ImportInto(ctx context.Context, pkg *pack.Package) (uint64, int, error) {
 	// TODO bulk import from external (CSV, parquet, network sync) or table copy
 	// - src: full pkg without selection (importer or TableReader)
 	// - dst: direct write to table storage without wal
@@ -163,5 +163,5 @@ func (t *Table) ImportInto(ctx context.Context, pkg *pack.Package) (uint64, erro
 	// - design wise import/copy may be limited to new tables only (created in same tx)
 	//   then a tx rollback would clean up the table file and references if import/sync
 	//   fails
-	return 0, nil
+	return 0, 0, nil
 }

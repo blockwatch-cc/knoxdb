@@ -306,45 +306,17 @@ func (n *SNode) Query(it *Iterator) error {
 	var loadBlocks []uint16
 
 	if !n.spack.IsComplete() {
-		// we always need data pack keys, versions, num values and rid columns
-		if n.spack.Block(STATS_ROW_KEY) == nil {
-			// translate index to field id
-			loadBlocks = append(loadBlocks,
-				STATS_ROW_KEY+1,
-				STATS_ROW_VERSION+1,
-				STATS_ROW_NVALS+1,
-				uint16(minColIndex(it.idx.rx)+1), // min rid
-				uint16(maxColIndex(it.idx.rx)+1), // max rid
-			)
-		}
-
-		// translate filter indexes (field schema positions zero-based) into
-		// spack columns identifiers (uint16, 1-based)
+		// identify which fields to load: it.ids contains field ids
+		// which we translate back to block positions (the stats index
+		// uses consecutive ids even for metadata fields)
 		if it.flt != nil {
-			uniqueFields := make(map[uint16]struct{})
-			it.flt.ForEach(func(f *filter.Filter) error {
-				// skip already processed fields
-				if _, ok := uniqueFields[f.Id]; ok {
-					return nil
+			for _, id := range it.ids {
+				if n.spack.Block(int(id-1)) == nil {
+					loadBlocks = append(loadBlocks, id)
 				}
-				uniqueFields[f.Id] = struct{}{}
-
-				// translate table column indices into min/max statistics column ids
-				minx, maxx := minColIndex(f.Index), maxColIndex(f.Index)
-
-				// identify missing statistics blocks and load by id (not by index)
-				if n.spack.Block(minx) == nil {
-					loadBlocks = append(loadBlocks, uint16(minx+1))
-				}
-				if n.spack.Block(maxx) == nil {
-					loadBlocks = append(loadBlocks, uint16(maxx+1))
-				}
-
-				return nil
-			})
+			}
 		} else {
 			// load all missing fields
-			loadBlocks = loadBlocks[:0]
 			for i, b := range n.spack.Blocks() {
 				if b != nil {
 					continue

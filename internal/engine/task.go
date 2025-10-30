@@ -169,6 +169,12 @@ func (m *TaskService) Stop() {
 func (m *TaskService) Kill() {
 	m.log.Debugf("killing task service")
 	m.cancel()
+	m.wg.Wait()
+	for range m.maxWorkers {
+		w := <-m.workers
+		w.Close()
+	}
+	m.drain()
 }
 
 func (m *TaskService) dispatch() {

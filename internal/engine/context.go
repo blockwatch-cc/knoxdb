@@ -119,8 +119,8 @@ func (e *Engine) WithTransaction(ctx context.Context, flags ...TxFlags) (context
 		default:
 			_, ok = <-e.txchan
 		}
-
 	}
+
 	// channel was closed during wait
 	if !ok {
 		return ctx, nil, noop, noop, ErrDatabaseShutdown

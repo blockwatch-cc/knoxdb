@@ -84,134 +84,140 @@ func TestCompositeIndexEngine[T any, F IF[T]](t *testing.T, driver, eng string, 
 			InsertData(t, e, table)
 			ts := table.Schema()
 
-			iopts := NewTestIndexOptions(t, driver, eng, types.IndexTypeComposite)
-			indexSchema, err := ts.SelectFields("i32", "i64", "$rid")
+			iopts := NewTestIndexOptions(t, driver, eng)
+			ss, err := ts.Select("i32", "i64")
 			require.NoError(t, err)
+			indexSchema := &schema.IndexSchema{
+				Name:   "test_index",
+				Type:   types.IndexTypeComposite,
+				Base:   ts,
+				Fields: ss.Fields,
+			}
 
 			var indexEngine F = new(T)
-			c.Run(t, e, table, indexEngine, indexSchema, ts, iopts, topts)
+			c.Run(t, e, table, ts, topts, indexEngine, indexSchema, iopts)
 		})
 	}
 }
 
-func CreateCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
-	CreateIndex(t, ti, tab, e, io, is)
+func CreateCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+	CreateIndex(t, e, te, ie, is, io)
 }
 
-func OpenCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
+func OpenCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
 	ctx := context.Background()
-	CreateIndex(t, ti, tab, e, io, is)
-	require.NoError(t, ti.Close(ctx))
+	CreateIndex(t, e, te, ie, is, io)
+	require.NoError(t, ie.Close(ctx))
 	ctx = engine.WithEngine(ctx, e)
-	require.NoError(t, ti.Open(ctx, tab, is, io))
-	require.NoError(t, ti.Close(ctx))
+	require.NoError(t, ie.Open(ctx, te, is, io))
+	require.NoError(t, ie.Close(ctx))
 }
 
-func CloseCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
-	CreateIndex(t, ti, tab, e, io, is)
+func CloseCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+	CreateIndex(t, e, te, ie, is, io)
 	ctx := engine.WithEngine(context.Background(), e)
-	require.NoError(t, ti.Close(ctx))
+	require.NoError(t, ie.Close(ctx))
 }
 
-func DropCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
-	CreateIndex(t, ti, tab, e, io, is)
+func DropCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+	CreateIndex(t, e, te, ie, is, io)
 	ctx := engine.WithEngine(context.Background(), e)
 
 	dbpath := filepath.Join(e.RootPath(), is.Name)
 	ok, err := store.Exists(io.Driver, dbpath)
 	require.NoError(t, err, "access error")
 	require.True(t, ok, "db not exists")
-	require.NoError(t, ti.Drop(ctx))
+	require.NoError(t, ie.Drop(ctx))
 	ok, err = store.Exists(io.Driver, dbpath)
 	require.NoError(t, err, "access error")
 	require.False(t, ok, "db not deleted")
 }
 
-func TruncateCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
-	CreateIndex(t, ti, tab, e, io, is)
+func TruncateCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+	CreateIndex(t, e, te, ie, is, io)
 	ctx := engine.WithEngine(context.Background(), e)
-	require.NoError(t, ti.Truncate(ctx))
+	require.NoError(t, ie.Truncate(ctx))
 }
 
-func RebuildCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
-	CreateIndex(t, ti, tab, e, io, is)
+func RebuildCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+	CreateIndex(t, e, te, ie, is, io)
 	ctx := engine.WithEngine(context.Background(), e)
-	require.NoError(t, ti.Rebuild(ctx))
+	require.NoError(t, ie.Rebuild(ctx))
 }
 
-func SyncCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
-	CreateIndex(t, ti, tab, e, io, is)
+func SyncCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+	CreateIndex(t, e, te, ie, is, io)
 	ctx := engine.WithEngine(context.Background(), e)
-	require.NoError(t, ti.Sync(ctx))
-	FillIndex(t, e, ti)
-	require.NoError(t, ti.Sync(ctx))
+	require.NoError(t, ie.Sync(ctx))
+	FillIndex(t, e, ie)
+	require.NoError(t, ie.Sync(ctx))
 }
 
-func CanMatchCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
-	CreateIndex(t, ti, tab, e, io, is)
+func CanMatchCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+	CreateIndex(t, e, te, ie, is, io)
 
 	switch to.Engine {
 	case engine.TableKindLSM:
 		// eq
-		require.True(t, ti.CanMatch(makeTree(makeFilter(ts, "i32", EQ, 1, nil))), EQ)
+		require.True(t, ie.CanMatch(makeTree(makeFilter(ts, "i32", EQ, 1, nil))), EQ)
 		// le
-		require.True(t, ti.CanMatch(makeTree(makeFilter(ts, "i32", LE, 1, nil))), LE)
+		require.True(t, ie.CanMatch(makeTree(makeFilter(ts, "i32", LE, 1, nil))), LE)
 		// lt
-		require.True(t, ti.CanMatch(makeTree(makeFilter(ts, "i32", LT, 1, nil))), LT)
+		require.True(t, ie.CanMatch(makeTree(makeFilter(ts, "i32", LT, 1, nil))), LT)
 		// ge
-		require.True(t, ti.CanMatch(makeTree(makeFilter(ts, "i32", GE, 1, nil))), GE)
+		require.True(t, ie.CanMatch(makeTree(makeFilter(ts, "i32", GE, 1, nil))), GE)
 		// gt
-		require.True(t, ti.CanMatch(makeTree(makeFilter(ts, "i32", GT, 1, nil))), GT)
+		require.True(t, ie.CanMatch(makeTree(makeFilter(ts, "i32", GT, 1, nil))), GT)
 		// rg
-		require.True(t, ti.CanMatch(makeTree(makeFilter(ts, "i32", RG, 1, 2))), RG)
+		require.True(t, ie.CanMatch(makeTree(makeFilter(ts, "i32", RG, 1, 2))), RG)
 		// complex trees
-		require.True(t, ti.CanMatch(makeTree(
+		require.True(t, ie.CanMatch(makeTree(
 			makeFilter(ts, "i64", EQ, 1, nil),
 			makeFilter(ts, "i32", RG, 1, 2),
 		)), "multi")
 		// no other mode
-		require.False(t, ti.CanMatch(makeTree(makeFilter(ts, "i32", IN, []int{1}, nil))), IN)
-		require.False(t, ti.CanMatch(makeTree(makeFilter(ts, "i32", NI, []int{1}, nil))), NI)
+		require.False(t, ie.CanMatch(makeTree(makeFilter(ts, "i32", IN, []int{1}, nil))), IN)
+		require.False(t, ie.CanMatch(makeTree(makeFilter(ts, "i32", NI, []int{1}, nil))), NI)
 		// no simple filters
-		require.False(t, ti.CanMatch(makeFilter(ts, "i32", EQ, 1, nil)), "no simple")
+		require.False(t, ie.CanMatch(makeFilter(ts, "i32", EQ, 1, nil)), "no simple")
 		// no ineligible fields
-		require.False(t, ti.CanMatch(makeTree(makeFilter(ts, "u64", EQ, 1, nil))), "non index field")
+		require.False(t, ie.CanMatch(makeTree(makeFilter(ts, "u64", EQ, 1, nil))), "non index field")
 
 	case engine.TableKindPack:
 		// complex trees
-		require.True(t, ti.CanMatch(makeTree(
+		require.True(t, ie.CanMatch(makeTree(
 			makeFilter(ts, "i64", EQ, 1, nil),
 			makeFilter(ts, "i32", EQ, 1, nil),
 		)), "multi")
 		// no sub-selection of fields (because its a hash index)
-		require.False(t, ti.CanMatch(makeTree(makeFilter(ts, "i32", EQ, 1, nil))), EQ)
+		require.False(t, ie.CanMatch(makeTree(makeFilter(ts, "i32", EQ, 1, nil))), EQ)
 		// no other mode
-		require.False(t, ti.CanMatch(makeTree(makeFilter(ts, "i32", LE, 1, nil))), LE)
-		require.False(t, ti.CanMatch(makeTree(makeFilter(ts, "i32", LT, 1, nil))), LT)
-		require.False(t, ti.CanMatch(makeTree(makeFilter(ts, "i32", GE, 1, nil))), GE)
-		require.False(t, ti.CanMatch(makeTree(makeFilter(ts, "i32", GT, 1, nil))), GT)
-		require.False(t, ti.CanMatch(makeTree(makeFilter(ts, "i32", IN, []int{1}, nil))), IN)
-		require.False(t, ti.CanMatch(makeTree(makeFilter(ts, "i32", NI, []int{1}, nil))), NI)
-		require.False(t, ti.CanMatch(makeTree(makeFilter(ts, "i32", RG, 1, 2))), RG)
+		require.False(t, ie.CanMatch(makeTree(makeFilter(ts, "i32", LE, 1, nil))), LE)
+		require.False(t, ie.CanMatch(makeTree(makeFilter(ts, "i32", LT, 1, nil))), LT)
+		require.False(t, ie.CanMatch(makeTree(makeFilter(ts, "i32", GE, 1, nil))), GE)
+		require.False(t, ie.CanMatch(makeTree(makeFilter(ts, "i32", GT, 1, nil))), GT)
+		require.False(t, ie.CanMatch(makeTree(makeFilter(ts, "i32", IN, []int{1}, nil))), IN)
+		require.False(t, ie.CanMatch(makeTree(makeFilter(ts, "i32", NI, []int{1}, nil))), NI)
+		require.False(t, ie.CanMatch(makeTree(makeFilter(ts, "i32", RG, 1, 2))), RG)
 		// no simple filters
-		require.False(t, ti.CanMatch(makeFilter(ts, "i32", EQ, 1, nil)), "no simple")
+		require.False(t, ie.CanMatch(makeFilter(ts, "i32", EQ, 1, nil)), "no simple")
 		// no suffix filters
-		require.False(t, ti.CanMatch(makeTree(makeFilter(ts, "i64", EQ, 1, nil))), "no suffix")
+		require.False(t, ie.CanMatch(makeTree(makeFilter(ts, "i64", EQ, 1, nil))), "no suffix")
 		// no ineligible fields
-		require.False(t, ti.CanMatch(makeTree(makeFilter(ts, "u64", EQ, 1, nil))), "non index field")
+		require.False(t, ie.CanMatch(makeTree(makeFilter(ts, "u64", EQ, 1, nil))), "non index field")
 
 	default:
 		require.Fail(t, "no case for testing table engine %s", to.Engine)
 	}
 }
 
-func AddCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
-	CreateIndex(t, ti, tab, e, io, is)
-	FillIndex(t, e, ti)
+func AddCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+	CreateIndex(t, e, te, ie, is, io)
+	FillIndex(t, e, ie)
 	ctx := engine.WithEngine(context.Background(), e)
 
 	// query data to confirm it is stored
-	res, _, err := ti.QueryComposite(ctx, makeTree(
+	res, _, err := ie.QueryComposite(ctx, makeTree(
 		makeFilter(ts, "i64", EQ, 1, nil),
 		makeFilter(ts, "i32", EQ, 1, nil),
 	))
@@ -220,9 +226,9 @@ func AddCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngin
 	require.Equal(t, 1, res.Count())
 }
 
-func DeleteCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
-	CreateIndex(t, ti, tab, e, io, is)
-	prev := FillIndex(t, e, ti)
+func DeleteCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+	CreateIndex(t, e, te, ie, is, io)
+	prev := FillIndex(t, e, ie)
 	ctx := engine.WithEngine(context.Background(), e)
 
 	q := makeTree(
@@ -230,34 +236,34 @@ func DeleteCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEn
 		makeFilter(ts, "i32", EQ, 5, nil),
 	)
 
-	res, _, err := ti.QueryComposite(ctx, q)
+	res, _, err := ie.QueryComposite(ctx, q)
 	require.NoError(t, err)
 	require.NotNil(t, res)
 	require.Equal(t, 1, res.Count())
 
 	// delete last item stored
-	require.NoError(t, ti.DelPack(ctx, prev, pack.WriteModeAll, 0))
-	require.NoError(t, ti.Finalize(ctx, 1))
-	require.NoError(t, ti.GC(ctx, 1))
+	require.NoError(t, ie.DelPack(ctx, prev, pack.WriteModeAll, 0))
+	require.NoError(t, ie.Finalize(ctx, 1))
+	require.NoError(t, ie.GC(ctx, 1))
 
 	// query again
 	// check 2: confirm item is removed
-	res, _, err = ti.QueryComposite(ctx, q)
+	res, _, err = ie.QueryComposite(ctx, q)
 	require.NoError(t, err)
 	require.NotNil(t, res)
 	require.Equal(t, 0, res.Count())
 }
 
-func QueryCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
-	CreateIndex(t, ti, tab, e, io, is)
-	FillIndex(t, e, ti)
+func QueryCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+	CreateIndex(t, e, te, ie, is, io)
+	FillIndex(t, e, ie)
 	ctx := engine.WithEngine(context.Background(), e)
 
 	switch to.Engine {
 	case engine.TableKindLSM:
 		// le
 		q := makeTree(makeFilter(ts, "i32", LE, 6, nil))
-		res, _, err := ti.QueryComposite(ctx, q)
+		res, _, err := ie.QueryComposite(ctx, q)
 		require.NoError(t, err)
 		require.NotNil(t, res)
 		require.Equal(t, 6, res.Count())
@@ -268,7 +274,7 @@ func QueryCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEng
 			makeFilter(ts, "i64", EQ, 1, nil),
 			makeFilter(ts, "i32", EQ, 1, nil),
 		)
-		res, _, err := ti.QueryComposite(ctx, q)
+		res, _, err := ie.QueryComposite(ctx, q)
 		require.NoError(t, err)
 		require.NotNil(t, res)
 		require.Equal(t, 1, res.Count())
@@ -278,22 +284,23 @@ func QueryCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEng
 	}
 }
 
-func IsCompositeIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
+func IsCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
 	t.Helper()
 
-	if io.Type != types.IndexTypeComposite {
+	if is.Type != types.IndexTypeComposite {
 		// create index
-		CreateIndex(t, ti, tab, e, io, is)
+		CreateIndex(t, e, te, ie, is, io)
 		// check is false
-		require.False(t, ti.IsComposite())
+		require.False(t, ie.IsComposite())
 	} else {
 		// create composite index index
-		cs, err := ts.SelectFields("i64", "i32", "$rid")
+		ss, err := ts.Select("i64", "i32")
 		require.NoError(t, err)
+		is.Fields = ss.Fields
 
-		CreateIndex(t, ti, tab, e, io, cs)
+		CreateIndex(t, e, te, ie, is, io)
 
 		// check is true
-		require.True(t, ti.IsComposite())
+		require.True(t, ie.IsComposite())
 	}
 }

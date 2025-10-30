@@ -46,7 +46,7 @@ func TestWorkload3(t *testing.T) {
 			Balance: initialBalance,
 		}
 	}
-	startPK, err := table.Insert(ctx, data)
+	startPK, _, err := table.Insert(ctx, data)
 	require.NoError(t, err, "Failed to initialize accounts")
 
 	// Update IDs for accounts

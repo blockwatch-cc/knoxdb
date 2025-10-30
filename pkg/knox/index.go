@@ -25,6 +25,10 @@ func (t IndexImpl) Schema() *schema.Schema {
 	return t.index.Schema()
 }
 
+func (t IndexImpl) IndexSchema() *schema.IndexSchema {
+	return t.index.IndexSchema()
+}
+
 func (t IndexImpl) Metrics() IndexMetrics {
 	return t.index.Metrics()
 }

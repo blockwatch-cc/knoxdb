@@ -86,7 +86,7 @@ func (b *bucket) CreateBucket(key []byte) (store.Bucket, error) {
 	}
 
 	// Add the new bucket to the bucket index.
-	b.tx.db.opts.Log.Debugf("Creating bucket %q with id 0x%x", string(key), childID)
+	b.tx.db.opts.Log.Debugf("creating bucket %q with id 0x%x", string(key), childID)
 	b.tx.db.bucketIds[string(childKey)] = childID
 
 	return &bucket{tx: b.tx, id: childID, key: childKey}, nil
@@ -113,7 +113,7 @@ func (b *bucket) DeleteBucket(key []byte) error {
 		return store.ErrBucketNotFound
 	}
 
-	b.tx.db.opts.Log.Debugf("Deleting bucket %q with id 0x%x", string(key), childID)
+	b.tx.db.opts.Log.Debugf("deleting bucket %q with id 0x%x", string(key), childID)
 
 	// Remove all nested buckets and their keys.
 	childIDs := [][bucketIdLen]byte{childID}
@@ -121,7 +121,7 @@ func (b *bucket) DeleteBucket(key []byte) error {
 		childID = childIDs[len(childIDs)-1]
 		childIDs = childIDs[:len(childIDs)-1]
 
-		b.tx.db.opts.Log.Debugf("Deleting nested bucket id 0x%x", childID)
+		b.tx.db.opts.Log.Debugf("deleting nested bucket id 0x%x", childID)
 
 		// Mark all non-bucket keys for deletion
 		rng := store.BytesPrefix(childID[:])

@@ -20,6 +20,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/assert"
 	"blockwatch.cc/knoxdb/pkg/schema"
+	"blockwatch.cc/knoxdb/pkg/slicex"
 	"blockwatch.cc/knoxdb/pkg/store"
 	"github.com/echa/log"
 )
@@ -427,6 +428,10 @@ func (idx *Index) Close() {
 
 // introspect
 
+func (idx *Index) Schema() *schema.Schema {
+	return idx.schema
+}
+
 func (idx *Index) Epoch() uint32 {
 	return idx.epoch
 }
@@ -659,8 +664,9 @@ func (idx *Index) Get(key uint32) (*Record, bool) {
 		smatch: bitset.New(0),
 		vmatch: bitset.New(0),
 		snode:  node,
-		match:  []uint32{uint32(pos)},
+		match:  arena.AllocUint32(STATS_PACK_SIZE)[:0],
 	}
+	it.match = append(it.match, uint32(pos))
 	// load missing fields but don't run an spack query (flt = nil)
 	if err := it.snode.Query(it); err != nil {
 		// what to do?
@@ -703,13 +709,20 @@ func (idx *Index) FindRid(ctx context.Context, rid uint64) (*Iterator, bool) {
 
 		// init an iterator so that calling next() will run a query
 		it := &Iterator{
-			ctx:    ctx,
-			idx:    idx,
-			flt:    flt,
+			ctx: ctx,
+			idx: idx,
+			flt: flt,
+			ids: []uint16{
+				STATS_ROW_KEY + 1,
+				STATS_ROW_VERSION + 1,
+				STATS_ROW_NVALS + 1,
+				uint16(minColIndex(idx.rx) + 1), // min rid
+				uint16(maxColIndex(idx.rx) + 1), // max rid
+			},
 			use:    0,
 			vmatch: bitset.New(STATS_PACK_SIZE),
 			smatch: bitset.New(slen),
-			match:  make([]uint32, 0, 1),
+			match:  arena.AllocUint32(STATS_PACK_SIZE),
 			sx:     slen - 2, // start at last spack (it will +1)
 			n:      -1,       // start at first offset (it will +1)
 		}
@@ -807,13 +820,19 @@ func (idx *Index) Query(ctx context.Context, flt *filter.Node, dir types.OrderTy
 	}
 
 	// identify if query would benefit from loading any filters
-	var use Features
+	var (
+		use Features
+		ids []uint16
+	)
 	if idx.use&FilterMask > 0 {
 		flt.ForEach(func(f *filter.Filter) error {
 			// range filters work in integer type columns only
 			if f.Type.IsInt() {
 				use |= FeatRangeFilter
 			}
+
+			// list field ids
+			ids = append(ids, uint16(minColIndex(f.Index)+1), uint16(maxColIndex(f.Index)+1))
 
 			switch f.Mode {
 			case types.FilterModeEqual, types.FilterModeIn:
@@ -840,6 +859,12 @@ func (idx *Index) Query(ctx context.Context, flt *filter.Node, dir types.OrderTy
 
 		// mask with enabled features
 		use &= idx.use
+	} else {
+		// only list required metadata field ids
+		flt.ForEach(func(f *filter.Filter) error {
+			ids = append(ids, uint16(minColIndex(f.Index)+1), uint16(maxColIndex(f.Index)+1))
+			return nil
+		})
 	}
 
 	// create iterator from matching snodes
@@ -848,6 +873,7 @@ func (idx *Index) Query(ctx context.Context, flt *filter.Node, dir types.OrderTy
 		idx:     idx,
 		flt:     flt,
 		use:     use,
+		ids:     slicex.Unique(ids),
 		smatch:  nodeBits,
 		vmatch:  bitset.New(STATS_PACK_SIZE),
 		match:   arena.AllocUint32(STATS_PACK_SIZE),

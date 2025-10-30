@@ -22,7 +22,7 @@ func NewPhysicalTableInserter(t engine.TableEngine) *PhysicalTableInserter {
 }
 
 func (op *PhysicalTableInserter) Process(ctx context.Context, src *pack.Package) (*pack.Package, Result) {
-	_, err := op.table.InsertInto(ctx, src)
+	_, _, err := op.table.InsertInto(ctx, src)
 	if err != nil {
 		op.err = err
 		return nil, ResultError

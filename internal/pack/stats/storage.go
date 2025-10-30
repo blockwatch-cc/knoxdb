@@ -319,6 +319,8 @@ func (idx *Index) Load(ctx context.Context, tx store.Tx) error {
 					STATS_ROW_KEY + 1,
 					STATS_ROW_VERSION + 1,
 					STATS_ROW_NVALS + 1,
+					uint16(minColIndex(idx.rx) + 1), // min rid
+					uint16(maxColIndex(idx.rx) + 1), // max rid
 				},
 				0, // len from store
 			)

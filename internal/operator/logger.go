@@ -78,7 +78,7 @@ func (op *Logger) Process(_ context.Context, src *pack.Package) (*pack.Package, 
 	}
 
 	// assemble rows
-	t.AppendHeader(slicex.Any(s.AllFieldNames()).Slice())
+	t.AppendHeader(slicex.Any(s.Names()).Slice())
 	if sel := src.Selected(); sel != nil {
 		for _, v := range sel[:min(op.limit, len(sel))] {
 			t.AppendRow(src.ReadRow(int(v), nil))

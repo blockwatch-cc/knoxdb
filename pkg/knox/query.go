@@ -381,7 +381,7 @@ func (q Query) Stream(ctx context.Context, fn func(QueryRow) error) error {
 	return q.table.Stream(ctx, q, fn)
 }
 
-func (q Query) Delete(ctx context.Context) (uint64, error) {
+func (q Query) Delete(ctx context.Context) (int, error) {
 	n, err := q.table.Delete(ctx, q)
 	if err != nil {
 		return 0, fmt.Errorf("query %s: %v", q.tag, err)
@@ -389,7 +389,7 @@ func (q Query) Delete(ctx context.Context) (uint64, error) {
 	return n, nil
 }
 
-func (q Query) Count(ctx context.Context) (uint64, error) {
+func (q Query) Count(ctx context.Context) (int, error) {
 	n, err := q.table.Count(ctx, q)
 	if err != nil {
 		return 0, fmt.Errorf("query %s: %v", q.tag, err)
@@ -439,8 +439,8 @@ func (q Query) MakePlan() (engine.QueryPlan, error) {
 	// validate output schema
 	s := q.table.Schema()
 	if q.schema != nil {
-		if err := s.CanSelect(q.schema); err != nil {
-			return nil, err
+		if !s.ContainsSchema(q.schema) {
+			return nil, schema.ErrSchemaMismatch
 		}
 		s = q.schema
 	}
@@ -709,11 +709,11 @@ func (q GenericQuery[T]) Stream(ctx context.Context, fn func(*T) error) error {
 	})
 }
 
-func (q GenericQuery[T]) Delete(ctx context.Context) (uint64, error) {
+func (q GenericQuery[T]) Delete(ctx context.Context) (int, error) {
 	return q.Query.Delete(ctx)
 }
 
-func (q GenericQuery[T]) Count(ctx context.Context) (uint64, error) {
+func (q GenericQuery[T]) Count(ctx context.Context) (int, error) {
 	return q.Query.Count(ctx)
 }
 

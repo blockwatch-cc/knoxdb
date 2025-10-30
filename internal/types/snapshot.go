@@ -17,9 +17,9 @@ const ReadTxOffset XID = 1 << 63
 
 func (x XID) String() string {
 	if x > ReadTxOffset {
-		return "R-" + strconv.FormatUint(uint64(x-ReadTxOffset), 10)
+		return "R_" + strconv.FormatUint(uint64(x-ReadTxOffset), 10)
 	} else {
-		return "W-" + strconv.FormatUint(uint64(x), 10)
+		return "W_" + strconv.FormatUint(uint64(x), 10)
 	}
 }
 

@@ -923,7 +923,7 @@ func TestSchemaDetect(t *testing.T) {
 			// schema name
 			require.Equal(t, c.name, s.Name, "schema name")
 			// field names
-			require.ElementsMatch(t, strings.Split(c.fields, ","), s.AllFieldNames(), "field names")
+			require.ElementsMatch(t, strings.Split(c.fields, ","), s.Names(), "field names")
 			// field types
 			for i, f := range s.Fields {
 				require.Equal(t, c.typs[i], f.Type, "field types for "+f.Name)
@@ -942,7 +942,7 @@ func TestSchemaDetect(t *testing.T) {
 				allIndexNames := strings.Split(c.idxfields, ",")
 				// every index is detected
 				// for _, v := range allIndexNames {
-				// 	f, ok := s.FieldByName(v)
+				// 	f, ok := s.Find(v)
 				// 	require.True(t, ok)
 				// 	require.NotNil(t, f.Index)
 				// 	require.NotZero(t, f.Index.Type)
@@ -993,13 +993,13 @@ func TestSchemaMarshal(t *testing.T) {
 	assert.Equal(t, s.IsFixedSize, r.IsFixedSize)
 	assert.Equal(t, s.WireSize(), r.WireSize())
 	assert.Equal(t, s.NumFields(), r.NumFields())
-	assert.Equal(t, s.NumActiveFields(), r.NumActiveFields())
-	assert.Equal(t, s.NumVisibleFields(), r.NumVisibleFields())
-	assert.Equal(t, s.NumMetaFields(), r.NumMetaFields())
-	assert.Equal(t, s.AllFieldNames(), r.AllFieldNames())
-	assert.Equal(t, s.AllFieldIds(), r.AllFieldIds())
-	assert.Equal(t, s.VisibleFieldIds(), r.VisibleFieldIds())
-	assert.Equal(t, s.MetaFieldIds(), r.MetaFieldIds())
+	assert.Equal(t, s.NumActive(), r.NumActive())
+	assert.Equal(t, s.NumVisible(), r.NumVisible())
+	assert.Equal(t, s.NumMeta(), r.NumMeta())
+	assert.Equal(t, s.Names(), r.Names())
+	assert.Equal(t, s.Ids(), r.Ids())
+	assert.Equal(t, s.VisibleIds(), r.VisibleIds())
+	assert.Equal(t, s.MetaIds(), r.MetaIds())
 	assert.Equal(t, s.PkId(), r.PkId())
 	assert.Equal(t, s.PkIndex(), r.PkIndex())
 }
@@ -1067,56 +1067,56 @@ func TestSchemaFieldVisibility(t *testing.T) {
 
 	// counts
 	require.Equal(t, 4, s.NumFields())
-	require.Equal(t, 1, s.NumVisibleFields())
-	require.Equal(t, 2, s.NumActiveFields())
-	require.Equal(t, 1, s.NumMetaFields())
+	require.Equal(t, 1, s.NumVisible())
+	require.Equal(t, 2, s.NumActive())
+	require.Equal(t, 1, s.NumMeta())
 
 	// ids
-	require.Equal(t, []uint16{1, 2, 3, 4}, s.AllFieldIds())
-	require.Equal(t, []uint16{1}, s.VisibleFieldIds())
-	require.Equal(t, []uint16{1, 2}, s.ActiveFieldIds())
-	require.Equal(t, []uint16{2}, s.MetaFieldIds())
+	require.Equal(t, []uint16{1, 2, 3, 4}, s.Ids())
+	require.Equal(t, []uint16{1}, s.VisibleIds())
+	require.Equal(t, []uint16{1, 2}, s.ActiveIds())
+	require.Equal(t, []uint16{2}, s.MetaIds())
 
 	// names
-	require.Equal(t, []string{"field1", "field2", "field3", "field4"}, s.AllFieldNames())
-	require.Equal(t, []string{"field1", "field2"}, s.ActiveFieldNames())
-	require.Equal(t, []string{"field1"}, s.VisibleFieldNames())
-	require.Equal(t, []string{"field2"}, s.MetaFieldNames())
+	require.Equal(t, []string{"field1", "field2", "field3", "field4"}, s.Names())
+	require.Equal(t, []string{"field1", "field2"}, s.ActiveNames())
+	require.Equal(t, []string{"field1"}, s.VisibleNames())
+	require.Equal(t, []string{"field2"}, s.MetaNames())
 
 	// by name should hide deleted fields
-	_, ok := s.FieldByName("field1")
+	_, ok := s.Find("field1")
 	require.True(t, ok)
-	_, ok = s.FieldByName("field2")
+	_, ok = s.Find("field2")
 	require.True(t, ok)
-	_, ok = s.FieldByName("field3")
+	_, ok = s.Find("field3")
 	require.False(t, ok)
-	_, ok = s.FieldByName("field4")
+	_, ok = s.Find("field4")
 	require.False(t, ok)
 
 	// index by name should hide deleted fields
-	_, ok = s.FieldIndexByName("field1")
+	_, ok = s.Index("field1")
 	require.True(t, ok)
-	_, ok = s.FieldIndexByName("field2")
+	_, ok = s.Index("field2")
 	require.True(t, ok)
-	_, ok = s.FieldIndexByName("field3")
+	_, ok = s.Index("field3")
 	require.False(t, ok)
-	_, ok = s.FieldIndexByName("field4")
+	_, ok = s.Index("field4")
 	require.False(t, ok)
 
 	// by id should show all fields
-	_, ok = s.FieldById(1)
+	_, ok = s.FindId(1)
 	require.True(t, ok)
-	_, ok = s.FieldById(2)
+	_, ok = s.FindId(2)
 	require.True(t, ok)
-	_, ok = s.FieldById(3)
+	_, ok = s.FindId(3)
 	require.True(t, ok)
-	_, ok = s.FieldById(4)
+	_, ok = s.FindId(4)
 	require.True(t, ok)
 }
 
-// TestSchemaCanMatchFields checks if Schema.CanMatchFields() correctly
+// TestSchemaCanMatch checks if Schema.CanMatch() correctly
 // identifies when a set of field names matches the schema.
-func TestSchemaCanMatchFields(t *testing.T) {
+func TestSchemaCanMatch(t *testing.T) {
 	s := NewSchema().WithName("test").
 		WithField(&Field{
 			Name: "field1",
@@ -1139,14 +1139,14 @@ func TestSchemaCanMatchFields(t *testing.T) {
 		}).
 		Finalize()
 
-	require.True(t, s.CanMatchFields("field1", "field2"))
-	require.False(t, s.CanMatchFields("field3"))
-	require.False(t, s.CanMatchFields("field4"))
+	require.True(t, s.CanMatch("field1", "field2"))
+	require.False(t, s.CanMatch("field3"))
+	require.False(t, s.CanMatch("field4"))
 }
 
 // TestSchemaCanSelect verifies that Schema.CanSelect() correctly determines
 // if one schema can be selected from another.
-func TestSchemaCanSelect(t *testing.T) {
+func TestSchemaContainsSchema(t *testing.T) {
 	s := NewSchema().WithName("test").
 		WithField(&Field{
 			Name: "field1",
@@ -1174,35 +1174,35 @@ func TestSchemaCanSelect(t *testing.T) {
 		WithField(&Field{Name: "field1", Type: FT_I64}).
 		Finalize()
 
-	require.NoError(t, s.CanSelect(s1))
+	require.True(t, s.ContainsSchema(s1))
 
 	// active internal field
 	s2 := NewSchema().WithName("test2").
 		WithField(&Field{Name: "field2", Type: FT_STRING}).
 		Finalize()
 
-	require.NoError(t, s.CanSelect(s2))
+	require.True(t, s.ContainsSchema(s2))
 
 	// deleted field
 	s3 := NewSchema().WithName("test3").
 		WithField(&Field{Name: "field3", Type: FT_U64}).
 		Finalize()
 
-	require.Error(t, s.CanSelect(s3))
+	require.False(t, s.ContainsSchema(s3))
 
 	// deleted internal field
 	s4 := NewSchema().WithName("test4").
 		WithField(&Field{Name: "field4", Type: FT_U64}).
 		Finalize()
 
-	require.Error(t, s.CanSelect(s4))
+	require.False(t, s.ContainsSchema(s4))
 
 	// non existing field
 	s5 := NewSchema().WithName("test5").
 		WithField(&Field{Name: "field5", Type: FT_U64}).
 		Finalize()
 
-	require.Error(t, s.CanSelect(s5))
+	require.False(t, s.ContainsSchema(s5))
 }
 
 // TestSchemaSort checks if Schema.Sort() correctly sorts the fields
@@ -1224,9 +1224,9 @@ func TestSchemaSort(t *testing.T) {
 	require.Equal(t, "field1", s.Fields[1].Name, "Second field should still be 'field1' (id=2) after sorting")
 }
 
-// TestSchemaMapTo verifies that Schema.MapTo() correctly maps fields
+// TestSchemaMapSchema verifies that Schema.MapSchema() correctly maps fields
 // from one schema to another, even if the field order is different.
-func TestSchemaMapTo(t *testing.T) {
+func TestSchemaMapSchema(t *testing.T) {
 	s := NewSchema().WithName("test").
 		WithField(&Field{
 			Name: "field1",
@@ -1256,7 +1256,7 @@ func TestSchemaMapTo(t *testing.T) {
 		Finalize()
 
 	// inactive fields are hidden
-	mapping, err := s.MapTo(s1)
+	mapping, err := s.MapSchema(s1)
 	require.NoError(t, err)
 	require.Equal(t, []int{-1, 0}, mapping)
 
@@ -1268,7 +1268,7 @@ func TestSchemaMapTo(t *testing.T) {
 		WithField(&Field{Name: "field1", Type: FT_I64}).
 		Finalize()
 
-	mapping, err = s.MapTo(s2)
+	mapping, err = s.MapSchema(s2)
 	require.NoError(t, err)
 	require.Equal(t, []int{1, -1, -1, 0}, mapping)
 }
@@ -1280,32 +1280,32 @@ func TestSchemaDeleteField(t *testing.T) {
 	beforeLen := s.NumFields()
 	beforeHash := s.Hash
 	beforeVersion := s.Version
-	beforeFieldNames := s.AllFieldNames()
-	beforeFieldIds := s.AllFieldIds()
+	beforeFieldNames := s.Names()
+	beforeFieldIds := s.Ids()
 
-	s, err = s.DeleteField(2)
+	s, err = s.DeleteId(2)
 	require.NoError(t, err)
 
 	require.Len(t, s.Fields, beforeLen)
-	require.Equal(t, beforeFieldNames, s.AllFieldNames())
-	require.Equal(t, beforeFieldIds, s.AllFieldIds())
-	require.NotEqual(t, beforeFieldNames, s.ActiveFieldNames())
-	require.NotEqual(t, beforeFieldIds, s.ActiveFieldIds())
-	require.NotEqual(t, beforeFieldNames, s.VisibleFieldNames())
-	require.NotEqual(t, beforeFieldIds, s.VisibleFieldIds())
+	require.Equal(t, beforeFieldNames, s.Names())
+	require.Equal(t, beforeFieldIds, s.Ids())
+	require.NotEqual(t, beforeFieldNames, s.ActiveNames())
+	require.NotEqual(t, beforeFieldIds, s.ActiveIds())
+	require.NotEqual(t, beforeFieldNames, s.VisibleNames())
+	require.NotEqual(t, beforeFieldIds, s.VisibleIds())
 
-	require.Equal(t, s.NumFields()-1, s.NumVisibleFields(), "num visible fields must change")
-	require.Equal(t, s.NumFields()-1, s.NumActiveFields(), "num active fields must change")
+	require.Equal(t, s.NumFields()-1, s.NumVisible(), "num visible fields must change")
+	require.Equal(t, s.NumFields()-1, s.NumActive(), "num active fields must change")
 	require.Less(t, s.WireSize(), beforeSz, "wire size must change")
 	require.NotEqual(t, beforeHash, s.Hash, "hash must change")
 	require.Less(t, beforeVersion, s.Version, "version must increase")
 
-	_, ok := s.FieldByName("i64")
+	_, ok := s.Find("i64")
 	require.False(t, ok, "deleted field is no longer accessible by name")
-	f, ok := s.FieldById(2)
+	f, ok := s.FindId(2)
 	require.True(t, ok, "deleted field still accessible by id")
 	require.False(t, f.IsVisible(), "deleted field is invisibile")
-	require.False(t, s.CanMatchFields("id", "i64"), "cannot match deleted field")
-	_, err = s.SelectFieldIds(1, 2)
+	require.False(t, s.CanMatch("id", "i64"), "cannot match deleted field")
+	_, err = s.SelectIds(1, 2)
 	require.Error(t, err, "cannot select deleted field")
 }

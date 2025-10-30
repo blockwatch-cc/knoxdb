@@ -71,7 +71,7 @@ func (e *Engine) CreateStore(ctx context.Context, s *schema.Schema, opts StoreOp
 
 	// ensure logger
 	if opts.Logger == nil {
-		opts.Logger = e.log
+		opts.Logger = e.log.Clone()
 	}
 
 	// start transaction and amend context
@@ -183,7 +183,7 @@ func (e *Engine) openStores(ctx context.Context) error {
 		kvstore := factory()
 
 		// ensure logger
-		opts.Logger = e.log
+		opts.Logger = e.log.Clone() // FIXME: register logger to set level later
 		opts.ReadOnly = e.opts.ReadOnly
 
 		// open the store

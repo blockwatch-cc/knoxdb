@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -75,7 +76,7 @@ func (m *LockManager) Len() int {
 // waits for all locks to be released
 func (m *LockManager) Wait() {
 	for m.Len() > 0 {
-		time.Sleep(10 * time.Millisecond)
+		runtime.Gosched()
 	}
 }
 

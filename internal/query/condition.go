@@ -71,7 +71,7 @@ func ParseCondition(key, val string, s *schema.Schema) (c Condition, err error) 
 	if !ok {
 		mode = "eq"
 	}
-	field, ok := s.FieldByName(name)
+	field, ok := s.Find(name)
 	if !ok {
 		err = fmt.Errorf("unknown column %q", name)
 		return
@@ -171,19 +171,14 @@ func (c Condition) Compile(s *schema.Schema) (*filter.Node, error) {
 	// bind leaf node condition
 	if c.IsLeaf() {
 		// lookup field and fill missing values
-		field, ok := s.FieldByName(c.Name)
+		fx, ok := s.Index(c.Name)
 		if !ok {
 			return nil, fmt.Errorf("unknown column %q", c.Name)
 		}
-		fx, ok := s.FieldIndexById(field.Id)
-		if !ok {
-			return nil, fmt.Errorf("unknown column %q", c.Name)
-		}
-		typ := field.Type
-		blockType := typ.BlockType()
+		field := s.Fields[fx]
 
 		// Use matcher factory to generate matcher impl for type and mode
-		matcher := filter.NewFactory(typ).New(c.Mode)
+		matcher := filter.NewFactory(field.Type).New(c.Mode)
 
 		// Cast types of condition values since we allow external use.
 		// The wire format code path is safe because data encoding follows
@@ -192,7 +187,7 @@ func (c Condition) Compile(s *schema.Schema) (*filter.Node, error) {
 		if s.HasEnums() {
 			enum, _ = s.Enums.Lookup(c.Name)
 		}
-		caster := schema.NewCaster(typ, field.Scale, enum)
+		caster := schema.NewCaster(field.Type, field.Scale, enum)
 
 		// init matcher impl from value(s)
 		var (
@@ -201,7 +196,7 @@ func (c Condition) Compile(s *schema.Schema) (*filter.Node, error) {
 		)
 		switch c.Mode {
 		case types.FilterModeIn, types.FilterModeNotIn:
-			if blockType.CanUseAsSet() {
+			if field.Type.BlockType().CanUseAsSet() {
 				// ensure slice type matches blocks
 				var slice any
 				slice, err = caster.CastSlice(c.Value)
@@ -212,7 +207,7 @@ func (c Condition) Compile(s *schema.Schema) (*filter.Node, error) {
 			} else {
 				// special case for unsupported IN/NI block types
 				// we rewrite IN -> OR(EQ) and NIN -> AND(NE) subtrees
-				factory := filter.NewFactory(typ)
+				factory := filter.NewFactory(field.Type)
 				if c.Mode == types.FilterModeIn {
 					node = filter.NewNode().SetOr(true) // OR
 					for _, val := range slicex.Any(c.Value).Iterator() {
@@ -224,7 +219,7 @@ func (c Condition) Compile(s *schema.Schema) (*filter.Node, error) {
 						matcher.WithValue(val)
 						node.AddLeaf(&filter.Filter{
 							Name:    c.Name,
-							Type:    blockType,
+							Type:    field.Type.BlockType(),
 							Mode:    types.FilterModeEqual,
 							Index:   fx,
 							Id:      field.Id,
@@ -243,7 +238,7 @@ func (c Condition) Compile(s *schema.Schema) (*filter.Node, error) {
 						matcher.WithValue(val)
 						node.AddLeaf(&filter.Filter{
 							Name:    c.Name,
-							Type:    blockType,
+							Type:    field.Type.BlockType(),
 							Mode:    types.FilterModeNotEqual,
 							Index:   fx,
 							Id:      field.Id,
@@ -282,7 +277,7 @@ func (c Condition) Compile(s *schema.Schema) (*filter.Node, error) {
 		if node == nil {
 			node = filter.NewNode().AddLeaf(&filter.Filter{
 				Name:    c.Name,
-				Type:    typ.BlockType(),
+				Type:    field.Type.BlockType(),
 				Mode:    c.Mode,
 				Index:   fx,
 				Id:      field.Id,

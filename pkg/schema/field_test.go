@@ -143,6 +143,21 @@ func TestFieldValidation(t *testing.T) {
 			expectErr: false,
 		},
 		{
+			name:      "Valid timebase flag",
+			field:     NewField(FT_TIMESTAMP).WithName("test_field").WithFlags(F_TIMEBASE),
+			expectErr: false,
+		},
+		{
+			name:      "Valid enum flag for u16 type",
+			field:     NewField(FT_U16).WithName("test_field").WithFlags(F_ENUM),
+			expectErr: false,
+		},
+		{
+			name:      "Invalid enum flag for string type (must be U16 interally)",
+			field:     NewField(FT_STRING).WithName("test_field").WithFlags(F_ENUM),
+			expectErr: true,
+		},
+		{
 			name:      "Invalid filter kind",
 			field:     NewField(FT_I32).WithName("test_field").WithFilter(types.FilterType(100)),
 			expectErr: true,
@@ -156,6 +171,16 @@ func TestFieldValidation(t *testing.T) {
 			name:      "Valid string field with filter",
 			field:     NewField(FT_STRING).WithName("test_field").WithFilter(types.FilterTypeBloom2b),
 			expectErr: false,
+		},
+		{
+			name:      "Invalid timebase flag",
+			field:     NewField(FT_STRING).WithName("test_field").WithFlags(F_TIMEBASE),
+			expectErr: true,
+		},
+		{
+			name:      "Invalid enum flag",
+			field:     NewField(FT_DATE).WithName("test_field").WithFlags(F_ENUM),
+			expectErr: true,
 		},
 	}
 
@@ -354,7 +379,6 @@ func TestFieldEncodingDecoding(t *testing.T) {
 func TestFieldSerializationRoundTrip(t *testing.T) {
 	original := NewField(FT_STRING).
 		WithName("test_field").
-		WithFlags(types.FieldFlagTimebase).
 		WithFilter(types.FilterTypeBloom2b).
 		WithFixed(10)
 

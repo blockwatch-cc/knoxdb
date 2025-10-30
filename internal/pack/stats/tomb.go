@@ -35,7 +35,7 @@ func NewTomb() *Tomb {
 
 func (t *Tomb) WithSchema(tableSchema, metaSchema *schema.Schema, use Features) *Tomb {
 	t.nSpackFields = metaSchema.NumFields()
-	t.activeFields = tableSchema.ActiveFieldIds()
+	t.activeFields = tableSchema.ActiveIds()
 	for _, f := range tableSchema.Fields {
 		switch f.Filter {
 		case types.FilterTypeBloom2b, types.FilterTypeBloom3b,

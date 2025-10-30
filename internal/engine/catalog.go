@@ -143,10 +143,10 @@ func (c *Catalog) WithWal(w *wal.Wal) *Catalog {
 func (c *Catalog) Create(ctx context.Context, opts DatabaseOptions) error {
 	c.log = opts.Logger
 	c.path = filepath.Join(opts.Path, c.name)
-	c.log.Debugf("Creating catalog at %s", c.path)
+	c.log.Debugf("create catalog at %s", c.path)
 	db, err := store.Create(opts.CatalogOptions(c.name)...)
 	if err != nil {
-		return fmt.Errorf("%s: creating catalog: %w", c.name, err)
+		return fmt.Errorf("create catalog %s: %w", c.name, err)
 	}
 
 	// init table storage
@@ -185,10 +185,10 @@ func (c *Catalog) Open(ctx context.Context, opts DatabaseOptions) error {
 	c.log = opts.Logger
 	c.path = filepath.Join(opts.Path, c.name)
 
-	c.log.Debugf("Opening catalog at %s", c.path)
+	c.log.Debugf("open catalog at %s", c.path)
 	db, err := store.Open(opts.CatalogOptions(c.name)...)
 	if err != nil {
-		c.log.Errorf("opening catalog %s: %v", c.name, err)
+		c.log.Errorf("open catalog %s: %v", c.name, err)
 		return ErrDatabaseCorrupt
 	}
 
@@ -315,6 +315,46 @@ func (c *Catalog) PutSchema(ctx context.Context, s *schema.Schema) error {
 		return err
 	}
 	return bucket.Put(util.U64Bytes(s.Hash), buf)
+}
+
+func (c *Catalog) GetIndexSchema(ctx context.Context, key uint64) (*schema.IndexSchema, error) {
+	tx, err := GetTx(ctx).CatalogTx(c.db, false)
+	if err != nil {
+		return nil, err
+	}
+	bucket := tx.Bucket(schemasKey)
+	if bucket == nil {
+		return nil, ErrDatabaseCorrupt
+	}
+	buf := bucket.Get(util.U64Bytes(key))
+	if buf == nil {
+		return nil, ErrNoKey
+	}
+	s := &schema.IndexSchema{}
+	if err := s.UnmarshalBinary(buf); err != nil {
+		return nil, err
+	}
+	s.Base, err = c.GetSchema(ctx, s.Base.Hash)
+	if err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+func (c *Catalog) PutIndexSchema(ctx context.Context, s *schema.IndexSchema) error {
+	tx, err := GetTx(ctx).CatalogTx(c.db, true)
+	if err != nil {
+		return err
+	}
+	bucket := tx.Bucket(schemasKey)
+	if bucket == nil {
+		return ErrDatabaseCorrupt
+	}
+	buf, err := s.MarshalBinary()
+	if err != nil {
+		return err
+	}
+	return bucket.Put(util.U64Bytes(s.Hash()), buf)
 }
 
 func (c *Catalog) DelSchema(ctx context.Context, key uint64) error {
@@ -485,7 +525,7 @@ func (c *Catalog) DropTable(ctx context.Context, key uint64) error {
 	return nil
 }
 
-func (c *Catalog) GetIndex(ctx context.Context, key uint64) (s *schema.Schema, o IndexOptions, err error) {
+func (c *Catalog) GetIndex(ctx context.Context, key uint64) (s *schema.IndexSchema, o IndexOptions, err error) {
 	var tx store.Tx
 	tx, err = GetTx(ctx).CatalogTx(c.db, false)
 	if err != nil {
@@ -506,7 +546,7 @@ func (c *Catalog) GetIndex(ctx context.Context, key uint64) (s *schema.Schema, o
 		err = ErrNoKey
 		return
 	}
-	s, err = c.GetSchema(ctx, BE.Uint64(skey))
+	s, err = c.GetIndexSchema(ctx, BE.Uint64(skey))
 	if err != nil {
 		return
 	}
@@ -540,8 +580,8 @@ func (c *Catalog) ListIndexes(ctx context.Context, key uint64) ([]uint64, error)
 	return res, nil
 }
 
-func (c *Catalog) AddIndex(ctx context.Context, ikey, tkey uint64, s *schema.Schema, o IndexOptions) error {
-	if err := c.PutSchema(ctx, s); err != nil {
+func (c *Catalog) AddIndex(ctx context.Context, ikey, tkey uint64, s *schema.IndexSchema, o IndexOptions) error {
+	if err := c.PutIndexSchema(ctx, s); err != nil {
 		return err
 	}
 
@@ -561,7 +601,7 @@ func (c *Catalog) AddIndex(ctx context.Context, ikey, tkey uint64, s *schema.Sch
 	if err != nil {
 		return err
 	}
-	if err := bucket.Put(schemaKey, util.U64Bytes(s.Hash)); err != nil {
+	if err := bucket.Put(schemaKey, util.U64Bytes(s.Hash())); err != nil {
 		return err
 	}
 	if err := bucket.Put(nameKey, []byte(s.Name)); err != nil {

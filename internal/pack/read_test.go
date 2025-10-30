@@ -18,7 +18,7 @@ func TestReadStruct(t *testing.T) {
 			pkg := makeTypedPackage(v, PACK_SIZE)
 			s, err := schema.SchemaOf(v)
 			require.NoError(t, err)
-			maps, err := s.MapTo(s)
+			maps, err := s.MapSchema(s)
 			require.NoError(t, err)
 			for i := range PACK_SIZE {
 				err := pkg.ReadStruct(i, v, s, maps)
@@ -33,7 +33,7 @@ func TestReadChildStruct(t *testing.T) {
 	dst := &encodeTestSubStruct{}
 	dstSchema, err := schema.SchemaOf(dst)
 	require.NoError(t, err)
-	maps, err := pkg.schema.MapTo(dstSchema)
+	maps, err := pkg.schema.MapSchema(dstSchema)
 	require.NoError(t, err)
 	for i := range PACK_SIZE {
 		err := pkg.ReadStruct(i, dst, dstSchema, maps)
@@ -45,7 +45,7 @@ func BenchmarkReadStruct(b *testing.B) {
 	for _, v := range testStructs {
 		pkg := makeTypedPackage(v, PACK_SIZE)
 		s, _ := schema.SchemaOf(v)
-		maps, _ := s.MapTo(s)
+		maps, _ := s.MapSchema(s)
 		b.Run(fmt.Sprintf("%T/%d", v, PACK_SIZE), func(b *testing.B) {
 			b.ReportAllocs()
 			for b.Loop() {

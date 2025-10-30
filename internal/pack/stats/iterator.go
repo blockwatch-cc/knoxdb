@@ -10,16 +10,17 @@ import (
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/operator/filter"
-	"blockwatch.cc/knoxdb/pkg/store"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/assert"
+	"blockwatch.cc/knoxdb/pkg/store"
 )
 
 // stats iterator
 type Iterator struct {
 	ctx     context.Context
 	idx     *Index         // back reference to index
-	flt     *filter.Node   // ptr to current query conditions
+	flt     *filter.Node   // ptr to current query conditions (may be nil)
+	ids     []uint16       // required metadata blocks for the filter (nil == all)
 	use     Features       // flags indicating which filter to use
 	smatch  *bitset.Bitset // snode matches
 	vmatch  *bitset.Bitset // spack matches
@@ -38,17 +39,18 @@ func (it *Iterator) Close() {
 	}
 	it.idx = nil
 	it.flt = nil
+	it.ids = nil
 	it.use = 0
 	it.smatch.Close()
 	it.smatch = nil
 	it.vmatch.Close()
 	it.vmatch = nil
 	it.snode = nil
-	if len(it.match) > 1 {
-		arena.Free(it.match)
-	}
+	arena.Free(it.match)
 	it.match = nil
 	it.reverse = false
+	it.sx = 0
+	it.n = 0
 }
 
 func (it *Iterator) IsValid() bool {

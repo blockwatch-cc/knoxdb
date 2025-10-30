@@ -102,7 +102,7 @@ func (r Request) Query(key string) (*query.QueryPlan, error) {
 	}
 
 	// derive query schema from table schema
-	s, err := r.table.Schema().SelectFields(cols...)
+	s, err := r.table.Schema().Select(cols...)
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +135,7 @@ func (r Request) Run(ctx context.Context, key string) (*Result, error) {
 
 func (req Request) RunQuery(ctx context.Context, plan *query.QueryPlan) (*Result, error) {
 	// load table type
-	timeIndex, ok := plan.ResultSchema.FieldIndexByName("time")
+	timeIndex, ok := plan.ResultSchema.Index("time")
 	if !ok {
 		return nil, fmt.Errorf("missing time field in result schema")
 	}
@@ -169,11 +169,11 @@ func (req Request) RunQuery(ctx context.Context, plan *query.QueryPlan) (*Result
 		groupByEnum  *schema.EnumDictionary
 	)
 	if req.GroupBy != "" {
-		groupByIndex, ok = plan.ResultSchema.FieldIndexByName(req.GroupBy)
+		groupByIndex, ok = plan.ResultSchema.Index(req.GroupBy)
 		if !ok {
 			return nil, fmt.Errorf("unknown group_by field %q", req.GroupBy)
 		}
-		f, ok := plan.ResultSchema.FieldByName(req.GroupBy)
+		f, ok := plan.ResultSchema.Find(req.GroupBy)
 		if !ok {
 			return nil, fmt.Errorf("unknown group_by field %q", req.GroupBy)
 		}

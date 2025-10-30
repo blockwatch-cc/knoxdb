@@ -21,13 +21,13 @@ import (
 
 var (
 	timeFmt      = "2006-01-02_15-04-05"
-	sys          string // wasm, native
+	arch         string // wasm, native
 	maxErrors    int
 	maxErrorFreq float64
 )
 
 func init() {
-	flag.StringVar(&sys, "system", "wasm", "set os. wasm/native")
+	flag.StringVar(&arch, "arch", "native", "set os. wasm/native")
 	flag.IntVar(&maxErrors, "max-errors", 1, "stop the test runner after N total observed errors")
 	flag.Float64Var(&maxErrorFreq, "max-error-freq", math.Inf(0), "stops the test runner when the rate of errors observed per second is greater than N (inclusive)")
 }
@@ -39,9 +39,9 @@ func buildTest(t *testing.T, dirPath string) {
 	if os.Getenv("GOARCH") == "wasm" {
 		tags += ",faketime"
 	}
-	cmdScenarios := exec.Command("go", "test", "-c", "../scenarios", "-o", dirPath, "-tags", tags)
-	t.Log(cmdScenarios)
-	out, err := cmdScenarios.CombinedOutput()
+	cmd := exec.Command("go", "test", "-c", "../scenarios", "-o", dirPath, "-tags", tags)
+	t.Log(cmd)
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Logf("Build: %v", err)
 		t.Fatalf("Reason: %s", out)
@@ -67,25 +67,25 @@ func buildTestInWasm(t *testing.T, dirPath string) {
 
 func runTestInWasm(t *testing.T, dirPath string, w io.Writer) error {
 	t.Helper()
-	cmdRuntime := exec.Command("go", "run", "../wasm/runtime", "-vvv", "-module", filepath.Join(dirPath, "scenarios.test"), "-test.v", "-test.failfast")
-	cmdRuntime.Stderr = w
-	cmdRuntime.Stdout = w
-	t.Log(cmdRuntime)
-	cmdRuntime.Env = append(cmdRuntime.Environ(), "KNOX_DRIVER=mem")
-	return cmdRuntime.Run()
+	cmd := exec.Command("go", "run", "../wasm/runtime", "-vvv", "-module", filepath.Join(dirPath, "scenarios.test"), "-test.v", "-test.failfast")
+	cmd.Stderr = w
+	cmd.Stdout = w
+	t.Log(cmd)
+	cmd.Env = append(cmd.Environ(), "KNOX_DRIVER=mem")
+	return cmd.Run()
 }
 
 func runTestInNative(t *testing.T, dirPath string, w io.Writer) error {
 	t.Helper()
-	cmdRuntime := exec.Command(filepath.Join(dirPath, "scenarios.test"), "-test.v", "-test.count=10", "-test.failfast")
-	cmdRuntime.Stderr = w
-	cmdRuntime.Stdout = w
-	t.Log(cmdRuntime)
-	return cmdRuntime.Run()
+	cmd := exec.Command(filepath.Join(dirPath, "scenarios.test"), "-test.v", "-test.count=10", "-test.failfast")
+	cmd.Stderr = w
+	cmd.Stdout = w
+	t.Log(cmd)
+	return cmd.Run()
 }
 
 func setup(t *testing.T) (func(*testing.T, string), func(*testing.T, string, io.Writer) error) {
-	switch sys {
+	switch arch {
 	case "wasm":
 		t.Log("Running as WASM module...")
 		return buildTestInWasm, runTestInWasm
@@ -155,6 +155,9 @@ func TestScenarios(t *testing.T) {
 	// build test
 	build, run := setup(t)
 	build(t, buildPath)
+	if t.Failed() {
+		return
+	}
 
 	// cleanup on panic/exit
 	var f *os.File

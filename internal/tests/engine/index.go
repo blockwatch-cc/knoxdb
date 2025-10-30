@@ -20,7 +20,16 @@ import (
 
 type IndexTestCase struct {
 	Name string
-	Run  func(*testing.T, *engine.Engine, engine.TableEngine, engine.IndexEngine, *schema.Schema, *schema.Schema, engine.IndexOptions, engine.TableOptions)
+	Run  func(
+		*testing.T,
+		*engine.Engine,
+		engine.TableEngine,
+		*schema.Schema,
+		engine.TableOptions,
+		engine.IndexEngine,
+		*schema.IndexSchema,
+		engine.IndexOptions,
+	)
 }
 
 type IF[T any] interface {
@@ -86,37 +95,45 @@ func TestIndexEngine[T any, F IF[T]](t *testing.T, driver, eng string, table eng
 				e := NewTestEngine(t, NewTestDatabaseOptions(t, driver))
 				defer e.Close(ctx)
 
-				// create table and insert data
+				// create table
 				CreateEnum(t, e)
 				topts := NewTestTableOptions(t, driver, eng)
 				CreateTable(t, e, table, topts, allTypesSchema)
 				defer table.Close(ctx)
-				InsertData(t, e, table)
-				ts := table.Schema() // table has added metadata
 
-				iopts := NewTestIndexOptions(t, driver, eng, indexType)
-				indexSchema, err := ts.SelectFields("u64", "$rid")
+				// re-read scherma because table adds metadata
+				ts := table.Schema()
+
+				// prepare index
+				iopts := NewTestIndexOptions(t, driver, eng)
+				ss, err := ts.Select("u64")
 				require.NoError(t, err)
+				indexSchema := &schema.IndexSchema{
+					Name:   "test_index",
+					Type:   indexType,
+					Base:   ts,
+					Fields: ss.Fields,
+				}
 
 				var indexEngine F = new(T)
-				c.Run(t, e, table, indexEngine, indexSchema, ts, iopts, topts)
+				c.Run(t, e, table, ts, topts, indexEngine, indexSchema, iopts)
 			})
 		}
 	}
 }
 
-func CreateIndex(t *testing.T, idxEngine engine.IndexEngine, tab engine.TableEngine, e *engine.Engine, idxOpts engine.IndexOptions, s *schema.Schema) {
+func CreateIndex(t *testing.T, e *engine.Engine, te engine.TableEngine, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
 	t.Helper()
 	ctx := engine.WithEngine(context.Background(), e)
-	require.NoError(t, idxEngine.Create(ctx, tab, s, idxOpts))
-	tab.ConnectIndex(idxEngine)
+	require.NoError(t, ie.Create(ctx, te, is, io))
+	te.ConnectIndex(ie)
 }
 
-func FillIndex(t *testing.T, e *engine.Engine, ti engine.IndexEngine) *pack.Package {
+func FillIndex(t *testing.T, e *engine.Engine, ie engine.IndexEngine) *pack.Package {
 	t.Helper()
 	ctx := engine.WithEngine(context.Background(), e)
-	enc := schema.NewEncoder(ti.Table().Schema())
-	pkg := pack.New().WithSchema(ti.Table().Schema()).WithMaxRows(1 << 11).Alloc()
+	enc := schema.NewEncoder(ie.Table().Schema())
+	pkg := pack.New().WithSchema(ie.Table().Schema()).WithMaxRows(1 << 11).Alloc()
 	meta := &schema.Meta{}
 	for i := range 6 {
 		allType := NewAllTypes(i)
@@ -126,8 +143,8 @@ func FillIndex(t *testing.T, e *engine.Engine, ti engine.IndexEngine) *pack.Pack
 		require.NoError(t, err)
 		pkg.AppendWire(buf, meta)
 	}
-	require.NoError(t, ti.AddPack(ctx, pkg, pack.WriteModeAll))
-	require.NoError(t, ti.Finalize(ctx, 1))
+	require.NoError(t, ie.AddPack(ctx, pkg, pack.WriteModeAll))
+	require.NoError(t, ie.Finalize(ctx, 1))
 
 	// return a package with just the last row (for delete tests)
 	pkg.Delete(0, 5)
@@ -149,191 +166,191 @@ func QueryIndexFail(t *testing.T, ctx context.Context, idx engine.IndexEngine, f
 	require.Nil(t, res, "nil result bitmap")
 }
 
-func CreateIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
-	CreateIndex(t, ti, tab, e, io, is)
+func CreateIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+	CreateIndex(t, e, te, ie, is, io)
 }
 
-func OpenIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
-	CreateIndex(t, ti, tab, e, io, is)
-	require.NoError(t, ti.Close(context.Background()))
+func OpenIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+	CreateIndex(t, e, te, ie, is, io)
+	require.NoError(t, ie.Close(context.Background()))
 	ctx := engine.WithEngine(context.Background(), e)
-	require.NoError(t, ti.Open(ctx, tab, is, io))
-	require.NoError(t, ti.Close(ctx))
+	require.NoError(t, ie.Open(ctx, te, is, io))
+	require.NoError(t, ie.Close(ctx))
 }
 
-func CloseIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
-	CreateIndex(t, ti, tab, e, io, is)
+func CloseIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+	CreateIndex(t, e, te, ie, is, io)
 	ctx := engine.WithEngine(context.Background(), e)
-	require.NoError(t, ti.Close(ctx))
+	require.NoError(t, ie.Close(ctx))
 }
 
-func DropIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
-	CreateIndex(t, ti, tab, e, io, is)
+func DropIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+	CreateIndex(t, e, te, ie, is, io)
 	ctx := engine.WithEngine(context.Background(), e)
 	dbpath := filepath.Join(e.RootPath(), is.Name)
 	ok, err := store.Exists(io.Driver, dbpath)
 	require.NoError(t, err, "access error")
 	require.True(t, ok, "db not exists")
-	require.NoError(t, ti.Drop(ctx))
+	require.NoError(t, ie.Drop(ctx))
 	ok, err = store.Exists(io.Driver, dbpath)
 	require.NoError(t, err, "access error")
 	require.False(t, ok, "db not deleted")
 }
 
-func TruncateIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
-	CreateIndex(t, ti, tab, e, io, is)
-	FillIndex(t, e, ti)
+func TruncateIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+	CreateIndex(t, e, te, ie, is, io)
+	FillIndex(t, e, ie)
 	ctx := engine.WithEngine(context.Background(), e)
-	require.NoError(t, ti.Truncate(ctx))
+	require.NoError(t, ie.Truncate(ctx))
 }
 
-func RebuildIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
-	CreateIndex(t, ti, tab, e, io, is)
+func RebuildIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+	CreateIndex(t, e, te, ie, is, io)
 	ctx := engine.WithEngine(context.Background(), e)
-	require.NoError(t, ti.Rebuild(ctx))
+	require.NoError(t, ie.Rebuild(ctx))
 }
 
-func SyncIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
-	CreateIndex(t, ti, tab, e, io, is)
+func SyncIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+	CreateIndex(t, e, te, ie, is, io)
 	ctx := engine.WithEngine(context.Background(), e)
-	require.NoError(t, ti.Sync(ctx))
-	FillIndex(t, e, ti)
-	require.NoError(t, ti.Sync(ctx))
+	require.NoError(t, ie.Sync(ctx))
+	FillIndex(t, e, ie)
+	require.NoError(t, ie.Sync(ctx))
 }
 
-func CanMatchIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
-	CreateIndex(t, ti, tab, e, io, is)
+func CanMatchIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+	CreateIndex(t, e, te, ie, is, io)
 
 	// check by type
-	switch io.Type {
+	switch is.Type {
 	case types.IndexTypeHash:
 		// eq
-		require.True(t, ti.CanMatch(makeFilter(ts, "u64", EQ, 1, nil)), EQ)
+		require.True(t, ie.CanMatch(makeFilter(ts, "u64", EQ, 1, nil)), EQ)
 		// in
-		require.True(t, ti.CanMatch(makeFilter(ts, "u64", IN, []int{1, 2}, nil)), IN)
+		require.True(t, ie.CanMatch(makeFilter(ts, "u64", IN, []int{1, 2}, nil)), IN)
 		// no other mode
-		require.False(t, ti.CanMatch(makeFilter(ts, "u64", LE, 1, nil)), LE)
-		require.False(t, ti.CanMatch(makeFilter(ts, "u64", LT, 1, nil)), LT)
-		require.False(t, ti.CanMatch(makeFilter(ts, "u64", GE, 1, nil)), GE)
-		require.False(t, ti.CanMatch(makeFilter(ts, "u64", GT, 1, nil)), GT)
-		require.False(t, ti.CanMatch(makeFilter(ts, "u64", RG, 1, 2)), RG)
+		require.False(t, ie.CanMatch(makeFilter(ts, "u64", LE, 1, nil)), LE)
+		require.False(t, ie.CanMatch(makeFilter(ts, "u64", LT, 1, nil)), LT)
+		require.False(t, ie.CanMatch(makeFilter(ts, "u64", GE, 1, nil)), GE)
+		require.False(t, ie.CanMatch(makeFilter(ts, "u64", GT, 1, nil)), GT)
+		require.False(t, ie.CanMatch(makeFilter(ts, "u64", RG, 1, 2)), RG)
 		// no trees
-		require.False(t, ti.CanMatch(makeTree(
+		require.False(t, ie.CanMatch(makeTree(
 			makeFilter(ts, "u64", EQ, 1, nil),
 			makeFilter(ts, "u32", EQ, 2, nil),
 		)), "no multi")
 		// no ineligible fields
-		require.False(t, ti.CanMatch(makeFilter(ts, "i32", EQ, 1, nil)), "non index field")
-		require.False(t, ti.CanMatch(makeFilter(ts, "u64", NI, []int{1, 2}, nil)), NI)
+		require.False(t, ie.CanMatch(makeFilter(ts, "i32", EQ, 1, nil)), "non index field")
+		require.False(t, ie.CanMatch(makeFilter(ts, "u64", NI, []int{1, 2}, nil)), NI)
 
 	case types.IndexTypeInt, types.IndexTypePk:
 		// eq
-		require.True(t, ti.CanMatch(makeFilter(ts, "u64", EQ, 1, nil)), EQ)
+		require.True(t, ie.CanMatch(makeFilter(ts, "u64", EQ, 1, nil)), EQ)
 		// le
-		require.True(t, ti.CanMatch(makeFilter(ts, "u64", LE, 1, nil)), LE)
+		require.True(t, ie.CanMatch(makeFilter(ts, "u64", LE, 1, nil)), LE)
 		// lt
-		require.True(t, ti.CanMatch(makeFilter(ts, "u64", LT, 1, nil)), LT)
+		require.True(t, ie.CanMatch(makeFilter(ts, "u64", LT, 1, nil)), LT)
 		// ge
-		require.True(t, ti.CanMatch(makeFilter(ts, "u64", GE, 1, nil)), GE)
+		require.True(t, ie.CanMatch(makeFilter(ts, "u64", GE, 1, nil)), GE)
 		// gt
-		require.True(t, ti.CanMatch(makeFilter(ts, "u64", GT, 1, nil)), GT)
+		require.True(t, ie.CanMatch(makeFilter(ts, "u64", GT, 1, nil)), GT)
 		// rg
-		require.True(t, ti.CanMatch(makeFilter(ts, "u64", RG, 1, 2)), RG)
+		require.True(t, ie.CanMatch(makeFilter(ts, "u64", RG, 1, 2)), RG)
 		// no other mode
-		require.False(t, ti.CanMatch(makeFilter(ts, "u64", IN, []int{1, 2}, nil)), IN)
-		require.False(t, ti.CanMatch(makeFilter(ts, "u64", NI, []int{1, 2}, nil)), NI)
+		require.False(t, ie.CanMatch(makeFilter(ts, "u64", IN, []int{1, 2}, nil)), IN)
+		require.False(t, ie.CanMatch(makeFilter(ts, "u64", NI, []int{1, 2}, nil)), NI)
 		// no trees
-		require.False(t, ti.CanMatch(makeTree(
+		require.False(t, ie.CanMatch(makeTree(
 			makeFilter(ts, "u64", EQ, 1, nil),
 			makeFilter(ts, "u32", EQ, 2, nil),
 		)), "no multi")
 		// no ineligible fields
-		require.False(t, ti.CanMatch(makeFilter(ts, "i32", EQ, 1, nil)), "non index field")
+		require.False(t, ie.CanMatch(makeFilter(ts, "i32", EQ, 1, nil)), "non index field")
 	default:
-		require.Fail(t, "no case for testing index type %s", io.Type)
+		require.Fail(t, "no case for testing index type %s", is.Type)
 	}
 }
 
-func AddIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
-	CreateIndex(t, ti, tab, e, io, is)
-	FillIndex(t, e, ti)
+func AddIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+	CreateIndex(t, e, te, ie, is, io)
+	FillIndex(t, e, ie)
 	ctx := engine.WithEngine(context.Background(), e)
 
 	// query data to confirm it is stored
-	switch io.Type {
+	switch is.Type {
 	case types.IndexTypeHash:
-		QueryIndex(t, ctx, ti, makeFilter(ts, "u64", EQ, 5, nil), 1)
-		QueryIndex(t, ctx, ti, makeFilter(ts, "u64", EQ, 15, nil), 0)
+		QueryIndex(t, ctx, ie, makeFilter(ts, "u64", EQ, 5, nil), 1)
+		QueryIndex(t, ctx, ie, makeFilter(ts, "u64", EQ, 15, nil), 0)
 
 	case types.IndexTypeInt:
-		QueryIndex(t, ctx, ti, makeFilter(ts, "u64", LT, 6, nil), 6)
-		QueryIndex(t, ctx, ti, makeFilter(ts, "u64", GT, 15, nil), 0)
+		QueryIndex(t, ctx, ie, makeFilter(ts, "u64", LT, 6, nil), 6)
+		QueryIndex(t, ctx, ie, makeFilter(ts, "u64", GT, 15, nil), 0)
 
 	default:
-		require.Fail(t, "no case for testing index type %s", io.Type)
+		require.Fail(t, "no case for testing index type %s", is.Type)
 	}
 }
 
-func DeleteIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
-	CreateIndex(t, ti, tab, e, io, is)
-	prev := FillIndex(t, e, ti)
+func DeleteIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+	CreateIndex(t, e, te, ie, is, io)
+	prev := FillIndex(t, e, ie)
 	ctx := engine.WithEngine(context.Background(), e)
 
-	switch io.Type {
+	switch is.Type {
 	case types.IndexTypeHash:
-		QueryIndex(t, ctx, ti, makeFilter(ts, "u64", EQ, 5, nil), 1)
+		QueryIndex(t, ctx, ie, makeFilter(ts, "u64", EQ, 5, nil), 1)
 
 	case types.IndexTypeInt:
-		QueryIndex(t, ctx, ti, makeFilter(ts, "u64", LT, 6, nil), 6)
+		QueryIndex(t, ctx, ie, makeFilter(ts, "u64", LT, 6, nil), 6)
 
 	default:
-		require.Fail(t, "no case for testing index type %s", io.Type)
+		require.Fail(t, "no case for testing index type %s", is.Type)
 	}
 
 	// delete last item and store
-	require.NoError(t, ti.DelPack(ctx, prev, pack.WriteModeAll, 0))
-	require.NoError(t, ti.Finalize(ctx, 1))
-	require.NoError(t, ti.GC(ctx, 1))
+	require.NoError(t, ie.DelPack(ctx, prev, pack.WriteModeAll, 0))
+	require.NoError(t, ie.Finalize(ctx, 1))
+	require.NoError(t, ie.GC(ctx, 1))
 
 	// query again, confirm item is removed
-	switch io.Type {
+	switch is.Type {
 	case types.IndexTypeHash:
-		QueryIndex(t, ctx, ti, makeFilter(ts, "u64", EQ, 5, nil), 0)
+		QueryIndex(t, ctx, ie, makeFilter(ts, "u64", EQ, 5, nil), 0)
 
 	case types.IndexTypeInt:
-		QueryIndex(t, ctx, ti, makeFilter(ts, "u64", LT, 6, nil), 5)
+		QueryIndex(t, ctx, ie, makeFilter(ts, "u64", LT, 6, nil), 5)
 
 	default:
-		require.Fail(t, "no case for testing index type %s", io.Type)
+		require.Fail(t, "no case for testing index type %s", is.Type)
 	}
 }
 
-func QueryIndexTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, ti engine.IndexEngine, is, ts *schema.Schema, io engine.IndexOptions, to engine.TableOptions) {
-	CreateIndex(t, ti, tab, e, io, is)
-	FillIndex(t, e, ti)
+func QueryIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+	CreateIndex(t, e, te, ie, is, io)
+	FillIndex(t, e, ie)
 	ctx := engine.WithEngine(context.Background(), e)
 
 	// query by type
-	switch io.Type {
+	switch is.Type {
 	case types.IndexTypeHash:
 		// eq
-		QueryIndex(t, ctx, ti, makeFilter(ts, "u64", EQ, 1, nil), 1)
+		QueryIndex(t, ctx, ie, makeFilter(ts, "u64", EQ, 1, nil), 1)
 		// in
-		QueryIndex(t, ctx, ti, makeFilter(ts, "u64", IN, []int{1, 2}, nil), 2)
+		QueryIndex(t, ctx, ie, makeFilter(ts, "u64", IN, []int{1, 2}, nil), 2)
 	case types.IndexTypeInt:
 		// eq
-		QueryIndex(t, ctx, ti, makeFilter(ts, "u64", EQ, 1, nil), 1)
+		QueryIndex(t, ctx, ie, makeFilter(ts, "u64", EQ, 1, nil), 1)
 		// le
-		QueryIndex(t, ctx, ti, makeFilter(ts, "u64", LE, 1, nil), 2)
+		QueryIndex(t, ctx, ie, makeFilter(ts, "u64", LE, 1, nil), 2)
 		// lt
-		QueryIndex(t, ctx, ti, makeFilter(ts, "u64", LT, 1, nil), 1)
+		QueryIndex(t, ctx, ie, makeFilter(ts, "u64", LT, 1, nil), 1)
 		// ge
-		QueryIndex(t, ctx, ti, makeFilter(ts, "u64", GE, 1, nil), 5)
+		QueryIndex(t, ctx, ie, makeFilter(ts, "u64", GE, 1, nil), 5)
 		// gt
-		QueryIndex(t, ctx, ti, makeFilter(ts, "u64", GT, 1, nil), 4)
+		QueryIndex(t, ctx, ie, makeFilter(ts, "u64", GT, 1, nil), 4)
 		// rg
-		QueryIndex(t, ctx, ti, makeFilter(ts, "u64", RG, 1, 2), 2)
+		QueryIndex(t, ctx, ie, makeFilter(ts, "u64", RG, 1, 2), 2)
 	default:
-		require.Fail(t, "no case for testing index type %s", io.Type)
+		require.Fail(t, "no case for testing index type %s", is.Type)
 	}
 }

@@ -17,11 +17,11 @@ var (
 )
 
 type MockIndex struct {
-	schema *schema.Schema
+	schema *schema.IndexSchema
 	result *xroar.Bitmap
 }
 
-func NewMockIndex(s *schema.Schema, result *xroar.Bitmap) engine.QueryableIndex {
+func NewMockIndex(s *schema.IndexSchema, result *xroar.Bitmap) engine.QueryableIndex {
 	return &MockIndex{
 		schema: s,
 		result: result,
@@ -32,8 +32,13 @@ func (idx *MockIndex) IsPk() bool {
 	return true
 }
 
-func (idx *MockIndex) Schema() *schema.Schema {
+func (idx *MockIndex) IndexSchema() *schema.IndexSchema {
 	return idx.schema
+}
+
+func (idx *MockIndex) Schema() *schema.Schema {
+	s, _ := idx.schema.StorageSchema()
+	return s
 }
 
 func (idx *MockIndex) IsComposite() bool {

@@ -92,11 +92,11 @@ func TestViewGet(t *testing.T) {
 func TestViewGetWithVisibility(t *testing.T) {
 	base := NewAllTypes(int64(0x0faf0faf0faf0faf))
 	baseSchema := MustSchemaOf(AllTypes{})
-	visSchema, err := baseSchema.DeleteField(2)
+	visSchema, err := baseSchema.DeleteId(2)
 	require.NoError(t, err)
-	visSchema, err = visSchema.DeleteField(4)
+	visSchema, err = visSchema.DeleteId(4)
 	require.NoError(t, err)
-	visSchema, err = visSchema.DeleteField(5)
+	visSchema, err = visSchema.DeleteId(5)
 	require.NoError(t, err)
 	visEnc := NewEncoder(visSchema)
 	buf, err := visEnc.Encode(&base, nil)
@@ -388,9 +388,9 @@ func BenchmarkViewCut(b *testing.B) {
 func BenchmarkViewCutSkip(b *testing.B) {
 	var err error
 	baseSchema := MustSchemaOf(AllTypes{})
-	baseSchema, err = baseSchema.DeleteField(2)
+	baseSchema, err = baseSchema.DeleteId(2)
 	require.NoError(b, err)
-	baseSchema, err = baseSchema.DeleteField(10)
+	baseSchema, err = baseSchema.DeleteId(10)
 	require.NoError(b, err)
 	base := NewAllTypes(int64(0x0faf0faf0faf0faf))
 	baseEnc := NewEncoder(baseSchema)

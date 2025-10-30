@@ -73,7 +73,7 @@ func TestWorkload4(t *testing.T) {
 		}
 		initRows = append(initRows, row)
 	}
-	_, err = table.Insert(ctx, initRows)
+	_, _, err = table.Insert(ctx, initRows)
 	require.NoError(t, err, "Failed to insert work rows")
 
 	// Multi-threaded interleaved operations
@@ -127,7 +127,7 @@ func TestWorkload4(t *testing.T) {
 					}
 
 					t.Logf("Writing meta row TH-%d-TXN-%d", metaRow.ThreadID, metaRow.TxId)
-					_, err = table.Insert(ctx, []*UnifiedRow{metaRow})
+					_, _, err = table.Insert(ctx, []*UnifiedRow{metaRow})
 					require.NoError(t, err, "Failed to insert meta row")
 
 					require.NoError(t, commit(), "Commit failed")
@@ -177,7 +177,6 @@ func TestWorkload4(t *testing.T) {
 	_, err = knox.NewGenericQuery[UnifiedRow]().
 		WithTable(table).
 		AndEqual("row_type", RowTypeMeta).
-		WithDebug(true).
 		WithLogger(log.Log).
 		Execute(ctx, &metaRows)
 	require.NoError(t, err, "Failed to validate work rows")

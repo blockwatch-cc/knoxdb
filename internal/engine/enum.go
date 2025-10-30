@@ -102,7 +102,7 @@ func (e *Engine) DropEnum(ctx context.Context, name string) error {
 
 	// check enum is unused
 	for _, t := range e.tables.Map() {
-		if slices.Contains(t.Schema().EnumFieldNames(), enum.Name()) {
+		if slices.Contains(t.Schema().EnumNames(), enum.Name()) {
 			return ErrEnumInUse
 		}
 	}
@@ -190,7 +190,7 @@ func (e *Engine) openEnums(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		e.log.Debugf("Loaded enum %s [0x%016x] [0x%016x]", enum.Name(), key, enum.Tag())
+		e.log.Debugf("loaded enum %s key=0x%016x n=%d", enum.Name(), key, enum.Len())
 		e.enums.Put(key, enum)
 	}
 

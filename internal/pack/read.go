@@ -366,10 +366,10 @@ func ForEach[T any](pkg *Package, fn func(i int, v *T) error) error {
 	if err != nil {
 		return err
 	}
-	if err := pkg.schema.CanSelect(dst); err != nil {
-		return err
+	if !pkg.schema.ContainsSchema(dst) {
+		return schema.ErrSchemaMismatch
 	}
-	maps, err := pkg.schema.MapTo(dst)
+	maps, err := pkg.schema.MapSchema(dst)
 	if err != nil {
 		return err
 	}

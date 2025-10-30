@@ -6,6 +6,7 @@ package table
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync/atomic"
 
 	"blockwatch.cc/knoxdb/internal/engine"
@@ -25,7 +26,7 @@ import (
 // to WAL. The WAL message encoding is compatible with Update.
 //
 // [Records] -> [List Pks] -> [Index Lookup Rids] -> [Update Journal]
-func (t *Table) UpdateRows(ctx context.Context, buf []byte) (uint64, error) {
+func (t *Table) UpdateRows(ctx context.Context, buf []byte) (int, error) {
 	// Update (pk != 0)
 	// - input is record format without metadata
 	// - same pk can be updated multiple times in the same batch
@@ -93,17 +94,37 @@ func (t *Table) UpdateRows(ctx context.Context, buf []byte) (uint64, error) {
 		ridMap[v] = 0 // seed with 0
 	}
 
-	// lookup from index
+	// lookup from index (stale when journal contains newer updates/deletes)
 	if err := idx.Lookup(ctx, pks, ridMap); err != nil {
 		return 0, err
 	}
+
+	var nResolved int
+	for _, rid := range ridMap {
+		if rid > 0 {
+			nResolved++
+		}
+	}
+	// t.log.Debugf("update resolved %d/%d rids from index", nResolved, len(pks))
 
 	// protect journal access
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	// fill in journal info (does a pk have a visible and more recent rid mapping?)
+	// fill in journal info
+	// - does a pk have a visible and more recent rid mapping: max(rid)
+	// - has a pk been deleted most recently: rid = MAX_U64
 	t.journal.Lookup(ridMap, tx.Snapshot())
+
+	// ensure all rids are resolved (0 < rid < MAX_U64)
+	// - rid = 0: this pk never existed or was deleted and the deletion was merged
+	// - rid = MAX_U64: this pk was deleted in journal and the delete is visible
+	for _, rid := range ridMap {
+		if rid == 0 || rid == math.MaxUint64 {
+			// t.log.Debugf("update: pk=%d not found", pk)
+			return 0, engine.ErrNoRecord
+		}
+	}
 
 	// write updates to journal and WAL
 	n, err := t.journal.UpdateRecords(ctx, buf, ridMap)
@@ -112,7 +133,7 @@ func (t *Table) UpdateRows(ctx context.Context, buf []byte) (uint64, error) {
 	}
 	atomic.AddInt64(&t.metrics.UpdatedTuples, int64(n))
 
-	return uint64(n), nil
+	return n, nil
 }
 
 // TODO
@@ -148,7 +169,7 @@ func (x *Updater) Append(ctx context.Context, src *pack.Package) error {
 	return err
 }
 
-func (t *Table) Update(ctx context.Context, q engine.QueryPlan) (uint64, error) {
+func (t *Table) Update(ctx context.Context, q engine.QueryPlan) (int, error) {
 	// unpack query plan
 	plan, ok := q.(*query.QueryPlan)
 	if !ok {
@@ -182,5 +203,5 @@ func (t *Table) Update(ctx context.Context, q engine.QueryPlan) (uint64, error) 
 	}
 	atomic.AddInt64(&t.metrics.UpdatedTuples, int64(upd.Len()))
 
-	return uint64(upd.Len()), nil
+	return upd.Len(), nil
 }

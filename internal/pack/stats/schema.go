@@ -50,7 +50,7 @@ func MakeSchema(s *schema.Schema) *schema.Schema {
 			WithFilter(src.Filter)                         // keep filter (in case its bloom)
 
 		statsSchema.WithField(f)
-		statsSchema.WithField(f.WithName("max_" + src.Name))
+		statsSchema.WithField(f.Clone().WithName("max_" + src.Name))
 	}
 
 	return statsSchema.Finalize()

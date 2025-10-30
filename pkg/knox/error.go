@@ -14,19 +14,24 @@ import (
 )
 
 var (
+	// engine errors
+	ErrNoDatabase = engine.ErrNoDatabase
+	ErrNoRecord   = engine.ErrNoRecord
+	ErrNoTable    = engine.ErrNoTable
+	ErrNoIndex    = engine.ErrNoIndex
+	ErrNoStore    = engine.ErrNoStore
+	ErrNoEnum     = engine.ErrNoEnum
+
 	ErrDatabaseExists = engine.ErrDatabaseExists
-	ErrNoDatabase     = engine.ErrNoDatabase
-	ErrNoTable        = engine.ErrNoTable
-	ErrNoIndex        = engine.ErrNoIndex
-	ErrNoStore        = engine.ErrNoStore
-	ErrNoEnum         = engine.ErrNoEnum
-	EndStream         = types.EndStream
+	ErrTableExists    = engine.ErrTableExists
+	ErrStoreExists    = engine.ErrStoreExists
+	ErrIndexExists    = engine.ErrIndexExists
+	ErrEnumExists     = engine.ErrEnumExists
 
-	ErrTableExists = engine.ErrTableExists
-	ErrStoreExists = engine.ErrStoreExists
-	ErrIndexExists = engine.ErrIndexExists
-	ErrEnumExists  = engine.ErrEnumExists
+	// loop breaker
+	EndStream = types.EndStream
 
+	// SDK errors
 	ErrNoPointer      = errors.New("expected pointer value")
 	ErrNilPointer     = errors.New("invalid nil pointer")
 	ErrNotImplemented = errors.New("not implemented")
@@ -52,11 +57,11 @@ func (t *errorTable) Metrics() TableMetrics                                     
 func (t *errorTable) DB() Database                                                 { return nil }
 func (t *errorTable) Schema() *schema.Schema                                       { return &schema.Schema{} }
 func (t *errorTable) Engine() engine.TableEngine                                   { return nil }
-func (t *errorTable) Insert(_ context.Context, _ any) (uint64, error)              { return 0, t.err }
-func (t *errorTable) Update(_ context.Context, _ any) (uint64, error)              { return 0, t.err }
-func (t *errorTable) Delete(_ context.Context, _ QueryRequest) (uint64, error)     { return 0, t.err }
+func (t *errorTable) Insert(_ context.Context, _ any) (uint64, int, error)         { return 0, 0, t.err }
+func (t *errorTable) Update(_ context.Context, _ any) (int, error)                 { return 0, t.err }
+func (t *errorTable) Delete(_ context.Context, _ QueryRequest) (int, error)        { return 0, t.err }
 func (t *errorTable) Query(_ context.Context, _ QueryRequest) (QueryResult, error) { return nil, t.err }
-func (t *errorTable) Count(_ context.Context, _ QueryRequest) (uint64, error)      { return 0, t.err }
+func (t *errorTable) Count(_ context.Context, _ QueryRequest) (int, error)         { return 0, t.err }
 func (t *errorTable) Stream(_ context.Context, _ QueryRequest, _ func(QueryRow) error) error {
 	return t.err
 }

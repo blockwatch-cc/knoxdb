@@ -270,7 +270,7 @@ func (db *db) close() {
 	if db.manifest.Name != "" {
 		db.opts.Log.Debugf("%s database closed successfully.", db.manifest.Name)
 	} else {
-		db.opts.Log.Debugf("Database closed successfully.")
+		db.opts.Log.Debugf("database closed successfully.")
 	}
 	db.closed = true
 	db.store = nil

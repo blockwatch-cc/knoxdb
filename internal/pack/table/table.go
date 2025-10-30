@@ -80,7 +80,7 @@ func (t *Table) Schema() *schema.Schema {
 }
 
 func (t *Table) State() engine.ObjectState {
-	return t.state
+	return t.journal.State()
 }
 
 func (t *Table) IsReadOnly() bool {
@@ -101,54 +101,25 @@ func (t *Table) PkIndex() (engine.QueryableIndex, bool) {
 }
 
 // main and history tables use different setups
-func validateSchemaAndOptions(s *schema.Schema, opts engine.TableOptions) (*schema.Schema, engine.TableOptions, error) {
+func mergeDefaultOptions(opts engine.TableOptions) engine.TableOptions {
 	if opts.Engine == engine.TableKindHistory {
-		// ensure options
 		opts = DefaultHistoryOptions.Merge(opts)
-
-		// check history schema (schema must have meta columns enabled and RID must be PK)
-		if !s.HasMeta() {
-			s, _ = s.WithMeta().ResetPk(schema.MetaRid)
-		}
-		if s.Pk().Id != schema.MetaRid {
-			return nil, opts, fmt.Errorf("invalid pk %q on history table %q", s.Pk().Name, s.Name)
-		}
-
 	} else {
-		// ensure options
 		opts = DefaultTableOptions.Merge(opts)
-
-		// check history schema (schema must have meta columns enabled, must have PK)
-		if !s.HasMeta() {
-			s = s.WithMeta()
-		}
-
-		// ensure we have a pk field, use RID when missing
-		if s.PkId() == 0 {
-			s.ResetPk(schema.MetaRid)
-		}
 	}
-
-	return s, opts, nil
+	return opts
 }
 
 func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableOptions) error {
-	// validate schema and options
-	var err error
-	s, opts, err = validateSchemaAndOptions(s, opts)
-	if err != nil {
-		return err
-	}
-
 	// setup table
 	t.engine = engine.GetEngine(ctx)
 	t.schema = s
 	t.id = s.TaggedHash(types.ObjectTagTable)
 	t.px = s.PkIndex()
-	t.opts = opts
+	t.opts = mergeDefaultOptions(opts)
 	t.state = engine.NewObjectState(s.Name)
 	t.metrics = engine.NewTableMetrics(s.Name)
-	t.log = opts.Logger
+	t.log = t.opts.Logger.WithTag(fmt.Sprintf("table[%s]:", s.Name))
 
 	// write initial checkpoint
 	lsn, err := t.engine.Wal().Write(&wal.Record{
@@ -166,7 +137,7 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 		return err
 	}
 
-	t.log.Debugf("table[%s]: backend successfully created", s.Name)
+	t.log.Debug("backend successfully created")
 	return nil
 }
 
@@ -174,11 +145,11 @@ func (t *Table) createBackend(ctx context.Context) error {
 	// setup backend db file
 	name := t.schema.Name
 	path := filepath.Join(t.engine.RootPath(), name)
-	t.log.Debugf("table[%s]: creating backend=%s path=%s opts=%#v",
-		name, t.opts.Engine, path, t.opts)
+	t.log.Debugf("creating backend=%s path=%s opts=%#v", t.opts.Engine, path, t.opts)
 
 	opts := append(
 		t.opts.StoreOptions(),
+		store.WithLogger(t.log),
 		store.WithPath(path),
 		store.WithManifest(
 			store.NewManifest(
@@ -243,26 +214,19 @@ func (t *Table) createBackend(ctx context.Context) error {
 }
 
 func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOptions) error {
-	// validate schema and options
-	var err error
-	s, opts, err = validateSchemaAndOptions(s, opts)
-	if err != nil {
-		return err
-	}
-
 	// setup table
 	t.engine = engine.GetEngine(ctx)
 	t.schema = s
 	t.id = s.TaggedHash(types.ObjectTagTable)
 	t.px = s.PkIndex()
-	t.opts = opts
+	t.opts = mergeDefaultOptions(opts)
 	t.state = engine.NewObjectState(s.Name)
 	t.metrics = engine.NewTableMetrics(s.Name)
-	t.log = opts.Logger.WithTag(s.Name)
+	t.log = t.opts.Logger.WithTag(fmt.Sprintf("table[%s]:", s.Name))
 
 	// open db backend and load latest state
 	if err := t.openBackend(ctx); err != nil {
-		t.log.Errorf("table[%s]: open: %v", s.Name, err)
+		t.log.Errorf("open: %v", err)
 		_ = t.Close(ctx)
 		return engine.ErrDatabaseCorrupt
 	}
@@ -283,17 +247,19 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 
 		// replay wal from latest checkpoint
 		if err := t.ReplayWal(ctx); err != nil {
-			t.log.Errorf("table[%s]: replay wal: %v", s.Name, err)
-			if err2 := t.Close(ctx); err2 != nil {
-				t.log.Errorf("table[%s]: close: %v", s.Name, err2)
-			}
-			return err
+			// t.log.Errorf("replay wal: %v", err)
+			// if err2 := t.Close(ctx); err2 != nil {
+			// 	t.log.Errorf("close: %v", err2)
+			// }
+			return fmt.Errorf("replay wal: %v", err)
 		}
-		t.log.Debugf("table[%s]: opened with %d rows, %d/%d journal entries, seq=%d",
-			s.Name, t.state.NRows, t.journal.NumTuples(), t.journal.NumTombstones(),
-			t.state.NextPk)
+		state := t.journal.State()
+		t.log.Debugf("opened with rows=%d, %d/%d journal entries, rid=%d pk=%d",
+			state.NRows, t.journal.NumTuples(), t.journal.NumTombstones(),
+			state.NextRid, state.NextPk)
 	} else {
-		t.log.Debugf("table[%s]: opened with %d rows seq=%d", s.Name, t.state.NRows, t.state.NextPk)
+		t.log.Debugf("opened with rows=%d rid=%d pk=%d",
+			t.state.NRows, t.state.NextRid, t.state.NextPk)
 	}
 
 	return nil
@@ -302,10 +268,10 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 func (t *Table) openBackend(ctx context.Context) error {
 	name := t.schema.Name
 	path := filepath.Join(t.engine.RootPath(), name)
-	t.log.Debugf("table[%s]: open backend=%s path=%s opts=%#v",
-		name, t.opts.Engine, path, t.opts)
+	t.log.Debugf("open backend=%s path=%s opts=%#v", t.opts.Engine, path, t.opts)
 	opts := append(
 		t.opts.StoreOptions(),
+		store.WithLogger(t.log),
 		store.WithPath(path),
 		store.WithManifest(
 			store.NewManifest(
@@ -316,7 +282,7 @@ func (t *Table) openBackend(ctx context.Context) error {
 	)
 	db, err := store.Open(opts...)
 	if err != nil {
-		return fmt.Errorf("table[%s] open: %v", name, err)
+		return err
 	}
 	t.db = db
 
@@ -338,8 +304,8 @@ func (t *Table) openBackend(ctx context.Context) error {
 			return fmt.Errorf("loading state: %v", err)
 		}
 
-		t.log.Tracef("table[%s]: state pk=%d rid=%d nrows=%d epoch=%d lsn=0x%x",
-			t.schema.Name, t.state.NextPk, t.state.NextRid, t.state.NRows,
+		t.log.Debugf("state pk=%d rid=%d nrows=%d epoch=%d lsn=0x%x",
+			t.state.NextPk, t.state.NextRid, t.state.NRows,
 			t.state.Epoch, t.state.Checkpoint)
 
 		// init statistics index
@@ -362,14 +328,14 @@ func (t *Table) openBackend(ctx context.Context) error {
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("open: %v", err)
+		return err
 	}
 	return nil
 }
 
 func (t *Table) Close(ctx context.Context) (err error) {
 	if t.db != nil {
-		t.log.Debugf("table[%s]: closing", t.schema.Name)
+		t.log.Debug("closing")
 		err = t.db.Close()
 		t.db = nil
 	}
@@ -411,11 +377,11 @@ func (t *Table) Metrics() engine.TableMetrics {
 }
 
 func (t *Table) Drop(ctx context.Context) error {
-	name, drv, path := t.schema.Name, t.opts.Driver, t.db.Path()
+	drv, path := t.opts.Driver, t.db.Path()
 	if err := t.Close(ctx); err != nil {
 		return err
 	}
-	t.log.Debugf("table[%s]: dropping path=%s", name, path)
+	t.log.Debugf("dropping path=%s", path)
 	return store.Drop(drv, path)
 }
 
@@ -494,10 +460,10 @@ func (t *Table) CommitTx(ctx context.Context, xid types.XID) error {
 	if canMerge {
 		// cascading merge calls on high tx volume are scheduled, but may
 		// bail out when segment merge takes too long
-		t.log.Debugf("table[%s]: scheduling merge task", t.schema.Name)
+		t.log.Debug("scheduling merge task")
 		ok := t.engine.Schedule(engine.NewTask(t.Merge))
 		if !ok {
-			t.log.Warnf("table[%s]: merge task queue full", t.schema.Name)
+			t.log.Warn("merge task queue full")
 		}
 	}
 	return nil
@@ -511,20 +477,20 @@ func (t *Table) AbortTx(ctx context.Context, xid types.XID) error {
 	if canMerge {
 		// cascading merge calls on high tx volume are scheduled, but may
 		// bail out when segment merge takes too long
-		t.log.Debugf("table[%s]: scheduling merge task", t.schema.Name)
+		t.log.Debug("scheduling merge task")
 		ok := t.engine.Schedule(engine.NewTask(t.Merge))
 		if !ok {
-			t.log.Warnf("table[%s]: merge task queue full", t.schema.Name)
+			t.log.Warn("merge task queue full")
 		}
 	}
 	return nil
 }
 
-// Checkpoint journal which rotates the active segment and writes
+// Checkpoint journal. Rotates the active segment and writes
 // new table checkpoint to WAL. This may be called concurrently to
 // queries and writer calls by a background worker to advance WAL LSNs
 // across tables. After writing a new WAL checkpoint this function
-// also schedules a merge call which is required to push the new table
+// schedules a merge call which is required to push the new table
 // checkpoint to disk.
 func (t *Table) Checkpoint(ctx context.Context) error {
 	t.mu.Lock()

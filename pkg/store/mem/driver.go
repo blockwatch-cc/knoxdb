@@ -58,7 +58,7 @@ func (d *driver) Create(opts store.Options) (store.DB, error) {
 		bucketIds: make(map[string][bucketIdLen]byte),
 	}
 
-	opts.Log.Debug("Initializing database...")
+	opts.Log.Debug("initializing backend...")
 
 	// init manifest
 	db.manifest = opts.Manifest

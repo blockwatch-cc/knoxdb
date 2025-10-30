@@ -52,7 +52,7 @@ const (
 
 func NewDecoder(s *schema.Schema, r io.Reader) *Decoder {
 	return &Decoder{
-		r:      NewReader(r, s.NumVisibleFields()),
+		r:      NewReader(r, s.NumVisible()),
 		s:      s,
 		flags:  DecoderFlagStrictSchema | DecoderFlagReadHeader,
 		dateAs: time.DateOnly,    // 2006-01-02
@@ -352,7 +352,7 @@ func (d *Decoder) validateHeader(line []string) error {
 	if d.flags&DecoderFlagStrictSchema == 0 {
 		return nil
 	}
-	if len(line) != d.s.NumVisibleFields() {
+	if len(line) != d.s.NumVisible() {
 		return schema.ErrSchemaMismatch
 	}
 	var i int

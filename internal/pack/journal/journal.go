@@ -129,6 +129,10 @@ func (j *Journal) Tip() *Segment {
 	return j.tip
 }
 
+func (j *Journal) State() engine.ObjectState {
+	return j.tip.tstate
+}
+
 func (j *Journal) Segments() []*Segment {
 	return append([]*Segment{j.tip}, j.tail...)
 }
@@ -168,7 +172,8 @@ func (j *Journal) Close() {
 // durable. Note the caller must schedule a merge task to actually
 // write the new table checkpoint to disk.
 func (j *Journal) Checkpoint(_ context.Context) error {
-	return j.doRotateAndCheckpoint()
+	j.doRotate()
+	return j.doCheckpoint()
 }
 
 func (j *Journal) rotateAndCheckpoint() error {
@@ -176,10 +181,10 @@ func (j *Journal) rotateAndCheckpoint() error {
 	if !j.rotateWhenFull() {
 		return nil
 	}
-	return j.doRotateAndCheckpoint()
+	return j.doCheckpoint()
 }
 
-func (j *Journal) doRotateAndCheckpoint() error {
+func (j *Journal) doCheckpoint() error {
 	// write WAL checkpoint
 	lsn, err := j.wal.Write(&wal.Record{
 		Type:   wal.RecordTypeCheckpoint,
@@ -448,7 +453,7 @@ func (j *Journal) Query(plan *query.QueryPlan, epoch uint32) *Result {
 }
 
 // Identify most recent visible row ids for primary keys in list. Walk journal backwards
-// and keep max(rid), ignore tombstones.
+// and keep max(rid). When pk/rid is found in a visible tombstones set to MAX_U64.
 func (j *Journal) Lookup(ridMap map[uint64]uint64, snap *types.Snapshot) {
 	seg := j.tip
 	for seg != nil {
@@ -461,6 +466,7 @@ func (j *Journal) Lookup(ridMap map[uint64]uint64, snap *types.Snapshot) {
 }
 
 func (j *Journal) ReplayWalRecord(ctx context.Context, rec *wal.Record, rd engine.TableReader) error {
+	// j.log.Debugf("journal: apply %s", rec)
 	switch rec.Type {
 	case wal.RecordTypeCommit:
 		j.CommitTx(rec.TxID)
@@ -470,11 +476,9 @@ func (j *Journal) ReplayWalRecord(ctx context.Context, rec *wal.Record, rd engin
 
 	case wal.RecordTypeCheckpoint:
 		// each segment starts with a checkpoint
-		j.log.Debugf("journal: apply %s", rec)
 		j.tip.WithLSN(rec.Lsn)
 
 	case wal.RecordTypeInsert:
-		j.log.Debugf("journal: apply %s", rec)
 		// read data header (first rid)
 		buf := rec.Data[0]
 		rid, n := num.Uvarint(buf)
@@ -483,6 +487,12 @@ func (j *Journal) ReplayWalRecord(ctx context.Context, rec *wal.Record, rd engin
 			count    uint64
 			expectPk = j.tip.tstate.NextPk
 		)
+
+		// sanity check row id
+		if j.tip.tstate.NextRid != rid {
+			return fmt.Errorf("update: state rid %d does not match WAL record %d",
+				j.tip.tstate.NextRid, rid)
+		}
 
 		// split buf into wire messages
 		view, buf, _ := schema.NewView(j.schema).Cut(buf)
@@ -508,11 +518,10 @@ func (j *Journal) ReplayWalRecord(ctx context.Context, rec *wal.Record, rd engin
 			return fmt.Errorf("decode wal record: %d extra bytes", len(buf))
 		}
 		j.tip.tstate.NextPk = expectPk
-		j.tip.tstate.NextRid = rid + 1
+		j.tip.tstate.NextRid = rid
 		j.tip.tstate.NRows += count
 
 	case wal.RecordTypeUpdate:
-		j.log.Debugf("journal: apply %s", rec)
 		buf := rec.Data[0]
 
 		// changeset bitset
@@ -525,7 +534,6 @@ func (j *Journal) ReplayWalRecord(ctx context.Context, rec *wal.Record, rd engin
 
 		// sanity check row id
 		if j.tip.tstate.NextRid != rid {
-			// should not happen
 			return fmt.Errorf("update: state rid %d does not match WAL record %d",
 				j.tip.tstate.NextRid, rid)
 		}
@@ -568,7 +576,7 @@ func (j *Journal) ReplayWalRecord(ctx context.Context, rec *wal.Record, rd engin
 				cids = append(cids, j.schema.Fields[i].Id)
 				cols = append(cols, i)
 			}
-			cschema, err := j.schema.SelectFieldIds(cids...)
+			cschema, err := j.schema.SelectIds(cids...)
 			if err != nil {
 				// should not happen
 				return fmt.Errorf("update: make change schema: %v", err)
@@ -657,7 +665,6 @@ func (j *Journal) ReplayWalRecord(ctx context.Context, rec *wal.Record, rd engin
 		}
 
 	case wal.RecordTypeDelete:
-		j.log.Debugf("journal: apply %s", rec)
 		buf := rec.Data[0]
 		var nDeleted uint64
 		for len(buf) > 0 && j.Capacity() > 0 {

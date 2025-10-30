@@ -113,6 +113,7 @@ func TestCatalogAddTable(t *testing.T) {
 	require.NoError(t, err)
 	defer abort()
 	s, err := schema.SchemaOf(&TestTable{})
+	s.WithMeta()
 	require.NoError(t, err)
 	opts := TableOptions{
 		Engine:   "pack",
@@ -170,13 +171,18 @@ func TestCatalogAddIndex(t *testing.T) {
 	defer abort()
 	s, err := schema.SchemaOf(&TestTable{})
 	require.NoError(t, err)
-	s.WithName(s.Name + "_index")
-	opts := IndexOptions{
+	topts := TableOptions{
 		Engine:   "pack",
 		Driver:   "mem",
 		PageSize: 1024,
 	}
-	require.NoError(t, cat.AddIndex(tctx, 2, 1, s, opts))
+	iopts := IndexOptions{
+		Engine:   "pack",
+		Driver:   "mem",
+		PageSize: 1024,
+	}
+	require.NoError(t, cat.AddTable(tctx, 1, s, topts))
+	require.NoError(t, cat.AddIndex(tctx, 2, 1, s.Indexes[0], iopts))
 	require.NoError(t, commit())
 
 	// list indexes
@@ -192,9 +198,9 @@ func TestCatalogAddIndex(t *testing.T) {
 	s2, opts2, err := cat.GetIndex(tctx, 2)
 	require.NoError(t, err)
 	require.NotNil(t, s2)
-	require.Equal(t, s2.Name, s.Name)
-	require.Equal(t, s2.Hash, s.Hash)
-	require.Equal(t, opts2, opts)
+	require.Equal(t, s2.Name, s.Indexes[0].Name)
+	require.Equal(t, s2.Hash(), s.Indexes[0].Hash())
+	require.Equal(t, opts2, iopts)
 	require.NoError(t, abort())
 
 	// drop index

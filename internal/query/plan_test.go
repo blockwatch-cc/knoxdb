@@ -25,7 +25,7 @@ import (
 
 var (
 	testSchema      *schema.Schema
-	testIndexSchema *schema.Schema
+	testIndexSchema *schema.IndexSchema
 	testEnums       schema.EnumRegistry
 )
 
@@ -36,10 +36,7 @@ func init() {
 		panic(err)
 	}
 	testSchema = testSchema.WithMeta()
-	testIndexSchema, err = testSchema.SelectFields("name", "$rid")
-	if err != nil {
-		panic(err)
-	}
+	testIndexSchema = testSchema.Indexes[1]
 
 	statusEnum := schema.NewEnumDictionary("status")
 	statusEnum.Append("active", "pending", "inactive")
@@ -127,12 +124,12 @@ func TestPlanCompile(t *testing.T) {
 		Expected  *filter.Node
 	}
 
-	f1, _ := testSchema.FieldByName("id")
+	f1, _ := testSchema.Find("id")
 	px := testSchema.PkIndex()
-	f2, _ := testSchema.FieldByName("name")
-	x2, _ := testSchema.FieldIndexByName("name")
-	f3, _ := testSchema.FieldByName("score")
-	x3, _ := testSchema.FieldIndexByName("score")
+	f2, _ := testSchema.Find("name")
+	x2, _ := testSchema.Index("name")
+	f3, _ := testSchema.Find("score")
+	x3, _ := testSchema.Index("score")
 
 	testCases := []TestCase{
 		// single condition + single index
@@ -471,10 +468,11 @@ func TestPlanQueryIndexes(t *testing.T) {
 		Expected  *filter.Node
 	}
 
-	f1, _ := testSchema.FieldByName("$rid")
+	f1, ok := testSchema.Find("$rid")
+	require.True(t, ok, "missing $rid field")
 	rx := testSchema.RowIdIndex()
-	// f2, _ := testSchema.FieldByName("name")
-	// f3, _ := testSchema.FieldByName("score")
+	// f2, _ := testSchema.Find("name")
+	// f3, _ := testSchema.Find("score")
 
 	testCases := []TestCase{
 		// single condition + single index

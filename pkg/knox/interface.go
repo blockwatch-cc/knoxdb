@@ -70,10 +70,10 @@ type Table interface {
 	Schema() *schema.Schema
 	Metrics() TableMetrics
 	Engine() engine.TableEngine
-	Insert(context.Context, any) (uint64, error)
-	Update(context.Context, any) (uint64, error)
-	Delete(context.Context, QueryRequest) (uint64, error)
-	Count(context.Context, QueryRequest) (uint64, error)
+	Insert(context.Context, any) (uint64, int, error)
+	Update(context.Context, any) (int, error)
+	Delete(context.Context, QueryRequest) (int, error)
+	Count(context.Context, QueryRequest) (int, error)
 	Query(context.Context, QueryRequest) (QueryResult, error)
 	Stream(context.Context, QueryRequest, func(QueryRow) error) error
 }
@@ -81,6 +81,7 @@ type Table interface {
 type Index interface {
 	DB() Database
 	Schema() *schema.Schema
+	IndexSchema() *schema.IndexSchema
 	Metrics() IndexMetrics
 	Engine() engine.IndexEngine
 }
@@ -116,7 +117,7 @@ type Database interface {
 	// indexes
 	ListIndexes(name string) []string
 	FindIndex(name string) (Index, error)
-	CreateIndex(ctx context.Context, name string, table Table, s *schema.Schema, opts IndexOptions) error
+	CreateIndex(ctx context.Context, s *schema.IndexSchema, opts IndexOptions) error
 	RebuildIndex(ctx context.Context, name string) error
 	DropIndex(ctx context.Context, name string) error
 

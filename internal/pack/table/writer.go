@@ -40,7 +40,6 @@ type Writer struct {
 	vtail    uint32                    // previous storage version for loaded tail packs
 	bcache   block.BlockCachePartition // block cache reference
 	wasFull  bool                      // last known tail pack was full (new on write)
-	name     string                    // table name copy (for logging)
 	log      log.Logger
 	nPacks   int
 	nRecords int
@@ -60,7 +59,6 @@ func (t *Table) NewWriter(epoch uint32) engine.TableWriter {
 		stats:   s,
 		log:     t.log,
 		vtail:   0,
-		name:    t.schema.Name,
 		wasFull: s.IsTailFull(),
 		start:   time.Now().UTC(),
 	}
@@ -113,7 +111,7 @@ func (w *Writer) Append(ctx context.Context, src *pack.Package, mode engine.Writ
 		err   error
 	)
 
-	// w.log.Debugf("table[%s]: appending journal pack %08x", w.name, src.Key())
+	// w.log.Debugf("appending journal pack %08x", src.Key())
 
 	for {
 		// append next chunk of data to tail: max(cap(tail), len(src))
@@ -134,7 +132,7 @@ func (w *Writer) Append(ctx context.Context, src *pack.Package, mode engine.Writ
 
 		// stop when src is exhausted
 		if !state.More() {
-			// w.log.Debugf("table[%s]: no more data to append", w.name)
+			// w.log.Debugf("no more data to append")
 			break
 		}
 	}
@@ -149,7 +147,7 @@ func (w *Writer) Replace(ctx context.Context, src *pack.Package, mode engine.Wri
 	// backup tail to allow mixed Append/Replace mode
 	tail := w.tail
 
-	// w.log.Debugf("table[%s]: replace pack %08x[v%d]", w.name, src.Key(), src.Version())
+	// w.log.Debugf("replace pack %08x[v%d]", src.Key(), src.Version())
 
 	// append source data to new pack using selection mode
 	w.tail = pack.New().
@@ -176,7 +174,7 @@ func (w *Writer) Replace(ctx context.Context, src *pack.Package, mode engine.Wri
 }
 
 func (w *Writer) Finalize(ctx context.Context, state engine.ObjectState) error {
-	// w.log.Debugf("table[%s]: finalize", w.name)
+	// w.log.Debug("finalize")
 
 	// store tail pack
 	if w.tail != nil {
@@ -188,16 +186,30 @@ func (w *Writer) Finalize(ctx context.Context, state engine.ObjectState) error {
 		w.tail = nil
 	}
 
+	// check for abort
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
 	// finalize indexes (merge new and mark deleted entries)
-	// w.log.Debugf("table[%s]: merging index data", w.name)
+	// w.log.Debug("merging index data")
 	if err := w.FinalizeIndexes(ctx); err != nil {
 		return err
+	}
+
+	// check for abort
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
 	}
 
 	// write stats update and table state (WAL checkpoint and LSN of next segment)
 	// this will finalize the merge
 	err := w.table.db.Update(func(tx store.Tx) error {
-		// w.log.Debugf("table[%s]: storing metadata v%d", w.name, w.stats.Epoch())
+		// w.log.Debugf("storing metadata v%d", w.stats.Epoch())
 		if err := w.stats.Store(ctx, tx); err != nil {
 			return err
 		}
@@ -209,8 +221,8 @@ func (w *Writer) Finalize(ctx context.Context, state engine.ObjectState) error {
 		w.table.state.NextPk = state.NextPk
 		w.table.state.NextRid = state.NextRid
 
-		// w.log.Debugf("table[%s]: table checkpoint v%d lsn=%d",
-		// 	w.name, w.table.state.Epoch, w.table.state.Checkpoint)
+		// w.log.Debugf("table checkpoint v%d lsn=%d",
+		// 	w.table.state.Epoch, w.table.state.Checkpoint)
 
 		return w.table.state.Store(ctx, tx)
 	})
@@ -288,8 +300,8 @@ func (w *Writer) appendTail(ctx context.Context, src *pack.Package, mode pack.Wr
 	n, state = w.tail.AppendSelected(src, mode, state)
 	w.nRecords += n
 
-	// w.log.Debugf("table[%s]: append %d records to pack %08x[v%d]",
-	// w.name, n, w.tail.Key(), w.tail.Version())
+	// w.log.Debugf("append %d records to pack %08x[v%d]",
+	// n, w.tail.Key(), w.tail.Version())
 	// if n == 0 {
 	// 	sel := src.Selected()
 	// 	panic(fmt.Errorf("selection error n=0, sel=%d %v", len(sel), sel[:min(8, len(sel))]))
@@ -306,8 +318,8 @@ func (w *Writer) storePack(ctx context.Context, pkg *pack.Package) error {
 			return err
 		}
 
-		// w.log.Debugf("table[%s]: mark empty pack %08x[v%d] vtail=%d",
-		// 	w.name, pkg.Key(), pkg.Version(), w.vtail)
+		// w.log.Debugf("mark empty pack %08x[v%d] vtail=%d",
+		// 	pkg.Key(), pkg.Version(), w.vtail)
 
 		// schedule garbage collection
 		var err error
@@ -324,7 +336,7 @@ func (w *Writer) storePack(ctx context.Context, pkg *pack.Package) error {
 	// init statistics
 	pkg.WithStats()
 
-	// w.log.Debugf("table[%s]: storing pack %08x[v%d]", w.name, pkg.Key(), pkg.Version())
+	// w.log.Debugf("storing pack %08x[v%d]", pkg.Key(), pkg.Version())
 
 	// analyze, optimize, compress and write to disk
 	err := w.table.db.Update(func(tx store.Tx) error {
@@ -366,7 +378,7 @@ func (w *Writer) storePack(ctx context.Context, pkg *pack.Package) error {
 func (w *Writer) loadTail(ctx context.Context) (*pack.Package, error) {
 	// fetch tail pack info from stats index
 	key, ver, nvals := w.stats.TailInfo()
-	// w.log.Debugf("table[%s]: loading pack %08x[v%d]", w.name, key, ver)
+	// w.log.Debugf("loading pack %08x[v%d]", key, ver)
 
 	// prepare an empty pack without block storage
 	pkg := pack.New().
@@ -377,7 +389,7 @@ func (w *Writer) loadTail(ctx context.Context) (*pack.Package, error) {
 
 	// try load from cache using tableid as cache tag
 	// count number of expected blocks
-	nBlocks := w.table.schema.NumActiveFields()
+	nBlocks := w.table.schema.NumActive()
 
 	// init cache on first call
 	if w.bcache == nil {

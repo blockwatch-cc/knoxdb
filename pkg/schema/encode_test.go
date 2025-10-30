@@ -141,9 +141,9 @@ func TestEncodeValWithVisibility(t *testing.T) {
 	s, err := SchemaOf(visibilityTestStruct{})
 	require.NoError(t, err)
 	val := makeVisibilityTestData(1)[0]
-	s, err = s.DeleteField(2)
+	s, err = s.DeleteId(2)
 	require.NoError(t, err)
-	s, err = s.DeleteField(3)
+	s, err = s.DeleteId(3)
 	require.NoError(t, err)
 	enc := NewEncoder(s)
 	buf, err := enc.Encode(&val, nil)
@@ -172,9 +172,9 @@ func TestEncodeRoundtripWithVisibility(t *testing.T) {
 	// visibility tests (internal & deleted fields)
 	s, err := SchemaOf(visibilityTestStruct{})
 	require.NoError(t, err)
-	s, err = s.DeleteField(2)
+	s, err = s.DeleteId(2)
 	require.NoError(t, err)
-	s, err = s.DeleteField(4)
+	s, err = s.DeleteId(4)
 	require.NoError(t, err)
 	val := makeVisibilityTestData(1)[0]
 	enc := NewEncoder(s)
@@ -341,9 +341,9 @@ func BenchmarkEncodeVal(b *testing.B) {
 func BenchmarkEncodeValSkip(b *testing.B) {
 	slice, sz := makeBenchData(1)
 	enc := NewGenericEncoder[encodeBenchStruct]()
-	s, err := enc.enc.schema.DeleteField(2)
+	s, err := enc.enc.schema.DeleteId(2)
 	require.NoError(b, err)
-	s, err = s.DeleteField(4)
+	s, err = s.DeleteId(4)
 	require.NoError(b, err)
 	enc.enc.schema = s
 	buf := enc.NewBuffer(1)

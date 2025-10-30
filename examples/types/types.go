@@ -149,7 +149,7 @@ func run() error {
 	for i := 1; i <= c; i++ {
 		data = append(data, NewRandomTypes(i))
 	}
-	_, err = table.Insert(ctx, data)
+	_, _, err = table.Insert(ctx, data)
 	if err != nil {
 		return err
 	}
@@ -172,7 +172,7 @@ func run() error {
 		WithTag("three_million_records").
 		WithLimit(3000000).
 		WithStats(true).
-		// WithDebug(true).
+		WithDebug(true).
 		Stream(ctx, func(_ *Types) error {
 			count++
 			return nil
@@ -230,10 +230,13 @@ func run() error {
 	} else {
 		log.Infof("Deleted %d records", n)
 	}
-	err = db.Sync(ctx)
-	if err != nil {
-		return err
-	}
+
+	time.Sleep(100 * time.Millisecond)
+
+	// err = db.Sync(ctx)
+	// if err != nil {
+	// 	return err
+	// }
 
 	log.Info("Closing DB")
 
@@ -267,7 +270,7 @@ func Create(ctx context.Context) (db knox.Database, table knox.Table, err error)
 		WithPath("./db").
 		WithNamespace("cx.bwd.knox.types-demo").
 		WithCacheSize(1 << 20 * TypesCacheSize).
-		WithLogger(log.Log)
+		WithLogger(log.Log.Clone())
 
 	log.Info("Creating DB")
 	db, err = knox.CreateDatabase(ctx, "types", opts)
@@ -286,7 +289,7 @@ func Create(ctx context.Context) (db knox.Database, table knox.Table, err error)
 	}
 
 	log.Infof("Creating Table %s", s.Name)
-	log.Debugf("Schema %s", s)
+	log.Debugf("Input Schema %s", s)
 	table, err = db.CreateTable(ctx, s, knox.TableOptions{
 		Engine:      "pack",
 		Driver:      "bolt",
@@ -299,48 +302,22 @@ func Create(ctx context.Context) (db knox.Database, table knox.Table, err error)
 		return
 	}
 	ts := table.Schema()
+	log.Debugf("Table Schema %s", ts)
 
-	// s, err = ts.SelectFields("hash", "$rid")
-	// if err != nil {
-	// 	return
-	// }
-	// s.WithName("types_hash_index")
-	// log.Infof("Creating Index %s", s.Name())
-	// log.Debugf("Schema %s", s)
-	// err = db.CreateIndex(ctx, "types_hash_index", table, s, knox.IndexOptions{
-	// 	Engine:      "pack",
-	// 	Driver:      "bolt",
-	// 	Type:        knox.IndexTypeHash,
-	// 	PackSize:    1 << TypesIndexPackSizeLog2,
-	// 	JournalSize: 1 << TypesIndexJournalSizeLog2,
-	// 	PageFill:    TypesIndexFillLevel,
-	// 	Logger:      log.Log,
-	// })
-	// if err != nil {
-	// 	return
-	// }
-
-	s, err = ts.SelectFields("id", "$rid")
-	if err != nil {
-		return
+	for _, s := range ts.Indexes {
+		log.Infof("Creating Index %s", s.Name)
+		err = db.CreateIndex(ctx, s, knox.IndexOptions{
+			Engine:      "pack",
+			Driver:      "bolt",
+			PackSize:    1 << TypesIndexPackSizeLog2,
+			JournalSize: 1 << TypesIndexJournalSizeLog2,
+			PageFill:    TypesIndexFillLevel,
+			NoSync:      true,
+		})
+		if err != nil {
+			return
+		}
 	}
-	s.WithName("types_pk_index")
-	log.Infof("Creating Index %s", s.Name)
-	log.Debugf("Schema %s", s)
-	err = db.CreateIndex(ctx, "types_pk_index", table, s, knox.IndexOptions{
-		Engine:      "pack",
-		Driver:      "bolt",
-		Type:        knox.IndexTypeInt,
-		PackSize:    1 << TypesIndexPackSizeLog2,
-		JournalSize: 1 << TypesIndexJournalSizeLog2,
-		PageFill:    TypesIndexFillLevel,
-		Logger:      log.Log,
-		NoSync:      true,
-	})
-	if err != nil {
-		return
-	}
-
 	return
 }
 
@@ -349,7 +326,7 @@ func Open(ctx context.Context) (db knox.Database, table knox.Table, err error) {
 	db, err = knox.OpenDatabase(ctx, "types", knox.DatabaseOptions{
 		Path:      "./db",
 		Namespace: "cx.bwd.knox.types-demo",
-		Logger:    log.Log,
+		Logger:    log.Log.Clone(),
 	})
 	if err != nil {
 		return

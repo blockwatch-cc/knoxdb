@@ -30,8 +30,8 @@ func TestOptimize(t *testing.T) {
 		sm := schema.NewSchema().
 			WithField(schema.NewField(tests.FieldTypes[gen.Type()]).WithName("f1")).
 			WithField(schema.NewField(tests.FieldTypes[gen.Type()]).WithName("f2"))
-		f1, _ := sm.FieldByName("f1")
-		f2, _ := sm.FieldByName("f2")
+		f1, _ := sm.Find("f1")
+		f2, _ := sm.Find("f2")
 		tests := []struct {
 			name      string
 			input     *Node

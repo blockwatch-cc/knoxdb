@@ -103,7 +103,7 @@ func (t *Table) Stream(ctx context.Context, q engine.QueryPlan, fn func(engine.Q
 	return nil
 }
 
-func (t *Table) Count(ctx context.Context, q engine.QueryPlan) (uint64, error) {
+func (t *Table) Count(ctx context.Context, q engine.QueryPlan) (int, error) {
 	// unpack query plan
 	plan, ok := q.(*query.QueryPlan)
 	if !ok {
@@ -117,7 +117,7 @@ func (t *Table) Count(ctx context.Context, q engine.QueryPlan) (uint64, error) {
 	}
 
 	// amend query plan to only output pk field
-	rs, err := t.schema.SelectFieldIds(t.schema.PkId())
+	rs, err := t.schema.SelectIds(t.schema.PkId())
 	if err != nil {
 		return 0, err
 	}
@@ -181,7 +181,7 @@ func (t *Table) doQueryAsc(ctx context.Context, plan *query.QueryPlan, res Query
 
 	// early return
 	if jres.IsEmpty() && plan.IsNoMatch() {
-		plan.Log.Debugf("empty match")
+		// plan.Log.Debugf("empty match")
 		return nil
 	}
 
@@ -208,7 +208,7 @@ func (t *Table) doQueryAsc(ctx context.Context, plan *query.QueryPlan, res Query
 				break
 			}
 			nRowsScanned += pkg.Len()
-			// plan.Log.Debugf("Found matching pack id %d", pkg.Key())
+			// plan.Log.Debugf("found %d matches pack id %d", pkg.NumSelected(), pkg.Key())
 
 			nRowsMatched += pkg.NumSelected()
 			if err = res.Append(ctx, pkg); err != nil {
@@ -219,7 +219,7 @@ func (t *Table) doQueryAsc(ctx context.Context, plan *query.QueryPlan, res Query
 
 	// after all packs have been scanned, add remaining rows from journal, if any
 	for pkg := range jres.Iterator() {
-		plan.Log.Debugf("journal segment %d with %d matches", pkg.Key(), pkg.NumSelected())
+		// plan.Log.Debugf("found %d matches in journal segment %d", pkg.NumSelected(), pkg.Key())
 		nRowsMatched += pkg.NumSelected()
 		if err = res.Append(ctx, pkg); err != nil {
 			return err
