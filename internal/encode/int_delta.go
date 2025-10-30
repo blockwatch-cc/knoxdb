@@ -158,9 +158,6 @@ func (c *DeltaContainer[T]) MatchEqual(val T, bits, _ *Bitset) {
 		}
 	}
 
-	fmt.Printf("Delta-EQ for=%d delta=%d val=%d v64=%d div=%d mod=%d\n",
-		c.For, c.Delta, val, val-c.For, (val-c.For)/c.Delta, (val-c.For)%c.Delta)
-
 	val -= c.For // may wrap
 
 	if val%c.Delta == 0 {

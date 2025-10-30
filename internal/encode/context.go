@@ -4,7 +4,6 @@
 package encode
 
 import (
-	"fmt"
 	"math/bits"
 	"sync"
 	"unsafe"
@@ -123,14 +122,12 @@ func AnalyzeInt[T types.Integer](vals []T, checkUnique bool) *Context[T] {
 	case c.Delta > 0:
 		needBits := bits.Len64(uint64(c.NumValues) * uint64(c.Delta))
 		if needBits > c.PhyBits {
-			fmt.Printf("Reset +delta(%d) need(%d) > phy(%d)\n", c.Delta, needBits, c.PhyBits)
 			c.Delta = 0
 		}
 
 	case c.Delta < 0:
 		needBits := bits.Len64(uint64(c.NumValues) * uint64(-c.Delta))
 		if needBits > c.PhyBits {
-			fmt.Printf("Reset -delta(%d) need(%d) > phy(%d)\n", c.Delta, needBits, c.PhyBits)
 			c.Delta = 0
 		}
 	}
