@@ -10,7 +10,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"runtime"
 	"strconv"
 	"strings"
@@ -155,19 +154,8 @@ func TestWorkload5(t *testing.T) {
 		ctx        = context.Background()
 	)
 
-	// manage random seeds to drive the determinism for this test
-	seed := util.RandSeed()
-
-	// create a new random seed for multiple runs unless a user-defined seed is used
-	testRun++
-	if testRun > 1 && os.Getenv(util.GORANDSEED) == "" {
-		seed = util.RandUint64()
-	}
-
-	// re-init random number generator (resets pseudo-randomness so that
-	// rand usage in other testcases does not impact the random selection here)
-	t.Logf("Random seed 0x%016x", seed)
-	util.RandInit(seed)
+	// setup determinism
+	SetupDeterministicRand(t)
 
 	// create new database and table
 	db := &dbProvider{}

@@ -43,6 +43,9 @@ type UnifiedRow struct {
 }
 
 func TestWorkload4(t *testing.T) {
+	// setup determinism
+	SetupDeterministicRand(t)
+
 	// Setup the unified database
 	eng, cleanup := tests.NewDatabase(t, &UnifiedRow{})
 	t.Cleanup(func() {

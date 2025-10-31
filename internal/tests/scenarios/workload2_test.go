@@ -21,6 +21,9 @@ import (
 )
 
 func TestWorkload2(t *testing.T) {
+	// setup determinism
+	SetupDeterministicRand(t)
+
 	eng, cleanup := tests.NewDatabase(t, &tests.Types{})
 	t.Cleanup(func() {
 		cleanup()
