@@ -78,7 +78,7 @@ type Field struct {
 	Compress types.BlockCompression // data compression from struct tag
 	Filter   FilterType             // metadata filter type
 	Fixed    uint16                 // 0..65535 fixed size array/bytes/string length
-	Scale    uint8                  // 0..255 fixed point scale, time scale, bloom error probability 1/x (1..4)
+	Scale    uint8                  // 0..255 fixed point scale, time scale
 
 	// encoder values for INSERT, UPDATE, QUERY
 	Path   []int   // reflect struct nested positions

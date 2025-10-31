@@ -18,7 +18,6 @@ import (
 )
 
 // TODO
-// - support 'including' extra payload fields (load/store/merge more columns)
 // - tomb should not have to store extra fields
 // - data placement algorithm is inefficient for hash indexes (use linear hashing)
 

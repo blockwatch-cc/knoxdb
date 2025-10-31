@@ -21,9 +21,9 @@ import (
 //
 // Examples
 //
-// Id      uint64    `"knox:X,pk`            // implies PK index type
-// F1      int       `"knox:Y,index=hash`
-// F2      int       `"knox:Z,index=int,extra=X+Y`
+// Id      uint64    `"knox:X,pk"`            // implies PK index type
+// F1      int       `"knox:Y,index=hash"`
+// F2      int       `"knox:Z,index=int,extra=X+Y"`
 // _       struct{}  `"knox:idx,index=composite,fields=X+Y,extra=Z+X"`
 
 type IndexSchema struct {
