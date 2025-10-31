@@ -71,7 +71,7 @@ func (m i128EqualMatcher) MatchValue(v any) bool {
 }
 
 func (m i128EqualMatcher) MatchRange(from, to any) bool {
-	return !(m.val.Lt(from.(num.Int128)) || m.val.Gt(to.(num.Int128)))
+	return m.val.Ge(from.(num.Int128)) && m.val.Le(to.(num.Int128))
 }
 
 func (m i128EqualMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask *bitset.Bitset) {
@@ -283,7 +283,7 @@ func (m i128RangeMatcher) MatchValue(v any) bool {
 }
 
 func (m i128RangeMatcher) MatchRange(from, to any) bool {
-	return !(from.(num.Int128).Gt(m.to) || to.(num.Int128).Lt(m.from))
+	return from.(num.Int128).Le(m.to) && to.(num.Int128).Ge(m.from)
 }
 
 func (m i128RangeMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {

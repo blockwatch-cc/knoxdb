@@ -272,7 +272,7 @@ func (m bytesRangeMatcher) MatchValue(v any) bool {
 }
 
 func (m bytesRangeMatcher) MatchRange(from, to any) bool {
-	return !(bytes.Compare(from.([]byte), m.to) > 0 || bytes.Compare(to.([]byte), m.from) < 0)
+	return bytes.Compare(from.([]byte), m.to) <= 0 && bytes.Compare(to.([]byte), m.from) >= 0
 }
 
 func (m bytesRangeMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {

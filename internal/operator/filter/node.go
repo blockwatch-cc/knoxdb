@@ -159,15 +159,15 @@ func (n *Node) FieldIds() []uint16 {
 //  return ord.Values
 // }
 
-func (n *Node) collectIndexes(s *slicex.OrderedIntegers[int]) {
-	if n.IsLeaf() {
-		s.Insert(n.Filter.Index)
-		return
-	}
-	for _, v := range n.Children {
-		v.collectIndexes(s)
-	}
-}
+// func (n *Node) collectIndexes(s *slicex.OrderedIntegers[int]) {
+// 	if n.IsLeaf() {
+// 		s.Insert(n.Filter.Index)
+// 		return
+// 	}
+// 	for _, v := range n.Children {
+// 		v.collectIndexes(s)
+// 	}
+// }
 
 // Size returns the total number of condition leaf nodes
 func (n *Node) Size() int {

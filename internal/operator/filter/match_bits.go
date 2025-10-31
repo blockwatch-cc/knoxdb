@@ -209,7 +209,7 @@ func (m bitGeMatcher) MatchValue(val any) bool {
 	// false   true  -> true
 	// true    false -> false
 	// true    true  -> true
-	return !(m.val && !val.(bool))
+	return !m.val || val.(bool)
 }
 
 func (m bitGeMatcher) MatchRange(from, to any) bool {

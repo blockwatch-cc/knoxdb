@@ -330,7 +330,7 @@ func (m numEqualMatcher[T]) MatchValue(v any) bool {
 }
 
 func (m numEqualMatcher[T]) MatchRange(from, to any) bool {
-	return !(m.val < from.(T) || m.val > to.(T))
+	return m.val >= from.(T) && m.val <= to.(T)
 }
 
 func (m numEqualMatcher[T]) MatchFilter(flt filter.Filter) bool {
@@ -550,7 +550,7 @@ func (m numRangeMatcher[T]) MatchValue(v any) bool {
 }
 
 func (m numRangeMatcher[T]) MatchRange(from, to any) bool {
-	return !(from.(T) > m.to || to.(T) < m.from)
+	return from.(T) <= m.to && to.(T) >= m.from
 }
 
 func (m numRangeMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitset) {

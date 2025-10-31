@@ -32,14 +32,15 @@ func TestOptimize(t *testing.T) {
 			WithField(schema.NewField(tests.FieldTypes[gen.Type()]).WithName("f2"))
 		f1, _ := sm.Find("f1")
 		f2, _ := sm.Find("f2")
-		tests := []struct {
+		type TestStruct struct {
 			name      string
 			input     *Node
 			expected  *Node
 			comment   string
 			skipTypes []BlockType
 			onlyTypes []BlockType
-		}{
+		}
+		tests := []TestStruct{
 			{
 				name:      "IN(2,3) OR EQ(4) OR IN(5,6,7)",
 				input:     makeOrTree(makeInNode(f1, s(2, 3)), makeEqualNode(f1, v(4)), makeInNode(f1, s(5, 6, 7))),
@@ -211,6 +212,52 @@ func TestOptimize(t *testing.T) {
 				onlyTypes: []BlockType{BlockBool}, // tautology
 			},
 			{
+				name:     "NI(42) => NE(42)",
+				input:    makeAndTree(makeNotInNode(f1, s(42))),
+				expected: makeAndTree(makeNotEqualNode(f1, v(42))),
+				comment:  "single NI should be simplified to NE",
+			},
+			{
+				name:     "NI(A) AND NI(B) => NI(A,B)",
+				input:    makeAndTree(makeNotInNode(f1, s(42)), makeNotInNode(f1, s(43))),
+				expected: makeAndTree(makeNotInNode(f1, s(42, 43))),
+				comment:  "multiple NI should be simplified to single NI",
+			},
+			{
+				name:      "NI(A) OR NI(B) => NI(A/B)",
+				input:     makeOrTree(makeNotInNode(f1, s(42, 43, 44)), makeNotInNode(f1, s(43, 44, 45))),
+				expected:  makeOrTree(makeNotInNode(f1, s(43, 44))),
+				comment:   "multiple NI with OR should be simplified to intersection",
+				skipTypes: []BlockType{BlockBool},
+			},
+			{
+				name:      "NI(A) OR NI(B) => NI(A/B) 2",
+				input:     makeOrTree(makeNotInNode(f1, s(42, 43)), makeNotInNode(f1, s(43, 44, 45))),
+				expected:  makeOrTree(makeNotEqualNode(f1, v(43))),
+				comment:   "multiple NI with OR should be simplified to intersection",
+				skipTypes: []BlockType{BlockBool},
+			},
+			{
+				name:      "NI(true,false) => FALSE",
+				input:     makeAndTree(makeNotInNode(f1, s(0, 1))),
+				expected:  makeAndTree(makeFalseNode(f1)),
+				comment:   "full-range NI contradiction",
+				onlyTypes: []BlockType{BlockBool}, // contradiction
+			},
+			{
+				name:      "NI(true) OR NI(false) => TRUE",
+				input:     makeOrTree(makeNotInNode(f1, s(0)), makeNotInNode(f1, s(1))),
+				expected:  makeOrTree(makeTrueNode(f1)),
+				comment:   "full-range NI OR should simplify to TRUE",
+				onlyTypes: []BlockType{BlockBool}, // contradiction
+			},
+			{
+				name:      "regexp",
+				input:     makeAndTree(makeRegexNode(f1, ".*"), makeEqualNode(f1, v(42))),
+				expected:  makeAndTree(makeEqualNode(f1, v(42)), makeRegexNode(f1, ".*")),
+				onlyTypes: []BlockType{BlockBytes},
+			},
+			{
 				name:     "Independent Fields",
 				input:    makeAndTree(makeNode(f1, FilterModeEqual, v(1)), makeNode(f2, FilterModeEqual, v(2))),
 				expected: makeAndTree(makeNode(f1, FilterModeEqual, v(1)), makeNode(f2, FilterModeEqual, v(2))),
@@ -254,7 +301,12 @@ func TestOptimizeExtended(t *testing.T) {
 			t.Run(fmt.Sprintf("%s_%s", gen.Name(), cond), func(t *testing.T) {
 				// Create a filter node for the current type and condition
 				field := schema.NewField(tests.FieldTypes[gen.Type()]).WithName("f1")
-				node := makeNode(field, cond, gen.MakeValue(42))
+				var node *Node
+				if cond == FilterModeRegexp {
+					node = makeNode(field, cond, ".*")
+				} else {
+					node = makeNode(field, cond, gen.MakeValue(42))
+				}
 
 				// Create AND/OR trees with the node
 				andTree := makeAndTree(node, node)
@@ -318,11 +370,14 @@ func makeNode(field *schema.Field, mode FilterMode, value any) *Node {
 		if reflect.ValueOf(value).Kind() != reflect.Slice {
 			value = slicex.MakeAny(value)
 		}
+		// fmt.Printf("slice %#v\n", value)
 		v, err := caster.CastSlice(value)
 		if err != nil {
 			panic(err)
 		}
+		// fmt.Printf("casted %#v\n", v)
 		f.Value = blockType.Unique(v)
+		// fmt.Printf("unique %#v\n", f.Value)
 		f.Matcher.WithSlice(f.Value)
 	case FilterModeRange:
 		rg, ok := value.(RangeValue)
@@ -342,6 +397,10 @@ func makeNode(field *schema.Field, mode FilterMode, value any) *Node {
 		}
 		f.Value = rg
 		f.Matcher.WithValue(f.Value)
+	case FilterModeRegexp:
+		if _, ok := value.(string); !ok {
+			panic("expected type string for regexp value")
+		}
 	default:
 		v, err := caster.CastValue(value)
 		if err != nil {

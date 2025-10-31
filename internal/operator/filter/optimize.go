@@ -46,6 +46,8 @@ import (
 //   - or: NI(A) + NI(B) => NI(A/B), true iff A / B = ø
 //   - or: NE(A) + NE(B) => true iff A != B
 //   - or: IN(A) + NE(B) => true iff B in [A] (set + antiset covers all universe)
+//   - or: NI(range) => LT(min) OR GT(max) -- for complete ranges
+//   - or: NI(range) => FALSE -- for full type ranges e.g. [false,true], u8[0..255]
 //
 // - replace/simplify ranges
 //   - any: LT(min) => false
@@ -233,7 +235,8 @@ func simplifyNodes(nodes []*Node, isOrNode bool) []*Node {
 // - any: RG(N,max) => GE(N)
 // - any: RG(N,N) => EQ(N)
 // - any: IN(A,B,C) => RG(A,C)
-func simplifySingle(nodes []*Node, _ bool) []*Node {
+// - and: NI(range) => LT(min) OR GT(max)
+func simplifySingle(nodes []*Node, isOrNode bool) []*Node {
 	var res []*Node
 
 	for _, node := range nodes {
@@ -253,17 +256,13 @@ func simplifySingle(nodes []*Node, _ bool) []*Node {
 				})
 			default:
 				// convert full set to range for integer types
-				minv, maxv, isFull := f.Type.Range(f.Value)
-				if isFull && minv != nil {
+				minv, maxv, isCont := f.Type.Range(f.Value)
+				if isCont && minv != nil {
 					rg := RangeValue{minv, maxv}
 					if isFullDomain(f.Type, rg) {
-						res = append(res, &Node{
-							Filter: f.AsTrue(),
-						})
+						res = append(res, &Node{Filter: f.AsTrue()})
 					} else {
-						res = append(res, &Node{
-							Filter: f.As(FilterModeRange, rg),
-						})
+						res = append(res, &Node{Filter: f.As(FilterModeRange, rg)})
 					}
 				} else {
 					res = append(res, node)
@@ -281,9 +280,35 @@ func simplifySingle(nodes []*Node, _ bool) []*Node {
 					Filter: f.As(FilterModeNotEqual, slicex.Any(f.Value).Index(0)),
 				})
 			default:
-				res = append(res, node)
-
+				minv, maxv, isCont := f.Type.Range(f.Value)
+				if isCont && minv != nil {
+					switch {
+					case isFullDomain(f.Type, RangeValue{minv, maxv}):
+						res = append(res, &Node{
+							Filter: f.AsFalse(),
+						})
+					case !isOrNode:
+						// AND NI(2,3,4) => AND (GT(4) OR LT(2))
+						res = append(res, &Node{
+							OrKind: true,
+							Children: []*Node{
+								{
+									Filter: f.As(FilterModeGt, maxv),
+								},
+								{
+									Filter: f.As(FilterModeLt, minv),
+								},
+							},
+						})
+					default:
+						// keep
+						res = append(res, node)
+					}
+				} else {
+					res = append(res, node)
+				}
 			}
+
 		case FilterModeLt:
 			if f.Type.Cmp(f.Value, f.Type.MinNumericVal()) == 0 {
 				res = append(res, &Node{
@@ -292,6 +317,7 @@ func simplifySingle(nodes []*Node, _ bool) []*Node {
 			} else {
 				res = append(res, node)
 			}
+
 		case FilterModeGt:
 			if f.Type.Cmp(f.Value, f.Type.MaxNumericVal()) == 0 {
 				res = append(res, &Node{
@@ -300,6 +326,7 @@ func simplifySingle(nodes []*Node, _ bool) []*Node {
 			} else {
 				res = append(res, node)
 			}
+
 		case FilterModeLe:
 			switch {
 			case f.Type.Cmp(f.Value, f.Type.MaxNumericVal()) == 0:
@@ -313,6 +340,7 @@ func simplifySingle(nodes []*Node, _ bool) []*Node {
 			default:
 				res = append(res, node)
 			}
+
 		case FilterModeGe:
 			switch {
 			case f.Type.Cmp(f.Value, f.Type.MinNumericVal()) == 0:
@@ -326,6 +354,7 @@ func simplifySingle(nodes []*Node, _ bool) []*Node {
 			default:
 				res = append(res, node)
 			}
+
 		case FilterModeRange:
 			rg := f.Value.(RangeValue)
 			c := f.Type.Cmp(rg[0], rg[1])
@@ -353,6 +382,7 @@ func simplifySingle(nodes []*Node, _ bool) []*Node {
 			default:
 				res = append(res, node)
 			}
+
 		default:
 			res = append(res, node)
 		}
