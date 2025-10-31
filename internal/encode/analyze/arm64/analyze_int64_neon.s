@@ -8,7 +8,7 @@
 // scalar code working
 TEXT ·analyze_i64_neon(SB), NOSPLIT, $0-32
     MOVD vals+0(FP), R0    // Slice pointer
-    MOVD len+8(FP), R1     // Length
+    MOVD vals_len+8(FP), R1     // Length
     MOVD ret+24(FP), R2    // Return pointer to Context[int64]
 
     // TODO: if len == 0 return

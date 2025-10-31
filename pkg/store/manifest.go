@@ -82,7 +82,6 @@ func (m *Manifest) UnmarshalBinary(buf []byte) (err error) {
 	v, n = num.Uvarint(buf)
 	buf = buf[n:]
 	m.Label = string(buf[:v])
-	buf = buf[v:]
 
 	return nil
 }

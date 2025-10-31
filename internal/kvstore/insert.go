@@ -10,8 +10,8 @@ import (
 	"sync/atomic"
 
 	"blockwatch.cc/knoxdb/internal/engine"
-	"blockwatch.cc/knoxdb/pkg/store"
 	"blockwatch.cc/knoxdb/internal/wal"
+	"blockwatch.cc/knoxdb/pkg/store"
 )
 
 var BE = binary.BigEndian

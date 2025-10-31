@@ -13,20 +13,20 @@ import (
 // test all combinations of delta container setups
 func makeSignedDeltaCases[T types.Signed]() []DeltaContainer[T] {
 	return []DeltaContainer[T]{
-		DeltaContainer[T]{Delta: 3, For: 0, N: 10},   // +delta and no for
-		DeltaContainer[T]{Delta: 4, For: 4, N: 10},   // +delta and +for
-		DeltaContainer[T]{Delta: 4, For: -4, N: 10},  // +delta and -for
-		DeltaContainer[T]{Delta: -3, For: 0, N: 10},  // -delta and no for
-		DeltaContainer[T]{Delta: -4, For: 4, N: 10},  // -delta and +for
-		DeltaContainer[T]{Delta: -4, For: -4, N: 10}, // -delta and -for
-		DeltaContainer[T]{Delta: -4, For: 40, N: 10}, // -delta and high +for (all +values)
+		{Delta: 3, For: 0, N: 10},   // +delta and no for
+		{Delta: 4, For: 4, N: 10},   // +delta and +for
+		{Delta: 4, For: -4, N: 10},  // +delta and -for
+		{Delta: -3, For: 0, N: 10},  // -delta and no for
+		{Delta: -4, For: 4, N: 10},  // -delta and +for
+		{Delta: -4, For: -4, N: 10}, // -delta and -for
+		{Delta: -4, For: 40, N: 10}, // -delta and high +for (all +values)
 	}
 }
 
 func makeUnsignedDeltaCases[T types.Unsigned]() []DeltaContainer[T] {
 	return []DeltaContainer[T]{
-		DeltaContainer[T]{Delta: 3, For: 0, N: 10},
-		DeltaContainer[T]{Delta: 4, For: 4, N: 10},
+		{Delta: 3, For: 0, N: 10},
+		{Delta: 4, For: 4, N: 10},
 	}
 }
 

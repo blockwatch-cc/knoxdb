@@ -43,15 +43,15 @@ steps:
       - trivy config --exit-code 1 --skip-files "./scripts/docker/*" ./
 
   - name: vet
-    image: golang:1.24-alpine
+    image: golang:1.25-alpine
     volumes:
       - name: cache
         path: /go
     commands:
-      - go vet $(go list ./... | grep -v /internal/cmp/avx | grep -v internal/tests/wasm/vfs | grep -v internal/filter/llb | grep -v internal/filter/bloom | grep -v internal/hash/xxhash | grep -v internal/encode/s8b/avx2 )
+      - go vet $(go list ./... | grep -v cmp/avx | grep -v wasm/vfs | grep -v filter/llb | grep -v filter/bloom | grep -v hash/xxhash | grep -v s8b/avx2 | grep -v hashprobe )
 
   - name: unit
-    image: golang:1.24-alpine
+    image: golang:1.25-alpine
     volumes:
       - name: cache
         path: /go
@@ -75,7 +75,7 @@ steps:
         from_secret: MINIO_SECRET
     commands:
       - apk add --no-cache git
-      - go test -v ./internal/tests/run -timeout 1h -system wasm
+      - go run -buildvcs=true ./internal/tests/run -count 100 -arch wasm
     depends_on:
       - lint
       - scan
@@ -98,32 +98,9 @@ steps:
         from_secret: MINIO_SECRET
     commands:
       - apk add --no-cache git
-      - go test -v ./internal/tests/run -timeout 1h -system native
+      - go run -buildvcs=true ./internal/tests/run -count 100 -arch native
     depends_on:
       - lint
       - scan
       - vet
       - unit
-
-  # - name: scenario native/badger/lsm
-  #   image: hub.bwd.cx/golangdst:1.23-alpine
-  #   volumes:
-  #     - name: cache
-  #       path: /go
-  #   environment:
-  #     KNOX_DRIVER: badger
-  #     KNOX_ENGINE: lsm
-  #     MINIO_BUCKET: scenarios
-  #     MINIO_URL: hd1.bwd.cx:9001
-  #     MINIO_USER:
-  #       from_secret: MINIO_USER
-  #     MINIO_SECRET:
-  #       from_secret: MINIO_SECRET
-  #   commands:
-  #     - apk add --no-cache git
-  #     - go test -v ./internal/tests/run -timeout 1h -system native
-  #   depends_on:
-  #     - lint
-  #     - scan
-  #     - vet
-  #     - unit

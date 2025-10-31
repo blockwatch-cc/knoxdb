@@ -364,10 +364,9 @@ func (p *JoinPlan) Compile(ctx context.Context) error {
 		//   - RIGHT: R first, then add IN cond to L
 		//   - FULL: needs different algo design !!!
 		// - table/filter cardinality and limits
-		switch {
-		case p.Type == types.RightJoin || p.Type == types.FullJoin:
+		if p.Type == types.RightJoin || p.Type == types.FullJoin {
 			p.Order = JoinOrderLeftRight
-		default:
+		} else {
 			// estimate result set cardinality to define join order
 			cardinalityLeft := p.Left.Plan.EstimateCardinality(ctx)
 			cardinalityRight := p.Right.Plan.EstimateCardinality(ctx)

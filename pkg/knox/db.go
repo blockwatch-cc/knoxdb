@@ -29,15 +29,6 @@ type DB struct {
 	log    log.Logger
 }
 
-// remote
-// func ConnectDatabase(ctx context.Context, uri string, opts DatabaseOptions) (Database, error) {
-// 	c := wire.NewClient().WithLogger(opts.Logger)
-// 	if err := c.Connect(ctx, uri); err != nil {
-// 		return nil, err
-// 	}
-// 	return c, nil
-// }
-
 func IsDatabaseExist(ctx context.Context, name string, opts DatabaseOptions) (bool, error) {
 	return engine.IsExist(ctx, name, opts)
 }

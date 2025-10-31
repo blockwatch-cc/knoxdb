@@ -8,8 +8,8 @@ import (
 	"context"
 	"sync/atomic"
 
-	"blockwatch.cc/knoxdb/pkg/store"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/pkg/store"
 )
 
 func (kv *KVStore) Range(ctx context.Context, prefix []byte, fn func(ctx context.Context, k, v []byte) error) error {
