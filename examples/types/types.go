@@ -172,7 +172,7 @@ func run() error {
 		WithTag("three_million_records").
 		WithLimit(3000000).
 		WithStats(true).
-		WithDebug(true).
+		// WithDebug(true).
 		Stream(ctx, func(_ *Types) error {
 			count++
 			return nil

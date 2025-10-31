@@ -4,7 +4,7 @@ go 1.24.0
 
 require (
 	github.com/echa/config v1.1.3
-	github.com/echa/log v1.3.4
+	github.com/echa/log v1.3.5
 	github.com/gofrs/flock v0.13.0
 	github.com/google/btree v1.1.3
 	github.com/jedib0t/go-pretty/v6 v6.6.8
