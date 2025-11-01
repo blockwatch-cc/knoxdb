@@ -345,7 +345,7 @@ func TestPlanCompile(t *testing.T) {
 			Expected:  makeAndTree(makeNotInNode(f1, px, []uint64{1, 2, 3, 4})),
 		},
 		{
-			Name:      "or: NI(A) + NI(B) => NI(A+B)",
+			Name:      "or: NI(A) + NI(B) => NI(A/B)",
 			Condition: Or(NotIn("id", []uint64{1, 2, 3}), NotIn("id", []uint64{2, 3, 4})),
 			Expected:  makeAndTree(makeNotInNode(f1, px, []uint64{2, 3})),
 		},

@@ -34,6 +34,8 @@ import (
 //   - any: empty IN => false
 //   - any: empty NIN => true
 //   - any: IN(A,B,C) => RG(A,C)
+//   - any: NI(full-range) => FALSE -- only for full ranges e.g. [false,true], u8[0..255]
+//   - any: IN(full-range) => TRUE -- only for full ranges e.g. [false,true], u8[0..255]
 //   - and: EQ(A) + EQ(B) => false iff A != B
 //   - and: IN(A) + IN(B) => IN(A-B) -- intersect (handle empty case)
 //   - and: NI(A) + NI(B) => NI(A+B) -- union! (does work for OR!!!)
@@ -46,8 +48,6 @@ import (
 //   - or: NI(A) + NI(B) => NI(A/B), true iff A / B = ø
 //   - or: NE(A) + NE(B) => true iff A != B
 //   - or: IN(A) + NE(B) => true iff B in [A] (set + antiset covers all universe)
-//   - or: NI(range) => LT(min) OR GT(max) -- for complete ranges
-//   - or: NI(range) => FALSE -- for full type ranges e.g. [false,true], u8[0..255]
 //
 // - replace/simplify ranges
 //   - any: LT(min) => false
@@ -74,8 +74,9 @@ import (
 //   - or: RG(A,B) + RG(C,D) => RG(A,D) iff C ≤ B
 //   - or: RG(A,B) + EQ(C) => RG(A,B) iff A ≤ C ≤ B -- replace weaker with stronger
 //
-// TODO: range and set type modes
+// TODO: merge ranges and sets, anti-range mode
 //   - or: RG(A,B) + NE(C) => true iff C ¢ [A,B]
+//   - any: NI(1,2,3) => NR(1,3)
 func (n *Node) Optimize() {
 	// stop at leaf nodes
 	if n.IsLeaf() {
@@ -235,8 +236,9 @@ func simplifyNodes(nodes []*Node, isOrNode bool) []*Node {
 // - any: RG(N,max) => GE(N)
 // - any: RG(N,N) => EQ(N)
 // - any: IN(A,B,C) => RG(A,C)
-// - and: NI(range) => LT(min) OR GT(max)
-func simplifySingle(nodes []*Node, isOrNode bool) []*Node {
+// - any: IN(full-range) => true
+// - aby: NI(full-range) => false
+func simplifySingle(nodes []*Node, _ bool) []*Node {
 	var res []*Node
 
 	for _, node := range nodes {
@@ -281,29 +283,10 @@ func simplifySingle(nodes []*Node, isOrNode bool) []*Node {
 				})
 			default:
 				minv, maxv, isCont := f.Type.Range(f.Value)
-				if isCont && minv != nil {
-					switch {
-					case isFullDomain(f.Type, RangeValue{minv, maxv}):
-						res = append(res, &Node{
-							Filter: f.AsFalse(),
-						})
-					case !isOrNode:
-						// AND NI(2,3,4) => AND (GT(4) OR LT(2))
-						res = append(res, &Node{
-							OrKind: true,
-							Children: []*Node{
-								{
-									Filter: f.As(FilterModeGt, maxv),
-								},
-								{
-									Filter: f.As(FilterModeLt, minv),
-								},
-							},
-						})
-					default:
-						// keep
-						res = append(res, node)
-					}
+				if isCont && isFullDomain(f.Type, RangeValue{minv, maxv}) {
+					res = append(res, &Node{Filter: f.AsFalse()})
+					// TODO: this case would benefit from an anti-range filter
+					// NI(2,3,4) => NR(2,4) == (GT(4) OR LT(2))
 				} else {
 					res = append(res, node)
 				}
@@ -895,10 +878,27 @@ func makeSetFilterFrom(f *Filter, ins, nis any, isOrNode bool) *Filter {
 				return f.As(FilterModeEqual, slicex.Any(set).Index(0))
 			}
 		default:
+			// convert continuous sets into ranges
+			minv, maxv, isCont := f.Type.Range(set)
 			if isOrNode {
+				if isCont {
+					if isFullDomain(f.Type, RangeValue{minv, maxv}) {
+						return f.AsFalse()
+					}
+					// TODO: ideally we could do an anti-range filter
+				}
 				return f.As(FilterModeNotIn, set)
 			} else {
-				return f.As(FilterModeIn, set)
+				if isCont {
+					rg := RangeValue{minv, maxv}
+					if isFullDomain(f.Type, rg) {
+						return f.AsTrue()
+					} else {
+						return f.As(FilterModeRange, rg)
+					}
+				} else {
+					return f.As(FilterModeIn, set)
+				}
 			}
 		}
 	case ins != nil:
@@ -909,6 +909,16 @@ func makeSetFilterFrom(f *Filter, ins, nis any, isOrNode bool) *Filter {
 		case 1:
 			return f.As(FilterModeEqual, slicex.Any(ins).Index(0))
 		default:
+			// convert continuous sets into ranges
+			minv, maxv, isCont := f.Type.Range(ins)
+			if isCont {
+				rg := RangeValue{minv, maxv}
+				if isFullDomain(f.Type, rg) {
+					return f.AsTrue()
+				} else {
+					return f.As(FilterModeRange, rg)
+				}
+			}
 			return f.As(FilterModeIn, ins)
 		}
 	case nis != nil:
@@ -919,6 +929,14 @@ func makeSetFilterFrom(f *Filter, ins, nis any, isOrNode bool) *Filter {
 		case 1:
 			return f.As(FilterModeNotEqual, slicex.Any(nis).Index(0))
 		default:
+			// convert continuous sets into ranges
+			minv, maxv, isCont := f.Type.Range(nis)
+			if isCont {
+				if isFullDomain(f.Type, RangeValue{minv, maxv}) {
+					return f.AsFalse()
+				}
+				// TODO: ideally we could do an anti-range filter
+			}
 			return f.As(FilterModeNotIn, nis)
 		}
 	default:
@@ -927,7 +945,7 @@ func makeSetFilterFrom(f *Filter, ins, nis any, isOrNode bool) *Filter {
 }
 
 func isFullDomain(typ BlockType, rg RangeValue) bool {
-	if typ == BlockBytes {
+	if typ == BlockBytes || rg[0] == nil {
 		return false
 	}
 	isMin := typ.Cmp(rg[0], typ.MinNumericVal()) == 0
