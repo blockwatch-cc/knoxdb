@@ -62,9 +62,9 @@ type Encoder struct {
 }
 
 func NewEncoder(s *Schema) *Encoder {
-	enums := s.Enums
+	enums := s.Enums.Load()
 	if enums == nil {
-		enums = &GlobalRegistry
+		enums = GlobalRegistry
 	}
 	return &Encoder{
 		schema: s,

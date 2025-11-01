@@ -84,7 +84,7 @@ func ParseCondition(key, val string, s *schema.Schema) (c Condition, err error) 
 	c.Name = field.Name
 	var enum *schema.EnumDictionary
 	if s.HasEnums() {
-		enum, _ = s.Enums.Lookup(c.Name)
+		enum, _ = s.Enums.Load().Lookup(c.Name)
 	}
 	parser := schema.NewParser(field.Type, field.Scale, enum)
 	switch c.Mode {
@@ -185,7 +185,7 @@ func (c Condition) Compile(s *schema.Schema) (*filter.Node, error) {
 		// schema field types.
 		var enum *schema.EnumDictionary
 		if s.HasEnums() {
-			enum, _ = s.Enums.Lookup(c.Name)
+			enum, _ = s.Enums.Load().Lookup(c.Name)
 		}
 		caster := schema.NewCaster(field.Type, field.Scale, enum)
 

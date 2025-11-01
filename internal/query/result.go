@@ -335,7 +335,7 @@ func (r *Row) Decode(val any) error {
 			return err
 		}
 		r.maps = maps
-		r.schema = s.WithEnums(r.res.Schema().Enums)
+		r.schema = s.WithEnums(r.res.Schema().Enums.Load())
 	}
 	return r.res.pkg.ReadStruct(r.row, val, r.schema, r.maps)
 }
@@ -441,7 +441,7 @@ func (r *Row) Big(col int) num.Big {
 }
 
 func (r *Row) Enum(col int) string {
-	enums := r.schema.Enums
+	enums := r.schema.Enums.Load()
 	if enums == nil {
 		return ""
 	}

@@ -51,7 +51,7 @@ func (op *Logger) Process(_ context.Context, src *pack.Package) (*pack.Package, 
 			})
 		case types.FieldTypeUint16:
 			if field.Flags.Is(types.FieldFlagEnum) && s.HasEnums() {
-				if lut, ok := s.Enums.Lookup(field.Name); ok {
+				if lut, ok := s.Enums.Load().Lookup(field.Name); ok {
 					cfgs = append(cfgs, table.ColumnConfig{
 						Name: field.Name,
 						Transformer: func(val any) string {

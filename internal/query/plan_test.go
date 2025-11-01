@@ -26,7 +26,7 @@ import (
 var (
 	testSchema      *schema.Schema
 	testIndexSchema *schema.IndexSchema
-	testEnums       schema.EnumRegistry
+	testEnums       *schema.EnumRegistry
 )
 
 func init() {
@@ -43,7 +43,7 @@ func init() {
 
 	testEnums = schema.NewEnumRegistry()
 	testEnums.Register(statusEnum)
-	testSchema.WithEnums(&testEnums)
+	testSchema.WithEnums(testEnums)
 }
 
 type testStruct struct {

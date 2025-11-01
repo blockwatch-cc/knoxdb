@@ -8,6 +8,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"strconv"
+	"sync"
 
 	"golang.org/x/exp/constraints"
 )
@@ -47,9 +48,21 @@ func init() {
 	}
 }
 
+type SyncedSource struct {
+	mu  sync.Mutex
+	src rand.Source
+}
+
+func (s *SyncedSource) Uint64() uint64 {
+	s.mu.Lock()
+	v := s.src.Uint64()
+	s.mu.Unlock()
+	return v
+}
+
 func RandInit(seed uint64) {
 	randSeed = seed
-	rnd := rand.New(rand.NewPCG(seed, seed))
+	rnd := rand.New(&SyncedSource{src: rand.NewPCG(seed, seed)})
 	RandInt = rnd.Int
 	RandIntn = rnd.IntN
 	RandInt32 = rnd.Int32

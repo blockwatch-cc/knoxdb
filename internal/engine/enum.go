@@ -22,7 +22,7 @@ func (e *Engine) CloneEnums(names ...string) *schema.EnumRegistry {
 			clone.Register(dict)
 		}
 	}
-	return &clone
+	return clone
 }
 
 func (e *Engine) EnumNames() []string {

@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"blockwatch.cc/knoxdb/internal/hash/xxhash64"
 	"blockwatch.cc/knoxdb/internal/types"
@@ -30,7 +31,7 @@ type Schema struct {
 	Hash        uint64
 	Fields      []*Field
 	Indexes     []*IndexSchema
-	Enums       *EnumRegistry
+	Enums       atomic.Pointer[EnumRegistry]
 	MinWireSize int
 	MaxWireSize int
 	IsFixedSize bool
@@ -75,7 +76,7 @@ func (s *Schema) WithField(f *Field) *Schema {
 }
 
 func (s *Schema) WithEnums(r *EnumRegistry) *Schema {
-	s.Enums = r
+	s.Enums.Store(r)
 	return s
 }
 
@@ -94,7 +95,7 @@ func (s *Schema) nextFieldId() uint16 {
 }
 
 func (s *Schema) HasEnums() bool {
-	return s.Enums != nil
+	return s.Enums.Load() != nil
 }
 
 func (s *Schema) NewBuffer(sz int) *bytes.Buffer {
@@ -343,9 +344,9 @@ func (s *Schema) Clone() *Schema {
 		Name:    s.Name,
 		Fields:  slices.Clone(s.Fields),
 		Indexes: slices.Clone(s.Indexes),
-		Enums:   s.Enums,
 		Version: s.Version,
 	}
+	clone.Enums.Store(s.Enums.Load())
 	for i := range clone.Fields {
 		clone.Fields[i] = clone.Fields[i].Clone()
 	}
@@ -653,7 +654,7 @@ func (s *Schema) Validate() error {
 	return nil
 }
 
-func (s Schema) MarshalBinary() ([]byte, error) {
+func (s *Schema) MarshalBinary() ([]byte, error) {
 	buf := bytes.NewBuffer(make([]byte, 0, 32*len(s.Fields)+12+len(s.Name)))
 
 	// version: u32
@@ -764,15 +765,13 @@ func (s *Schema) Finalize() *Schema {
 
 		// try lookup enum from global registry using tag '0' or generate new enum
 		if f.Is(types.FieldFlagEnum) {
-			if s.Enums == nil {
-				r := NewEnumRegistry()
-				s.Enums = &r
-			}
-			if _, ok := s.Enums.Lookup(f.Name); !ok {
+			s.Enums.CompareAndSwap(nil, NewEnumRegistry())
+			enums := s.Enums.Load()
+			if _, ok := enums.Lookup(f.Name); !ok {
 				if e, ok := LookupEnum(0, f.Name); ok {
-					s.Enums.Register(e)
+					enums.Register(e)
 				} else {
-					s.Enums.Register(NewEnumDictionary(f.Name))
+					enums.Register(NewEnumDictionary(f.Name))
 				}
 			}
 		}

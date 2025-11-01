@@ -39,8 +39,8 @@ func LookupEnum(tag uint64, name string) (*EnumDictionary, bool) {
 	return GlobalRegistry.Get(types.TaggedHash(types.ObjectTagEnum, name) + tag)
 }
 
-func NewEnumRegistry() EnumRegistry {
-	return EnumRegistry{util.NewLockFreeMap[uint64, *EnumDictionary]()}
+func NewEnumRegistry() *EnumRegistry {
+	return &EnumRegistry{util.NewLockFreeMap[uint64, *EnumDictionary]()}
 }
 
 func (r EnumRegistry) Register(e *EnumDictionary) {

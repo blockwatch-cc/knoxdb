@@ -69,7 +69,7 @@ type Engine struct {
 	tables   *util.LockFreeMap[uint64, TableEngine] // table objects
 	stores   *util.LockFreeMap[uint64, StoreEngine] // store objects
 	indexes  *util.LockFreeMap[uint64, IndexEngine] // index objects
-	enums    schema.EnumRegistry                    // enum objects
+	enums    *schema.EnumRegistry                   // enum objects
 	opts     DatabaseOptions                        // engine-wide configuration
 	txchan   chan struct{}                          // single writer enforcement
 	txs      TxList                                 // active read / write transactions

@@ -71,7 +71,7 @@ func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, opts TableOp
 	}
 
 	// connect schema enums
-	s.WithEnums(&enums)
+	s.WithEnums(enums)
 
 	// ensure table has metadata, may clone & extend schema
 	if !s.HasMeta() {

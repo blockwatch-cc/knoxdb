@@ -214,7 +214,7 @@ func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, maps []
 	assert.Always(maps != nil, "nil target mapping")
 
 	var err error
-	enums := dstSchema.Enums
+	enums := dstSchema.Enums.Load()
 	base := rval.Addr().UnsafePointer()
 	for i, field := range dstSchema.Fields {
 		// identify source field

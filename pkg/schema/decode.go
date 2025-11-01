@@ -76,9 +76,9 @@ type Decoder struct {
 }
 
 func NewDecoder(s *Schema) *Decoder {
-	enums := s.Enums
+	enums := s.Enums.Load()
 	if enums == nil {
-		enums = &GlobalRegistry
+		enums = GlobalRegistry
 	}
 	return &Decoder{
 		schema: s,
