@@ -88,16 +88,35 @@ func (t *Table) IsReadOnly() bool {
 }
 
 func (t *Table) Indexes() []engine.QueryableIndex {
-	return t.indexes
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return slices.Clone(t.indexes)
 }
 
 func (t *Table) PkIndex() (engine.QueryableIndex, bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	for _, idx := range t.indexes {
 		if idx.IsPk() {
 			return idx, true
 		}
 	}
 	return nil, false
+}
+
+func (t *Table) ConnectIndex(idx engine.QueryableIndex) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.indexes = append(t.indexes, idx)
+}
+
+func (t *Table) DisconnectIndex(idx engine.QueryableIndex) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	idxId := idx.Schema().TaggedHash(types.ObjectTagIndex)
+	t.indexes = slices.DeleteFunc(t.indexes, func(v engine.QueryableIndex) bool {
+		return v.Schema().TaggedHash(types.ObjectTagIndex) == idxId
+	})
 }
 
 // main and history tables use different setups
@@ -439,17 +458,6 @@ func (t *Table) Truncate(ctx context.Context) error {
 	atomic.StoreInt64(&t.metrics.MetaSize, 0)
 	atomic.StoreInt64(&t.metrics.PacksCount, 0)
 	return nil
-}
-
-func (t *Table) ConnectIndex(idx engine.QueryableIndex) {
-	t.indexes = append(t.indexes, idx)
-}
-
-func (t *Table) DisconnectIndex(idx engine.QueryableIndex) {
-	idxId := idx.Schema().TaggedHash(types.ObjectTagIndex)
-	t.indexes = slices.DeleteFunc(t.indexes, func(v engine.QueryableIndex) bool {
-		return v.Schema().TaggedHash(types.ObjectTagIndex) == idxId
-	})
 }
 
 func (t *Table) CommitTx(ctx context.Context, xid types.XID) error {

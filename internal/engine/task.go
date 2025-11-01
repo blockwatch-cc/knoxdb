@@ -65,14 +65,17 @@ func (w *Worker) Run() {
 		select {
 		case <-w.ctx.Done():
 			return
-		case job := <-w.job:
-			job.complete(job.run(w.ctx))
+		case job, ok := <-w.job:
+			if ok {
+				job.complete(job.run(w.ctx))
+			} else {
+				return
+			}
 		}
 	}
 }
 
 func (w *Worker) Close() {
-	w.pool = nil
 	close(w.job)
 }
 

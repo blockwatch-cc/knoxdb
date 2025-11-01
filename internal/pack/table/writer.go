@@ -245,7 +245,7 @@ func (w *Writer) Finalize(ctx context.Context, state engine.ObjectState) error {
 }
 
 func (w *Writer) AppendIndexes(ctx context.Context, src *pack.Package, mode engine.WriteMode) error {
-	for _, idx := range w.table.indexes {
+	for _, idx := range w.table.Indexes() {
 		if err := idx.(engine.IndexEngine).AddPack(ctx, src, mode); err != nil {
 			return err
 		}
@@ -254,7 +254,7 @@ func (w *Writer) AppendIndexes(ctx context.Context, src *pack.Package, mode engi
 }
 
 func (w *Writer) DeleteIndexes(ctx context.Context, src *pack.Package, mode engine.WriteMode) error {
-	for _, idx := range w.table.indexes {
+	for _, idx := range w.table.Indexes() {
 		if err := idx.(engine.IndexEngine).DelPack(ctx, src, mode, w.stats.Epoch()); err != nil {
 			return err
 		}
@@ -263,7 +263,7 @@ func (w *Writer) DeleteIndexes(ctx context.Context, src *pack.Package, mode engi
 }
 
 func (w *Writer) FinalizeIndexes(ctx context.Context) error {
-	for _, v := range w.table.indexes {
+	for _, v := range w.table.Indexes() {
 		idx := v.(engine.IndexEngine)
 		if err := idx.Finalize(ctx, w.stats.Epoch()); err != nil {
 			return err
