@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math/bits"
 	"sync"
+	"sync/atomic"
 	"unsafe"
 )
 
@@ -22,7 +23,7 @@ type Allocator interface {
 // 1k (10) .. 128k (17) = 8 sync.Pools
 type allocator[T any] struct {
 	mu    sync.Mutex
-	pools [8]*sync.Pool
+	pools [8]atomic.Pointer[sync.Pool]
 	track map[uintptr]int
 }
 
@@ -37,13 +38,15 @@ func newAllocator[T any]() *allocator[T] {
 
 func (a *allocator[T]) pool(class int) *sync.Pool {
 	idx := class - minAllocClass
-	if a.pools[idx] == nil {
+	p := a.pools[idx].Load()
+	if p == nil {
 		sz := 1 << class
-		a.pools[idx] = &sync.Pool{
+		p = &sync.Pool{
 			New: func() any { return make([]T, 0, sz) },
 		}
+		a.pools[idx].Store(p)
 	}
-	return a.pools[idx]
+	return p
 }
 
 func (a *allocator[T]) Alloc(sz int) any {
