@@ -62,7 +62,7 @@ func (gen *Generator) Next(context.Context) (*pack.Package, operator.Result) {
 			gen.err = err
 			return nil, operator.ResultError
 		}
-		if enum, ok := s.Enums.Lookup("my_enum"); ok {
+		if enum, ok := s.Enums.Load().Lookup("my_enum"); ok {
 			enum.Append(myEnums...)
 		}
 		gen.enc = schema.NewEncoder(s)

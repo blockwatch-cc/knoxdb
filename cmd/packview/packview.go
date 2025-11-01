@@ -406,7 +406,7 @@ func printValue(s *schema.Schema, f *schema.Field, val any) any {
 		return util.LimitStringEllipsis(util.ToString(val), 33)
 	case types.FieldTypeUint16:
 		if f.Flags.Is(types.FieldFlagEnum) && s.HasEnums() {
-			if lut, ok := s.Enums.Lookup(f.Name); ok {
+			if lut, ok := s.Enums.Load().Lookup(f.Name); ok {
 				enum, ok := lut.Value(val.(uint16))
 				if ok {
 					return enum
@@ -442,7 +442,7 @@ func PrintContent(ctx context.Context, view ContentViewer, desc TableDescriptor,
 			})
 		case types.FieldTypeUint16:
 			if field.Flags.Is(types.FieldFlagEnum) && s.HasEnums() {
-				if lut, ok := s.Enums.Lookup(field.Name); ok {
+				if lut, ok := s.Enums.Load().Lookup(field.Name); ok {
 					cfgs = append(cfgs, table.ColumnConfig{
 						Name: field.Name,
 						Transformer: func(val any) string {
