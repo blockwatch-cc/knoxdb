@@ -88,21 +88,21 @@ const (
 // `IntegerDictionary[int64]`).
 
 type Block struct {
-	nref  int64      // ref counter
-	buf   *byte      // backing store for raw numeric types ([0:n:n] n = sz*cap)
-	_     *page      // buffer page reference (to release page lock on close)
-	any   any        // interface to embedded vector container
-	len   uint32     // in type units
-	cap   uint32     // in type units
-	sz    byte       // type size
-	typ   BlockType  // type
-	flags BlockFlags // flags
-	_     [21]byte   // pad to 64 bytes
+	nref  atomic.Int64 // ref counter
+	buf   *byte        // backing store for raw numeric types ([0:n:n] n = sz*cap)
+	_     *page        // buffer page reference (to release page lock on close)
+	any   any          // interface to embedded vector container
+	len   uint32       // in type units
+	cap   uint32       // in type units
+	sz    byte         // type size
+	typ   BlockType    // type
+	flags BlockFlags   // flags
+	_     [21]byte     // pad to 64 bytes
 }
 
 func New(typ BlockType, sz int) *Block {
 	b := blockPool.Get().(*Block)
-	b.nref = 1
+	b.nref.Store(1)
 	b.len = 0
 	b.cap = uint32(sz)
 	b.sz = byte(typ.Size())
@@ -155,7 +155,7 @@ func (b *Block) free() {
 	b.flags = 0
 	b.any = nil
 	b.buf = nil
-	b.nref = 0
+	b.nref.Store(0)
 	b.typ = 0
 	b.len = 0
 	b.cap = 0
@@ -165,25 +165,35 @@ func (b *Block) free() {
 
 func (b *Block) Ref() int64 {
 	assert.Always(b != nil, "ref: nil block, potential use after free")
-	assert.Always(atomic.LoadInt64(&b.nref) >= 0, "block refcount < 0")
-	return atomic.AddInt64(&b.nref, 1)
+	assert.Always(b.nref.Load() >= 0, "block refcount < 0")
+	for {
+		val := b.nref.Load()
+		if b.nref.CompareAndSwap(val, val+1) {
+			return val + 1
+		}
+	}
 }
 
 func (b *Block) Deref() int64 {
 	assert.Always(b != nil, "deref: nil block, potential use after free", nil)
-	assert.Always(atomic.LoadInt64(&b.nref) > 0, "block refcount <= 0")
-	val := atomic.AddInt64(&b.nref, -1)
-	if val == 0 {
-		b.free()
+	assert.Always(b.nref.Load() > 0, "block refcount <= 0")
+	for {
+		val := b.nref.Load()
+		if b.nref.CompareAndSwap(val, val-1) {
+			val -= 1
+			if val == 0 {
+				b.free()
+			}
+			return val
+		}
 	}
-	return val
 }
 
 func (b *Block) Container() any {
 	return b.any
 }
 
-func (b Block) Type() BlockType {
+func (b *Block) Type() BlockType {
 	return b.typ
 }
 

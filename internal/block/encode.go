@@ -226,7 +226,7 @@ func Decode(typ BlockType, buf []byte) (*Block, error) {
 	}
 
 	b := blockPool.Get().(*Block)
-	b.nref = 1
+	b.nref.Store(1)
 	b.typ = typ
 
 	// decode from buffer, set len/cap
