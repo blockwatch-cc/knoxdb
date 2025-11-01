@@ -463,7 +463,7 @@ func (t *Table) CommitTx(ctx context.Context, xid types.XID) error {
 		t.log.Debug("scheduling merge task")
 		ok := t.engine.Schedule(engine.NewTask(t.Merge))
 		if !ok {
-			t.log.Warn("merge task queue full")
+			t.log.Warn("merge: task queue full")
 		}
 	}
 	return nil
@@ -480,7 +480,7 @@ func (t *Table) AbortTx(ctx context.Context, xid types.XID) error {
 		t.log.Debug("scheduling merge task")
 		ok := t.engine.Schedule(engine.NewTask(t.Merge))
 		if !ok {
-			t.log.Warn("merge task queue full")
+			t.log.Warn("merge: task queue full")
 		}
 	}
 	return nil
@@ -493,6 +493,7 @@ func (t *Table) AbortTx(ctx context.Context, xid types.XID) error {
 // schedules a merge call which is required to push the new table
 // checkpoint to disk.
 func (t *Table) Checkpoint(ctx context.Context) error {
+	t.log.Debug("checkpoint now")
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if err := t.journal.Checkpoint(ctx); err != nil {

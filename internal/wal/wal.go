@@ -407,7 +407,7 @@ func (w *Wal) GC(watermark LSN) error {
 			return io.EOF
 		}
 		fname := w.segmentName(id)
-		w.log.Infof("wal: gc removing segment %s", fname)
+		w.log.Debugf("wal: gc removing segment %s", fname)
 		return os.Remove(fname)
 	})
 	if err != nil && err != io.EOF {

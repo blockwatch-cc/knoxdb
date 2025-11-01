@@ -161,11 +161,9 @@ func (t *Table) Merge(ctx context.Context) error {
 		t.mu.Unlock()
 
 		// gc wal after merge. this ensures that we don't keep a large amount
-		// of wal files at high write volume. internally GCWal() may rotate and
-		// checkpoint all table journals if too much wal data has accumulated.
-		// I this happens a new merge task is scheduled. Busy tables will have
-		// fresh journal segments to merge, others may have empty segments.
-		if err := t.engine.GCWal(ctx); err != nil {
+		// of wal files at high write volume. internally TryGC() will schedule
+		// a task that rotates and checkpoints all table journals.
+		if err := t.engine.TryGC(ctx); err != nil {
 			t.log.Warnf("wal gc: %v", err)
 		}
 	}
@@ -210,8 +208,7 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 	nStones = len(stones)
 
 	if mask != nil && mask.Any() && mask.Min() < t.stats.Get().GlobalMaxRid() {
-		t.log.Debugf("merge phase 1: %d/%d tombstones: some=%v",
-			mask.Count(), len(stones), stones[:min(32, len(stones))])
+		t.log.Debugf("merge phase 1: %d/%d tombstones", mask.Count(), len(stones))
 		src := t.NewReader().WithMask(mask, engine.ReadModeIncludeMask)
 		defer src.Close()
 		for {
@@ -224,8 +221,8 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 			}
 			nPacks++
 			nDel++
-			t.log.Debugf("merge pack 0x%08x[v%d] with %d tombs",
-				pkg.Key(), pkg.Version(), len(pkg.Selected()))
+			// t.log.Debugf("merge pack 0x%08x[v%d] with %d tombs",
+			// 	pkg.Key(), pkg.Version(), len(pkg.Selected()))
 
 			if hist != nil {
 				// TODO: patch xmax in history pack (which is writable)
@@ -263,10 +260,10 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 			// rewrite table pack excluding deleted rows
 			sel := pkg.Selected()
 			neg := types.NegateSelection(sel, pkg.Len())
-			t.log.Debugf("merge neg sel %d+%d=%d(%d) body=%v",
-				len(sel), len(neg), len(sel)+len(neg), pkg.Len(),
-				neg[:min(32, len(neg))],
-			)
+			// t.log.Debugf("merge neg sel %d+%d=%d(%d) body=%v",
+			// 	len(sel), len(neg), len(sel)+len(neg), pkg.Len(),
+			// 	neg[:min(32, len(neg))],
+			// )
 			pkg.WithSelection(neg)
 			if err := table.Replace(ctx, pkg, pack.WriteModeIncludeSelected); err != nil {
 				return err
@@ -312,16 +309,17 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 			case replaced != nil:
 				live = replaced.Clone().Neg()
 			}
-			pkg.WithSelection(live.Indexes(arena.AllocUint32(live.Count())))
-			nAdd += live.Count()
-			nPacks += (live.Count() + t.opts.PackSize - 1) / t.opts.PackSize
+			n := live.Count()
+			pkg.WithSelection(live.Indexes(arena.AllocUint32(n)))
+			nAdd += n
+			nPacks += (n + t.opts.PackSize - 1) / t.opts.PackSize
 			live.Close()
 
 			// append active records to table and indexes
 			if err := table.Append(ctx, pkg, pack.WriteModeIncludeSelected); err != nil {
 				return err
 			}
-			t.log.Debugf("merge appended %d records", pkg.NumSelected())
+			t.log.Debugf("merge phase 2: %d/%d records", pkg.NumSelected(), seg.Data().Len())
 
 			// free copy
 			arena.Free(pkg.Selected())
@@ -332,17 +330,19 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 			pkg := seg.Data()
 			nAdd += pkg.Len()
 			nPacks += (pkg.Len() + t.opts.PackSize - 1) / t.opts.PackSize
+			t.log.Debugf("merge phase 2: %d records", pkg.Len())
 
 			// fast-path (journal contains only valid post-images)
 			if err := table.Append(ctx, pkg, pack.WriteModeAll); err != nil {
 				return err
 			}
-			t.log.Debugf("merge appended all %d records", pkg.Len())
+			t.log.Debugf("merge pahse 2: %d records", pkg.Len())
 		}
 	}
 
 	if hist != nil {
 		// FIXME: howto track history table state?
+		t.log.Debugf("finalize history")
 		if err := hist.Finalize(ctx, seg.State()); err != nil {
 			return err
 		}

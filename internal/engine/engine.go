@@ -59,7 +59,8 @@ const (
 
 type Engine struct {
 	mu       sync.RWMutex                           // engine mutex
-	shutdown atomic.Value                           // atomic shutdown state
+	shutdown atomic.Bool                            // atomic shutdown state
+	rungc    atomic.Bool                            // gc task state
 	flock    *flock.Flock                           // exclusive directory lock
 	dbId     uint64                                 // unique database tag
 	path     string                                 // full db base path (from opts + name)
@@ -79,6 +80,7 @@ type Engine struct {
 	tasks    *TaskService                           // async task execution service
 	wal      *wal.Wal                               // write ahead log
 	lm       *LockManager                           // object lock manager
+
 }
 
 type CacheManager struct {
@@ -128,12 +130,24 @@ func (e *Engine) Log() log.Logger {
 }
 
 func (e *Engine) IsShutdown() bool {
-	sd := e.shutdown.Load()
-	return sd != nil && sd.(bool)
+	return e.shutdown.Load()
 }
 
 func (e *Engine) IsReadOnly() bool {
 	return e.opts.ReadOnly
+}
+
+func (e *Engine) Watermark() wal.LSN {
+	lsn := e.cat.Checkpoint()
+	for _, t := range e.tables.Map() {
+		lsn = min(lsn, t.State().Checkpoint)
+	}
+	return lsn
+}
+
+func (e *Engine) NeedsCheckpoint() bool {
+	walSize, segSize := e.wal.Next(), wal.LSN(e.opts.WalSegmentSize)
+	return e.Watermark() < walSize-5*segSize
 }
 
 // checks if catalog backend file exists
@@ -676,75 +690,142 @@ func (e *Engine) Schedule(t *Task) bool {
 	return e.tasks.Submit(t)
 }
 
-// WAL GC is triggered after table engines have merged new journal checkpoints.
-func (e *Engine) GCWal(ctx context.Context) error {
-	// ensure we don't call this function concurrently
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
+// TryGC is triggered after table engines have merged new journal checkpoints.
+// Its aim is to reduce the number of WAL files we need to keep around for crash
+// recovery by writing new table and catalog checkpoints at the end of the WAL.
+// TryGC will only measure the distance of the oldest active checkpoint and
+// schedule a GC task. It makes sure only a single GC task runs in the system.
+func (e *Engine) TryGC(ctx context.Context) error {
+	// skip during shutdown
 	if e.IsShutdown() {
-		return ErrDatabaseShutdown
+		e.log.Debug("GC skipped on shutdown")
+		return nil
 	}
 
-	// identify WAL watermark
-	lsn := e.cat.Checkpoint()
+	// skip when not required
+	if !e.NeedsCheckpoint() {
+		e.log.Debug("GC starting")
+		return e.wal.GC(e.Watermark())
+	}
+
+	// schedule GC task atomically
+	if ok := e.rungc.CompareAndSwap(false, true); !ok {
+		e.log.Debug("GC already running")
+		return nil
+	}
+
+	// schedule task
+	e.log.Debug("WAL watermark too old, scheduling checkpointing task")
+	if !e.Schedule(NewTask(e.RunGC)) {
+		// reset atomic state
+		e.rungc.Store(false)
+		e.log.Warn("task queue full")
+	}
+
+	return nil
+}
+
+func (e *Engine) RunGC(ctx context.Context) error {
+	// ensure GC is enabled (prevents from accidentally calling RunGC
+	// directly without a task)
+	if !e.rungc.Load() {
+		return nil
+	}
+
+	// reset state on exit
+	defer e.rungc.Store(false)
+
+	// skip on shutdown
+	if e.IsShutdown() {
+		return nil
+	}
+
+	// skip on canceled context
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	e.log.Debug("gc: running table checkpointing task")
+
+	// read current wal size and min watermark
+	startLsn := e.Watermark()
+	startSize := e.wal.Next()
+	segSize := wal.LSN(e.opts.WalSegmentSize)
+
+	// write catalog checkpoint when older than one segment, this also
+	// syncs the wal
+	if e.cat.Checkpoint() < startSize-segSize {
+		if err := e.cat.doCheckpoint(ctx); err != nil {
+			return fmt.Errorf("checkpoint catalog: %v", err)
+		}
+	}
+
+	// write table checkpoints when older than 5 segments and schedule
+	// table merge tasks (note: only after merge completes we will update
+	// the new table checkpoint in table state. this means we must defer
+	// wal gc until all tables have finalized the next merge.
 	for _, t := range e.tables.Map() {
-		lsn = min(lsn, t.State().Checkpoint)
+		if t.State().Checkpoint < startSize-5*segSize {
+			if err := t.Checkpoint(ctx); err != nil {
+				return fmt.Errorf("checkpoint table %s: %v", t.Schema().Name, err)
+			}
+		}
 	}
 
-	// if watermark is too old, force checkpoints for catalog and tables
-	// some of which may update right away (catalog), some need time for
-	// a background merge to progress.
-	walSize, segSize := e.wal.Next(), wal.LSN(e.opts.WalSegmentSize)
-	if lsn < walSize-5*segSize {
-		e.log.Debugf("WAL watermark %d older than 5 segments, checkpointing all tables", lsn)
+	// sync WAL again for table checkpoints to be safe
+	if err := e.wal.Sync(); err != nil {
+		return fmt.Errorf("sync wal: %v", err)
+	}
 
-		// write catalog checkpoint when older than one segment
-		if e.cat.Checkpoint() < walSize-segSize {
-			if err := e.cat.doCheckpoint(ctx); err != nil {
-				return err
-			}
+	// wait for tables to merge
+	//
+	// Two issues are to consider here:
+	//
+	// - There is no definitive signal about when all merges have finished.
+	//   We could use task completion status, but it seems easier to just poll
+	//   from time to time to see if tables have updated their state.
+	// - High througput tables will merge often and may merge faster than this
+	//   wait loop. In this case we will again end up with a large gap between
+	//   low and high throughput table checkpoints in the WAL which means
+	//   slower startup/crash-recovery and more on-disk space used.
+	//
+	// To balance both situations we wait only as long as either
+	// - all tables have merged
+	// - the WAL has grown more than one segment
+	//
+	e.log.Debug("gc: checkpoints synced, waiting for merge tasks to finish")
+	var lsn wal.LSN
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Second):
 		}
 
-		for _, t := range e.tables.Map() {
-			// write table checkpoints when older than 5 segments
-			if t.State().Checkpoint < walSize-5*segSize {
-				e.log.Debugf("checkpoint table %s", t.Schema().Name)
-				if err := t.Checkpoint(ctx); err != nil {
-					return err
-				}
-			}
+		// read watermark and wal size again
+		lsn = e.Watermark()
+		sz := e.wal.Next()
+
+		// stop wait when the WAL grew more than one segment
+		if sz-startSize > segSize {
+			e.log.Debug("gc: WAL grows fast, stop wait before all tables have merged")
+			break
 		}
 
-		// sync WAL
-		if err := e.wal.Sync(); err != nil {
-			return fmt.Errorf("sync wal: %v", err)
+		// stop when current watermark has crossed the start watermark
+		if lsn >= startLsn {
+			e.log.Debug("gc: stop wait, all tables have merged")
+			break
 		}
+	}
 
-		// wait some time for checkpoints to flush (we do this in a goroutine
-		// to not lock the table for too long)
-		go func() {
-			// wait
-			<-time.After(time.Second)
-
-			e.mu.Lock()
-			defer e.mu.Unlock()
-			if e.IsShutdown() {
-				return
-			}
-
-			// re-compute WAL watermark
-			lsn := e.cat.Checkpoint()
-			for _, t := range e.tables.Map() {
-				lsn = min(lsn, t.State().Checkpoint)
-			}
-
-			// run WAL GC
-			e.log.Debugf("wal gc before LSN 0x%016x", lsn)
-			if err := e.wal.GC(lsn); err != nil {
-				e.log.Errorf("wal gc before LSN 0x%016x", lsn)
-			}
-		}()
+	// run WAL GC
+	e.log.Debugf("gc: drop wal segments before LSN 0x%016x", lsn)
+	if err := e.wal.GC(lsn); err != nil {
+		e.log.Errorf("gc: %v", err)
+		return err
 	}
 	return nil
 }

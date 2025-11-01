@@ -952,8 +952,9 @@ func (c *Catalog) doCheckpoint(ctx context.Context) error {
 		}
 	}
 
-	// write checkpoint record to wal
-	lsn, err := c.wal.Write(&wal.Record{
+	// write checkpoint record to wal and sync so put below
+	// stores a valid/existing wal lsn
+	lsn, err := c.wal.WriteAndSync(&wal.Record{
 		Type:   wal.RecordTypeCheckpoint,
 		Tag:    types.ObjectTagDatabase,
 		Entity: c.id,
