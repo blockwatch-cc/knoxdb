@@ -5,6 +5,7 @@ package journal
 
 import (
 	"math"
+	"sync/atomic"
 	"unsafe"
 
 	"blockwatch.cc/knoxdb/internal/bitset"
@@ -24,7 +25,7 @@ const (
 	TombKey        uint16 = 0xFFF9
 )
 
-type SegmentState byte
+type SegmentState uint64
 
 const (
 	SegmentStateEmpty    SegmentState = iota // 0 no data, can be closed
@@ -41,6 +42,7 @@ var segmentSz = int(unsafe.Sizeof(Segment{}))
 // can add/commit/abort data. Concurrent queries hide uncommitted,
 // deleted and future data based on snapshot isolation (xmin/xmax tx ids).
 type Segment struct {
+	state    SegmentState       // segment lifecycle status (u64 for atomic updates)
 	data     *pack.Package      // full column data (insert/update) and tx metadata
 	stats    *stats.Record      // column statistics (available when full: waiting++)
 	tomb     *Tomb              // tombstone (compact delete records) with tx metadata
@@ -51,7 +53,6 @@ type Segment struct {
 	aborted  *bitset.Bitset     // lazy allocated bitset flagging aborted records
 	replaced *bitset.Bitset     // lazy allocated bitset flagging deleted/updated records
 	parent   *Segment           // parent segment (can form a DAG in future versions)
-	state    SegmentState       // segment lifecycle status
 
 	// statistics
 	xmin    types.XID // min xid in this segment (from ins/upd/del)
@@ -154,16 +155,20 @@ func (s *Segment) setCheckpoint(lsn wal.LSN) *Segment {
 }
 
 func (s *Segment) setState(state SegmentState) *Segment {
-	s.state = state
+	atomic.StoreUint64((*uint64)(&s.state), uint64(state))
 	return s
 }
 
+func (s *Segment) getState() SegmentState {
+	return SegmentState(atomic.LoadUint64((*uint64)(&s.state)))
+}
+
 func (s *Segment) is(state SegmentState) bool {
-	return s.state == state
+	return s.getState() == state
 }
 
 func (s *Segment) canDrop() bool {
-	switch s.state {
+	switch s.getState() {
 	case SegmentStateEmpty, SegmentStateMerged:
 		return true
 	default:
@@ -527,7 +532,7 @@ func (s *Segment) Match(node *filter.Node, snap *types.Snapshot, tomb *xroar.Bit
 	bits.Zero().Resize(s.Data().Len())
 
 	// check empty state and return early
-	if s.state == SegmentStateEmpty {
+	if s.is(SegmentStateEmpty) {
 		// log.Infof("> segment empty")
 		return
 	}
@@ -656,7 +661,7 @@ func (s *Segment) Match(node *filter.Node, snap *types.Snapshot, tomb *xroar.Bit
 // transaction is visible to the snapshot.
 func (s *Segment) MergeDeleted(set *xroar.Bitmap, snap *types.Snapshot) {
 	// check empty state and return early
-	if s.state == SegmentStateEmpty || s.IsEmpty() {
+	if s.is(SegmentStateEmpty) || s.IsEmpty() {
 		return
 	}
 
@@ -681,7 +686,7 @@ func (s *Segment) MergeDeleted(set *xroar.Bitmap, snap *types.Snapshot) {
 // For visibly deleted records use MAX_U64 as special marker.
 func (s *Segment) LookupRids(ridMap map[uint64]uint64, snap *types.Snapshot) {
 	// check empty state and return early
-	if s.state == SegmentStateEmpty || s.IsEmpty() {
+	if s.is(SegmentStateEmpty) || s.IsEmpty() {
 		return
 	}
 

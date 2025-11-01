@@ -80,6 +80,8 @@ func (t *Table) Schema() *schema.Schema {
 }
 
 func (t *Table) State() engine.ObjectState {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	return t.journal.State()
 }
 

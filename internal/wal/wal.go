@@ -295,14 +295,20 @@ func (w *Wal) IsClosed() bool {
 }
 
 func (w *Wal) Len() int64 {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	return int64(w.nextLsn)
 }
 
 func (w *Wal) Last() LSN {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	return w.lastLsn
 }
 
 func (w *Wal) Next() LSN {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	return w.nextLsn
 }
 

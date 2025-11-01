@@ -60,7 +60,10 @@ func (f TxFlags) IsDeferred() bool     { return f&TxFlagDeferred > 0 }
 
 type TxHook func(Context) error
 
-const ReadTxOffset = types.ReadTxOffset
+const (
+	ReadTxOffset = types.ReadTxOffset
+	rtFlags      = TxFlagCatalog | TxFlagConflict | TxFlagAborted
+)
 
 type Tx struct {
 	ctx      context.Context         // derived context so tx is cancellable
@@ -72,7 +75,8 @@ type Tx struct {
 	touched  map[uint64]struct{}     // oids we have written to (tables, stores)
 	onCommit []TxHook                // list of callbacks to execute before storage sync
 	onAbort  []TxHook                // list of callbacks to execute before storage sync
-	flags    TxFlags                 // flags
+	uflags   TxFlags                 // static user flags
+	rtflags  TxFlags                 // runtime updatable flags
 }
 
 // TxList is a list of transactions sorted by txid
@@ -125,7 +129,7 @@ func (e *Engine) NewTransaction(uflags TxFlags) *Tx {
 	tx := &Tx{
 		id:     0,
 		engine: e,
-		flags:  uflags,
+		uflags: uflags,
 		ctx:    context.Background(),
 		cancel: func(error) {},
 	}
@@ -141,7 +145,7 @@ func (e *Engine) NewTransaction(uflags TxFlags) *Tx {
 		e.mu.Lock()
 		tx.id = types.XID(atomic.AddUint64((*uint64)(&e.xnext), 1)) - 1
 		tx.snap = e.NewSnapshot(tx.id)
-		e.txs.Add(tx)
+		e.wtx = tx
 		e.mu.Unlock()
 	}
 
@@ -153,16 +157,13 @@ func (e *Engine) NewTransaction(uflags TxFlags) *Tx {
 // Must be called holding the engine lock
 func (e *Engine) NewSnapshot(id XID) *types.Snapshot {
 	s := types.NewSnapshot(id, e.xmin, e.xnext)
-	for _, x := range e.txs {
-		if x.IsReadOnly() {
-			continue
-		}
-		s.AddActive(x.id)
+	if e.wtx != nil {
+		s.AddActive(e.wtx.id)
 	}
 	return s
 }
 
-// called during wal replay
+// called during wal replay (contains write tx only)
 func (e *Engine) UpdateTxHorizon(xid types.XID) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -172,24 +173,18 @@ func (e *Engine) UpdateTxHorizon(xid types.XID) {
 
 func (e *Engine) delTx(tx *Tx) {
 	// FIXME: avoid lock, maybe use channel to signal to engine that tx
-	// can be removed and xmin update should happen
+	// can be removed and xmin update should happen (write tx only)
 
 	// lock engine
 	e.mu.Lock()
 
-	// remove from global tx list
-	e.txs.Del(tx)
-
-	// update xmin, without active tx we use xnext (horizon: anything smaller is final)
-	e.xmin = e.xnext
-
-	// find first active write xid if any
-	for _, x := range e.txs {
-		if x.IsReadOnly() {
-			continue
-		}
-		e.xmin = x.id
-		break
+	if tx.IsReadOnly() {
+		// remove from global read tx list
+		e.txs.Del(tx)
+	} else {
+		// update xmin when write tx closes
+		e.xmin = e.xnext
+		e.wtx = nil
 	}
 
 	// release all locks
@@ -206,13 +201,17 @@ func (t *Tx) WithContext(ctx context.Context) *Tx {
 
 func (t *Tx) WithFlags(flags ...TxFlags) *Tx {
 	for _, f := range flags {
-		t.flags |= f
+		if f&rtFlags > 0 {
+			t.rtflags |= f
+		} else {
+			t.uflags |= f
+		}
 	}
 	return t
 }
 
 func (t *Tx) IsReadOnly() bool {
-	return t.flags.IsReadOnly()
+	return t.uflags.IsReadOnly()
 }
 
 func (t *Tx) IsClosed() bool {
@@ -220,17 +219,17 @@ func (t *Tx) IsClosed() bool {
 }
 
 func (t *Tx) IsAborted() bool {
-	return t.engine == nil && t.flags.IsAborted()
+	return t.engine == nil && t.rtflags.IsAborted()
 }
 
 func (t *Tx) IsCommitted() bool {
-	return t.engine == nil && !t.flags.IsAborted()
+	return t.engine == nil && !t.rtflags.IsAborted()
 }
 
 func (t *Tx) UseWal() bool {
-	return !t.flags.IsNoWal() &&
+	return !t.uflags.IsNoWal() &&
 		t.engine.wal != nil &&
-		(len(t.touched) > 0 || t.flags.IsCatalog())
+		(len(t.touched) > 0 || t.rtflags.IsCatalog())
 }
 
 func (t *Tx) Id() types.XID {
@@ -264,7 +263,7 @@ func (t *Tx) Close() {
 	t.engine.delTx(t)
 
 	// signal to waiting writers
-	if !t.flags.IsReadOnly() {
+	if !t.uflags.IsReadOnly() {
 		t.engine.txchan <- struct{}{}
 	}
 
@@ -370,9 +369,9 @@ func (t *Tx) Commit() error {
 			fut *util.Future
 		)
 		switch {
-		case t.flags.IsNoSync():
+		case t.uflags.IsNoSync():
 			_, err = t.engine.wal.Write(rec)
-		case t.flags.IsDelaySync():
+		case t.uflags.IsDelaySync():
 			_, fut, err = t.engine.wal.WriteAndSchedule(rec)
 			if err == nil {
 				fut.Wait()
@@ -395,7 +394,7 @@ func (t *Tx) Commit() error {
 	}
 
 	// commit catalog
-	if t.flags.IsCatalog() {
+	if t.rtflags.IsCatalog() {
 		err := t.engine.cat.CommitTx(t.ctx, t.id)
 		if err != nil {
 			t.Fail(err)
@@ -435,7 +434,7 @@ func (t *Tx) Abort() error {
 		return t.Err()
 	}
 
-	t.flags |= TxFlagAborted
+	t.rtflags |= TxFlagAborted
 	defer t.Close()
 
 	if t.IsReadOnly() {
@@ -458,9 +457,9 @@ func (t *Tx) Abort() error {
 			fut *util.Future
 		)
 		switch {
-		case t.flags.IsNoSync():
+		case t.uflags.IsNoSync():
 			_, err = t.engine.wal.Write(rec)
-		case t.flags.IsDelaySync():
+		case t.uflags.IsDelaySync():
 			_, fut, err = t.engine.wal.WriteAndSchedule(rec)
 			if err == nil {
 				fut.Wait()
@@ -484,7 +483,7 @@ func (t *Tx) Abort() error {
 	}
 
 	// abort and update catalog wal
-	if t.flags.IsCatalog() {
+	if t.rtflags.IsCatalog() {
 		err := t.engine.cat.AbortTx(t.ctx, t.id)
 		if err != nil {
 			t.Fail(err)
@@ -512,7 +511,7 @@ func (t *Tx) Abort() error {
 
 func (t *Tx) Fail(err error) {
 	if errors.Is(err, ErrTxConflict) {
-		t.flags |= TxFlagConflict
+		t.rtflags |= TxFlagConflict
 	}
 	t.cancel(err)
 }
@@ -536,7 +535,7 @@ func (t *Tx) Kill(err error) error {
 	// cancel context
 	t.cancel(err)
 	err = nil
-	t.flags |= TxFlagAborted
+	t.rtflags |= TxFlagAborted
 
 	// close catalog tx
 	if t.catTx != nil {
@@ -575,6 +574,6 @@ func (t *Tx) CatalogTx(db store.DB, write bool) (store.Tx, error) {
 		return nil, err
 	}
 	t.catTx = tx
-	t.flags |= TxFlagCatalog
+	t.rtflags |= TxFlagCatalog
 	return tx, nil
 }

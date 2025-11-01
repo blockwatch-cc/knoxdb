@@ -73,15 +73,6 @@ func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, int, error)
 		return 0, 0, err
 	}
 
-	// register state reset callback only once
-	if !tx.Touched(t.id) {
-		prevState := t.state
-		tx.OnAbort(func(_ context.Context) error {
-			t.state = prevState
-			return nil
-		})
-	}
-
 	// register table for commit/abort callbacks
 	tx.Touch(t.id)
 

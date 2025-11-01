@@ -197,7 +197,7 @@ func (r *Reader) Seek(lsn LSN) error {
 	// r.wal.log.Debugf("wal: seek lsn 0x%016x offs=%d", lsn, lsn.Offset(r.maxSz))
 	if _, err := r.seg.Seek(lsn.Offset(r.maxSz), 0); err != nil {
 		if err == io.EOF {
-			return fmt.Errorf("wal: invalid seek to LSN 0x%016x offs=%d/%d",
+			return fmt.Errorf("wal: invalid seek to LSN 0x%016x offs=%x/%x",
 				lsn, lsn.Offset(r.maxSz), r.seg.sz)
 		}
 		return err
@@ -206,8 +206,8 @@ func (r *Reader) Seek(lsn LSN) error {
 	// read record (we expect a checkpoint record)
 	var head RecordHeader
 	if err := r.read(head[:]); err != nil {
-		return fmt.Errorf("wal: reading checkpoint at LSN 0x%016x offs=%d: %v",
-			lsn, lsn.Offset(r.maxSz), err)
+		return fmt.Errorf("wal: reading checkpoint at LSN 0x%016x offs=%x/%x: %v",
+			lsn, lsn.Offset(r.maxSz), r.seg.sz, err)
 	}
 
 	// ensure this header looks correct

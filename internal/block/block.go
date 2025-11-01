@@ -88,16 +88,17 @@ const (
 // `IntegerDictionary[int64]`).
 
 type Block struct {
-	nref  atomic.Int64 // ref counter
-	buf   *byte        // backing store for raw numeric types ([0:n:n] n = sz*cap)
-	_     *page        // buffer page reference (to release page lock on close)
-	any   any          // interface to embedded vector container
-	len   uint32       // in type units
-	cap   uint32       // in type units
-	sz    byte         // type size
-	typ   BlockType    // type
-	flags BlockFlags   // flags
-	_     [21]byte     // pad to 64 bytes
+	nref     atomic.Int64 // ref counter, nocopy, 64-bit aligned
+	buf      *byte        // backing store for raw numeric types ([0:n:n] n = sz*cap)
+	_        *page        // buffer page reference (to release page lock on close)
+	any      any          // interface to embedded vector container
+	len      uint32       // in type units
+	cap      uint32       // in type units
+	sz       byte         // type size
+	typ      BlockType    // type
+	dirty    bool         // flags
+	writable bool         // flags
+	// _     [21]byte     // pad to 64 bytes
 }
 
 func New(typ BlockType, sz int) *Block {
@@ -107,7 +108,8 @@ func New(typ BlockType, sz int) *Block {
 	b.cap = uint32(sz)
 	b.sz = byte(typ.Size())
 	b.typ = typ
-	b.flags = BlockFlagRaw
+	b.dirty = false
+	b.writable = true
 	switch typ {
 	case BlockInt128:
 		b.any = num.NewInt128Stride(sz)
@@ -152,7 +154,8 @@ func (b *Block) free() {
 			b.any.(Closer).Close()
 		}
 	}
-	b.flags = 0
+	b.dirty = false
+	b.writable = false
 	b.any = nil
 	b.buf = nil
 	b.nref.Store(0)
@@ -198,19 +201,19 @@ func (b *Block) Type() BlockType {
 }
 
 func (b *Block) IsDirty() bool {
-	return b.flags&BlockFlagDirty > 0
+	return b.dirty
 }
 
 func (b *Block) SetDirty() {
-	b.flags |= BlockFlagDirty
+	b.dirty = true
 }
 
 func (b *Block) SetClean() {
-	b.flags &^= BlockFlagDirty
+	b.dirty = false
 }
 
 func (b *Block) IsMaterialized() bool {
-	return b.flags&BlockFlagRaw > 0
+	return b.writable
 }
 
 func (b *Block) Len() int {

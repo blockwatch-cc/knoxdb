@@ -151,7 +151,6 @@ func TestWorkload5(t *testing.T) {
 		executed   = make(map[command]int)
 		cmdCh      = make(chan command)
 		errg       errgroup.Group
-		ctx        = context.Background()
 	)
 
 	// setup determinism
@@ -211,7 +210,7 @@ func TestWorkload5(t *testing.T) {
 		}
 		table, err := knox.FindGenericTable[tests.AllTypes](tableName, knox.WrapEngine(db.Get()))
 		require.NoError(t, err)
-		_, _, err = table.Insert(ctx, ins)
+		_, _, err = table.Insert(context.Background(), ins)
 		require.NoError(t, err)
 		numTuples = int64(len(ins))
 		clear(ins)
@@ -248,7 +247,7 @@ func TestWorkload5(t *testing.T) {
 				if err != nil {
 					return wrapErr(err)
 				}
-				pk, _, err := table.Insert(ctx, NewTestValue(int(atomic.AddInt64(&numInserts, 1))))
+				pk, _, err := table.Insert(context.Background(), NewTestValue(int(atomic.AddInt64(&numInserts, 1))))
 				if err != nil {
 					return wrapErr(err)
 				}
@@ -280,7 +279,7 @@ func TestWorkload5(t *testing.T) {
 					// WithDebug(true).
 					WithTable(table).
 					AndEqual("id", id).
-					Execute(ctx, &val)
+					Execute(context.Background(), &val)
 				if err != nil {
 					return wrapErr(err)
 				}
@@ -298,7 +297,7 @@ func TestWorkload5(t *testing.T) {
 
 				// update
 				val.Int64++
-				n, err = table.Update(ctx, &val)
+				n, err = table.Update(context.Background(), &val)
 				switch {
 				case errors.Is(err, knox.ErrNoRecord):
 					// race condition with delete
@@ -338,7 +337,7 @@ func TestWorkload5(t *testing.T) {
 					WithTag("delete-"+strconv.Itoa(round)).
 					WithTable(table.Table()).
 					AndEqual("id", id).
-					Execute(ctx, &val)
+					Execute(context.Background(), &val)
 				if err != nil {
 					return wrapErr(err)
 				}
@@ -360,7 +359,7 @@ func TestWorkload5(t *testing.T) {
 					// WithDebug(true).
 					WithTable(table.Table()).
 					AndEqual("id", val.Id).
-					Delete(ctx)
+					Delete(context.Background())
 
 				switch {
 				case err != nil:
@@ -400,7 +399,7 @@ func TestWorkload5(t *testing.T) {
 					// WithDebug(testing.Verbose()).
 					WithTable(table).
 					AndGte("id", id).
-					Execute(ctx, &val)
+					Execute(context.Background(), &val)
 				if err != nil {
 					return wrapErr(err)
 				}
@@ -424,7 +423,7 @@ func TestWorkload5(t *testing.T) {
 				// pick an order randomly
 				order := knox.OrderType(util.RandIntn(2))
 
-				ctx, cancel := context.WithCancel(ctx)
+				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
 				eng := db.Get()
 				table, err := knox.WrapEngine(eng).FindTable(tableName)
@@ -468,7 +467,7 @@ func TestWorkload5(t *testing.T) {
 					return nil
 				}
 				t.Logf("%04d [%s]", round, cmd)
-				err := db.Get().Sync(ctx)
+				err := db.Get().Sync(context.Background())
 				if err != nil {
 					return wrapErr(err)
 				}
@@ -481,7 +480,7 @@ func TestWorkload5(t *testing.T) {
 					return nil
 				}
 				t.Logf("%04d [%s]", round, cmd)
-				err := db.Get().CompactTable(ctx, tableName)
+				err := db.Get().CompactTable(context.Background(), tableName)
 				if err != nil {
 					return wrapErr(err)
 				}
@@ -494,7 +493,7 @@ func TestWorkload5(t *testing.T) {
 					return nil
 				}
 				t.Logf("%04d [%s]", round, cmd)
-				// err := db.Get().Snapshot(ctx, io.Discard)
+				// err := db.Get().Snapshot(context.Background(), io.Discard)
 				// if err != nil {
 				//     return wrapErr(err)
 				// }
@@ -508,7 +507,7 @@ func TestWorkload5(t *testing.T) {
 			// Graceful shutdown. Concurrent goroutines may fail.
 			_ = errg.Wait()
 			dir := db.Get().Options().Path
-			require.NoError(t, db.Get().Close(ctx))
+			require.NoError(t, db.Get().Close(context.Background()))
 
 			// reopen
 			t.Logf("%04d [%s] reopening DB at %s", round, cmd, dir)
@@ -562,7 +561,7 @@ func TestWorkload5(t *testing.T) {
 	// sync (wrapped into sub-test to catch panics)
 	t.Run("sync", func(t *testing.T) {
 		t.Log("Sync/merge database.")
-		require.NoError(t, db.Get().Sync(ctx))
+		require.NoError(t, db.Get().Sync(context.Background()))
 	})
 
 	// verify (wrapped into sub-test to catch panics)
@@ -596,7 +595,7 @@ func TestWorkload5(t *testing.T) {
 		var allTuples []*tests.AllTypes
 		_, err = knox.NewQuery().
 			WithTable(table).
-			Execute(ctx, &allTuples)
+			Execute(context.Background(), &allTuples)
 		require.NoError(t, err, "range scan failed")
 		require.Equal(t, len(allTuples), int(numTuples), "tuple count mismatch")
 
@@ -606,7 +605,7 @@ func TestWorkload5(t *testing.T) {
 			_, err = knox.NewQuery().
 				WithTable(table).
 				AndEqual("id", v.Id).
-				Execute(ctx, &oneTuple)
+				Execute(context.Background(), &oneTuple)
 			require.NoError(t, err, "range scan failed")
 			require.Equal(t, v.Id, oneTuple.Id, "tuple id mismatch")
 		}
@@ -617,7 +616,7 @@ func TestWorkload5(t *testing.T) {
 	// close DB
 	t.Log("Closing database.")
 	tests.NoDeadlock(t, func() bool {
-		assert.NoError(t, db.Get().Close(ctx))
+		assert.NoError(t, db.Get().Close(context.Background()))
 		return true
 	}, "deadlock on close")
 	t.Log("Done.")

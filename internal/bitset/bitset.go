@@ -39,15 +39,12 @@ func New(size int) *Bitset {
 	return s
 }
 
-// NewFromBytes references a pre-allocated byte slice.
+// NewFromBytes references a pre-allocated byte slice without writing to it.
 func NewFromBytes(buf []byte, sz int) *Bitset {
 	if sz == 0 {
 		sz = len(buf) << 3
 	}
 	buf = buf[:(sz+7)>>3]
-	if sz&7 > 0 {
-		buf[len(buf)-1] &= bytemask(sz)
-	}
 	s := bitsetPool.Get().(*Bitset)
 	s.buf = buf
 	s.cnt = -1

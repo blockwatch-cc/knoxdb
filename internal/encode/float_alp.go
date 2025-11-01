@@ -8,6 +8,7 @@ import (
 	"iter"
 	"math"
 	"sync"
+	"sync/atomic"
 
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/encode/alp"
@@ -38,7 +39,7 @@ type FloatAlpContainer[T types.Float, E int64 | int32] struct {
 	Exponent  uint8
 	Factor    uint8
 	flags     AlpFlags
-	dec       *alp.Decoder[T, E]
+	dec       atomic.Pointer[alp.Decoder[T, E]]
 }
 
 func (c *FloatAlpContainer[T, E]) Info() string {
@@ -52,9 +53,9 @@ func (c *FloatAlpContainer[T, E]) Info() string {
 }
 
 func (c *FloatAlpContainer[T, E]) Close() {
-	if c.dec != nil {
-		c.dec.Close()
-		c.dec = nil
+	p := c.dec.Load()
+	if ok := c.dec.CompareAndSwap(p, nil); ok && p != nil {
+		p.Close()
 	}
 	c.Values.Close()
 	c.Values = nil
@@ -165,7 +166,7 @@ func (c *FloatAlpContainer[T, E]) Load(buf []byte) ([]byte, error) {
 
 func (c *FloatAlpContainer[T, E]) Get(n int) T {
 	c.initDecoder()
-	return c.dec.DecodeValue(c.Values.Get(n), n)
+	return c.dec.Load().DecodeValue(c.Values.Get(n), n)
 }
 
 func (c *FloatAlpContainer[T, E]) AppendTo(dst []T, sel []uint32) []T {
@@ -175,7 +176,7 @@ func (c *FloatAlpContainer[T, E]) AppendTo(dst []T, sel []uint32) []T {
 		tmp := c.Values.AppendTo(arena.Alloc[E](sz), nil)
 		c.initDecoder()
 		dst = dst[:sz]
-		c.dec.Decode(dst, tmp)
+		c.dec.Load().Decode(dst, tmp)
 		arena.Free(tmp)
 	} else {
 		it := c.Chunks()
@@ -216,17 +217,18 @@ func (c *FloatAlpContainer[T, E]) Encode(ctx *Context[T], vals []T) NumberContai
 }
 
 func (c *FloatAlpContainer[T, E]) initDecoder() {
-	if c.dec != nil {
+	if c.dec.Load() != nil {
 		return
 	}
-	c.dec = alp.NewDecoder[T, E](c.Factor, c.Exponent).WithSafeInt(c.flags&FlagSafeInt > 0)
+	p := alp.NewDecoder[T, E](c.Factor, c.Exponent).WithSafeInt(c.flags&FlagSafeInt > 0)
 	if c.flags&FlagPatched > 0 {
 		cnt := c.Patches.Len()
-		c.dec.WithPatches(
+		p.WithPatches(
 			c.Patches.AppendTo(arena.Alloc[T](cnt), nil),
 			c.Positions.AppendTo(arena.Alloc[uint32](cnt), nil),
 		)
 	}
+	c.dec.Store(p)
 }
 
 func (c *FloatAlpContainer[T, E]) Cmp(i, j int) int {
@@ -255,7 +257,7 @@ func (c *FloatAlpContainer[T, E]) MatchEqual(val T, bits, mask *Bitset) {
 	if c.flags&FlagPatched > 0 {
 		// load decoded patch data
 		c.initDecoder()
-		vals, pos := c.dec.Patches()
+		vals, pos := c.dec.Load().Patches()
 
 		// if av == min we must revert bits on all patch positions
 		// we know by checking of any patch position is already set
@@ -315,7 +317,7 @@ func (c *FloatAlpContainer[T, E]) MatchLess(val T, bits, mask *Bitset) {
 	// matched it but the true patched value is not less
 	if c.flags&FlagPatched > 0 {
 		c.initDecoder()
-		vals, pos := c.dec.Patches()
+		vals, pos := c.dec.Load().Patches()
 		for i, p := range pos {
 			if vals[i] < val {
 				bits.Set(int(p))
@@ -357,7 +359,7 @@ func (c *FloatAlpContainer[T, E]) MatchLessEqual(val T, bits, mask *Bitset) {
 	// matched it but the true patched value is not less
 	if c.flags&FlagPatched > 0 {
 		c.initDecoder()
-		vals, pos := c.dec.Patches()
+		vals, pos := c.dec.Load().Patches()
 		// NaN cannot match here
 		for i, p := range pos {
 			if vals[i] <= val {
@@ -396,7 +398,7 @@ func (c *FloatAlpContainer[T, E]) MatchGreater(val T, bits, mask *Bitset) {
 	// matched it but the true patched value is not greater
 	if c.flags&FlagPatched > 0 {
 		c.initDecoder()
-		vals, pos := c.dec.Patches()
+		vals, pos := c.dec.Load().Patches()
 		for i, p := range pos {
 			if vals[i] > val {
 				bits.Set(int(p))
@@ -438,7 +440,7 @@ func (c *FloatAlpContainer[T, E]) MatchGreaterEqual(val T, bits, mask *Bitset) {
 	// matched it but the true patched value is not less
 	if c.flags&FlagPatched > 0 {
 		c.initDecoder()
-		vals, pos := c.dec.Patches()
+		vals, pos := c.dec.Load().Patches()
 		// NaN cannot match here
 		for i, p := range pos {
 			if vals[i] >= val {
@@ -479,7 +481,7 @@ func (c *FloatAlpContainer[T, E]) MatchBetween(a, b T, bits, mask *Bitset) {
 	// matched it but the true patched value is not less
 	if c.flags&FlagPatched > 0 {
 		c.initDecoder()
-		vals, pos := c.dec.Patches()
+		vals, pos := c.dec.Load().Patches()
 		// NaN cannot match here
 		for i, p := range pos {
 			if vals[i] >= a && vals[i] <= b {
@@ -561,7 +563,7 @@ type FloatAlpIterator[T types.Float, E int64 | int32] struct {
 
 func NewFloatAlpIterator[T types.Float, E int64 | int32](c *FloatAlpContainer[T, E]) *FloatAlpIterator[T, E] {
 	it := newFloatAlpIterator[T, E]()
-	it.dec = c.dec
+	it.dec = c.dec.Load()
 	it.src = c.Values.Chunks()
 	it.base = -1
 	it.len = c.Len()

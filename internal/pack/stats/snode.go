@@ -309,6 +309,10 @@ func (n *SNode) Query(it *Iterator) error {
 		// identify which fields to load: it.ids contains field ids
 		// which we translate back to block positions (the stats index
 		// uses consecutive ids even for metadata fields)
+
+		// lock snode to prevent concurrent access with load below
+		n.mu.Lock()
+
 		if it.flt != nil {
 			for _, id := range it.ids {
 				if n.spack.Block(int(id-1)) == nil {
@@ -326,6 +330,8 @@ func (n *SNode) Query(it *Iterator) error {
 				loadBlocks = append(loadBlocks, uint16(i)+1)
 			}
 		}
+
+		n.mu.Unlock()
 	}
 
 	// optimized fast path when all data is in memory
@@ -394,11 +400,16 @@ func (n *SNode) Query(it *Iterator) error {
 		if it.flt != nil {
 			var m int
 
+			// lock snode
+			n.mu.Lock()
+
 			// reset match vector
 			it.vmatch.Resize(n.spack.Len()).Zero()
 
 			// match minmax ranges and optional filters
 			m, it.vmatch = matchVector(it.flt, n.spack, buckets, it.vmatch)
+			n.mu.Unlock()
+
 			if it.vmatch.None() {
 				it.match = it.match[:0]
 				return nil

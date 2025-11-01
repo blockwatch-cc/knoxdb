@@ -857,7 +857,7 @@ func (c *Catalog) append(ctx context.Context, o Object) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// fetch tx and append with index flag (to forward commit call)
+	// fetch tx and append catalog flag (to forward commit call here)
 	tx := GetTx(ctx).WithFlags(TxFlagCatalog)
 
 	// write wal record
@@ -978,7 +978,7 @@ func (c *Catalog) doCheckpoint(ctx context.Context) error {
 	// 		return err
 	// 	}
 	// 	tx.catTx = nil
-	// 	tx.flags &^= TxFlagsCatalog
+	// 	tx.rtflags &^= TxFlagsCatalog
 	// }
 
 	return nil

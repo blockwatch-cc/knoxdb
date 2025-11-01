@@ -72,7 +72,8 @@ type Engine struct {
 	enums    *schema.EnumRegistry                   // enum objects
 	opts     DatabaseOptions                        // engine-wide configuration
 	txchan   chan struct{}                          // single writer enforcement
-	txs      TxList                                 // active read / write transactions
+	txs      TxList                                 // active read transactions
+	wtx      *Tx                                    // active write transaction (single)
 	xmin     XID                                    // xid horizon (minimum active xid)
 	xnext    XID                                    // next txid for read/write tx
 	vnext    XID                                    // virtual xid for read-only tx
@@ -80,7 +81,6 @@ type Engine struct {
 	tasks    *TaskService                           // async task execution service
 	wal      *wal.Wal                               // write ahead log
 	lm       *LockManager                           // object lock manager
-
 }
 
 type CacheManager struct {
