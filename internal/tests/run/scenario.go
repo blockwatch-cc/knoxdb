@@ -77,10 +77,9 @@ func run() error {
 	}()
 
 	for round := range maxRound {
-		// use or generate random seed
+		// cycle through seed list or generate random seed each round when empty
 		if len(seedList) > 0 {
-			rnd = seedList[0]
-			seedList = seedList[1:]
+			rnd = seedList[round%len(seedList)]
 		} else {
 			rnd = util.RandUint64n(1 << 20)
 		}
