@@ -282,14 +282,11 @@ func (r *Reader) nextLookupMatch(ctx context.Context) (*pack.Package, error) {
 }
 
 func (r *Reader) nextQueryMatch(ctx context.Context) (*pack.Package, error) {
-	// fixed marker value to identify excluded entries in the selection vector
-	// const DROP_MARKER uint32 = 0xffffffff
-
 	// Loop until a pack with query matches is found.
 	//
 	// - first check for potential matches against the table's statistics index
 	//   (zone maps, filters)
-	// - load blocks vectors required to perform a full vector match
+	// - load necessary block vectors required to perform a full vector match
 	// - run a vector match, apply snapshot isolation and optional exclude mask
 	// - continue with next potential pack when no match was found
 	// - if match was found, load remaining block vectors
@@ -346,13 +343,14 @@ func (r *Reader) nextQueryMatch(ctx context.Context) (*pack.Package, error) {
 					rid := rids.Get(i)
 
 					// reset matched bit and remove rid from mask
+					// this is ok since every rid is only ever merged once
 					if r.mask.Contains(rid) {
 						r.bits.Unset(i)
 						r.mask.Unset(rid)
 					}
 
 					// TODO: measure if this is faster than checking all matches
-					// and removing a range
+					// and removing a range of bits at once
 
 					// stop early when next mask value is outside this pack
 					if r.mask.Min() > rmax {

@@ -388,7 +388,7 @@ func (t *Table) Metrics() engine.TableMetrics {
 	m.MetaBytesRead, m.MetaBytesWritten = s.Metrics()
 	s.Release(false)
 
-	m.TupleCount = int64(t.journal.Tip().State().NRows)
+	m.TupleCount = int64(t.journal.State().NRows)
 	m.JournalSize = int64(t.journal.Size())
 	m.JournalSegments = int64(t.journal.NumSegments())
 	m.JournalCapacity = int64(t.opts.JournalSize)

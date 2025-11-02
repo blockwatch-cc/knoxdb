@@ -340,12 +340,10 @@ func (t *GenericTable[T]) Insert(ctx context.Context, val any) (uint64, int, err
 	case []T:
 		for i := range v {
 			*(*uint64)(unsafe.Add(unsafe.Pointer(&v[i]), pkOffset)) = pk
-			n++
 		}
 	case []*T:
 		for i := range v {
 			*(*uint64)(unsafe.Add(unsafe.Pointer(v[i]), pkOffset)) = pk
-			n++
 		}
 	}
 

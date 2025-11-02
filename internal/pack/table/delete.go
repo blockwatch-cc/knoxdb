@@ -76,6 +76,9 @@ func (d *DeleteAdapter) Append(ctx context.Context, src *pack.Package) error {
 
 	src.WithSelection(sel)
 	n, err := d.j.DeletePack(ctx, src)
+	if err != nil {
+		return err
+	}
 	d.n += n
 
 	// reset to old selection vector and free alloc
@@ -88,7 +91,7 @@ func (d *DeleteAdapter) Append(ctx context.Context, src *pack.Package) error {
 	if d.limit > 0 && d.n >= d.limit {
 		return types.EndStream
 	}
-	return err
+	return nil
 }
 
 func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (int, error) {

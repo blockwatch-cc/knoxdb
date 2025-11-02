@@ -208,7 +208,7 @@ func (t *Table) doQueryAsc(ctx context.Context, plan *query.QueryPlan, res Query
 				break
 			}
 			nRowsScanned += pkg.Len()
-			// plan.Log.Debugf("found %d matches pack id %d", pkg.NumSelected(), pkg.Key())
+			// plan.Log.Debugf("found %d matches in pack[%d]", pkg.NumSelected(), pkg.Key())
 
 			nRowsMatched += pkg.NumSelected()
 			if err = res.Append(ctx, pkg); err != nil {

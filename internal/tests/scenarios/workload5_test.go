@@ -151,6 +151,8 @@ func TestWorkload5(t *testing.T) {
 		executed   = make(map[command]int)
 		cmdCh      = make(chan command)
 		errg       errgroup.Group
+		wg         sync.WaitGroup
+		liveIds    sync.Map
 	)
 
 	// setup determinism
@@ -189,7 +191,6 @@ func TestWorkload5(t *testing.T) {
 	}()
 
 	// count number of commands for logging
-	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -210,9 +211,15 @@ func TestWorkload5(t *testing.T) {
 		}
 		table, err := knox.FindGenericTable[tests.AllTypes](tableName, knox.WrapEngine(db.Get()))
 		require.NoError(t, err)
-		_, _, err = table.Insert(context.Background(), ins)
+		pk, n, err := table.Insert(context.Background(), ins)
 		require.NoError(t, err)
-		numTuples = int64(len(ins))
+		require.Equal(t, len(ins), n, "seed tuples")
+		t.Logf("Inserted %d/%d seed tuples", n, len(ins))
+		numTuples = int64(n)
+		for range ins {
+			liveIds.Store(pk, nil)
+			pk++
+		}
 		clear(ins)
 	})
 
@@ -253,6 +260,7 @@ func TestWorkload5(t *testing.T) {
 				}
 				t.Logf("%04d [%s] %d", round, cmd, pk)
 				atomic.AddInt64(&numTuples, 1)
+				liveIds.Store(pk, nil)
 
 				cmdCh <- cmd
 				return nil
@@ -370,6 +378,7 @@ func TestWorkload5(t *testing.T) {
 				case n == 1:
 					// expected success case
 					atomic.AddInt64(&numTuples, -1)
+					liveIds.Delete(val.Id)
 					cmdCh <- cmd
 				case n > 1:
 					// must not happen
@@ -589,6 +598,7 @@ func TestWorkload5(t *testing.T) {
 		)
 
 		// TODO: improve integrity checks
+		// assert.Equal(t, liveIds.Len(), m.TupleCount, "tuple count")
 		require.Equal(t, numTuples, m.TupleCount, "tuple count")
 
 		// range scan
@@ -597,7 +607,7 @@ func TestWorkload5(t *testing.T) {
 			WithTable(table).
 			Execute(context.Background(), &allTuples)
 		require.NoError(t, err, "range scan failed")
-		require.Equal(t, len(allTuples), int(numTuples), "tuple count mismatch")
+		require.Equal(t, int(numTuples), len(allTuples), "tuple count mismatch")
 
 		// point queries
 		for _, v := range allTuples {
@@ -606,7 +616,7 @@ func TestWorkload5(t *testing.T) {
 				WithTable(table).
 				AndEqual("id", v.Id).
 				Execute(context.Background(), &oneTuple)
-			require.NoError(t, err, "range scan failed")
+			require.NoError(t, err, "point scan failed")
 			require.Equal(t, v.Id, oneTuple.Id, "tuple id mismatch")
 		}
 
