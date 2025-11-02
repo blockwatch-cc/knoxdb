@@ -529,7 +529,7 @@ func (s *Segment) AbortActiveTx() (nAborted int, nRowsDiff int) {
 // commit/abort calls.
 func (s *Segment) Match(node *filter.Node, snap *types.Snapshot, tomb *xroar.Bitmap, bits *bitset.Bitset) {
 	// reset bits
-	bits.Zero().Resize(s.Data().Len())
+	bits.Resize(s.Data().Len())
 
 	// check empty state and return early
 	if s.is(SegmentStateEmpty) {

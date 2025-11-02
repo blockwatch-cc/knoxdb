@@ -302,29 +302,39 @@ func (j *Journal) AbortTx(xid types.XID) bool {
 		pmin, rmin uint64 = 1<<64 - 1, 1<<64 - 1
 		nRowsDiff  int
 	)
+
+	// roll-over nRowsDiff across segments to update each segments
+	// row counter in case an abort crosses multiple segments
 	for _, v := range j.tail {
-		if v.is(SegmentStateWaiting) && v.ContainsTx(xid) {
-			r := v.AbortTx(xid)
-			pmin = min(pmin, v.tstate.NextPk)
-			rmin = min(rmin, v.tstate.NextRid)
-			v.tstate.NextPk = pmin
-			v.tstate.NextRid = rmin
-			v.tstate.NRows = uint64(int64(v.tstate.NRows) - int64(nRowsDiff))
-			// log.Warnf("Adjust seg %d state nrowsdiff=%d to %#v", v.Id(), nRowsDiff, v.tstate)
-			nRowsDiff += r
+		// abortable segments are in waiting state only
+		if !v.is(SegmentStateWaiting) {
+			continue
 		}
+
+		// the segment may not contain this xid (unlikely with single writer design)
+		var n int
+		if v.ContainsTx(xid) {
+			n = v.AbortTx(xid)
+		}
+		pmin = min(pmin, v.tstate.NextPk)
+		rmin = min(rmin, v.tstate.NextRid)
+		v.tstate.NextPk = pmin
+		v.tstate.NextRid = rmin
+		v.tstate.NRows = uint64(int64(v.tstate.NRows) - int64(nRowsDiff))
+		// log.Warnf("Adjust seg %d state nrowsdiff=%d to %#v", v.Id(), nRowsDiff, v.tstate)
+		nRowsDiff += n
 	}
 
 	// update tip, adjust state also when tip is empty to roll over changes from parent segment
-	if j.tip.ContainsTx(xid) || j.tip.IsEmpty() {
+	if j.tip.ContainsTx(xid) {
 		j.tip.AbortTx(xid)
-		pmin = min(pmin, j.tip.tstate.NextPk)
-		rmin = min(rmin, j.tip.tstate.NextRid)
-		j.tip.tstate.NextPk = pmin
-		j.tip.tstate.NextRid = rmin
-		j.tip.tstate.NRows = uint64(int64(j.tip.tstate.NRows) - int64(nRowsDiff))
-		// log.Warnf("Adjust tip %d state with nrowsdiff=%d to %#v", j.tip.Id(), nRowsDiff, j.tip.tstate)
 	}
+	pmin = min(pmin, j.tip.tstate.NextPk)
+	rmin = min(rmin, j.tip.tstate.NextRid)
+	j.tip.tstate.NextPk = pmin
+	j.tip.tstate.NextRid = rmin
+	j.tip.tstate.NRows = uint64(int64(j.tip.tstate.NRows) - int64(nRowsDiff))
+	// log.Warnf("Adjust tip %d state with nrowsdiff=%d to %#v", j.tip.Id(), nRowsDiff, j.tip.tstate)
 
 	return j.compact()
 }

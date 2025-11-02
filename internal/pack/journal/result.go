@@ -6,6 +6,7 @@ package journal
 import (
 	"iter"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/xroar"
@@ -25,6 +26,9 @@ func NewResult() *Result {
 
 func (r *Result) Close() {
 	for _, pkg := range r.pkgs {
+		if sel := pkg.Selected(); sel != nil {
+			arena.Free(sel)
+		}
 		pkg.Release()
 	}
 	clear(r.pkgs)

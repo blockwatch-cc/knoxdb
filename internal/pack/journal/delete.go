@@ -103,7 +103,7 @@ func (j *Journal) deletePackWithWal(src *pack.Package, xid types.XID, w *wal.Wal
 
 				// rotate segment once full
 				if err := j.rotateAndCheckpoint(); err != nil {
-					return count, err
+					return 0, err
 				}
 			}
 		}
@@ -139,7 +139,7 @@ func (j *Journal) deletePackWithWal(src *pack.Package, xid types.XID, w *wal.Wal
 
 			// rotate segment once full
 			if err := j.rotateAndCheckpoint(); err != nil {
-				return count, err
+				return 0, err
 			}
 		}
 	}
@@ -170,9 +170,7 @@ func (j *Journal) deletePackNoWal(src *pack.Package, xid types.XID) (int, error)
 				m := min(len(rids), j.TombCapacity())
 
 				// collect rowids for deletion and add to tomb
-				for i := range m {
-					rid := rids[i]
-
+				for _, rid := range rids[:m] {
 					// append to tomb, set xmax on rid when in tip segment
 					j.tip.NotifyDelete(xid, rid)
 				}
