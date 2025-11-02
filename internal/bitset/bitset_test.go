@@ -60,7 +60,7 @@ func TestBitsetNew(t *testing.T) {
 func TestBitsetFromBytes(t *testing.T) {
 	for _, c := range popCases {
 		t.Run(c.Name, func(t *testing.T) {
-			bits := NewFromBytes(c.Source, c.Size)
+			bits := New(0).SetFromBytes(c.Source, c.Size, false)
 			assert.Len(t, bits.Bytes(), len(c.Source), "length")
 			assert.Equal(t, c.Size, bits.Len(), "size")
 			assert.Equal(t, c.Count, bits.Count(), "count")

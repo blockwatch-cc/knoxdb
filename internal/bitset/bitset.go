@@ -20,6 +20,13 @@ var bitsetPool = sync.Pool{
 	New: func() any { return &Bitset{} },
 }
 
+// Bitset implements a dense bitmap and efficient algorithms to update and
+// query bits and ranges. The internal storage is in byte-wise little endian
+// order so that bits are ordered as [7,6,5,4,3,2,1,0] within a byte. This
+// may seem counterintuitive but is a major reason for speed improvements
+// of comparison operators in internal/cmp/avx2|avx512. For compatibility
+// with other bitset implementations some methods can perform auto reversal
+// like SetFromBytes, String, MarshalText, UnmarshalText.
 type Bitset struct {
 	buf     []byte
 	cnt     int
@@ -32,14 +39,18 @@ type Bitset struct {
 func New(size int) *Bitset {
 	sz := bitFieldLen(size)
 	s := bitsetPool.Get().(*Bitset)
-	s.buf = arena.AllocBytes(sz)[:sz]
-	clear(s.buf)
+	if size > 0 {
+		s.buf = arena.AllocBytes(sz)[:sz]
+		clear(s.buf)
+	}
 	s.cnt = 0
 	s.size = size
 	return s
 }
 
 // NewFromBytes references a pre-allocated byte slice without writing to it.
+// The tail is assumed to be properly zeroed so that no more bits follow the
+// bit at position size-1.
 func NewFromBytes(buf []byte, sz int) *Bitset {
 	if sz == 0 {
 		sz = len(buf) << 3
@@ -112,7 +123,7 @@ func (s *Bitset) Unset(i int) {
 	s.buf[i>>3] &^= mask
 }
 
-func (s *Bitset) SetFromBytes(buf []byte, size int, reverse bool) {
+func (s *Bitset) SetFromBytes(buf []byte, size int, reverse bool) *Bitset {
 	l := bitFieldLen(size)
 	if cap(s.buf) < l {
 		if !s.noclose {
@@ -137,6 +148,7 @@ func (s *Bitset) SetFromBytes(buf []byte, size int, reverse bool) {
 	if size&7 > 0 {
 		s.buf[l-1] &= bytemask(size)
 	}
+	return s
 }
 
 // Sets al bits in range. Start and end indices form a closed interval
