@@ -197,16 +197,10 @@ func (s *Segment) Tomb() *Tomb {
 }
 
 func (s *Segment) Aborted() *bitset.Bitset {
-	if s.aborted != nil {
-		s.aborted.Resize(s.data.Len())
-	}
 	return s.aborted
 }
 
 func (s *Segment) Replaced() *bitset.Bitset {
-	if s.replaced != nil {
-		s.replaced.Resize(s.data.Len())
-	}
 	return s.replaced
 }
 
@@ -311,6 +305,14 @@ func (s *Segment) NotifyInsert(xid types.XID, rid uint64) {
 
 	// count
 	s.nInsert++
+
+	// extend sets
+	if s.aborted != nil {
+		s.aborted.Append(false)
+	}
+	if s.replaced != nil {
+		s.replaced.Append(false)
+	}
 }
 
 // append update
@@ -331,6 +333,14 @@ func (s *Segment) NotifyUpdate(xid types.XID, rid, ref uint64) {
 
 	// count
 	s.nUpdate++
+
+	// extend sets
+	if s.aborted != nil {
+		s.aborted.Append(false)
+	}
+	if s.replaced != nil {
+		s.replaced.Append(false)
+	}
 
 	// same segment replace by update
 	if s.ContainsRid(ref) {
@@ -361,9 +371,8 @@ func (s *Segment) NotifyDelete(xid types.XID, rid uint64) {
 func (s *Segment) setXmax(xid types.XID, rid uint64, isDeleted bool) {
 	// lazy allocate replaced bitset, or grow to fit current data len)
 	if s.replaced == nil {
-		s.replaced = bitset.New(s.data.Cap())
+		s.replaced = bitset.New(s.data.Cap()).Resize(s.data.Len())
 	}
-	s.replaced.Resize(s.data.Len())
 
 	if s.nAbort == 0 {
 		// without aborts rids are unique sorted (append only) and never reused
@@ -413,9 +422,8 @@ func (s *Segment) AbortTx(xid types.XID) int {
 
 	// lazy allocate aborted set, set to data len (will grow with more data)
 	if s.aborted == nil {
-		s.aborted = bitset.New(s.data.Cap())
+		s.aborted = bitset.New(s.data.Cap()).Resize(s.data.Len())
 	}
-	s.aborted.Resize(s.data.Len())
 
 	// reset all metadata records where xmin or xmax = xid to zero
 	// so they become invisible to MVCC
@@ -558,8 +566,6 @@ func (s *Segment) Match(node *filter.Node, snap *types.Snapshot, tomb *xroar.Bit
 
 	// remove aborted records from match
 	if s.aborted != nil {
-		// make sure aborted has full length
-		s.aborted.Resize(s.Data().Len())
 		bits.AndNot(s.aborted)
 		if bits.None() {
 			// log.Infof("> empty match after abort")
@@ -582,8 +588,6 @@ func (s *Segment) Match(node *filter.Node, snap *types.Snapshot, tomb *xroar.Bit
 
 		// remove in-segment replaced records (all replacements are visible)
 		if s.replaced != nil {
-			// make sure replaced has full length
-			s.replaced.Resize(s.Data().Len())
 			bits.AndNot(s.replaced)
 			if bits.None() {
 				// log.Infof("> empty match after dels")
