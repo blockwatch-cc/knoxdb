@@ -49,13 +49,6 @@ const (
 	BlockInt256  = types.BlockInt256
 )
 
-type BlockFlags byte
-
-const (
-	BlockFlagDirty = 1 << iota // block has been written to
-	BlockFlagRaw               // backing object is writable
-)
-
 // Challenge
 //
 // Define a common abstraction across vector types (int64, int32, float64,

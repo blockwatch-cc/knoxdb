@@ -147,7 +147,7 @@ func (e *Engine) Watermark() wal.LSN {
 
 func (e *Engine) NeedsCheckpoint() bool {
 	walSize, segSize := e.wal.Next(), wal.LSN(e.opts.WalSegmentSize)
-	return e.Watermark() < walSize-5*segSize
+	return walSize > 5*segSize && e.Watermark() < walSize-5*segSize
 }
 
 // checks if catalog backend file exists

@@ -259,7 +259,7 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 		})
 	}
 
-	// setup journal and replay wal
+	// setup journal and replay wal, no journal on history tables
 	if t.opts.JournalSize*t.opts.JournalSegments > 0 {
 		t.journal = journal.NewJournal(s, t.opts.JournalSize, t.opts.JournalSegments).
 			WithWal(t.engine.Wal()).
@@ -268,10 +268,6 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 
 		// replay wal from latest checkpoint
 		if err := t.ReplayWal(ctx); err != nil {
-			// t.log.Errorf("replay wal: %v", err)
-			// if err2 := t.Close(ctx); err2 != nil {
-			// 	t.log.Errorf("close: %v", err2)
-			// }
 			return fmt.Errorf("replay wal: %v", err)
 		}
 		state := t.journal.State()
@@ -309,7 +305,7 @@ func (t *Table) openBackend(ctx context.Context) error {
 
 	// load table state
 	err = t.db.View(func(tx store.Tx) error {
-		// check table storage
+		// check storage
 		for _, v := range [][]byte{
 			engine.DataKeySuffix,
 			engine.StateKeySuffix,
@@ -325,7 +321,7 @@ func (t *Table) openBackend(ctx context.Context) error {
 			return fmt.Errorf("loading state: %v", err)
 		}
 
-		t.log.Debugf("state pk=%d rid=%d nrows=%d epoch=%d lsn=0x%x",
+		t.log.Debugf("saved state pk=%d rid=%d nrows=%d epoch=%d lsn=0x%x",
 			t.state.NextPk, t.state.NextRid, t.state.NRows,
 			t.state.Epoch, t.state.Checkpoint)
 

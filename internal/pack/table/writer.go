@@ -194,7 +194,7 @@ func (w *Writer) Finalize(ctx context.Context, state engine.ObjectState) error {
 	}
 
 	// finalize indexes (merge new and mark deleted entries)
-	// w.log.Debug("merging index data")
+	w.log.Debug("finalize indexes")
 	if err := w.FinalizeIndexes(ctx); err != nil {
 		return err
 	}
@@ -221,9 +221,7 @@ func (w *Writer) Finalize(ctx context.Context, state engine.ObjectState) error {
 		w.table.state.NextPk = state.NextPk
 		w.table.state.NextRid = state.NextRid
 
-		// w.log.Debugf("table checkpoint v%d lsn=%d",
-		// 	w.table.state.Epoch, w.table.state.Checkpoint)
-
+		// w.log.Debugf("table checkpoint v%d lsn=%d", w.stats.Epoch(), state.Checkpoint)
 		return w.table.state.Store(ctx, tx)
 	})
 	if err != nil {
@@ -238,6 +236,7 @@ func (w *Writer) Finalize(ctx context.Context, state engine.ObjectState) error {
 	}
 
 	// swap new stats index, may GC previous version
+	// w.log.Debugf("installing new metadata v%d", w.stats.Epoch())
 	w.table.stats.Update(w.stats)
 	w.stats = nil
 

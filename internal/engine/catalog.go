@@ -1022,7 +1022,7 @@ func (c *Catalog) runCommitActions(ctx context.Context, pending []Object) error 
 
 // requires transaction in context
 func (c *Catalog) Recover(ctx context.Context) error {
-	c.log.Debug("catalog: run wal recovery from lsn 0x%x", c.checkpoint)
+	c.log.Debugf("catalog: run wal recovery from lsn 0x%x", c.checkpoint)
 
 	// read all wal records, of any record exists it must be rolled back
 	// unless its txid is committed

@@ -149,13 +149,7 @@ func run() (err error) {
 	case "detail":
 		PrintDetail(getTableOrIndexView(db, desc.Table), desc, out)
 	case "content":
-		ctx, _, abort, err := db.Begin(ctx)
-		if err != nil {
-			return err
-		}
-		defer abort()
 		PrintContent(ctx, getTableOrIndexView(db, desc.Table), desc, out)
-
 	default:
 		return fmt.Errorf("unsupported command %s", cmd)
 	}

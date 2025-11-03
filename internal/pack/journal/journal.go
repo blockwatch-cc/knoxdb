@@ -467,6 +467,8 @@ func (j *Journal) Query(plan *query.QueryPlan, epoch uint32) *Result {
 // tombstones or when an rid cannot be resolved return false. Only return true
 // if all pks have been successfully resolved.
 func (j *Journal) Lookup(ridMap map[uint64]uint64, snap *types.Snapshot) bool {
+	// TODO: lock-free segment walk
+
 	// stage 1: find highest visible rid for each pk
 	// start at tip then load next segment in history order
 	for seg := j.tip; seg != nil; seg = seg.parent {

@@ -143,7 +143,7 @@ func (t *Table) Merge(ctx context.Context) error {
 	err = t.mergeJournal(ctx, seg)
 	if err != nil {
 		// notify journal, will keep segment in memory and retry
-		t.log.Errorf("merge epoch %d: %v", seg.Id(), err)
+		t.log.Errorf("merge segment %d: %v", seg.Id(), err)
 		t.mu.Lock()
 		t.journal.AbortMerged(seg)
 		t.mu.Unlock()
@@ -203,7 +203,6 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 	// Phase 1 - move deleted rows to history, rewrite table packs
 	stones := seg.Tomb().Stones() // non-aborted deletes (within and outside the segment)
 	mask := seg.Tomb().RowIds()   // row id bitmap of all deletes, nil when empty
-	aborted := seg.Aborted()      // bitset of aborted records, nil when empty
 	replaced := seg.Replaced()    // bitset of updated/deleted records, nil when empty
 	nStones = len(stones)
 
@@ -295,6 +294,7 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 
 	// Phase 2 - move journal data to table, exclude aborted and replaced records
 	if seg.Data().Len() > 0 {
+		aborted := seg.Aborted() // bitset of aborted records, nil when empty
 		if aborted != nil || replaced != nil {
 			// copy journal segment pack and attach private selection vector
 			pkg := seg.Data().Copy()
@@ -314,12 +314,12 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 			nAdd += n
 			nPacks += (n + t.opts.PackSize - 1) / t.opts.PackSize
 			live.Close()
+			t.log.Debugf("merge phase 2: %d/%d records", pkg.NumSelected(), seg.Data().Len())
 
 			// append active records to table and indexes
 			if err := table.Append(ctx, pkg, pack.WriteModeIncludeSelected); err != nil {
 				return err
 			}
-			t.log.Debugf("merge phase 2: %d/%d records", pkg.NumSelected(), seg.Data().Len())
 
 			// free copy
 			arena.Free(pkg.Selected())
@@ -336,13 +336,12 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 			if err := table.Append(ctx, pkg, pack.WriteModeAll); err != nil {
 				return err
 			}
-			t.log.Debugf("merge pahse 2: %d records", pkg.Len())
 		}
 	}
 
 	if hist != nil {
 		// FIXME: howto track history table state?
-		t.log.Debugf("finalize history")
+		// t.log.Debugf("finalize history")
 		if err := hist.Finalize(ctx, seg.State()); err != nil {
 			return err
 		}
@@ -351,7 +350,7 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 	// finalize will flush remaining writer packs to disk, update table state
 	// and make new epoch visible by atomically replacing the table stats index
 	// with the new version produced during merge
-	t.log.Debugf("finalize merge")
+	// t.log.Debugf("finalize merge")
 	if err := table.Finalize(ctx, seg.State()); err != nil {
 		return err
 	}
