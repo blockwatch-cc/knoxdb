@@ -197,10 +197,16 @@ func (s *Segment) Tomb() *Tomb {
 }
 
 func (s *Segment) Aborted() *bitset.Bitset {
+	if s.aborted != nil {
+		s.aborted.Resize(s.data.Len())
+	}
 	return s.aborted
 }
 
 func (s *Segment) Replaced() *bitset.Bitset {
+	if s.replaced != nil {
+		s.replaced.Resize(s.data.Len())
+	}
 	return s.replaced
 }
 
@@ -305,14 +311,6 @@ func (s *Segment) NotifyInsert(xid types.XID, rid uint64) {
 
 	// count
 	s.nInsert++
-
-	// extend aborted set if used
-	if s.aborted != nil {
-		s.aborted.Append(false)
-	}
-	if s.replaced != nil {
-		s.replaced.Append(false)
-	}
 }
 
 // append update
@@ -337,11 +335,6 @@ func (s *Segment) NotifyUpdate(xid types.XID, rid, ref uint64) {
 	// same segment replace by update
 	if s.ContainsRid(ref) {
 		s.setXmax(xid, ref, false)
-	}
-
-	// extend aborted set if used
-	if s.aborted != nil {
-		s.aborted.Append(false)
 	}
 }
 
@@ -420,8 +413,9 @@ func (s *Segment) AbortTx(xid types.XID) int {
 
 	// lazy allocate aborted set, set to data len (will grow with more data)
 	if s.aborted == nil {
-		s.aborted = bitset.New(s.data.Cap()).Resize(s.data.Len())
+		s.aborted = bitset.New(s.data.Cap())
 	}
+	s.aborted.Resize(s.data.Len())
 
 	// reset all metadata records where xmin or xmax = xid to zero
 	// so they become invisible to MVCC
@@ -564,6 +558,8 @@ func (s *Segment) Match(node *filter.Node, snap *types.Snapshot, tomb *xroar.Bit
 
 	// remove aborted records from match
 	if s.aborted != nil {
+		// make sure aborted has full length
+		s.aborted.Resize(s.Data().Len())
 		bits.AndNot(s.aborted)
 		if bits.None() {
 			// log.Infof("> empty match after abort")
@@ -586,6 +582,8 @@ func (s *Segment) Match(node *filter.Node, snap *types.Snapshot, tomb *xroar.Bit
 
 		// remove in-segment replaced records (all replacements are visible)
 		if s.replaced != nil {
+			// make sure replaced has full length
+			s.replaced.Resize(s.Data().Len())
 			bits.AndNot(s.replaced)
 			if bits.None() {
 				// log.Infof("> empty match after dels")
@@ -683,21 +681,24 @@ func (s *Segment) MergeDeleted(set *xroar.Bitmap, snap *types.Snapshot) {
 }
 
 // Map most recent visible row id to primary key. Used during full record updates.
-// For visibly deleted records use MAX_U64 as special marker.
+// For visibly deleted records use MAX_U64 as special marker. Returns false only
+// when any pk was deleted.
 func (s *Segment) LookupRids(ridMap map[uint64]uint64, snap *types.Snapshot) {
 	// check empty state and return early
 	if s.is(SegmentStateEmpty) || s.IsEmpty() {
+		// fmt.Printf("J-0 seg=%d skip empty\n", s.data.Key())
 		return
 	}
 
 	// shortcut: can skip this segment when no records are visible
 	// to the snapshot, i.e. the segment contains only future tx
 	if s.xmin >= snap.Xmax {
+		// fmt.Printf("J-0 seg=%d skip future s.xmin=%d > snap.xmax=%d\n", s.data.Key(), s.xmin, snap.Xmax)
 		return
 	}
 
-	// TODO: do vector scan on pk slice if len(ridMap) == 1 (single row update)
-	// and clear bits for aborted/replaced records
+	// TODO: we could do a vector scan on pk slice for single row updates
+	// (len(ridMap) == 1) and clear bits for aborted/replaced records
 
 	// optimization: if the segment is complete (no more open tx) and all xids are
 	// visible to the snapshot, we can merge all records
@@ -706,30 +707,26 @@ func (s *Segment) LookupRids(ridMap map[uint64]uint64, snap *types.Snapshot) {
 		pks := s.data.Pks().Slice()
 		rids := s.data.RowIds().Slice()
 		if s.aborted != nil {
-			// with aborted records
+			// fmt.Printf("J-1 lookup seg=%d\n", s.data.Key())
 			for i, pk := range pks {
 				if s.aborted.Contains(i) {
 					continue // skip aborted records
 				}
-				if s.replaced != nil && s.replaced.Contains(i) {
-					continue // skip deleted/replaced records
-				}
 				rid, ok := ridMap[pk]
 				if !ok {
-					continue // skip rids we're not looking for in this query
+					continue // skip pks we're not looking for in this query
 				}
+				// fmt.Printf("J-1 seg=%d found pk=%d rid=%d\n", s.data.Key(), pk, rids[i])
 				ridMap[pk] = max(rid, rids[i])
 			}
 		} else {
-			// no aborted records
+			// fmt.Printf("J-2 lookup seg=%d\n", s.data.Key())
 			for i, pk := range pks {
 				rid, ok := ridMap[pk]
 				if !ok {
-					continue // skip rids we're not looking for in this query
+					continue // skip pks we're not looking for in this query
 				}
-				if s.replaced != nil && s.replaced.Contains(i) {
-					continue // skip deleted/replaced records
-				}
+				// fmt.Printf("J-2 seg=%d found pk=%d rid=%d\n", s.data.Key(), pk, rids[i])
 				ridMap[pk] = max(rid, rids[i])
 			}
 		}
@@ -739,63 +736,82 @@ func (s *Segment) LookupRids(ridMap map[uint64]uint64, snap *types.Snapshot) {
 		rids := s.data.RowIds().Slice()
 		xmins := s.data.Xmins().Slice()
 		if s.aborted != nil {
-			// with aborted records
+			// fmt.Printf("J-3 lookup seg=%d\n", s.data.Key())
 			for i, pk := range pks {
 				if s.aborted.Contains(i) {
 					continue // skip aborted records
 				}
 				rid, ok := ridMap[pk]
 				if !ok {
-					continue // skip rids we're not looking for in this query
+					continue // skip pks we're not looking for in this query
 				}
 				if !snap.IsVisible(types.XID(xmins[i])) {
 					continue // skip MVCC invisible records
 				}
+				// fmt.Printf("J-3 seg=%d found pk=%d rid=%d\n", s.data.Key(), pk, rids[i])
 				ridMap[pk] = max(rid, rids[i])
 			}
 		} else {
-			// no aborted records
+			// fmt.Printf("J-4 lookup seg=%d\n", s.data.Key())
 			for i, pk := range pks {
 				rid, ok := ridMap[pk]
 				if !ok {
-					continue // skip rids we're not looking for in this query
+					continue // skip pks we're not looking for in this query
 				}
 				if !snap.IsVisible(types.XID(xmins[i])) {
 					continue // skip MVCC invisible records
 				}
+				// fmt.Printf("J-4 seg=%d found pk=%d rid=%d\n", s.data.Key(), pk, rids[i])
 				ridMap[pk] = max(rid, rids[i])
 			}
 		}
 	}
+}
 
-	// check tomb for deleted rids; every pk and every rid is unique and
-	// not reused post update or delete, hence we can set rid = MAX_U64
-	// once we find a true delete in a journal segment. Note we must skip
-	// tomb records for updates and tomb records for deletes that are not
-	// yet visible under MVCC. The tomb clears records on abort, so all
-	// records we find here are valid.
-	if len(s.tomb.stones) > 0 {
-		for pk, rid := range ridMap {
-			if rid == 0 || rid == math.MaxUint64 {
-				continue // skip unresolved and deleted records
+// CheckRids checks the local tomb for deleted rids; every pk and every
+// rid is unique and not reused post update or delete. Some deletes may
+// be not yet visible under MVCC. The tomb clears records on abort, so all
+// records we find here are valid.
+//
+// In case this function is later used for something other than record
+// updates, we could signal deletion by setting rid = MAX_U64 once we find
+// a true delete in a journal segment.
+func (s *Segment) CheckRids(ridMap map[uint64]uint64, snap *types.Snapshot) bool {
+	if len(s.tomb.stones) == 0 {
+		// fmt.Printf("J-5 seg=%d has no tomb\n", s.data.Key())
+		return true
+	}
+
+	for pk, rid := range ridMap {
+		// skip unresolved pks
+		if rid == 0 {
+			continue
+		}
+		if !s.tomb.rids.Contains(rid) {
+			// fmt.Printf("J-5 seg=%d rid=%d pk=%d not in tomb\n", s.data.Key(), rid, pk)
+			continue // skip if not in tomb at all
+		}
+		// find the tombstone record for this rid
+		for _, stone := range s.tomb.stones {
+			if !stone.IsDel {
+				continue // skip update tombstones
 			}
-			if !s.tomb.rids.Contains(rid) {
-				continue // skip if not in tomb at all
+			if stone.Rid != rid {
+				continue // skip unrelated tombstones
 			}
-			// find the tombstone record for this pk/rid combination
-			for _, stone := range s.tomb.stones {
-				if !stone.IsDel {
-					continue // skip update tombstones
-				}
-				if stone.Rid != rid {
-					continue // skip unrelated tombstones
-				}
-				if snap != nil && !snap.IsVisible(stone.Xid) {
-					continue // skip  MVCC invisible tombstones
-				}
-				// this rid is truly deleted
-				ridMap[pk] = math.MaxUint64
+			if snap != nil && !snap.IsVisible(stone.Xid) {
+				// fmt.Printf("J-5 seg=%d skip invisible xid=%d on pk=%d rid=%d\n",
+				// 	s.data.Key(), stone.Xid, pk, rid)
+				continue // skip MVCC invisible tombstones
 			}
+			// this rid is truly deleted
+			// fmt.Printf("J-5 seg=%d set deleted pk=%d\n", s.data.Key(), pk)
+			ridMap[pk] = math.MaxUint64
+
+			// can stop early because update will return an error anyways
+			return false
 		}
 	}
+	// fmt.Printf("J-5 seg=%d no tombstone found in %#v\n", s.data.Key(), s.tomb.stones)
+	return true
 }

@@ -88,7 +88,7 @@ func (j *Journal) UpdateRecords(ctx context.Context, src []byte, ridMap map[uint
 			msg.Write(view.Bytes())
 
 			// add update to journal
-			// j.log.Debugf("journal update records %d[%d] -> [%d]", pk, ref, nextRid)
+			// j.log.Debugf("journal update record %d[%d] -> [%d]", pk, ref, nextRid)
 			j.tip.UpdateRecord(xid, nextRid, ref, view.Bytes())
 
 			// keep new assigned rid (in case we update again later)
@@ -101,7 +101,7 @@ func (j *Journal) UpdateRecords(ctx context.Context, src []byte, ridMap map[uint
 			sz += len(view.Bytes())
 			view, vbuf, _ = view.Cut(vbuf)
 		}
-		// j.log.Debugf("journal updated %d records into segment %d", nextRid-firstRid, j.tip.Id())
+		// j.log.Debugf("journal updated %d records in segment %d", nextRid-firstRid, j.tip.Id())
 
 		// 2 write to wal
 		if tx.UseWal() {

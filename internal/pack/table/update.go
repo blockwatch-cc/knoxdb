@@ -6,7 +6,6 @@ package table
 import (
 	"context"
 	"fmt"
-	"math"
 	"sync/atomic"
 
 	"blockwatch.cc/knoxdb/internal/engine"
@@ -99,31 +98,27 @@ func (t *Table) UpdateRows(ctx context.Context, buf []byte) (int, error) {
 		return 0, err
 	}
 
-	var nResolved int
-	for _, rid := range ridMap {
-		if rid > 0 {
-			nResolved++
-		}
-	}
-	// t.log.Debugf("update resolved %d/%d rids from index", nResolved, len(pks))
+	// var nResolved int
+	// for _, rid := range ridMap {
+	// 	if rid > 0 {
+	// 		nResolved++
+	// 	}
+	// }
+	// t.log.Debugf("update resolved %d/%d rids from index: %#v", nResolved, len(pks), ridMap)
 
 	// protect journal access
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	// fill in journal info
-	// - does a pk have a visible and more recent rid mapping: max(rid)
-	// - has a pk been deleted most recently: rid = MAX_U64
-	t.journal.Lookup(ridMap, tx.Snapshot())
-
-	// ensure all rids are resolved (0 < rid < MAX_U64)
-	// - rid = 0: this pk never existed or was deleted and the deletion was merged
-	// - rid = MAX_U64: this pk was deleted in journal and the delete is visible
-	for _, rid := range ridMap {
-		if rid == 0 || rid == math.MaxUint64 {
-			// t.log.Debugf("update: pk=%d not found", pk)
-			return 0, engine.ErrNoRecord
-		}
+	// overlay journal with MVCC rules
+	// - find recent visible updates: max(rid)
+	// - find recent visible deletes: rid = MAX_U64
+	//
+	// lookup returns false iff
+	// - one of the pks has been deleted
+	// - one of the pks was not found
+	if !t.journal.Lookup(ridMap, tx.Snapshot()) {
+		return 0, engine.ErrNoRecord
 	}
 
 	// write updates to journal and WAL

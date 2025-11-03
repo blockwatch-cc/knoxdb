@@ -75,9 +75,7 @@ func (j *Journal) deletePackWithWal(src *pack.Package, xid types.XID, w *wal.Wal
 			for len(rids) > 0 {
 				m := min(len(rids), j.TombCapacity())
 				// collect rowids for deletion and add to tomb
-				for i := range m {
-					rid := rids[i]
-
+				for _, rid := range rids[:m] {
 					// append to WAL record
 					buf = num.AppendUvarint(buf, rid)
 

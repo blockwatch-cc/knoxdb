@@ -462,17 +462,35 @@ func (j *Journal) Query(plan *query.QueryPlan, epoch uint32) *Result {
 	return res
 }
 
-// Identify most recent visible row ids for primary keys in list. Walk journal backwards
-// and keep max(rid). When pk/rid is found in a visible tombstones set to MAX_U64.
-func (j *Journal) Lookup(ridMap map[uint64]uint64, snap *types.Snapshot) {
-	seg := j.tip
-	for seg != nil {
-		// merge max(rid)
+// Identify most recent visible row ids for primary keys in map. Walk segments in
+// backwards order and keep max(rid). When the first rid is found in a visible
+// tombstones or when an rid cannot be resolved return false. Only return true
+// if all pks have been successfully resolved.
+func (j *Journal) Lookup(ridMap map[uint64]uint64, snap *types.Snapshot) bool {
+	// stage 1: find highest visible rid for each pk
+	// start at tip then load next segment in history order
+	for seg := j.tip; seg != nil; seg = seg.parent {
 		seg.LookupRids(ridMap, snap)
-
-		// next segment in history order
-		seg = seg.parent
 	}
+
+	// check if all pks are resolved
+	for _, rid := range ridMap {
+		if rid == 0 {
+			return false
+		}
+	}
+
+	// stage 2: check tombs whether any found rid has been visibly deleted
+	// again start at tip then load next segment in history order
+	// stop at first deletion (our only use-case for lookup is for
+	// update calls which fail when a user tries to update any deleted record)
+	for seg := j.tip; seg != nil; seg = seg.parent {
+		if !seg.CheckRids(ridMap, snap) {
+			return false
+		}
+	}
+
+	return true
 }
 
 func (j *Journal) ReplayWalRecord(ctx context.Context, rec *wal.Record, rd engine.TableReader) error {
