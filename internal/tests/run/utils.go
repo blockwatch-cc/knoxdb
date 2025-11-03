@@ -24,6 +24,7 @@ import (
 var (
 	timeFmt                                = "2006-01-02_15-04-05"
 	arch                                   string // wasm, native
+	numCpu                                 int
 	enableRace                             bool
 	enableVerbose                          bool
 	maxRound                               int
@@ -33,6 +34,7 @@ var (
 	skipUpload                             bool
 	seedString                             string
 	seedList                               []uint64
+	timeout                                time.Duration
 )
 
 func init() {
@@ -41,9 +43,11 @@ func init() {
 	flag.BoolVar(&enableRace, "race", false, "enable race detector")
 	flag.BoolVar(&enableVerbose, "v", false, "enable test log streaming")
 	flag.IntVar(&maxRound, "count", 1, "number of iterations using different random seeds")
+	flag.IntVar(&numCpu, "cpu", runtime.NumCPU(), "number of CPU cores to use for running tests")
 	flag.IntVar(&maxErrors, "max-errors", 1, "stop the test runner after N total observed errors")
 	flag.Float64Var(&maxErrorRate, "max-error-rate", 10, "stops the test runner when the rate of errors observed per second is greater than N (inclusive)")
 	flag.StringVar(&seedString, "seed", "", "comma separated list of random seeds")
+	flag.DurationVar(&timeout, "timeout", time.Minute, "test run timeout (will abort and trace test run)")
 
 	// env vars
 	skipUpload = config.GetBool(os.Getenv("SKIP_UPLOAD"))
@@ -110,6 +114,7 @@ func logBuildInfo() {
 		log.Infof("Test Seeds    randomized")
 	}
 	log.Infof("Test Rounds   %d", maxRound)
+	log.Infof("Test Timeout  %s", timeout)
 	log.Infof("Test Errors   max=%d max-rate=%f", maxErrors, maxErrorRate)
 }
 

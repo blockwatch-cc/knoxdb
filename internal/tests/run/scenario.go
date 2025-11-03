@@ -81,7 +81,7 @@ func run() error {
 		if len(seedList) > 0 {
 			rnd = seedList[round%len(seedList)]
 		} else {
-			rnd = util.RandUint64n(1 << 20)
+			rnd = util.RandUint64n(1<<64 - 1)
 		}
 
 		os.Setenv(util.GORANDSEED, strconv.FormatUint(rnd, 10))
@@ -130,7 +130,13 @@ func run() error {
 		log.Infof("Run scenario #%d/%d with %s=0x%016x", round+1, maxRound, util.GORANDSEED, rnd)
 
 		// run test in child process
-		err = run(buildPath, mw)
+		if timeout > 0 {
+			ctx2, cancel := context.WithTimeout(ctx, timeout)
+			err = run(ctx2, buildPath, mw)
+			cancel()
+		} else {
+			err = run(ctx, buildPath, mw)
+		}
 
 		if enableVerbose {
 			// restore stdout
@@ -192,7 +198,7 @@ func run() error {
 	return nil
 }
 
-func setup() (func(string, io.Writer) error, func(string, io.Writer) error) {
+func setup() (func(string, io.Writer) error, func(context.Context, string, io.Writer) error) {
 	switch arch {
 	case "wasm":
 		log.Info("Running as WASM module")
@@ -229,7 +235,11 @@ func buildTest(out string, w io.Writer) error {
 	}
 
 	log.Infof("Building test for %s/%s", os.Getenv("GOOS"), os.Getenv("GOARCH"))
-	args := []string{"test", "-c", "./internal/tests/scenarios", "-o", out, "-tags"}
+	args := []string{
+		"test", "-c", "./internal/tests/scenarios",
+		"-o", out,
+		"-tags",
+	}
 	tags := "with_assert"
 	if os.Getenv("GOARCH") == "wasm" {
 		tags += ",faketime"
@@ -246,7 +256,7 @@ func buildTest(out string, w io.Writer) error {
 	return cmd.Run()
 }
 
-func runTestInWasm(dir string, w io.Writer) error {
+func runTestInWasm(ctx context.Context, dir string, w io.Writer) error {
 	args := []string{
 		"run",
 		"./internal/tests/wasm/runtime",
@@ -256,7 +266,7 @@ func runTestInWasm(dir string, w io.Writer) error {
 		"-test.failfast",
 	}
 
-	cmd := exec.Command("go", args...)
+	cmd := exec.CommandContext(ctx, "go", args...)
 	cmd.Stderr = w
 	cmd.Stdout = w
 	cmd.Env = append(cmd.Environ(), "KNOX_DRIVER=mem")
@@ -264,10 +274,11 @@ func runTestInWasm(dir string, w io.Writer) error {
 	return cmd.Run()
 }
 
-func runTestInNative(dir string, w io.Writer) error {
+func runTestInNative(ctx context.Context, dir string, w io.Writer) error {
 	args := []string{
 		"-test.v",
 		"-test.failfast",
+		"-test.cpu=" + strconv.Itoa(numCpu),
 		"-test.count=1",
 	}
 	cmd := exec.Command(filepath.Join(dir, "scenarios.test"), args...)
@@ -296,15 +307,24 @@ func runTestInNative(dir string, w io.Writer) error {
 	signal.Notify(sigc, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	defer signal.Stop(sigc)
 
+	doAbort := false
 	select {
 	case err := <-errc:
 		return err
-	case <-sigc:
-		log.Info("Aborting child process")
+	case <-ctx.Done():
+		log.Warn("Aborting child process after timeout")
+		doAbort = true
+	case s := <-sigc:
+		log.Warnf("Aborting child process after %s", s)
+		doAbort = true
+	}
+
+	if doAbort {
 		err := cmd.Process.Signal(syscall.SIGABRT)
 		if err != nil {
 			log.Errorf("SIGABRT: %v", err)
 		}
 		return <-errc
 	}
+	return nil
 }
