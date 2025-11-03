@@ -345,14 +345,13 @@ func (e *Engine) openTables(ctx context.Context) error {
 		opts.Logger = e.log.Clone() // FIXME: register logger to set level later
 		opts.ReadOnly = e.opts.ReadOnly
 
-		// open the table, load journals, replay wal after crash
-		if err := table.Open(ctx, s, opts); err != nil {
+		// open indexes first so merge during WAL replay can find them
+		if err := e.openIndexes(ctx, table, s); err != nil {
 			return err
 		}
 
-		// open indexes
-		if err := e.openIndexes(ctx, table); err != nil {
-			_ = table.Close(ctx)
+		// open the table, load journals, replay wal after crash
+		if err := table.Open(ctx, s, opts); err != nil {
 			return err
 		}
 

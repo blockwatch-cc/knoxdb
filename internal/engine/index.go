@@ -253,8 +253,9 @@ func (e *Engine) DropIndex(ctx context.Context, name string) error {
 	return commit()
 }
 
-func (e *Engine) openIndexes(ctx context.Context, table TableEngine) error {
-	tag := types.TaggedHash(types.ObjectTagTable, table.Schema().Name)
+func (e *Engine) openIndexes(ctx context.Context, table TableEngine, ts *schema.Schema) error {
+	// tag := types.TaggedHash(types.ObjectTagTable, table.Schema().Name)
+	tag := types.TaggedHash(types.ObjectTagTable, ts.Name)
 
 	// filter indexes by table in catalog
 	keys, err := e.cat.ListIndexes(ctx, tag)
@@ -280,7 +281,6 @@ func (e *Engine) openIndexes(ctx context.Context, table TableEngine) error {
 		table.ConnectIndex(idx)
 		itag := types.TaggedHash(types.ObjectTagIndex, s.Name)
 		e.indexes.Put(itag, idx)
-		e.log.Debugf("Loaded index %s", s.Name)
 	}
 
 	return nil
