@@ -112,41 +112,42 @@ func (it *LookupIterator) loadNextPack(ctx context.Context) (bool, error) {
 		// key directly or to the next larger key (in both cases the first
 		// of a block pair, id = 0)
 		ok := it.cur.Seek(it.idx.encodePackKey(it.keys[0], it.nextPk, 0))
-		// it.idx.log.Infof("Seek 0x%016x:%016x:%d ok=%t", it.keys[0], it.nextPk, 0, ok)
+		// it.idx.log.Debugf("seek 0x%016x:%016x:%d ok=%t", it.keys[0], it.nextPk, 0, ok)
 
 		// seek to last pack when not found (our search key is likely in this pack)
 		if !ok {
 			// if exists, set cur to the first block in the last pair
 			it.cur.Last()
 			ok = it.cur.Prev()
-			// it.idx.log.Infof("Seek last>prev %t", ok)
+			// it.idx.log.Debugf("seek last>prev %t", ok)
 		}
 
 		// no last pack? this must be an empty bucket
 		if !ok {
-			// it.idx.log.Infof("Empty bucket, skippikng all searches")
+			// it.idx.log.Debug("empty bucket, skipping all searches")
 			it.keys = it.keys[:0]
 			return false, nil
 		}
 
 		// decode the key
 		key, rid, id := it.idx.decodePackKey(it.cur.Key())
-		// it.idx.log.Infof("Found 0x%016x:%016x:%d", key, rid, id)
+		// it.idx.log.Debugf("found 0x%016x:%016x:%d", key, rid, id)
 
 		// rewind if we're behind the search key
 		if key > it.keys[0] {
 			// set cur to the first block in the previous pair
 			it.cur.Prev()
 			ok = it.cur.Prev()
-			// it.idx.log.Infof("Rewind prev>prev %t", ok)
+			// it.idx.log.Debugf("rewind prev>prev %t", ok)
 
 			// decode the previous key
 			if ok {
 				key, rid, id = it.idx.decodePackKey(it.cur.Key())
-				// it.idx.log.Infof("Now 0x%016x:%016x:%d", key, rid, id)
-				// assert we're actually at the first block
+				// it.idx.log.Debugf("now 0x%016x:%016x:%d", key, rid, id)
 			}
 		}
+
+		// assert we're actually at the first block
 		assert.Always(id == 0, "must be at first block in index pair")
 
 		// looks like this was the first pack and it did not contain
@@ -154,7 +155,7 @@ func (it *LookupIterator) loadNextPack(ctx context.Context) (bool, error) {
 		// key and retry
 		if !ok {
 			for len(it.keys) > 0 && it.keys[0] < key {
-				// it.idx.log.Infof("Ignoring key 0x%016x", it.keys[0])
+				// it.idx.log.Debugf("ignoring key 0x%016x", it.keys[0])
 				it.keys = it.keys[1:]
 			}
 			continue
@@ -180,11 +181,11 @@ func (it *LookupIterator) loadNextPack(ctx context.Context) (bool, error) {
 		for i := range []int{0, 1} {
 			// assert block is correct
 			bkey, brid, bid := it.idx.decodePackKey(it.cur.Key())
-			assert.Always(bid == i, "unexpected block id", "key", bkey, "rid", brid, "id", bid, "i", i)
+			// assert.Always(bid == i, "unexpected block id", "key", bkey, "rid", brid, "id", bid, "i", i)
 
 			// decode when not already found in cache
 			if it.pack.Block(i) == nil {
-				// it.idx.log.Infof("Loading block 0x%016x:%016x:%d", bik, brid, i)
+				// it.idx.log.Debugf("loading block 0x%016x:%016x:%d", bkey, brid, i)
 				f := it.idx.sstore.Fields[i]
 				b, err := block.Decode(f.Type.BlockType(), it.cur.Value())
 				if err != nil {

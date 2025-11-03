@@ -455,6 +455,7 @@ func (idx *Index) DelPack(ctx context.Context, pkg *pack.Package, mode pack.Writ
 func (idx *Index) Finalize(ctx context.Context, epoch uint32) error {
 	// flush remaining journal entries
 	if idx.journal.Len() > 0 {
+		// idx.log.Debugf("merge %d journal records", idx.journal.Len())
 		if err := idx.mergeAppend(ctx); err != nil {
 			return err
 		}
@@ -462,6 +463,7 @@ func (idx *Index) Finalize(ctx context.Context, epoch uint32) error {
 
 	// write tombstone for later GC
 	if idx.tomb.Len() > 0 {
+		// idx.log.Debugf("merge %d journal records", idx.tomb.Len())
 		if err := idx.storeTomb(ctx, epoch); err != nil {
 			return err
 		}
@@ -469,6 +471,7 @@ func (idx *Index) Finalize(ctx context.Context, epoch uint32) error {
 
 	// write epoch
 	err := idx.db.Update(func(tx store.Tx) error {
+		// idx.log.Debugf("store epoch %d", epoch)
 		idx.state.Epoch = uint64(epoch)
 		return idx.state.Store(ctx, tx)
 	})

@@ -153,9 +153,9 @@ func (it *MergeIterator) UpdateIndexState(ctx context.Context) error {
 		return engine.ErrNoTx
 	}
 
-	// row count
+	// row count (remove duplicates from earlier aborted merge)
 	if it.nIns != it.nDel {
-		n := max(0, int(it.idx.state.NRows)+it.nIns-it.nDel)
+		n := max(0, int(it.idx.state.NRows)+it.nIns-it.nDel-it.nDups)
 		it.idx.state.NRows = uint64(n)
 	}
 
@@ -443,7 +443,7 @@ func (it *MergeIterator) loadNextPack(search MergeValue) error {
 // writes journal records to index packs. this is called during table merge when
 // index journal runs full and when finalizing index updates.
 func (idx *Index) mergeAppend(ctx context.Context) error {
-	idx.log.Debugf("starting merge journal[%d]", idx.journal.Len())
+	idx.log.Debugf("merging journal[%d]", idx.journal.Len())
 
 	var (
 		start = time.Now()
@@ -454,7 +454,6 @@ func (idx *Index) mergeAppend(ctx context.Context) error {
 	j0 := idx.journal.Block(0).Uint64().Slice()
 	j1 := idx.journal.Block(1).Uint64().Slice()
 	jlen := len(j0)
-	idx.log.Debugf("j0=%d j1=%d", len(j0), len(j1))
 
 	// co-sort journal vectors in-place
 	util.Sort2(j0, j1)
@@ -633,7 +632,7 @@ func (idx *Index) mergeAppend(ctx context.Context) error {
 
 // removes tombstoned records from journal packs by rewriting packs.
 func (idx *Index) mergeTomb(ctx context.Context, tomb *pack.Package) error {
-	idx.log.Debugf("starting merge tomb[%d]", tomb.Len())
+	idx.log.Debugf("merging tomb[%d]", tomb.Len())
 
 	var (
 		start = time.Now()

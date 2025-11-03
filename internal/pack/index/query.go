@@ -326,6 +326,10 @@ func (idx *Index) lookupKeys(ctx context.Context, keys []uint64) (*xroar.Bitmap,
 }
 
 // PK -> RID lookup, keys are sorted, ridMap is allocated
+// Note: the index is typically stale when updates/deletes are waiting
+// in journal even if committed. Index is only updated during journal merge.
+// This means all matches found here must be cross-checked against the journal
+// by our query engine under MVCC.
 func (idx *Index) Lookup(ctx context.Context, keys []uint64, ridMap map[uint64]uint64) error {
 	// gracefully handle empty query list
 	if len(keys) == 0 {
@@ -348,7 +352,7 @@ func (idx *Index) Lookup(ctx context.Context, keys []uint64, ridMap map[uint64]u
 	}()
 
 	// stop when all inputs are matched
-	for nKeys < nKeysMatched {
+	for nKeysMatched < nKeys {
 		// check context
 		if err := ctx.Err(); err != nil {
 			return err
@@ -373,11 +377,11 @@ func (idx *Index) Lookup(ctx context.Context, keys []uint64, ridMap map[uint64]u
 		// loop over the remaining (unresolved) keys, packs are sorted by pk
 		pos := 0
 		for _, key := range in[next:] {
-			// idx.log.Infof("looking for ik=0x%016x", ik)
+			// idx.log.Debugf("looking for ik=0x%016x", key)
 
 			// no more matches in this pack?
 			if kmax < key || k0.Get(pos) > maxKey {
-				// idx.log.Infof("no more matches in this pack")
+				// idx.log.Debug("no more matches in this pack")
 				break
 			}
 
@@ -386,21 +390,18 @@ func (idx *Index) Lookup(ctx context.Context, keys []uint64, ridMap map[uint64]u
 
 			// skip when not found
 			if pos+n >= packLen || k0.Get(pos+n) != key {
-				// idx.log.Infof("lookup key not found")
+				// idx.log.Debug("lookup key not found")
 				next++
 				continue
 			}
-			// idx.log.Infof("at pos %d found=%016x", pos+n, k0.Get(pos+n))
+			// idx.log.Debugf("at pos %d found=%016x", pos+n, k0.Get(pos+n))
 			pos += n
 
 			// on match, add row id to result
 			nKeysMatched++
-			// idx.log.Infof("add Result %d", k1.Get(pos))
+			// idx.log.Debugf("add result %d => %d", key, k1.Get(pos))
 			ridMap[key] = k1.Get(pos)
 
-			// Note: index may not be unique as updates merge duplicates which
-			// are not removed until GC; we must all matching row ids and let
-			// the query engine later decide which row is visible under MVCC.
 			// Multi-matches are in sort order.
 			for pos+1 < packLen && k0.Get(pos+1) == key {
 				pos++
