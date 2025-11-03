@@ -43,40 +43,38 @@ func (t *Task) complete(err error) {
 
 // Worker executes tasks in a separate goroutine.
 type Worker struct {
-	ctx  context.Context
-	pool chan *Worker
-	job  chan *Task
+	job chan *Task
 }
 
-func NewWorker(ctx context.Context, pool chan *Worker) *Worker {
+func NewWorker() *Worker {
 	return &Worker{
-		ctx:  ctx,
-		pool: pool,
-		job:  make(chan *Task),
+		job: make(chan *Task, 1),
 	}
 }
 
-func (w *Worker) Run() {
+func (w *Worker) Run(svc *TaskService) {
+	defer svc.wg.Done()
 	for {
 		// make worker available for scheduling new task
-		w.pool <- w
+		select {
+		case <-svc.stop:
+			return
+		case svc.workers <- w:
+		}
 
 		// wait for new task or shutdown
 		select {
-		case <-w.ctx.Done():
+		case <-svc.stop:
 			return
-		case job, ok := <-w.job:
-			if ok {
-				job.complete(job.run(w.ctx))
-			} else {
-				return
-			}
+		case job := <-w.job:
+			job.complete(job.run(svc.ctx))
 		}
 	}
 }
 
 func (w *Worker) Close() {
 	close(w.job)
+	w.job = nil
 }
 
 type TaskService struct {
@@ -84,6 +82,7 @@ type TaskService struct {
 	cancel     context.CancelFunc
 	tasks      chan *Task
 	workers    chan *Worker
+	stop       chan struct{}
 	maxWorkers int
 	maxQueue   int
 	log        log.Logger
@@ -130,10 +129,12 @@ func (m *TaskService) Start() {
 	m.once.Do(func() {
 		m.tasks = make(chan *Task, m.maxQueue)
 		m.workers = make(chan *Worker, m.maxWorkers)
+		m.stop = make(chan struct{}, 1)
 		m.log.Debugf("starting task service with queue=%d workers=%d", m.maxQueue, m.maxWorkers)
 		for range m.maxWorkers {
-			w := NewWorker(m.ctx, m.workers)
-			go w.Run()
+			w := NewWorker()
+			m.wg.Add(1)
+			go w.Run(m)
 		}
 		m.wg.Add(1)
 		go m.dispatch()
@@ -143,57 +144,45 @@ func (m *TaskService) Start() {
 func (m *TaskService) Stop() {
 	m.log.Debugf("stopping task service")
 
-	// signal shutdown to all running goroutines
+	// signal shutdown to dispatcher and workers
+	close(m.stop)
+
+	// cancel context to stop running tasks early
 	m.cancel()
 
-	// wait for dispatcher goroutine to exit
+	// wait for dispatcher and worker goroutines to exit
 	m.wg.Wait()
-
-	// wait for all workers to exit and free resources
-	for range m.maxWorkers {
-		w := <-m.workers
-		w.Close()
-	}
 
 	// finalize pending tasks
 	m.drain()
 
 	// close channels
-	if m.tasks != nil {
-		close(m.tasks)
-		m.tasks = nil
-	}
-	if m.workers != nil {
-		close(m.workers)
-		m.workers = nil
-	}
+	close(m.tasks)
+	close(m.workers)
 }
 
 func (m *TaskService) Kill() {
 	m.log.Debugf("killing task service")
+	close(m.stop)
 	m.cancel()
 	m.wg.Wait()
-	for range m.maxWorkers {
-		w := <-m.workers
-		w.Close()
-	}
 	m.drain()
 }
 
 func (m *TaskService) dispatch() {
 	defer m.wg.Done()
 	for {
-		// wait for the next task
+		// wait for the next task or shutdown
 		var task *Task
 		select {
-		case <-m.ctx.Done():
+		case <-m.stop:
 			return
 		case task = <-m.tasks:
 		}
 
-		// pick next ready worker
+		// wait for the next ready worker or shutdown
 		select {
-		case <-m.ctx.Done():
+		case <-m.stop:
 			task.complete(ErrDatabaseShutdown)
 			return
 		case w := <-m.workers:
@@ -205,10 +194,8 @@ func (m *TaskService) dispatch() {
 func (m *TaskService) drain() {
 	for {
 		select {
-		case task, ok := <-m.tasks:
-			if ok {
-				task.complete(ErrDatabaseShutdown)
-			}
+		case task := <-m.tasks:
+			task.complete(ErrDatabaseShutdown)
 		default:
 			return
 		}
