@@ -121,7 +121,7 @@ type Wal struct {
 	nextLsn LSN
 	lastLsn LSN
 	log     log.Logger
-	nBytes  int64
+	nBytes  atomic.Int64
 }
 
 func Create(opts WalOptions) (*Wal, error) {
@@ -186,8 +186,8 @@ func Open(lsn LSN, opts WalOptions) (*Wal, error) {
 		csum:    opts.Seed,
 		nextLsn: maxLsn,
 		log:     opts.Logger,
-		nBytes:  int64(maxLsn - minLsn),
 	}
+	wal.nBytes.Store(int64(maxLsn - minLsn))
 	wal.log.Debugf("wal: verifying from LSN 0x%x", lsn)
 
 	r := wal.NewReader()
@@ -266,7 +266,7 @@ func (w *Wal) Close() error {
 	w.nextLsn = 0
 	w.lastLsn = 0
 	w.log = nil
-	w.nBytes = 0
+	w.nBytes.Store(0)
 	return err
 }
 
@@ -286,7 +286,7 @@ func (w *Wal) ForceClose() error {
 	w.nextLsn = 0
 	w.lastLsn = 0
 	w.log = nil
-	w.nBytes = 0
+	w.nBytes.Store(0)
 	return err
 }
 
@@ -369,12 +369,13 @@ func (w *Wal) WriteAndSchedule(rec *Record) (LSN, *util.Future, error) {
 }
 
 func (w *Wal) NumBytesSincdLastGC() int64 {
-	return atomic.LoadInt64(&w.nBytes)
+	return w.nBytes.Load()
 }
 
 // remove all WAL segment files before lsn
 func (w *Wal) GC(watermark LSN) error {
-	if watermark > w.nextLsn {
+	// next locks mutex
+	if watermark > w.Next() {
 		return ErrInvalidLSN
 	}
 
@@ -388,7 +389,7 @@ func (w *Wal) GC(watermark LSN) error {
 
 	// skip if we haven't made a segment worth of progress since last GC
 	// (on startup we analyze segment files and set nBytes to the full range)
-	if atomic.LoadInt64(&w.nBytes) < int64(w.opts.MaxSegmentSize) {
+	if w.nBytes.Load() < int64(w.opts.MaxSegmentSize) {
 		w.log.Tracef("wal: skip gc due to too little progress")
 		return nil
 	}
@@ -429,7 +430,7 @@ func (w *Wal) GC(watermark LSN) error {
 	dir.Close()
 
 	// reset write counter
-	atomic.StoreInt64(&w.nBytes, 0)
+	w.nBytes.Store(0)
 
 	return err
 }
@@ -490,7 +491,7 @@ func (w *Wal) write(rec *Record) (LSN, error) {
 	w.csum = csum
 	w.lastLsn = lsn
 	w.nextLsn = lsn.Add(sz)
-	atomic.AddInt64(&w.nBytes, int64(sz))
+	w.nBytes.Add(int64(sz))
 
 	return lsn, nil
 }
