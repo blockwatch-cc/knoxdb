@@ -178,7 +178,7 @@ func (idx *Index) Store(ctx context.Context, tx store.Tx) error {
 		return err
 	}
 
-	// idx.log.Tracef("store %d snodes, %d inodes", len(idx.snodes), len(idx.inodes))
+	// idx.log.Debugf("store %d snodes, %d inodes", len(idx.snodes), len(idx.inodes))
 
 	// store dirty inodes
 	for i, inode := range idx.inodes {
@@ -209,23 +209,26 @@ func (idx *Index) Store(ctx context.Context, tx store.Tx) error {
 		if !snode.dirty {
 			continue
 		}
+		pkg := snode.spack.Load()
+		skey := pkg.Key()
+		sver := pkg.Version()
 
 		// mark previous snodes for gc
-		key := encodeNodeKey(KIND_SNODE, uint32(i), snode.Key(), snode.Version())
+		key := encodeNodeKey(KIND_SNODE, uint32(i), skey, sver)
 		if err := tomb.AddNode(tx, key); err != nil {
 			return err
 		}
 
 		// mark previous snode packs for gc
-		if err := tomb.AddSPack(tx, snode.Key(), snode.Version()); err != nil {
+		if err := tomb.AddSPack(tx, skey, sver); err != nil {
 			return err
 		}
 
 		// update version
-		snode.SetVersion(idx.view, snode.Version()+1)
+		snode.SetVersion(idx.view, sver+1)
 
 		// key is tree node kind + id (u32) + spack key (u32) + version
-		key = encodeNodeKey(KIND_SNODE, uint32(i), snode.Key(), snode.Version())
+		key = encodeNodeKey(KIND_SNODE, uint32(i), skey, sver+1)
 		// idx.log.Tracef("store snode %d [%x]", i, key)
 		err := tree.Put(key, snode.meta)
 		if err != nil {
@@ -234,7 +237,7 @@ func (idx *Index) Store(ctx context.Context, tx store.Tx) error {
 		idx.bytesWritten += int64(len(snode.meta))
 
 		// package blocks
-		snode.disksize, err = snode.spack.StoreToDisk(ctx, blocks)
+		snode.disksize, err = pkg.StoreToDisk(ctx, blocks)
 		if err != nil {
 			return err
 		}
@@ -242,7 +245,7 @@ func (idx *Index) Store(ctx context.Context, tx store.Tx) error {
 		idx.bytesWritten += int64(snode.disksize)
 		idx.clean = false
 
-		// operator.NewLogger(os.Stdout, 30).Process(context.Background(), snode.spack)
+		// operator.NewLogger(os.Stdout, 30).Process(context.Background(), pkg)
 	}
 
 	return nil
@@ -293,7 +296,7 @@ func (idx *Index) Load(ctx context.Context, tx store.Tx) error {
 		if ilen == 0 {
 			ilen = 1 << log2(int(id*2)+2) // num inodes is the full inode tree plus 1 extra
 			slen := int(id) + 1           // num snodes is exact count
-			// idx.log.Tracef("load %d snodes, %d inodes", slen, ilen)
+			// idx.log.Debugf("load %d snodes, %d inodes", slen, ilen)
 			idx.inodes = slices.Grow(idx.inodes, ilen)
 			idx.inodes = idx.inodes[:ilen]
 			idx.snodes = slices.Grow(idx.snodes, slen)
@@ -304,7 +307,7 @@ func (idx *Index) Load(ctx context.Context, tx store.Tx) error {
 		switch kind {
 		case KIND_SNODE:
 			// snode
-			// idx.log.Tracef("load snode %d [%x]", id, c.Key())
+			// idx.log.Debugf("load snode %d [%x]", id, c.Key())
 			node := NewSNode(key, idx.schema, false)
 			node.meta = bytes.Clone(c.Value())
 			node.LoadVersion(idx.view)
@@ -312,7 +315,8 @@ func (idx *Index) Load(ctx context.Context, tx store.Tx) error {
 			idx.bytesRead += int64(len(c.Value()))
 
 			// load key and nvals columns
-			n, err := node.spack.LoadFromDisk(
+			pkg := node.spack.Load()
+			n, err := pkg.LoadFromDisk(
 				ctx,
 				blocks, // bucket
 				[]uint16{ // field ids!! (id = index + 1)
@@ -329,8 +333,8 @@ func (idx *Index) Load(ctx context.Context, tx store.Tx) error {
 			}
 			idx.bytesRead += int64(n)
 
-			// idx.log.Tracef("loaded snode %d %d[v%d]", id, node.Key(), node.Version())
-			// operator.NewLogger(os.Stdout, 30).Process(context.Background(), node.spack)
+			// idx.log.Debugf("loaded snode %d %d[v%d]", id, node.Key(), node.Version())
+			// operator.NewLogger(os.Stdout, 30).Process(context.Background(), pkg)
 
 		case KIND_INODE:
 			// inode

@@ -63,9 +63,10 @@ func (it *Iterator) PackInfo() (uint32, uint32, int) {
 		return 0, 0, 0
 	}
 	pos := int(it.match[it.n])
-	k := it.snode.spack.Uint32(STATS_ROW_KEY, pos)
-	v := it.snode.spack.Uint32(STATS_ROW_VERSION, pos)
-	n := it.snode.spack.Uint64(STATS_ROW_NVALS, pos)
+	pkg := it.snode.spack.Load()
+	k := pkg.Uint32(STATS_ROW_KEY, pos)
+	v := pkg.Uint32(STATS_ROW_VERSION, pos)
+	n := pkg.Uint64(STATS_ROW_NVALS, pos)
 	return k, v, int(n)
 }
 
@@ -74,7 +75,7 @@ func (it *Iterator) Key() uint32 {
 	if it.snode == nil {
 		return 0
 	}
-	return it.snode.spack.Uint32(STATS_ROW_KEY, int(it.match[it.n]))
+	return it.snode.spack.Load().Uint32(STATS_ROW_KEY, int(it.match[it.n]))
 }
 
 // query, merge
@@ -82,7 +83,7 @@ func (it *Iterator) Version() uint32 {
 	if it.snode == nil {
 		return 0
 	}
-	return it.snode.spack.Uint32(STATS_ROW_VERSION, int(it.match[it.n]))
+	return it.snode.spack.Load().Uint32(STATS_ROW_VERSION, int(it.match[it.n]))
 }
 
 // merge
@@ -90,7 +91,7 @@ func (it *Iterator) IsFull() bool {
 	if it.snode == nil {
 		return false
 	}
-	nvals := it.snode.spack.Uint64(STATS_ROW_NVALS, int(it.match[it.n]))
+	nvals := it.snode.spack.Load().Uint64(STATS_ROW_NVALS, int(it.match[it.n]))
 	return int(nvals) == it.idx.nmax
 }
 
@@ -100,8 +101,9 @@ func (it *Iterator) MinMax(col int) (any, any) {
 		return nil, nil
 	}
 	minx, maxx := minColIndex(col), maxColIndex(col)
-	minv := it.snode.spack.Block(minx).Get(int(it.match[it.n]))
-	maxv := it.snode.spack.Block(maxx).Get(int(it.match[it.n]))
+	pkg := it.snode.spack.Load()
+	minv := pkg.Block(minx).Get(int(it.match[it.n]))
+	maxv := pkg.Block(maxx).Get(int(it.match[it.n]))
 	return minv, maxv
 }
 
@@ -110,7 +112,7 @@ func (it *Iterator) NValues() int {
 	if it.snode == nil {
 		return 0
 	}
-	nvals := it.snode.spack.Uint64(STATS_ROW_NVALS, int(it.match[it.n]))
+	nvals := it.snode.spack.Load().Uint64(STATS_ROW_NVALS, int(it.match[it.n]))
 	return int(nvals)
 }
 
@@ -119,7 +121,7 @@ func (it *Iterator) ReadWire() []byte {
 	if it.snode == nil {
 		return nil
 	}
-	buf, err := it.snode.spack.ReadWire(int(it.match[it.n]))
+	buf, err := it.snode.spack.Load().ReadWire(int(it.match[it.n]))
 	if err != nil {
 		assert.Unreachable("invalid snode wire layout", err)
 	}
@@ -255,7 +257,7 @@ func (it *Iterator) combinedRange(b store.Bucket, key, ver uint32, n *filter.Nod
 
 		// load min value for this column
 		minx := minColIndex(n.Filter.Index)
-		minv := it.snode.spack.Block(minx).Get(int(it.match[it.n]))
+		minv := it.snode.spack.Load().Block(minx).Get(int(it.match[it.n]))
 
 		return idx.Query(n.Filter, minv, nRows)
 	}

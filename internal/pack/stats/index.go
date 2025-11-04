@@ -468,7 +468,7 @@ func (idx *Index) HeapSize() int {
 		sz += 24 + len(v.meta)
 	}
 	for _, v := range idx.snodes {
-		sz += 32 + len(v.meta) + v.spack.Size()
+		sz += 32 + len(v.meta) + v.spack.Load().Size()
 	}
 	return sz
 }
@@ -501,7 +501,7 @@ func (idx *Index) AddPack(ctx context.Context, pkg *pack.Package) error {
 	node, i, ok := idx.findSNode(pkg.Key())
 
 	// create a new leaf node when not found or full
-	if !ok || node.spack.Len() == STATS_PACK_SIZE {
+	if !ok || node.spack.Load().Len() == STATS_PACK_SIZE {
 		node, i = idx.addSnode()
 	}
 
@@ -935,7 +935,7 @@ func (idx *Index) addSnode() (*SNode, int) {
 	// use slen as key so that we assign sequential stats pack keys
 	var nextKey uint32
 	if slen > 0 {
-		nextKey = idx.snodes[slen-1].spack.Key() + 1
+		nextKey = idx.snodes[slen-1].spack.Load().Key() + 1
 	}
 	node := NewSNode(nextKey, idx.schema, true)
 	idx.snodes = append(idx.snodes, node)

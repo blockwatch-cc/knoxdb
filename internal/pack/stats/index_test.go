@@ -213,8 +213,8 @@ func TestIndexAddSingle(t *testing.T) {
 
 	// snode internals
 	snode := idx.snodes[0]
-	assert.Equal(t, uint32(0), snode.spack.Key(), "snode spack key")
-	assert.Equal(t, 1, snode.spack.Len(), "snode spack len")
+	assert.Equal(t, uint32(0), snode.spack.Load().Key(), "snode spack key")
+	assert.Equal(t, 1, snode.spack.Load().Len(), "snode spack len")
 	assert.True(t, snode.dirty, "snode dirty")
 
 	// snode api
@@ -317,8 +317,8 @@ func TestIndexUpdate(t *testing.T) {
 
 	// snode internals
 	snode = idx.snodes[0]
-	assert.Equal(t, uint32(0), snode.spack.Key(), "snode spack key")
-	assert.Equal(t, 1, snode.spack.Len(), "snode spack len")
+	assert.Equal(t, uint32(0), snode.spack.Load().Key(), "snode spack key")
+	assert.Equal(t, 1, snode.spack.Load().Len(), "snode spack len")
 	assert.True(t, snode.dirty, "snode dirty")
 
 	// snode api

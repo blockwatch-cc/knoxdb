@@ -97,8 +97,9 @@ func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
 
 		// build range filters for int columns
 		if b.Type().IsInt() && idx.use.Is(FeatRangeFilter) {
-			minv := node.spack.Block(minColIndex(i)).Get(n)
-			maxv := node.spack.Block(maxColIndex(i)).Get(n)
+			pkg := node.spack.Load()
+			minv := pkg.Block(minColIndex(i)).Get(n)
+			maxv := pkg.Block(maxColIndex(i)).Get(n)
 			rg, err := BuildRangeIndex(b, minv, maxv)
 			if err != nil {
 				return err
