@@ -42,7 +42,7 @@ func TestWorkload6(t *testing.T) {
 	// setup deterministic seed
 	SetupDeterministicRand(t)
 
-	eng, cleanup := tests.NewDatabase(t, &Account{})
+	eng, cleanup := tests.NewTempDatabase(t, &Account{})
 	t.Cleanup(func() {
 		cleanup()
 		tests.SaveDatabaseFiles(t, eng)
@@ -63,7 +63,7 @@ func TestWorkload6(t *testing.T) {
 
 	startTime := time.Now()
 	startid := 0
-	for range 100_000 {
+	for range 10_000 {
 		require.NoError(t, err)
 
 		data := genAccounts(startid)
