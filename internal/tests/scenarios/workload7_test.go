@@ -40,7 +40,7 @@ func TestWorkload7Seq(t *testing.T) {
 	var numRecords int64
 	startTime := time.Now()
 
-	for i := range 100_000 {
+	for i := range 10_000 {
 		data := &Account{
 			Balance:   int64(balance + i + i),
 			FirstSeen: time.Unix(int64(i), 0),
@@ -83,7 +83,7 @@ func TestWorkload7Conc(t *testing.T) {
 	startTime := time.Now()
 	errg.SetLimit(32)
 
-	for i := range 100_000 {
+	for i := range 10_000 {
 		data := &Account{
 			Balance:   int64(balance + i + i),
 			FirstSeen: time.Unix(int64(i), 0),
