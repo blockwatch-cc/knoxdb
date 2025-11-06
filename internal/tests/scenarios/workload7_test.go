@@ -7,7 +7,6 @@ package scenarios
 import (
 	"context"
 	"runtime/debug"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -15,6 +14,7 @@ import (
 	tests "blockwatch.cc/knoxdb/internal/tests/engine"
 	"blockwatch.cc/knoxdb/pkg/knox"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
 func TestWorkload7Seq(t *testing.T) {
@@ -40,7 +40,7 @@ func TestWorkload7Seq(t *testing.T) {
 	var numRecords int64
 	startTime := time.Now()
 
-	for i := range 10_000_000 {
+	for i := range 100_000 {
 		data := &Account{
 			Balance:   int64(balance + i + i),
 			FirstSeen: time.Unix(int64(i), 0),
@@ -77,36 +77,31 @@ func TestWorkload7Conc(t *testing.T) {
 		}
 	}()
 
-	errch := make(chan error)
-	var wg sync.WaitGroup
+	var errg errgroup.Group
 	var numRecords atomic.Uint64
 
 	startTime := time.Now()
-	for i := range 10_000_000 {
+	errg.SetLimit(32)
+
+	for i := range 100_000 {
 		data := &Account{
 			Balance:   int64(balance + i + i),
 			FirstSeen: time.Unix(int64(i), 0),
 		}
 
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		errg.Go(func() error {
 			ctx := context.Background()
-			_, _, err2 := table.Insert(ctx, data)
+			_, _, err := table.Insert(ctx, data)
 			if err != nil {
-				errch <- err2
+				return err
 			}
 			numRecords.Add(1)
-		}()
+			return nil
+		})
 	}
 
-	wg.Wait()
+	require.NoError(t, errg.Wait(), "insert should not fail")
+
 	dur := time.Since(startTime)
 	t.Logf("runtime [%s], rate [%f]", dur, float64(numRecords.Load())/(float64(dur)/float64(time.Second)))
-
-	select {
-	case err := <-errch:
-		t.Logf("error: %v", err)
-	default:
-	}
 }

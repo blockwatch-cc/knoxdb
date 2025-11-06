@@ -7,13 +7,14 @@ package scenarios
 import (
 	"context"
 	"runtime/debug"
-	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	tests "blockwatch.cc/knoxdb/internal/tests/engine"
 	"blockwatch.cc/knoxdb/pkg/knox"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -58,36 +59,28 @@ func TestWorkload6(t *testing.T) {
 		}
 	}()
 
-	errch := make(chan error)
-	var wg sync.WaitGroup
+	var numRecords atomic.Uint64
+	var errg errgroup.Group
+	errg.SetLimit(32)
 
 	startTime := time.Now()
 	startid := 0
 	for range 10_000 {
-		require.NoError(t, err)
-
 		data := genAccounts(startid)
 		startid += len(data)
 
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		errg.Go(func() error {
 			ctx := context.Background()
-			_, _, err2 := table.Insert(ctx, data)
-			if err2 != nil {
-				errch <- err2
+			_, n, err := table.Insert(ctx, data)
+			if err != nil {
+				return err
 			}
-		}()
+			numRecords.Add(uint64(n))
+			return nil
+		})
 	}
 
-	wg.Wait()
+	require.NoError(t, errg.Wait(), "table inserts should not fail")
 	dur := time.Since(startTime)
 	t.Logf("runtime [%s], rate [%f]", dur, float64(startid)/(float64(dur)/float64(time.Second)))
-
-	select {
-	case err := <-errch:
-		t.Logf("error: %v", err)
-	default:
-	}
-
 }
