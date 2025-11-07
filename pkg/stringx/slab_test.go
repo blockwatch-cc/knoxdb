@@ -5,14 +5,16 @@ package stringx
 
 import (
 	"bytes"
+	"sync"
 	"testing"
 
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
-func TestStringPoolAppend(t *testing.T) {
-	pool := NewStringPool(64)
+func TestSlabPoolAppend(t *testing.T) {
+	pool := NewSlabPool(64)
 	data := util.RandByteSlices(64, 8) // 64x length 8
 	for i, v := range data {
 		n := pool.Append(v)
@@ -32,13 +34,14 @@ func TestStringPoolAppend(t *testing.T) {
 	}
 }
 
-func TestStringPoolReallocAppend(t *testing.T) {
-	// default string size: 64 byte -> default pool size n * 64
-	// num strings inserted: 4k
-	// string len: 128
-	// expected allocs: 1
-	pool := NewStringPool(2048)
-	data := util.RandByteSlices(4096, 128)
+func TestSlabPoolAllocAppend(t *testing.T) {
+	// default page size: 64k
+	// num strings: 4k
+	// string len: 2k strings
+	// expected allocs: 8
+	// expected grow page slice: 1 (from cap 8 to 16)
+	pool := NewSlabPool(4096)
+	data := util.RandByteSlices(4096, 2048)
 	for i, v := range data {
 		n := pool.Append(v)
 		require.Equal(t, i, n, "append index")
@@ -52,13 +55,13 @@ func TestStringPoolReallocAppend(t *testing.T) {
 		rg := pool.Range(a, b)
 		require.Equal(t, b-a, rg.Len(), "subrange length")
 		for i := range b - a {
-			require.Equal(t, data[a+i], rg.Get(i), "range pos", a+i, i)
+			require.Equal(t, data[a+i], rg.Get(i), "range pos real=%d effective=%d", a+i, i)
 		}
 	}
 }
 
-func TestStringPoolSet(t *testing.T) {
-	pool := NewStringPool(64)
+func TestSlabPoolSet(t *testing.T) {
+	pool := NewSlabPool(64)
 	truth := make(map[int][]byte)
 	// fill with random length strings
 	for i := range 64 {
@@ -81,9 +84,9 @@ func TestStringPoolSet(t *testing.T) {
 	}
 }
 
-func TestStringPoolDelete(t *testing.T) {
+func TestSlabPoolDelete(t *testing.T) {
 	for range 16 {
-		pool := NewStringPool(64)
+		pool := NewSlabPool(64)
 		pool.AppendMany(util.RandByteSlices(64, 8)...) // 64x length 8
 		require.Equal(t, 64, pool.Len(), "len")
 		a, b := util.RandIntRange(0, 64)
@@ -92,18 +95,18 @@ func TestStringPoolDelete(t *testing.T) {
 	}
 }
 
-func TestStringPoolCmp(t *testing.T) {
+func TestSlabPoolCmp(t *testing.T) {
 	for range 16 {
-		pool := NewStringPool(64)
+		pool := NewSlabPool(64)
 		pool.AppendMany(util.RandByteSlices(64, 8)...) // 64x length 8
 		a, b := util.RandIntn(64), util.RandIntn(64)
 		require.Equal(t, bytes.Compare(pool.Get(a), pool.Get(b)), pool.Cmp(a, b), "cmp")
 	}
 }
 
-func TestStringPoolExtremes(t *testing.T) {
+func TestSlabPoolExtremes(t *testing.T) {
 	// min max
-	pool := NewStringPool(64)
+	pool := NewSlabPool(64)
 	require.Equal(t, []byte(nil), pool.Min(), "empty min")
 	require.Equal(t, []byte(nil), pool.Max(), "empty max")
 	la, lb := pool.MinMaxLen()
@@ -125,8 +128,8 @@ func TestStringPoolExtremes(t *testing.T) {
 	require.Equal(t, 5, lb, "max len")
 }
 
-func TestStringPoolIterators(t *testing.T) {
-	pool := NewStringPool(64)
+func TestSlabPoolIterators(t *testing.T) {
+	pool := NewSlabPool(64)
 	data := util.RandByteSlices(64, 8) // 64x length 8
 	pool.AppendMany(data...)
 
@@ -150,36 +153,53 @@ func TestStringPoolIterators(t *testing.T) {
 	}
 }
 
-type BenchmarkSize struct {
-	Name string
-	N    int
+func TestSlabPoolParallel(t *testing.T) {
+	pool := NewSlabPool(1 << 16)
+	data := util.RandByteSlices(64, 8) // 64x length 8
+	pool.AppendMany(data...)
+
+	var (
+		errg errgroup.Group
+		mu   sync.Mutex
+	)
+	errg.SetLimit(32)
+
+	// run one less than 1024 to not overflow pool
+	for range 1023 {
+		// writer (synced)
+		errg.Go(func() error {
+			mu.Lock()
+			defer mu.Unlock()
+			for _, v := range data {
+				pool.Append(v)
+			}
+			return nil
+		})
+
+		// readers (concurrent)
+		errg.Go(func() error {
+			for range 1024 {
+				n := util.RandIntn(pool.Len())
+				buf := pool.Get(n)
+				if len(buf) > 0 {
+					require.Equal(t, buf, data[n%64], "string mismatch")
+				}
+			}
+			return nil
+		})
+	}
+
+	require.NoError(t, errg.Wait())
 }
 
-var BenchmarkSizes = []BenchmarkSize{
-	{"1k", 1024},
-	{"16k", 16 * 1024},
-	{"64k", 64 * 1024},
-}
-
-type BenchmarkMask struct {
-	Name    string
-	Pattern []byte
-}
-
-var BenchmarkMasks = []BenchmarkMask{
-	{"0xFA", []byte{0xfa}},
-	{"0x10", []byte{0x10}},
-	{"0xFF", []byte{0xff}}, // translates to no mask
-}
-
-func BenchmarkStringPoolAppend(b *testing.B) {
+func BenchmarkSlabPoolAppend(b *testing.B) {
 	for _, sz := range BenchmarkSizes {
 		src := util.RandByteSlices(sz.N, 32)
 		b.Run(sz.Name, func(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(sz.N * 32))
 			for b.Loop() {
-				pool := NewStringPoolSize(sz.N, 32)
+				pool := NewSlabPoolSize(sz.N, 33*sz.N+1)
 				for _, v := range src {
 					pool.Append(v)
 				}
@@ -190,13 +210,13 @@ func BenchmarkStringPoolAppend(b *testing.B) {
 	}
 }
 
-func BenchmarkStringPoolGet(b *testing.B) {
+func BenchmarkSlabPoolGet(b *testing.B) {
 	for _, sz := range BenchmarkSizes {
 		src := util.RandByteSlices(sz.N, 32)
 		b.Run(sz.Name, func(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(sz.N * 32))
-			pool := NewStringPoolSize(sz.N, 32)
+			pool := NewSlabPoolSize(sz.N, 33*sz.N+1)
 			pool.AppendMany(src...)
 			for b.Loop() {
 				for i := range src {
@@ -209,13 +229,13 @@ func BenchmarkStringPoolGet(b *testing.B) {
 	}
 }
 
-func BenchmarkStringPoolCmp(b *testing.B) {
+func BenchmarkSlabPoolCmp(b *testing.B) {
 	for _, sz := range BenchmarkSizes {
 		src := util.RandByteSlices(sz.N, 32)
 		b.Run(sz.Name, func(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(sz.N * 32))
-			pool := NewStringPoolSize(sz.N, 32)
+			pool := NewSlabPoolSize(sz.N, 32)
 			pool.AppendMany(src...)
 			for b.Loop() {
 				for i := range src {
@@ -228,9 +248,9 @@ func BenchmarkStringPoolCmp(b *testing.B) {
 	}
 }
 
-func BenchmarkStringPoolIterator(b *testing.B) {
+func BenchmarkSlabPoolIterator(b *testing.B) {
 	for _, sz := range BenchmarkSizes {
-		pool := NewStringPoolSize(sz.N, 32)
+		pool := NewSlabPoolSize(sz.N, 32)
 		for range sz.N {
 			pool.Append(util.RandBytes(32))
 		}
@@ -250,9 +270,9 @@ func BenchmarkStringPoolIterator(b *testing.B) {
 	}
 }
 
-func BenchmarkStringPoolChunk(b *testing.B) {
+func BenchmarkSlabPoolChunk(b *testing.B) {
 	for _, sz := range BenchmarkSizes {
-		pool := NewStringPoolSize(sz.N, 32)
+		pool := NewSlabPoolSize(sz.N, 32)
 		for range sz.N {
 			pool.Append(util.RandBytes(32))
 		}
@@ -275,9 +295,9 @@ func BenchmarkStringPoolChunk(b *testing.B) {
 	}
 }
 
-func BenchmarkStringPoolMinMax(b *testing.B) {
+func BenchmarkSlabPoolMinMax(b *testing.B) {
 	for _, sz := range BenchmarkSizes {
-		pool := NewStringPoolSize(sz.N, 32)
+		pool := NewSlabPoolSize(sz.N, 32)
 		for range sz.N {
 			pool.Append(util.RandBytes(32))
 		}
@@ -296,9 +316,9 @@ func BenchmarkStringPoolMinMax(b *testing.B) {
 	}
 }
 
-func BenchmarkStringPoolAppendTo(b *testing.B) {
+func BenchmarkSlabPoolAppendTo(b *testing.B) {
 	for _, sz := range BenchmarkSizes {
-		pool := NewStringPoolSize(sz.N, 32)
+		pool := NewSlabPoolSize(sz.N, 32)
 		for range sz.N {
 			pool.Append(util.RandBytes(32))
 		}
@@ -315,59 +335,5 @@ func BenchmarkStringPoolAppendTo(b *testing.B) {
 		})
 		_ = x
 		pool.Close()
-	}
-}
-
-func BenchmarkByteSliceAppend(b *testing.B) {
-	for _, sz := range BenchmarkSizes {
-		src := util.RandByteSlices(sz.N, 32)
-		b.Run(sz.Name, func(b *testing.B) {
-			b.ReportAllocs()
-			b.SetBytes(int64(sz.N * 32))
-			for b.Loop() {
-				dst := make([][]byte, 0, len(src))
-				for _, v := range src {
-					dst = append(dst, bytes.Clone(v))
-				}
-				_ = dst
-			}
-			b.ReportMetric(float64(sz.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
-		})
-	}
-}
-
-func BenchmarkByteSliceGet(b *testing.B) {
-	for _, sz := range BenchmarkSizes {
-		src := util.RandByteSlices(sz.N, 32)
-		b.Run(sz.Name, func(b *testing.B) {
-			b.ReportAllocs()
-			b.SetBytes(int64(sz.N * 32))
-			for b.Loop() {
-				var dst []byte
-				for i := range src {
-					dst = src[i]
-				}
-				_ = dst
-			}
-			b.ReportMetric(float64(sz.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
-		})
-	}
-}
-
-func BenchmarkByteSliceIterator(b *testing.B) {
-	for _, sz := range BenchmarkSizes {
-		src := util.RandByteSlices(sz.N, 32)
-		var x int
-		b.Run(sz.Name, func(b *testing.B) {
-			b.ReportAllocs()
-			b.SetBytes(int64(sz.N * 32))
-			for b.Loop() {
-				for _, v := range src {
-					x += len(v)
-				}
-			}
-			b.ReportMetric(float64(sz.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
-		})
-		_ = x
 	}
 }

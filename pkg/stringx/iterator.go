@@ -3,7 +3,11 @@
 
 package stringx
 
-import "blockwatch.cc/knoxdb/internal/types"
+import (
+	"unsafe"
+
+	"blockwatch.cc/knoxdb/internal/types"
+)
 
 const (
 	CHUNK_SIZE = types.CHUNK_SIZE
@@ -53,7 +57,7 @@ func (it *StringChunkIterator) NextChunk() (*[CHUNK_SIZE][]byte, int) {
 	n := min(CHUNK_SIZE, len(it.pool.ptr)-it.base)
 	for i, v := range it.pool.ptr[it.base : it.base+n] {
 		ofs, sz := ptr2pair(v)
-		it.chunk[i] = it.pool.buf[ofs : ofs+sz]
+		it.chunk[i] = unsafe.Slice((*byte)(unsafe.Add(it.pool.base, ofs)), sz)
 	}
 	clear(it.chunk[n:])
 

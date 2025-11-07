@@ -5,6 +5,7 @@ package stringx
 
 import (
 	"bytes"
+	"fmt"
 	"iter"
 	"slices"
 	"sync"
@@ -22,28 +23,30 @@ var (
 
 	// ensure we implement required interfaces
 	_ types.StringAccessor = (*StringPool)(nil)
+
+	// zero is a zero length zero capacity slice uses as placeholder
+	// for returning zero length strings and to avoid allocations
+	zero = make([]byte, 0)[:0:0]
 )
 
 const StringPoolDefaultSize = 64
 
-// TODO
-// extensible buf (avoid buf realloc/memcopy on append)
-// - add new buffers of max fixed size on Append/Set as needed
-// - unify addressing into a single u64: buf_id + ofs + len
-// - requires we define an absolute max size per string (=max block size)
-//
-
 // StringPool is a memory efficient pool for variable length strings.
-// Its main purpose is to manage a slice of strings without the 24-byte
-// slice header overheads of [][]byte. Even though space savings are
-// great, they come at a 8x increased cost for random access. The main
-// reason for this cost is that function calls to Get() or iterator
-// yield callbacks are not inlined which makes them massively more
-// expensive than direct addressing `slice[i]` or `for i, v := range slice {}`
-// loops.
+// Its not thread-safe and may realloc/copy internal memory on growth.
+// Users can prevent reallocs by defining a correct max number and
+// max total length for all strings. Strings can be retrieved from
+// a pool by their position assigned during insert.
+//
+// The main purpose of StringPool is to lower memory overhead of
+// [][]byte (24 bytes per slice), especially for small strings.
+// Even though space savings are great, they come at higher
+// cost for random access. The main reason is the cost of non-inlined
+// function calls to Get() and iterator yield callbacks.
 type StringPool struct {
-	buf []byte   // buffer pool
-	ptr []uint64 // string offsets/lengths in buf
+	buf  []byte   // buffer pool
+	ptr  []uint64 // string content pointers [ off << 32 | len ]
+	base unsafe.Pointer
+	pp   *uint64
 }
 
 func ptr2pair(p uint64) (uint32, uint32) {
@@ -62,6 +65,8 @@ func NewStringPoolSize(n, sz int) *StringPool {
 	p := stringPool.Get().(*StringPool)
 	p.buf = arena.Alloc[byte](n * sz)
 	p.ptr = arena.Alloc[uint64](n)
+	p.base = unsafe.Pointer(unsafe.SliceData(p.buf))
+	p.pp = unsafe.SliceData(p.ptr)
 	return p
 }
 
@@ -70,6 +75,8 @@ func (p *StringPool) Close() {
 	arena.Free(p.ptr)
 	p.buf = nil
 	p.ptr = nil
+	p.base = nil
+	p.pp = nil
 	stringPool.Put(p)
 }
 
@@ -102,18 +109,17 @@ func (p *StringPool) HeapSize() int {
 //
 // Panics when i or j are out of bounds.
 func (p *StringPool) Cmp(i, j int) int {
-	ofs, sz := ptr2pair(p.ptr[i])
-	x := p.buf[ofs : ofs+sz]
-	ofs, sz = ptr2pair(p.ptr[j])
-	y := p.buf[ofs : ofs+sz]
-	return bytes.Compare(x, y)
+	if l := uint(len(p.ptr)); uint(i) > l || uint(j) > l {
+		return 0
+	}
+	return bytes.Compare(p.get(i), p.get(j))
 }
 
 func (p *StringPool) MinMax() ([]byte, []byte) {
 	if p.Len() == 0 {
 		return nil, nil
 	}
-	vmin := p.Get(0)
+	vmin := p.get(0)
 	vmax := vmin
 	for v := range p.Values() {
 		if bytes.Compare(v, vmin) < 0 {
@@ -129,7 +135,7 @@ func (p *StringPool) Min() []byte {
 	if p.Len() == 0 {
 		return nil
 	}
-	vmin := p.Get(0)
+	vmin := p.get(0)
 	for v := range p.Values() {
 		if bytes.Compare(v, vmin) < 0 {
 			vmin = v
@@ -142,7 +148,7 @@ func (p *StringPool) Max() []byte {
 	if p.Len() == 0 {
 		return nil
 	}
-	vmax := p.Get(0)
+	vmax := p.get(0)
 	for v := range p.Values() {
 		if bytes.Compare(v, vmax) > 0 {
 			vmax = v
@@ -170,20 +176,9 @@ func (p *StringPool) MinMaxLen() (int, int) {
 // unary iterator `for v := range pool.Iterator() {}`
 func (p *StringPool) Values() iter.Seq[[]byte] {
 	return func(fn func([]byte) bool) {
-		// beware of all empty strings
-		var base unsafe.Pointer
-		if len(p.buf) > 0 {
-			base = unsafe.Pointer(&p.buf[0])
-		}
-		var buf []byte
 		for _, ptr := range p.ptr {
 			ofs, len := ptr2pair(ptr)
-			if len == 0 {
-				buf = p.buf[:0:0]
-			} else {
-				buf = unsafe.Slice((*byte)(unsafe.Add(base, ofs)), len)
-			}
-			if !fn(buf) {
+			if !fn(unsafe.Slice((*byte)(unsafe.Add(p.base, ofs)), len)) {
 				return
 			}
 		}
@@ -193,20 +188,9 @@ func (p *StringPool) Values() iter.Seq[[]byte] {
 // 2-ary iterator `for i, v := range pool.Iterator2() {}`
 func (p *StringPool) Iterator() iter.Seq2[int, []byte] {
 	return func(fn func(int, []byte) bool) {
-		// beware of all empty strings
-		var base unsafe.Pointer
-		if len(p.buf) > 0 {
-			base = unsafe.Pointer(&p.buf[0])
-		}
-		var buf []byte
 		for i, ptr := range p.ptr {
 			ofs, len := ptr2pair(ptr)
-			if len == 0 {
-				buf = p.buf[:0:0]
-			} else {
-				buf = unsafe.Slice((*byte)(unsafe.Add(base, ofs)), len)
-			}
-			if !fn(i, buf) {
+			if !fn(i, unsafe.Slice((*byte)(unsafe.Add(p.base, ofs)), len)) {
 				return
 			}
 		}
@@ -217,16 +201,25 @@ func (p *StringPool) Chunks() types.StringIterator {
 	return NewIterator(p)
 }
 
-// Append adds a new element and returns its position in the pool.
+// Append adds a new entry and returns its position in the pool.
 func (p *StringPool) Append(val []byte) int {
-	vlen := uint32(len(val))
+	vlen := len(val)
+	if vlen > maxPageSize {
+		panic(fmt.Errorf("stringpool: string value too large"))
+	}
+	willGrow := len(p.ptr) == cap(p.ptr) || len(p.buf)+vlen > cap(p.buf)
 	if vlen == 0 {
-		// append empty string
+		// append empty string, may realloc
 		p.ptr = append(p.ptr, 0)
 	} else {
-		vofs := uint32(len(p.buf))
-		p.ptr = append(p.ptr, pair2ptr(vofs, vlen))
+		// may realloc
+		p.ptr = append(p.ptr, pair2ptr(uint32(len(p.buf)), uint32(vlen)))
 		p.buf = append(p.buf, val...)
+	}
+	// check for realloc and update pointers
+	if willGrow {
+		p.base = unsafe.Pointer(unsafe.SliceData(p.buf))
+		p.pp = unsafe.SliceData(p.ptr)
 	}
 	return len(p.ptr) - 1
 }
@@ -264,29 +257,42 @@ func (p *StringPool) AppendTo(dst types.StringWriter, sel []uint32) {
 	if sel == nil {
 		for _, ptr := range p.ptr {
 			ofs, len := ptr2pair(ptr)
-			dst.Append(p.buf[ofs : ofs+len])
+			dst.Append(unsafe.Slice((*byte)(unsafe.Add(p.base, ofs)), len))
 		}
 	} else {
 		for _, v := range sel {
-			ofs, len := ptr2pair(p.ptr[int(v)])
-			dst.Append(p.buf[ofs : ofs+len])
+			ofs, len := ptr2pair(*(*uint64)(unsafe.Add(unsafe.Pointer(p.pp), v*8)))
+			dst.Append(unsafe.Slice((*byte)(unsafe.Add(p.base, ofs)), len))
 		}
 	}
 }
 
-// Get returns element at position i. Panics if i is out of bounds.
+// Get returns an entry at position i. The underlying buffer is shared
+// with the pool and only valid until close. Returns empty slice when i
+// is out of bounds.
 func (p *StringPool) Get(i int) []byte {
-	ofs, sz := ptr2pair(p.ptr[i])
-	return p.buf[ofs : ofs+sz : ofs+sz]
+	if uint(i) > uint(len(p.ptr)) {
+		return zero
+	}
+	return p.get(i)
 }
 
-// GetString returns element at position i as shared string.
+// get returns entry at position i unchecked. It uses pointer arithmentic
+// like in C (Go requires unsafe here) to avoid slice boundary checks.
+func (p *StringPool) get(i int) []byte {
+	ofs, sz := ptr2pair(*(*uint64)(unsafe.Add(unsafe.Pointer(p.pp), i*8)))
+	return unsafe.Slice((*byte)(unsafe.Add(p.base, ofs)), sz)
+}
+
+// GetString returns an entry at position i casted to string type.
+// Other than regular Go strings memory is shared with the pool,
+// so its unsafe to use the string after close.
 // Panics if i is out of bounds.
 func (p *StringPool) GetString(i int) string {
 	return util.UnsafeGetString(p.Get(i))
 }
 
-// Set replaces element at position i with a new string. The new string
+// Set replaces entry at position i with a new string. The new string
 // is added to the buffer (without duplicate check) and the previous
 // string becomes garbage. Panics if i is out of bounds.
 func (p *StringPool) Set(i int, val []byte) {
@@ -297,7 +303,7 @@ func (p *StringPool) Set(i int, val []byte) {
 	p.buf = append(p.buf, val...)
 }
 
-// Delete removes elements [i:j] where indices form an open
+// Delete removes entries [i:j] where indices form an open
 // interval [i,j). Panics if i or j are out of bounds.
 func (p *StringPool) Delete(i, j int) {
 	p.ptr = slices.Delete(p.ptr, i, j)
@@ -307,8 +313,11 @@ func (p *StringPool) Delete(i, j int) {
 // pool. Do not close this pool as memory is shared. Panics if i or j
 // are out of bounds.
 func (p *StringPool) Range(i, j int) *StringPool {
+	rg := p.ptr[i:j]
 	return &StringPool{
-		buf: p.buf,
-		ptr: p.ptr[i:j],
+		buf:  p.buf,
+		ptr:  rg,
+		base: p.base,
+		pp:   unsafe.SliceData(rg),
 	}
 }
