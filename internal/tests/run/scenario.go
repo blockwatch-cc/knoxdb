@@ -264,6 +264,7 @@ func runTestInWasm(ctx context.Context, dir string, w io.Writer) error {
 		"-module", filepath.Join(dir, "scenarios.test"),
 		"-test.v",
 		"-test.failfast",
+		"-test.run=" + testrun,
 	}
 
 	cmd := exec.CommandContext(ctx, "go", args...)
@@ -280,6 +281,7 @@ func runTestInNative(ctx context.Context, dir string, w io.Writer) error {
 		"-test.failfast",
 		"-test.cpu=" + strconv.Itoa(numCpu),
 		"-test.count=1",
+		"-test.run=" + testrun,
 	}
 	cmd := exec.Command(filepath.Join(dir, "scenarios.test"), args...)
 	cmd.Stderr = w

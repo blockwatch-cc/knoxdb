@@ -34,6 +34,7 @@ type DatabaseOptions struct {
 	PageFill float64 // boltdb
 	NoSync   bool    // boltdb, no fsync on transactions (dangerous)
 	ReadOnly bool    // read-only tx and no schema changes
+	IsTemp   bool    // drop database on close
 }
 
 func (o DatabaseOptions) Merge(o2 DatabaseOptions) DatabaseOptions {
@@ -52,6 +53,7 @@ func (o DatabaseOptions) Merge(o2 DatabaseOptions) DatabaseOptions {
 	o.PageFill = util.NonZero(o2.PageFill, o.PageFill)
 	o.NoSync = o2.NoSync
 	o.ReadOnly = o2.ReadOnly
+	o.IsTemp = o2.IsTemp
 	if o2.Logger != nil {
 		o.Logger = o2.Logger
 	}
@@ -72,6 +74,9 @@ func (o DatabaseOptions) CatalogOptions(dbName string) []store.Option {
 	}
 	if o.NoSync {
 		opts = append(opts, store.WithNoSync())
+	}
+	if o.IsTemp {
+		opts = append(opts, store.WithDeleteOnClose())
 	}
 	return opts
 }
@@ -146,6 +151,11 @@ func (o DatabaseOptions) WithMaxTasks(n int) DatabaseOptions {
 	return o
 }
 
+func (o DatabaseOptions) WithDeleteOnClose() DatabaseOptions {
+	o.IsTemp = true
+	return o
+}
+
 func (o DatabaseOptions) MarshalBinary() ([]byte, error) {
 	enc := schema.NewGenericEncoder[DatabaseOptions]()
 	return enc.Encode(o, nil)
@@ -172,6 +182,7 @@ type TableOptions struct {
 	PageFill float64 // boltdb
 	ReadOnly bool    // read-only tx and no schema changes
 	NoSync   bool    // boltdb, no fsync on transactions (dangerous)
+	IsTemp   bool    // drop tables on close
 }
 
 func (o TableOptions) Merge(o2 TableOptions) TableOptions {
@@ -189,6 +200,7 @@ func (o TableOptions) Merge(o2 TableOptions) TableOptions {
 	o.PageFill = util.NonZero(o2.PageFill, o.PageFill)
 	o.ReadOnly = o2.ReadOnly
 	o.NoSync = o2.NoSync
+	o.IsTemp = o2.IsTemp
 	return o
 }
 
@@ -204,6 +216,9 @@ func (o TableOptions) StoreOptions() []store.Option {
 	}
 	if o.NoSync {
 		opts = append(opts, store.WithNoSync())
+	}
+	if o.IsTemp {
+		opts = append(opts, store.WithDeleteOnClose())
 	}
 	return opts
 }
@@ -264,6 +279,11 @@ func (o TableOptions) WithReadOnly() TableOptions {
 	return o
 }
 
+func (o TableOptions) WithDeleteOnClose() TableOptions {
+	o.IsTemp = true
+	return o
+}
+
 func (o TableOptions) WithDangerousNoSync() TableOptions {
 	o.NoSync = true
 	return o
@@ -282,6 +302,7 @@ type StoreOptions struct {
 	NoSync    bool       // boltdb, no fsync on transactions (dangerous)
 	TxMaxSize int        // maximum write size of low-level dbfile transactions
 	Logger    log.Logger `knox:"-"` // custom logger
+	IsTemp    bool       // drop store on close
 }
 
 func (o StoreOptions) Merge(o2 StoreOptions) StoreOptions {
@@ -291,6 +312,7 @@ func (o StoreOptions) Merge(o2 StoreOptions) StoreOptions {
 	o.TxMaxSize = util.NonZero(o2.TxMaxSize, o.TxMaxSize)
 	o.ReadOnly = o2.ReadOnly
 	o.NoSync = o2.NoSync
+	o.IsTemp = o2.IsTemp
 	if o2.Logger != nil {
 		o.Logger = o2.Logger
 	}
@@ -309,6 +331,9 @@ func (o StoreOptions) StoreOptions() []store.Option {
 	}
 	if o.NoSync {
 		opts = append(opts, store.WithNoSync())
+	}
+	if o.IsTemp {
+		opts = append(opts, store.WithDeleteOnClose())
 	}
 	return opts
 }
@@ -349,6 +374,11 @@ func (o StoreOptions) WithReadOnly() StoreOptions {
 	return o
 }
 
+func (o StoreOptions) WithDeleteOnClose() StoreOptions {
+	o.IsTemp = true
+	return o
+}
+
 func (o StoreOptions) WithDangerousNoSync() StoreOptions {
 	o.NoSync = true
 	return o
@@ -373,6 +403,7 @@ type IndexOptions struct {
 	PageFill float64 // boltdb
 	ReadOnly bool    // read-only tx and no schema changes
 	NoSync   bool    // boltdb, no fsync on transactions (dangerous)
+	IsTemp   bool    // drop index on close
 }
 
 func (o IndexOptions) Merge(o2 IndexOptions) IndexOptions {
@@ -389,6 +420,7 @@ func (o IndexOptions) Merge(o2 IndexOptions) IndexOptions {
 	o.PageFill = util.NonZero(o2.PageFill, o.PageFill)
 	o.ReadOnly = o2.ReadOnly
 	o.NoSync = o2.NoSync
+	o.IsTemp = o2.IsTemp
 	return o
 }
 
@@ -404,6 +436,9 @@ func (o IndexOptions) StoreOptions() []store.Option {
 	}
 	if o.NoSync {
 		opts = append(opts, store.WithNoSync())
+	}
+	if o.IsTemp {
+		opts = append(opts, store.WithDeleteOnClose())
 	}
 	return opts
 }
@@ -456,6 +491,11 @@ func (o IndexOptions) WithPageFill(n float64) IndexOptions {
 
 func (o IndexOptions) WithReadOnly() IndexOptions {
 	o.ReadOnly = true
+	return o
+}
+
+func (o IndexOptions) WithDeleteOnClose() IndexOptions {
+	o.IsTemp = true
 	return o
 }
 

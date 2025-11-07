@@ -24,6 +24,7 @@ import (
 var (
 	timeFmt                                = "2006-01-02_15-04-05"
 	arch                                   string // wasm, native
+	testrun                                string
 	numCpu                                 int
 	enableRace                             bool
 	enableVerbose                          bool
@@ -40,6 +41,7 @@ var (
 func init() {
 	// cli flags
 	flag.StringVar(&arch, "arch", "native", "test with arch wasm/native")
+	flag.StringVar(&testrun, "run", "", "regex to select workload to run")
 	flag.BoolVar(&enableRace, "race", false, "enable race detector")
 	flag.BoolVar(&enableVerbose, "v", false, "enable test log streaming")
 	flag.IntVar(&maxRound, "count", 1, "number of iterations using different random seeds")

@@ -28,7 +28,7 @@ func TestWorkload3(t *testing.T) {
 	// setup determinism
 	SetupDeterministicRand(t)
 
-	eng, cleanup := tests.NewDatabase(t, &Ledger{})
+	eng, cleanup := tests.NewTempDatabase(t, &Ledger{})
 	t.Cleanup(func() {
 		cleanup()
 		tests.SaveDatabaseFiles(t, eng)

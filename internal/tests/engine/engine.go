@@ -132,6 +132,45 @@ func NewDatabase(t *testing.T, typs ...any) (*engine.Engine, func()) {
 	return db, func() { db.Close(ctx) }
 }
 
+// NewDatabase sets up a fresh database and creates tables from struct types.
+func NewTempDatabase(t *testing.T, typs ...any) (*engine.Engine, func()) {
+	t.Helper()
+	dbo := NewTestDatabaseOptions(t, "").
+		WithDeleteOnClose()
+	t.Logf("NEW DB catalog driver=%s at %s", dbo.Driver, dbo.Path)
+	db := NewTestEngine(t, dbo)
+
+	ctx := context.Background()
+	// t.Logf("NEW enum=my_enum")
+	_, err := db.CreateEnum(ctx, "my_enum")
+	require.NoError(t, err, "Failed to create enum")
+
+	err = db.ExtendEnum(ctx, "my_enum", myEnums...)
+	require.NoError(t, err, "Failed to extend enum")
+
+	// Create tables and indexes for given types
+	for _, typ := range typs {
+		s, err := schema.SchemaOf(typ)
+		require.NoError(t, err, "Failed to generate schema for type %T", typ)
+		s = s.WithMeta()
+		opts := NewTestTableOptions(t, "", "").
+			WithDeleteOnClose()
+		t.Logf("NEW table=%s driver=%s engine=%s", s.Name, opts.Driver, opts.Engine)
+		_, err = db.CreateTable(ctx, s, opts)
+		require.NoError(t, err, "Failed to create table for type %T", typ)
+
+		// create indexes for type
+		for _, is := range s.Indexes {
+			iopts := NewTestIndexOptions(t, "", "").
+				WithDeleteOnClose()
+			_, err = db.CreateIndex(ctx, is, iopts)
+			require.NoError(t, err, "create pk index")
+		}
+	}
+
+	return db, func() { db.Close(ctx) }
+}
+
 func SaveDatabaseFiles(t *testing.T, e *engine.Engine) {
 	t.Helper()
 
