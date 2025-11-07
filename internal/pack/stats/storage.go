@@ -12,6 +12,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/store"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 const STATS_BUCKETS = 6
@@ -294,8 +295,8 @@ func (idx *Index) Load(ctx context.Context, tx store.Tx) error {
 
 		// init tree sizes from highest snode key id on storage
 		if ilen == 0 {
-			ilen = 1 << log2(int(id*2)+2) // num inodes is the full inode tree plus 1 extra
-			slen := int(id) + 1           // num snodes is exact count
+			ilen = 1 << util.Log2(int(id*2)+2) // num inodes is the full inode tree plus 1 extra
+			slen := int(id) + 1                // num snodes is exact count
 			// idx.log.Debugf("load %d snodes, %d inodes", slen, ilen)
 			idx.inodes = slices.Grow(idx.inodes, ilen)
 			idx.inodes = idx.inodes[:ilen]

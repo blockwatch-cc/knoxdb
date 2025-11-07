@@ -268,7 +268,7 @@ func TestIndexAddMany(t *testing.T) {
 	validateTree(t, idx)
 
 	// tree internals
-	require.Len(t, idx.inodes, 1<<log2ceil(sz), "idx num inodes")
+	require.Len(t, idx.inodes, 1<<util.Log2ceil(sz), "idx num inodes")
 	require.Len(t, idx.snodes, sz, "idx num snodes")
 
 	// api
@@ -419,7 +419,7 @@ func TestIndexDeleteMany(t *testing.T) {
 	validateTree(t, idx)
 
 	// tree internals
-	require.Len(t, idx.inodes, 1<<log2ceil(4), "idx num inodes")
+	require.Len(t, idx.inodes, 1<<util.Log2ceil(4), "idx num inodes")
 	require.Len(t, idx.snodes, 4, "idx num snodes")
 
 	snode := idx.snodes[0]
@@ -483,7 +483,7 @@ func TestIndexStore(t *testing.T) {
 	validateTree(t, idx)
 
 	// tree internals
-	require.Len(t, idx.inodes, 1<<log2ceil(sz), "idx num inodes")
+	require.Len(t, idx.inodes, 1<<util.Log2ceil(sz), "idx num inodes")
 	require.Len(t, idx.snodes, sz, "idx num snodes")
 
 	// api

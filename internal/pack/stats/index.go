@@ -22,6 +22,7 @@ import (
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/slicex"
 	"blockwatch.cc/knoxdb/pkg/store"
+	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/echa/log"
 )
 
@@ -960,7 +961,7 @@ func (idx *Index) addSnode() (*SNode, int) {
 		for i := ilen - 2; i >= 0; i-- {
 			// to = 1                        when i = 0 (root node)
 			//      i + 2 ^ trunc(log2(i+1)) otherwise
-			to := i + 1<<log2(i+1)
+			to := i + 1<<util.Log2(i+1)
 			idx.inodes[to], idx.inodes[i] = idx.inodes[i], nil
 		}
 
@@ -1066,7 +1067,7 @@ func (idx *Index) rebuildInodeTree(ver uint32) {
 
 	// resize inode array
 	slen := len(idx.snodes)
-	idx.inodes = idx.inodes[:1<<log2ceil(slen)]
+	idx.inodes = idx.inodes[:1<<util.Log2ceil(slen)]
 	ilen := len(idx.inodes)
 	si := ilen - 1
 

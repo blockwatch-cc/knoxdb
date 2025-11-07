@@ -4,8 +4,6 @@
 package stats
 
 import (
-	"math/bits"
-
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"golang.org/x/exp/constraints"
@@ -77,16 +75,4 @@ func parentIndex(i int) int {
 		return -1
 	}
 	return (i - 1) / 2
-}
-
-func log2(i int) int {
-	return bits.UintSize - bits.LeadingZeros(uint(i)) - 1
-}
-
-func log2ceil(i int) int {
-	v := log2(i)
-	if i&(i-1) > 0 {
-		v++
-	}
-	return v
 }

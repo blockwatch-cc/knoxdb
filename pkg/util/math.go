@@ -5,6 +5,7 @@ package util
 
 import (
 	"bytes"
+	"math/bits"
 
 	"golang.org/x/exp/constraints"
 )
@@ -140,4 +141,16 @@ func NonZeroMin[T constraints.Ordered](x ...T) T {
 func Abs[T constraints.Signed](n T) T {
 	y := int64(n) >> 63
 	return T((int64(n) ^ y) - y)
+}
+
+func Log2(i int) int {
+	return bits.UintSize - bits.LeadingZeros(uint(i)) - 1
+}
+
+func Log2ceil(i int) int {
+	v := Log2(i)
+	if i&(i-1) > 0 {
+		v++
+	}
+	return v
 }
