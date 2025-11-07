@@ -38,19 +38,34 @@ func TestWorkload7Seq(t *testing.T) {
 	}()
 
 	var numRecords int64
-	startTime := time.Now()
 
-	for i := range 10_000 {
-		data := &Account{
-			Balance:   int64(balance + i + i),
-			FirstSeen: time.Unix(int64(i), 0),
+	i := 0
+	timer := time.NewTimer(time.Minute)
+	startTime := time.Now()
+loop:
+	for {
+		select {
+		case <-timer.C:
+			break loop
+		default:
+			data := &Account{
+				Balance:   int64(balance + i + i),
+				FirstSeen: time.Unix(int64(i), 0),
+			}
+			ctx := context.Background()
+			ctx, commit, abort, err := table.DB().Begin(ctx, knox.TxFlagNoWal)
+			if err != nil {
+				t.Fatalf("error: %v", err)
+			}
+			_, _, err = table.Insert(ctx, data)
+			if err != nil {
+				abort()
+				t.Fatalf("error: %v", err)
+			}
+			commit()
+			abort()
+			numRecords++
 		}
-		ctx := context.Background()
-		_, _, err2 := table.Insert(ctx, data)
-		if err != nil {
-			t.Fatalf("error: %v", err2)
-		}
-		numRecords++
 	}
 
 	dur := time.Since(startTime)
@@ -80,24 +95,40 @@ func TestWorkload7Conc(t *testing.T) {
 	var errg errgroup.Group
 	var numRecords atomic.Uint64
 
+	i := 0
+	timer := time.NewTimer(time.Minute)
 	startTime := time.Now()
 	errg.SetLimit(32)
-
-	for i := range 10_000 {
-		data := &Account{
-			Balance:   int64(balance + i + i),
-			FirstSeen: time.Unix(int64(i), 0),
-		}
-
-		errg.Go(func() error {
-			ctx := context.Background()
-			_, _, err := table.Insert(ctx, data)
-			if err != nil {
-				return err
+loop:
+	for {
+		select {
+		case <-timer.C:
+			break loop
+		default:
+			data := &Account{
+				Balance:   int64(balance + i + i),
+				FirstSeen: time.Unix(int64(i), 0),
 			}
-			numRecords.Add(1)
-			return nil
-		})
+
+			errg.Go(func() error {
+				ctx := context.Background()
+				ctx, commit, abort, err := table.DB().Begin(ctx, knox.TxFlagNoWal)
+				if err != nil {
+					t.Fatalf("error: %v", err)
+				}
+				defer abort()
+				_, _, err = table.Insert(ctx, data)
+				if err != nil {
+					return err
+				}
+				err = commit()
+				if err != nil {
+					return err
+				}
+				numRecords.Add(1)
+				return err
+			})
+		}
 	}
 
 	require.NoError(t, errg.Wait(), "insert should not fail")

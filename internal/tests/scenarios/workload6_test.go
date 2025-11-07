@@ -65,19 +65,27 @@ func TestWorkload6(t *testing.T) {
 
 	startTime := time.Now()
 	startid := 0
-	for range 10_000 {
-		data := genAccounts(startid)
-		startid += len(data)
 
-		errg.Go(func() error {
-			ctx := context.Background()
-			_, n, err := table.Insert(ctx, data)
-			if err != nil {
-				return err
-			}
-			numRecords.Add(uint64(n))
-			return nil
-		})
+	timer := time.NewTimer(time.Minute)
+loop:
+	for {
+		select {
+		case <-timer.C:
+			break loop
+		default:
+			data := genAccounts(startid)
+			startid += len(data)
+
+			errg.Go(func() error {
+				ctx := context.Background()
+				_, n, err := table.Insert(ctx, data)
+				if err != nil {
+					return err
+				}
+				numRecords.Add(uint64(n))
+				return nil
+			})
+		}
 	}
 
 	require.NoError(t, errg.Wait(), "table inserts should not fail")
