@@ -20,16 +20,16 @@ type Allocator interface {
 	Free(any, int)
 }
 
-// 1k (10) .. 128k (17) = 8 sync.Pools
+// 1k (10) .. 2M (22) = 13 sync.Pools
 type allocator[T any] struct {
 	mu    sync.Mutex
-	pools [8]atomic.Pointer[sync.Pool]
+	pools [13]atomic.Pointer[sync.Pool]
 	track map[uintptr]int
 }
 
 const (
 	minAllocClass = 10
-	maxAllocClass = 17
+	maxAllocClass = 22
 )
 
 func newAllocator[T any]() *allocator[T] {
