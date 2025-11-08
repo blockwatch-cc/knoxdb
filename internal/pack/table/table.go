@@ -68,6 +68,7 @@ type Table struct {
 	stats   *stats.AtomicPointer    // in-memory metadata
 	journal *journal.Journal        // in-memory data not yet written to packs
 	metrics engine.TableMetrics     // usage statistics
+	task    *engine.Task            // merge task pointer
 	log     log.Logger
 }
 
@@ -463,11 +464,12 @@ func (t *Table) CommitTx(ctx context.Context, xid types.XID) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	canMerge := t.journal.CommitTx(xid)
-	if canMerge {
-		// cascading merge calls on high tx volume are scheduled, but may
-		// bail out when segment merge takes too long
+
+	// TODO: move task scheduling and backpressure handling to journal
+	if canMerge && t.task == nil {
 		t.log.Debug("scheduling merge task")
-		ok := t.engine.Schedule(engine.NewTask(t.Merge))
+		t.task = engine.NewTask(t.Merge)
+		ok := t.engine.Schedule(t.task)
 		if !ok {
 			t.log.Warn("merge: task queue full")
 		}
@@ -480,11 +482,12 @@ func (t *Table) AbortTx(ctx context.Context, xid types.XID) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	canMerge := t.journal.AbortTx(xid)
-	if canMerge {
-		// cascading merge calls on high tx volume are scheduled, but may
-		// bail out when segment merge takes too long
+
+	// TODO: move task scheduling and backpressure handling to journal
+	if canMerge && t.task == nil {
 		t.log.Debug("scheduling merge task")
-		ok := t.engine.Schedule(engine.NewTask(t.Merge))
+		t.task = engine.NewTask(t.Merge)
+		ok := t.engine.Schedule(t.task)
 		if !ok {
 			t.log.Warn("merge: task queue full")
 		}

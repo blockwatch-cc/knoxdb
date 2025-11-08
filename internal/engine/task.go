@@ -23,7 +23,7 @@ func NewTask(fn func(context.Context) error) *Task {
 	}
 }
 
-func (t *Task) Done() bool {
+func (t *Task) IsDone() bool {
 	select {
 	case <-t.done:
 		return true
@@ -32,8 +32,18 @@ func (t *Task) Done() bool {
 	}
 }
 
+func (t *Task) Done() <-chan struct{} {
+	return t.done
+}
+
 func (t *Task) Err() error {
 	return t.err
+}
+
+func (t *Task) Abort() {
+	if t.err == nil {
+		t.err = ErrTaskAborted
+	}
 }
 
 func (t *Task) complete(err error) {
@@ -178,6 +188,11 @@ func (m *TaskService) dispatch() {
 		case <-m.stop:
 			return
 		case task = <-m.tasks:
+		}
+
+		// ignore aborted tasks
+		if task.err != nil {
+			continue
 		}
 
 		// wait for the next ready worker or shutdown

@@ -230,23 +230,38 @@ func (j *Journal) doRotate() bool {
 // NextMergable returns the next journal segment that is ready to merge.
 // If another segment is currently merging, error ErrAgain is returned.
 func (j *Journal) NextMergable() (*Segment, error) {
-	for i, v := range j.tail {
-		if v.is(SegmentStateMerging) {
-			return nil, engine.ErrAgain
+	// no tail segment exists
+	if len(j.tail) == 0 {
+		return nil, nil
+	}
+
+	for _, seg := range j.tail {
+		// segment is already merging
+		if seg.is(SegmentStateMerging) {
+			if len(j.tail) > 1 {
+				return nil, engine.ErrAgain
+			}
+			return nil, nil
 		}
-		if v.is(SegmentStateComplete) {
+
+		// tail segment is complete
+		if seg.is(SegmentStateComplete) {
 			// flip state
-			v.setState(SegmentStateMerging)
+			seg.setState(SegmentStateMerging)
 
 			// determine follower segment's checkpoint
-			if i < len(j.tail)-1 {
-				v.setCheckpoint(j.tail[i+1].lsn)
+			if len(j.tail) > 1 {
+				seg.setCheckpoint(j.tail[1].lsn)
 			} else {
-				v.setCheckpoint(j.tip.lsn)
+				seg.setCheckpoint(j.tip.lsn)
 			}
-			return v, nil
+			return seg, nil
 		}
+
+		// otherwise ignore segment
 	}
+
+	// nothing to do yet
 	return nil, nil
 }
 
@@ -290,6 +305,7 @@ func (j *Journal) CommitTx(xid types.XID) bool {
 	for _, v := range j.tail {
 		if v.is(SegmentStateWaiting) && v.ContainsTx(xid) {
 			v.CommitTx(xid)
+			v.setState(SegmentStateComplete)
 		}
 	}
 
@@ -315,6 +331,7 @@ func (j *Journal) AbortTx(xid types.XID) bool {
 		var n int
 		if v.ContainsTx(xid) {
 			n = v.AbortTx(xid)
+			v.setState(SegmentStateComplete)
 		}
 		pmin = min(pmin, v.tstate.NextPk)
 		rmin = min(rmin, v.tstate.NextRid)
@@ -355,6 +372,7 @@ func (j *Journal) AbortActiveTx() (int, bool) {
 			v.tstate.NRows = uint64(int64(v.tstate.NRows) - int64(nRowsDiff))
 			nAborted += n
 			nRowsDiff += r
+			v.setState(SegmentStateComplete)
 		}
 	}
 
@@ -372,22 +390,22 @@ func (j *Journal) AbortActiveTx() (int, bool) {
 func (j *Journal) compact() bool {
 	// remove empty segments and prepare merge for complete segments
 	var (
-		k            int
-		haveMergable bool
+		k         int
+		canMerge  bool
+		isMerging bool
+		n         int
 	)
 	for i, s := range j.tail {
-		if s.canDrop() {
+		switch s.getState() {
+		case SegmentStateEmpty, SegmentStateMerged:
 			s.Close()
 			j.tail[i] = nil
 			continue
-		}
-
-		// advance wait state to complete
-		if s.is(SegmentStateWaiting) && s.IsDone() {
-			s.setState(SegmentStateComplete)
-			haveMergable = true
-		} else {
-			haveMergable = haveMergable || s.is(SegmentStateComplete)
+		case SegmentStateComplete:
+			canMerge = true
+			n++
+		case SegmentStateMerging:
+			isMerging = true
 		}
 		j.tail[k] = s
 		k++
@@ -395,7 +413,7 @@ func (j *Journal) compact() bool {
 	clear(j.tail[k:])
 	j.tail = j.tail[:k]
 
-	return haveMergable
+	return canMerge && !isMerging
 }
 
 // Merges results from a chain of journal segments under snapshot isolation

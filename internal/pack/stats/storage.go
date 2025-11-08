@@ -85,18 +85,19 @@ func decodeNodeKey(buf []byte) (kind byte, id, key, ver uint32) {
 // rewrite. Just the inner inode tree and all snodes is sufficient, the snode spack's
 // block versions can wrap around just as the data block versions.
 func (idx *Index) Store(ctx context.Context, tx store.Tx) error {
-	// create buckets if not exist
-	for _, k := range idx.keys {
-		if _, err := tx.Root().CreateBucket(k); err != nil {
-			return err
-		}
-	}
-
 	// resolve buckets
 	tree := idx.treeBucket(tx)
 	blocks := idx.statsBucket(tx)
+
+	// create buckets if not exist
 	if tree == nil || blocks == nil {
-		return store.ErrBucketNotFound
+		for _, k := range idx.keys {
+			if _, err := tx.Root().CreateBucket(k); err != nil {
+				return err
+			}
+		}
+		tree = idx.treeBucket(tx)
+		blocks = idx.statsBucket(tx)
 	}
 
 	// identify empty snodes for garbage collection

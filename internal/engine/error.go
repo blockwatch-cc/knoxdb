@@ -47,6 +47,7 @@ var (
 	ErrTxTimeout      = errors.New("write transaction wait timed out")
 	ErrShortMessage   = errors.New("short message buffer")
 	ErrTooManyTasks   = errors.New("too many running tasks")
+	ErrTaskAborted    = errors.New("task aborted")
 	ErrNotImplemented = errors.New("feature not implemented")
 	ErrAgain          = errors.New("try again")
 )

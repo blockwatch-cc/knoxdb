@@ -112,15 +112,22 @@ func (t *Table) Merge(ctx context.Context) error {
 		nRetries = 3
 	)
 
+	t.log.Debug("starting merge task")
+
+	// we're running, reset merge task handle
+	t.mu.Lock()
+	t.task = nil
+	t.mu.Unlock()
+
 	if t.IsReadOnly() {
 		return engine.ErrTableReadOnly
 	}
 
 	for {
 		// get next mergable segment, will atomically mark as merge in progress
-		t.mu.RLock()
+		t.mu.Lock()
 		seg, err = t.journal.NextMergable()
-		t.mu.RUnlock()
+		t.mu.Unlock()
 		nRetries--
 		if err == nil || nRetries <= 0 {
 			break
@@ -363,8 +370,8 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 	atomic.StoreInt64(&t.metrics.LastMergeDuration, int64(dur))
 	nBytes = atomic.LoadInt64(&t.metrics.BytesWritten) - nBytes
 
-	t.log.Debugf("merged packs=%d records=%d tombs=%d heap=%s stored=%s comp=%.2f%% in %s",
-		nPacks, nAdd, nStones, util.ByteSize(nHeap), util.ByteSize(nBytes),
+	t.log.Infof("merged segment %d packs=%d records=%d tombs=%d heap=%s stored=%s comp=%.2f%% in %s",
+		seg.Id(), nPacks, nAdd, nStones, util.ByteSize(nHeap), util.ByteSize(nBytes),
 		float64(nBytes)*100/float64(nHeap), dur)
 
 	return nil
