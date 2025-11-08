@@ -245,7 +245,6 @@ func run() error {
 
 func OpenOrCreate(ctx context.Context) (db knox.Database, table knox.Table, err error) {
 	ok, err := knox.IsDatabaseExist(
-		ctx,
 		"types",
 		knox.DefaultDatabaseOptions.WithPath("./db"),
 	)

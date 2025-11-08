@@ -75,7 +75,7 @@ steps:
         from_secret: MINIO_SECRET
     commands:
       - apk add --no-cache git
-      - go run -buildvcs=true ./internal/tests/run -count 100 -arch wasm -timeout 3000m
+      - go run -buildvcs=true ./internal/tests/run -count 100 -arch wasm
     depends_on:
       - lint
       - scan
@@ -98,7 +98,7 @@ steps:
         from_secret: MINIO_SECRET
     commands:
       - apk add --no-cache git
-      - go run -buildvcs=true ./internal/tests/run -count 100 -arch native -timeout 3000m
+      - go run -buildvcs=true ./internal/tests/run -count 100 -arch native
     depends_on:
       - lint
       - scan
