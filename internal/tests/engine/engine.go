@@ -27,9 +27,6 @@ const (
 func NewTestDatabaseOptions(t *testing.T, driver string) engine.DatabaseOptions {
 	t.Helper()
 	driver = util.NonEmptyString(driver, os.Getenv("KNOX_DRIVER"), "bolt")
-	if testing.Verbose() {
-		log.Log.SetLevel(log.LevelDebug)
-	}
 	return engine.DatabaseOptions{
 		Path:      t.TempDir(),
 		Driver:    driver,
@@ -46,17 +43,14 @@ func NewTestTableOptions(t *testing.T, driver, eng string) engine.TableOptions {
 	t.Helper()
 	driver = util.NonEmptyString(driver, os.Getenv("KNOX_DRIVER"), "bolt")
 	eng = util.NonEmptyString(eng, os.Getenv("KNOX_ENGINE"), "pack")
-	if testing.Verbose() {
-		log.Log.SetLevel(log.LevelDebug)
-	}
 	return engine.TableOptions{
 		Driver:      driver,
 		Engine:      engine.TableKind(eng),
-		PageSize:    4096,
+		PageSize:    1 << 16, // 64kB
 		PageFill:    0.9,
-		PackSize:    1 << 11,
-		JournalSize: 1 << 10,
-		NoSync:      false,
+		PackSize:    1 << 16, // 64k
+		JournalSize: 1 << 16, // 64k
+		NoSync:      true,
 		ReadOnly:    false,
 		Logger:      log.Log.Clone(),
 	}
@@ -66,18 +60,15 @@ func NewTestIndexOptions(t *testing.T, driver, eng string) engine.IndexOptions {
 	t.Helper()
 	driver = util.NonEmptyString(driver, os.Getenv("KNOX_DRIVER"), "bolt")
 	eng = util.NonEmptyString(eng, os.Getenv("KNOX_ENGINE"), "pack")
-	if testing.Verbose() {
-		log.Log.SetLevel(log.LevelDebug)
-	}
 	return engine.IndexOptions{
 		Driver:      driver,
 		Engine:      engine.IndexKind(eng),
-		JournalSize: 1 << 10,
-		PageSize:    4096,
+		JournalSize: 1 << 16, // 64k
+		PageSize:    1 << 16, // 64kB
 		PageFill:    0.9,
-		PackSize:    1 << 11,
+		PackSize:    1 << 12, // 4k
 		ReadOnly:    false,
-		NoSync:      false,
+		NoSync:      true,
 		Logger:      log.Log.Clone(),
 	}
 }

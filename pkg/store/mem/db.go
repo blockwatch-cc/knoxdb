@@ -36,6 +36,15 @@ type db struct {
 	sequences map[string]*sequence         // map of open sequences
 }
 
+func (db *db) bucketName(id [bucketIdLen]byte) string {
+	for n, k := range db.bucketIds {
+		if k == id {
+			return n
+		}
+	}
+	return ""
+}
+
 // Enforce db implements the store.DB interface.
 var _ store.DB = (*db)(nil)
 

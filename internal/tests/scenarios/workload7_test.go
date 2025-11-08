@@ -40,12 +40,13 @@ func TestWorkload7Seq(t *testing.T) {
 	var numRecords int64
 
 	i := 0
-	timer := time.NewTimer(time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	startTime := time.Now()
 loop:
 	for {
 		select {
-		case <-timer.C:
+		case <-ctx.Done():
 			break loop
 		default:
 			data := &Account{
@@ -53,7 +54,7 @@ loop:
 				FirstSeen: time.Unix(int64(i), 0),
 			}
 			ctx := context.Background()
-			ctx, commit, abort, err := table.DB().Begin(ctx, knox.TxFlagNoWal)
+			ctx, commit, abort, err := db.Begin(ctx, knox.TxFlagNoWal)
 			if err != nil {
 				t.Fatalf("error: %v", err)
 			}
@@ -62,8 +63,9 @@ loop:
 				abort()
 				t.Fatalf("error: %v", err)
 			}
-			commit()
-			abort()
+			if err := commit(); err != nil {
+				t.Fatalf("error: %v", err)
+			}
 			numRecords++
 		}
 	}
@@ -96,13 +98,14 @@ func TestWorkload7Conc(t *testing.T) {
 	var numRecords atomic.Uint64
 
 	i := 0
-	timer := time.NewTimer(time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	startTime := time.Now()
 	errg.SetLimit(32)
 loop:
 	for {
 		select {
-		case <-timer.C:
+		case <-ctx.Done():
 			break loop
 		default:
 			data := &Account{
@@ -112,21 +115,17 @@ loop:
 
 			errg.Go(func() error {
 				ctx := context.Background()
-				ctx, commit, abort, err := table.DB().Begin(ctx, knox.TxFlagNoWal)
+				ctx, commit, abort, err := db.Begin(ctx, knox.TxFlagNoWal)
 				if err != nil {
 					t.Fatalf("error: %v", err)
 				}
 				defer abort()
-				_, _, err = table.Insert(ctx, data)
+				_, n, err := table.Insert(ctx, data)
 				if err != nil {
 					return err
 				}
-				err = commit()
-				if err != nil {
-					return err
-				}
-				numRecords.Add(1)
-				return err
+				numRecords.Add(uint64(n))
+				return commit()
 			})
 		}
 	}

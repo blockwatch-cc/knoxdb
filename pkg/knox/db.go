@@ -18,7 +18,6 @@ const (
 	TxFlagReadOnly = engine.TxFlagReadOnly // run tx in read-only mode
 	TxFlagNoWal    = engine.TxFlagNoWal    // do not write wal
 	TxFlagNoSync   = engine.TxFlagNoSync   // write wal but do not fsync
-	TxFlagNoWait   = engine.TxFlagNoWait   // don't block in single writer mode
 	TxFlagDeferred = engine.TxFlagDeferred // let read tx wait for safe snapshot or timeout
 )
 

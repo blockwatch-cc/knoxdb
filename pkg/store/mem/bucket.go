@@ -7,6 +7,7 @@ import (
 	"bytes"
 
 	"blockwatch.cc/knoxdb/pkg/store"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 // bucket is an internal type used to represent a collection of key/value pairs
@@ -86,7 +87,13 @@ func (b *bucket) CreateBucket(key []byte) (store.Bucket, error) {
 	}
 
 	// Add the new bucket to the bucket index.
-	b.tx.db.opts.Log.Debugf("creating bucket %q with id 0x%x", string(key), childID)
+	if util.IsASCII(string(key)) {
+		b.tx.db.opts.Log.Debugf("creating bucket %s/%s with id 0x%x",
+			b.tx.db.bucketName(b.id), string(key), childID)
+	} else {
+		b.tx.db.opts.Log.Debugf("creating bucket %s/%x with id 0x%x",
+			b.tx.db.bucketName(b.id), key, childID)
+	}
 	b.tx.db.bucketIds[string(childKey)] = childID
 
 	return &bucket{tx: b.tx, id: childID, key: childKey}, nil

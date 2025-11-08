@@ -26,22 +26,6 @@ type transaction struct {
 // Enforce transaction implements the store.Tx interface.
 var _ store.Tx = (*transaction)(nil)
 
-// The transaction is no longer valid if it has been closed.
-// func (tx *transaction) checkClosed() error {
-// 	if tx.closed {
-// 		return store.ErrTxClosed
-// 	}
-// 	return nil
-// }
-
-// checkWriteable returns an error if the the database or transaction is closed.
-// func (tx *transaction) checkWriteable() error {
-// 	if !tx.writable {
-// 		return makeDbErr(store.ErrTxNotWritable, "tx is not writeable")
-// 	}
-// 	return nil
-// }
-
 // nextBucketID returns the next bucket ID to use for creating a new bucket.
 //
 // NOTE: This function must only be called on a writable transaction.  Since it
