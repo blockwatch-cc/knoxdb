@@ -404,7 +404,7 @@ func (t *Tx) Commit() error {
 	// run callbacks
 	for _, fn := range t.onCommit {
 		if err := fn(t.ctx); err != nil {
-			t.engine.log.Errorf("Tx 0x%016x commit: %v", t.id, err)
+			t.engine.log.Errorf("Tx %s commit: %v", t.id, err)
 		}
 	}
 
@@ -493,7 +493,7 @@ func (t *Tx) Abort() error {
 	// run callbacks
 	for _, fn := range t.onAbort {
 		if err := fn(t.ctx); err != nil {
-			t.engine.log.Errorf("Tx 0x%016x abort: %v", t.id, err)
+			t.engine.log.Errorf("Tx %s abort: %v", t.id, err)
 		}
 	}
 

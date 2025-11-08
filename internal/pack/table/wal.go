@@ -75,10 +75,10 @@ func (t *Table) ReplayWal(ctx context.Context) error {
 
 	// merge journal after crash recovery when segments are ready
 	if canMerge {
-		t.log.Debug("scheduling merge task")
+		t.log.Trace("scheduling merge task")
 		ok := t.engine.Schedule(engine.NewTask(t.Merge))
 		if !ok {
-			t.log.Warn("merge task queue full")
+			t.log.Trace("merge task queue full")
 		}
 	}
 

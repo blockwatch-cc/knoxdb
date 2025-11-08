@@ -28,8 +28,12 @@ type DB struct {
 	log    log.Logger
 }
 
-func IsDatabaseExist(ctx context.Context, name string, opts DatabaseOptions) (bool, error) {
-	return engine.IsExist(ctx, name, opts)
+func IsDatabaseExist(name string, opts DatabaseOptions) (bool, error) {
+	return engine.IsExist(name, opts)
+}
+
+func DropDatabase(name string, opts DatabaseOptions) error {
+	return engine.Drop(name, opts)
 }
 
 func WrapEngine(e *engine.Engine) Database {

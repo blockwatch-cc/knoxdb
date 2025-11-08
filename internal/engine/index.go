@@ -95,7 +95,7 @@ func (e *Engine) CreateIndex(ctx context.Context, s *schema.IndexSchema, opts In
 
 	// ensure logger
 	if opts.Logger == nil {
-		opts.Logger = e.log.Clone()
+		opts.Logger = e.opts.Logger
 	}
 
 	// start (or use) transaction and amend context
@@ -273,7 +273,7 @@ func (e *Engine) openIndexes(ctx context.Context, table TableEngine, ts *schema.
 			return ErrNoEngine
 		}
 		idx := factory()
-		opts.Logger = e.log.Clone() // FIXME: register logger to set level later
+		opts.Logger = e.opts.Logger
 		opts.ReadOnly = e.opts.ReadOnly
 		if err := idx.Open(ctx, table, s, opts); err != nil {
 			return err

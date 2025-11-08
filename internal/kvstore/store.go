@@ -61,12 +61,12 @@ func (kv *KVStore) Create(ctx context.Context, s *schema.Schema, opts engine.Sto
 	kv.key = []byte(s.Name)
 	kv.metrics = engine.NewStoreMetrics(s.Name)
 	kv.noClose = true
-	kv.log = opts.Logger
+	kv.log = opts.Logger.Clone("store:" + s.Name)
 
 	// create db if not passed in options
 	if kv.db == nil {
 		path := filepath.Join(e.RootPath(), s.Name)
-		kv.log.Debugf("store[%s]: creating backend=%s path=%s opts=%#v", s.Name, path, opts)
+		kv.log.Debugf("creating backend=%s path=%s opts=%#v", path, opts)
 		opts := append(
 			kv.opts.StoreOptions(),
 			store.WithPath(path),
@@ -79,7 +79,7 @@ func (kv *KVStore) Create(ctx context.Context, s *schema.Schema, opts engine.Sto
 		)
 		db, err := store.Create(opts...)
 		if err != nil {
-			kv.log.Errorf("creating store %s: %v", s.Name, err)
+			kv.log.Errorf("creating store: %v", err)
 			return engine.ErrNoStore
 		}
 		kv.db = db
@@ -107,7 +107,7 @@ func (kv *KVStore) Create(ctx context.Context, s *schema.Schema, opts engine.Sto
 		return err
 	}
 
-	kv.log.Debugf("store[%s]: backend successfully created", s.Name)
+	kv.log.Debug("backend successfully created")
 	return tx.Commit()
 }
 
@@ -122,12 +122,12 @@ func (kv *KVStore) Open(ctx context.Context, s *schema.Schema, opts engine.Store
 	kv.key = []byte(s.Name)
 	kv.metrics = engine.NewStoreMetrics(s.Name)
 	kv.noClose = true
-	kv.log = opts.Logger
+	kv.log = opts.Logger.Clone("store:" + s.Name)
 
 	// open db if not passed in options
 	if kv.db == nil {
 		path := filepath.Join(e.RootPath(), s.Name)
-		kv.log.Debugf("store[%s]: creating backend=%s path=%s opts=%#v", s.Name, path, opts)
+		kv.log.Debugf("creating backend=%s path=%s opts=%#v", path, opts)
 		opts := append(
 			kv.opts.StoreOptions(),
 			store.WithPath(path),
@@ -171,13 +171,13 @@ func (kv *KVStore) Open(ctx context.Context, s *schema.Schema, opts engine.Store
 	kv.metrics.TotalSize = int64(stats.Size) // estimate only
 	kv.metrics.NumKeys = int64(stats.KeyN)
 
-	kv.log.Debugf("store[%s]: opened with %d entries", kv.schema.Name, kv.metrics.NumKeys)
+	kv.log.Debugf("opened with %d entries", kv.metrics.NumKeys)
 	return nil
 }
 
 func (kv *KVStore) Close(ctx context.Context) (err error) {
 	if !kv.noClose && kv.db != nil {
-		kv.log.Debugf("store[%s]: closing", kv.schema.Name)
+		kv.log.Debug("closing")
 		err = kv.db.Close()
 		kv.db = nil
 	}
@@ -222,9 +222,8 @@ func (kv *KVStore) Metrics() engine.StoreMetrics {
 }
 
 func (kv *KVStore) Drop(ctx context.Context) error {
-	typ := kv.engine.Namespace() + "." + kv.schema.Label()
 	if kv.noClose {
-		kv.log.Debugf("dropping store %s", typ)
+		kv.log.Debug("dropping backend state")
 		tx, err := kv.db.Begin(true)
 		if err != nil {
 			return err
@@ -241,7 +240,7 @@ func (kv *KVStore) Drop(ctx context.Context) error {
 	path := kv.db.Path()
 	_ = kv.db.Close()
 	kv.db = nil
-	kv.log.Debugf("dropping store %s with path %s", typ, path)
+	kv.log.Debugf("dropping backend files at %s", path)
 	if err := os.Remove(path); err != nil {
 		return err
 	}

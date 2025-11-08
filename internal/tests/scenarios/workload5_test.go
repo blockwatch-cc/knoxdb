@@ -112,18 +112,6 @@ func genCommand() command {
 
 var lastCrash atomic.Int64
 
-type dbProvider struct {
-	db atomic.Value
-}
-
-func (p *dbProvider) Get() *engine.Engine {
-	return p.db.Load().(*engine.Engine)
-}
-
-func (p *dbProvider) Update(eng *engine.Engine) {
-	p.db.Store(eng)
-}
-
 func canIgnoreError(err error, round int) bool {
 	if err == nil {
 		return true
@@ -153,22 +141,49 @@ func TestWorkload5(t *testing.T) {
 		errg     errgroup.Group
 		wg       sync.WaitGroup
 		liveIds  sync.Map
+		db       atomic.Pointer[engine.Engine]
 	)
 
 	// setup determinism
 	SetupDeterministicRand(t)
 
 	// create new database and table
-	db := &dbProvider{}
-	{
-		eng, _ := tests.NewDatabase(t, &tests.AllTypes{})
-		db.Update(eng)
-	}
+	eng, _ := tests.NewDatabase(t, &tests.AllTypes{})
+	dbo := eng.Options()
+	db.Store(eng)
+
 	errg.SetLimit(maxProcs)
 
 	// save database files on failure
 	t.Cleanup(func() {
-		tests.SaveDatabaseFiles(t, db.Get())
+		tests.SaveDatabaseFiles(t, db.Load())
+
+		// manual cleanup because we restart often (db may be closed at this point)
+		t.Log("Cleaning up after test.")
+		eng := db.Load()
+		ctx := context.Background()
+		if eng.IsShutdown() {
+			// reopen
+			dir := db.Load().Options().Path
+			dbo := tests.NewTestDatabaseOptions(t, "").WithPath(dir)
+			eng, _ = engine.Open(ctx, tests.TEST_DB_NAME, dbo)
+		}
+		if eng != nil {
+			for _, name := range eng.TableNames() {
+				for _, iname := range eng.IndexNames(name) {
+					eng.DropIndex(ctx, iname)
+				}
+				eng.DropTable(ctx, name)
+			}
+			for _, name := range eng.StoreNames() {
+				eng.DropStore(ctx, name)
+			}
+			for _, name := range eng.EnumNames() {
+				eng.DropEnum(ctx, name)
+			}
+			eng.Close(ctx)
+		}
+		require.NoError(t, engine.Drop(tests.TEST_DB_NAME, dbo))
 	})
 
 	// set test failed when we detect a panic, this ensures cleanup above
@@ -209,7 +224,7 @@ func TestWorkload5(t *testing.T) {
 		for i := range ins {
 			ins[i] = NewTestValue(i + 1)
 		}
-		table, err := knox.FindGenericTable[tests.AllTypes](tableName, knox.WrapEngine(db.Get()))
+		table, err := knox.FindGenericTable[tests.AllTypes](tableName, knox.WrapEngine(db.Load()))
 		require.NoError(t, err)
 		pk, n, err := table.Insert(context.Background(), ins)
 		require.NoError(t, err)
@@ -260,7 +275,10 @@ func TestWorkload5(t *testing.T) {
 					if round < int(lastCrash.Load()) {
 						return nil
 					}
-					table, err := knox.FindGenericTable[tests.AllTypes](tableName, knox.WrapEngine(db.Get()))
+					table, err := knox.FindGenericTable[tests.AllTypes](
+						tableName,
+						knox.WrapEngine(db.Load()),
+					)
 					if err != nil {
 						return wrapErr(err)
 					}
@@ -281,7 +299,7 @@ func TestWorkload5(t *testing.T) {
 					if round < int(lastCrash.Load()) {
 						return nil
 					}
-					table, err := knox.WrapEngine(db.Get()).FindTable(tableName)
+					table, err := knox.WrapEngine(db.Load()).FindTable(tableName)
 					if err != nil {
 						return wrapErr(err)
 					}
@@ -343,28 +361,6 @@ func TestWorkload5(t *testing.T) {
 						t.Logf("%04d [%s] pk=%d", round, cmd, id)
 						cmdCh <- cmd
 					}
-
-					// // 2nd update
-					// val.Int64++
-					// n, err = table.Update(context.Background(), &val)
-					// switch {
-					// case errors.Is(err, knox.ErrNoRecord):
-					// 	// race condition with delete
-					// 	t.Logf("%04d [%s] pk=%d not found (race with delete)", round, cmd, id)
-					// case err != nil && n == 0:
-					// 	return wrapErr(err)
-					// case n == 0:
-					// 	// invalid zero update without error
-					// 	return fmt.Errorf("%04d [%s] invalid zero update without error", round, cmd)
-					// case n > 1:
-					// 	// must not happen
-					// 	return fmt.Errorf("%04d [%s] updated %d records with pk=%d", round, cmd, n, val.Id)
-					// case n == 1:
-					// 	// success
-					// 	t.Logf("%04d [%s] 2nd pk=%d", round, cmd, id)
-					// 	cmdCh <- cmd
-					// }
-
 					return nil
 				})
 			case delete:
@@ -373,7 +369,10 @@ func TestWorkload5(t *testing.T) {
 					if round < int(lastCrash.Load()) {
 						return nil
 					}
-					table, err := knox.FindGenericTable[tests.AllTypes](tableName, knox.WrapEngine(db.Get()))
+					table, err := knox.FindGenericTable[tests.AllTypes](
+						tableName,
+						knox.WrapEngine(db.Load()),
+					)
 					if err != nil {
 						return wrapErr(err)
 					}
@@ -439,7 +438,7 @@ func TestWorkload5(t *testing.T) {
 					if round < int(lastCrash.Load()) {
 						return nil
 					}
-					table, err := knox.WrapEngine(db.Get()).FindTable(tableName)
+					table, err := knox.WrapEngine(db.Load()).FindTable(tableName)
 					if err != nil {
 						return wrapErr(err)
 					}
@@ -481,7 +480,7 @@ func TestWorkload5(t *testing.T) {
 
 					ctx, cancel := context.WithCancel(context.Background())
 					defer cancel()
-					eng := db.Get()
+					eng := db.Load()
 					table, err := knox.WrapEngine(eng).FindTable(tableName)
 					if err != nil {
 						return wrapErr(err)
@@ -523,7 +522,7 @@ func TestWorkload5(t *testing.T) {
 						return nil
 					}
 					t.Logf("%04d [%s]", round, cmd)
-					err := db.Get().Sync(context.Background())
+					err := db.Load().Sync(context.Background())
 					if err != nil {
 						return wrapErr(err)
 					}
@@ -536,7 +535,7 @@ func TestWorkload5(t *testing.T) {
 						return nil
 					}
 					t.Logf("%04d [%s]", round, cmd)
-					err := db.Get().CompactTable(context.Background(), tableName)
+					err := db.Load().CompactTable(context.Background(), tableName)
 					if err != nil {
 						return wrapErr(err)
 					}
@@ -549,7 +548,7 @@ func TestWorkload5(t *testing.T) {
 						return nil
 					}
 					t.Logf("%04d [%s]", round, cmd)
-					// err := db.Get().Snapshot(context.Background(), io.Discard)
+					// err := db.Load().Snapshot(context.Background(), io.Discard)
 					// if err != nil {
 					//     return wrapErr(err)
 					// }
@@ -562,8 +561,8 @@ func TestWorkload5(t *testing.T) {
 				lastCrash.Store(int64(round))
 				// Graceful shutdown. Concurrent goroutines may fail.
 				_ = errg.Wait()
-				dir := db.Get().Options().Path
-				require.NoError(t, db.Get().Close(context.Background()))
+				dir := db.Load().Options().Path
+				require.NoError(t, db.Load().Close(context.Background()))
 
 				// reopen
 				t.Logf("%04d [%s] reopening DB at %s", round, cmd, dir)
@@ -574,13 +573,13 @@ func TestWorkload5(t *testing.T) {
 				}
 				require.NoError(t, err, "Failed to open database at %s", dbo.Path)
 				t.Logf("%04d [%s] set new engine %p", round, cmd, eng)
-				db.Update(eng)
+				db.Store(eng)
 				cmdCh <- cmd
 
 			case crash:
 				lastCrash.Store(int64(round))
 				_ = errg.Wait()
-				eng := db.Get()
+				eng := db.Load()
 				dir := eng.Options().Path
 				t.Logf("%04d [%s] engine %p", round, cmd, eng)
 				// Crash/unclean shutdown. Concurrent goroutines may fail.
@@ -596,7 +595,7 @@ func TestWorkload5(t *testing.T) {
 				}
 				require.NoError(t, err, "Failed to open database at %s", dbo.Path)
 				t.Logf("%04d [%s] set new engine %p", round, cmd, eng)
-				db.Update(eng)
+				db.Store(eng)
 				cmdCh <- cmd
 			}
 		}
@@ -618,13 +617,13 @@ func TestWorkload5(t *testing.T) {
 	// sync (wrapped into sub-test to catch panics)
 	t.Run("sync", func(t *testing.T) {
 		t.Log("Sync/merge database.")
-		require.NoError(t, db.Get().Sync(context.Background()))
+		require.NoError(t, db.Load().Sync(context.Background()))
 	})
 
 	// verify (wrapped into sub-test to catch panics)
 	t.Run("verify", func(t *testing.T) {
 		t.Log("Verifying data integrity.")
-		table, err := knox.WrapEngine(db.Get()).FindTable(tableName)
+		table, err := knox.WrapEngine(db.Load()).FindTable(tableName)
 		require.NoError(t, err, "use table")
 
 		// count live records (ground truth)
@@ -730,7 +729,7 @@ func TestWorkload5(t *testing.T) {
 	// close DB
 	t.Log("Closing database.")
 	tests.NoDeadlock(t, func() bool {
-		assert.NoError(t, db.Get().Close(context.Background()))
+		assert.NoError(t, db.Load().Close(context.Background()))
 		return true
 	}, "deadlock on close")
 	t.Log("Done.")

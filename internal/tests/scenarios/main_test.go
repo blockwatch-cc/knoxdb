@@ -15,7 +15,7 @@ import (
 func TestMain(m *testing.M) {
 	flag.Parse()
 	if testing.Verbose() {
-		// log.SetLevel(log.LevelDebug)
+		log.SetLevel(log.LevelDebug)
 	} else {
 		log.SetLevel(log.LevelInfo)
 	}

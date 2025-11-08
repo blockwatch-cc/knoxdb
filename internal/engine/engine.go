@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"runtime"
 	"sync"
@@ -151,9 +152,39 @@ func (e *Engine) NeedsCheckpoint() bool {
 }
 
 // checks if catalog backend file exists
-func IsExist(ctx context.Context, name string, opts DatabaseOptions) (bool, error) {
+func IsExist(name string, opts DatabaseOptions) (bool, error) {
 	opts = DefaultDatabaseOptions.Merge(opts)
 	return store.Exists(opts.Driver, filepath.Join(opts.Path, name, CATALOG_NAME))
+}
+
+// drops entire DB directory, fails if DB is open or does not exist
+func Drop(name string, opts DatabaseOptions) error {
+	ok, err := IsExist(name, opts)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrNoDatabase
+	}
+	lock := flock.New(filepath.Join(opts.Path, ENGINE_LOCK_NAME))
+	_, err = lock.TryLock()
+	if err != nil && !errors.Is(err, errors.ErrUnsupported) {
+		return err
+	}
+	defer lock.Close()
+
+	// drop catalog
+	dir := filepath.Join(opts.Path, name, CATALOG_NAME)
+	opts.Logger.Info("Dropping catalog", dir)
+	err = store.Drop(opts.Driver, dir)
+	if err != nil {
+		return err
+	}
+
+	// remove wal (and other outstanding files)
+	dir = filepath.Join(opts.Path, name)
+	opts.Logger.Info("Dropping db files at", dir)
+	return os.RemoveAll(dir)
 }
 
 func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, error) {
@@ -183,14 +214,11 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 	e.tasks.WithContext(WithEngine(ctx, e))
 	e.shutdown.Store(false)
 
-	// start services
-	e.tasks.Start()
-
 	if opts.Logger != nil {
-		e.log = opts.Logger
-		e.tasks.WithLogger(opts.Logger)
+		e.log = opts.Logger.Clone("db:" + name)
+		e.tasks.WithLogger(e.log)
+		e.cat.WithLogger(e.log)
 	}
-
 	e.log.Debugf("create database %q at %q", name, e.path)
 
 	// set exclusive directory lock
@@ -236,6 +264,9 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 		e.cache.buffers = NewBufferCache(opts.CacheSize / 10)
 	}
 
+	// start services
+	e.tasks.Start()
+
 	// init catalog
 	if err = e.cat.Create(ctx, opts); err != nil {
 		return nil, err
@@ -280,8 +311,9 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 	e.tasks.WithContext(WithEngine(ctx, e))
 	e.shutdown.Store(false)
 	if opts.Logger != nil {
-		e.log = opts.Logger
-		e.tasks.WithLogger(opts.Logger)
+		e.log = opts.Logger.Clone("db:" + name)
+		e.tasks.WithLogger(e.log)
+		e.cat.WithLogger(e.log)
 	}
 
 	e.log.Debugf("open database %q at %q", name, e.path)
@@ -294,9 +326,6 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 	} else {
 		e.flock = lock
 	}
-
-	// start services before potential recovery
-	e.tasks.Start()
 
 	// start transaction (for catalog access and recovery we need a write tx,
 	// but we don't want it to write wal records; in read-only mode we open
@@ -376,6 +405,9 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 		e.cache.blocks = block.NewCache(e.opts.CacheSize * 90 / 10)
 		e.cache.buffers = NewBufferCache(e.opts.CacheSize / 10)
 	}
+
+	// start services (enables background merge during wal replay)
+	e.tasks.Start()
 
 	// open database objects
 	if err = e.openEnums(ctx); err != nil {
@@ -698,28 +730,28 @@ func (e *Engine) Schedule(t *Task) bool {
 func (e *Engine) TryGC(ctx context.Context) error {
 	// skip during shutdown
 	if e.IsShutdown() {
-		e.log.Debug("GC skipped on shutdown")
+		e.log.Trace("GC skipped on shutdown")
 		return nil
 	}
 
 	// skip when not required
 	if !e.NeedsCheckpoint() {
-		e.log.Debug("GC starting")
+		e.log.Trace("GC starting")
 		return e.wal.GC(e.Watermark())
 	}
 
 	// schedule GC task atomically
 	if ok := e.rungc.CompareAndSwap(false, true); !ok {
-		e.log.Debug("GC already running")
+		e.log.Trace("GC already running")
 		return nil
 	}
 
 	// schedule task
-	e.log.Debug("WAL watermark too old, scheduling checkpointing task")
+	e.log.Trace("WAL watermark too old, scheduling checkpointing task")
 	if !e.Schedule(NewTask(e.RunGC)) {
 		// reset atomic state
 		e.rungc.Store(false)
-		e.log.Warn("task queue full")
+		e.log.Trace("task queue full")
 	}
 
 	return nil

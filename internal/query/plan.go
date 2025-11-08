@@ -139,7 +139,7 @@ func (p *QueryPlan) WithSchema(s *schema.Schema) *QueryPlan {
 }
 
 func (p *QueryPlan) WithLogger(l log.Logger) *QueryPlan {
-	p.Log = l.Clone().WithTag(p.Tag + " Q>")
+	p.Log = l.Clone("Q:" + p.Tag)
 	return p
 }
 
@@ -160,7 +160,7 @@ func (p *QueryPlan) Runtime() time.Duration {
 }
 
 func (p *QueryPlan) Errorf(s string, vals ...any) error {
-	return fmt.Errorf("query "+p.Tag+": ", vals...)
+	return fmt.Errorf("[Q:"+p.Tag+"] "+s, vals...)
 }
 
 func (p *QueryPlan) Error(err any) error {

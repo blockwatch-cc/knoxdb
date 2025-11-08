@@ -107,7 +107,7 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.In
 		Alloc()
 	idx.convert = conv
 	idx.metrics = engine.NewIndexMetrics(s.Name)
-	idx.log = idx.opts.Logger.WithTag(fmt.Sprintf("index[%s]:", s.Name))
+	idx.log = idx.opts.Logger.Clone("index:" + s.Name)
 
 	// create backend and store initial state
 	if err := idx.createBackend(ctx); err != nil {
@@ -193,7 +193,7 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Inde
 		Alloc()
 	idx.convert = conv
 	idx.metrics = engine.NewIndexMetrics(s.Name)
-	idx.log = idx.opts.Logger.WithTag(fmt.Sprintf("index[%s]:", s.Name))
+	idx.log = idx.opts.Logger.Clone("index:" + s.Name)
 
 	// open db backend and load latest state
 	if err := idx.openBackend(ctx); err != nil {
@@ -319,7 +319,7 @@ func (idx *Index) Drop(ctx context.Context) error {
 	path := idx.db.Path()
 	idx.db.Close()
 	idx.db = nil
-	idx.log.Debugf("dropping file %s", path)
+	idx.log.Debugf("dropping backend files at %s", path)
 	return store.Drop(idx.opts.Driver, path)
 }
 

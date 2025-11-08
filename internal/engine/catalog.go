@@ -140,8 +140,12 @@ func (c *Catalog) WithWal(w *wal.Wal) *Catalog {
 	return c
 }
 
+func (c *Catalog) WithLogger(l log.Logger) *Catalog {
+	c.log = l
+	return c
+}
+
 func (c *Catalog) Create(ctx context.Context, opts DatabaseOptions) error {
-	c.log = opts.Logger
 	c.path = filepath.Join(opts.Path, c.name)
 	c.log.Debugf("create catalog at %s", c.path)
 	db, err := store.Create(opts.CatalogOptions(c.name)...)
@@ -181,10 +185,7 @@ func (c *Catalog) Create(ctx context.Context, opts DatabaseOptions) error {
 
 func (c *Catalog) Open(ctx context.Context, opts DatabaseOptions) error {
 	opts = DefaultDatabaseOptions.Merge(opts)
-
-	c.log = opts.Logger
 	c.path = filepath.Join(opts.Path, c.name)
-
 	c.log.Debugf("open catalog at %s", c.path)
 	db, err := store.Open(opts.CatalogOptions(c.name)...)
 	if err != nil {

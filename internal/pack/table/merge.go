@@ -112,7 +112,7 @@ func (t *Table) Merge(ctx context.Context) error {
 		nRetries = 3
 	)
 
-	t.log.Debug("starting merge task")
+	t.log.Trace("starting merge task")
 
 	// we're running, reset merge task handle
 	t.mu.Lock()
@@ -146,7 +146,7 @@ func (t *Table) Merge(ctx context.Context) error {
 	}
 
 	// run merge
-	t.log.Debugf("merging journal segment %d", seg.Id())
+	t.log.Tracef("merging journal segment %d", seg.Id())
 	err = t.mergeJournal(ctx, seg)
 	if err != nil {
 		// notify journal, will keep segment in memory and retry
@@ -214,7 +214,7 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 	nStones = len(stones)
 
 	if mask != nil && mask.Any() && mask.Min() < t.stats.Get().GlobalMaxRid() {
-		t.log.Debugf("merge phase 1: %d/%d tombstones", mask.Count(), len(stones))
+		t.log.Tracef("merge phase 1: %d/%d tombstones", mask.Count(), len(stones))
 		src := t.NewReader().WithMask(mask, engine.ReadModeIncludeMask)
 		defer src.Close()
 		for {
@@ -321,7 +321,7 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 			nAdd += n
 			nPacks += (n + t.opts.PackSize - 1) / t.opts.PackSize
 			live.Close()
-			t.log.Debugf("merge phase 2: %d/%d records", pkg.NumSelected(), seg.Data().Len())
+			t.log.Tracef("merge phase 2: %d/%d records", pkg.NumSelected(), seg.Data().Len())
 
 			// append active records to table and indexes
 			if err := table.Append(ctx, pkg, pack.WriteModeIncludeSelected); err != nil {
@@ -337,7 +337,7 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 			pkg := seg.Data()
 			nAdd += pkg.Len()
 			nPacks += (pkg.Len() + t.opts.PackSize - 1) / t.opts.PackSize
-			t.log.Debugf("merge phase 2: %d records", pkg.Len())
+			t.log.Tracef("merge phase 2: %d records", pkg.Len())
 
 			// fast-path (journal contains only valid post-images)
 			if err := table.Append(ctx, pkg, pack.WriteModeAll); err != nil {
@@ -370,7 +370,7 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 	atomic.StoreInt64(&t.metrics.LastMergeDuration, int64(dur))
 	nBytes = atomic.LoadInt64(&t.metrics.BytesWritten) - nBytes
 
-	t.log.Infof("merged segment %d packs=%d records=%d tombs=%d heap=%s stored=%s comp=%.2f%% in %s",
+	t.log.Debugf("merged segment %d packs=%d records=%d tombs=%d heap=%s stored=%s comp=%.2f%% in %s",
 		seg.Id(), nPacks, nAdd, nStones, util.ByteSize(nHeap), util.ByteSize(nBytes),
 		float64(nBytes)*100/float64(nHeap), dur)
 

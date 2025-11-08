@@ -101,7 +101,7 @@ func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, opts TableOp
 
 	// ensure logger
 	if opts.Logger == nil {
-		opts.Logger = e.log.Clone()
+		opts.Logger = e.opts.Logger
 	}
 	// create table engine
 	table := factory()
@@ -342,7 +342,7 @@ func (e *Engine) openTables(ctx context.Context) error {
 		table := factory()
 
 		// ensure logger and override flags
-		opts.Logger = e.log.Clone() // FIXME: register logger to set level later
+		opts.Logger = e.opts.Logger
 		opts.ReadOnly = e.opts.ReadOnly
 
 		// open indexes first so merge during WAL replay can find them

@@ -86,7 +86,7 @@ func run() (err error) {
 			case error:
 				err = x
 			default:
-				err = errors.New("unknown panic")
+				err = fmt.Errorf("%v", e)
 			}
 		}
 	}()

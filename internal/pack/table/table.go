@@ -141,7 +141,7 @@ func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableO
 	t.opts = mergeDefaultOptions(opts)
 	t.state = engine.NewObjectState(s.Name)
 	t.metrics = engine.NewTableMetrics(s.Name)
-	t.log = t.opts.Logger.WithTag(fmt.Sprintf("table[%s]:", s.Name))
+	t.log = t.opts.Logger.Clone("table:" + s.Name)
 
 	// write initial checkpoint
 	lsn, err := t.engine.Wal().Write(&wal.Record{
@@ -244,7 +244,7 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 	t.opts = mergeDefaultOptions(opts)
 	t.state = engine.NewObjectState(s.Name)
 	t.metrics = engine.NewTableMetrics(s.Name)
-	t.log = t.opts.Logger.WithTag(fmt.Sprintf("table[%s]:", s.Name))
+	t.log = t.opts.Logger.Clone("table:" + s.Name)
 
 	// open db backend and load latest state
 	if err := t.openBackend(ctx); err != nil {
@@ -322,7 +322,7 @@ func (t *Table) openBackend(ctx context.Context) error {
 			return fmt.Errorf("loading state: %v", err)
 		}
 
-		t.log.Debugf("saved state pk=%d rid=%d nrows=%d epoch=%d lsn=0x%x",
+		t.log.Debugf("loaded state pk=%d rid=%d nrows=%d epoch=%d lsn=0x%x",
 			t.state.NextPk, t.state.NextRid, t.state.NRows,
 			t.state.Epoch, t.state.Checkpoint)
 
@@ -399,7 +399,7 @@ func (t *Table) Drop(ctx context.Context) error {
 	if err := t.Close(ctx); err != nil {
 		return err
 	}
-	t.log.Debugf("dropping path=%s", path)
+	t.log.Debugf("dropping backend files at %s", path)
 	return store.Drop(drv, path)
 }
 
@@ -467,11 +467,11 @@ func (t *Table) CommitTx(ctx context.Context, xid types.XID) error {
 
 	// TODO: move task scheduling and backpressure handling to journal
 	if canMerge && t.task == nil {
-		t.log.Debug("scheduling merge task")
+		t.log.Trace("scheduling merge task")
 		t.task = engine.NewTask(t.Merge)
 		ok := t.engine.Schedule(t.task)
 		if !ok {
-			t.log.Warn("merge: task queue full")
+			t.log.Trace("merge: task queue full")
 		}
 	}
 	return nil
@@ -485,11 +485,11 @@ func (t *Table) AbortTx(ctx context.Context, xid types.XID) error {
 
 	// TODO: move task scheduling and backpressure handling to journal
 	if canMerge && t.task == nil {
-		t.log.Debug("scheduling merge task")
+		t.log.Trace("scheduling merge task")
 		t.task = engine.NewTask(t.Merge)
 		ok := t.engine.Schedule(t.task)
 		if !ok {
-			t.log.Warn("merge: task queue full")
+			t.log.Trace("merge: task queue full")
 		}
 	}
 	return nil

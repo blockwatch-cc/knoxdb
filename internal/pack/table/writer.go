@@ -194,7 +194,6 @@ func (w *Writer) Finalize(ctx context.Context, state engine.ObjectState) error {
 	}
 
 	// finalize indexes (merge new and mark deleted entries)
-	w.log.Debug("finalize indexes")
 	if err := w.FinalizeIndexes(ctx); err != nil {
 		return err
 	}

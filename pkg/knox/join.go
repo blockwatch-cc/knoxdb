@@ -54,7 +54,7 @@ func NewJoin() Join {
 		right: JoinTable{
 			Table: newErrorTable("join", ErrNoTable),
 		},
-		log: log.New(nil).SetLevel(log.LevelInfo),
+		log: log.Disabled,
 	}
 }
 
@@ -80,7 +80,7 @@ func (j Join) WithLimits(l, r uint32) Join {
 }
 
 func (j Join) WithLogger(l log.Logger) Join {
-	j.log = l.Clone()
+	j.log = l
 	return j
 }
 

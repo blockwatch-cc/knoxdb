@@ -111,7 +111,7 @@ func (p *JoinPlan) WithLimit(n uint32) *JoinPlan {
 }
 
 func (p *JoinPlan) WithLogger(l log.Logger) *JoinPlan {
-	p.Log = l.Clone()
+	p.Log = l.Clone("JOIN:" + p.Tag)
 	return p
 }
 

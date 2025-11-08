@@ -47,7 +47,7 @@ func TestWorkload4(t *testing.T) {
 	SetupDeterministicRand(t)
 
 	// Setup the unified database
-	eng, cleanup := tests.NewTempDatabase(t, &UnifiedRow{})
+	eng, cleanup := tests.NewDatabase(t, &UnifiedRow{})
 	t.Cleanup(func() {
 		cleanup()
 		tests.SaveDatabaseFiles(t, eng)

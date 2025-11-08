@@ -24,7 +24,7 @@ const (
 	SAVE_PATH    = "./data"
 )
 
-func NewTestDatabaseOptions(t *testing.T, driver string) engine.DatabaseOptions {
+func NewTestDatabaseOptions(t testing.TB, driver string) engine.DatabaseOptions {
 	t.Helper()
 	driver = util.NonEmptyString(driver, os.Getenv("KNOX_DRIVER"), "bolt")
 	return engine.DatabaseOptions{
@@ -35,11 +35,11 @@ func NewTestDatabaseOptions(t *testing.T, driver string) engine.DatabaseOptions 
 		CacheSize: 1 << 20,
 		NoSync:    false,
 		ReadOnly:  false,
-		Logger:    log.Log.Clone(),
+		Logger:    log.Log.Clone(""),
 	}
 }
 
-func NewTestTableOptions(t *testing.T, driver, eng string) engine.TableOptions {
+func NewTestTableOptions(t testing.TB, driver, eng string) engine.TableOptions {
 	t.Helper()
 	driver = util.NonEmptyString(driver, os.Getenv("KNOX_DRIVER"), "bolt")
 	eng = util.NonEmptyString(eng, os.Getenv("KNOX_ENGINE"), "pack")
@@ -52,11 +52,11 @@ func NewTestTableOptions(t *testing.T, driver, eng string) engine.TableOptions {
 		JournalSize: 1 << 16, // 64k
 		NoSync:      true,
 		ReadOnly:    false,
-		Logger:      log.Log.Clone(),
+		Logger:      log.Log.Clone(""),
 	}
 }
 
-func NewTestIndexOptions(t *testing.T, driver, eng string) engine.IndexOptions {
+func NewTestIndexOptions(t testing.TB, driver, eng string) engine.IndexOptions {
 	t.Helper()
 	driver = util.NonEmptyString(driver, os.Getenv("KNOX_DRIVER"), "bolt")
 	eng = util.NonEmptyString(eng, os.Getenv("KNOX_ENGINE"), "pack")
@@ -69,18 +69,18 @@ func NewTestIndexOptions(t *testing.T, driver, eng string) engine.IndexOptions {
 		PackSize:    1 << 12, // 4k
 		ReadOnly:    false,
 		NoSync:      true,
-		Logger:      log.Log.Clone(),
+		Logger:      log.Log.Clone(""),
 	}
 }
 
-func NewTestEngine(t *testing.T, opts engine.DatabaseOptions) *engine.Engine {
+func NewTestEngine(t testing.TB, opts engine.DatabaseOptions) *engine.Engine {
 	t.Helper()
 	eng, err := engine.Create(context.Background(), TEST_DB_NAME, opts)
 	require.NoError(t, err, "Failed to create database")
 	return eng
 }
 
-func OpenTestEngine(t *testing.T, opts engine.DatabaseOptions) *engine.Engine {
+func OpenTestEngine(t testing.TB, opts engine.DatabaseOptions) *engine.Engine {
 	t.Helper()
 	eng, err := engine.Open(context.Background(), TEST_DB_NAME, opts)
 	require.NoError(t, err, "Failed to open database at %s", opts.Path)
@@ -88,10 +88,12 @@ func OpenTestEngine(t *testing.T, opts engine.DatabaseOptions) *engine.Engine {
 }
 
 // NewDatabase sets up a fresh database and creates tables from struct types.
-func NewDatabase(t *testing.T, typs ...any) (*engine.Engine, func()) {
+func NewDatabase(t testing.TB, typs ...any) (*engine.Engine, func()) {
 	t.Helper()
 	dbo := NewTestDatabaseOptions(t, "")
-	t.Logf("NEW DB catalog driver=%s at %s", dbo.Driver, dbo.Path)
+	if testing.Verbose() {
+		t.Logf("NEW DB catalog driver=%s at %s", dbo.Driver, dbo.Path)
+	}
 	db := NewTestEngine(t, dbo)
 
 	ctx := context.Background()
@@ -108,7 +110,9 @@ func NewDatabase(t *testing.T, typs ...any) (*engine.Engine, func()) {
 		require.NoError(t, err, "Failed to generate schema for type %T", typ)
 		s = s.WithMeta()
 		opts := NewTestTableOptions(t, "", "")
-		t.Logf("NEW table=%s driver=%s engine=%s", s.Name, opts.Driver, opts.Engine)
+		if testing.Verbose() {
+			t.Logf("NEW table=%s driver=%s engine=%s", s.Name, opts.Driver, opts.Engine)
+		}
 		_, err = db.CreateTable(ctx, s, opts)
 		require.NoError(t, err, "Failed to create table for type %T", typ)
 
@@ -120,46 +124,21 @@ func NewDatabase(t *testing.T, typs ...any) (*engine.Engine, func()) {
 		}
 	}
 
-	return db, func() { db.Close(ctx) }
-}
-
-// NewDatabase sets up a fresh database and creates tables from struct types.
-func NewTempDatabase(t *testing.T, typs ...any) (*engine.Engine, func()) {
-	t.Helper()
-	dbo := NewTestDatabaseOptions(t, "").
-		WithDeleteOnClose()
-	t.Logf("NEW DB catalog driver=%s at %s", dbo.Driver, dbo.Path)
-	db := NewTestEngine(t, dbo)
-
-	ctx := context.Background()
-	// t.Logf("NEW enum=my_enum")
-	_, err := db.CreateEnum(ctx, "my_enum")
-	require.NoError(t, err, "Failed to create enum")
-
-	err = db.ExtendEnum(ctx, "my_enum", myEnums...)
-	require.NoError(t, err, "Failed to extend enum")
-
-	// Create tables and indexes for given types
-	for _, typ := range typs {
-		s, err := schema.SchemaOf(typ)
-		require.NoError(t, err, "Failed to generate schema for type %T", typ)
-		s = s.WithMeta()
-		opts := NewTestTableOptions(t, "", "").
-			WithDeleteOnClose()
-		t.Logf("NEW table=%s driver=%s engine=%s", s.Name, opts.Driver, opts.Engine)
-		_, err = db.CreateTable(ctx, s, opts)
-		require.NoError(t, err, "Failed to create table for type %T", typ)
-
-		// create indexes for type
-		for _, is := range s.Indexes {
-			iopts := NewTestIndexOptions(t, "", "").
-				WithDeleteOnClose()
-			_, err = db.CreateIndex(ctx, is, iopts)
-			require.NoError(t, err, "create pk index")
+	return db, func() {
+		if testing.Verbose() {
+			t.Log("Cleanup up after test.")
 		}
+		for _, typ := range typs {
+			s, _ := schema.SchemaOf(typ)
+			for _, is := range s.Indexes {
+				require.NoError(t, db.DropIndex(ctx, is.Name))
+			}
+			require.NoError(t, db.DropTable(ctx, s.Name))
+		}
+		require.NoError(t, db.DropEnum(ctx, "my_enum"))
+		require.NoError(t, db.Close(ctx))
+		require.NoError(t, engine.Drop(TEST_DB_NAME, dbo))
 	}
-
-	return db, func() { db.Close(ctx) }
 }
 
 func SaveDatabaseFiles(t *testing.T, e *engine.Engine) {

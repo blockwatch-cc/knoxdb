@@ -270,7 +270,7 @@ func Create(ctx context.Context) (db knox.Database, table knox.Table, err error)
 		WithPath("./db").
 		WithNamespace("cx.bwd.knox.types-demo").
 		WithCacheSize(1 << 20 * TypesCacheSize).
-		WithLogger(log.Log.Clone())
+		WithLogger(log.Log.Clone(""))
 
 	log.Info("Creating DB")
 	db, err = knox.CreateDatabase(ctx, "types", opts)
@@ -289,7 +289,7 @@ func Create(ctx context.Context) (db knox.Database, table knox.Table, err error)
 	}
 
 	log.Infof("Creating Table %s", s.Name)
-	log.Debugf("Input Schema %s", s)
+	log.Tracef("Input Schema %s", s)
 	table, err = db.CreateTable(ctx, s, knox.TableOptions{
 		Engine:      "pack",
 		Driver:      "bolt",
@@ -302,7 +302,7 @@ func Create(ctx context.Context) (db knox.Database, table knox.Table, err error)
 		return
 	}
 	ts := table.Schema()
-	log.Debugf("Table Schema %s", ts)
+	log.Tracef("Table Schema %s", ts)
 
 	for _, s := range ts.Indexes {
 		log.Infof("Creating Index %s", s.Name)
@@ -326,19 +326,18 @@ func Open(ctx context.Context) (db knox.Database, table knox.Table, err error) {
 	db, err = knox.OpenDatabase(ctx, "types", knox.DatabaseOptions{
 		Path:      "./db",
 		Namespace: "cx.bwd.knox.types-demo",
-		Logger:    log.Log.Clone(),
+		Logger:    log.Log.Clone(""),
 	})
 	if err != nil {
 		return
 	}
 
-	log.Info("Use table types")
 	table, err = db.FindTable("types")
 	if err != nil {
 		return
 	}
-	log.Debugf("Schema %s", table.Schema())
-	log.Infof("%d records", table.Metrics().TupleCount)
+	log.Tracef("Schema %s", table.Schema())
+	log.Infof("Found table %s with %d records", table.Schema().Name, table.Metrics().TupleCount)
 	return
 }
 
