@@ -163,10 +163,6 @@ func (s *Segment) getState() SegmentState {
 	return SegmentState(atomic.LoadUint64((*uint64)(&s.state)))
 }
 
-func (s *Segment) is(state SegmentState) bool {
-	return s.getState() == state
-}
-
 func (s *Segment) canDrop() bool {
 	switch s.getState() {
 	case SegmentStateEmpty, SegmentStateMerged:
@@ -221,6 +217,9 @@ func (s *Segment) IsFull() bool {
 // A segment is considered empty when it either contains no data
 // or all records originate from aborted transactions.
 func (s *Segment) IsEmpty() bool {
+	if s.getState() == SegmentStateEmpty {
+		return true
+	}
 	if s.Len() == 0 {
 		return true
 	}
@@ -495,6 +494,10 @@ func (s *Segment) AbortTx(xid types.XID) int {
 	// log.Warnf("Rollback seg %d state to %#v", s.Id(), s.tstate)
 
 	if s.IsEmpty() {
+		// set empty state only when waiting (this could be the active tip segment)
+		if s.getState() == SegmentStateWaiting {
+			s.setState(SegmentStateEmpty)
+		}
 		s.rmin = 1<<64 - 1
 		s.rmax = 0
 	} else {
@@ -534,7 +537,7 @@ func (s *Segment) Match(node *filter.Node, snap *types.Snapshot, tomb *xroar.Bit
 	bits.Resize(s.Data().Len())
 
 	// check empty state and return early
-	if s.is(SegmentStateEmpty) {
+	if s.IsEmpty() {
 		// log.Infof("> segment empty")
 		return
 	}
@@ -663,7 +666,7 @@ func (s *Segment) Match(node *filter.Node, snap *types.Snapshot, tomb *xroar.Bit
 // transaction is visible to the snapshot.
 func (s *Segment) MergeDeleted(set *xroar.Bitmap, snap *types.Snapshot) {
 	// check empty state and return early
-	if s.is(SegmentStateEmpty) || s.IsEmpty() {
+	if s.IsEmpty() {
 		return
 	}
 
@@ -689,7 +692,7 @@ func (s *Segment) MergeDeleted(set *xroar.Bitmap, snap *types.Snapshot) {
 // when any pk was deleted.
 func (s *Segment) LookupRids(ridMap map[uint64]uint64, snap *types.Snapshot) {
 	// check empty state and return early
-	if s.is(SegmentStateEmpty) || s.IsEmpty() {
+	if s.IsEmpty() {
 		// fmt.Printf("J-0 seg=%d skip empty\n", s.data.Key())
 		return
 	}

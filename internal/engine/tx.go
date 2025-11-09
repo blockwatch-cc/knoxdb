@@ -8,27 +8,13 @@ import (
 	"errors"
 	"sort"
 	"sync/atomic"
+	"time"
 
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/wal"
 	"blockwatch.cc/knoxdb/pkg/store"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
-
-// TODO
-// - implement tx reuse/pooling
-// - close/drop/truncate/compact/alter integration
-//   - use lock manager
-//   - should deterministic tx exclusive lock the entire db (or table?)
-// - tx conflict detection (only when multi writer)
-//   - keep list of written PKs per table in tx (how to know, journal?)
-//   - keep aggregate list of written PKs in engine
-//   - add written pk to both lists on write (in journal, update/delete calls only)
-//   - check if pk exists in global list but not local list
-//     - if not in local and in global: -> conflict, abort current tx
-//     - if in local and global: -> second update/undelete/etc -> allow
-//   - on tx close (commit or abort) AND NOT engine list with local list clearing touched pks
-// writes map[uint64]bitmap.Bitmap
 
 type TxFlags uint16
 
@@ -385,11 +371,13 @@ func (t *Tx) Commit() error {
 		}
 	}
 
+	var waitList []WaitCh
+
 	// commit all touched objects, this will update journal segments
 	for oid := range t.touched {
-		err := t.engine.CommitTx(t.ctx, oid, t.id)
-		if err != nil {
-			t.Fail(err)
+		wait := t.engine.CommitTx(t.ctx, oid, t.id)
+		if wait != nil {
+			waitList = append(waitList, wait)
 		}
 	}
 
@@ -422,7 +410,45 @@ func (t *Tx) Commit() error {
 		t.catTx = nil
 	}
 
-	return t.Err()
+	// return tx error if any
+	if err := t.Err(); err != nil {
+		return err
+	}
+
+	// block when backpressure from full table journals exists
+	// unless the user requested the tx not to wait (we reuse
+	// the nowait flag here which is otherwise also used for
+	// deferred read transactions)
+	if len(waitList) > 0 {
+		if t.uflags.IsNoWait() {
+			// don't fail tx but still inform user to wait
+			return ErrTxBackoff
+		}
+
+		// wait for back-pressure to reduce, but at most TxWaitTimeout
+		to := t.engine.opts.TxWaitTimeout
+		if to > 0 {
+			start := time.Now()
+		waitloop:
+			// wait for either a timeout or backpressure to ease
+			for _, wait := range waitList {
+				select {
+				case <-wait:
+				case <-time.After(to - time.Since(start)):
+					// negative duration will fire immediately
+					break waitloop
+				}
+			}
+		} else {
+			// wait until all pending merge tasks from back-pressured
+			// journals have completed
+			for _, wait := range waitList {
+				<-wait
+			}
+		}
+	}
+
+	return nil
 }
 
 func (t *Tx) Abort() error {
@@ -473,13 +499,9 @@ func (t *Tx) Abort() error {
 		}
 	}
 
-	// send abort to all touched objects; write wal abort records,
-	// update journal segments
+	// send abort to all touched objects which will update journal segments
 	for oid := range t.touched {
-		err := t.engine.AbortTx(t.ctx, oid, t.id)
-		if err != nil {
-			t.Fail(err)
-		}
+		t.engine.AbortTx(t.ctx, oid, t.id)
 	}
 
 	// abort and update catalog wal
@@ -516,8 +538,9 @@ func (t *Tx) Fail(err error) {
 	t.cancel(err)
 }
 
-// TODO
-// - like abort() but called from another goroutine on engine shutdown
+// Kill forcefully aborts a transaction and releases locks immediatly
+//
+// - similart to Abort() but called from another goroutine on engine shutdown
 // - prevent race conditions with other code altering tx data
 // - write wal record
 // - run abort callbacks

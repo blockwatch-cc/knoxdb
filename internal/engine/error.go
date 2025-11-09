@@ -45,6 +45,7 @@ var (
 	ErrTxReadonly     = errors.New("transaction is read-only")
 	ErrTxClosed       = errors.New("transaction is closed")
 	ErrTxTimeout      = errors.New("write transaction wait timed out")
+	ErrTxBackoff      = errors.New("slow down write throughput")
 	ErrShortMessage   = errors.New("short message buffer")
 	ErrTooManyTasks   = errors.New("too many running tasks")
 	ErrTaskAborted    = errors.New("task aborted")

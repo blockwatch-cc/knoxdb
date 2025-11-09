@@ -6,7 +6,6 @@ package journal
 import (
 	"context"
 	"fmt"
-	"slices"
 
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/engine"
@@ -46,7 +45,7 @@ type Journal struct {
 	tip    *Segment       // active head segment used for writing
 	tail   []*Segment     // immutable tail segments waiting for completion and flush
 	maxsz  int            // max number of records before segment freeze
-	maxseg int            // max number of immutable segments // TODO: unused, refactor
+	maxseg int            // max number of immutable segments
 	log    log.Logger     // journal logger instance
 }
 
@@ -237,16 +236,15 @@ func (j *Journal) NextMergable() (*Segment, error) {
 
 	for _, seg := range j.tail {
 		// segment is already merging
-		if seg.is(SegmentStateMerging) {
+		switch seg.getState() {
+		case SegmentStateMerging:
 			if len(j.tail) > 1 {
 				return nil, engine.ErrAgain
 			}
 			return nil, nil
-		}
 
-		// tail segment is complete
-		if seg.is(SegmentStateComplete) {
-			// flip state
+		case SegmentStateComplete:
+			// tail segment is complete
 			seg.setState(SegmentStateMerging)
 
 			// determine follower segment's checkpoint
@@ -256,9 +254,10 @@ func (j *Journal) NextMergable() (*Segment, error) {
 				seg.setCheckpoint(j.tip.lsn)
 			}
 			return seg, nil
-		}
 
-		// otherwise ignore segment
+		default:
+			// otherwise ignore segment
+		}
 	}
 
 	// nothing to do yet
@@ -275,13 +274,7 @@ func (j *Journal) ConfirmMerged(ctx context.Context, s *Segment) {
 	j.log.Debugf("journal: removing merged segment %d", id)
 
 	// remove empty and merged segments, concurrent readers hold a copy
-	j.tail = slices.DeleteFunc(j.tail, func(s *Segment) bool {
-		ok := s.canDrop()
-		if ok {
-			s.Close()
-		}
-		return ok
-	})
+	j.prune()
 
 	// unlink tail segment's parent
 	if len(j.tail) > 0 {
@@ -291,55 +284,86 @@ func (j *Journal) ConfirmMerged(ctx context.Context, s *Segment) {
 	}
 }
 
+// reset segment state when merge has failed
 func (j *Journal) AbortMerged(s *Segment) {
-	// reset segment state
 	s.setState(SegmentStateComplete)
 }
 
-func (j *Journal) CommitTx(xid types.XID) bool {
+func (j *Journal) CommitTx(xid types.XID) (canMerge bool, shouldWait bool) {
 	if j.tip.ContainsTx(xid) {
 		j.tip.CommitTx(xid)
 	}
 
+	var canPrune bool
+
 	// commit tx across segments
 	for _, v := range j.tail {
-		if v.is(SegmentStateWaiting) && v.ContainsTx(xid) {
-			v.CommitTx(xid)
-			v.setState(SegmentStateComplete)
+		switch v.getState() {
+		case SegmentStateEmpty, SegmentStateMerged:
+			canPrune = true
+		case SegmentStateWaiting:
+			if v.ContainsTx(xid) {
+				v.CommitTx(xid)
+				v.setState(SegmentStateComplete)
+				canMerge = true
+			}
+		case SegmentStateComplete:
+			canMerge = true
+		case SegmentStateMerging:
+			canMerge = false
 		}
 	}
 
-	return j.compact()
+	// handle empty and merged segments
+	if canPrune {
+		j.prune()
+	}
+
+	// let the table handle mergable segments
+	return canMerge, len(j.tail) >= j.maxseg
 }
 
 func (j *Journal) AbortTx(xid types.XID) bool {
 	// abort tx across segments, rollback table state
 	var (
-		pmin, rmin uint64 = 1<<64 - 1, 1<<64 - 1
-		nRowsDiff  int
+		pmin, rmin         uint64 = 1<<64 - 1, 1<<64 - 1
+		nRowsDiff          int
+		canPrune, canMerge bool
 	)
 
 	// roll-over nRowsDiff across segments to update each segments
 	// row counter in case an abort crosses multiple segments
 	for _, v := range j.tail {
-		// abortable segments are in waiting state only
-		if !v.is(SegmentStateWaiting) {
-			continue
-		}
+		switch v.getState() {
+		case SegmentStateEmpty, SegmentStateMerged:
+			canPrune = true
+		case SegmentStateComplete:
+			canMerge = true
+		case SegmentStateMerging:
+			canMerge = false
+		case SegmentStateWaiting:
+			// forward abort when the segment contains this xid
+			var n int
+			if v.ContainsTx(xid) {
+				n = v.AbortTx(xid)
 
-		// the segment may not contain this xid (unlikely with single writer design)
-		var n int
-		if v.ContainsTx(xid) {
-			n = v.AbortTx(xid)
-			v.setState(SegmentStateComplete)
+				// check if state has changed
+				if !v.IsEmpty() {
+					v.setState(SegmentStateComplete)
+					canMerge = true
+				} else {
+					v.setState(SegmentStateEmpty)
+					canPrune = true
+				}
+			}
+			pmin = min(pmin, v.tstate.NextPk)
+			rmin = min(rmin, v.tstate.NextRid)
+			v.tstate.NextPk = pmin
+			v.tstate.NextRid = rmin
+			v.tstate.NRows = uint64(int64(v.tstate.NRows) - int64(nRowsDiff))
+			// log.Warnf("Adjust seg %d state nrowsdiff=%d to %#v", v.Id(), nRowsDiff, v.tstate)
+			nRowsDiff += n
 		}
-		pmin = min(pmin, v.tstate.NextPk)
-		rmin = min(rmin, v.tstate.NextRid)
-		v.tstate.NextPk = pmin
-		v.tstate.NextRid = rmin
-		v.tstate.NRows = uint64(int64(v.tstate.NRows) - int64(nRowsDiff))
-		// log.Warnf("Adjust seg %d state nrowsdiff=%d to %#v", v.Id(), nRowsDiff, v.tstate)
-		nRowsDiff += n
 	}
 
 	// update tip, adjust state also when tip is empty to roll over changes from parent segment
@@ -353,7 +377,13 @@ func (j *Journal) AbortTx(xid types.XID) bool {
 	j.tip.tstate.NRows = uint64(int64(j.tip.tstate.NRows) - int64(nRowsDiff))
 	// log.Warnf("Adjust tip %d state with nrowsdiff=%d to %#v", j.tip.Id(), nRowsDiff, j.tip.tstate)
 
-	return j.compact()
+	// handle empty and merged segments
+	if canPrune {
+		j.prune()
+	}
+
+	// let the table handle mergable segments
+	return canMerge
 }
 
 // called once to finalize wal replay, rollback pk/rid state
@@ -361,9 +391,17 @@ func (j *Journal) AbortActiveTx() (int, bool) {
 	var (
 		nAborted, nRowsDiff int
 		pmin, rmin          uint64 = 1<<64 - 1, 1<<64 - 1
+		canPrune, canMerge  bool
 	)
 	for _, v := range j.tail {
-		if v.is(SegmentStateWaiting) {
+		switch v.getState() {
+		case SegmentStateEmpty, SegmentStateMerged:
+			canPrune = true
+		case SegmentStateComplete:
+			canMerge = true
+		case SegmentStateMerging:
+			canMerge = false
+		case SegmentStateWaiting:
 			n, r := v.AbortActiveTx()
 			pmin = min(pmin, v.tstate.NextPk)  // track cross-segment
 			rmin = min(rmin, v.tstate.NextRid) // track cross-segment
@@ -372,7 +410,15 @@ func (j *Journal) AbortActiveTx() (int, bool) {
 			v.tstate.NRows = uint64(int64(v.tstate.NRows) - int64(nRowsDiff))
 			nAborted += n
 			nRowsDiff += r
-			v.setState(SegmentStateComplete)
+
+			// check if state has changed
+			if !v.IsEmpty() {
+				v.setState(SegmentStateComplete)
+				canMerge = true
+			} else {
+				v.setState(SegmentStateEmpty)
+				canPrune = true
+			}
 		}
 	}
 
@@ -384,36 +430,29 @@ func (j *Journal) AbortActiveTx() (int, bool) {
 	j.tip.tstate.NextRid = rmin
 	j.tip.tstate.NRows = uint64(int64(j.tip.tstate.NRows) - int64(nRowsDiff))
 
-	return nAborted, j.compact()
+	// handle empty and merged segments
+	if canPrune {
+		j.prune()
+	}
+
+	// let the table handle mergable segments
+	return nAborted, canMerge
 }
 
-func (j *Journal) compact() bool {
-	// remove empty segments and prepare merge for complete segments
-	var (
-		k         int
-		canMerge  bool
-		isMerging bool
-		n         int
-	)
-	for i, s := range j.tail {
-		switch s.getState() {
+// remove empty and merged tail segments
+func (j *Journal) prune() {
+	var k int
+	for _, v := range j.tail {
+		switch v.getState() {
 		case SegmentStateEmpty, SegmentStateMerged:
-			s.Close()
-			j.tail[i] = nil
-			continue
-		case SegmentStateComplete:
-			canMerge = true
-			n++
-		case SegmentStateMerging:
-			isMerging = true
+			v.Close()
+		default:
+			j.tail[k] = v
+			k++
 		}
-		j.tail[k] = s
-		k++
 	}
 	clear(j.tail[k:])
 	j.tail = j.tail[:k]
-
-	return canMerge && !isMerging
 }
 
 // Merges results from a chain of journal segments under snapshot isolation

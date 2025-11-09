@@ -23,12 +23,12 @@ func NewTask(fn func(context.Context) error) *Task {
 	}
 }
 
-func (t *Task) IsDone() bool {
+func (t *Task) Wait() error {
 	select {
 	case <-t.done:
-		return true
+		return t.err
 	default:
-		return false
+		return nil
 	}
 }
 
@@ -192,6 +192,7 @@ func (m *TaskService) dispatch() {
 
 		// ignore aborted tasks
 		if task.err != nil {
+			task.complete(task.err)
 			continue
 		}
 

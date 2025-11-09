@@ -36,6 +36,9 @@ const (
 
 type TableFactory func() TableEngine
 
+// backpressure channel to signal caller should block
+type WaitCh <-chan struct{}
+
 // internal interface required for all table engines
 type TableEngine interface {
 	Create(Context, *Schema, TableOptions) error
@@ -70,8 +73,8 @@ type TableEngine interface {
 	PkIndex() (QueryableIndex, bool)
 
 	// Tx Management
-	CommitTx(ctx Context, xid XID) error
-	AbortTx(ctx Context, xid XID) error
+	CommitTx(ctx Context, xid XID) WaitCh
+	AbortTx(ctx Context, xid XID)
 
 	// data handling
 	NewReader() TableReader
@@ -242,8 +245,8 @@ type StoreEngine interface {
 	Scan(ctx Context, from, to []byte, fn func(ctx Context, k, v []byte) error) error
 
 	// Tx Management
-	CommitTx(ctx Context, xid XID) error
-	AbortTx(ctx Context, xid XID) error
+	CommitTx(ctx Context, xid XID) WaitCh
+	AbortTx(ctx Context, xid XID)
 }
 
 type ConditionMatcher interface {
@@ -253,6 +256,6 @@ type ConditionMatcher interface {
 
 // all objects that support tracking tx info
 type TxTracker interface {
-	CommitTx(ctx Context, xid XID) error
-	AbortTx(ctx Context, xid XID) error
+	CommitTx(ctx Context, xid XID) WaitCh
+	AbortTx(ctx Context, xid XID)
 }

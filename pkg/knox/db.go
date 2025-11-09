@@ -19,6 +19,7 @@ const (
 	TxFlagNoWal    = engine.TxFlagNoWal    // do not write wal
 	TxFlagNoSync   = engine.TxFlagNoSync   // write wal but do not fsync
 	TxFlagDeferred = engine.TxFlagDeferred // let read tx wait for safe snapshot or timeout
+	TxFlagNoWait   = engine.TxFlagNoWait   // don't wait for concurrent writers and back-pressure
 )
 
 var _ Database = (*DB)(nil)

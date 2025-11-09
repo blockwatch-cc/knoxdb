@@ -141,6 +141,11 @@ func (o DatabaseOptions) WithLockTimeout(to time.Duration) DatabaseOptions {
 	return o
 }
 
+func (o DatabaseOptions) WithtxWaitTimeout(to time.Duration) DatabaseOptions {
+	o.TxWaitTimeout = to
+	return o
+}
+
 func (o DatabaseOptions) WithMaxWorkers(n int) DatabaseOptions {
 	o.MaxWorkers = n
 	return o

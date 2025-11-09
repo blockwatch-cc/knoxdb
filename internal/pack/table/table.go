@@ -38,7 +38,7 @@ var (
 		PageFill:        1.0,     // append only
 		PackSize:        1 << 14, // 16k
 		JournalSize:     1 << 15, // 32k
-		JournalSegments: 16,      // max 256 (unused)
+		JournalSegments: 0,       // max 256 (unused)
 		TxMaxSize:       1 << 24, // 16 MB,
 		Logger:          log.Disabled,
 	}
@@ -56,19 +56,19 @@ var (
 )
 
 type Table struct {
-	mu      sync.RWMutex            // global table lock (syncs r/w access, single writer)
-	engine  *engine.Engine          // engine access
-	schema  *schema.Schema          // ordered list of table fields as central type info
-	opts    engine.TableOptions     // copy of config options
-	id      uint64                  // unique table id (tagged name hash)
-	px      int                     // field index for primary key (required)
-	db      store.DB                // lower-level storage (e.g. boltdb wrapper)
-	state   engine.ObjectState      // volatile state
-	indexes []engine.QueryableIndex // list of indexes
-	stats   *stats.AtomicPointer    // in-memory metadata
-	journal *journal.Journal        // in-memory data not yet written to packs
-	metrics engine.TableMetrics     // usage statistics
-	task    *engine.Task            // merge task pointer
+	mu      sync.RWMutex                // global table lock (syncs r/w access, single writer)
+	engine  *engine.Engine              // engine access
+	schema  *schema.Schema              // ordered list of table fields as central type info
+	opts    engine.TableOptions         // copy of config options
+	id      uint64                      // unique table id (tagged name hash)
+	px      int                         // field index for primary key (required)
+	db      store.DB                    // lower-level storage (e.g. boltdb wrapper)
+	state   engine.ObjectState          // volatile state
+	indexes []engine.QueryableIndex     // list of indexes
+	stats   *stats.AtomicPointer        // in-memory metadata
+	journal *journal.Journal            // in-memory data not yet written to packs
+	metrics engine.TableMetrics         // usage statistics
+	task    atomic.Pointer[engine.Task] // merge task pointer
 	log     log.Logger
 }
 
@@ -224,7 +224,7 @@ func (t *Table) createBackend(ctx context.Context) error {
 	}
 
 	// setup journal (note: history tables have no journal)
-	if t.opts.JournalSize*t.opts.JournalSegments > 0 {
+	if t.opts.JournalSize > 0 {
 		t.journal = journal.NewJournal(t.schema, t.opts.JournalSize, t.opts.JournalSegments).
 			WithState(t.state).
 			WithWal(t.engine.Wal()).
@@ -261,7 +261,7 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOpt
 	}
 
 	// setup journal and replay wal, no journal on history tables
-	if t.opts.JournalSize*t.opts.JournalSegments > 0 {
+	if t.opts.JournalSize > 0 {
 		t.journal = journal.NewJournal(s, t.opts.JournalSize, t.opts.JournalSegments).
 			WithWal(t.engine.Wal()).
 			WithState(t.state).
@@ -352,6 +352,11 @@ func (t *Table) openBackend(ctx context.Context) error {
 }
 
 func (t *Table) Close(ctx context.Context) (err error) {
+	// wait for background task to finish before we free memory
+	if task := t.task.Load(); task != nil {
+		task.Wait()
+	}
+	// close resources
 	if t.db != nil {
 		t.log.Debug("closing")
 		err = t.db.Close()
@@ -459,40 +464,54 @@ func (t *Table) Truncate(ctx context.Context) error {
 	return nil
 }
 
-func (t *Table) CommitTx(ctx context.Context, xid types.XID) error {
+// CommitTx commits xid across journal segments and may start journal merge.
+// Returns back-pressure channel on journal overflow which signals when
+// the next journal segment has successfully merged and more room becomes
+// available.
+func (t *Table) CommitTx(ctx context.Context, xid types.XID) engine.WaitCh {
 	// lock journal access
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	canMerge := t.journal.CommitTx(xid)
+	canMerge, shouldWait := t.journal.CommitTx(xid)
 
-	// TODO: move task scheduling and backpressure handling to journal
-	if canMerge && t.task == nil {
-		t.log.Trace("scheduling merge task")
-		t.task = engine.NewTask(t.Merge)
-		ok := t.engine.Schedule(t.task)
-		if !ok {
+	// schedule merge task
+	task := t.task.Load()
+	if canMerge && task == nil {
+		task = engine.NewTask(t.Merge)
+		if t.engine.Schedule(task) {
+			t.log.Trace("merge: scheduled task")
+			t.task.Store(task)
+		} else {
 			t.log.Trace("merge: task queue full")
+			task = nil
 		}
 	}
+
+	// handle backpressure when journal is full (too many segments)
+	// by returning the task's completion channel to signal more room
+	// has become available
+	if shouldWait && task != nil {
+		return task.Done()
+	}
+
 	return nil
 }
 
-func (t *Table) AbortTx(ctx context.Context, xid types.XID) error {
+func (t *Table) AbortTx(ctx context.Context, xid types.XID) {
 	// lock journal access
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	canMerge := t.journal.AbortTx(xid)
 
-	// TODO: move task scheduling and backpressure handling to journal
-	if canMerge && t.task == nil {
-		t.log.Trace("scheduling merge task")
-		t.task = engine.NewTask(t.Merge)
-		ok := t.engine.Schedule(t.task)
-		if !ok {
+	if canMerge && t.task.Load() == nil {
+		task := engine.NewTask(t.Merge)
+		if t.engine.Schedule(task) {
+			t.log.Trace("merge: scheduled task")
+			t.task.Store(task)
+		} else {
 			t.log.Trace("merge: task queue full")
 		}
 	}
-	return nil
 }
 
 // Checkpoint journal. Rotates the active segment and writes

@@ -18,32 +18,32 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
-// Merge processes updates from a journal segment writing them back into table
-// backend storage and indexes. Merge is idempotent, it can crash, get
-// interrupted and restarted. The merged journal segment is only discarded
-// when all data has been successfully written eventually.
+// Merge copies all changes in a journal segment into compact table vectors.
+// Merging is an idempotent process. It can crash, get interrupted and restarted.
+// It writes new versions of backend table storage blocks and index blocks and
+// only discards a journal segment when all data has been successfully written.
 //
-// The merge process works in multiple stages
-// 1. set journal segment state merging
-// 2. create table writers for main and optional history tables
-// 3. process all deleted records
-//    - append to history when enabled (patch xmax metadata from tombstones)
+// Merge works in multiple stages
+// 1. update journal segment state to merging
+// 2. process deleted records
+//    - append to history (optional, patch xmax metadata from tombstones)
 //    - add to history indexes
 //    - drop from main indexes
 //    - rewrite main table packs
-// 4. process all new records
+// 3. process new record versions
 //    - append to main table
 //    - add to main indexes
 //
-// Storage writes use micro-transactions for each pack written which makes
-// changes gradually visible as merge progresses. To protect consistency of
-// concurrent queries we use MVCC metadata and journal merge-on-query. Explicit
-// syncronization or logging is not required. On potential crash already written
-// backend data is overwritten by the next merge process. All backend data is
-// versioned (with versions appended to keys) so that new backend writes are
-// not used until the metadata index version is updated on merge success.
+// Storage writes are atomic for all vector blocks in a pack. Concurrent readers
+// use the on-disk versions of blocks that were active at transaction start.
+// New block versions become only visible once merge completes and only for
+// future transactions. We achieve this by producing a COW copy of block metadata
+// and atomically installing the new metadata version on merge completion.
+// While merge progresses, old readers observe the previous on-disk versions of
+// blocks overlayed by changes in the journal. After potential crash incomplete written
+// blocks are removed and written again by the next merge process.
 //
-// Merge appends new row from insert/update operations at the end of
+// Merge appends new row versions from insert/update operations at the end of
 // a table's data vectors and removes old rows replaced by update/delete.
 // When history is enabled, pre-images of old rows are moved to a history table.
 //
@@ -67,17 +67,10 @@ import (
 //     append post-image from journal to last pack
 //   - delete -> remove pre-image rid or mark as deleted (set xmax, is_deleted)
 //
-// Notable Side Effects
-// - updates table statistics (single-writer private copy, copy-on-write updates)
-//   - writes to a private stats index clone during merge
-//   - all stats index changes are copy-on-write (re-uses tree and pack structure)
-//   - when done, atomically replaces stats index ptr in table (see TableWriter.Finalize())
-// - updates indexes (using versioned keys for on-disk data blocks)
-// - replaces stored data blocks on disk
-//   - atomic backend write of all blocks in a single pack
-//   - followed by cache flush of all blocks (under cache and tx locks)
-//   - concurrent readers always see a consistent pack version, but will see
-//     pack updates as merge progresses
+// No visible side effects for concurrent read/write transactions
+// - table statistics updates are COW using a private copy
+// - new table statistics are installed via atomic update on completion (see TableWriter.Finalize())
+// - on-disk table and index blocks are versioned and invisible until statistics update
 //
 // Design considerations for background merge
 //
@@ -85,9 +78,9 @@ import (
 // - merges one journal segment at a time
 // - no database engine (user) transaction exists
 // - uses short-lived backend write transactions to atomically write pack blocks
-// - readers are only blocked during pack backend writes (with boltdb storage engine)
-// - may stall on I/O while holding backend tx locks
-// - merge may get interrupted (context cancel, crash)
+// - readers are only blocked during short backend writes (with boltdb storage engine)
+// - may briefly stall on I/O while holding backend store locks
+// - merge can get interrupted without side-effects (by error, context cancel or crash)
 // - journal data and tombstone remain authoritative source (overlay pack data)
 //   until merge is confirmed
 // - MVCC still works for merged data (record metadata remains available to queries)
@@ -97,14 +90,14 @@ import (
 //   2. write epoch + LSN to table state (normative end of merge)
 //   3. swap meta index ptr (only afterwards its safe to drop merged segment)
 //   4. drop merged segment from journal
-//   5. GC
+//   5. GC wal segments, gc unused block versions
 // - notes
 //   - crash recovery after step 2 skips already merged journal segment
 //   - must filter journal query by meta epoch to prevent duplicates
 
 // Merge is called as background task and operates concurrent to journal
 // writes and query readers. If another segment from the same journal
-// is currently in merging state, the task yield and retries later.
+// is currently in merging state, the task yields and retries later.
 func (t *Table) Merge(ctx context.Context) error {
 	var (
 		seg      *journal.Segment
@@ -114,10 +107,8 @@ func (t *Table) Merge(ctx context.Context) error {
 
 	t.log.Trace("starting merge task")
 
-	// we're running, reset merge task handle
-	t.mu.Lock()
-	t.task = nil
-	t.mu.Unlock()
+	// reset merge task handle on completion
+	defer t.task.Store(nil)
 
 	if t.IsReadOnly() {
 		return engine.ErrTableReadOnly

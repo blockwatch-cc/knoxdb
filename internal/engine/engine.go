@@ -688,7 +688,7 @@ func (e *Engine) Sync(ctx context.Context) error {
 	return errg.Wait()
 }
 
-func (e *Engine) CommitTx(ctx context.Context, oid uint64, xid types.XID) error {
+func (e *Engine) CommitTx(ctx context.Context, oid uint64, xid types.XID) <-chan struct{} {
 	var (
 		t  TxTracker
 		ok bool
@@ -703,7 +703,7 @@ func (e *Engine) CommitTx(ctx context.Context, oid uint64, xid types.XID) error 
 	return t.CommitTx(ctx, xid)
 }
 
-func (e *Engine) AbortTx(ctx context.Context, oid uint64, xid types.XID) error {
+func (e *Engine) AbortTx(ctx context.Context, oid uint64, xid types.XID) {
 	var (
 		t  TxTracker
 		ok bool
@@ -712,10 +712,9 @@ func (e *Engine) AbortTx(ctx context.Context, oid uint64, xid types.XID) error {
 	if !ok {
 		t, ok = e.stores.Get(oid)
 	}
-	if !ok {
-		return nil
+	if ok {
+		t.AbortTx(ctx, xid)
 	}
-	return t.AbortTx(ctx, xid)
 }
 
 func (e *Engine) Schedule(t *Task) bool {
@@ -730,28 +729,28 @@ func (e *Engine) Schedule(t *Task) bool {
 func (e *Engine) TryGC(ctx context.Context) error {
 	// skip during shutdown
 	if e.IsShutdown() {
-		e.log.Trace("GC skipped on shutdown")
+		e.log.Trace("wal gc skipped on shutdown")
 		return nil
 	}
 
 	// skip when not required
 	if !e.NeedsCheckpoint() {
-		e.log.Trace("GC starting")
+		e.log.Trace("wal gc starting")
 		return e.wal.GC(e.Watermark())
 	}
 
 	// schedule GC task atomically
 	if ok := e.rungc.CompareAndSwap(false, true); !ok {
-		e.log.Trace("GC already running")
+		e.log.Trace("eal gc already running")
 		return nil
 	}
 
 	// schedule task
-	e.log.Trace("WAL watermark too old, scheduling checkpointing task")
+	e.log.Trace("wal watermark too old, scheduling checkpointing task")
 	if !e.Schedule(NewTask(e.RunGC)) {
 		// reset atomic state
 		e.rungc.Store(false)
-		e.log.Trace("task queue full")
+		e.log.Trace("checkpoint: task queue full")
 	}
 
 	return nil

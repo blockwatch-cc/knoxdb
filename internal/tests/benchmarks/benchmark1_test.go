@@ -49,10 +49,17 @@ func BenchmarkInsertBulk(b *testing.B) {
 			)
 			for b.Loop() {
 				ctx, commit, _, err := db.Begin(context.Background(), knox.TxFlagNoWal)
-				require.NoError(b, err, "begin")
+				if err != nil {
+					b.Fatalf("begin: %v", err)
+				}
 				_, n, err := table.Insert(ctx, data)
-				require.NoError(b, err, "insert")
-				require.NoError(b, commit())
+				if err != nil {
+					b.Fatalf("insert: %v", err)
+				}
+				err = commit()
+				if err != nil {
+					b.Fatalf("commit: %v", err)
+				}
 				nrec += n
 				ntx++
 			}
