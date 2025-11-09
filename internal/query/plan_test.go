@@ -36,7 +36,7 @@ func init() {
 		panic(err)
 	}
 	testSchema = testSchema.WithMeta()
-	testIndexSchema = testSchema.Indexes[1]
+	testIndexSchema = testSchema.Indexes[1] // hash index on name
 
 	statusEnum := schema.NewEnumDictionary("status")
 	statusEnum.Append("active", "pending", "inactive")
@@ -65,8 +65,8 @@ func (t *testStruct) Encode() []byte {
 	return buf
 }
 
-func makeIndex(pks ...uint64) engine.QueryableIndex {
-	return NewMockIndex(testIndexSchema, bitmap.NewFromIndexes(pks))
+func makeIndex(rids ...uint64) engine.QueryableIndex {
+	return NewMockIndex(testIndexSchema, bitmap.NewFromIndexes(rids))
 }
 
 func IsFilterEqual(a, b *filter.Node) bool {
@@ -550,7 +550,7 @@ func TestPlanQueryIndexes(t *testing.T) {
 			require.NoError(t, plan.Compile(context.TODO()))
 			require.NoError(t, plan.QueryIndexes(context.TODO()))
 
-			// fully processed trees should habe a top level bitmap
+			// fully processed trees should have a top level bitmap
 			if plan.Filters.IsProcessed() {
 				require.True(t, plan.Filters.Bits.IsValid(), "missing bits for %s", plan.Filters)
 			}

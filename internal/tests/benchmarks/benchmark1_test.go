@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Blockwatch Data Inc.
 // Author: abdul@blockwatch.cc, alex@blockwatch.cc
 //
-// Benchmark1 test the write throughput for knoxdb
+// Benchmark1 tests bulk write throughput (max rec/s)
 package benchmarks
 
 import (
@@ -12,6 +12,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/tests"
 	etests "blockwatch.cc/knoxdb/internal/tests/engine"
 	"blockwatch.cc/knoxdb/pkg/knox"
+	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/echa/log"
 	"github.com/stretchr/testify/require"
 )
@@ -22,12 +23,13 @@ type Account struct {
 	Balance   int64     `knox:"balance"`
 }
 
-func genAccounts(n int) []*Account {
+func genAccounts(n, k int) []*Account {
 	accounts := make([]*Account, 0, n)
+	now := time.Now().UTC()
 	for i := range n {
 		accounts = append(accounts, &Account{
-			Balance:   int64(1000 + 1 + i),
-			FirstSeen: time.Unix(int64(1+i), 0),
+			Balance:   int64(util.RandIntn(1000 + k + i)),
+			FirstSeen: now.Add(time.Second * time.Duration(k+i)),
 		})
 	}
 	return accounts
@@ -40,7 +42,7 @@ func BenchmarkInsertBulk(b *testing.B) {
 		db := knox.WrapEngine(eng)
 		table, err := db.FindTable("account")
 		require.NoError(b, err, "Missing table")
-		data := genAccounts(sz.N)
+		data := genAccounts(sz.N, 1)
 
 		b.Run(sz.Name, func(b *testing.B) {
 			var (

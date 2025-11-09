@@ -254,8 +254,8 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 		}
 	}
 
-	// request at least the primary key and row_id fields
-	filterFieldIds := append(p.Filters.FieldIds(), p.Table.Schema().PkId())
+	// request at least the row_id field
+	filterFieldIds := p.Filters.FieldIds()
 	if hasMeta {
 		filterFieldIds = append(filterFieldIds, schema.MetaRid)
 	}
@@ -278,7 +278,7 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 		// this will select all single-field indexes and all
 		// composite indexes where the first index field is used as
 		// query condition (they may use prefix key matches)
-		if !slicex.Contains(filterFieldIds, idx.Schema().Fields[0].Id) {
+		if !slicex.Contains(filterFieldIds, idx.IndexSchema().Fields[0].Id) {
 			continue
 		}
 		p.Indexes = append(p.Indexes, idx)
@@ -308,7 +308,7 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 
 // INDEX QUERY: use index lookup for indexed fields and attach pk bitmaps
 func (p *QueryPlan) QueryIndexes(ctx context.Context) error {
-	if p.Flags.IsNoIndex() || p.Filters.IsProcessed() {
+	if p.Flags.IsNoIndex() || p.Filters.IsProcessed() || len(p.Indexes) == 0 {
 		return nil
 	}
 	origFieldIds := p.Filters.FieldIds()
@@ -330,7 +330,7 @@ func (p *QueryPlan) QueryIndexes(ctx context.Context) error {
 	}
 
 	// Step 2: add IN conditions from aggregate bits at each tree level
-	// without index match this adds an always false condition for the pk field
+	// without index match this adds an always false condition for the rid field
 	p.decorateIndexNodes(p.Filters, tmpl, true)
 	p.Log.Debugf("Decorated %s", p.Filters)
 
@@ -390,7 +390,7 @@ func (p *QueryPlan) decorateIndexNodes(node *filter.Node, tmpl *filter.Filter, i
 			}
 		}
 
-		// add a new primary key IN condition to root
+		// add a new rowid IN condition to root
 		if bits.Count() == 0 {
 			node.Children = append(node.Children, &filter.Node{
 				Filter: tmpl.AsFalse(),
@@ -406,7 +406,7 @@ func (p *QueryPlan) decorateIndexNodes(node *filter.Node, tmpl *filter.Filter, i
 		return
 	}
 
-	// common case, add PK IN condition to the current tree level
+	// common case, add RID IN condition to the current tree level
 	for _, child := range node.Children {
 		// single condition children
 		if child.IsLeaf() {

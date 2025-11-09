@@ -128,9 +128,7 @@ func (n *Node) Optimize() {
 	newChilds = simplifyNodes(newChilds, n.OrKind)
 
 	// sort by weight
-	sort.Slice(newChilds, func(i, j int) bool {
-		return newChilds[i].Weight() < newChilds[j].Weight()
-	})
+	sort.Sort(ByWeight(newChilds))
 
 	// replace current children
 	n.Children = newChilds
@@ -153,9 +151,7 @@ func simplifyNodes(nodes []*Node, isOrNode bool) []*Node {
 	}
 
 	// order leafs by field index
-	sort.Slice(leafs, func(i, j int) bool {
-		return leafs[i].Filter.Index < leafs[j].Filter.Index
-	})
+	sort.Sort(ByFilterIndex(leafs))
 
 	// first apply simplifications for single nodes
 	leafs = simplifySingle(leafs, isOrNode)
@@ -579,30 +575,14 @@ func simplifyRanges(nodes []*Node, isOrNode bool) []*Node {
 // - any: NE(A) + NE(A) => NE(A) -- same value, duplicate
 func simplifySets(nodes []*Node, isOrNode bool) []*Node {
 	var (
-		ins, nis    any
-		lastIdx     int
-		res         []*Node
-		f           *Filter
-		plus, minus func(any, any) any
+		ins, nis any
+		lastIdx  int
+		res      []*Node
+		f        *Filter
 	)
 
 	// order nodes by field index and move sets first
-	sort.Slice(nodes, func(i, j int) bool {
-		ix, jx := nodes[i].Filter.Index, nodes[j].Filter.Index
-		if ix != jx {
-			return ix < jx
-		}
-		var is, js uint16
-		switch nodes[i].Filter.Mode {
-		case FilterModeIn, FilterModeNotIn:
-			is++
-		}
-		switch nodes[j].Filter.Mode {
-		case FilterModeIn, FilterModeNotIn:
-			js++
-		}
-		return is > js
-	})
+	sort.Sort(ByFilterIndexSetsFirst(nodes))
 
 	postProcess := func() {
 		// produce zero or one combined filter from sets
@@ -631,7 +611,9 @@ func simplifySets(nodes []*Node, isOrNode bool) []*Node {
 
 		// keep this node's filter around for potential use in post-process
 		f = node.Filter
+
 		// set aggregation functions
+		var plus, minus func(any, any) any
 		if isOrNode {
 			plus, minus = f.Type.Intersect, f.Type.Union
 		} else {

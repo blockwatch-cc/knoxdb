@@ -58,7 +58,7 @@ func (t *Table) Query(ctx context.Context, q engine.QueryPlan) (engine.QueryResu
 	default:
 		err = t.doQueryAsc(ctx, plan, res)
 	}
-	if err != nil {
+	if err != nil && err != types.EndStream {
 		res.Close()
 		return nil, err
 	}
@@ -133,7 +133,7 @@ func (t *Table) Count(ctx context.Context, q engine.QueryPlan) (int, error) {
 
 	// run the query
 	err = t.doQueryAsc(ctx, plan, res)
-	if err != nil {
+	if err != nil && err != types.EndStream {
 		return 0, err
 	}
 

@@ -308,6 +308,16 @@ func (r *Reader) nextQueryMatch(ctx context.Context) (*pack.Package, error) {
 			return nil, nil
 		}
 
+		// TODO: make reqFields and resFields dynamic based on min/max match
+		//
+		// we could limit loading match columns further by considering the fact
+		// that many filter conditions can be all true/false for certain
+		// packs which we would know from min/max alone. we use this idea to skip
+		// calling match in operator/filter, so we may not even load columns here.
+		// if we needed these columns later we could still load them below.
+		// this can boost scan performance considerably as we may skip many
+		// non-matches.
+
 		// load match columns only
 		k, v, n := r.it.PackInfo()
 		// rmin, rmax := r.it.MinMaxRid()

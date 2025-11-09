@@ -115,7 +115,7 @@ func NewQuery() Query {
 		table: newErrorTable("query", ErrEmptyTable),
 		order: OrderAsc,
 		limit: 0,
-		log:   log.New(nil).SetLevel(log.LevelInfo),
+		log:   log.Log,
 	}
 }
 

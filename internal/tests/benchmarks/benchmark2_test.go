@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Blockwatch Data Inc.
 // Author: abdul@blockwatch.cc, alex@blockwatch.cc
 //
-// Benchmark2 test the transaction throughput for knoxdb
+// Benchmark2 tests transaction throughput (max tx/s)
 package benchmarks
 
 import (
@@ -12,6 +12,7 @@ import (
 
 	tests "blockwatch.cc/knoxdb/internal/tests/engine"
 	"blockwatch.cc/knoxdb/pkg/knox"
+	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/echa/log"
 	"github.com/stretchr/testify/require"
 )
@@ -26,6 +27,7 @@ func BenchmarkInsertSequential(b *testing.B) {
 	var (
 		nrec int
 		ntx  int
+		now  = time.Now().UTC()
 	)
 
 	for b.Loop() {
@@ -34,8 +36,8 @@ func BenchmarkInsertSequential(b *testing.B) {
 			b.Fatalf("begin: %v", err)
 		}
 		data := &Account{
-			Balance:   int64(1000 + b.N),
-			FirstSeen: time.Unix(int64(b.N), 0),
+			Balance:   int64(util.RandIntn(1000 + b.N)),
+			FirstSeen: now.Add(time.Second * time.Duration(b.N)),
 		}
 		_, n, err := table.Insert(ctx, data)
 		if err != nil {
