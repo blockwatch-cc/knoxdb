@@ -50,7 +50,9 @@ func TestJournalInsert(t *testing.T) {
 	require.True(t, j.Tip().ContainsRid(1))
 
 	// commit
-	require.False(t, j.CommitTx(xid))
+	canMerge, shouldWait := j.CommitTx(xid)
+	require.False(t, canMerge)
+	require.False(t, shouldWait)
 	require.True(t, j.Tip().ContainsTx(xid))
 	require.False(t, j.Tip().IsActiveTx(xid))
 	require.False(t, j.Tip().IsEmpty())
@@ -84,7 +86,9 @@ func TestJournalUpdate(t *testing.T) {
 	require.Equal(t, 1, n, "update count")
 
 	// commit
-	require.False(t, j.CommitTx(xid))
+	canMerge, shouldWait := j.CommitTx(xid)
+	require.False(t, canMerge)
+	require.False(t, shouldWait)
 
 	// check state
 	require.Equal(t, 3, j.Len(), "record count")
@@ -130,7 +134,9 @@ func TestJournalDelete(t *testing.T) {
 	require.Equal(t, 1, n, "update count")
 
 	// commit
-	require.False(t, j.CommitTx(xid))
+	canMerge, shouldWait := j.CommitTx(xid)
+	require.False(t, canMerge)
+	require.False(t, shouldWait)
 
 	// check state
 	require.Equal(t, 2, j.Len(), "record count")
@@ -166,7 +172,10 @@ func TestJournalRotate(t *testing.T) {
 		require.Equal(t, 1, n, "n")
 		require.Equal(t, uint64(i+1), pk, "pk")
 	}
-	require.True(t, j.CommitTx(xid), "have mergable segment")
+
+	canMerge, shouldWait := j.CommitTx(xid)
+	require.True(t, canMerge, "have mergable segment")
+	require.False(t, shouldWait)
 
 	// should have 2 segments now
 	require.Equal(t, 129, j.Len(), "record count")
@@ -225,7 +234,9 @@ func TestJournalRotateAborted(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, n, "n")
 	require.Equal(t, uint64(1), pk, "pk")
-	require.False(t, j.CommitTx(xid))
+	canMerge, shouldWait := j.CommitTx(xid)
+	require.False(t, canMerge)
+	require.False(t, shouldWait)
 
 	// open new tx
 	ctx = setupNextTx(t, ctx)
@@ -235,7 +246,9 @@ func TestJournalRotateAborted(t *testing.T) {
 	n, err = j.UpdateRecords(ctx, makeRecord(1), map[uint64]uint64{1: 1})
 	require.NoError(t, err)
 	require.Equal(t, 1, n, "update count")
-	require.False(t, j.CommitTx(xid))
+	canMerge, shouldWait = j.CommitTx(xid)
+	require.False(t, canMerge)
+	require.False(t, shouldWait)
 	require.Nil(t, j.Tip().Aborted())
 
 	// snapshot state
