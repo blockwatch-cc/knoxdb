@@ -140,7 +140,7 @@ func (m *TaskService) Start() {
 		m.tasks = make(chan *Task, m.maxQueue)
 		m.workers = make(chan *Worker, m.maxWorkers)
 		m.stop = make(chan struct{}, 1)
-		m.log.Infof("starting task service with queue=%d workers=%d", m.maxQueue, m.maxWorkers)
+		m.log.Debugf("starting task service with queue=%d workers=%d", m.maxQueue, m.maxWorkers)
 		for range m.maxWorkers {
 			w := NewWorker()
 			m.wg.Add(1)
@@ -152,7 +152,7 @@ func (m *TaskService) Start() {
 }
 
 func (m *TaskService) Stop() {
-	m.log.Infof("stopping task service")
+	m.log.Debugf("stopping task service")
 
 	// signal shutdown to dispatcher and workers
 	close(m.stop)
@@ -172,7 +172,7 @@ func (m *TaskService) Stop() {
 }
 
 func (m *TaskService) Kill() {
-	m.log.Infof("killing task service")
+	m.log.Debugf("killing task service")
 	close(m.stop)
 	m.cancel()
 	m.wg.Wait()

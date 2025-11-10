@@ -68,6 +68,19 @@ func decodeNodeKey(buf []byte) (kind byte, id, key, ver uint32) {
 	return
 }
 
+// InitStore generates buckets in the backend store. Used in tests. Tables
+// call idx.Store below.
+func (idx *Index) InitStore(ctx context.Context) error {
+	return idx.db.Update(func(tx store.Tx) error {
+		for _, k := range idx.keys {
+			if _, err := tx.Root().CreateBucket(k); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 // Store identifies updated inodes and snodes and stores tombstones for the previous
 // version of each node and snode spack, then writes new node versions and spacks
 // to disk. Store works within a single storage layer transaction hence updates

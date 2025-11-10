@@ -148,7 +148,7 @@ func (c *Catalog) WithLogger(l log.Logger) *Catalog {
 func (c *Catalog) Create(ctx context.Context, opts DatabaseOptions) error {
 	c.path = filepath.Join(opts.Path, c.name)
 	c.log.Debugf("create catalog at %s", c.path)
-	db, err := store.Create(opts.CatalogOptions(c.name)...)
+	db, err := store.Create(opts.WithLogger(c.log).CatalogOptions(c.name)...)
 	if err != nil {
 		return fmt.Errorf("create catalog %s: %w", c.name, err)
 	}
@@ -187,7 +187,7 @@ func (c *Catalog) Open(ctx context.Context, opts DatabaseOptions) error {
 	opts = DefaultDatabaseOptions.Merge(opts)
 	c.path = filepath.Join(opts.Path, c.name)
 	c.log.Debugf("open catalog at %s", c.path)
-	db, err := store.Open(opts.CatalogOptions(c.name)...)
+	db, err := store.Open(opts.WithLogger(c.log).CatalogOptions(c.name)...)
 	if err != nil {
 		c.log.Errorf("open catalog %s: %v", c.name, err)
 		return ErrDatabaseCorrupt

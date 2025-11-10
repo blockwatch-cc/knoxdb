@@ -66,7 +66,8 @@ func TestWorkload2(t *testing.T) {
 	count := 0
 	err = knox.NewGenericQuery[tests.Types]().
 		WithTable(table).
-		WithDebug(testing.Verbose()). // Enable detailed query logging
+		WithTag("validate-stream").
+		// WithDebug(testing.Verbose()). // Enable detailed query logging
 		Stream(ctx, func(res *tests.Types) error {
 			val, ok := insertedData.Load(res.Id)
 			require.True(t, ok, "Missing record for Id: %d", res.Id)

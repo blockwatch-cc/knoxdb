@@ -200,6 +200,7 @@ func TestIndexAddSingle(t *testing.T) {
 	defer db.Close()
 	idx := NewIndex().WithDB(db).WithSchema(TestSchema).WithMaxSize(TEST_PKG_SIZE)
 	defer idx.Close()
+	require.NoError(t, idx.InitStore(ctx))
 	pkg := makeTestPackage(t, 0, 1)
 	require.NoError(t, idx.AddPack(ctx, pkg))
 
@@ -248,6 +249,7 @@ func TestIndexAddMany(t *testing.T) {
 	defer db.Close()
 	idx := NewIndex().WithDB(db).WithSchema(TestSchema).WithMaxSize(TEST_PKG_SIZE)
 	defer idx.Close()
+	require.NoError(t, idx.InitStore(ctx))
 
 	// num snodes we expect to attach
 	sz := 5
@@ -290,6 +292,7 @@ func TestIndexUpdate(t *testing.T) {
 	defer db.Close()
 	idx := NewIndex().WithDB(db).WithSchema(TestSchema).WithMaxSize(TEST_PKG_SIZE)
 	defer idx.Close()
+	require.NoError(t, idx.InitStore(ctx))
 	pkg := makeTestPackage(t, 0, 1)
 	require.NoError(t, idx.AddPack(ctx, pkg))
 	snode := idx.snodes[0]
@@ -352,6 +355,7 @@ func TestIndexDeleteSingle(t *testing.T) {
 	defer db.Close()
 	idx := NewIndex().WithDB(db).WithSchema(TestSchema).WithMaxSize(TEST_PKG_SIZE)
 	defer idx.Close()
+	require.NoError(t, idx.InitStore(ctx))
 	require.NoError(t, db.Update(func(tx store.Tx) error { return idx.Store(ctx, tx) }))
 	require.NoError(t, idx.AddPack(ctx, makeTestPackage(t, 0, 1)))
 	require.NoError(t, idx.AddPack(ctx, makeTestPackage(t, 1, TEST_PKG_SIZE+1)))
@@ -392,6 +396,7 @@ func TestIndexDeleteMany(t *testing.T) {
 	defer db.Close()
 	idx := NewIndex().WithDB(db).WithSchema(TestSchema).WithMaxSize(TEST_PKG_SIZE)
 	defer idx.Close()
+	require.NoError(t, idx.InitStore(ctx))
 	require.NoError(t, db.Update(func(tx store.Tx) error { return idx.Store(ctx, tx) }))
 
 	sz := 5
@@ -449,6 +454,7 @@ func TestIndexStore(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 	src := NewIndex().WithDB(db).WithSchema(TestSchema).WithMaxSize(TEST_PKG_SIZE)
+	require.NoError(t, src.InitStore(ctx))
 
 	sz := 5
 	for n := 0; n < sz; n++ {
@@ -505,6 +511,7 @@ func TestIndexStoreAndAdd(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 	idx := NewIndex().WithDB(db).WithSchema(TestSchema).WithMaxSize(TEST_PKG_SIZE)
+	require.NoError(t, idx.InitStore(ctx))
 
 	// fill half
 	for k := 0; k < STATS_PACK_SIZE/2; k++ {
@@ -545,7 +552,7 @@ func TestIndexQueryEqual(t *testing.T) {
 		WithMaxSize(TEST_PKG_SIZE).
 		WithFeatures(FeatRangeFilter)
 	defer idx.Close()
-	require.NoError(t, db.Update(func(tx store.Tx) error { return idx.Store(ctx, tx) }))
+	require.NoError(t, idx.InitStore(ctx))
 
 	sz := 5
 	for n := 0; n < sz; n++ {
@@ -589,7 +596,7 @@ func TestIndexQueryAll(t *testing.T) {
 		WithMaxSize(TEST_PKG_SIZE).
 		WithFeatures(FeatRangeFilter)
 	defer idx.Close()
-	require.NoError(t, db.Update(func(tx store.Tx) error { return idx.Store(ctx, tx) }))
+	require.NoError(t, idx.InitStore(ctx))
 
 	sz := 5
 	for n := 0; n < sz; n++ {
@@ -643,7 +650,7 @@ func TestIndexQueryLess(t *testing.T) {
 		WithMaxSize(TEST_PKG_SIZE).
 		WithFeatures(FeatRangeFilter)
 	defer idx.Close()
-	require.NoError(t, db.Update(func(tx store.Tx) error { return idx.Store(ctx, tx) }))
+	require.NoError(t, idx.InitStore(ctx))
 
 	sz := 1
 	for n := 0; n < sz; n++ {
@@ -700,7 +707,7 @@ func TestIndexQueryRange(t *testing.T) {
 		WithMaxSize(TEST_PKG_SIZE).
 		WithFeatures(FeatRangeFilter)
 	defer idx.Close()
-	require.NoError(t, db.Update(func(tx store.Tx) error { return idx.Store(ctx, tx) }))
+	require.NoError(t, idx.InitStore(ctx))
 
 	sz := 1
 	for n := 0; n < sz; n++ {
@@ -756,7 +763,7 @@ func TestIndexFindPk(t *testing.T) {
 		WithMaxSize(TEST_PKG_SIZE).
 		WithFeatures(FeatRangeFilter)
 	defer idx.Close()
-	require.NoError(t, db.Update(func(tx store.Tx) error { return idx.Store(ctx, tx) }))
+	require.NoError(t, idx.InitStore(ctx))
 
 	// fill half
 	for k := 0; k < STATS_PACK_SIZE/2; k++ {
@@ -792,7 +799,7 @@ func TestIndexFindPkEnd(t *testing.T) {
 	defer db.Close()
 	idx := NewIndex().WithDB(db).WithSchema(TestSchema).WithMaxSize(TEST_PKG_SIZE)
 	defer idx.Close()
-	require.NoError(t, db.Update(func(tx store.Tx) error { return idx.Store(ctx, tx) }))
+	require.NoError(t, idx.InitStore(ctx))
 
 	// fill half (last data pack is full, so no more room for this pk)
 	for k := 0; k < STATS_PACK_SIZE/2; k++ {
@@ -824,6 +831,7 @@ func TestIndexFindPkEndWithSpace(t *testing.T) {
 	defer db.Close()
 	idx := NewIndex().WithDB(db).WithSchema(TestSchema).WithMaxSize(TEST_PKG_SIZE)
 	defer idx.Close()
+	require.NoError(t, idx.InitStore(ctx))
 
 	// fill half
 	for k := 0; k < STATS_PACK_SIZE/2; k++ {
@@ -866,6 +874,7 @@ func BenchmarkIndexQueryEqual(b *testing.B) {
 		)
 		require.NoError(b, err)
 		idx := NewIndex().WithDB(db).WithSchema(TestSchema).WithMaxSize(TEST_PKG_SIZE)
+		require.NoError(b, idx.InitStore(ctx))
 
 		// insert Nx2048 data packs
 		for n := 0; n < sz; n++ {
@@ -903,6 +912,7 @@ func BenchmarkIndexQueryAll(b *testing.B) {
 		)
 		require.NoError(b, err)
 		idx := NewIndex().WithDB(db).WithSchema(TestSchema).WithMaxSize(TEST_PKG_SIZE)
+		require.NoError(b, idx.InitStore(ctx))
 
 		// insert Nx2048 data packs
 		for n := 0; n < sz; n++ {

@@ -115,14 +115,6 @@ func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
 
 	// store filters
 	return idx.db.Update(func(tx store.Tx) error {
-		// create stats buckets if not exist
-		for k := range STATS_BUCKETS {
-			_, err := tx.Root().CreateBucket(idx.keys[k])
-			if err != nil {
-				return err
-			}
-		}
-
 		if len(blooms) > 0 {
 			b := idx.filterBucket(tx)
 			if b == nil {

@@ -139,7 +139,9 @@ func (p *QueryPlan) WithSchema(s *schema.Schema) *QueryPlan {
 }
 
 func (p *QueryPlan) WithLogger(l log.Logger) *QueryPlan {
-	p.Log = l.Clone("Q:" + p.Tag)
+	if p.Flags.IsDebug() {
+		p.Log = l.Clone("Q:" + p.Tag)
+	}
 	return p
 }
 

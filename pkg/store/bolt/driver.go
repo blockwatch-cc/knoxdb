@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"time"
 
-	bolt "go.etcd.io/bbolt"
-
 	"blockwatch.cc/knoxdb/pkg/store"
+	"github.com/echa/log"
+	bolt "go.etcd.io/bbolt"
 )
 
 // Bolt Limits
@@ -160,18 +160,30 @@ func makeBoltOpts(o store.Options) *bolt.Options {
 		PageSize:        o.PageSize,
 		MmapFlags:       o.MmapFlags,
 		InitialMmapSize: o.InitialMmapSize,
-		// Logger:          logger{o.Log},
+		Logger:          logger{o.Log},
 	}
 }
 
-// type logger struct {
-// 	log.Logger
-// }
+type logger struct {
+	log log.Logger
+}
 
-// func (l logger) Warning(v ...interface{}) {
-// 	l.Logger.Warn(v...)
-// }
+// redirect info -> debug
+func (l logger) Info(v ...interface{})                 { l.log.Debug(v...) }
+func (l logger) Infof(format string, v ...interface{}) { l.log.Debugf(format, v...) }
 
-// func (l logger) Warningf(format string, v ...interface{}) {
-// 	l.Logger.Warnf(format, v...)
-// }
+// redirect debug -> trace
+func (l logger) Debug(v ...interface{})                 { l.log.Trace(v...) }
+func (l logger) Debugf(format string, v ...interface{}) { l.log.Tracef(format, v...) }
+
+// rename: bbolt Logger interface has custom name for warning level
+func (l logger) Warning(v ...interface{})                 { l.log.Warn(v...) }
+func (l logger) Warningf(format string, v ...interface{}) { l.log.Warnf(format, v...) }
+
+// keep
+func (l logger) Error(v ...interface{})                 { l.log.Error(v...) }
+func (l logger) Errorf(format string, v ...interface{}) { l.log.Errorf(format, v...) }
+func (l logger) Fatal(v ...interface{})                 { l.log.Fatal(v...) }
+func (l logger) Fatalf(format string, v ...interface{}) { l.log.Fatalf(format, v...) }
+func (l logger) Panic(v ...interface{})                 { l.log.Panic(v...) }
+func (l logger) Panicf(format string, v ...interface{}) { l.log.Panicf(format, v...) }
