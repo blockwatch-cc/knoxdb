@@ -175,7 +175,7 @@ func Drop(name string, opts DatabaseOptions) error {
 
 	// drop catalog
 	dir := filepath.Join(opts.Path, name, CATALOG_NAME)
-	opts.Logger.Info("[db:%s] dropping catalog", name, dir)
+	opts.Logger.Infof("[db:%s] dropping catalog", name, dir)
 	err = store.Drop(opts.Driver, dir)
 	if err != nil {
 		return err
@@ -183,7 +183,7 @@ func Drop(name string, opts DatabaseOptions) error {
 
 	// remove wal (and other outstanding files)
 	dir = filepath.Join(opts.Path, name)
-	opts.Logger.Info("[db:%s] dropping db files at", name, dir)
+	opts.Logger.Infof("[db:%s] dropping db files at", name, dir)
 	return os.RemoveAll(dir)
 }
 

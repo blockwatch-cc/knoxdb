@@ -253,30 +253,14 @@ func PrintSchema(s *schema.Schema, w io.Writer) {
 	t.SetTitle("Schema %s [0x%x] - %d fields - %d bytes", s.Name, s.Hash, s.NumFields(), s.WireSize())
 	t.AppendHeader(table.Row{"#", "Name", "Type", "Flags", "Filter", "Size", "Compress"})
 	for _, f := range s.Fields {
-		var (
-			typ    string
-			filter string
-		)
-		switch f.Type {
-		case schema.FT_TIME, schema.FT_TIMESTAMP:
-			typ = f.Type.String() + "(" + schema.TimeScale(f.Scale).ShortName() + ")"
-		case schema.FT_D32, schema.FT_D64, schema.FT_D128, schema.FT_D256:
-			typ = f.Type.String() + "(" + strconv.Itoa(int(f.Scale)) + ")"
-		case schema.FT_STRING, schema.FT_BYTES:
-			if f.Fixed > 0 {
-				typ = "[" + strconv.Itoa(int(f.Fixed)) + "]" + f.Type.String()
-			}
-		}
-		if typ == "" {
-			typ = f.Type.String()
-		}
+		var filter string
 		if f.Filter > 0 {
 			filter = f.Filter.String()
 		}
 		t.AppendRow([]any{
 			f.Id,
 			f.Name,
-			typ,
+			f.TypeName(),
 			f.Flags.String(),
 			filter,
 			f.Type.Size(),

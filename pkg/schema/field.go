@@ -10,6 +10,7 @@ import (
 	"io"
 	"math"
 	"reflect"
+	"strconv"
 	"time"
 
 	"blockwatch.cc/knoxdb/internal/types"
@@ -166,6 +167,21 @@ func (f *Field) TimeFormat() string {
 	default:
 		return ""
 	}
+}
+
+func (f *Field) TypeName() (typ string) {
+	typ = f.Type.String()
+	switch f.Type {
+	case FT_TIME, FT_TIMESTAMP:
+		typ += "(" + TimeScale(f.Scale).ShortName() + ")"
+	case FT_D32, FT_D64, FT_D128, FT_D256:
+		typ += "(" + strconv.Itoa(int(f.Scale)) + ")"
+	case FT_STRING, FT_BYTES:
+		if f.Fixed > 0 {
+			typ = "[" + strconv.Itoa(int(f.Fixed)) + "]" + typ
+		}
+	}
+	return
 }
 
 func (f *Field) GoType() reflect.Type {
