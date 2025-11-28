@@ -11,6 +11,7 @@ import (
 	"math"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
 	"blockwatch.cc/knoxdb/internal/types"
@@ -182,6 +183,58 @@ func (f *Field) TypeName() (typ string) {
 		}
 	}
 	return
+}
+
+func ParseFieldFromTypename(typ string) (*Field, error) {
+	if len(typ) == 0 {
+		return nil, fmt.Errorf("empty type name")
+	}
+	var (
+		f     *Field
+		fixed uint16
+		scale uint8
+	)
+	if typ[0] == '[' {
+		num, typstr, ok := strings.Cut(typ[1:], "]")
+		if !ok {
+			return nil, fmt.Errorf("invalid array type: %q", typ)
+		}
+		n, err := strconv.Atoi(num)
+		if err != nil {
+			return nil, fmt.Errorf("invalid array len: %v", err)
+		}
+		fixed = uint16(n)
+		typ = typstr
+	} else {
+		typstr, scalestr, ok := strings.Cut(typ, "(")
+		if ok {
+			if !strings.HasSuffix(scalestr, ")") {
+				return nil, fmt.Errorf("invalid scaled type: %s", typ)
+			}
+			scalestr = strings.TrimSuffix(scalestr, ")")
+			n, err := strconv.Atoi(scalestr)
+			if err == nil {
+				scale = uint8(n)
+			} else {
+				tscale, ok := ParseTimeScale(scalestr)
+				if !ok {
+					return nil, fmt.Errorf("invalid scale factor: %s", typ)
+				}
+				scale = uint8(tscale)
+			}
+		}
+		typ = typstr
+	}
+	ty := types.ParseFieldType(typ)
+	if !ty.IsValid() {
+		return nil, fmt.Errorf("invalid array type: %s", typ)
+	}
+	f = &Field{
+		Type:  ty,
+		Fixed: fixed,
+		Scale: scale,
+	}
+	return f, f.Validate()
 }
 
 func (f *Field) GoType() reflect.Type {
