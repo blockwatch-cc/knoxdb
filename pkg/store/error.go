@@ -31,4 +31,6 @@ var (
 	ErrNotImplemented    = errors.New("feature not implemented")
 	ErrInvalidCursor     = errors.New("invalid cursor")
 	ErrInvalidVersion    = errors.New("invalid version")
+	ErrInvalidName       = errors.New("manifest: invalid name")
+	ErrInvalidLabel      = errors.New("manifest: invalid label")
 )

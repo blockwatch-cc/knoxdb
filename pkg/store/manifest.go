@@ -41,10 +41,10 @@ func (m *Manifest) Validate(v *Manifest) error {
 		return nil
 	}
 	if v.Name != "*" && v.Name != m.Name {
-		return fmt.Errorf("manifest: invalid name, want=%s have=%s", v.Name, m.Name)
+		return fmt.Errorf("%w: want=%s have=%s", ErrInvalidName, v.Name, m.Name)
 	}
 	if v.Label != "*" && v.Label != m.Label {
-		return fmt.Errorf("manifest: invalid label, want=%s have=%s", v.Label, m.Label)
+		return fmt.Errorf("%w: want=%s have=%s", ErrInvalidLabel, v.Label, m.Label)
 	}
 	return nil
 }
