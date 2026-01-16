@@ -160,11 +160,11 @@ func matchFilterVector(f *filter.Filter, pkg *pack.Package, bits, mask *bitset.B
 		case types.FilterTypeBfuse8:
 			buf := b[STATS_FILTER_KEY].Get(bkey)
 			n += len(buf)
-			flt, err = fuse.NewBinaryFuseFromBytes[uint8](buf)
+			flt, err = fuse.NewFromBytes[uint8](buf)
 		case types.FilterTypeBfuse16:
 			buf := b[STATS_FILTER_KEY].Get(bkey)
 			n += len(buf)
-			flt, err = fuse.NewBinaryFuseFromBytes[uint16](buf)
+			flt, err = fuse.NewFromBytes[uint16](buf)
 		case types.FilterTypeBits:
 			buf := b[STATS_FILTER_KEY].Get(bkey)
 			if len(buf) > 0 {

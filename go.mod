@@ -3,6 +3,7 @@ module blockwatch.cc/knoxdb
 go 1.24.0
 
 require (
+	github.com/FastFilter/xorfilter v0.4.1
 	github.com/echa/config v1.1.3
 	github.com/echa/log v1.4.0
 	github.com/gofrs/flock v0.13.0

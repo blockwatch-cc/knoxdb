@@ -430,5 +430,5 @@ func BuildFuseFilter[T uint8 | uint16](b *block.Block) (*fuse.BinaryFuse[T], err
 
 	// need unique values for filter construction
 	u64 = slicex.Unique(u64)
-	return fuse.NewBinaryFuse[T](u64)
+	return fuse.Build[T](u64)
 }

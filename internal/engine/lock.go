@@ -521,7 +521,7 @@ func getOrCreateLock(locks []*lock, typ LockType, oid uint64, exclusive bool) (*
 }
 
 // Find cycle in dependency graph, starting at current xid. We are not yet waiting
-// on the next lock, but of lock is found in any of our dependecies granted lists
+// on the next lock, but if the lock is found in any of our dependencies granted lists
 // then we are about to get a deadlock.
 func (m *LockManager) detectDeadlock(next *lock, xid XID) bool {
 	return m.hasLoopTo(m.granted[xid], next, xid)
