@@ -235,8 +235,6 @@ func (t TableImpl) Stream(ctx context.Context, q QueryRequest, fn func(QueryRow)
 	return commit()
 }
 
-var _ Table = (*GenericTable[int])(nil)
-
 // GenericTable[T] implements Table interface for Go struct types
 type GenericTable[T any] struct {
 	schema *schema.Schema
@@ -245,7 +243,11 @@ type GenericTable[T any] struct {
 	db     Database
 }
 
-func FindGenericTable[T any](name string, db Database) (*GenericTable[T], error) {
+func AsGenericTable[T any](t Table) (*GenericTable[T], error) {
+	return FindGenericTable[T](t.DB(), t.Schema().Name)
+}
+
+func FindGenericTable[T any](db Database, name string) (*GenericTable[T], error) {
 	var t T
 	s, err := schema.SchemaOf(t)
 	if err != nil {
@@ -289,6 +291,7 @@ func (t *GenericTable[T]) Table() Table {
 		log:   log.Disabled,
 	}
 }
+
 func (t *GenericTable[T]) DB() Database {
 	return t.db
 }
@@ -450,55 +453,10 @@ func (t *GenericTable[T]) Count(ctx context.Context, q QueryRequest) (int, error
 	return n, nil
 }
 
-func (t *GenericTable[T]) Query(ctx context.Context, q QueryRequest) (QueryResult, error) {
-	plan, err := q.MakePlan()
-	if err != nil {
-		return nil, err
-	}
-
-	// use or open tx
-	ctx, commit, abort, err := t.db.Begin(ctx, TxFlagReadOnly)
-	if err != nil {
-		return nil, err
-	}
-	defer abort()
-
-	if err := plan.Compile(ctx); err != nil {
-		return nil, err
-	}
-
-	res, err := t.table.Query(ctx, plan)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := commit(); err != nil {
-		return nil, err
-	}
-
-	return res, nil
+func (t *GenericTable[T]) Query(ctx context.Context, q QueryRequest) ([]T, error) {
+	return (GenericQuery[T]{q.(Query).WithTable(t.Table())}).Run(ctx)
 }
 
-func (t *GenericTable[T]) Stream(ctx context.Context, q QueryRequest, fn func(QueryRow) error) error {
-	plan, err := q.MakePlan()
-	if err != nil {
-		return err
-	}
-
-	// use or open tx
-	ctx, commit, abort, err := t.db.Begin(ctx, TxFlagReadOnly)
-	if err != nil {
-		return err
-	}
-	defer abort()
-
-	if err := plan.Compile(ctx); err != nil {
-		return err
-	}
-
-	if err := t.table.Stream(ctx, plan, fn); err != nil {
-		return err
-	}
-
-	return commit()
+func (t *GenericTable[T]) Stream(ctx context.Context, q QueryRequest, fn func(*T) error) error {
+	return (GenericQuery[T]{q.(Query).WithTable(t.Table())}).Stream(ctx, fn)
 }
