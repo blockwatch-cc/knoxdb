@@ -43,7 +43,7 @@ func (f BitMatcherFactory) New(m FilterMode) Matcher {
 type bitMatcher struct {
 	noopMatcher
 	val  bool
-	hash filter.HashValue
+	hash uint64
 }
 
 func (m *bitMatcher) WithValue(v any) {
@@ -102,7 +102,7 @@ func (m bitEqualMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, _ *bit
 }
 
 func (m bitEqualMatcher) MatchFilter(flt filter.Filter) bool {
-	return flt.Contains(m.hash.Uint64())
+	return flt.Contains(m.hash)
 }
 
 // NOT EQUAL
@@ -417,7 +417,7 @@ func (m bitRangeMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask *
 // In, Contains
 type bitInSetMatcher struct {
 	bitRangeMatcher
-	hashes []filter.HashValue
+	hashes []uint64
 }
 
 func (m *bitInSetMatcher) Weight() int { return 1 }
@@ -466,15 +466,15 @@ func (m *bitInSetMatcher) WithSet(set *xroar.Bitmap) {
 	case 2:
 		// all true
 		m.from, m.to = true, true
-		m.hashes = []filter.HashValue{filter.HashUint8(1)}
+		m.hashes = []uint64{filter.HashUint8(1)}
 	case 3:
 		// full range
 		m.from, m.to = false, true
-		m.hashes = []filter.HashValue{filter.HashUint8(0), filter.HashUint8(1)}
+		m.hashes = []uint64{filter.HashUint8(0), filter.HashUint8(1)}
 	default:
 		// empty or all false
 		m.from, m.to = false, false
-		m.hashes = []filter.HashValue{filter.HashUint8(0)}
+		m.hashes = []uint64{filter.HashUint8(0)}
 	}
 }
 

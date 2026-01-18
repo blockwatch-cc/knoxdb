@@ -12,7 +12,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/hash/xxhash"
 	"blockwatch.cc/knoxdb/internal/hash/xxhash32"
 	"blockwatch.cc/knoxdb/internal/hash/xxhash64"
-	"blockwatch.cc/knoxdb/internal/tests"
+	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 var benchSizes = []int{4, 8, 16, 64, 128, 1024}
@@ -40,7 +40,7 @@ func HashBench(b *testing.B, name string, fn func([]byte) uint64) {
 		buf := bytes.Repeat([]byte{0xFA}, sz)
 		b.Run(fmt.Sprintf("%s/%d", name, sz), func(b *testing.B) {
 			b.SetBytes(int64(sz))
-			for range b.N {
+			for b.Loop() {
 				_ = fn(buf)
 			}
 		})
@@ -53,35 +53,35 @@ func HashBench(b *testing.B, name string, fn func([]byte) uint64) {
 
 func BenchmarkXxhashVec64(b *testing.B) {
 	b.SetBytes(8)
-	for range b.N {
+	for b.Loop() {
 		_ = xxhash.Hash64u64(42)
 	}
 }
 
 func BenchmarkXxhashVec32(b *testing.B) {
 	b.SetBytes(8)
-	for range b.N {
+	for b.Loop() {
 		_ = xxhash.Hash32u64(42, 0)
 	}
 }
 
-func BenchmarkXxh3Vec64(b *testing.B) {
-	b.SetBytes(8)
-	for range b.N {
-		_ = xxhash.XXH3u64(42)
-	}
-}
+// func BenchmarkXxh3Vec64(b *testing.B) {
+// 	b.SetBytes(8)
+// 	for b.Loop() {
+// 		_ = xxhash.XXH3u64(42)
+// 	}
+// }
 
 func BenchmarkWyhash64(b *testing.B) {
 	b.SetBytes(8)
-	for range b.N {
+	for b.Loop() {
 		_ = WyHash64(42, 0)
 	}
 }
 
 func BenchmarkWyhash32(b *testing.B) {
 	b.SetBytes(4)
-	for range b.N {
+	for b.Loop() {
 		_ = WyHash32(42, 0)
 	}
 }
@@ -89,17 +89,32 @@ func BenchmarkWyhash32(b *testing.B) {
 func BenchmarkMultiHash(b *testing.B) {
 	HashBenchMulti64(b, "xxhash64", xxhash.Vec64u64)
 	HashBenchMulti32(b, "xxhash32", xxhash.Vec32u64)
-	HashBenchMulti64(b, "xxh3", xxhash.VecXXH3u64)
+	// HashBenchMulti64(b, "xxh3", xxhash.VecXXH3u64)
 	HashBenchMulti64(b, "wyhash", WyVec64u64)
 }
 
+type BenchmarkSize struct {
+	Name string
+	N    int
+}
+
+var BenchmarkSizes = []BenchmarkSize{
+	{"1k", 1024},
+	{"16k", 16 * 1024},
+	{"64k", 64 * 1024},
+}
+
+func genRnd(n int) []uint64 {
+	return util.RandUints[uint64](n)
+}
+
 func HashBenchMulti64(b *testing.B, name string, fn func([]uint64, []uint64) []uint64) {
-	for _, sz := range tests.BenchmarkSizes {
-		data := tests.GenRnd[uint64](sz.N)
+	for _, sz := range BenchmarkSizes {
+		data := genRnd(sz.N)
 		res := make([]uint64, sz.N)
 		b.Run(fmt.Sprintf("%s/%s", name, sz.Name), func(b *testing.B) {
 			b.SetBytes(int64(sz.N) * 8)
-			for range b.N {
+			for b.Loop() {
 				_ = fn(data, res)
 			}
 		})
@@ -107,12 +122,12 @@ func HashBenchMulti64(b *testing.B, name string, fn func([]uint64, []uint64) []u
 }
 
 func HashBenchMulti32(b *testing.B, name string, fn func([]uint64, []uint32, uint32) []uint32) {
-	for _, sz := range tests.BenchmarkSizes {
-		data := tests.GenRnd[uint64](sz.N)
+	for _, sz := range BenchmarkSizes {
+		data := genRnd(sz.N)
 		res := make([]uint32, sz.N)
 		b.Run(fmt.Sprintf("%s/%s", name, sz.Name), func(b *testing.B) {
 			b.SetBytes(int64(sz.N) * 8)
-			for range b.N {
+			for b.Loop() {
 				fn(data, res, 0)
 			}
 		})

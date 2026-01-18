@@ -11,7 +11,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/filter"
-	"blockwatch.cc/knoxdb/internal/hash/xxhash"
 	"blockwatch.cc/knoxdb/pkg/slicex"
 	"github.com/echa/log"
 )
@@ -48,7 +47,7 @@ func (f BytesMatcherFactory) New(m FilterMode) Matcher {
 type bytesMatcher struct {
 	noopMatcher
 	val  []byte
-	hash filter.HashValue
+	hash uint64
 }
 
 func (m *bytesMatcher) Weight() int { return len(m.val) }
@@ -63,7 +62,7 @@ func (m *bytesMatcher) Value() any {
 }
 
 func (m bytesMatcher) MatchFilter(flt filter.Filter) bool {
-	return flt.Contains(m.hash.Uint64())
+	return flt.Contains(m.hash)
 }
 
 // EQUAL ---
@@ -308,15 +307,15 @@ func (m bytesRangeMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask
 const filterThreshold = 2 // use hash map for IN conditions with at least N entries
 
 type hashvalue struct {
-	hash uint32 // value hash (colliding with another value hash)
+	hash uint64 // value hash (colliding with another value hash)
 	pos  int    // position in value list
 }
 
 type bytesSetMatcher struct {
 	noopMatcher
 	slice    *slicex.OrderedBytes // original query data, sorted, unique
-	hashes   []filter.HashValue   // bloom hashes
-	hmap     map[uint32]int       // compiled hashmap for quick byte/string set query lookup
+	hashes   []uint64             // bloom hashes
+	hmap     map[uint64]int       // compiled hashmap for quick byte/string set query lookup
 	overflow []hashvalue          // hash collision overflow list
 }
 
@@ -336,36 +335,36 @@ func (m *bytesSetMatcher) WithSlice(slice any) {
 	m.slice = slicex.NewOrderedBytes(slice.([][]byte)).SetUnique()
 	m.hashes = filter.HashMulti(m.slice.Values)
 	if len(m.slice.Values) > filterThreshold {
-		// re-use bloom hash value [1] (xxhash32) as unique hash value
-		m.hmap = make(map[uint32]int)
+		// re-use bloom hash value
+		m.hmap = make(map[uint64]int)
 		for i, h := range m.hashes {
 			val := m.slice.Values[i]
-			if pos, ok := m.hmap[h[1]]; !ok {
+			if pos, ok := m.hmap[h]; !ok {
 				// no collision
-				m.hmap[h[1]] = i
+				m.hmap[h] = i
 			} else {
 				// handle collissions
 				if pos != 0xFFFFFFFF {
-					log.Warnf("knox: condition hash collision %0x / %0x == %0x", val, m.slice.Values[pos], h[1])
+					log.Warnf("knox: condition hash collision %0x / %0x == %0x", val, m.slice.Values[pos], h)
 					m.overflow = append(m.overflow, hashvalue{
-						hash: h[1],
+						hash: h,
 						pos:  pos,
 					})
 				} else {
-					log.Warnf("knox: condition double hash collision %0x == %0x", val, h[1])
+					log.Warnf("knox: condition double hash collision %0x == %0x", val, h)
 				}
 				m.overflow = append(m.overflow, hashvalue{
-					hash: h[1],
+					hash: h,
 					pos:  i,
 				})
-				m.hmap[h[1]] = 0xFFFFFFFF
+				m.hmap[h] = 0xFFFFFFFF
 			}
 		}
 	}
 }
 
 func (m bytesSetMatcher) matchHashMap(val []byte) bool {
-	sum := xxhash.Sum32(val, 0)
+	sum := filter.Hash(val)
 	if pos, ok := m.hmap[sum]; ok {
 		if pos != 0xFFFFFFFF {
 			// compare slice value at pos to ensure we're collision free

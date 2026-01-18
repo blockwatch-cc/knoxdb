@@ -19,7 +19,7 @@ import (
 type floatInSetMatcher[T types.Float] struct {
 	noopMatcher
 	slice  slicex.OrderedFloats[T]
-	hashes []filter.HashValue
+	hashes []uint64
 }
 
 func (m *floatInSetMatcher[T]) Weight() int { return m.slice.Len() }

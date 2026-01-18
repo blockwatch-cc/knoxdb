@@ -7,10 +7,10 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
+	"slices"
 	"sync"
 	"unsafe"
 
-	"blockwatch.cc/knoxdb/internal/filter"
 	"github.com/FastFilter/xorfilter"
 )
 
@@ -37,7 +37,7 @@ func Build[T Unsigned](keys []uint64) (*BinaryFuse[T], error) {
 
 // zero-copy read
 func NewFromBytes[T Unsigned](buf []byte) (*BinaryFuse[T], error) {
-	if len(buf) < 24 {
+	if len(buf) < 28 {
 		return nil, io.ErrShortBuffer
 	}
 	f := xorfilter.BinaryFuse[T]{
@@ -49,8 +49,7 @@ func NewFromBytes[T Unsigned](buf []byte) (*BinaryFuse[T], error) {
 	}
 
 	fplen := LE.Uint32(buf[24:])
-	size := int(unsafe.Sizeof(T(0)))
-	f.Fingerprints = unsafe.Slice((*T)(unsafe.Pointer(unsafe.SliceData(buf[28:]))), int(fplen)*size)
+	f.Fingerprints = unsafe.Slice((*T)(unsafe.Pointer(unsafe.SliceData(buf[28:]))), int(fplen))
 
 	return &BinaryFuse[T]{f}, nil
 }
@@ -63,15 +62,6 @@ func (f *BinaryFuse[T]) MarshalBinary() ([]byte, error) {
 	return buf.Bytes(), err
 }
 
-func (f *BinaryFuse[T]) ContainsAny(keys []filter.HashValue) bool {
-	for _, v := range keys {
-		if f.Contains(v.Uint64()) {
-			return true
-		}
-	}
-	return false
-}
-
-func (f *BinaryFuse[T]) ContainsHash(key filter.HashValue) bool {
-	return f.Contains(key.Uint64())
+func (f *BinaryFuse[T]) ContainsAny(keys []uint64) bool {
+	return slices.ContainsFunc(keys, f.Contains)
 }

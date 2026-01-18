@@ -27,9 +27,10 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"unsafe"
 
-	"blockwatch.cc/knoxdb/internal/filter"
 	"blockwatch.cc/knoxdb/pkg/util"
+	"github.com/zeebo/xxh3"
 )
 
 type containsFunc func(*Filter, uint32, uint32) bool
@@ -131,7 +132,7 @@ func (f *Filter) Clone() *Filter {
 
 // location returns the ith hashed location using two hash values.
 func (f *Filter) location(h0, h1 uint32, i uint32) uint32 {
-	return h0 + h1*i&f.mask
+	return (h0 + h1*i) & f.mask
 }
 
 // contains4 is a loop unrolled version for k=4
@@ -178,28 +179,19 @@ func addGeneric(f *Filter, h0, h1 uint32) {
 	}
 }
 
-func (f *Filter) AddHash(h filter.HashValue) {
-	f.add(f, h[0], h[1])
-}
-
 // Contains returns true if the filter possible contains the
 // encoded (pre-hashed) value. This implements the common
 // interface filter.Filter used by query matchers.
 func (f *Filter) Contains(h uint64) bool {
-	return f.contains(f, uint32(h>>32), uint32(h))
-}
-
-// ContainsHash returns true if the filter possible contains the
-// hash value.
-func (f *Filter) ContainsHash(h filter.HashValue) bool {
-	return f.contains(f, h[0], h[1])
+	return f.contains(f, uint32(h), uint32(h>>32))
 }
 
 // ContainsAny returns true if the filter contains any hash value in l.
 // Returns false if the filter definitely does not contain any hash in l.
-func (f *Filter) ContainsAny(l []filter.HashValue) bool {
+// func (f *Filter) ContainsAny(l []filter.HashValue) bool {
+func (f *Filter) ContainsAny(l []uint64) bool {
 	for _, h := range l {
-		if f.contains(f, h[0], h[1]) {
+		if f.contains(f, uint32(h), uint32(h>>32)) {
 			return true
 		}
 	}
@@ -208,42 +200,58 @@ func (f *Filter) ContainsAny(l []filter.HashValue) bool {
 
 // Add inserts data to the filter.
 func (f *Filter) Add(v []byte) {
-	add_string(f, v)
+	h := xxh3.Hash(v)
+	f.add(f, uint32(h), uint32(h>>32))
 }
 
 // AddMany inserts multiple data points to the filter.
 func (f *Filter) AddMany(src [][]byte) {
-	add_strings(f, src)
+	for _, v := range src {
+		h := xxh3.Hash(v)
+		f.add(f, uint32(h), uint32(h>>32))
+	}
 }
 
 // AddManyUint8 inserts multiple data points to the filter.
 func (f *Filter) AddManyUint8(src []byte) {
-	add_u8(f, src)
+	for _, v := range src {
+		h := xxh3.Hash((*[1]byte)(unsafe.Pointer(&v))[:])
+		f.add(f, uint32(h), uint32(h>>32))
+	}
 }
 
 // AddManyUint16 inserts multiple data points to the filter.
 func (f *Filter) AddManyUint16(src []uint16) {
-	add_u16(f, src)
+	for _, v := range src {
+		h := xxh3.Hash((*[2]byte)(unsafe.Pointer(&v))[:])
+		f.add(f, uint32(h), uint32(h>>32))
+	}
 }
 
 // AddManyUint32 inserts multiple data points to the filter.
 func (f *Filter) AddManyUint32(src []uint32) {
-	add_u32(f, src)
+	for _, v := range src {
+		h := xxh3.Hash((*[4]byte)(unsafe.Pointer(&v))[:])
+		f.add(f, uint32(h), uint32(h>>32))
+	}
 }
 
 // AddManyUint64 inserts multiple data points to the filter.
 func (f *Filter) AddManyUint64(src []uint64) {
-	add_u64(f, src)
+	for _, v := range src {
+		h := xxh3.Hash((*[8]byte)(unsafe.Pointer(&v))[:])
+		f.add(f, uint32(h), uint32(h>>32))
+	}
 }
 
 // AddManyFloat64 inserts multiple data points to the filter.
 func (f *Filter) AddManyFloat64(src []float64) {
-	add_u64(f, util.ReinterpretSlice[float64, uint64](src))
+	f.AddManyUint64(util.ReinterpretSlice[float64, uint64](src))
 }
 
 // AddManyFloat32 inserts multiple data points to the filter.
 func (f *Filter) AddManyFloat32(src []float32) {
-	add_u32(f, util.ReinterpretSlice[float32, uint32](src))
+	f.AddManyUint32(util.ReinterpretSlice[float32, uint32](src))
 }
 
 // Merge performs an in-place union of other into f.
@@ -259,7 +267,16 @@ func (f *Filter) Merge(other *Filter) error {
 	} else if f.k != other.k {
 		return fmt.Errorf("bloom.Merge(): k mismatch: %d <> %d", f.k, other.k)
 	}
-	merge(f.bits, other.bits)
+
+	// Perform union.
+	var n int
+	for n < len(f.bits) {
+		*(*uint64)(unsafe.Pointer(&f.bits[n])) |= *(*uint64)(unsafe.Pointer(&other.bits[n]))
+		n += 8
+	}
+	for i := n; i < len(f.bits); i++ {
+		f.bits[i] |= other.bits[i]
+	}
 	return nil
 }
 

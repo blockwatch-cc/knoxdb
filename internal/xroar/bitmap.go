@@ -27,7 +27,6 @@ import (
 	"strings"
 	"sync"
 
-	"blockwatch.cc/knoxdb/internal/filter"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/constraints"
@@ -322,17 +321,8 @@ func (ra *Bitmap) Contains(x uint64) bool {
 	return false
 }
 
-func (ra *Bitmap) ContainsHash(key filter.HashValue) bool {
-	return ra.Contains(key.Uint64())
-}
-
-func (ra *Bitmap) ContainsAny(keys []filter.HashValue) bool {
-	for _, v := range keys {
-		if ra.Contains(v.Uint64()) {
-			return true
-		}
-	}
-	return false
+func (ra *Bitmap) ContainsAny(keys []uint64) bool {
+	return slices.ContainsFunc(keys, ra.Contains)
 }
 
 // returns true if any bit is set within range (boundaries inclusive)

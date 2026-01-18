@@ -224,7 +224,7 @@ func TestWorkload5(t *testing.T) {
 		for i := range ins {
 			ins[i] = NewTestValue(i + 1)
 		}
-		table, err := knox.FindGenericTable[tests.AllTypes](tableName, knox.WrapEngine(db.Load()))
+		table, err := knox.FindGenericTable[tests.AllTypes](knox.WrapEngine(db.Load()), tableName)
 		require.NoError(t, err)
 		pk, n, err := table.Insert(context.Background(), ins)
 		require.NoError(t, err)
@@ -276,8 +276,8 @@ func TestWorkload5(t *testing.T) {
 						return nil
 					}
 					table, err := knox.FindGenericTable[tests.AllTypes](
-						tableName,
 						knox.WrapEngine(db.Load()),
+						tableName,
 					)
 					if err != nil {
 						return wrapErr(err)
@@ -370,8 +370,8 @@ func TestWorkload5(t *testing.T) {
 						return nil
 					}
 					table, err := knox.FindGenericTable[tests.AllTypes](
-						tableName,
 						knox.WrapEngine(db.Load()),
+						tableName,
 					)
 					if err != nil {
 						return wrapErr(err)

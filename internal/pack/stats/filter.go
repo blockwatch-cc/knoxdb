@@ -406,21 +406,21 @@ func BuildFuseFilter[T uint8 | uint16](b *block.Block) (*fuse.BinaryFuse[T], err
 		// write individual elements (no optimization exists)
 		u64 = make([]uint64, b.Len())
 		for i, v := range b.Int256().Iterator() {
-			u64[i] = filter.Hash(v.Bytes()).Uint64()
+			u64[i] = filter.Hash(v.Bytes())
 		}
 
 	case block.BlockInt128:
 		// write individual elements (no optimization exists)
 		u64 = make([]uint64, b.Len())
 		for i, v := range b.Int128().Iterator() {
-			u64[i] = filter.Hash(v.Bytes()).Uint64()
+			u64[i] = filter.Hash(v.Bytes())
 		}
 
 	case block.BlockBytes:
 		// write all strings
 		u64 = make([]uint64, b.Len())
 		for i, v := range b.Bytes().Iterator() {
-			u64[i] = filter.Hash(v).Uint64()
+			u64[i] = filter.Hash(v)
 		}
 
 	default:

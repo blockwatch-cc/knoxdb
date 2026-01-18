@@ -53,7 +53,7 @@ func (m *i128Matcher) Weight() int { return 2 }
 
 func (m *i128Matcher) WithValue(v any) {
 	m.val = v.(num.Int128)
-	m.hash = filter.Hash(m.val.Bytes()).Uint64()
+	m.hash = filter.Hash(m.val.Bytes())
 }
 
 func (m *i128Matcher) Value() any {
@@ -317,7 +317,7 @@ func (m i128RangeMatcher) MatchRangeVectors(mins, maxs *block.Block, bits, mask 
 type i128InSetMatcher struct {
 	noopMatcher
 	slice  []num.Int128
-	hashes []filter.HashValue
+	hashes []uint64
 }
 
 func (m *i128InSetMatcher) Weight() int { return len(m.slice) }

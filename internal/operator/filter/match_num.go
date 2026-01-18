@@ -4,6 +4,8 @@
 package filter
 
 import (
+	"slices"
+
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/cmp"
@@ -306,8 +308,8 @@ func (f NumMatcherFactory[T]) New(m FilterMode) Matcher {
 type numMatcher[T Number] struct {
 	noopMatcher
 	match numMatchFunc[T]
+	hash  uint64
 	val   T
-	hash  filter.HashValue
 }
 
 func (m *numMatcher[T]) WithValue(v any) {
@@ -336,7 +338,7 @@ func (m numEqualMatcher[T]) MatchRange(from, to any) bool {
 func (m numEqualMatcher[T]) MatchFilter(flt filter.Filter) bool {
 	if x, ok := flt.(*bloom.Filter); ok {
 		// only bloom uses hashes for all data types
-		return x.ContainsHash(m.hash)
+		return x.Contains(m.hash)
 	}
 	// other filters contain numeric values for integers
 	return flt.Contains(uint64(m.val))
@@ -589,7 +591,7 @@ func (m numRangeMatcher[T]) MatchRangeVectors(mins, maxs *block.Block, bits, mas
 // In, Contains
 type numInSetMatcher[T Number] struct {
 	set    *xroar.Bitmap
-	hashes []filter.HashValue
+	hashes []uint64
 }
 
 func (m *numInSetMatcher[T]) Weight() int { return 1 }
@@ -627,7 +629,7 @@ func (m *numInSetMatcher[T]) WithSet(set *xroar.Bitmap) {
 	m.set = set
 	card := set.Count()
 	it := m.set.NewIterator()
-	m.hashes = make([]filter.HashValue, card)
+	m.hashes = make([]uint64, card)
 	for i := range card {
 		v, ok := it.Next()
 		if !ok {
@@ -650,11 +652,7 @@ func (m numInSetMatcher[T]) MatchFilter(flt filter.Filter) bool {
 	case *xroar.Bitmap:
 		return xroar.And(m.set, x).Any()
 	case *bloom.Filter:
-		for _, h := range m.hashes {
-			if flt.Contains(h.Uint64()) {
-				return true
-			}
-		}
+		return slices.ContainsFunc(m.hashes, flt.Contains)
 	default:
 		it := m.set.NewIterator()
 		for {

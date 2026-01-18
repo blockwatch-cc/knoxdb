@@ -177,7 +177,7 @@ func BenchmarkAddUint32AVX2(b *testing.B) {
 			data := tests.GenRnd[uint32](c.N)
 			b.Run(fmt.Sprintf("%s/p=%d", c.Name, p), func(b *testing.B) {
 				b.SetBytes(int64(4 * c.N))
-				for range b.N {
+				for b.Loop() {
 					f := NewFilterWithPrecision(p)
 					llb_add_u32_avx2(f, data, 0)
 				}
@@ -195,7 +195,7 @@ func BenchmarkAddUint32AVX512(b *testing.B) {
 			data := tests.GenRnd[uint32](c.N)
 			b.Run(fmt.Sprintf("%s/p=%d", c.Name, p), func(b *testing.B) {
 				b.SetBytes(int64(4 * c.N))
-				for range b.N {
+				for b.Loop() {
 					f := NewFilterWithPrecision(p)
 					llb_add_u32_avx512(f, data, 0)
 				}
@@ -213,7 +213,7 @@ func BenchmarkAddUint64AVX2(b *testing.B) {
 			data := tests.GenRnd[uint64](c.N)
 			b.Run(fmt.Sprintf("%s/p=%d", c.Name, p), func(b *testing.B) {
 				b.SetBytes(int64(8 * c.N))
-				for range b.N {
+				for b.Loop() {
 					f := NewFilterWithPrecision(p)
 					llb_add_u64_avx2(f, data, 0)
 				}
@@ -231,7 +231,7 @@ func BenchmarkAddUint64AVX512(b *testing.B) {
 			data := tests.GenRnd[uint64](c.N)
 			b.Run(fmt.Sprintf("%s/p=%d", c.Name, p), func(b *testing.B) {
 				b.SetBytes(int64(8 * c.N))
-				for range b.N {
+				for b.Loop() {
 					f := NewFilterWithPrecision(p)
 					llb_add_u64_avx512(f, data, 0)
 				}
@@ -251,7 +251,7 @@ func BenchmarkCardinalityAVX2(b *testing.B) {
 			f.AddMultiUint32(data)
 			b.Run(fmt.Sprintf("%s/p=%d", c.Name, p), func(b *testing.B) {
 				b.SetBytes(int64(len(f.buf)))
-				for range b.N {
+				for b.Loop() {
 					llb_cardinality_avx2(f)
 				}
 			})
@@ -270,7 +270,7 @@ func BenchmarkCardinalityAVX512(b *testing.B) {
 			f.AddMultiUint32(data)
 			b.Run(fmt.Sprintf("%s/p=%d", c.Name, p), func(b *testing.B) {
 				b.SetBytes(int64(len(f.buf)))
-				for range b.N {
+				for b.Loop() {
 					llb_cardinality_avx512(f)
 				}
 			})
@@ -294,7 +294,7 @@ func BenchmarkMergeAVX2(b *testing.B) {
 
 			b.Run(fmt.Sprintf("%s/p=%d", c.Name, p), func(b *testing.B) {
 				b.SetBytes(int64(len(f1.buf)))
-				for range b.N {
+				for b.Loop() {
 					o, err := NewFilterBuffer(f1.Bytes(), p)
 					if err != nil {
 						b.Fatal(err)

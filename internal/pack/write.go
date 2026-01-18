@@ -377,7 +377,7 @@ func (p *Package) AppendRange(src *Package, i, j int) {
 	// }()
 
 	for k, b := range p.blocks {
-		if b == nil {
+		if b == nil || src.blocks[k] == nil {
 			continue
 		}
 		b.AppendRange(src.blocks[k], i, j)
@@ -411,7 +411,7 @@ func (p *Package) AppendTo(dst *Package, sel []uint32) int {
 	// 	}
 	// }()
 	for k, b := range p.blocks {
-		if b == nil {
+		if b == nil || dst.blocks[k] == nil {
 			continue
 		}
 		b.AppendTo(dst.blocks[k], sel)

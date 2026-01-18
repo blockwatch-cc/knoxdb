@@ -197,7 +197,7 @@ func BenchmarkAddUint32Go(b *testing.B) {
 			data := tests.GenRnd[uint32](c.N)
 			b.Run(fmt.Sprintf("%s/p=%d", c.Name, p), func(b *testing.B) {
 				b.SetBytes(int64(4 * c.N))
-				for range b.N {
+				for b.Loop() {
 					f := NewFilterWithPrecision(p)
 					llb_add_u32_purego(f, data, 0)
 				}
@@ -212,7 +212,7 @@ func BenchmarkAddUint64Go(b *testing.B) {
 			data := tests.GenRnd[uint64](c.N)
 			b.Run(fmt.Sprintf("%s/p=%d", c.Name, p), func(b *testing.B) {
 				b.SetBytes(int64(8 * c.N))
-				for range b.N {
+				for b.Loop() {
 					f := NewFilterWithPrecision(p)
 					llb_add_u64_purego(f, data, 0)
 				}
@@ -225,10 +225,11 @@ func BenchmarkAddHashes(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		for _, p := range benchPrecisons {
 			data := tests.GenRnd[uint64](c.N)
-			u64 := xxhash.Vec64u64(data, make([]uint64, c.N))
+			hashes := make([]uint64, c.N)
 			b.Run(fmt.Sprintf("%s/p=%d", c.Name, p), func(b *testing.B) {
-				b.ReportAllocs()
-				for range b.N {
+				b.SetBytes(int64(8 * c.N))
+				for b.Loop() {
+					u64 := xxhash.Vec64u64(data, hashes)
 					f := NewFilterWithPrecision(p)
 					f.AddHashes(u64)
 				}
@@ -245,7 +246,7 @@ func BenchmarkCardinalityGo(b *testing.B) {
 			f.AddMultiUint32(data)
 			b.Run(fmt.Sprintf("%s/p=%d", c.Name, p), func(b *testing.B) {
 				b.SetBytes(int64(len(f.buf)))
-				for range b.N {
+				for b.Loop() {
 					_ = llb_cardinality_purego(f)
 				}
 			})
@@ -266,7 +267,7 @@ func BenchmarkMergeGo(b *testing.B) {
 
 			b.Run(fmt.Sprintf("%s/p=%d", c.Name, p), func(b *testing.B) {
 				b.SetBytes(int64(len(f1.buf)))
-				for range b.N {
+				for b.Loop() {
 					other, err := NewFilterBuffer(f1.Bytes(), f1.P())
 					if err != nil {
 						b.Fatal(err)
@@ -282,8 +283,8 @@ func BenchmarkUniqueMap(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		data := tests.GenRnd[uint64](c.N)
 		b.Run(c.Name, func(b *testing.B) {
-			b.ReportAllocs()
-			for range b.N {
+			b.SetBytes(int64(8 * c.N))
+			for b.Loop() {
 				f := make(map[uint64]struct{}, len(data))
 				for _, v := range data {
 					f[v] = struct{}{}
@@ -298,8 +299,8 @@ func BenchmarkUniqueSort(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		data := tests.GenRnd[uint64](c.N)
 		b.Run(c.Name, func(b *testing.B) {
-			b.ReportAllocs()
-			for range b.N {
+			b.SetBytes(int64(8 * c.N))
+			for b.Loop() {
 				res := slicex.Unique(slices.Clone(data))
 				_ = len(res)
 			}
