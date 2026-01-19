@@ -166,7 +166,7 @@ func Drop(name string, opts DatabaseOptions) error {
 	if !ok {
 		return ErrNoDatabase
 	}
-	lock := flock.New(filepath.Join(opts.Path, ENGINE_LOCK_NAME))
+	lock := flock.New(filepath.Join(opts.Path, name, ENGINE_LOCK_NAME))
 	_, err = lock.TryLock()
 	if err != nil && !errors.Is(err, errors.ErrUnsupported) {
 		return err
@@ -222,7 +222,7 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 	e.log.Debugf("create database %q at %q", name, e.path)
 
 	// set exclusive directory lock
-	lock := flock.New(filepath.Join(opts.Path, ENGINE_LOCK_NAME))
+	lock := flock.New(filepath.Join(opts.Path, name, ENGINE_LOCK_NAME))
 	_, err := lock.TryLock()
 	if err != nil && !errors.Is(err, errors.ErrUnsupported) {
 		return nil, err
@@ -319,7 +319,7 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 	e.log.Debugf("open database %q at %q", name, e.path)
 
 	// set exclusive directory lock
-	lock := flock.New(filepath.Join(opts.Path, ENGINE_LOCK_NAME))
+	lock := flock.New(filepath.Join(opts.Path, name, ENGINE_LOCK_NAME))
 	_, err := lock.TryLock()
 	if err != nil && !errors.Is(err, errors.ErrUnsupported) {
 		return nil, err
@@ -549,6 +549,7 @@ func (e *Engine) Close(ctx context.Context) error {
 	if e.flock != nil {
 		e.log.Trace("free flock")
 		e.flock.Close()
+		os.Remove(e.flock.Path())
 		e.flock = nil
 	}
 
@@ -658,6 +659,7 @@ func (e *Engine) ForceShutdown() error {
 	if e.flock != nil {
 		e.log.Trace("free flock")
 		e.flock.Close()
+		os.Remove(e.flock.Path())
 		e.flock = nil
 	}
 
