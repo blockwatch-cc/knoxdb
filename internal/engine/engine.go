@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -166,7 +167,8 @@ func Drop(name string, opts DatabaseOptions) error {
 	if !ok {
 		return ErrNoDatabase
 	}
-	lock := flock.New(filepath.Join(opts.Path, name, ENGINE_LOCK_NAME))
+	dir := filepath.Join(opts.Path, name)
+	lock := flock.New(filepath.Join(dir, ENGINE_LOCK_NAME))
 	_, err = lock.TryLock()
 	if err != nil && !errors.Is(err, errors.ErrUnsupported) {
 		return err
@@ -174,21 +176,62 @@ func Drop(name string, opts DatabaseOptions) error {
 	defer lock.Close()
 
 	// drop catalog
-	dir := filepath.Join(opts.Path, name, CATALOG_NAME)
-	opts.Logger.Infof("[db:%s] dropping catalog", name, dir)
-	err = store.Drop(opts.Driver, dir)
+	opts.Logger.Infof("[db:%s] dropping catalog", name)
+	err = store.Drop(opts.Driver, filepath.Join(dir, CATALOG_NAME))
 	if err != nil {
 		return err
 	}
 
 	// remove wal (and other outstanding files)
-	dir = filepath.Join(opts.Path, name)
-	opts.Logger.Infof("[db:%s] dropping db files at", name, dir)
+	opts.Logger.Infof("[db:%s] dropping wal and temp files", name)
 	return os.RemoveAll(dir)
+}
+
+func prepareDatabaseDirectory(name string, opts DatabaseOptions) error {
+	dir := filepath.Join(opts.Path, name)
+	s, err := os.Stat(dir)
+
+	// fail on any error that is not nonexist
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+
+	// path does not exist, create it
+	if s == nil {
+		return os.MkdirAll(dir, 0755)
+	}
+
+	// fail when path is not a directory
+	if !s.IsDir() {
+		return fmt.Errorf("%s is not a directory", dir)
+	}
+
+	// make sure dir is empty
+	f, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	_, err = f.Readdir(1)
+	if err != io.EOF {
+		return err
+	}
+	if err == nil {
+		return fmt.Errorf("path %s is not empty", dir)
+	}
+	return nil
 }
 
 func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, error) {
 	opts = DefaultDatabaseOptions.Merge(opts)
+
+	// check database directory is empty
+	if err := prepareDatabaseDirectory(name, opts); err != nil {
+		return nil, err
+	}
+
+	// init engine
 	e := &Engine{
 		path: filepath.Join(opts.Path, name),
 		cache: CacheManager{
@@ -222,7 +265,7 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 	e.log.Debugf("create database %q at %q", name, e.path)
 
 	// set exclusive directory lock
-	lock := flock.New(filepath.Join(opts.Path, name, ENGINE_LOCK_NAME))
+	lock := flock.New(filepath.Join(e.path, ENGINE_LOCK_NAME))
 	_, err := lock.TryLock()
 	if err != nil && !errors.Is(err, errors.ErrUnsupported) {
 		return nil, err
