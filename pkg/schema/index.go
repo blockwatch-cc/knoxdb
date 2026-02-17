@@ -536,6 +536,9 @@ func reflectStructFieldForIndex(f reflect.StructField, tagName string, base *Sch
 		index.Name += "_index"
 	}
 
+	// prefix index name with base name
+	index.Name = base.Name + "_" + index.Name
+
 	// parse tags, we need at least a type
 	tokens := strings.Split(tag, ",")
 
