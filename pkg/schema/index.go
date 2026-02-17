@@ -53,32 +53,32 @@ func MustIndexesOf(m any) []*IndexSchema {
 
 func NewIndexSchema(typ IndexType, s *Schema, f ...*Field) *IndexSchema {
 	return &IndexSchema{
-		Name:   strings.Join([]string{f[0].Name, typ.String(), "index"}, "_"),
+		Name:   strings.Join([]string{s.Name, f[0].Name, typ.String(), "index"}, "_"),
 		Type:   typ,
 		Base:   s,
 		Fields: f,
 	}
 }
 
-func (i *IndexSchema) IsValid() bool {
-	return i.Type.IsValid() && len(i.Fields) > 0
+func (s *IndexSchema) IsValid() bool {
+	return s.Type.IsValid() && len(s.Fields) > 0
 }
 
 // TaggedHash returns a unique index name hash.
-func (i *IndexSchema) TaggedHash(tag types.ObjectTag) uint64 {
-	return types.TaggedHash(tag, i.Name)
+func (s *IndexSchema) TaggedHash(tag types.ObjectTag) uint64 {
+	return types.TaggedHash(tag, s.Name)
 }
 
 // Hash returns a unique index schema hash.
-func (i *IndexSchema) Hash() uint64 {
+func (s *IndexSchema) Hash() uint64 {
 	h := xxhash64.New()
 
 	// index type
-	h.Write([]byte{byte(i.Type)})
+	h.Write([]byte{byte(s.Type)})
 
 	// base schema hash
 	var b [8]byte
-	LE.PutUint64(b[:], i.Base.Hash)
+	LE.PutUint64(b[:], s.Base.Hash)
 
 	// hash: id, type, flags, fixed, scale (not: filter, compress, name)
 	hashField := func(f *Field) {
@@ -92,12 +92,12 @@ func (i *IndexSchema) Hash() uint64 {
 	}
 
 	// index fields
-	for _, f := range i.Fields {
+	for _, f := range s.Fields {
 		hashField(f)
 	}
 
 	// extra fields
-	for _, f := range i.Fields {
+	for _, f := range s.Fields {
 		hashField(f)
 	}
 
@@ -107,44 +107,44 @@ func (i *IndexSchema) Hash() uint64 {
 // Ids returns an ordered list of all field ids required by this index.
 // This includes rowid, all index fields and extra include fields. Note the
 // schema requires metadata.
-func (i *IndexSchema) Ids() []uint16 {
+func (s *IndexSchema) Ids() []uint16 {
 	ids := []uint16{MetaRid}
-	for _, f := range i.Fields {
+	for _, f := range s.Fields {
 		ids = append(ids, f.Id)
 	}
-	for _, f := range i.Extra {
+	for _, f := range s.Extra {
 		ids = append(ids, f.Id)
 	}
 	return slicex.Unique(ids)
 }
 
-func (i *IndexSchema) ExtraIds() []uint16 {
-	if len(i.Extra) == 0 {
+func (s *IndexSchema) ExtraIds() []uint16 {
+	if len(s.Extra) == 0 {
 		return nil
 	}
-	ids := make([]uint16, len(i.Extra))
-	for k, f := range i.Extra {
+	ids := make([]uint16, len(s.Extra))
+	for k, f := range s.Extra {
 		ids[k] = f.Id
 	}
 	return ids
 }
 
-func (i *IndexSchema) Indices() []int {
-	ixs := make([]int, len(i.Fields))
-	for k, f := range i.Fields {
-		x, _ := i.Base.IndexId(f.Id)
+func (s *IndexSchema) Indices() []int {
+	ixs := make([]int, len(s.Fields))
+	for k, f := range s.Fields {
+		x, _ := s.Base.IndexId(f.Id)
 		ixs[k] = x
 	}
 	return ixs
 }
 
-func (i *IndexSchema) ExtraIndices() []int {
-	if len(i.Extra) == 0 {
+func (s *IndexSchema) ExtraIndices() []int {
+	if len(s.Extra) == 0 {
 		return nil
 	}
-	ixs := make([]int, len(i.Extra))
-	for k, f := range i.Extra {
-		x, _ := i.Base.IndexId(f.Id)
+	ixs := make([]int, len(s.Extra))
+	for k, f := range s.Extra {
+		x, _ := s.Base.IndexId(f.Id)
 		ixs[k] = x
 	}
 	return ixs
@@ -152,21 +152,21 @@ func (i *IndexSchema) ExtraIndices() []int {
 
 // IndexSchema returns a sub-schema from base which contains all fields
 // required by the index including row_id, index and extra fields.
-func (i *IndexSchema) IndexSchema() (*Schema, error) {
-	s, err := i.Base.SelectIds(i.Ids()...)
+func (s *IndexSchema) IndexSchema() (*Schema, error) {
+	base, err := s.Base.SelectIds(s.Ids()...)
 	if err != nil {
 		return nil, err
 	}
-	return s.As(i.Name), nil
+	return base.As(s.Name), nil
 }
 
 // Contains returns true if all named fields exist in order.
-func (i *IndexSchema) Contains(names ...string) bool {
-	if len(names) == 0 || len(names) > len(i.Fields) {
+func (s *IndexSchema) Contains(names ...string) bool {
+	if len(names) == 0 || len(names) > len(s.Fields) {
 		return false
 	}
 	for k, n := range names {
-		if i.Fields[k].Name == n {
+		if s.Fields[k].Name == n {
 			continue
 		}
 		return false
@@ -177,150 +177,150 @@ func (i *IndexSchema) Contains(names ...string) bool {
 // StorageSchema returns a sub-schema usable for storing index records.
 // Hash and composite hash indexes will contain a synthetic hash field
 // as the first element.
-func (i *IndexSchema) StorageSchema() (*Schema, error) {
+func (s *IndexSchema) StorageSchema() (*Schema, error) {
 	// validate again just to be sure
-	if err := i.Validate(); err != nil {
+	if err := s.Validate(); err != nil {
 		return nil, err
 	}
 
 	// we need row_id to be present
-	if rid := i.Base.RowId(); !rid.IsValid() {
+	if rid := s.Base.RowId(); !rid.IsValid() {
 		return nil, ErrNoMeta
 	}
 
 	// build storage schema (without flags to make all fields visible)
 	var b *Builder
-	switch i.Type {
+	switch s.Type {
 	case I_PK:
 		// pk -> rid
 		b = NewBuilder().
-			WithName(i.Name).
-			WithVersion(i.Base.Version).
-			Uint64(i.Fields[0].Name, Id(i.Fields[0].Id)).
+			WithName(s.Name).
+			WithVersion(s.Base.Version).
+			Uint64(s.Fields[0].Name, Id(s.Fields[0].Id)).
 			Uint64("rid", Id(MetaRid))
 
 	case I_HASH:
 		// hash(any) -> rid
 		b = NewBuilder().
-			WithName(i.Name).
-			WithVersion(i.Base.Version).
+			WithName(s.Name).
+			WithVersion(s.Base.Version).
 			Uint64("hash").
 			Uint64("rid", Id(MetaRid))
 
 	case I_INT:
 		// int -> rid
 		b = NewBuilder().
-			WithName(i.Name).
-			WithVersion(i.Base.Version).
-			Uint64(i.Fields[0].Name, Id(i.Fields[0].Id)).
+			WithName(s.Name).
+			WithVersion(s.Base.Version).
+			Uint64(s.Fields[0].Name, Id(s.Fields[0].Id)).
 			Uint64("rid", Id(MetaRid))
 
 	case I_COMPOSITE:
 		// hash(...) -> rid
 		b = NewBuilder().
-			WithName(i.Name).
-			WithVersion(i.Base.Version).
+			WithName(s.Name).
+			WithVersion(s.Base.Version).
 			Uint64("hash").
 			Uint64("rid", Id(MetaRid))
 	}
 
 	// add extra fields (assign new ids)
-	b.Field(i.Extra...)
+	b.Field(s.Extra...)
 
 	// finalize and validate our new schema
-	s := b.Finalize().Schema()
-	if err := s.Validate(); err != nil {
+	final := b.Finalize().Schema()
+	if err := final.Validate(); err != nil {
 		return nil, err
 	}
 
-	return s, nil
+	return final, nil
 }
 
-func (i *IndexSchema) Validate() error {
+func (s *IndexSchema) Validate() error {
 	// require index type in range
-	if i.Name == "" {
+	if s.Name == "" {
 		return fmt.Errorf("index: empty name")
 	}
 
 	// require index type in range
-	if !i.Type.IsValid() {
-		return fmt.Errorf("index[%s]: invalid index type %d", i.Name, i.Type)
+	if !s.Type.IsValid() {
+		return fmt.Errorf("index[%s]: invalid index type %d", s.Name, s.Type)
 	}
 
 	// requires at least 1 index field
-	if len(i.Fields) == 0 {
-		return fmt.Errorf("index[%s]: empty field list", i.Name)
+	if len(s.Fields) == 0 {
+		return fmt.Errorf("index[%s]: empty field list", s.Name)
 	}
 
 	// fields must be defined in base schema
-	for _, f := range i.Fields {
-		if _, ok := i.Base.FindId(f.Id); !ok {
+	for _, f := range s.Fields {
+		if _, ok := s.Base.FindId(f.Id); !ok {
 			return fmt.Errorf("index[%s]: field %s (%d) not in base schema %s",
-				i.Name, f.Name, f.Id, i.Base.Name)
+				s.Name, f.Name, f.Id, s.Base.Name)
 		}
 	}
-	for _, f := range i.Extra {
-		if _, ok := i.Base.FindId(f.Id); !ok {
+	for _, f := range s.Extra {
+		if _, ok := s.Base.FindId(f.Id); !ok {
 			return fmt.Errorf("index[%s]: extra field %s (%d) not in base schema %s",
-				i.Name, f.Name, f.Id, i.Base.Name)
+				s.Name, f.Name, f.Id, s.Base.Name)
 		}
 	}
 
 	// fields and extra lists must not contain duplicate entries
 	unique := make(map[uint16]struct{})
-	for _, f := range i.Fields {
+	for _, f := range s.Fields {
 		if _, ok := unique[f.Id]; ok {
-			return fmt.Errorf("index[%s]: duplicate index field %s (%d)", i.Name, f.Name, f.Id)
+			return fmt.Errorf("index[%s]: duplicate index field %s (%d)", s.Name, f.Name, f.Id)
 		}
 		unique[f.Id] = struct{}{}
 	}
 	clear(unique)
-	for _, f := range i.Extra {
+	for _, f := range s.Extra {
 		if _, ok := unique[f.Id]; ok {
-			return fmt.Errorf("index[%s]: duplicate extra field %s (%d)", i.Name, f.Name, f.Id)
+			return fmt.Errorf("index[%s]: duplicate extra field %s (%d)", s.Name, f.Name, f.Id)
 		}
 		unique[f.Id] = struct{}{}
 	}
 
 	// check type-specific restrictions
-	switch i.Type {
+	switch s.Type {
 	case I_INT:
 		// requires single integer field
-		if len(i.Fields) > 1 {
-			return fmt.Errorf("index[%s]: integer index requires single field", i.Name)
+		if len(s.Fields) > 1 {
+			return fmt.Errorf("index[%s]: integer index requires single field", s.Name)
 		}
-		f := i.Fields[0]
+		f := s.Fields[0]
 		switch f.Type {
 		case FT_TIME, FT_DATE, FT_TIMESTAMP,
 			FT_I64, FT_I32, FT_I16, FT_I8, FT_U64, FT_U32, FT_U16, FT_U8:
 			// ok
 		default:
 			return fmt.Errorf("index[%s]: unsupported integer index on field %s type %s",
-				i.Name, f.Name, f.Type)
+				s.Name, f.Name, f.Type)
 		}
 
 	case I_PK:
 		// requires single integer field
-		if len(i.Fields) > 1 {
-			return fmt.Errorf("index[%s]: primary index requires single field", i.Name)
+		if len(s.Fields) > 1 {
+			return fmt.Errorf("index[%s]: primary index requires single field", s.Name)
 		}
 		// require pk index on pk field only
-		f := i.Fields[0]
+		f := s.Fields[0]
 		if f.Type != FT_U64 || f.Flags&F_PRIMARY == 0 {
 			return fmt.Errorf("field[%s]: pk index on unsupported field %s type %s",
-				i.Name, f.Name, f.Type)
+				s.Name, f.Name, f.Type)
 		}
 
 	case I_HASH:
 		// requires single field
-		if len(i.Fields) > 1 {
-			return fmt.Errorf("index[%s]: hash index requires single field", i.Name)
+		if len(s.Fields) > 1 {
+			return fmt.Errorf("index[%s]: hash index requires single field", s.Name)
 		}
 
 	case I_COMPOSITE:
 		// requires multiple fields
-		if len(i.Fields) < 2 {
-			return fmt.Errorf("index[%s]: composite index requires at least 2 fields", i.Name)
+		if len(s.Fields) < 2 {
+			return fmt.Errorf("index[%s]: composite index requires at least 2 fields", s.Name)
 		}
 	}
 
