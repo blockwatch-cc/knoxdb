@@ -44,7 +44,8 @@ func (t *Table) Query(ctx context.Context, q engine.QueryPlan) (engine.QueryResu
 			Alloc(),
 	).
 		WithLimit(plan.Limit).
-		WithOffset(plan.Offset)
+		WithOffset(plan.Offset).
+		WithOrder(plan.Order)
 
 	// protect journal access
 	t.mu.RLock()
@@ -81,7 +82,8 @@ func (t *Table) Stream(ctx context.Context, q engine.QueryPlan, fn func(engine.Q
 	// prepare result
 	res := query.NewStreamResult(fn).
 		WithLimit(plan.Limit).
-		WithOffset(plan.Offset)
+		WithOffset(plan.Offset).
+		WithOrder(plan.Order)
 	defer res.Close()
 
 	// protect journal access

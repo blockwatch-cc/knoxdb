@@ -5,16 +5,19 @@ package journal
 
 import (
 	"iter"
+	"slices"
 
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/pack"
+	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
 )
 
 type Result struct {
-	tomb *xroar.Bitmap   // deleted rids
-	pkgs []*pack.Package // pack copies with selection vector
+	tomb  *xroar.Bitmap   // deleted rids
+	pkgs  []*pack.Package // pack copies with selection vector
+	order types.OrderType // result order
 }
 
 func NewResult() *Result {
@@ -61,7 +64,11 @@ func (r *Result) Append(seg *Segment, bits *bitset.Bitset) {
 
 	// add selection vector unless all records match
 	if !bits.All() {
-		clone.WithSelection(bits.Indexes(nil))
+		sel := bits.Indexes(nil)
+		if r.order.IsReverse() {
+			slices.Reverse(sel)
+		}
+		clone.WithSelection(sel)
 	}
 
 	r.pkgs = append(r.pkgs, clone)

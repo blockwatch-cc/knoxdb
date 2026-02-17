@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"iter"
+	"slices"
 	"time"
 
 	"blockwatch.cc/knoxdb/internal/engine"
@@ -65,6 +66,7 @@ type StreamResult struct {
 	n      uint32
 	limit  uint32
 	offset uint32
+	order  types.OrderType
 }
 
 func NewStreamResult(fn StreamCallback) *StreamResult {
@@ -85,27 +87,51 @@ func (r *StreamResult) WithOffset(o uint32) *StreamResult {
 	return r
 }
 
+func (r *StreamResult) WithOrder(o types.OrderType) *StreamResult {
+	r.order = o
+	return r
+}
+
 // QueryResultConsumer interface
 func (r *StreamResult) Append(_ context.Context, pkg *pack.Package) error {
 	r.r.pkg = pkg
 	sel := pkg.Selected()
 	if sel == nil {
-		for i := range pkg.Len() {
-			// skip offset
-			if r.offset > 0 {
-				r.offset--
-				continue
+		if r.order.IsForward() {
+			for i := range pkg.Len() {
+				// skip offset
+				if r.offset > 0 {
+					r.offset--
+					continue
+				}
+				r.n++
+				if err := r.fn(r.r.Row(i)); err != nil {
+					return err
+				}
+				// apply limit
+				if r.limit > 0 && r.n >= r.limit {
+					return types.EndStream
+				}
 			}
-			r.n++
-			if err := r.fn(r.r.Row(i)); err != nil {
-				return err
-			}
-			// apply limit
-			if r.limit > 0 && r.n >= r.limit {
-				return types.EndStream
+		} else {
+			for i := pkg.Len() - 1; i > -0; i-- {
+				// skip offset
+				if r.offset > 0 {
+					r.offset--
+					continue
+				}
+				r.n++
+				if err := r.fn(r.r.Row(i)); err != nil {
+					return err
+				}
+				// apply limit
+				if r.limit > 0 && r.n >= r.limit {
+					return types.EndStream
+				}
 			}
 		}
 	} else {
+		// sel is expected to be ordered correctly
 		for _, v := range sel {
 			// skip offset
 			if r.offset > 0 {
@@ -143,6 +169,7 @@ type Result struct {
 	row    *Row // row cache
 	limit  uint32
 	offset uint32
+	order  types.OrderType
 }
 
 func NewResult(pkg *pack.Package) *Result {
@@ -161,8 +188,14 @@ func (r *Result) WithOffset(o uint32) *Result {
 	return r
 }
 
+func (r *Result) WithOrder(o types.OrderType) *Result {
+	r.order = o
+	return r
+}
+
 func (r *Result) Append(_ context.Context, src *pack.Package) error {
-	// read selection info
+	// read selection info (when sel is attached it is expected to be in correct
+	// order, i.e. asc or desc)
 	sel := src.Selected()
 	nsel := uint32(src.NumSelected())
 
@@ -176,12 +209,19 @@ func (r *Result) Append(_ context.Context, src *pack.Package) error {
 				return nil
 			}
 			if sel != nil {
-				// skip offset elements from existing selection vector
+				// skip offset elements from existing selection vector keeping order
 				sel = sel[r.offset:]
 				nsel -= r.offset
 			} else {
-				// create selection vector for some tail portion of src
-				sel = types.NewRange(r.offset, nsel).AsSelection()
+				// create selection vector for some tail portion of src considering order
+				if r.order.IsForward() {
+					// skip offset entries at start
+					sel = types.NewRange(r.offset, nsel).AsSelection()
+				} else {
+					// skip offset entries at end and reverse selection indexes
+					sel = types.NewRange(0, nsel-r.offset).AsSelection()
+					slices.Reverse(sel)
+				}
 				nsel = uint32(src.Len()) - r.offset
 			}
 			r.offset = 0
@@ -189,21 +229,31 @@ func (r *Result) Append(_ context.Context, src *pack.Package) error {
 
 		// apply limit
 		if r.limit > 0 {
-			free := uint32(r.pkg.FreeSpace())
-			if nsel > free {
-				if sel != nil {
-					// shorten selection vector
-					sel = sel[:free]
+			nsel = min(nsel, r.limit, uint32(r.pkg.FreeSpace()))
+			if sel != nil {
+				// shorten selection vector keeping order
+				sel = sel[:nsel]
+			} else {
+				// create selection vector considering order
+				if r.order.IsForward() {
+					sel = types.NewRange(0, nsel).AsSelection()
 				} else {
-					// create selection vector
-					sel = types.NewRange(0, free).AsSelection()
+					n := uint32(src.Len())
+					sel = types.NewRange(n-nsel, n).AsSelection()
+					slices.Reverse(sel)
 				}
 			}
 		}
 	}
 
-	// append selected elements (note: without src selection, limit and offset
-	// sel is nil here)
+	// need sel vector for desc order
+	if sel == nil && r.order.IsReverse() {
+		sel = types.NewRange(0, src.Len()).AsSelection()
+		slices.Reverse(sel)
+	}
+
+	// append selected elements (note: without src selection or desc order,
+	// limit and offset sel is nil here)
 	src.AppendTo(r.pkg, sel)
 
 	// stop when limit is reached

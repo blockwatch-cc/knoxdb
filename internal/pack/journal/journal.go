@@ -481,8 +481,6 @@ func (j *Journal) Query(plan *query.QueryPlan, epoch uint32) *Result {
 	// alloc result and match bitset
 	res := NewResult()
 	bits := bitset.New(j.maxsz)
-	node := plan.Filters
-	snap := plan.Snap
 
 	// Single-pass merge
 	// Walk segments in backwards order starting at tip. This ensures we first
@@ -498,10 +496,10 @@ func (j *Journal) Query(plan *query.QueryPlan, epoch uint32) *Result {
 		}
 
 		// step 1: identify deleted records
-		seg.MergeDeleted(res.tomb, snap)
+		seg.MergeDeleted(res.tomb, plan.Snap)
 
 		// step 2: match filters, apply snapshot visibility rules and tomb
-		seg.Match(node, snap, res.tomb, bits.Zero())
+		seg.Match(plan.Filters, plan.Snap, res.tomb, bits)
 
 		// add segment to result if it has any match
 		if bits.Any() {

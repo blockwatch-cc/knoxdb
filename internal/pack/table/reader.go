@@ -6,6 +6,7 @@ package table
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sync/atomic"
 
 	"blockwatch.cc/knoxdb/internal/arena"
@@ -272,6 +273,9 @@ func (r *Reader) nextLookupMatch(ctx context.Context) (*pack.Package, error) {
 		sel = append(sel, uint32(p))
 		p++
 	}
+	if r.query.Order.IsReverse() {
+		slices.Reverse(sel)
+	}
 	r.pack.WithSelection(sel)
 
 	// clear mask range
@@ -425,7 +429,11 @@ func (r *Reader) nextQueryMatch(ctx context.Context) (*pack.Package, error) {
 		// 	r.pack.Key(), r.pack.Version(), r.bits.Count(), r.pack.Len(), pmin, pmax)
 
 		// set pack selection vector
-		r.pack.WithSelection(r.bits.Indexes(r.hits))
+		sel := r.bits.Indexes(r.hits)
+		if r.query.Order.IsReverse() {
+			slices.Reverse(sel)
+		}
+		r.pack.WithSelection(sel)
 
 		// validate selection vector
 		// l := r.pack.Len()
