@@ -1,5 +1,5 @@
 kind: pipeline
-name: Unit Tests
+name: KnoxDB Unit Tests
 platform:
   os: linux
   arch: amd64
@@ -69,7 +69,6 @@ steps:
       - go run -buildvcs=true ./internal/tests/run -count 100 -arch wasm
     depends_on:
       - lint
-      - scan
       - vet
       - unit
 
@@ -92,6 +91,5 @@ steps:
       - go run -buildvcs=true ./internal/tests/run -count 100 -arch native
     depends_on:
       - lint
-      - scan
       - vet
       - unit
