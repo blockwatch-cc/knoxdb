@@ -1088,6 +1088,18 @@ func (c BytesCaster) CastValue(val any) (res any, err error) {
 				res, ok = []byte{byte(vv.Uint())}, true
 			case reflect.String:
 				res, ok = []byte(vv.String()), true
+			case reflect.Array:
+				if vv.Type().Elem().Kind() == reflect.Uint8 {
+					if vv.CanAddr() {
+						res, ok = vv.Bytes(), true
+					} else {
+						slice := make([]byte, vv.Len())
+						for i := range vv.Len() {
+							slice[i] = uint8(vv.Index(i).Uint())
+						}
+						res, ok = slice, true
+					}
+				}
 			default:
 				ok = false
 			}
