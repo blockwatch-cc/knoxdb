@@ -2,7 +2,6 @@
 // Author: stefan@blockwatch.cc
 
 //go:build amd64
-// +build amd64
 
 // nolint
 package avx2

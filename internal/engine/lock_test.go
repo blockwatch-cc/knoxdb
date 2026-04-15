@@ -192,7 +192,7 @@ func BenchmarkLockShared(b *testing.B) {
 			b.RunParallel(func(pb *testing.PB) {
 				var xid XID = 1
 				for pb.Next() {
-					for i := 0; i < n; i++ {
+					for i := range n {
 						_ = m.Lock(ctx, xid, LockModeShared, uint64(i))
 					}
 					m.Done(xid)

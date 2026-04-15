@@ -603,7 +603,7 @@ func (m *numInSetMatcher[T]) Value() any {
 	card := m.set.Count()
 	it := m.set.NewIterator()
 	vals := make([]T, card)
-	for i := 0; i < card; i++ {
+	for i := range card {
 		v, ok := it.Next()
 		if !ok {
 			break
@@ -742,7 +742,7 @@ func (m *numNotInSetMatcher[T]) Value() any {
 	card := m.set.Count()
 	it := m.set.NewIterator()
 	vals := make([]T, card)
-	for i := 0; i < card; i++ {
+	for i := range card {
 		v, ok := it.Next()
 		if !ok {
 			break

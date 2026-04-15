@@ -195,7 +195,7 @@ func (l *ExprList) AddUniqueFront(name string, fn reducer.ReducerFunc) {
 
 func (l *ExprList) UnmarshalText(src []byte) error {
 	s := string(src)
-	for _, v := range strings.Split(s, ",") {
+	for v := range strings.SplitSeq(s, ",") {
 		r := reducer.ReducerFuncSum
 		name := v
 		if fn, n, ok := strings.Cut(name, "("); ok {

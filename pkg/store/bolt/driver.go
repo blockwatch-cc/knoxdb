@@ -169,21 +169,21 @@ type logger struct {
 }
 
 // redirect info -> debug
-func (l logger) Info(v ...interface{})                 { l.log.Debug(v...) }
-func (l logger) Infof(format string, v ...interface{}) { l.log.Debugf(format, v...) }
+func (l logger) Info(v ...any)                 { l.log.Debug(v...) }
+func (l logger) Infof(format string, v ...any) { l.log.Debugf(format, v...) }
 
 // redirect debug -> trace
-func (l logger) Debug(v ...interface{})                 { l.log.Trace(v...) }
-func (l logger) Debugf(format string, v ...interface{}) { l.log.Tracef(format, v...) }
+func (l logger) Debug(v ...any)                 { l.log.Trace(v...) }
+func (l logger) Debugf(format string, v ...any) { l.log.Tracef(format, v...) }
 
 // rename: bbolt Logger interface has custom name for warning level
-func (l logger) Warning(v ...interface{})                 { l.log.Warn(v...) }
-func (l logger) Warningf(format string, v ...interface{}) { l.log.Warnf(format, v...) }
+func (l logger) Warning(v ...any)                 { l.log.Warn(v...) }
+func (l logger) Warningf(format string, v ...any) { l.log.Warnf(format, v...) }
 
 // keep
-func (l logger) Error(v ...interface{})                 { l.log.Error(v...) }
-func (l logger) Errorf(format string, v ...interface{}) { l.log.Errorf(format, v...) }
-func (l logger) Fatal(v ...interface{})                 { l.log.Fatal(v...) }
-func (l logger) Fatalf(format string, v ...interface{}) { l.log.Fatalf(format, v...) }
-func (l logger) Panic(v ...interface{})                 { l.log.Panic(v...) }
-func (l logger) Panicf(format string, v ...interface{}) { l.log.Panicf(format, v...) }
+func (l logger) Error(v ...any)                 { l.log.Error(v...) }
+func (l logger) Errorf(format string, v ...any) { l.log.Errorf(format, v...) }
+func (l logger) Fatal(v ...any)                 { l.log.Fatal(v...) }
+func (l logger) Fatalf(format string, v ...any) { l.log.Fatalf(format, v...) }
+func (l logger) Panic(v ...any)                 { l.log.Panic(v...) }
+func (l logger) Panicf(format string, v ...any) { l.log.Panicf(format, v...) }

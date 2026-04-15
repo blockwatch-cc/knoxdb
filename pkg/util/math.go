@@ -5,6 +5,7 @@ package util
 
 import (
 	"bytes"
+	"cmp"
 	"math/bits"
 
 	"golang.org/x/exp/constraints"
@@ -24,15 +25,8 @@ func MaxBytes(a, b []byte) []byte {
 	return b
 }
 
-func Cmp[T constraints.Ordered](a, b T) int {
-	switch {
-	case a == b:
-		return 0
-	case a < b:
-		return -1
-	default:
-		return 1
-	}
+func Cmp[T cmp.Ordered](a, b T) int {
+	return cmp.Compare(a, b)
 }
 
 // false < true
@@ -47,7 +41,7 @@ func CmpBool(a, b bool) int {
 	}
 }
 
-func Max[T constraints.Ordered](vals ...T) T {
+func Max[T cmp.Ordered](vals ...T) T {
 	var zero T
 	switch len(vals) {
 	case 0:
@@ -65,7 +59,7 @@ func Max[T constraints.Ordered](vals ...T) T {
 	}
 }
 
-func Min[T constraints.Ordered](vals ...T) T {
+func Min[T cmp.Ordered](vals ...T) T {
 	var zero T
 	switch len(vals) {
 	case 0:
@@ -83,7 +77,7 @@ func Min[T constraints.Ordered](vals ...T) T {
 	}
 }
 
-func MinMax[T constraints.Ordered](vals ...T) (T, T) {
+func MinMax[T cmp.Ordered](vals ...T) (T, T) {
 	var min, max T
 	switch l := len(vals); l {
 	case 0:
@@ -110,11 +104,11 @@ func MinMax[T constraints.Ordered](vals ...T) (T, T) {
 	return min, max
 }
 
-func Clamp[T constraints.Ordered](val, min, max T) T {
+func Clamp[T cmp.Ordered](val, min, max T) T {
 	return Min(Max(val, min), max)
 }
 
-func NonZero[T constraints.Ordered](x ...T) T {
+func NonZero[T cmp.Ordered](x ...T) T {
 	var zero T
 	for _, v := range x {
 		if v != zero {
@@ -124,7 +118,7 @@ func NonZero[T constraints.Ordered](x ...T) T {
 	return zero
 }
 
-func NonZeroMin[T constraints.Ordered](x ...T) T {
+func NonZeroMin[T cmp.Ordered](x ...T) T {
 	var min, zero T
 	for _, v := range x {
 		if v != zero {

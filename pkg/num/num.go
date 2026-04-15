@@ -91,13 +91,6 @@ func abs(n int64) uint64 {
 	return uint64((n ^ y) - y)
 }
 
-func min(x, y int) int {
-	if x < y {
-		return x
-	}
-	return y
-}
-
 func digits64(val int64) int {
 	v := abs(val)
 	for i := range pow10 {

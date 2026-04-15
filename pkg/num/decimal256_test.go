@@ -15,7 +15,7 @@ func n256(hi int64, lo ...uint64) Int256 {
 		return Int256FromInt64(hi)
 	default:
 		i256 := Int256FromInt64(hi)
-		for i := 0; i < len(lo); i++ {
+		for i := range lo {
 			mul := Int256FromInt64(int64(pow10[digits64(int64(lo[i]))-1]))
 			i256 = i256.Mul(mul)
 		}
@@ -40,7 +40,7 @@ func TestDecimal256Numbers(t *testing.T) {
 		err   error
 	}
 	makePrecisionTest256 := func(n int) (tests []test) {
-		for i := 0; i < n; i++ {
+		for i := range n {
 			tests = append(tests, test{
 				name:  "10e" + strconv.Itoa(i),
 				in:    e256(i),

@@ -32,7 +32,7 @@ func Sample[T types.Number](v []T) ([]T, bool) {
 	chunk := len(v) / SAMPLE_COUNT
 	sz = 0
 
-	for i := 0; i < SAMPLE_COUNT; i++ {
+	for i := range SAMPLE_COUNT {
 		// Note: btrblocks uses a random sample, but we need determinism
 		// start := chunk * i + util.RandIntn(chunk-SAMPLE_SIZE)
 		start := chunk * i

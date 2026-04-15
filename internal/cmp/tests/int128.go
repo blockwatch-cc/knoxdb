@@ -31,7 +31,7 @@ var (
 
 func RandInt128Slice(n int) Int128Slice {
 	s := make([]Int128, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		s[i][0] = util.RandUint64()
 		s[i][1] = util.RandUint64()
 	}

@@ -35,7 +35,7 @@ func TestWorkload1(t *testing.T) {
 
 	// Insert a large number of records in a single transaction
 	data := make([]*tests.Types, txnSize)
-	for i := 0; i < txnSize; i++ {
+	for i := range txnSize {
 		data[i] = tests.NewRandomTypes(i)
 	}
 	startPK, _, err := table.Insert(ctx, data)

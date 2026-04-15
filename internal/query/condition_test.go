@@ -628,7 +628,7 @@ func FuzzConditionParse(f *testing.F) {
 // test data builders
 func buildLargeConditionTree(size int) Condition {
 	var c Condition
-	for i := 0; i < size; i++ {
+	for i := range size {
 		child := Equal("id", i)
 		if i%2 == 0 {
 			child = Or(child, Equal("score", float64(i)))

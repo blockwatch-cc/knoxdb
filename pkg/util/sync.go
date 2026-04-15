@@ -3,6 +3,8 @@
 
 package util
 
+import "maps"
+
 import "sync/atomic"
 
 // LockFreeMap is a concurrent Go map implementation that uses atomic
@@ -34,9 +36,7 @@ func (m *LockFreeMap[K, V]) Put(k K, v V) {
 		p1 := m.val.Load().(*map[K]V)
 		m1 := *p1
 		m2 := make(map[K]V)
-		for n, v := range m1 {
-			m2[n] = v
-		}
+		maps.Copy(m2, m1)
 		m2[k] = v
 		if m.val.CompareAndSwap(p1, &m2) {
 			return

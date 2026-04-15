@@ -44,7 +44,7 @@ func TestWorkload3(t *testing.T) {
 
 	// Initialize accounts with balances
 	data := make([]*Ledger, numAccounts)
-	for i := 0; i < numAccounts; i++ {
+	for i := range numAccounts {
 		data[i] = &Ledger{
 			Balance: initialBalance,
 		}
@@ -58,12 +58,12 @@ func TestWorkload3(t *testing.T) {
 	}
 
 	// Perform debit and credit operations
-	for i := 0; i < numAccounts/(numTransfersPerTx*2); i++ {
+	for i := range numAccounts / (numTransfersPerTx * 2) {
 		func(txId int) {
 			ctx, commit, abort, err := db.Begin(ctx)
 			require.NoError(t, err, "Begin tx failed")
 			defer abort()
-			for k := 0; k < numTransfersPerTx; k++ {
+			for k := range numTransfersPerTx {
 				from := txId*numTransfersPerTx*2 + 2*k
 				to := txId*numTransfersPerTx*2 + 2*k + 1
 

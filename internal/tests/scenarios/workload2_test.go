@@ -41,7 +41,7 @@ func TestWorkload2(t *testing.T) {
 	insertedData := sync.Map{}
 
 	// Concurrent inserts
-	for threadID := 0; threadID < numThreads; threadID++ {
+	for threadID := range numThreads {
 		wg.Add(1)
 		go func(threadID int) {
 			start := time.Now()
@@ -49,7 +49,7 @@ func TestWorkload2(t *testing.T) {
 				log.Infof("Goroutine %d completed in %s", threadID, time.Since(start))
 				wg.Done()
 			}()
-			for i := 0; i < txnSize; i++ {
+			for i := range txnSize {
 				record := tests.NewRandomTypes(threadID*txnSize + i)
 				pk, _, err := table.Insert(ctx, []*tests.Types{record})
 				require.NoError(t, err, "Failed to insert data")

@@ -263,10 +263,10 @@ func sanitize(s string) string {
 }
 
 var (
-	emptyType     = reflect.TypeOf(struct{}{})
-	uint8Type     = reflect.TypeOf(uint8(0))
-	byteSliceType = reflect.TypeOf([]byte(nil))
-	modelType     = reflect.TypeOf((*Model)(nil)).Elem()
+	emptyType     = reflect.TypeFor[struct{}]()
+	uint8Type     = reflect.TypeFor[uint8]()
+	byteSliceType = reflect.TypeFor[[]byte]()
+	modelType     = reflect.TypeFor[Model]()
 )
 
 func reflectStructField(f reflect.StructField, tagName string) (field *Field, err error) {

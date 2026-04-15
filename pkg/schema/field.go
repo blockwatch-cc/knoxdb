@@ -680,7 +680,7 @@ func (f *Field) Decode(r io.Reader, layout binary.ByteOrder) (val any, err error
 // so that the return value can consistently be used for interface calls.
 func (f *Field) StructValue(rval reflect.Value) reflect.Value {
 	dst := rval.FieldByIndex(f.Path)
-	if dst.Kind() == reflect.Ptr {
+	if dst.Kind() == reflect.Pointer {
 		if dst.IsNil() && dst.CanSet() {
 			dst.Set(reflect.New(dst.Type().Elem()))
 		}

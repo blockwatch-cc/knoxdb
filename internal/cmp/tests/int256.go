@@ -32,7 +32,7 @@ var (
 
 func RandInt256Slice(n int) Int256Slice {
 	s := make([]Int256, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		s[i][0] = util.RandUint64()
 		s[i][1] = util.RandUint64()
 		s[i][2] = util.RandUint64()

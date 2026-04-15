@@ -4,12 +4,13 @@
 package util
 
 import (
+	"cmp"
 	"sort"
 
 	"golang.org/x/exp/constraints"
 )
 
-type PairSorter[S, T constraints.Ordered] struct {
+type PairSorter[S, T cmp.Ordered] struct {
 	s []S
 	t []T
 }
@@ -27,7 +28,7 @@ func (s PairSorter[S, T]) Swap(i, j int) {
 	s.t[i], s.t[j] = s.t[j], s.t[i]
 }
 
-func Sort2[S, T constraints.Ordered](s []S, t []T) {
+func Sort2[S, T cmp.Ordered](s []S, t []T) {
 	sort.Sort(PairSorter[S, T]{s, t})
 }
 
@@ -40,7 +41,7 @@ func Sort[T constraints.Integer](vs []T, shift int) {
 
 	if len(vs) < 1<<6 {
 		// Insertion sort for small inputs
-		for i := 0; i < len(vs); i++ {
+		for i := range vs {
 			for j := i; j > 0 && vs[j-1] > vs[j]; j-- {
 				vs[j-1], vs[j] = vs[j], vs[j-1]
 			}
@@ -58,7 +59,7 @@ func Sort[T constraints.Integer](vs []T, shift int) {
 	// Locate bin ranges in the sorted array
 	accum := 0
 	var ends [1 << nbits]int
-	for b := 0; b < len(bins); b++ {
+	for b := range len(bins) {
 		beg := accum
 		accum += bins[b]
 		ends[b] = accum
@@ -66,7 +67,7 @@ func Sort[T constraints.Integer](vs []T, shift int) {
 	}
 
 	// Second pass: move elements into allotted bins
-	for b := 0; b < len(bins); b++ {
+	for b := range len(bins) {
 		for i := bins[b]; i < ends[b]; {
 			bin := int(vs[i]>>s) & 0xFF
 			if bin == b {
@@ -81,7 +82,7 @@ func Sort[T constraints.Integer](vs []T, shift int) {
 	// Recursively sort each bin on the next digit
 	if shift < w-nbits {
 		beg := 0
-		for b := 0; b < len(bins); b++ {
+		for b := range len(bins) {
 			Sort(vs[beg:ends[b]], shift+nbits)
 			beg = ends[b]
 		}

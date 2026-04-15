@@ -68,7 +68,7 @@ func BenchmarkLRU_Freq(b *testing.B) {
 
 func TestLRU(t *testing.T) {
 	evictCounter := 0
-	onEvicted := func(k interface{}, v interface{}) {
+	onEvicted := func(k any, v any) {
 		if k != v {
 			t.Fatalf("Evict values not equal (%v!=%v)", k, v)
 		}
@@ -79,7 +79,7 @@ func TestLRU(t *testing.T) {
 		t.Fatalf("err: %v", err)
 	}
 
-	for i := 0; i < 256; i++ {
+	for i := range 256 {
 		l.Add(i, i)
 	}
 	if l.Len() != 128 {
@@ -95,7 +95,7 @@ func TestLRU(t *testing.T) {
 			t.Fatalf("bad key: %v", k)
 		}
 	}
-	for i := 0; i < 128; i++ {
+	for i := range 128 {
 		_, ok := l.Get(i)
 		if ok {
 			t.Fatalf("should be evicted")
@@ -135,7 +135,7 @@ func TestLRU(t *testing.T) {
 // test that Add returns true/false if an eviction occurred
 func TestLRUAdd(t *testing.T) {
 	evictCounter := 0
-	onEvicted := func(k interface{}, v interface{}) {
+	onEvicted := func(k any, v any) {
 		evictCounter++
 	}
 

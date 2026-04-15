@@ -5,6 +5,7 @@ package rclru
 
 import (
 	"math/rand"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -83,7 +84,7 @@ func Test2Q_RandomOps(t *testing.T) {
 	}
 
 	n := 200000
-	for i := 0; i < n; i++ {
+	for range n {
 		key := rand.Int() % 512
 		r := rand.Int()
 		switch r % 3 {
@@ -120,7 +121,7 @@ func Test2Q_Get_RecentToFrequent(t *testing.T) {
 	}
 
 	// Touch all the entries, should be in t1
-	for i := 0; i < 128; i++ {
+	for i := range 128 {
 		l.Add(i, NewTestPackage(0, 0))
 	}
 	if n := l.recent.Len(); n != 128 {
@@ -131,7 +132,7 @@ func Test2Q_Get_RecentToFrequent(t *testing.T) {
 	}
 
 	// Get should upgrade to t2
-	for i := 0; i < 128; i++ {
+	for i := range 128 {
 		_, ok := l.Get(i)
 		if !ok {
 			t.Fatalf("missing: %d", i)
@@ -145,7 +146,7 @@ func Test2Q_Get_RecentToFrequent(t *testing.T) {
 	}
 
 	// Get be from t2
-	for i := 0; i < 128; i++ {
+	for i := range 128 {
 		_, ok := l.Get(i)
 		if !ok {
 			t.Fatalf("missing: %d", i)
@@ -309,7 +310,7 @@ func Test2Q(t *testing.T) {
 		t.Fatalf("err: %v", err)
 	}
 	b := make([]*TestPackage, 257)
-	for i := 0; i < 256; i++ {
+	for i := range 256 {
 		b[i] = NewTestPackage(i, 0)
 		l.Add(i, b[i])
 	}
@@ -327,7 +328,7 @@ func Test2Q(t *testing.T) {
 			v.Deref()
 		}
 	}
-	for i := 0; i < 128; i++ {
+	for i := range 128 {
 		_, ok := l.Get(i)
 		if ok {
 			t.Fatalf("should be evicted")
@@ -375,7 +376,7 @@ func Test2Q(t *testing.T) {
 	if l.Len() != 0 {
 		t.Fatalf("bad len: %v", l.Len())
 	}
-	for i := 0; i < 257; i++ {
+	for i := range 257 {
 		l.Remove(i)
 		_, ok := l.Get(i)
 		if ok {
@@ -441,16 +442,16 @@ func Test2Q_Parallism(t *testing.T) {
 		t.Fatalf("err: %v", err)
 	}
 	b := make([]*TestPackage, nPacks)
-	for i := 0; i < nPacks; i++ {
+	for i := range nPacks {
 		b[i] = NewTestPackage(i, 0)
 	}
 	refs := make([]int64, nPacks)    // counts the refernces to the packs
 	actions := make([]int, nThreads) // actions of the parallel threads
 	ids := make([]int, nThreads)     // ids for the parallel threads
 
-	for r := 0; r < nRuns; r++ {
+	for r := range nRuns {
 		// 1st determine actions for the threads
-		for i := 0; i < nThreads; i++ {
+		for i := range nThreads {
 			act := rand.Intn(6)
 			id := rand.Intn(nPacks)
 			actions[i] = act
@@ -459,7 +460,7 @@ func Test2Q_Parallism(t *testing.T) {
 		// 2nd perform threads in parrallel and determine what to expect
 		var wg sync.WaitGroup
 		wg.Add(nThreads)
-		for j := 0; j < nThreads; j++ {
+		for j := range nThreads {
 			n := j
 			go func(act, id int) {
 				switch act {
@@ -496,13 +497,10 @@ func Test2Q_Parallism(t *testing.T) {
 		wg.Wait()
 		// 3rd compare current state with expected
 		cached := l.Keys()
-		for id := 0; id < nPacks; id++ {
+		for id := range nPacks {
 			want := refs[id]
-			for _, v := range cached {
-				if v == id {
-					want++
-					break
-				}
+			if slices.Contains(cached, id) {
+				want++
 			}
 			if got := b[id].refCount; got != want {
 				t.Errorf("run %d id= %d: refCount %d expected %d\n  actions: %v\n      ids: %v",

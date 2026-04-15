@@ -2,7 +2,6 @@
 // Author: alex@blockwatch.cc
 
 //go:build !amd64
-// +build !amd64
 
 package avx2
 

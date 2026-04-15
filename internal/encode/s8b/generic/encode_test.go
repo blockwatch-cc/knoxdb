@@ -50,7 +50,7 @@ func DecodeLegacyWrapper[T types.Unsigned](dst []T, buf []byte) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		for i := 0; i < n; i++ {
+		for i := range n {
 			dst[i] = T(u64[i])
 		}
 		return n, nil

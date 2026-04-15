@@ -4,9 +4,9 @@
 package slicex
 
 import (
+	"cmp"
 	"sort"
 
-	"golang.org/x/exp/constraints"
 	"golang.org/x/exp/slices"
 )
 
@@ -15,7 +15,7 @@ type Number interface {
 }
 
 // assumes src and rem are sorted
-func remove[T constraints.Ordered](src, rem []T) []T {
+func remove[T cmp.Ordered](src, rem []T) []T {
 	if len(src) == 0 || len(rem) == 0 {
 		return src
 	}
@@ -44,7 +44,7 @@ func remove[T constraints.Ordered](src, rem []T) []T {
 	return src[:k]
 }
 
-func removeZeros[T constraints.Ordered](s []T) ([]T, int) {
+func removeZeros[T cmp.Ordered](s []T) ([]T, int) {
 	var (
 		n    int
 		zero T
@@ -61,7 +61,7 @@ func removeZeros[T constraints.Ordered](s []T) ([]T, int) {
 }
 
 // assumes s is already sorted
-func removeDuplicates[T constraints.Ordered](s []T) []T {
+func removeDuplicates[T cmp.Ordered](s []T) []T {
 	if len(s) == 0 {
 		return s
 	}
@@ -139,7 +139,7 @@ func index[T Number](s []T, val T, last int, canOptimize bool) (int, bool) {
 // from and to. Note that from/to do not necessarily have to be members
 // themselves, but some intermediate values are. Slice s is expected
 // to be sorted and from must be less than or equal to to.
-func containsRange[T constraints.Ordered](s []T, from, to T) bool {
+func containsRange[T cmp.Ordered](s []T, from, to T) bool {
 	n := len(s)
 	if n == 0 {
 		return false
@@ -186,7 +186,7 @@ func containsRange[T constraints.Ordered](s []T, from, to T) bool {
 }
 
 // intersect adds all values to out that are memers in both input slices x and y
-func intersect[T constraints.Ordered](x, y, out []T) []T {
+func intersect[T cmp.Ordered](x, y, out []T) []T {
 	if out == nil {
 		out = make([]T, 0, min(len(x), len(y)))
 	}
@@ -225,7 +225,7 @@ func intersect[T constraints.Ordered](x, y, out []T) []T {
 	return out
 }
 
-func merge[T constraints.Ordered](s []T, unique bool, v ...T) []T {
+func merge[T cmp.Ordered](s []T, unique bool, v ...T) []T {
 	ls, lv := len(s), len(v)
 	// extend cap(s) if necessary
 	if cap(s) < ls+lv {
@@ -299,7 +299,7 @@ func merge[T constraints.Ordered](s []T, unique bool, v ...T) []T {
 	return s
 }
 
-func removeRange[T constraints.Ordered](s []T, from, to T, out []T) []T {
+func removeRange[T cmp.Ordered](s []T, from, to T, out []T) []T {
 	start, _ := slices.BinarySearch(s, from)
 	if start == len(s) {
 		if cap(out) < len(s) {
@@ -322,7 +322,7 @@ func removeRange[T constraints.Ordered](s []T, from, to T, out []T) []T {
 	return out
 }
 
-func intersectRange[T constraints.Ordered](s []T, from, to T, out []T) []T {
+func intersectRange[T cmp.Ordered](s []T, from, to T, out []T) []T {
 	start, _ := slices.BinarySearch(s, from)
 	if start == len(s) {
 		return out

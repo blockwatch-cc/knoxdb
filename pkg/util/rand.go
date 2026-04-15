@@ -98,7 +98,7 @@ func RandBytes(sz int) []byte {
 
 func RandByteSlices(n, u int) [][]byte {
 	s := make([][]byte, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		s[i] = RandBytes(u)
 	}
 	return s
@@ -132,7 +132,7 @@ func RandString(sz int) string {
 
 func RandStringSlices(n, u int) []string {
 	s := make([]string, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		s[i] = RandString(u)
 	}
 	return s
@@ -140,7 +140,7 @@ func RandStringSlices(n, u int) []string {
 
 func RandInts[T constraints.Signed](sz int) []T {
 	s := make([]T, sz)
-	for i := 0; i < sz; i++ {
+	for i := range sz {
 		s[i] = T(RandInt64())
 	}
 	return s
@@ -148,7 +148,7 @@ func RandInts[T constraints.Signed](sz int) []T {
 
 func RandIntsn[T constraints.Signed](sz int, max T) []T {
 	s := make([]T, sz)
-	for i := 0; i < sz; i++ {
+	for i := range sz {
 		s[i] = T(RandInt64n(int64(max)))
 	}
 	return s
@@ -172,7 +172,7 @@ func RandIntRange[T constraints.Signed](min, max T) (T, T) {
 
 func RandUints[T constraints.Unsigned](sz int) []T {
 	s := make([]T, sz)
-	for i := 0; i < sz; i++ {
+	for i := range sz {
 		s[i] = T(RandUint64())
 	}
 	return s
@@ -180,7 +180,7 @@ func RandUints[T constraints.Unsigned](sz int) []T {
 
 func RandUintsn[T constraints.Unsigned](sz int, max T) []T {
 	s := make([]T, sz)
-	for i := 0; i < sz; i++ {
+	for i := range sz {
 		s[i] = T(RandUint64n(uint64(max)))
 	}
 	return s
@@ -196,7 +196,7 @@ func RandUintsRange[T constraints.Unsigned](sz int, min, max T) []T {
 
 func RandFloats[T constraints.Float](sz int) []T {
 	s := make([]T, sz)
-	for i := 0; i < sz; i++ {
+	for i := range sz {
 		s[i] = T(RandFloat64())
 	}
 	return s
@@ -204,7 +204,7 @@ func RandFloats[T constraints.Float](sz int) []T {
 
 func RandFloatsn[T constraints.Float](sz int, max T) []T {
 	s := make([]T, sz)
-	for i := 0; i < sz; i++ {
+	for i := range sz {
 		s[i] = T(RandFloat64()) * max
 	}
 	return s

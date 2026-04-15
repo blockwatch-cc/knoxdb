@@ -2,7 +2,6 @@
 // Author: alex@blockwatch.cc
 
 //go:build !arm64 || appengine || gccgo
-// +build !arm64 appengine gccgo
 
 package arm64
 

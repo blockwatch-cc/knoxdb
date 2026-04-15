@@ -90,7 +90,7 @@ func NewSymbolTable() *SymbolTable {
 		zeroTerminated: false,
 	}
 
-	for i := 0; i < 256; i++ {
+	for i := range 256 {
 		symbolTable.symbols[i] = NewSymbol().WithCode(uint8(i), uint64(i|(1<<FSST_LEN_BITS))) // pseudo symbols
 	}
 
@@ -104,17 +104,17 @@ func NewSymbolTable() *SymbolTable {
 	var s = Symbol{}
 	s.val.SetUint64(0)
 	s.icl = FSST_ICL_FREE // marks empty in hashtab
-	for i := 0; i < HashTabSize; i++ {
+	for i := range HashTabSize {
 		symbolTable.hashTab[i] = s
 	}
 
 	// fill byteCodes[] with the pseudo code all bytes (escaped bytes)
-	for i := 0; i < 256; i++ {
+	for i := range 256 {
 		symbolTable.byteCodes[i] = uint16((1 << FSST_LEN_BITS) | i)
 	}
 
 	// fill shortCodes[] with the pseudo code for the first byte of each two-byte pattern
-	for i := 0; i < 65536; i++ {
+	for i := range 65536 {
 		symbolTable.shortCodes[i] = uint16((1 << FSST_LEN_BITS) | (i & 255))
 	}
 
@@ -266,7 +266,7 @@ func (sym *SymbolTable) Finalize(zeroTerminated uint8) {
 	}
 
 	// renumber the codes in byteCodes[]
-	for i := 0; i < 256; i++ {
+	for i := range 256 {
 		if (sym.byteCodes[i] & FSST_CODE_MASK) >= FSST_CODE_BASE {
 			sym.byteCodes[i] = uint16(newCode[uint8(sym.byteCodes[i])]) + (1 << FSST_LEN_BITS)
 		} else {
@@ -275,7 +275,7 @@ func (sym *SymbolTable) Finalize(zeroTerminated uint8) {
 	}
 
 	// renumber the codes in shortCodes[]
-	for i := 0; i < 65536; i++ {
+	for i := range 65536 {
 		if (sym.shortCodes[i] & FSST_CODE_MASK) >= FSST_CODE_BASE {
 			sym.shortCodes[i] = uint16(newCode[uint8(sym.shortCodes[i])]) + (sym.shortCodes[i] & (15 << FSST_LEN_BITS))
 		} else {
@@ -284,7 +284,7 @@ func (sym *SymbolTable) Finalize(zeroTerminated uint8) {
 	}
 
 	// replace the symbols in the hash table
-	for i := 0; i < HashTabSize; i++ {
+	for i := range HashTabSize {
 		if sym.hashTab[i].icl < FSST_ICL_FREE {
 			sym.hashTab[i] = sym.symbols[newCode[uint8(sym.hashTab[i].Code())]]
 		}

@@ -47,10 +47,7 @@ func PrettyString(s string) string {
 		}
 		for j := 0; j <= l/3; j++ {
 			start := l%3 + j*3
-			end := start + 3
-			if end > len(s) {
-				end = len(s)
-			}
+			end := min(start+3, len(s))
 			p += s[start:end] + ","
 		}
 		s = p[:len(p)-2] + rem
@@ -58,7 +55,7 @@ func PrettyString(s string) string {
 	return s
 }
 
-func Pretty(val interface{}) string {
+func Pretty(val any) string {
 	switch v := val.(type) {
 	case int:
 		return PrettyInt64(int64(v))

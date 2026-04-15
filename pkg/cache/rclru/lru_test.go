@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-var szPackage = int(reflect.TypeOf(TestPackage{}).Size())
+var szPackage = int(reflect.TypeFor[TestPackage]().Size())
 
 func NewTestLRU() (*LRU[int, *TestPackage], error) {
 	return NewLRU[int, *TestPackage](), nil
@@ -50,10 +50,10 @@ func TestLRU(t *testing.T) {
 		t.Fatalf("err: %v", err)
 	}
 
-	for i := 0; i < 256; i++ {
+	for i := range 256 {
 		l.Add(i, NewTestPackage(i, 0))
 	}
-	for i := 0; i < 128; i++ {
+	for range 128 {
 		l.RemoveOldest()
 	}
 	if l.Len() != 128 {
@@ -69,7 +69,7 @@ func TestLRU(t *testing.T) {
 			t.Fatalf("bad key: %v", k)
 		}
 	}
-	for i := 0; i < 128; i++ {
+	for i := range 128 {
 		_, ok := l.Get(i)
 		if ok {
 			t.Fatalf("should be evicted")
@@ -158,10 +158,10 @@ func TestLRU_GetOldest_RemoveOldest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
-	for i := 0; i < 256; i++ {
+	for i := range 256 {
 		l.Add(i, nil)
 	}
-	for i := 0; i < 128; i++ {
+	for range 128 {
 		l.RemoveOldest()
 	}
 

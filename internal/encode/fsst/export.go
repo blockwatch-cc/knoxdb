@@ -33,7 +33,7 @@ func Export(e *Encoder, buf []byte) uint64 {
 	binary.LittleEndian.PutUint64(buf[3:11], version)
 	buf[11] = byte(e.symbolTable.terminator)
 
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		buf[12+i] = byte(e.symbolTable.lenHisto[i])
 	}
 

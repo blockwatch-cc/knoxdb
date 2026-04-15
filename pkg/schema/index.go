@@ -483,7 +483,7 @@ func nestedStructFields(typ reflect.Type) []reflect.StructField {
 		f := typ.Field(i)
 		if f.Anonymous {
 			t := f.Type
-			if t.Kind() == reflect.Ptr {
+			if t.Kind() == reflect.Pointer {
 				t = t.Elem()
 			}
 			if t.Kind() == reflect.Struct {
@@ -568,7 +568,7 @@ func reflectStructFieldForIndex(f reflect.StructField, tagName string, base *Sch
 				return nil, fmt.Errorf("unsupported fields list for index type %q", index.Type)
 			}
 			// parse field names
-			for _, fname := range strings.Split(val, "+") {
+			for fname := range strings.SplitSeq(val, "+") {
 				field, ok := base.Find(fname)
 				if !ok {
 					return nil, fmt.Errorf("undefined indexed field %q in base schema %s", fname, base.Name)
@@ -577,7 +577,7 @@ func reflectStructFieldForIndex(f reflect.StructField, tagName string, base *Sch
 			}
 		case "extra":
 			// parse field names
-			for _, fname := range strings.Split(val, "+") {
+			for fname := range strings.SplitSeq(val, "+") {
 				field, ok := base.Find(fname)
 				if !ok {
 					return nil, fmt.Errorf("undefined extra field %q in base schema %s", fname, base.Name)

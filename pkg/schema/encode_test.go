@@ -208,7 +208,7 @@ func TestDecoderRead(t *testing.T) {
 		require.NotNil(t, b)
 		require.NotEmpty(t, b)
 	}
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		val, err := dec.Read(buf)
 		require.NoError(t, err)
 		if i < 99 {
@@ -291,7 +291,7 @@ type encodeBenchStruct struct {
 }
 
 func makeBenchData(sz int) (res []encodeBenchStruct, size int64) {
-	for i := 0; i < sz; i++ {
+	for i := range sz {
 		res = append(res, encodeBenchStruct{
 			Id:      0,
 			Time:    time.Now().UTC(),

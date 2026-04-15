@@ -87,7 +87,7 @@ func TestCardinalityUint32Go(t *testing.T) {
 	unique := map[uint32]bool{}
 	slice := make([]uint32, step)
 	var j int
-	for i := 0; i < 100000; i++ {
+	for i := range 100000 {
 		val := uint32(util.RandIntn(i + step))
 		unique[val] = true
 		slice[j] = val
@@ -113,7 +113,7 @@ func TestCardinalityMultiUint64Go(t *testing.T) {
 	unique := map[uint64]bool{}
 	slice := make([]uint64, step)
 	var j int
-	for i := 0; i < 100000; i++ {
+	for i := range 100000 {
 		val := uint64(util.RandIntn(i + step))
 		unique[val] = true
 		slice[j] = val

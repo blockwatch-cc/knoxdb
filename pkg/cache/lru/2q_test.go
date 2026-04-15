@@ -74,7 +74,7 @@ func Test2Q_RandomOps(t *testing.T) {
 	}
 
 	n := 200000
-	for i := 0; i < n; i++ {
+	for range n {
 		key := rand.Int63() % 512
 		r := rand.Int63()
 		switch r % 3 {
@@ -100,7 +100,7 @@ func Test2Q_Get_RecentToFrequent(t *testing.T) {
 	}
 
 	// Touch all the entries, should be in t1
-	for i := 0; i < 128; i++ {
+	for i := range 128 {
 		l.Add(i, i)
 	}
 	if n := l.recent.Len(); n != 128 {
@@ -111,7 +111,7 @@ func Test2Q_Get_RecentToFrequent(t *testing.T) {
 	}
 
 	// Get should upgrade to t2
-	for i := 0; i < 128; i++ {
+	for i := range 128 {
 		_, ok := l.Get(i)
 		if !ok {
 			t.Fatalf("missing: %d", i)
@@ -125,7 +125,7 @@ func Test2Q_Get_RecentToFrequent(t *testing.T) {
 	}
 
 	// Get be from t2
-	for i := 0; i < 128; i++ {
+	for i := range 128 {
 		_, ok := l.Get(i)
 		if !ok {
 			t.Fatalf("missing: %d", i)
@@ -226,7 +226,7 @@ func Test2Q(t *testing.T) {
 		t.Fatalf("err: %v", err)
 	}
 
-	for i := 0; i < 256; i++ {
+	for i := range 256 {
 		l.Add(i, i)
 	}
 	if l.Len() != 128 {
@@ -238,7 +238,7 @@ func Test2Q(t *testing.T) {
 			t.Fatalf("bad key: %v", k)
 		}
 	}
-	for i := 0; i < 128; i++ {
+	for i := range 128 {
 		_, ok := l.Get(i)
 		if ok {
 			t.Fatalf("should be evicted")

@@ -16,7 +16,7 @@ func n128(hi int64, lo ...uint64) Int128 {
 		return Int128FromInt64(hi)
 	default:
 		i128 := Int128FromInt64(hi)
-		for i := 0; i < len(lo); i++ {
+		for i := range lo {
 			i128 = i128.Mul64(int64(pow10[digits64(int64(lo[i]))-1]))
 		}
 		return i128

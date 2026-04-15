@@ -230,7 +230,7 @@ func TestTwoSimultaneousReaders(t *testing.T) {
 			Tag:    types.ObjectTagDatabase,
 			Entity: uint64(i),
 			TxID:   types.XID(i * 100),
-			Data:   [][]byte{[]byte(fmt.Sprintf("data%d", i))},
+			Data:   [][]byte{fmt.Appendf(nil, "data%d", i)},
 		}
 		_, err := w.Write(rec)
 		require.NoError(t, err)
@@ -256,7 +256,7 @@ func TestTwoSimultaneousReaders(t *testing.T) {
 			require.Equal(t, types.ObjectTagDatabase, rec.Tag)
 			require.Equal(t, uint64(i), rec.Entity)
 			require.Equal(t, types.XID(i*100), rec.TxID)
-			require.Equal(t, [][]byte{[]byte(fmt.Sprintf("data%d", i))}, rec.Data)
+			require.Equal(t, [][]byte{fmt.Appendf(nil, "data%d", i)}, rec.Data)
 		}
 	}
 
@@ -288,7 +288,7 @@ func TestConcurrentReadersLargeDataset(t *testing.T) {
 			Tag:    types.ObjectTagDatabase,
 			Entity: uint64(i),
 			TxID:   types.XID(i * 100),
-			Data:   [][]byte{[]byte(fmt.Sprintf("data%d", i))},
+			Data:   [][]byte{fmt.Appendf(nil, "data%d", i)},
 		}
 		_, err := w.Write(rec)
 		require.NoError(t, err)
@@ -300,7 +300,7 @@ func TestConcurrentReadersLargeDataset(t *testing.T) {
 	var wg sync.WaitGroup
 	errors := make(chan error, numReaders)
 
-	for r := 0; r < numReaders; r++ {
+	for r := range numReaders {
 		wg.Add(1)
 		go func(readerID int) {
 			defer wg.Done()
@@ -323,7 +323,7 @@ func TestConcurrentReadersLargeDataset(t *testing.T) {
 				require.Equal(t, types.ObjectTagDatabase, rec.Tag)
 				require.Equal(t, uint64(expectedI), rec.Entity)
 				require.Equal(t, types.XID(expectedI*100), rec.TxID)
-				require.Equal(t, [][]byte{[]byte(fmt.Sprintf("data%d", expectedI))}, rec.Data)
+				require.Equal(t, [][]byte{fmt.Appendf(nil, "data%d", expectedI)}, rec.Data)
 
 				count++
 			}

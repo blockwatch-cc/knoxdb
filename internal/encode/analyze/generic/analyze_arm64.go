@@ -1,7 +1,6 @@
 // Copyright (c) 2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 //go:build arm64
-// +build arm64
 
 package generic
 

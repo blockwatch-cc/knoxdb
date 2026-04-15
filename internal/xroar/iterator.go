@@ -41,7 +41,7 @@ func (bm *Bitmap) NewRangeIterators(numRanges int) []*Iterator {
 
 	// This loop distributes the key equally to the ranges. For example: If numRanges = 3
 	// and keyn = 8 then it will be distributes as [3, 3, 2]
-	for i := 0; i < numRanges; i++ {
+	for i := range numRanges {
 		iters[i] = bm.NewIterator()
 		n := width
 		if i < rem {

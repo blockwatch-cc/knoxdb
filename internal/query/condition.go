@@ -196,57 +196,12 @@ func (c Condition) Compile(s *schema.Schema) (*filter.Node, error) {
 		)
 		switch c.Mode {
 		case types.FilterModeIn, types.FilterModeNotIn:
-			if field.Type.BlockType().CanUseAsSet() {
-				// ensure slice type matches blocks
-				var slice any
-				slice, err = caster.CastSlice(c.Value)
-				if err == nil {
-					matcher.WithSlice(slice)
-					c.Value = slice
-				}
-			} else {
-				// special case for unsupported IN/NI block types
-				// we rewrite IN -> OR(EQ) and NIN -> AND(NE) subtrees
-				factory := filter.NewFactory(field.Type)
-				if c.Mode == types.FilterModeIn {
-					node = filter.NewNode().SetOr(true) // OR
-					for _, val := range slicex.Any(c.Value).Iterator() {
-						val, err = caster.CastValue(val)
-						if err != nil {
-							break
-						}
-						matcher := factory.New(types.FilterModeEqual)
-						matcher.WithValue(val)
-						node.AddLeaf(&filter.Filter{
-							Name:    c.Name,
-							Type:    field.Type.BlockType(),
-							Mode:    types.FilterModeEqual,
-							Index:   fx,
-							Id:      field.Id,
-							Value:   val,
-							Matcher: matcher,
-						})
-					}
-				} else {
-					node = filter.NewNode().SetOr(false) // AND
-					for _, val := range slicex.Any(c.Value).Iterator() {
-						val, err = caster.CastValue(val)
-						if err != nil {
-							break
-						}
-						matcher := factory.New(types.FilterModeNotEqual)
-						matcher.WithValue(val)
-						node.AddLeaf(&filter.Filter{
-							Name:    c.Name,
-							Type:    field.Type.BlockType(),
-							Mode:    types.FilterModeNotEqual,
-							Index:   fx,
-							Id:      field.Id,
-							Value:   val,
-							Matcher: matcher,
-						})
-					}
-				}
+			// ensure slice type matches blocks
+			var slice any
+			slice, err = caster.CastSlice(c.Value)
+			if err == nil {
+				matcher.WithSlice(slice)
+				c.Value = slice
 			}
 		case types.FilterModeRange:
 			// ensure range type matches blocks

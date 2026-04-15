@@ -14,7 +14,7 @@ import (
 
 func RandUints[T constraints.Unsigned](sz int) []T {
 	s := make([]T, sz)
-	for i := 0; i < sz; i++ {
+	for i := range sz {
 		s[i] = T(rand.Uint64())
 	}
 	return s

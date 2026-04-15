@@ -82,7 +82,7 @@ func makeRandomValue(typ BlockType) any {
 
 func makeRandomBlock(typ BlockType, sz int) *block.Block {
 	b := block.New(typ, sz)
-	for i := 0; i < sz; i++ {
+	for range sz {
 		switch typ {
 		case BlockInt64:
 			b.Int64().Append(util.RandInt64())
@@ -121,7 +121,7 @@ func TestMatchValue(t *testing.T) {
 	for _, typ := range testMatchBlockTypes {
 		for _, mode := range testMatchSingleValueModes {
 			t.Logf("%s_%s", typ, mode)
-			for i := 0; i < 10; i++ {
+			for range 10 {
 				m := newFactory(typ).New(mode)
 				v1, v2 := makeRandomValue(typ), makeRandomValue(typ)
 				m.WithValue(v1)

@@ -1,5 +1,4 @@
 //go:build !appengine
-// +build !appengine
 
 package xxhash64
 
@@ -43,7 +42,7 @@ func TestInlining(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, line := range strings.Split(string(out), "\n") {
+	for line := range strings.SplitSeq(string(out), "\n") {
 		parts := strings.Split(line, ": can inline")
 		if len(parts) < 2 {
 			continue

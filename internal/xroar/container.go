@@ -367,7 +367,7 @@ type bitmap []uint16
 var bitmapMask [16]uint16
 
 func init() {
-	for i := 0; i < 16; i++ {
+	for i := range 16 {
 		bitmapMask[i] = 1 << (15 - i)
 	}
 }
@@ -555,7 +555,7 @@ func (b bitmap) all() []uint16 {
 	for idx := uint16(0); idx < uint16(len(data)); idx++ {
 		x := data[idx]
 		// TODO: This could potentially be optimized.
-		for pos := uint16(0); pos < 16; pos++ {
+		for pos := range uint16(16) {
 			if x&bitmapMask[pos] > 0 {
 				res = append(res, (idx<<4)|pos)
 			}
@@ -568,11 +568,11 @@ func (b bitmap) all() []uint16 {
 func (b bitmap) selectAt(idx int) uint16 {
 	data := b[startIdx:]
 	n := uint16(len(data))
-	for i := uint16(0); i < n; i++ {
+	for i := range n {
 		x := data[i]
 		c := bits.OnesCount16(x)
 		if idx < c {
-			for pos := uint16(0); pos < 16; pos++ {
+			for pos := range uint16(16) {
 				if idx == 0 && x&bitmapMask[pos] > 0 {
 					return i*16 + pos
 				}

@@ -189,7 +189,7 @@ func umulHop(z, x, y uint64) (hi, lo uint64) {
 // Requires len(x) >= len(y).
 func addTo(x, y []uint64) uint64 {
 	var carry uint64
-	for i := 0; i < len(y); i++ {
+	for i := range y {
 		x[i], carry = bits.Add64(x[i], y[i], carry)
 	}
 	return carry
@@ -199,7 +199,7 @@ func addTo(x, y []uint64) uint64 {
 // Requires len(x) >= len(y).
 func subMulTo(x, y []uint64, multiplier uint64) uint64 {
 	var borrow uint64
-	for i := 0; i < len(y); i++ {
+	for i := range y {
 		s, carry1 := bits.Sub64(x[i], borrow, 0)
 		ph, pl := bits.Mul64(y[i], multiplier)
 		t, carry2 := bits.Sub64(s, pl, 0)

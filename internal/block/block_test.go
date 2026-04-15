@@ -134,7 +134,7 @@ func TestAppend8(t *testing.T) {
 
 func TestGet64(t *testing.T) {
 	block := New(BlockInt64, 1024)
-	for i := 0; i < 1024; i++ {
+	for i := range 1024 {
 		v := util.RandInt64()
 		block.Int64().Append(v)
 		w := block.Int64().Get(i)
@@ -144,7 +144,7 @@ func TestGet64(t *testing.T) {
 
 func TestSet64(t *testing.T) {
 	block := New(BlockInt64, 1024)
-	for i := 0; i < 1024; i++ {
+	for i := range 1024 {
 		block.Int64().Append(util.RandInt64())
 		block.Int64().Set(i, int64(i))
 		require.Equal(t, int64(i), block.Int64().Get(i))

@@ -30,7 +30,7 @@ func BenchmarkMemoryUsage(b *testing.B) {
 
 	incr := uint64(1 << 16)
 	max := uint64(1<<32 - 1)
-	for x := 0; x < 10; x++ {
+	for range 10 {
 		rb := New()
 
 		var i uint64
@@ -84,9 +84,9 @@ func BenchmarkSet(b *testing.B) {
 
 func BenchmarkMerge10K(b *testing.B) {
 	var bitmaps []*Bitmap
-	for i := 0; i < 10000; i++ {
+	for range 10000 {
 		bm := New()
-		for j := 0; j < 1000; j++ {
+		for range 1000 {
 			x := util.RandUint64() % 1e8 // 10M.
 			bm.Set(x)
 		}
@@ -136,7 +136,7 @@ func BenchmarkMerge10K(b *testing.B) {
 func BenchmarkUnsetRange(b *testing.B) {
 	bm := New()
 	N := uint64(1e5)
-	for i := uint64(0); i < N; i++ {
+	for i := range N {
 		bm.Set(i)
 	}
 
@@ -147,7 +147,7 @@ func BenchmarkUnsetRange(b *testing.B) {
 			b.StopTimer()
 			bm2 := bm.Clone()
 			b.StartTimer()
-			for i := uint64(0); i < cnt; i++ {
+			for i := range cnt {
 				bm2.UnsetRange(i*sz, (i+1)*sz)
 			}
 		}
@@ -169,13 +169,13 @@ func BenchmarkUnsetRange(b *testing.B) {
 func BenchmarkSelect(b *testing.B) {
 	bm := New()
 	N := uint64(1e5)
-	for i := uint64(0); i < N; i++ {
+	for i := range N {
 		bm.Set(i)
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		for j := uint64(0); j < N; j++ {
+		for j := range N {
 			bm.Select(j)
 		}
 	}

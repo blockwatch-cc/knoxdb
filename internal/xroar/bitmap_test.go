@@ -19,12 +19,12 @@ func fill(c []uint16, b uint16) {
 func TestModify(t *testing.T) {
 	data := make([]uint16, 16)
 	s := toUint64Slice(data)
-	for i := 0; i < len(s); i++ {
+	for i := range s {
 		s[i] = uint64(i)
 	}
 
 	o := toUint64Slice(data)
-	for i := 0; i < len(o); i++ {
+	for i := range o {
 		require.Equal(t, uint64(i), o[i])
 	}
 }
@@ -90,12 +90,12 @@ func TestKey(t *testing.T) {
 	require.Equal(t, uint16(10), c[indexCardinality])
 
 	// Create 10 containers
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		// t.Logf("Creating a new container: %d\n", i)
 		ra.Set(uint64(i)<<16 + 1)
 	}
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		ra.Set(uint64(i)<<16 + 2)
 	}
 
@@ -254,7 +254,7 @@ func TestBitmapOps(t *testing.T) {
 		smallMap := make(map[uint64]struct{})
 		bigMap := make(map[uint64]struct{})
 
-		for i := 0; i < N; i++ {
+		for range N {
 			smallx := uint64(util.RandInt64n(M))
 
 			_, has := smallMap[smallx]
@@ -356,10 +356,10 @@ func TestBitmapOps(t *testing.T) {
 func TestSetGet(t *testing.T) {
 	bm := New()
 	N := int(1e6)
-	for i := 0; i < N; i++ {
+	for i := range N {
 		bm.Set(uint64(i))
 	}
-	for i := 0; i < N; i++ {
+	for i := range N {
 		has := bm.Contains(uint64(i))
 		require.True(t, has)
 	}
@@ -368,14 +368,14 @@ func TestSetGet(t *testing.T) {
 func TestSetSorted(t *testing.T) {
 	check := func(n int) {
 		var arr []uint64
-		for i := 0; i < n; i++ {
+		for i := range n {
 			arr = append(arr, uint64(i))
 		}
 		r := NewFromSorted(arr)
 		require.Equal(t, len(arr), r.Count())
 
 		rarr := r.ToArray(nil)
-		for i := 0; i < n; i++ {
+		for i := range n {
 			require.Equal(t, uint64(i), rarr[i])
 		}
 
@@ -391,7 +391,7 @@ func TestAnd(t *testing.T) {
 	b := New()
 
 	N := int(1e6)
-	for i := 0; i < N; i++ {
+	for i := range N {
 		if i%2 == 0 {
 			a.Set(uint64(i))
 		} else {
@@ -410,13 +410,13 @@ func TestAnd2(t *testing.T) {
 	a := New()
 	n := int(1e6)
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		a.Set(uint64(i))
 	}
 	require.Equal(t, n, a.Count())
 	a.UnsetRange(0, uint64(n/2))
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		a.Set(uint64(i))
 	}
 	require.Equal(t, n, a.Count())
@@ -427,7 +427,7 @@ func TestAndNot(t *testing.T) {
 	b := New()
 
 	N := int(1e6)
-	for i := 0; i < N; i++ {
+	for i := range N {
 		a.Set(uint64(i))
 		if i < N/2 {
 			b.Set(uint64(i))
@@ -452,7 +452,7 @@ func TestAndNot(t *testing.T) {
 	// Test for case when bitmap container will be generated.
 	a = New()
 	b = New()
-	for i := 0; i < 10000; i++ {
+	for i := range 10000 {
 		a.Set(uint64(i))
 		if i < 7000 {
 			b.Set(uint64(i))
@@ -460,7 +460,7 @@ func TestAndNot(t *testing.T) {
 	}
 	a.AndNot(b)
 	require.Equal(t, 3000, a.Count())
-	for i := 0; i < 10000; i++ {
+	for i := range 10000 {
 		if i < 7000 {
 			require.False(t, a.Contains(uint64(i)))
 		} else {
@@ -491,7 +491,7 @@ func TestOr(t *testing.T) {
 	b := New()
 
 	N := int(1e6)
-	for i := 0; i < N; i++ {
+	for i := range N {
 		if i%2 == 0 {
 			a.Set(uint64(i))
 		} else {
@@ -509,7 +509,7 @@ func TestOr(t *testing.T) {
 func TestCardinality(t *testing.T) {
 	a := New()
 	n := 1 << 20
-	for i := 0; i < n; i++ {
+	for i := range n {
 		a.Set(uint64(i))
 	}
 	require.Equal(t, n, a.Count())
@@ -518,7 +518,7 @@ func TestCardinality(t *testing.T) {
 func TestUnset(t *testing.T) {
 	a := New()
 	N := int(1 << 20)
-	for i := 0; i < N; i++ {
+	for i := range N {
 		a.Set(uint64(i))
 	}
 	require.Equal(t, N, a.Count())
@@ -599,7 +599,7 @@ func TestContainerUnsetRange(t *testing.T) {
 func TestUnsetRange(t *testing.T) {
 	a := New()
 	N := int(1e6)
-	for i := 0; i < N; i++ {
+	for i := range N {
 		a.Set(uint64(i))
 	}
 	a.UnsetRange(0, 0)
@@ -620,7 +620,7 @@ func TestUnsetRange(t *testing.T) {
 	require.Equal(t, 3, a.Count())
 
 	var arr []uint64
-	for i := 0; i < 123; i++ {
+	for i := range 123 {
 		arr = append(arr, uint64(i))
 	}
 	b := NewFromSorted(arr)
@@ -642,10 +642,10 @@ func TestUnsetRange2(t *testing.T) {
 func TestSelect(t *testing.T) {
 	a := New()
 	N := int(1e4)
-	for i := 0; i < N; i++ {
+	for i := range N {
 		a.Set(uint64(i))
 	}
-	for i := 0; i < N; i++ {
+	for i := range N {
 		val, err := a.Select(uint64(i))
 		require.NoError(t, err)
 		require.Equal(t, uint64(i), val)
@@ -656,7 +656,7 @@ func TestClone(t *testing.T) {
 	a := New()
 	N := int(1e5)
 
-	for i := 0; i < N; i++ {
+	for range N {
 		a.Set(uint64(util.RandInt64n(math.MaxInt64)))
 	}
 	b := a.Clone()
@@ -669,7 +669,7 @@ func TestContainerFull(t *testing.T) {
 	b := bitmap(c)
 	b[indexType] = typeBitmap
 	b[indexSize] = maxContainerSize
-	for i := 0; i < 1<<16; i++ {
+	for i := range 1 << 16 {
 		b.add(uint16(i))
 	}
 	require.Equal(t, math.MaxUint16+1, getCardinality(b))
@@ -760,13 +760,13 @@ func TestCleanup(t *testing.T) {
 func TestCleanup2(t *testing.T) {
 	a := New()
 	n := 10
-	for i := 0; i < n; i++ {
+	for i := range n {
 		a.Set(uint64(i * (1 << 16)))
 	}
 	require.Equal(t, n, a.Count())
 	require.Equal(t, n, a.keys.numKeys())
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if i%2 == 1 {
 			a.Unset(uint64(i * (1 << 16)))
 		}
@@ -783,7 +783,7 @@ func TestCleanupSplit(t *testing.T) {
 	a := New()
 	n := int(1 << 20)
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		a.Set(uint64(i))
 	}
 
@@ -808,7 +808,7 @@ func TestIsEmpty(t *testing.T) {
 	require.True(t, a.None())
 
 	n := int(1e6)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		a.Set(uint64(i))
 	}
 	require.False(t, a.None())

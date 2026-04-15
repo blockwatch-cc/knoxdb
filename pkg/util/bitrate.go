@@ -47,47 +47,49 @@ const (
 
 var ErrInvalidBitrate = errors.New("invalid bitrate")
 
+var bps = "bit/s"
+
 func (r BitRate) Size(d time.Duration) ByteSize {
-	return ByteSize(float64(r) * (float64(d) / float64(time.Second)) / 8)
+	return ByteSize(float64(r) * d.Seconds() / 8)
 }
 
 func ParseBitRate(r string) (BitRate, error) {
 	var f BitRate
 	var pos int
 	switch {
-	case strings.HasSuffix(r, "Ybit/s"):
+	case strings.HasSuffix(r, "Y"+bps):
 		f, pos = Ybit, len(r)-6
-	case strings.HasSuffix(r, "Yibit/s"):
+	case strings.HasSuffix(r, "Yi"+bps):
 		f, pos = Yibit, len(r)-7
-	case strings.HasSuffix(r, "Zbit/s"):
+	case strings.HasSuffix(r, "Z"+bps):
 		f, pos = Zbit, len(r)-6
-	case strings.HasSuffix(r, "Zibit/s"):
+	case strings.HasSuffix(r, "Zi"+bps):
 		f, pos = Zibit, len(r)-7
-	case strings.HasSuffix(r, "Ebit/s"):
+	case strings.HasSuffix(r, "E"+bps):
 		f, pos = Ebit, len(r)-6
-	case strings.HasSuffix(r, "Eibit/s"):
+	case strings.HasSuffix(r, "Ei"+bps):
 		f, pos = Eibit, len(r)-7
-	case strings.HasSuffix(r, "Pbit/s"):
+	case strings.HasSuffix(r, "P"+bps):
 		f, pos = Pbit, len(r)-6
-	case strings.HasSuffix(r, "Pibit/s"):
+	case strings.HasSuffix(r, "Pi"+bps):
 		f, pos = Pibit, len(r)-7
-	case strings.HasSuffix(r, "Tbit/s"):
+	case strings.HasSuffix(r, "T"+bps):
 		f, pos = Tbit, len(r)-6
-	case strings.HasSuffix(r, "Tibit/s"):
+	case strings.HasSuffix(r, "Ti"+bps):
 		f, pos = Tibit, len(r)-7
-	case strings.HasSuffix(r, "Gbit/s"):
+	case strings.HasSuffix(r, "G"+bps):
 		f, pos = Gbit, len(r)-6
-	case strings.HasSuffix(r, "Gibit/s"):
+	case strings.HasSuffix(r, "Gi"+bps):
 		f, pos = Gibit, len(r)-7
-	case strings.HasSuffix(r, "Mbit/s"):
+	case strings.HasSuffix(r, "M"+bps):
 		f, pos = Mbit, len(r)-6
-	case strings.HasSuffix(r, "Mibit/s"):
+	case strings.HasSuffix(r, "Mi"+bps):
 		f, pos = Mibit, len(r)-7
-	case strings.HasSuffix(r, "kbit/s"):
+	case strings.HasSuffix(r, "k"+bps):
 		f, pos = Kbit, len(r)-6
-	case strings.HasSuffix(r, "kibit/s"):
+	case strings.HasSuffix(r, "ki"+bps):
 		f, pos = Kibit, len(r)-7
-	case strings.HasSuffix(r, "bit/s"):
+	case strings.HasSuffix(r, ""+bps):
 		f, pos = 1, len(r)-5
 	default:
 		f, pos = 1, len(r)
@@ -103,23 +105,23 @@ func ParseBitRate(r string) (BitRate, error) {
 func (r BitRate) String() string {
 	switch {
 	case r > Ybit:
-		return fmt.Sprintf("%.2fYbit/s", r/Ybit)
+		return fmt.Sprintf("%.2fY%s", r/Ybit, bps)
 	case r > Zbit:
-		return fmt.Sprintf("%.2fZbit/s", r/Zbit)
+		return fmt.Sprintf("%.2fZ%s", r/Zbit, bps)
 	case r > Ebit:
-		return fmt.Sprintf("%.2fEbit/s", r/Ebit)
+		return fmt.Sprintf("%.2fE%s", r/Ebit, bps)
 	case r > Pbit:
-		return fmt.Sprintf("%.2fPbit/s", r/Pbit)
+		return fmt.Sprintf("%.2fP%s", r/Pbit, bps)
 	case r > Tbit:
-		return fmt.Sprintf("%.2fTbit/s", r/Tbit)
+		return fmt.Sprintf("%.2fT%s", r/Tbit, bps)
 	case r > Gbit:
-		return fmt.Sprintf("%.2fGbit/s", r/Gbit)
+		return fmt.Sprintf("%.2fG%s", r/Gbit, bps)
 	case r > Mbit:
-		return fmt.Sprintf("%.2fMbit/s", r/Mbit)
+		return fmt.Sprintf("%.2fM%s", r/Mbit, bps)
 	case r > Kbit:
-		return fmt.Sprintf("%.2fkbit/s", r/Kbit)
+		return fmt.Sprintf("%.2fk%s", r/Kbit, bps)
 	default:
-		return fmt.Sprintf("%.2fbit/s", r)
+		return fmt.Sprintf("%.2f%s", r, bps)
 	}
 }
 

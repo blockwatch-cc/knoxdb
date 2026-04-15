@@ -11,7 +11,7 @@ var (
 )
 
 func bitmapOrGeneric(data []uint16, other []uint16) (num int) {
-	for i := 0; i < len(data); i++ {
+	for i := range data {
 		data[i] |= other[i]
 		// We are going to iterate over the entire container. So, we can
 		// just recount the cardinality, starting from num=0.
@@ -21,7 +21,7 @@ func bitmapOrGeneric(data []uint16, other []uint16) (num int) {
 }
 
 func bitmapAndGeneric(data []uint16, other []uint16, buf []uint16) (num int) {
-	for i := 0; i < len(data); i++ {
+	for i := range data {
 		buf[i] = data[i] & other[i]
 		// We are going to iterate over the entire container. So, we can
 		// just recount the cardinality, starting from num=0.
@@ -31,7 +31,7 @@ func bitmapAndGeneric(data []uint16, other []uint16, buf []uint16) (num int) {
 }
 
 func bitmapAndNotGeneric(data []uint16, other []uint16, buf []uint16) (num int) {
-	for i := 0; i < len(data); i++ {
+	for i := range data {
 		// data[i] = data[i] ^ (data[i] & v)
 		buf[i] = (data[i] &^ other[i]) // improved performance
 		// We are going to iterate over the entire container. So, we can

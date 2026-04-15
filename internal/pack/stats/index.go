@@ -775,7 +775,7 @@ func (idx *Index) Query(ctx context.Context, flt *filter.Node, dir types.OrderTy
 		flt = idx.makeRidFilter(types.FilterModeGt, 0)
 	}
 
-	for n := 0; n < maxInodes; n++ {
+	for n := range maxInodes {
 		// skip this branch if unset
 		if !nodeBits.Contains(n) {
 			continue

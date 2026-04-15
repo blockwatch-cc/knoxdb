@@ -15,7 +15,7 @@ func TestLRU(t *testing.T) {
 		t.Fatalf("err: %v", err)
 	}
 
-	for i := 0; i < 256; i++ {
+	for i := range 256 {
 		l.Add(i, i)
 	}
 	if l.Len() != 128 {
@@ -31,7 +31,7 @@ func TestLRU(t *testing.T) {
 			t.Fatalf("bad key: %v", k)
 		}
 	}
-	for i := 0; i < 128; i++ {
+	for i := range 128 {
 		_, ok := l.Get(i)
 		if ok {
 			t.Fatalf("should be evicted")
@@ -80,7 +80,7 @@ func TestLRU_GetOldest_RemoveOldest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
-	for i := 0; i < 256; i++ {
+	for i := range 256 {
 		l.Add(i, i)
 	}
 	k, _, ok := l.GetOldest()
@@ -111,7 +111,7 @@ func TestLRU_GetOldest_RemoveOldest(t *testing.T) {
 // Test that Add returns true/false if an eviction occurred
 func TestLRU_Add(t *testing.T) {
 	evictCounter := 0
-	onEvicted := func(k interface{}, v interface{}) {
+	onEvicted := func(k any, v any) {
 		evictCounter++
 	}
 

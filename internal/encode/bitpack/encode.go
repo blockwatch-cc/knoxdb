@@ -221,7 +221,7 @@ func encode[T types.Integer](dst []uint64, src []T, log2 int, minv T) int {
 		mask   = uint64((1 << log2) - 1) // e.g., b=3 -> mask=0b111
 	)
 
-	for i := 0; i < len(src); i++ {
+	for i := range src {
 		word |= uint64((src[i] - minv)) & mask << offset
 		offset += log2
 		if offset >= BitsSize { // If we've filled a 64-bit word

@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -46,7 +47,7 @@ func IsBase64(s string) bool {
 	return err == nil
 }
 
-func ToRawString(t interface{}) (string, error) {
+func ToRawString(t any) (string, error) {
 	val := reflect.Indirect(reflect.ValueOf(t))
 	if !val.IsValid() {
 		return "", nil
@@ -111,8 +112,8 @@ func ToRawString(t interface{}) (string, error) {
 
 type StringList []string
 
-func (l StringList) AsInterface() []interface{} {
-	il := make([]interface{}, len(l))
+func (l StringList) AsInterface() []any {
+	il := make([]any, len(l))
 	for i, v := range l {
 		il[i] = v
 	}
@@ -120,12 +121,7 @@ func (l StringList) AsInterface() []interface{} {
 }
 
 func (l StringList) Contains(r string) bool {
-	for _, v := range l {
-		if v == r {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(l, r)
 }
 
 func (l *StringList) Add(r string) StringList {
@@ -236,12 +232,12 @@ func QuoteString(s string) string {
 	return strings.Join([]string{"\"", s, "\""}, "")
 }
 
-func JsonString(v interface{}) string {
+func JsonString(v any) string {
 	b, _ := json.Marshal(v)
 	return string(b)
 }
 
-func HexString(v interface{}) string {
+func HexString(v any) string {
 	var b []byte
 	if enc, ok := v.(encoding.BinaryMarshaler); ok {
 		b, _ = enc.MarshalBinary()
@@ -250,12 +246,7 @@ func HexString(v interface{}) string {
 }
 
 func ContainsString(s string, list []string) bool {
-	for _, b := range list {
-		if b == s {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(list, s)
 }
 
 func ToTitle(src string) string {

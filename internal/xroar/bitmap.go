@@ -148,7 +148,7 @@ func NewFromSorted[T constraints.Integer](vals []T) *Bitmap {
 			c[indexSize] = sz
 			c[indexType] = typeArray
 			setCardinality(c, len(l))
-			for i := 0; i < len(l); i++ {
+			for i := range l {
 				c[int(startIdx)+i] = l[i]
 			}
 
@@ -230,7 +230,7 @@ func (ra *Bitmap) None() bool {
 		return true
 	}
 	N := ra.keys.numKeys()
-	for i := 0; i < N; i++ {
+	for i := range N {
 		offset := ra.keys.val(i)
 		cont := ra.getContainer(offset)
 		if c := getCardinality(cont); c > 0 {
@@ -501,7 +501,7 @@ func (ra *Bitmap) Count() int {
 	}
 	N := ra.keys.numKeys()
 	var sz int
-	for i := 0; i < N; i++ {
+	for i := range N {
 		offset := ra.keys.val(i)
 		c := ra.getContainer(offset)
 		sz += getCardinality(c)
@@ -516,7 +516,7 @@ func (ra *Bitmap) Select(x uint64) (uint64, error) {
 			x, ra.Count())
 	}
 	n := ra.keys.numKeys()
-	for i := 0; i < n; i++ {
+	for i := range n {
 		off := ra.keys.val(i)
 		con := ra.getContainer(off)
 		c := uint64(getCardinality(con))
@@ -567,10 +567,7 @@ func (ra *Bitmap) setKey(k uint64, offset uint64) uint64 {
 
 	// ra.keys is full. We should expand its size.
 	curSize := uint64(len(ra.keys) * 4) // Multiply by 4 for U64 -> U16.
-	bySize := curSize
-	if bySize > math.MaxUint16 {
-		bySize = math.MaxUint16
-	}
+	bySize := min(curSize, math.MaxUint16)
 
 	ra.scootRight(curSize, bySize)
 	ra.keys = toUint64Slice(ra.data[:curSize+bySize])
@@ -600,10 +597,7 @@ func (ra *Bitmap) fastExpand(bySize uint64) {
 		ra.data = ra.data[:toSize]
 		return
 	}
-	growBy := cap(ra.data)
-	if growBy < int(bySize) {
-		growBy = int(bySize)
-	}
+	growBy := max(cap(ra.data), int(bySize))
 	out := make([]uint16, cap(ra.data)+growBy)
 	copy(out, ra.data)
 	ra.data = out[:toSize]
@@ -777,7 +771,7 @@ func (ra *Bitmap) ToArray(res []uint64) []uint64 {
 	}
 	res = res[:0]
 	N := ra.keys.numKeys()
-	for i := 0; i < N; i++ {
+	for i := range N {
 		key := ra.keys.key(i)
 		off := ra.keys.val(i)
 		c := ra.getContainer(off)
@@ -871,7 +865,7 @@ func (ra *Bitmap) extreme(dir int) uint64 {
 	var c []uint16
 
 	if dir == fwd {
-		for i := 0; i < N; i++ {
+		for i := range N {
 			offset := ra.keys.val(i)
 			c = ra.getContainer(offset)
 			if getCardinality(c) > 0 {

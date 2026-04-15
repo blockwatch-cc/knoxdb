@@ -107,10 +107,7 @@ func (s Symbol) Hash() uint64 {
 
 func (s Symbol) Concat(s2 Symbol) Symbol {
 	var newS Symbol
-	length := s.Len() + s2.Len()
-	if length > SYMBOL_MAX_LENGTH {
-		length = SYMBOL_MAX_LENGTH
-	}
+	length := min(s.Len()+s2.Len(), SYMBOL_MAX_LENGTH)
 	newS = newS.SetCodeLen(uint32(FSST_CODE_MASK), length)
 	newS.val.SetUint64((s2.val.Uint64() << (8 * s.Len())) | s.val.Uint64())
 	return newS

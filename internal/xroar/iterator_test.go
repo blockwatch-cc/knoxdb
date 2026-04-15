@@ -17,7 +17,7 @@
 package xroar
 
 import (
-	"sort"
+	"slices"
 	"testing"
 
 	"blockwatch.cc/knoxdb/pkg/util"
@@ -49,7 +49,7 @@ func TestIteratorRanges(t *testing.T) {
 
 	iters := bm.NewRangeIterators(8)
 	cnt := uint64(1)
-	for idx := 0; idx < 8; idx++ {
+	for idx := range 8 {
 		it := iters[idx]
 		for v, ok := it.Next(); ok; v, ok = it.Next() {
 			require.Equal(t, cnt, v)
@@ -76,9 +76,7 @@ func TestIteratorRandom(t *testing.T) {
 		bm.Set(v)
 	}
 
-	sort.Slice(arr, func(i, j int) bool {
-		return arr[i] < arr[j]
-	})
+	slices.Sort(arr)
 
 	it := bm.NewIterator()
 	v, _ := it.Next()
@@ -91,7 +89,7 @@ func TestIteratorRandom(t *testing.T) {
 func TestIteratorWithRemoveKeys(t *testing.T) {
 	b := New()
 	N := uint64(1e6)
-	for i := uint64(0); i < N; i++ {
+	for i := range N {
 		b.Set(i)
 	}
 
@@ -107,7 +105,7 @@ func TestIteratorWithRemoveKeys(t *testing.T) {
 
 func BenchmarkIterator(b *testing.B) {
 	bm := New()
-	for i := 0; i < int(1e5); i++ {
+	for i := range int(1e5) {
 		bm.Set(uint64(i))
 	}
 

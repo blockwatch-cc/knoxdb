@@ -137,7 +137,7 @@ func TestWalOptions(t *testing.T) {
 		defer w.Close()
 
 		// Write records to force multiple segment creation
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			rec := &Record{
 				TxID: types.XID(i + 1),
 				Tag:  types.ObjectTagDatabase,
@@ -461,13 +461,13 @@ func TestWalSyncAndClose(t *testing.T) {
 	w := createWal(t, opts)
 
 	// Write some records
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		rec := &Record{
 			Type:   RecordTypeInsert,
 			Tag:    types.ObjectTagDatabase,
 			Entity: uint64(i),
 			TxID:   types.XID(i + 1*100),
-			Data:   [][]byte{[]byte(fmt.Sprintf("data%d", i))},
+			Data:   [][]byte{fmt.Appendf(nil, "data%d", i)},
 		}
 		_, err := w.Write(rec)
 		require.NoError(t, err)
@@ -494,15 +494,15 @@ func TestWalAsyncWait(t *testing.T) {
 	// Write concurrent records
 	errg := &errgroup.Group{}
 	errg.SetLimit(32)
-	for th := 0; th < 32; th++ {
+	for th := range 32 {
 		errg.Go(func() error {
-			for i := 0; i < 10; i++ {
+			for i := range 10 {
 				rec := &Record{
 					Type:   RecordTypeInsert,
 					Tag:    types.ObjectTagDatabase,
 					Entity: uint64(i),
 					TxID:   types.XID(i + th*100 + 1),
-					Data:   [][]byte{[]byte(fmt.Sprintf("data%d", i))},
+					Data:   [][]byte{fmt.Appendf(nil, "data%d", i)},
 				}
 				_, fut, err := w.WriteAndSchedule(rec)
 				if err != nil {
@@ -530,15 +530,15 @@ func TestWalAsyncNoWait(t *testing.T) {
 	// Write concurrent records
 	errg := &errgroup.Group{}
 	errg.SetLimit(32)
-	for th := 0; th < 32; th++ {
+	for th := range 32 {
 		errg.Go(func() error {
-			for i := 0; i < 100; i++ {
+			for i := range 100 {
 				rec := &Record{
 					Type:   RecordTypeInsert,
 					Tag:    types.ObjectTagDatabase,
 					Entity: uint64(i),
 					TxID:   types.XID(i + th*100 + 1),
-					Data:   [][]byte{[]byte(fmt.Sprintf("data%d", i))},
+					Data:   [][]byte{fmt.Appendf(nil, "data%d", i)},
 				}
 				_, fut, err := w.WriteAndSchedule(rec)
 				if err != nil {
@@ -591,7 +591,7 @@ func TestWalSegmentRollover(t *testing.T) {
 
 	recordsWritten := 0
 	bytesWritten := 0
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		rec := &Record{
 			Type:   RecordTypeInsert,
 			Tag:    types.ObjectTagDatabase,
@@ -687,13 +687,13 @@ func TestWalRecovery(t *testing.T) {
 		require.NoError(t, err)
 
 		// Write some records
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			rec := &Record{
 				Type:   RecordTypeInsert,
 				Tag:    types.ObjectTagDatabase,
 				Entity: uint64(i),
 				TxID:   types.XID(i + 1*100),
-				Data:   [][]byte{[]byte(fmt.Sprintf("data%d", i))},
+				Data:   [][]byte{fmt.Appendf(nil, "data%d", i)},
 			}
 			_, err := w.Write(rec)
 			require.NoError(t, err)
@@ -737,13 +737,13 @@ func TestWalRecovery(t *testing.T) {
 		require.NoError(t, err)
 
 		// Write some records
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			rec := &Record{
 				Type:   RecordTypeInsert,
 				Tag:    types.ObjectTagDatabase,
 				Entity: uint64(i),
 				TxID:   types.XID(i + 1*100),
-				Data:   [][]byte{[]byte(fmt.Sprintf("data%d", i))},
+				Data:   [][]byte{fmt.Appendf(nil, "data%d", i)},
 			}
 			_, err := w.Write(rec)
 			require.NoError(t, err)
@@ -858,7 +858,7 @@ func TestWalRecoveryWithPartialRecords(t *testing.T) {
 			Tag:    types.ObjectTagDatabase,
 			Entity: uint64(i),
 			TxID:   types.XID(i),
-			Data:   [][]byte{[]byte(fmt.Sprintf("complete data %d", i))},
+			Data:   [][]byte{fmt.Appendf(nil, "complete data %d", i)},
 		}
 		_, err := w.Write(rec)
 		require.NoError(t, err)
@@ -918,7 +918,7 @@ func TestWalRecoveryWithPartialRecords(t *testing.T) {
 		require.Equal(t, types.ObjectTagDatabase, rec.Tag)
 		require.Equal(t, uint64(j), rec.Entity)
 		require.Equal(t, types.XID(j), rec.TxID)
-		require.Equal(t, [][]byte{[]byte(fmt.Sprintf("complete data %d", j))}, rec.Data)
+		require.Equal(t, [][]byte{fmt.Appendf(nil, "complete data %d", j)}, rec.Data)
 		recoveredCounter++
 		j++
 	}
@@ -1068,7 +1068,7 @@ func TestWalFaultInjection(t *testing.T) {
 				Type: RecordTypeInsert,
 				Tag:  types.ObjectTagDatabase,
 				TxID: types.XID(i),
-				Data: [][]byte{[]byte(fmt.Sprintf("data %d", i))},
+				Data: [][]byte{fmt.Appendf(nil, "data %d", i)},
 			}
 			lastLSN, err = w.Write(rec)
 			require.NoError(t, err)
@@ -1244,7 +1244,7 @@ func TestWalFaultInjection(t *testing.T) {
 		defer w.Close()
 
 		// Write records until close to segment boundary
-		for i := 0; i < 1000; i++ {
+		for i := range 1000 {
 			rec := &Record{
 				Type: RecordTypeInsert,
 				Tag:  types.ObjectTagDatabase,
@@ -1283,7 +1283,7 @@ func TestWalFaultInjection(t *testing.T) {
 		err = reader.Seek(lastLSN)
 		require.NoError(t, err)
 
-		for i := 0; i < 5; i++ {
+		for range 5 {
 			_, err = reader.Next()
 			if err != nil {
 				break

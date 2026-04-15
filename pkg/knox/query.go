@@ -299,7 +299,7 @@ func (q Query) Execute(ctx context.Context, val any) (n int, err error) {
 
 	// we expect a pointer to struct or pointer to slice
 	rval := reflect.ValueOf(val)
-	if rval.Kind() != reflect.Ptr {
+	if rval.Kind() != reflect.Pointer {
 		err = fmt.Errorf("query %s: %v", q.tag, ErrNoPointer)
 		return
 	}
@@ -324,7 +324,7 @@ func (q Query) Execute(ctx context.Context, val any) (n int, err error) {
 			// reuse existing slice elements
 			err = q.table.Stream(ctx, q, func(r QueryRow) error {
 				ev := rval.Index(n)
-				if ev.Kind() == reflect.Ptr {
+				if ev.Kind() == reflect.Pointer {
 					// allocate when nil ptr
 					if ev.IsNil() {
 						ev.Set(reflect.New(ev.Type().Elem()))
@@ -347,7 +347,7 @@ func (q Query) Execute(ctx context.Context, val any) (n int, err error) {
 				ev := e
 
 				// if element is ptr to struct, allocate the underlying struct
-				if e.Elem().Kind() == reflect.Ptr {
+				if e.Elem().Kind() == reflect.Pointer {
 					ev.Elem().Set(reflect.New(e.Elem().Type().Elem()))
 					ev = reflect.Indirect(e)
 				}

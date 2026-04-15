@@ -64,7 +64,7 @@ func preview(buf []byte) string {
 
 func printOflag(f experimentalsys.Oflag) string {
 	var b strings.Builder
-	for i := 0; i < 13; i++ {
+	for i := range 13 {
 		if i <= 2 {
 			if int(f&0x3) == i {
 				if b.Len() > 0 {

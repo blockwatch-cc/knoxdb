@@ -80,7 +80,7 @@ var indexTestCases = []indexTest{
 	{
 		name:      "hash index",
 		build:     GenericSchema[HashIndex],
-		idxnames:  []string{"id_index", "hash_index"},
+		idxnames:  []string{"hash_index_id_index", "hash_index_hash_index"},
 		idxfields: []string{"id", "hash"},
 		idxextra:  []string{"", ""},
 		idxtyps:   []IndexType{I_PK, I_HASH},
@@ -88,7 +88,7 @@ var indexTestCases = []indexTest{
 	{
 		name:      "integer index",
 		build:     GenericSchema[IntegerIndex],
-		idxnames:  []string{"id_index", "i64_index"},
+		idxnames:  []string{"integer_index_id_index", "integer_index_i64_index"},
 		idxfields: []string{"id", "i64"},
 		idxextra:  []string{"", ""},
 		idxtyps:   []IndexType{I_PK, I_INT},
@@ -96,7 +96,7 @@ var indexTestCases = []indexTest{
 	{
 		name:      "integer index with extra",
 		build:     GenericSchema[IntegerIndexWithExtra],
-		idxnames:  []string{"id_index", "i64_index"},
+		idxnames:  []string{"integer_index_with_extra_id_index", "integer_index_with_extra_i64_index"},
 		idxfields: []string{"id", "i64"},
 		idxextra:  []string{"", "i62"},
 		idxtyps:   []IndexType{I_PK, I_INT},
@@ -104,7 +104,7 @@ var indexTestCases = []indexTest{
 	{
 		name:      "composite index",
 		build:     GenericSchema[CompositeIndex],
-		idxnames:  []string{"id_index", "c1"},
+		idxnames:  []string{"composite_index_id_index", "composite_index_c1"},
 		idxfields: []string{"id", "i64,i66"},
 		idxextra:  []string{"", ""},
 		idxtyps:   []IndexType{I_PK, I_COMPOSITE},
@@ -112,7 +112,7 @@ var indexTestCases = []indexTest{
 	{
 		name:      "double composite index",
 		build:     GenericSchema[DoubleCompositeIndex],
-		idxnames:  []string{"id_index", "c1", "c2"},
+		idxnames:  []string{"double_composite_index_id_index", "double_composite_index_c1", "double_composite_index_c2"},
 		idxfields: []string{"id", "i64,i65", "i65,i66"},
 		idxextra:  []string{"", "", "i64,i66"},
 		idxtyps:   []IndexType{I_PK, I_COMPOSITE, I_COMPOSITE},

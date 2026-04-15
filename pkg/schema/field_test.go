@@ -89,8 +89,7 @@ func TestFieldReflectField(t *testing.T) {
 		StringField string
 	}
 
-	testStruct := TestStruct{}
-	structType := reflect.TypeOf(testStruct)
+	structType := reflect.TypeFor[TestStruct]()
 
 	t.Run("Int32Field", func(t *testing.T) {
 		// field := NewField(FT_I32)
@@ -282,7 +281,7 @@ func TestFieldStructValueRetrieval(t *testing.T) {
 
 	rval := reflect.ValueOf(value)
 
-	rvalTypeOf := reflect.TypeOf(value)
+	rvalTypeOf := reflect.TypeFor[TestStruct]()
 	IntField, err := reflectStructField(rvalTypeOf.Field(0), TAG_NAME)
 	require.NoError(t, err)
 
@@ -309,7 +308,7 @@ func TestFieldStructValueRetrieval(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			result := tc.field.StructValue(rval)
-			if result.Kind() == reflect.Ptr {
+			if result.Kind() == reflect.Pointer {
 				result = result.Elem()
 			}
 			assert.Equal(t, tc.expected, result.Interface())
@@ -411,14 +410,14 @@ func TestFieldRangeAndOverflow(t *testing.T) {
 		max        any
 		isUnsigned bool
 	}{
-		{FT_I8, reflect.TypeOf(int8(0)), int8(0), int8(math.MinInt8), int8(math.MaxInt8), false},
-		{FT_I16, reflect.TypeOf(int16(0)), int16(0), int16(math.MinInt16), int16(math.MaxInt16), false},
-		{FT_I32, reflect.TypeOf(int32(0)), int32(0), int32(math.MinInt32), int32(math.MaxInt32), false},
-		{FT_I64, reflect.TypeOf(int64(0)), int64(0), int64(math.MinInt64), int64(math.MaxInt64), false},
-		{FT_U8, reflect.TypeOf(uint8(0)), uint8(0), uint8(0), uint8(math.MaxUint8), true},
-		{FT_U16, reflect.TypeOf(uint16(0)), uint16(0), uint16(0), uint16(math.MaxUint16), true},
-		{FT_U32, reflect.TypeOf(uint32(0)), uint32(0), uint32(0), uint32(math.MaxUint32), true},
-		{FT_U64, reflect.TypeOf(uint64(0)), uint64(0), uint64(0), uint64(math.MaxUint64), true},
+		{FT_I8, reflect.TypeFor[int8](), int8(0), int8(math.MinInt8), int8(math.MaxInt8), false},
+		{FT_I16, reflect.TypeFor[int16](), int16(0), int16(math.MinInt16), int16(math.MaxInt16), false},
+		{FT_I32, reflect.TypeFor[int32](), int32(0), int32(math.MinInt32), int32(math.MaxInt32), false},
+		{FT_I64, reflect.TypeFor[int64](), int64(0), int64(math.MinInt64), int64(math.MaxInt64), false},
+		{FT_U8, reflect.TypeFor[uint8](), uint8(0), uint8(0), uint8(math.MaxUint8), true},
+		{FT_U16, reflect.TypeFor[uint16](), uint16(0), uint16(0), uint16(math.MaxUint16), true},
+		{FT_U32, reflect.TypeFor[uint32](), uint32(0), uint32(0), uint32(math.MaxUint32), true},
+		{FT_U64, reflect.TypeFor[uint64](), uint64(0), uint64(0), uint64(math.MaxUint64), true},
 	}
 
 	for _, targetType := range intTypes {
@@ -579,12 +578,12 @@ func TestFieldEncode(t *testing.T) {
 // TestFieldUtilityMethods verifies the correctness of various utility methods on the Field struct.
 func TestFieldUtilityMethods(t *testing.T) {
 	// unsuported field type generates error
-	marshalTypeOf := reflect.TypeOf(MarshalerTypes{})
+	marshalTypeOf := reflect.TypeFor[MarshalerTypes]()
 	_, err := reflectStructField(marshalTypeOf.Field(2), TAG_NAME)
 	require.Error(t, err)
 
 	// supported field types work
-	allTypeOf := reflect.TypeOf(AllTypes{})
+	allTypeOf := reflect.TypeFor[AllTypes]()
 	arrayField, err := reflectStructField(allTypeOf.Field(20), TAG_NAME)
 	require.NoError(t, err)
 
@@ -692,7 +691,7 @@ func TestFieldUtilityMethods(t *testing.T) {
 
 // TestFieldCodecSpecialCases verifies that Field correctly handles special codec cases.
 func TestFieldCodecSpecialCases(t *testing.T) {
-	allTypeOf := reflect.TypeOf(AllTypes{})
+	allTypeOf := reflect.TypeFor[AllTypes]()
 	arrayField, err := reflectStructField(allTypeOf.Field(20), TAG_NAME)
 	require.NoError(t, err)
 
@@ -725,7 +724,7 @@ func TestFieldStructValueComplexCases(t *testing.T) {
 		StringField: "test",
 	}
 
-	valueTypeOf := reflect.TypeOf(value)
+	valueTypeOf := reflect.TypeFor[TestStruct]()
 	intField, err := reflectStructField(valueTypeOf.Field(0), TAG_NAME)
 	require.NoError(t, err)
 
@@ -754,7 +753,7 @@ func TestFieldStructValueComplexCases(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := tt.field.StructValue(rval)
-			if result.Kind() == reflect.Ptr {
+			if result.Kind() == reflect.Pointer {
 				result = result.Elem()
 			}
 			assert.Equal(t, tt.expected, result.Interface())

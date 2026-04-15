@@ -68,7 +68,7 @@ func TestWorkload4(t *testing.T) {
 
 	// Insert initial work rows
 	initRows := make([]*UnifiedRow, 0)
-	for i := 0; i < numWorkRows; i++ {
+	for range numWorkRows {
 		row := &UnifiedRow{
 			RowType:  RowTypeWork,
 			ThreadID: 0,

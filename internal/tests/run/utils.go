@@ -63,7 +63,7 @@ func initFlags() {
 	flag.Parse()
 
 	if seedString != "" {
-		for _, v := range strings.Split(seedString, ",") {
+		for v := range strings.SplitSeq(seedString, ",") {
 			val, _ := strconv.ParseUint(v, 0, 64)
 			seedList = append(seedList, val)
 		}

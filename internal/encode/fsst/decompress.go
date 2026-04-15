@@ -111,7 +111,7 @@ func Decompress(strIn []byte) ([]uint8, error) {
 		escapeMask := (nextBlock & 0x80808080) & ((((^nextBlock) & 0x7F7F7F7F) + 0x7F7F7F7F) ^ 0x80808080)
 
 		if escapeMask == 0 {
-			for i := 0; i < 4; i++ {
+			for range 4 {
 				decode()
 			}
 		} else {
@@ -166,10 +166,7 @@ func Decompress(strIn []byte) ([]uint8, error) {
 			symbolBytes := make([]byte, 8)
 			binary.LittleEndian.PutUint64(symbolBytes, symbol[code])
 
-			endWrite := posOut + uint64(length[code])
-			if endWrite > size {
-				endWrite = size
-			}
+			endWrite := min(posOut+uint64(length[code]), size)
 
 			copy(strOut[posOut:endWrite], symbolBytes[:endWrite-posOut])
 			posOut = endWrite

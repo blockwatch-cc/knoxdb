@@ -79,7 +79,7 @@ func makeTypedPackage(typ any, fill int) *Package {
 	if err != nil {
 		panic(err)
 	}
-	for i := 0; i < fill; i++ {
+	for range fill {
 		pkg.AppendWire(buf, nil)
 	}
 	return pkg
@@ -100,7 +100,7 @@ func makeZeroStruct(v any) any {
 	val := ptr.Elem()
 	for i, l := 0, typ.NumField(); i < l; i++ {
 		dst := val.Field(i)
-		if dst.Kind() == reflect.Ptr {
+		if dst.Kind() == reflect.Pointer {
 			if dst.IsNil() && dst.CanSet() {
 				dst.Set(reflect.New(dst.Type().Elem()))
 			}

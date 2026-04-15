@@ -141,7 +141,7 @@ func (o DatabaseOptions) WithLockTimeout(to time.Duration) DatabaseOptions {
 	return o
 }
 
-func (o DatabaseOptions) WithtxWaitTimeout(to time.Duration) DatabaseOptions {
+func (o DatabaseOptions) WithTxWaitTimeout(to time.Duration) DatabaseOptions {
 	o.TxWaitTimeout = to
 	return o
 }

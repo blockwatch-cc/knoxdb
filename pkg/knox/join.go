@@ -147,7 +147,7 @@ func (j Join) WithStats(enable bool) Join {
 
 func (j Join) Execute(ctx context.Context, val any) error {
 	rval := reflect.ValueOf(val)
-	if rval.Kind() != reflect.Ptr {
+	if rval.Kind() != reflect.Pointer {
 		return ErrNoPointer
 	}
 	rval = reflect.Indirect(rval)
@@ -207,7 +207,7 @@ func (j Join) Execute(ctx context.Context, val any) error {
 				ev := e
 
 				// if element is ptr to struct, allocate the underlying struct
-				if e.Elem().Kind() == reflect.Ptr {
+				if e.Elem().Kind() == reflect.Pointer {
 					ev.Elem().Set(reflect.New(e.Elem().Type().Elem()))
 					ev = reflect.Indirect(e)
 				}

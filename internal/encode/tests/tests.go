@@ -121,7 +121,7 @@ func MakeFloatTest[T types.Float](s string, n int, data ...float64) TestCase[T] 
 		Data: make([]T, n),
 	}
 	if len(data) > 0 {
-		for i := 0; i < n; i++ {
+		for i := range n {
 			c.Data[i] = T(data[i])
 		}
 	} else {

@@ -1,5 +1,4 @@
 //go:build !appengine && gc && !purego
-// +build !appengine,gc,!purego
 
 // nolint
 package xxhash64

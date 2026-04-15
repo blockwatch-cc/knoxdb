@@ -1,5 +1,4 @@
 //go:build !appengine
-// +build !appengine
 
 // This file encapsulates usage of unsafe.
 // xxhash_safe.go contains the safe implementations.

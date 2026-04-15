@@ -253,9 +253,9 @@ func TestIndexAddMany(t *testing.T) {
 
 	// num snodes we expect to attach
 	sz := 5
-	for n := 0; n < sz; n++ {
+	for n := range sz {
 		// number of data packs per spack
-		for p := 0; p < STATS_PACK_SIZE; p++ {
+		for p := range STATS_PACK_SIZE {
 			// package key (sequential)
 			key := p + n*STATS_PACK_SIZE
 
@@ -400,8 +400,8 @@ func TestIndexDeleteMany(t *testing.T) {
 	require.NoError(t, db.Update(func(tx store.Tx) error { return idx.Store(ctx, tx) }))
 
 	sz := 5
-	for n := 0; n < sz; n++ {
-		for p := 0; p < STATS_PACK_SIZE; p++ {
+	for n := range sz {
+		for p := range STATS_PACK_SIZE {
 			key := p + n*STATS_PACK_SIZE
 			pk := uint64(1 + n*STATS_PACK_SIZE*TEST_PKG_SIZE + p*TEST_PKG_SIZE)
 			require.NoError(t, idx.AddPack(ctx, makeTestPackage(t, key, pk)))
@@ -409,7 +409,7 @@ func TestIndexDeleteMany(t *testing.T) {
 	}
 
 	// delete the first spack worth of data packs
-	for i := 0; i < STATS_PACK_SIZE; i++ {
+	for i := range STATS_PACK_SIZE {
 		pkg := pack.New().WithKey(uint32(i)).WithSchema(TestSchema)
 		require.NoError(t, idx.DeletePack(ctx, pkg))
 	}
@@ -457,8 +457,8 @@ func TestIndexStore(t *testing.T) {
 	require.NoError(t, src.InitStore(ctx))
 
 	sz := 5
-	for n := 0; n < sz; n++ {
-		for p := 0; p < STATS_PACK_SIZE; p++ {
+	for n := range sz {
+		for p := range STATS_PACK_SIZE {
 			key := p + n*STATS_PACK_SIZE
 			pk := uint64(1 + n*STATS_PACK_SIZE*TEST_PKG_SIZE + p*TEST_PKG_SIZE)
 			require.NoError(t, src.AddPack(ctx, makeTestPackage(t, key, pk)))
@@ -514,7 +514,7 @@ func TestIndexStoreAndAdd(t *testing.T) {
 	require.NoError(t, idx.InitStore(ctx))
 
 	// fill half
-	for k := 0; k < STATS_PACK_SIZE/2; k++ {
+	for k := range STATS_PACK_SIZE / 2 {
 		pk := uint64(1 + k*TEST_PKG_SIZE)
 		require.NoError(t, idx.AddPack(ctx, makeTestPackage(t, k, pk)))
 	}
@@ -555,8 +555,8 @@ func TestIndexQueryEqual(t *testing.T) {
 	require.NoError(t, idx.InitStore(ctx))
 
 	sz := 5
-	for n := 0; n < sz; n++ {
-		for p := 0; p < STATS_PACK_SIZE; p++ {
+	for n := range sz {
+		for p := range STATS_PACK_SIZE {
 			key := p + n*STATS_PACK_SIZE
 			pk := uint64(1 + n*STATS_PACK_SIZE*TEST_PKG_SIZE + p*TEST_PKG_SIZE)
 			require.NoError(t, idx.AddPack(ctx, makeTestPackage(t, key, pk)))
@@ -599,8 +599,8 @@ func TestIndexQueryAll(t *testing.T) {
 	require.NoError(t, idx.InitStore(ctx))
 
 	sz := 5
-	for n := 0; n < sz; n++ {
-		for p := 0; p < STATS_PACK_SIZE; p++ {
+	for n := range sz {
+		for p := range STATS_PACK_SIZE {
 			key := p + n*STATS_PACK_SIZE
 			pk := uint64(1 + n*STATS_PACK_SIZE*TEST_PKG_SIZE + p*TEST_PKG_SIZE)
 			require.NoError(t, idx.AddPack(ctx, makeTestPackage(t, key, pk)))
@@ -653,8 +653,8 @@ func TestIndexQueryLess(t *testing.T) {
 	require.NoError(t, idx.InitStore(ctx))
 
 	sz := 1
-	for n := 0; n < sz; n++ {
-		for p := 0; p < STATS_PACK_SIZE; p++ {
+	for n := range sz {
+		for p := range STATS_PACK_SIZE {
 			key := p + n*STATS_PACK_SIZE
 			pk := uint64(1 + n*STATS_PACK_SIZE*TEST_PKG_SIZE + p*TEST_PKG_SIZE)
 			require.NoError(t, idx.AddPack(ctx, makeTestPackage(t, key, pk)))
@@ -710,8 +710,8 @@ func TestIndexQueryRange(t *testing.T) {
 	require.NoError(t, idx.InitStore(ctx))
 
 	sz := 1
-	for n := 0; n < sz; n++ {
-		for p := 0; p < STATS_PACK_SIZE; p++ {
+	for n := range sz {
+		for p := range STATS_PACK_SIZE {
 			key := p + n*STATS_PACK_SIZE
 			pk := uint64(1 + n*STATS_PACK_SIZE*TEST_PKG_SIZE + p*TEST_PKG_SIZE)
 			require.NoError(t, idx.AddPack(ctx, makeTestPackage(t, key, pk)))
@@ -766,7 +766,7 @@ func TestIndexFindPk(t *testing.T) {
 	require.NoError(t, idx.InitStore(ctx))
 
 	// fill half
-	for k := 0; k < STATS_PACK_SIZE/2; k++ {
+	for k := range STATS_PACK_SIZE / 2 {
 		pk := uint64(1 + k*TEST_PKG_SIZE)
 		require.NoError(t, idx.AddPack(ctx, makeTestPackage(t, k, pk)))
 	}
@@ -802,7 +802,7 @@ func TestIndexFindPkEnd(t *testing.T) {
 	require.NoError(t, idx.InitStore(ctx))
 
 	// fill half (last data pack is full, so no more room for this pk)
-	for k := 0; k < STATS_PACK_SIZE/2; k++ {
+	for k := range STATS_PACK_SIZE / 2 {
 		pk := uint64(1 + k*TEST_PKG_SIZE)
 		require.NoError(t, idx.AddPack(ctx, makeTestPackage(t, k, pk)))
 	}
@@ -834,7 +834,7 @@ func TestIndexFindPkEndWithSpace(t *testing.T) {
 	require.NoError(t, idx.InitStore(ctx))
 
 	// fill half
-	for k := 0; k < STATS_PACK_SIZE/2; k++ {
+	for k := range STATS_PACK_SIZE / 2 {
 		pk := uint64(1 + k*TEST_PKG_SIZE)
 		require.NoError(t, idx.AddPack(ctx, makeTestPackage(t, k, pk)))
 	}
@@ -877,8 +877,8 @@ func BenchmarkIndexQueryEqual(b *testing.B) {
 		require.NoError(b, idx.InitStore(ctx))
 
 		// insert Nx2048 data packs
-		for n := 0; n < sz; n++ {
-			for p := 0; p < STATS_PACK_SIZE; p++ {
+		for n := range sz {
+			for p := range STATS_PACK_SIZE {
 				key := p + n*STATS_PACK_SIZE
 				pk := uint64(1 + n*STATS_PACK_SIZE*TEST_PKG_SIZE + p*TEST_PKG_SIZE)
 				require.NoError(b, idx.AddPack(ctx, makeTestPackage(b, key, pk)))
@@ -915,8 +915,8 @@ func BenchmarkIndexQueryAll(b *testing.B) {
 		require.NoError(b, idx.InitStore(ctx))
 
 		// insert Nx2048 data packs
-		for n := 0; n < sz; n++ {
-			for p := 0; p < STATS_PACK_SIZE; p++ {
+		for n := range sz {
+			for p := range STATS_PACK_SIZE {
 				key := p + n*STATS_PACK_SIZE
 				pk := uint64(1 + n*STATS_PACK_SIZE*TEST_PKG_SIZE + p*TEST_PKG_SIZE)
 				require.NoError(b, idx.AddPack(ctx, makeTestPackage(b, key, pk)))
