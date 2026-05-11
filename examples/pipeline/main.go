@@ -30,7 +30,7 @@ func run() error {
 	defer pl.Close()
 
 	return operator.NewExecutor().
-		AddPipeline(pl).
+		Add(pl).
 		Run(context.Background())
 }
 

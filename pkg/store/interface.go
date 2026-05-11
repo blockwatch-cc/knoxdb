@@ -8,22 +8,8 @@ import (
 	"io"
 )
 
-// DB provides a generic interface that is used to store KV indexes and KV data.
-// This interface is intended to be agnostic to the actual mechanism
-// used for backend data storage.  The RegisterDriver function can be used to
-// add a new backend data storage method.
-//
-// This interface is divided into two distinct categories of functionality.
-//
-// The first category is atomic metadata storage with bucket support.  This is
-// accomplished through the use of database transactions.
-//
-// The second category is generic block storage.  This functionality is
-// intentionally separate because the mechanism used for block storage may or
-// may not be the same mechanism used for metadata storage.  For example, it is
-// often more efficient to store the block data as flat files while the metadata
-// is kept in a database.  However, this interface aims to be generic enough to
-// support blocks in the database too, if needed by a particular backend.
+// DB defines a generic interface for key/value stores. Use the RegisterDriver
+// method to make drivers available.
 type DB interface {
 	// Type returns the database driver type the current database instance
 	// was created with.

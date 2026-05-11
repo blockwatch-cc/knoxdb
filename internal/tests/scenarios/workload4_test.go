@@ -67,14 +67,13 @@ func TestWorkload4(t *testing.T) {
 	log.Infof("Starting TestWorkload4 with %d threads and %d transactions per thread", numThreads, txnSize)
 
 	// Insert initial work rows
-	initRows := make([]*UnifiedRow, 0)
-	for range numWorkRows {
-		row := &UnifiedRow{
+	initRows := make([]*UnifiedRow, numWorkRows)
+	for i := range numWorkRows {
+		initRows[i] = &UnifiedRow{
 			RowType:  RowTypeWork,
 			ThreadID: 0,
 			TxId:     0,
 		}
-		initRows = append(initRows, row)
 	}
 	_, _, err = table.Insert(ctx, initRows)
 	require.NoError(t, err, "Failed to insert work rows")

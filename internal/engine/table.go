@@ -22,9 +22,10 @@ func RegisterTableFactory(n TableKind, fn TableFactory) {
 }
 
 func (e *Engine) TableNames() []string {
-	names := make([]string, 0)
-	for _, v := range e.tables.Map() {
-		names = append(names, v.Schema().Name)
+	tables := e.tables.Map()
+	names := make([]string, len(tables))
+	for i, v := range tables {
+		names[i] = v.Schema().Name
 	}
 	return names
 }

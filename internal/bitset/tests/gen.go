@@ -21,7 +21,7 @@ func Popcount(buf []byte) int {
 	return cnt
 }
 
-func F(s string, args ...interface{}) string {
+func F(s string, args ...any) string {
 	return fmt.Sprintf(s, args...)
 }
 

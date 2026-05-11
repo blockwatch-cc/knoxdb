@@ -1,6 +1,6 @@
 module blockwatch.cc/knoxdb
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/FastFilter/xorfilter v0.5.1

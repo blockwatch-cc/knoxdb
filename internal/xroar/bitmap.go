@@ -34,6 +34,8 @@ import (
 
 const mask = uint64(0xFFFFFFFFFFFF0000)
 
+var ErrUnreachable = errors.New("xroar: unreachable condition")
+
 type Bitmap struct {
 	data []uint16
 	keys node
@@ -54,7 +56,7 @@ func New() *Bitmap {
 
 func NewWithSize(numKeys int) *Bitmap {
 	if numKeys < 2 {
-		panic("Must contain at least two keys.")
+		panic(fmt.Errorf("must contain at least two keys"))
 	}
 	ra := &Bitmap{
 		// Each key must also keep an offset. So, we need to double the number
@@ -267,7 +269,7 @@ func (ra *Bitmap) Set(x uint64) bool {
 		b := bitmap(c)
 		return b.add(uint16(x))
 	}
-	panic("we shouldn't reach here")
+	panic(ErrUnreachable)
 }
 
 func (ra *Bitmap) Unset(x uint64) bool {
@@ -328,7 +330,7 @@ func (ra *Bitmap) ContainsAny(keys []uint64) bool {
 // returns true if any bit is set within range (boundaries inclusive)
 func (ra *Bitmap) ContainsRange(lo, hi uint64) bool {
 	if lo > hi {
-		panic("lo should not be more than hi")
+		panic(fmt.Errorf("lo should not be more than hi"))
 	}
 
 	if ra.None() {
@@ -436,7 +438,7 @@ func (ra *Bitmap) ContainsRange(lo, hi uint64) bool {
 // UnsetRange removes [lo, hi) from the bitmap.
 func (ra *Bitmap) UnsetRange(lo, hi uint64) {
 	if lo > hi {
-		panic("lo should not be more than hi")
+		panic(fmt.Errorf("lo should not be more than hi"))
 	}
 	if lo == hi {
 		return
@@ -532,7 +534,7 @@ func (ra *Bitmap) Select(x uint64) (uint64, error) {
 		}
 		x -= c
 	}
-	panic("should not reach here")
+	panic(ErrUnreachable)
 }
 
 func (ra *Bitmap) initSpaceForKeys(n int) {
@@ -644,7 +646,7 @@ func (ra *Bitmap) newContainer(sz uint16) uint64 {
 func (ra *Bitmap) expandContainer(offset uint64) {
 	sz := ra.data[offset]
 	if sz == 0 {
-		panic("Container size should NOT be zero")
+		panic(fmt.Errorf("container size should NOT be zero"))
 	}
 	bySize := sz
 	if sz >= 2048 {
@@ -698,7 +700,7 @@ func stepSize(n uint16) uint16 {
 func (ra *Bitmap) copyAt(offset uint64, src []uint16) {
 	dstSize := ra.data[offset]
 	if dstSize == 0 {
-		panic("Container size should NOT be zero")
+		panic(fmt.Errorf("container size should NOT be zero"))
 	}
 
 	// The src is a bitmapContainer. Just copy it over.
@@ -756,7 +758,7 @@ func (ra *Bitmap) copyAt(offset uint64, src []uint16) {
 func (ra *Bitmap) getContainer(offset uint64) []uint16 {
 	data := ra.data[offset:]
 	if len(data) == 0 {
-		panic(fmt.Sprintf("No container found at offset: %d\n", offset))
+		panic(fmt.Errorf("no container found at offset: %d", offset))
 	}
 	sz := data[0]
 	return data[:sz]
@@ -808,20 +810,21 @@ func (ra *Bitmap) String() string {
 		usedSize += int(sz)
 		card += getCardinality(c)
 
-		b.WriteString(fmt.Sprintf(
+		fmt.Fprintf(&b,
 			"[%03d] Key: %#8x. Offset: %7d. Size: %4d. Type: %d. Card: %6d. Uint16/Uid: %.2f\n",
-			i, k, v, sz, c[indexType], getCardinality(c), float64(sz)/float64(getCardinality(c))))
+			i, k, v, sz, c[indexType], getCardinality(c), float64(sz)/float64(getCardinality(c)),
+		)
 	}
-	b.WriteString(fmt.Sprintf("Number of containers: %d. Cardinality: %d\n",
-		ra.keys.numKeys(), card))
+	fmt.Fprintf(&b, "Number of containers: %d. Cardinality: %d\n",
+		ra.keys.numKeys(), card)
 
 	amp := float64(len(ra.data)-usedSize) / float64(usedSize)
-	b.WriteString(fmt.Sprintf(
+	fmt.Fprintf(&b,
 		"Size in Uint16s. Used: %d. Total: %d. Space Amplification: %.2f%%. Moved: %.2fx\n",
-		usedSize, len(ra.data), amp*100.0, float64(ra.memMoved)/float64(usedSize)))
+		usedSize, len(ra.data), amp*100.0, float64(ra.memMoved)/float64(usedSize))
 
-	b.WriteString(fmt.Sprintf("Used Uint16/Uid: %.2f. Total Uint16/Uid: %.2f",
-		float64(usedSize)/float64(card), float64(len(ra.data))/float64(card)))
+	fmt.Fprintf(&b, "Used Uint16/Uid: %.2f. Total Uint16/Uid: %.2f",
+		float64(usedSize)/float64(card), float64(len(ra.data))/float64(card))
 
 	return b.String()
 }
@@ -837,20 +840,20 @@ func (ra *Bitmap) Debug(x uint64) string {
 	hi := x & mask
 	off, found := ra.keys.getValue(hi)
 	if !found {
-		b.WriteString(fmt.Sprintf("Unable to find the container for x: %#x\n", hi))
+		fmt.Fprintf(&b, "Unable to find the container for x: %#x\n", hi)
 		b.WriteString(ra.String())
 	}
 	c := ra.getContainer(off)
 	lo := uint16(x)
 
-	b.WriteString(fmt.Sprintf("x: %#x lo: %#x. offset: %d\n", x, lo, off))
+	fmt.Fprintf(&b, "x: %#x lo: %#x. offset: %d\n", x, lo, off)
 
 	switch c[indexType] {
 	case typeArray:
 	case typeBitmap:
 		idx := lo / 16
 		pos := lo % 16
-		b.WriteString(fmt.Sprintf("At idx: %d. Pos: %d val: %#b\n", idx, pos, c[startIdx+idx]))
+		fmt.Fprintf(&b, "At idx: %d. Pos: %d val: %#b\n", idx, pos, c[startIdx+idx])
 	}
 	return b.String()
 }
@@ -898,7 +901,7 @@ func (ra *Bitmap) extreme(dir int) uint64 {
 		}
 		return k | uint64(b.maximum())
 	default:
-		panic("We don't support this type of container")
+		panic(fmt.Errorf("we don't support this type of container"))
 	}
 }
 

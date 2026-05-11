@@ -26,9 +26,10 @@ func (e *Engine) CloneEnums(names ...string) *schema.EnumRegistry {
 }
 
 func (e *Engine) EnumNames() []string {
-	names := make([]string, 0)
-	for _, v := range e.enums.Map() {
-		names = append(names, v.Name())
+	enums := e.enums.Map()
+	names := make([]string, len(enums))
+	for i, v := range enums {
+		names[i] = v.Name()
 	}
 	return names
 }

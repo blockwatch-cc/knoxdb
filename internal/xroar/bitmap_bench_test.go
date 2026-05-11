@@ -83,22 +83,22 @@ func BenchmarkSet(b *testing.B) {
 }
 
 func BenchmarkMerge10K(b *testing.B) {
-	var bitmaps []*Bitmap
-	for range 10000 {
+	bitmaps := make([]*Bitmap, 10000)
+	for i := range 10000 {
 		bm := New()
 		for range 1000 {
 			x := util.RandUint64() % 1e8 // 10M.
 			bm.Set(x)
 		}
-		bitmaps = append(bitmaps, bm)
+		bitmaps[i] = bm
 	}
 
 	second := func() *Bitmap {
-		var res []*Bitmap
-		for i := 0; i < 100; i += 1 {
+		res := make([]*Bitmap, 100)
+		for i := range 100 {
 			input := bitmaps[100*i : 100*i+100]
 			out := FastOr(input...)
-			res = append(res, out)
+			res[i] = out
 		}
 		return FastOr(res...)
 	}
@@ -116,18 +116,18 @@ func BenchmarkMerge10K(b *testing.B) {
 	b.Logf("card2: %d card3: %d", out2.Count(), out3.Count())
 
 	b.Run("fastor", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			_ = FastOr(bitmaps...)
 		}
 	})
 
 	b.Run("fastor-groups", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			_ = second()
 		}
 	})
 	b.Run("fastparor", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			_ = FastParOr(4, bitmaps...)
 		}
 	})
@@ -174,7 +174,7 @@ func BenchmarkSelect(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		for j := range N {
 			bm.Select(j)
 		}

@@ -4,6 +4,7 @@
 package tests
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"math/bits"
@@ -140,7 +141,7 @@ func mkU32(name string, src []uint32, match, match2 uint32, result []byte, lengt
 	src = src[:l]
 
 	// create new result at requested length
-	result = slices.Clone(result)
+	result = bytes.Clone(result)
 	l = BitFieldLen(length)
 	for l > len(result) {
 		result = append(result, result...)

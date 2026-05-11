@@ -206,9 +206,7 @@ func TestWorkload5(t *testing.T) {
 	}()
 
 	// count number of commands for logging
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for {
 			c, ok := <-cmdCh
 			if !ok {
@@ -216,7 +214,7 @@ func TestWorkload5(t *testing.T) {
 			}
 			executed[c]++
 		}
-	}()
+	})
 
 	// init: insert 1024 values (wrapped into sub-test to catch panics)
 	t.Run("init", func(t *testing.T) {

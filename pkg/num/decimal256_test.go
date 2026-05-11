@@ -51,7 +51,7 @@ func TestDecimal256Numbers(t *testing.T) {
 		return
 	}
 
-	var tests = []test{
+	tests := append([]test{
 		// regular
 		{name: "0", in: ZeroInt256, scale: 0, prec: 0},
 		{name: "-0", in: ZeroInt256, scale: 0, prec: 0},
@@ -68,9 +68,7 @@ func TestDecimal256Numbers(t *testing.T) {
 		// // extremes
 		{name: "MAX", in: MaxInt256, scale: 76, prec: 77},
 		{name: "MIN", in: MinInt256, scale: 76, prec: 77},
-	}
-	// precision
-	tests = append(tests, makePrecisionTest256(77)...)
+	}, makePrecisionTest256(77)...)
 
 	for _, test := range tests {
 		dec := NewDecimal256(test.in, test.scale)

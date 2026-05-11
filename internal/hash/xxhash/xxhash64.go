@@ -66,10 +66,11 @@ func Hash64u64(val uint64) uint64 {
 
 func rol32_17(x uint32) uint32 { return bits.RotateLeft32(x, 17) }
 func rol64_23(x uint64) uint64 { return bits.RotateLeft64(x, 23) }
-func rol64_24(x uint64) uint64 { return bits.RotateLeft64(x, 24) }
 func rol64_27(x uint64) uint64 { return bits.RotateLeft64(x, 27) }
 func rol64_31(x uint64) uint64 { return bits.RotateLeft64(x, 31) }
-func rol64_49(x uint64) uint64 { return bits.RotateLeft64(x, 49) }
+
+// func rol64_24(x uint64) uint64 { return bits.RotateLeft64(x, 24) }
+// func rol64_49(x uint64) uint64 { return bits.RotateLeft64(x, 49) }
 
 func x64_u8_purego(src []uint8, dst []uint64) []uint64 {
 	if len(src) == 0 {

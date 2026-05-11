@@ -2,7 +2,6 @@
 // Author: alex@blockwatch.cc
 
 //go:build !amd64 || appengine || gccgo
-// +build !amd64 appengine gccgo
 
 package avx2
 

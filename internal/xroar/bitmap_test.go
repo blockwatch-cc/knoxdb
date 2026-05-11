@@ -130,19 +130,8 @@ func TestBulkAdd(t *testing.T) {
 	ra := New()
 	m := make(map[uint64]struct{})
 	max := int64(1 << 20)
-	// start := time.Now()
 
-	// var cnt int
 	for range max {
-		// if i%100 == 0 && time.Since(start) > time.Second {
-		// 	cnt++
-		// 	start = time.Now()
-		// 	// t.Logf("Bitmap:\n%s\n", ra)
-		// 	if cnt == 3 {
-		// 		// t.Logf("Breaking out of the loop\n")
-		// 		break
-		// 	}
-		// }
 		x := uint64(util.RandInt64n(max))
 
 		if _, has := m[x]; has {
@@ -160,45 +149,20 @@ func TestBulkAdd(t *testing.T) {
 					pos := lo % 16
 					t.Logf("At idx: %d. Pos: %d val: %#b\n", idx, pos, c[startIdx+idx])
 				}
-
-				// t.Logf("Added: %d %#x. Added: %v\n", x, x, ra.Set(x))
-				// t.Logf("After add. has: %v\n", ra.Contains(x))
-
-				// t.Logf("Hex dump of container at offset: %d\n%s\n", off, hex.Dump(toByteSlice(c)))
 				t.FailNow()
 			}
 			continue
 		}
 		m[x] = struct{}{}
-		// fmt.Printf("Setting x: %#x\n", x)
 		if added := ra.Set(x); !added {
-			// t.Logf("Unable to set: %d %#x\n", x, x)
-			// t.Logf("ra.Has(x): %v\n", ra.Contains(x))
 			t.FailNow()
 		}
-		// for x := range m {
-		// 	if !ra.Has(x) {
-		// 		t.Logf("has(x) failed: %#x\n", x)
-		// 		t.Logf("Debug: %s\n", ra.Debug(x))
-		// 		t.FailNow()
-		// 	}
-		// }
-		// require.Truef(t, ra.Set(x), "Unable to set x: %d %#x\n", x, x)
 	}
-	// t.Logf("Card: %d\n", len(m))
 	require.Equalf(t, len(m), ra.Count(), "Bitmap:\n%s\n", ra)
 	for x := range m {
 		require.True(t, ra.Contains(x))
 	}
 
-	// _, has := ra.keys.getValue(0)
-	// require.True(t, has)
-	// for i := uint64(1); i <= max; i++ {
-	// 	require.Truef(t, ra.Has(i), "i=%d", i)
-	// }
-	// t.Logf("Data size: %d\n", len(ra.data))
-
-	// t.Logf("Copying data. Size: %d\n", len(ra.data))
 	dup := make([]uint16, len(ra.data))
 	copy(dup, ra.data)
 
@@ -248,7 +212,6 @@ func TestBitmapOps(t *testing.T) {
 	N := 10000
 
 	for _, f := range F {
-		// t.Logf("Using N: %d M: %d F: %d\n", N, M, f)
 		small, big := New(), New()
 		occ := make(map[uint64]int)
 		smallMap := make(map[uint64]struct{})
@@ -280,10 +243,6 @@ func TestBitmapOps(t *testing.T) {
 
 		bitOr := Or(small, big)
 		bitAnd := And(small, big)
-
-		// t.Logf("Sizes. small: %d big: %d, bitOr: %d bitAnd: %d\n",
-		// small.Count(), big.Count(),
-		// bitOr.Count(), bitAnd.Count())
 
 		cntOr, cntAnd := 0, 0
 		for x, freq := range occ {
@@ -319,8 +278,6 @@ func TestBitmapOps(t *testing.T) {
 		}
 		if cntAnd != bitAnd.Count() {
 			uids := bitAnd.ToArray(nil)
-			// t.Logf("Len Uids: %d Card: %d cntAnd: %d. Occ: %d\n", len(uids), bitAnd.Count(), cntAnd, len(occ))
-
 			uidMap := make(map[uint64]struct{})
 			for _, u := range uids {
 				uidMap[u] = struct{}{}
@@ -328,30 +285,12 @@ func TestBitmapOps(t *testing.T) {
 			for u := range occ {
 				delete(uidMap, u)
 			}
-			// for x := range uidMap {
-			// t.Logf("Remaining uids in UidMap: %d %#b\n", x, x)
-			// }
 			require.FailNow(t, "Cardinality isn't matching")
 		}
 		require.Equal(t, cntOr, bitOr.Count())
 		require.Equal(t, cntAnd, bitAnd.Count())
 	}
 }
-
-// func TestUint16(t *testing.T) {
-// 	// a := uint16(0xfeff)
-// 	// b := uint16(0x100)
-// 	// t.Logf("a & b: %#x", a&b)
-// 	var x uint16
-// 	for i := 0; i < 100000; i++ {
-// 		prev := x
-// 		x++
-// 		if x <= prev {
-// 			// This triggers when prev = 0xFFFF.
-// 			require.Failf(t, "x<=prev", "x %d <= prev %d", x, prev)
-// 		}
-// 	}
-// }
 
 func TestSetGet(t *testing.T) {
 	bm := New()
@@ -367,9 +306,9 @@ func TestSetGet(t *testing.T) {
 
 func TestSetSorted(t *testing.T) {
 	check := func(n int) {
-		var arr []uint64
+		arr := make([]uint64, n)
 		for i := range n {
-			arr = append(arr, uint64(i))
+			arr[i] = uint64(i)
 		}
 		r := NewFromSorted(arr)
 		require.Equal(t, len(arr), r.Count())
@@ -474,7 +413,7 @@ func TestAndNot2(t *testing.T) {
 	b := New()
 	n := int(1e6)
 
-	for i := 0; i < n/2; i++ {
+	for i := range n / 2 {
 		a.Set(uint64(i))
 	}
 	for i := n / 2; i < n; i++ {
@@ -619,9 +558,9 @@ func TestUnsetRange(t *testing.T) {
 	a.Set(uint64(3 * N / 4))
 	require.Equal(t, 3, a.Count())
 
-	var arr []uint64
+	arr := make([]uint64, 123)
 	for i := range 123 {
-		arr = append(arr, uint64(i))
+		arr[i] = uint64(i)
 	}
 	b := NewFromSorted(arr)
 	b.UnsetRange(50, math.MaxUint64)
@@ -631,7 +570,7 @@ func TestUnsetRange(t *testing.T) {
 func TestUnsetRange2(t *testing.T) {
 	// High from the last container should not be removed.
 	a := New()
-	for i := 1; i < 10; i++ {
+	for i := range 10 {
 		a.Set(uint64(i * (1 << 16)))
 		a.Set(uint64(i*(1<<16)) - 1)
 	}
@@ -727,7 +666,7 @@ func TestCleanup(t *testing.T) {
 	a := New()
 	n := 10
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		a.Set(uint64((i * (1 << 16))))
 	}
 	abuf := slices.Clone(a.Bytes())
@@ -747,7 +686,7 @@ func TestCleanup(t *testing.T) {
 
 	n = int(1e6)
 	b := New()
-	for i := 0; i < n; i++ {
+	for i := range n {
 		b.Set(uint64(i))
 	}
 	b.UnsetRange(0, uint64(n/2))
@@ -815,41 +754,6 @@ func TestIsEmpty(t *testing.T) {
 	a.UnsetRange(0, math.MaxUint64)
 	require.True(t, a.None())
 }
-
-// func TestRank(t *testing.T) {
-// 	a := New()
-// 	n := int(1e6)
-// 	for i := uint64(0); i < uint64(n); i++ {
-// 		a.Set(i)
-// 	}
-// 	for i := 0; i < n; i++ {
-// 		require.Equal(t, i, a.Rank(uint64(i)))
-// 	}
-// 	require.Equal(t, -1, a.Rank(uint64(n)))
-
-// 	// Check ranks after removing an element.
-// 	a.Unset(100)
-// 	for i := 0; i < n; i++ {
-// 		switch {
-// 		case i < 100:
-// 			require.Equal(t, i, a.Rank(uint64(i)))
-// 		case i == 100:
-// 			require.Equal(t, -1, a.Rank(uint64(i)))
-// 		default:
-// 			require.Equal(t, i-1, a.Rank(uint64(i)))
-// 		}
-// 	}
-
-// 	// Check ranks after removing a range of elements.
-// 	a.UnsetRange(0, uint64(1e4))
-// 	for i := 0; i < n; i++ {
-// 		if i < 1e4 {
-// 			require.Equal(t, -1, a.Rank(uint64(n)))
-// 		} else {
-// 			require.Equal(t, i-1e4, a.Rank(uint64(i)))
-// 		}
-// 	}
-// }
 
 func TestContainsRange(t *testing.T) {
 	type TestRange struct {
@@ -960,7 +864,7 @@ func BenchmarkContainsRange(b *testing.B) {
 			slices.Sort(nums)
 			a := NewFromSorted(nums)
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				min, max := util.RandUint64(), util.RandUint64()
 				if min > max {
 					min, max = max, min

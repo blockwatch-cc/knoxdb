@@ -137,9 +137,9 @@ var enumBenchSizes = []struct {
 }
 
 func makeRandStrings(n int) []string {
-	vals := []string{}
-	for range n {
-		vals = append(vals, util.U64Hex(util.RandUint64()))
+	vals := make([]string, n)
+	for i := range n {
+		vals[i] = util.U64Hex(util.RandUint64())
 	}
 	return vals
 }

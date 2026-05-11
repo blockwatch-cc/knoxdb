@@ -652,9 +652,7 @@ func (w *Wal) runSyncThread() {
 		tick    = time.NewTicker(w.opts.SyncDelay)
 		closing bool
 	)
-	w.wg.Add(1)
-	go func() {
-		defer w.wg.Done()
+	w.wg.Go(func() {
 		defer tick.Stop()
 		for {
 			select {
@@ -699,7 +697,7 @@ func (w *Wal) runSyncThread() {
 				return
 			}
 		}
-	}()
+	})
 }
 
 func (w *Wal) stopSyncThread() {

@@ -108,7 +108,8 @@ func (s *IndexSchema) Hash() uint64 {
 // This includes rowid, all index fields and extra include fields. Note the
 // schema requires metadata.
 func (s *IndexSchema) Ids() []uint16 {
-	ids := []uint16{MetaRid}
+	ids := make([]uint16, 0, 1+len(s.Fields)+len(s.Extra))
+	ids = append(ids, MetaRid)
 	for _, f := range s.Fields {
 		ids = append(ids, f.Id)
 	}

@@ -28,7 +28,7 @@ func bits[T types.Integer](n, bits int) func() []T {
 
 func combine[T types.Integer](fns ...func() []T) func() []T {
 	return func() []T {
-		var out []T
+		out := make([]T, 0, len(fns))
 		for _, fn := range fns {
 			out = append(out, fn()...)
 		}

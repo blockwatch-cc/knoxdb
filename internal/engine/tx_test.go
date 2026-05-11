@@ -281,12 +281,10 @@ func TestTxWait(t *testing.T) {
 		require.NoError(t, err)
 
 		var wg sync.WaitGroup
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			require.NoError(t, abort())
 			atomic.StoreUint64((*uint64)(&lastXid), uint64(tx.id))
-		}()
+		})
 
 		wg.Add(1)
 		e.opts.TxWaitTimeout = 20 * time.Millisecond

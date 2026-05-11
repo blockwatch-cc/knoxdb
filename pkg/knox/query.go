@@ -100,6 +100,7 @@ func (b *BytesBufferCloser) Close() error { return nil }
 
 type Query struct {
 	schema *schema.Schema // SELECT
+	fields []string       // SELECT
 	table  Table          // FROM
 	cond   Condition      // WHERE
 	limit  int            // LIMIT
@@ -121,6 +122,11 @@ func NewQuery() Query {
 
 func (q Query) Stats() QueryStats {
 	return q.stats
+}
+
+func (q Query) WithFields(names ...string) Query {
+	q.fields = names
+	return q
 }
 
 func (q Query) WithSchema(s *schema.Schema) Query {
@@ -436,8 +442,17 @@ func (q Query) MakePlan() (engine.QueryPlan, error) {
 		return nil, err
 	}
 
-	// validate output schema
+	// create output schema
 	s := q.table.Schema()
+	if q.schema == nil && len(q.fields) != 0 {
+		ss, err := s.Select(q.fields...)
+		if err != nil {
+			return nil, err
+		}
+		q.schema = ss
+	}
+
+	// validate output schema
 	if q.schema != nil {
 		if !s.ContainsSchema(q.schema) {
 			return nil, schema.ErrSchemaMismatch

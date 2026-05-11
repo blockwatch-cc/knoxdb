@@ -13,8 +13,8 @@ func NewExecutor() *Executor {
 	return &Executor{}
 }
 
-func (e *Executor) AddPipeline(p *PhysicalPipeline) *Executor {
-	e.pipelines = append(e.pipelines, p)
+func (e *Executor) Add(p ...*PhysicalPipeline) *Executor {
+	e.pipelines = append(e.pipelines, p...)
 	return e
 }
 

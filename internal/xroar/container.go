@@ -98,7 +98,7 @@ func removeRangeContainer(c []uint16, lo, hi uint16) {
 
 func calculateAndSetCardinality(data []uint16) {
 	if data[indexType] != typeBitmap {
-		panic("Non-bitmap containers should always have cardinality set correctly")
+		panic(fmt.Errorf("non-bitmap containers should always have cardinality set correctly"))
 	}
 	b := bitmap(data)
 	card := b.cardinality()
@@ -115,7 +115,7 @@ func (c array) find(x uint16) int {
 	N := getCardinality(c)
 	for i := int(startIdx); i < int(startIdx)+N; i++ {
 		if len(c) <= i {
-			panic(fmt.Sprintf("find: %d len(c) %d <= i %d\n", x, len(c), i))
+			panic(fmt.Errorf("find: %d len(c) %d <= i %d", x, len(c), i))
 		}
 		if c[i] >= x {
 			return i - int(startIdx)
@@ -123,15 +123,6 @@ func (c array) find(x uint16) int {
 	}
 	return N
 }
-
-// func (c array) rank(x uint16) int {
-// 	N := getCardinality(c)
-// 	idx := c.find(x)
-// 	if idx == N {
-// 		return -1
-// 	}
-// 	return idx
-// }
 
 func (c array) has(x uint16) bool {
 	N := getCardinality(c)
@@ -178,7 +169,7 @@ func (c array) remove(x uint16) bool {
 
 func (c array) removeRange(lo, hi uint16) {
 	if hi < lo {
-		panic(fmt.Sprintf("args must satisfy lo <= hi, got lo: %d, hi: %d\n", lo, hi))
+		panic(fmt.Errorf("args must satisfy lo <= hi, got lo: %d, hi: %d", lo, hi))
 	}
 	loIdx := c.find(lo)
 	hiIdx := c.find(hi)
@@ -355,9 +346,9 @@ func (c array) toBitmapContainer(buf []uint16) []uint16 {
 
 func (c array) String() string {
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("Size: %d\n", c[0]))
+	fmt.Fprintf(&b, "size: %d\n", c[0])
 	for i, val := range c[startIdx:] {
-		b.WriteString(fmt.Sprintf("%d: %d\n", i, val))
+		fmt.Fprintf(&b, "%d: %d\n", i, val)
 	}
 	return b.String()
 }
@@ -584,7 +575,7 @@ func (b bitmap) selectAt(idx int) uint16 {
 		}
 		idx -= c
 	}
-	panic("should not reach here")
+	panic(ErrUnreachable)
 }
 
 // bitValue returns a 0 or a 1 depending upon whether x is present in the bitmap, where 1 means
@@ -610,7 +601,7 @@ func (b bitmap) minimum() uint16 {
 		}
 		return uint16(16*i + lz)
 	}
-	panic("We shouldn't reach here")
+	panic(ErrUnreachable)
 }
 
 func (b bitmap) maximum() uint16 {
@@ -626,7 +617,7 @@ func (b bitmap) maximum() uint16 {
 		}
 		return uint16(16*(i-int(startIdx)) + 15 - tz)
 	}
-	panic("We shouldn't reach here")
+	panic(ErrUnreachable)
 }
 
 func (b bitmap) cardinality() int {
@@ -684,7 +675,7 @@ func containerOr(ac, bc, buf []uint16, runMode int) []uint16 {
 		right := bitmap(bc)
 		return left.orBitmap(right, buf, runMode)
 	}
-	panic("containerOr: We should not reach here")
+	panic(ErrUnreachable)
 }
 
 func containerAnd(ac, bc, buf []uint16) []uint16 {
@@ -712,7 +703,7 @@ func containerAnd(ac, bc, buf []uint16) []uint16 {
 		right := bitmap(bc)
 		return left.andBitmap(right, buf)
 	}
-	panic("containerAnd: We should not reach here")
+	panic(ErrUnreachable)
 }
 
 // TODO: Optimize this function.
@@ -741,5 +732,5 @@ func containerAndNot(ac, bc, buf []uint16) []uint16 {
 		right := bitmap(bc)
 		return left.andNotBitmap(right)
 	}
-	panic("containerAndNot: We should not reach here")
+	panic(ErrUnreachable)
 }

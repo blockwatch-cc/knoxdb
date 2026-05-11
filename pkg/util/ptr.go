@@ -3,4 +3,5 @@
 
 package util
 
-func PtrTo[T any](v T) *T { return &v }
+//go:fix inline
+func PtrTo[T any](v T) *T { return new(v) }
