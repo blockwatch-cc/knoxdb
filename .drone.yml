@@ -58,15 +58,9 @@ steps:
     environment:
       KNOX_DRIVER: mem
       KNOX_ENGINE: pack
-      # MINIO_BUCKET: scenarios
-      # MINIO_URL: hd1.bwd.cx:9001
-      # MINIO_USER:
-      #   from_secret: MINIO_USER
-      # MINIO_SECRET:
-      #   from_secret: MINIO_SECRET
     commands:
       - apk add --no-cache git
-      - go run -buildvcs=true ./internal/tests/run -count 100 -arch wasm
+      - go run -buildvcs=true ./internal/tests/run -count 100 -arch wasm -logs /go/logs
     depends_on:
       - lint
       - vet
@@ -80,15 +74,9 @@ steps:
     environment:
       KNOX_DRIVER: bolt
       KNOX_ENGINE: pack
-      # MINIO_BUCKET: scenarios
-      # MINIO_URL: hd1.bwd.cx:9001
-      # MINIO_USER:
-      #   from_secret: MINIO_USER
-      # MINIO_SECRET:
-      #   from_secret: MINIO_SECRET
     commands:
       - apk add --no-cache git
-      - go run -buildvcs=true ./internal/tests/run -count 100 -arch native
+      - go run -buildvcs=true ./internal/tests/run -count 100 -arch native -logs /go/logs
     depends_on:
       - lint
       - vet
