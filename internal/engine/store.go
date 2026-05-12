@@ -25,9 +25,9 @@ func RegisterStoreFactory(n StoreKind, fn StoreFactory) {
 
 func (e *Engine) StoreNames() []string {
 	stores := e.stores.Map()
-	names := make([]string, len(stores))
-	for i, v := range stores {
-		names[i] = v.Schema().Name
+	names := make([]string, 0, len(stores))
+	for _, v := range stores {
+		names = append(names, v.Schema().Name)
 	}
 	return names
 }
