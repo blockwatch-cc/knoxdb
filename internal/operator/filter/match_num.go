@@ -11,6 +11,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/filter"
 	"blockwatch.cc/knoxdb/internal/filter/bloom"
+	"blockwatch.cc/knoxdb/internal/hash"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
 
@@ -314,7 +315,7 @@ type numMatcher[T Number] struct {
 
 func (m *numMatcher[T]) WithValue(v any) {
 	m.val = v.(T)
-	m.hash = filter.HashT(m.val)
+	m.hash = hash.HashT(m.val)
 }
 
 func (m *numMatcher[T]) Value() any {
@@ -622,7 +623,7 @@ func (m *numInSetMatcher[T]) WithSlice(slice any) {
 	for _, v := range slice.([]T) {
 		m.set.Set(uint64(v))
 	}
-	m.hashes = filter.HashMulti(slice.([]T))
+	m.hashes = hash.Vec(slice.([]T), m.hashes)
 }
 
 func (m *numInSetMatcher[T]) WithSet(set *xroar.Bitmap) {
@@ -635,7 +636,7 @@ func (m *numInSetMatcher[T]) WithSet(set *xroar.Bitmap) {
 		if !ok {
 			break
 		}
-		m.hashes[i] = filter.HashT(v)
+		m.hashes[i] = hash.HashT(v)
 	}
 }
 

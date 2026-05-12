@@ -9,7 +9,7 @@ import (
 	"reflect"
 
 	"blockwatch.cc/knoxdb/internal/block"
-	"blockwatch.cc/knoxdb/internal/hash/xxhash64"
+	"blockwatch.cc/knoxdb/internal/hash"
 	"blockwatch.cc/knoxdb/internal/operator/filter"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/types"
@@ -195,7 +195,7 @@ func (c *SimpleHashConverter) QueryKeys(node *filter.Node) []uint64 {
 	case types.FilterModeEqual:
 		// single
 		_ = f0.Encode(buf, flt.Value, LE)
-		return []uint64{xxhash64.Sum64(buf.Bytes())}
+		return []uint64{hash.Hash(buf.Bytes())}
 
 	case types.FilterModeIn, types.FilterModeNotIn:
 		// slice
@@ -207,7 +207,7 @@ func (c *SimpleHashConverter) QueryKeys(node *filter.Node) []uint64 {
 		for i := range res {
 			buf.Reset()
 			_ = f0.Encode(buf, rval.Index(i).Interface(), LE)
-			res[i] = xxhash64.Sum64(buf.Bytes())
+			res[i] = hash.Hash(buf.Bytes())
 		}
 		return res
 
@@ -250,7 +250,7 @@ func (c *CompositeHashConverter) ConvertPack(pkg *pack.Package, mode pack.WriteM
 	// hash construction is more expensive, we need to push multiple values from different
 	// bit-width data blocks through our hash function
 	var x [8]byte
-	hasher := xxhash64.New()
+	hasher := hash.New()
 	u64 := hashBlock.Uint64()
 	sel := pkg.Selected()
 	for i, l := 0, pkg.Len(); i < l; i++ {
@@ -328,7 +328,7 @@ func (c *CompositeHashConverter) QueryKeys(node *filter.Node) []uint64 {
 	}
 
 	// create single hash key from composite EQ conditions
-	return []uint64{xxhash64.Sum64(buf.Bytes())}
+	return []uint64{hash.Hash(buf.Bytes())}
 }
 
 func (*CompositeHashConverter) QueryNode(_ *filter.Node) *filter.Node {

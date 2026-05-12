@@ -13,6 +13,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/bitset"
 	etests "blockwatch.cc/knoxdb/internal/encode/tests"
 	"blockwatch.cc/knoxdb/internal/filter/llb"
+	"blockwatch.cc/knoxdb/internal/hash"
 	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
@@ -321,6 +322,7 @@ func BenchmarkUniqueBitset(b *testing.B) {
 					u.Set(int(v) - int(minx))
 				}
 				card = u.Count()
+				u.Close()
 			}
 		})
 		_ = card
@@ -355,9 +357,12 @@ func BenchmarkUniqueLLB(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(c.N * 2))
 			for range b.N {
-				flt := llb.NewFilterWithPrecision(8)
-				flt.AddMultiUint32(data)
-				card = int(flt.Cardinality())
+				hashes := hash.Vec32(data, arena.AllocUint64(len(data))[:len(data)])
+				var scratch [256]byte // need 256 byte scratch space
+				unique, _ := llb.NewFilterBuffer(scratch[:], 8)
+				unique.Add(hashes...)
+				card = int(unique.Cardinality())
+				arena.Free(data)
 			}
 		})
 		_ = card

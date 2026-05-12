@@ -8,7 +8,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"hash"
 	"io"
 	"io/fs"
 	"os"
@@ -19,7 +18,7 @@ import (
 
 	"github.com/echa/log"
 
-	"blockwatch.cc/knoxdb/internal/hash/xxhash64"
+	"blockwatch.cc/knoxdb/internal/hash"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
@@ -117,7 +116,7 @@ type Wal struct {
 	req     chan *util.Future
 	close   chan struct{}
 	csum    uint64
-	hash    hash.Hash64
+	hash    hash.Hasher
 	nextLsn LSN
 	lastLsn LSN
 	log     log.Logger
@@ -140,7 +139,7 @@ func Create(opts WalOptions) (*Wal, error) {
 	wal := &Wal{
 		opts:    opts,
 		wr:      bufio.NewWriterSize(nil, WAL_BUFFER_SIZE),
-		hash:    xxhash64.New(),
+		hash:    hash.New(),
 		csum:    opts.Seed,
 		req:     make(chan *util.Future, WAL_MAX_SYNC_REQUESTS),
 		close:   make(chan struct{}),
@@ -180,7 +179,7 @@ func Open(lsn LSN, opts WalOptions) (*Wal, error) {
 	wal := &Wal{
 		opts:    opts,
 		wr:      bufio.NewWriterSize(nil, WAL_BUFFER_SIZE),
-		hash:    xxhash64.New(),
+		hash:    hash.New(),
 		req:     make(chan *util.Future, WAL_MAX_SYNC_REQUESTS),
 		close:   make(chan struct{}),
 		csum:    opts.Seed,

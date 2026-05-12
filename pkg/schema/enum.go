@@ -9,7 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	"blockwatch.cc/knoxdb/internal/hash/xxhash64"
+	"blockwatch.cc/knoxdb/internal/hash"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
@@ -118,7 +118,7 @@ func (e *EnumDictionary) MustValue(code uint16) string {
 }
 
 func (e *EnumDictionary) Code(val string) (uint16, bool) {
-	code, ok := e.codes[xxhash64.Sum64([]byte(val))]
+	code, ok := e.codes[hash.Hash([]byte(val))]
 	return code, ok
 }
 
@@ -142,7 +142,7 @@ func (e *EnumDictionary) Append(vals ...string) error {
 
 	clear(e.codes)
 	for _, v := range vals {
-		e.codes[xxhash64.Sum64([]byte(v))] = uint16(e.Len())
+		e.codes[hash.Hash([]byte(v))] = uint16(e.Len())
 		e.offsets = append(e.offsets, uint32(len(e.values)))
 		e.values = append(e.values, []byte(v)...)
 	}
@@ -170,7 +170,7 @@ func (e *EnumDictionary) UnmarshalBinary(buf []byte) error {
 	for len(buf) > 0 {
 		sz := buf[0]
 		buf = buf[1:]
-		e.codes[xxhash64.Sum64(buf[:sz])] = uint16(len(e.offsets))
+		e.codes[hash.Hash(buf[:sz])] = uint16(len(e.offsets))
 		e.offsets = append(e.offsets, uint32(len(e.values)))
 		e.values = append(e.values, buf[:sz]...)
 		buf = buf[sz:]

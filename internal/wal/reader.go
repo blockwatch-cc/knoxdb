@@ -6,10 +6,9 @@ package wal
 import (
 	"bufio"
 	"fmt"
-	"hash"
 	"io"
 
-	"blockwatch.cc/knoxdb/internal/hash/xxhash64"
+	"blockwatch.cc/knoxdb/internal/hash"
 	"blockwatch.cc/knoxdb/internal/types"
 )
 
@@ -60,7 +59,7 @@ type Reader struct {
 	flt    *RecordFilter
 	seg    *segment
 	rd     *bufio.Reader
-	hash   hash.Hash64
+	hash   hash.Hasher
 	csum   uint64
 	xid    types.XID
 	lsn    LSN
@@ -78,7 +77,7 @@ func (w *Wal) NewReader() WalReader {
 	return &Reader{
 		wal:    w,
 		rd:     bufio.NewReaderSize(nil, WAL_BUFFER_SIZE),
-		hash:   xxhash64.New(),
+		hash:   hash.New(),
 		csum:   w.opts.Seed,
 		maxSz:  w.opts.MaxSegmentSize,
 		maxLsn: w.nextLsn,
@@ -337,7 +336,7 @@ func (r *Reader) read(buf []byte) error {
 	return nil
 }
 
-func checksum(h hash.Hash64, seed uint64, head *RecordHeader, body [][]byte) uint64 {
+func checksum(h hash.Hasher, seed uint64, head *RecordHeader, body [][]byte) uint64 {
 	h.Reset()
 	var b [8]byte
 	LE.PutUint64(b[:], seed)

@@ -15,7 +15,7 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"blockwatch.cc/knoxdb/internal/hash/xxhash64"
+	"blockwatch.cc/knoxdb/internal/hash"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
@@ -724,7 +724,7 @@ func (s *Schema) Finalize() *Schema {
 	var b [4]byte
 
 	// generate schema hash from visible fields
-	h := xxhash64.New()
+	h := hash.New()
 	LE.PutUint32(b[:], s.Version)
 	h.Write(b[:])
 

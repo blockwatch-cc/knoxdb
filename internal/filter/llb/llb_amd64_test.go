@@ -1,5 +1,5 @@
-// Copyright (c) 2021 Blockwatch Data Inc.
-// Author: stefan@blockwatch.cc
+// Copyright (c) 2021-2026 Blockwatch Data Inc.
+// Author: stefan@blockwatch.cc, alex@blockwatch.cc
 
 package llb
 
@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/cpu"
+	"blockwatch.cc/knoxdb/internal/hash"
 	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
@@ -30,7 +31,7 @@ func TestCardinalityUint32AVX2(t *testing.T) {
 
 		if j%step == 0 {
 			exact := uint64(len(unique))
-			llb_add_u32_avx2(llb, slice, 0)
+			llb_add_u32_avx2(llb, slice)
 			j = 0
 			res := llb_cardinality_avx2(llb)
 
@@ -59,7 +60,7 @@ func TestCardinalityUint32AVX512(t *testing.T) {
 
 		if j%step == 0 {
 			exact := uint64(len(unique))
-			llb_add_u32_avx512(llb, slice, 0)
+			llb_add_u32_avx512(llb, slice)
 			j = 0
 			res := llb_cardinality_avx512(llb)
 
@@ -88,7 +89,7 @@ func TestCardinalityUint64AVX2(t *testing.T) {
 
 		if j%step == 0 {
 			exact := uint64(len(unique))
-			llb_add_u64_avx2(llb, slice, 0)
+			llb_add_u64_avx2(llb, slice)
 			j = 0
 			res := llb_cardinality_avx2(llb)
 
@@ -117,7 +118,7 @@ func TestCardinalityUint64AVX512(t *testing.T) {
 
 		if j%step == 0 {
 			exact := uint64(len(unique))
-			llb_add_u64_avx512(llb, slice, 0)
+			llb_add_u64_avx512(llb, slice)
 			j = 0
 			res := llb_cardinality_avx512(llb)
 
@@ -140,11 +141,11 @@ func TestMergeAVX2(t *testing.T) {
 
 	for i := 1; i <= 300000; i++ {
 		val := util.RandUint64()
-		llb1.AddUint64(val)
+		llb1.Add(hash.Uint64(val))
 		unique[val] = true
 
 		val = util.RandUint64()
-		llb2.AddUint64(val)
+		llb2.Add(hash.Uint64(val))
 		unique[val] = true
 	}
 
@@ -179,7 +180,7 @@ func BenchmarkAddUint32AVX2(b *testing.B) {
 				b.SetBytes(int64(4 * c.N))
 				for b.Loop() {
 					f := NewFilterWithPrecision(p)
-					llb_add_u32_avx2(f, data, 0)
+					llb_add_u32_avx2(f, data)
 				}
 			})
 		}
@@ -197,7 +198,7 @@ func BenchmarkAddUint32AVX512(b *testing.B) {
 				b.SetBytes(int64(4 * c.N))
 				for b.Loop() {
 					f := NewFilterWithPrecision(p)
-					llb_add_u32_avx512(f, data, 0)
+					llb_add_u32_avx512(f, data)
 				}
 			})
 		}
@@ -215,7 +216,7 @@ func BenchmarkAddUint64AVX2(b *testing.B) {
 				b.SetBytes(int64(8 * c.N))
 				for b.Loop() {
 					f := NewFilterWithPrecision(p)
-					llb_add_u64_avx2(f, data, 0)
+					llb_add_u64_avx2(f, data)
 				}
 			})
 		}
@@ -233,7 +234,7 @@ func BenchmarkAddUint64AVX512(b *testing.B) {
 				b.SetBytes(int64(8 * c.N))
 				for b.Loop() {
 					f := NewFilterWithPrecision(p)
-					llb_add_u64_avx512(f, data, 0)
+					llb_add_u64_avx512(f, data)
 				}
 			})
 		}
@@ -248,7 +249,7 @@ func BenchmarkCardinalityAVX2(b *testing.B) {
 		for _, p := range benchPrecisons {
 			data := tests.GenRnd[uint32](c.N)
 			f := NewFilterWithPrecision(p)
-			f.AddMultiUint32(data)
+			f.Add(hash.Vec32(data, nil)...)
 			b.Run(fmt.Sprintf("%s/p=%d", c.Name, p), func(b *testing.B) {
 				b.SetBytes(int64(len(f.buf)))
 				for b.Loop() {
@@ -267,7 +268,7 @@ func BenchmarkCardinalityAVX512(b *testing.B) {
 		for _, p := range benchPrecisons {
 			data := tests.GenRnd[uint32](c.N)
 			f := NewFilterWithPrecision(p)
-			f.AddMultiUint32(data)
+			f.Add(hash.Vec32(data, nil)...)
 			b.Run(fmt.Sprintf("%s/p=%d", c.Name, p), func(b *testing.B) {
 				b.SetBytes(int64(len(f.buf)))
 				for b.Loop() {
@@ -289,8 +290,8 @@ func BenchmarkMergeAVX2(b *testing.B) {
 
 			f1 := NewFilterWithPrecision(p)
 			f2 := NewFilterWithPrecision(p)
-			f1.AddMultiUint32(data1)
-			f2.AddMultiUint32(data2)
+			f1.Add(hash.Vec32(data1, nil)...)
+			f2.Add(hash.Vec32(data2, nil)...)
 
 			b.Run(fmt.Sprintf("%s/p=%d", c.Name, p), func(b *testing.B) {
 				b.SetBytes(int64(len(f1.buf)))

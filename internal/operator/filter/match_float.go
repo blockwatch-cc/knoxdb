@@ -9,6 +9,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/filter"
+	"blockwatch.cc/knoxdb/internal/hash"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/slicex"
 )
@@ -38,7 +39,7 @@ func (m *floatInSetMatcher[T]) WithSlice(slice any) {
 	data := slice.([]T)
 	slices.Sort(data)
 	m.slice.Values = data
-	m.hashes = filter.HashMulti(data)
+	m.hashes = hash.Vec(data, m.hashes)
 }
 
 func (m floatInSetMatcher[T]) MatchValue(v any) bool {

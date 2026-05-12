@@ -4,8 +4,8 @@
 package bloom
 
 // This package implements a custom bloom filter implementation loosely based on
-// Will Fitzgerald's bloom & bitset packages. It uses a vectorized zero-allocation
-// xxhash32 implementation, limits the filter size to powers of 2 and fixes the
+// Will Fitzgerald's bloom & bitset packages. It uses a fast xxh3 (64bit) hash
+// implementation, limits the filter size to powers of 2 and fixes the
 // number of hash functions to 4. The empirical false positive rate of this filter
 // is pow(1 - exp(-4 / (m / n)), 4). A good way is to dimension the filter based
 // on set cardinality while applying a scaling factor (multiply by 8 because
@@ -28,9 +28,6 @@ import (
 	"io"
 	"math"
 	"unsafe"
-
-	"blockwatch.cc/knoxdb/pkg/util"
-	"github.com/zeebo/xxh3"
 )
 
 type containsFunc func(*Filter, uint32, uint32) bool
@@ -199,59 +196,10 @@ func (f *Filter) ContainsAny(l []uint64) bool {
 }
 
 // Add inserts data to the filter.
-func (f *Filter) Add(v []byte) {
-	h := xxh3.Hash(v)
-	f.add(f, uint32(h), uint32(h>>32))
-}
-
-// AddMany inserts multiple data points to the filter.
-func (f *Filter) AddMany(src [][]byte) {
-	for _, v := range src {
-		h := xxh3.Hash(v)
+func (f *Filter) Add(hashes ...uint64) {
+	for _, h := range hashes {
 		f.add(f, uint32(h), uint32(h>>32))
 	}
-}
-
-// AddManyUint8 inserts multiple data points to the filter.
-func (f *Filter) AddManyUint8(src []byte) {
-	for _, v := range src {
-		h := xxh3.Hash((*[1]byte)(unsafe.Pointer(&v))[:])
-		f.add(f, uint32(h), uint32(h>>32))
-	}
-}
-
-// AddManyUint16 inserts multiple data points to the filter.
-func (f *Filter) AddManyUint16(src []uint16) {
-	for _, v := range src {
-		h := xxh3.Hash((*[2]byte)(unsafe.Pointer(&v))[:])
-		f.add(f, uint32(h), uint32(h>>32))
-	}
-}
-
-// AddManyUint32 inserts multiple data points to the filter.
-func (f *Filter) AddManyUint32(src []uint32) {
-	for _, v := range src {
-		h := xxh3.Hash((*[4]byte)(unsafe.Pointer(&v))[:])
-		f.add(f, uint32(h), uint32(h>>32))
-	}
-}
-
-// AddManyUint64 inserts multiple data points to the filter.
-func (f *Filter) AddManyUint64(src []uint64) {
-	for _, v := range src {
-		h := xxh3.Hash((*[8]byte)(unsafe.Pointer(&v))[:])
-		f.add(f, uint32(h), uint32(h>>32))
-	}
-}
-
-// AddManyFloat64 inserts multiple data points to the filter.
-func (f *Filter) AddManyFloat64(src []float64) {
-	f.AddManyUint64(util.ReinterpretSlice[float64, uint64](src))
-}
-
-// AddManyFloat32 inserts multiple data points to the filter.
-func (f *Filter) AddManyFloat32(src []float32) {
-	f.AddManyUint32(util.ReinterpretSlice[float32, uint32](src))
 }
 
 // Merge performs an in-place union of other into f.

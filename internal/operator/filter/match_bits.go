@@ -7,6 +7,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/filter"
+	"blockwatch.cc/knoxdb/internal/hash"
 	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/slicex"
 	"blockwatch.cc/knoxdb/pkg/util"
@@ -48,7 +49,7 @@ type bitMatcher struct {
 
 func (m *bitMatcher) WithValue(v any) {
 	m.val = v.(bool)
-	m.hash = filter.HashUint8(util.Bool2byte(m.val))
+	m.hash = hash.Uint8(util.Bool2byte(m.val))
 }
 
 func (m *bitMatcher) Value() any {
@@ -451,7 +452,7 @@ func (m *bitInSetMatcher) WithSlice(slice any) {
 	case 2:
 		m.from, m.to = vals[0], vals[1]
 	}
-	m.hashes = filter.HashMulti(vals)
+	m.hashes = hash.Vec(vals, m.hashes)
 }
 
 func (m *bitInSetMatcher) WithSet(set *xroar.Bitmap) {
@@ -466,15 +467,15 @@ func (m *bitInSetMatcher) WithSet(set *xroar.Bitmap) {
 	case 2:
 		// all true
 		m.from, m.to = true, true
-		m.hashes = []uint64{filter.HashUint8(1)}
+		m.hashes = []uint64{hash.Uint8(1)}
 	case 3:
 		// full range
 		m.from, m.to = false, true
-		m.hashes = []uint64{filter.HashUint8(0), filter.HashUint8(1)}
+		m.hashes = []uint64{hash.Uint8(0), hash.Uint8(1)}
 	default:
 		// empty or all false
 		m.from, m.to = false, false
-		m.hashes = []uint64{filter.HashUint8(0)}
+		m.hashes = []uint64{hash.Uint8(0)}
 	}
 }
 

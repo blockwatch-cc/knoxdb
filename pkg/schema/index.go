@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"blockwatch.cc/knoxdb/internal/hash/xxhash64"
+	"blockwatch.cc/knoxdb/internal/hash"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/slicex"
 )
@@ -71,7 +71,7 @@ func (s *IndexSchema) TaggedHash(tag types.ObjectTag) uint64 {
 
 // Hash returns a unique index schema hash.
 func (s *IndexSchema) Hash() uint64 {
-	h := xxhash64.New()
+	h := hash.New()
 
 	// index type
 	h.Write([]byte{byte(s.Type)})
@@ -524,7 +524,7 @@ func reflectStructFieldForIndex(f reflect.StructField, tagName string, base *Sch
 
 	// create index name when empty or _
 	if index.Name == "" || index.Name == "_" {
-		index.Name = "index_" + strconv.FormatUint(xxhash64.Sum64([]byte(tag)), 16)
+		index.Name = "index_" + strconv.FormatUint(hash.Hash([]byte(tag)), 16)
 	}
 
 	// lookup current field in base schema when its type is not empty

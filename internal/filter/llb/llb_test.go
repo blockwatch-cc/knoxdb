@@ -1,5 +1,5 @@
-// Copyright (c) 2021-2024 Blockwatch Data Inc.
-// Author: stefan@blockwatch.cc
+// Copyright (c) 2021-2026 Blockwatch Data Inc.
+// Author: stefan@blockwatch.cc, alex@blockwatch.cc
 
 package llb
 
@@ -11,7 +11,7 @@ import (
 	"slices"
 	"testing"
 
-	"blockwatch.cc/knoxdb/internal/hash/xxhash"
+	"blockwatch.cc/knoxdb/internal/hash"
 	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/pkg/slicex"
 	"blockwatch.cc/knoxdb/pkg/util"
@@ -52,7 +52,7 @@ func TestCardinality(t *testing.T) {
 
 	for i := 1; len(unique) <= 100000; i++ {
 		val := util.RandUint64()
-		llb.AddUint64(val)
+		llb.Add(hash.Uint64(val))
 		unique[val] = true
 
 		if len(unique)%step == 0 {
@@ -73,7 +73,7 @@ func TestPrecision(t *testing.T) {
 		for _, f := range []int{8, 9, 10, 11, 12, 13, 14, 15, 16} {
 			// now := time.Now()
 			flt := NewFilterWithPrecision(uint32(f))
-			flt.AddMultiInt64(util.RandInts[int64](sz))
+			flt.Add(hash.Vec(util.RandInts[int64](sz), nil)...)
 			c := flt.Cardinality()
 			_ = c
 			// t.Logf("F=%d SZ=%d C=%d ERR=%f RT=%s", f, sz, c, float64(sz-int(c))/float64(sz), time.Since(now))
@@ -81,7 +81,7 @@ func TestPrecision(t *testing.T) {
 	}
 }
 
-func TestCardinalityUint32Go(t *testing.T) {
+func TestCardinalityUint32(t *testing.T) {
 	llb := NewFilter()
 	step := 10000
 	unique := map[uint32]bool{}
@@ -95,7 +95,7 @@ func TestCardinalityUint32Go(t *testing.T) {
 
 		if j%step == 0 {
 			exact := uint64(len(unique))
-			llb_add_u32_purego(llb, slice, 0)
+			llb_add_u32_purego(llb, slice)
 			j = 0
 			res := llb_cardinality_purego(llb)
 
@@ -107,7 +107,7 @@ func TestCardinalityUint32Go(t *testing.T) {
 	}
 }
 
-func TestCardinalityMultiUint64Go(t *testing.T) {
+func TestCardinalityMultiUint64(t *testing.T) {
 	llb := NewFilter()
 	step := 10000
 	unique := map[uint64]bool{}
@@ -121,7 +121,7 @@ func TestCardinalityMultiUint64Go(t *testing.T) {
 
 		if j%step == 0 {
 			exact := uint64(len(unique))
-			llb_add_u64_purego(llb, slice, 0)
+			llb_add_u64_purego(llb, slice)
 			j = 0
 			res := llb_cardinality_purego(llb)
 
@@ -133,7 +133,7 @@ func TestCardinalityMultiUint64Go(t *testing.T) {
 	}
 }
 
-func TestMergeGo(t *testing.T) {
+func TestMerge(t *testing.T) {
 	llb1 := NewFilter()
 	llb2 := NewFilter()
 
@@ -141,11 +141,11 @@ func TestMergeGo(t *testing.T) {
 
 	for i := 1; i <= 300000; i++ {
 		val := util.RandUint64()
-		llb1.AddUint64(val)
+		llb1.Add(hash.Uint64(val))
 		unique[val] = true
 
 		val = util.RandUint64()
-		llb2.AddUint64(val)
+		llb2.Add(hash.Uint64(val))
 		unique[val] = true
 	}
 
@@ -175,7 +175,7 @@ func TestMarshal(t *testing.T) {
 
 	for i := 1; len(unique) <= 100000; i++ {
 		val := util.RandUint64()
-		llb.AddUint64(val)
+		llb.Add(hash.Uint64(val))
 		unique[val] = true
 	}
 
@@ -191,7 +191,7 @@ func TestMarshal(t *testing.T) {
 
 var benchPrecisons = []uint32{8, 12, 14, 16}
 
-func BenchmarkAddUint32Go(b *testing.B) {
+func BenchmarkAddUint32PureGo(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		for _, p := range benchPrecisons {
 			data := tests.GenRnd[uint32](c.N)
@@ -199,14 +199,14 @@ func BenchmarkAddUint32Go(b *testing.B) {
 				b.SetBytes(int64(4 * c.N))
 				for b.Loop() {
 					f := NewFilterWithPrecision(p)
-					llb_add_u32_purego(f, data, 0)
+					llb_add_u32_purego(f, data)
 				}
 			})
 		}
 	}
 }
 
-func BenchmarkAddUint64Go(b *testing.B) {
+func BenchmarkAddUint64PureGo(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		for _, p := range benchPrecisons {
 			data := tests.GenRnd[uint64](c.N)
@@ -214,14 +214,14 @@ func BenchmarkAddUint64Go(b *testing.B) {
 				b.SetBytes(int64(8 * c.N))
 				for b.Loop() {
 					f := NewFilterWithPrecision(p)
-					llb_add_u64_purego(f, data, 0)
+					llb_add_u64_purego(f, data)
 				}
 			})
 		}
 	}
 }
 
-func BenchmarkAddHashes(b *testing.B) {
+func BenchmarkHashAndAddPrealloc(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		for _, p := range benchPrecisons {
 			data := tests.GenRnd[uint64](c.N)
@@ -229,21 +229,21 @@ func BenchmarkAddHashes(b *testing.B) {
 			b.Run(fmt.Sprintf("%s/p=%d", c.Name, p), func(b *testing.B) {
 				b.SetBytes(int64(8 * c.N))
 				for b.Loop() {
-					u64 := xxhash.Vec64u64(data, hashes)
+					u64 := hash.Vec64(data, hashes)
 					f := NewFilterWithPrecision(p)
-					f.AddHashes(u64)
+					f.Add(u64...)
 				}
 			})
 		}
 	}
 }
 
-func BenchmarkCardinalityGo(b *testing.B) {
+func BenchmarkCardinalityPureGo(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		for _, p := range benchPrecisons {
 			data := tests.GenRnd[uint32](c.N)
 			f := NewFilterWithPrecision(p)
-			f.AddMultiUint32(data)
+			f.Add(hash.Vec32(data, nil)...)
 			b.Run(fmt.Sprintf("%s/p=%d", c.Name, p), func(b *testing.B) {
 				b.SetBytes(int64(len(f.buf)))
 				for b.Loop() {
@@ -254,7 +254,7 @@ func BenchmarkCardinalityGo(b *testing.B) {
 	}
 }
 
-func BenchmarkMergeGo(b *testing.B) {
+func BenchmarkMergePureGo(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		for _, p := range benchPrecisons {
 			data1 := tests.GenRnd[uint32](c.N)
@@ -262,8 +262,8 @@ func BenchmarkMergeGo(b *testing.B) {
 
 			f1 := NewFilterWithPrecision(p)
 			f2 := NewFilterWithPrecision(p)
-			f1.AddMultiUint32(data1)
-			f2.AddMultiUint32(data2)
+			f1.Add(hash.Vec32(data1, nil)...)
+			f2.Add(hash.Vec32(data2, nil)...)
 
 			b.Run(fmt.Sprintf("%s/p=%d", c.Name, p), func(b *testing.B) {
 				b.SetBytes(int64(len(f1.buf)))

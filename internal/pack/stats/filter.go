@@ -6,11 +6,12 @@ package stats
 import (
 	"slices"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/block"
-	"blockwatch.cc/knoxdb/internal/filter"
 	"blockwatch.cc/knoxdb/internal/filter/bloom"
 	"blockwatch.cc/knoxdb/internal/filter/fuse"
 	"blockwatch.cc/knoxdb/internal/filter/llb"
+	"blockwatch.cc/knoxdb/internal/hash"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
@@ -54,12 +55,13 @@ func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
 			types.FilterTypeBloom4b, types.FilterTypeBloom5b:
 			if idx.use.Is(FeatBloomFilter) {
 				// use cardinality from pack analyze step if exists, otherwise
-				// fall back to cardinality estimation
+				// fall back to cardinality estimation and reuse hashes
 				card := pstats.Unique[i]
+				var hashes []uint64
 				if card <= 0 {
-					card = EstimateCardinality(b, 8)
+					card, hashes = EstimateCardinality(b, 8)
 				}
-				if flt := BuildBloomFilter(b, card, f.Filter.Factor()); flt != nil {
+				if flt := BuildBloomFilter(b, card, f.Filter.Factor(), hashes); flt != nil {
 					blooms[f.Id] = flt.Bytes()
 				}
 			}
@@ -87,7 +89,7 @@ func (idx Index) buildFilters(pkg *pack.Package, node *SNode) error {
 				// fall back to cardinality estimation
 				card := pstats.Unique[i]
 				if card <= 0 {
-					card = EstimateCardinality(b, 8)
+					card, _ = EstimateCardinality(b, 8)
 				}
 				if flt := BuildBitsFilter(b, card); flt != nil {
 					bits[f.Id] = flt.Bytes()
@@ -206,20 +208,20 @@ func (idx Index) dropFilters(pkg *pack.Package) error {
 	})
 }
 
-func EstimateCardinality(b *block.Block, precision int) int {
+func EstimateCardinality(b *block.Block, precision int) (int, []uint64) {
 	// shortcut for empty and very small blocks
 	l := b.Len()
 	switch l {
 	case 0:
-		return 0
+		return 0, nil
 	case 1:
-		return 1
+		return 1, nil
 	case 2:
 		minVal, maxVal := b.MinMax()
 		if b.Type().EQ(minVal, maxVal) {
-			return 1
+			return 1, nil
 		}
-		return 2
+		return 2, nil
 	}
 
 	// type-based estimation
@@ -228,62 +230,70 @@ func EstimateCardinality(b *block.Block, precision int) int {
 	switch b.Type() {
 	case block.BlockInt64, block.BlockUint64, block.BlockFloat64:
 		flt := llb.NewFilterWithPrecision(uint32(precision))
-		flt.AddMultiUint64(b.Uint64().Slice())
-		return min(l, int(flt.Cardinality()))
+		hashes := hash.Vec64(b.Uint64().Slice(), arena.AllocUint64(l))
+		flt.Add(hashes...)
+		return min(l, int(flt.Cardinality())), hashes
 
 	case block.BlockInt32, block.BlockUint32, block.BlockFloat32:
 		flt := llb.NewFilterWithPrecision(uint32(precision))
-		flt.AddMultiUint32(b.Uint32().Slice())
-		return min(l, int(flt.Cardinality()))
+		hashes := hash.Vec32(b.Uint32().Slice(), arena.AllocUint64(l))
+		flt.Add(hashes...)
+		return min(l, int(flt.Cardinality())), hashes
 
 	case block.BlockInt16, block.BlockUint16:
 		bits := xroar.NewWithSize(l)
 		for _, v := range b.Uint16().Slice() {
 			bits.Set(uint64(v))
 		}
-		return bits.Count()
+		return bits.Count(), nil
 
 	case block.BlockInt8, block.BlockUint8:
 		bits := xroar.NewWithSize(l)
 		for _, v := range b.Uint8().Slice() {
 			bits.Set(uint64(v))
 		}
-		return bits.Count()
+		return bits.Count(), nil
 
 	case block.BlockInt256:
 		flt := llb.NewFilterWithPrecision(uint32(precision))
-		for _, v := range b.Int256().Iterator() {
-			flt.Add(v.Bytes())
+		hashes := arena.AllocUint64(l)[:l]
+		for i, v := range b.Int256().Iterator() {
+			hashes[i] = hash.Hash(v.Bytes())
 		}
-		return min(l, int(flt.Cardinality()))
+		flt.Add(hashes...)
+		return min(l, int(flt.Cardinality())), hashes
 
 	case block.BlockInt128:
 		flt := llb.NewFilterWithPrecision(uint32(precision))
-		for _, v := range b.Int128().Iterator() {
-			flt.Add(v.Bytes())
+		hashes := arena.AllocUint64(l)[:l]
+		for i, v := range b.Int128().Iterator() {
+			hashes[i] = hash.Hash(v.Bytes())
 		}
-		return min(l, int(flt.Cardinality()))
+		flt.Add(hashes...)
+		return min(l, int(flt.Cardinality())), hashes
 
 	case block.BlockBytes:
 		flt := llb.NewFilterWithPrecision(uint32(precision))
-		for _, v := range b.Bytes().Iterator() {
-			flt.Add(v)
+		hashes := arena.AllocUint64(l)[:l]
+		for i, v := range b.Bytes().Iterator() {
+			hashes[i] = hash.Hash(v)
 		}
-		return min(l, int(flt.Cardinality()))
+		flt.Add(hashes...)
+		return min(l, int(flt.Cardinality())), hashes
 
 	case block.BlockBool:
 		min, max := b.MinMax()
 		if min == max {
-			return 1
+			return 1, nil
 		}
-		return 2
+		return 2, nil
 
 	default:
-		return 0
+		return 0, nil
 	}
 }
 
-func BuildBloomFilter(b *block.Block, cardinality int, factor int) *bloom.Filter {
+func BuildBloomFilter(b *block.Block, cardinality int, factor int, hashes []uint64) *bloom.Filter {
 	if cardinality <= 0 || factor <= 0 {
 		return nil
 	}
@@ -301,48 +311,58 @@ func BuildBloomFilter(b *block.Block, cardinality int, factor int) *bloom.Filter
 	// 5        0.000082   0.008%    1 in 12,194
 	flt := bloom.NewFilter(cardinality * factor * 8)
 
-	switch b.Type() {
-	case block.BlockInt64, block.BlockUint64:
-		// we write uint64 data in little endian order into the filter,
-		// so all 8 byte numeric types look the same (float64 uses FloatBits == uint64)
-		flt.AddManyUint64(b.Uint64().Slice())
+	// reuse hashes from cardinality estimation if available
+	if hashes == nil {
+		// pre-alloc a hash slice
+		hashes = arena.AllocUint64(b.Len())[:b.Len()]
+		switch b.Type() {
+		case block.BlockInt64, block.BlockUint64, block.BlockFloat64:
+			// we write uint64 data in little endian order into the filter,
+			// so all 8 byte numeric types look the same (float64 uses FloatBits == uint64)
+			hashes = hash.Vec64(b.Uint64().Slice(), hashes)
 
-	case block.BlockInt32, block.BlockUint32:
-		// we write uint32 data in little endian order into the filter,
-		// so all 4 byte numeric types look the same (float32 uses FloatBits == uint32)
-		flt.AddManyUint32(b.Uint32().Slice())
+		case block.BlockInt32, block.BlockUint32, block.BlockFloat32:
+			// we write uint32 data in little endian order into the filter,
+			// so all 4 byte numeric types look the same (float32 uses FloatBits == uint32)
+			hashes = hash.Vec32(b.Uint32().Slice(), hashes)
 
-	case block.BlockInt16, block.BlockUint16:
-		// we write uint16 data in little endian order into the filter,
-		// so all 2 byte numeric types look the
-		flt.AddManyUint16(b.Uint16().Slice())
+		case block.BlockInt16, block.BlockUint16:
+			// we write uint16 data in little endian order into the filter,
+			// so all 2 byte numeric types look the
+			hashes = hash.Vec16(b.Uint16().Slice(), hashes)
 
-	case block.BlockInt8, block.BlockUint8:
-		flt.AddManyUint8(b.Uint8().Slice())
+		case block.BlockInt8, block.BlockUint8:
+			hashes = hash.Vec8(b.Uint8().Slice(), hashes)
 
-	case block.BlockInt256:
-		// write individual elements (no optimization exists)
-		for _, v := range b.Int256().Iterator() {
-			flt.Add(v.Bytes())
+		case block.BlockInt256:
+			// write individual elements (no optimization exists)
+			for i, v := range b.Int256().Iterator() {
+				hashes[i] = hash.Hash(v.Bytes())
+			}
+
+		case block.BlockInt128:
+			// write individual elements (no optimization exists)
+			for i, v := range b.Int128().Iterator() {
+				hashes[i] = hash.Hash(v.Bytes())
+			}
+
+		case block.BlockBytes:
+			// write only unique elements (post-dedup optimization this avoids
+			// calculating hashes for duplicates)
+			for i, v := range b.Bytes().Iterator() {
+				hashes[i] = hash.Hash(v)
+			}
+
+		default:
+			// BlockBool and unknown/future types have no filter
+			return nil
 		}
-
-	case block.BlockInt128:
-		// write individual elements (no optimization exists)
-		for _, v := range b.Int128().Iterator() {
-			flt.Add(v.Bytes())
-		}
-
-	case block.BlockBytes:
-		// write only unique elements (post-dedup optimization this avoids
-		// calculating hashes for duplicates)
-		for _, v := range b.Bytes().Iterator() {
-			flt.Add(v)
-		}
-
-	default:
-		// BlockFloat32/64, BlockBool and unknown/future types have no filter
-		return nil
 	}
+
+	// add values to filter
+	flt.Add(hashes...)
+	arena.Free(hashes)
+
 	return flt
 }
 
@@ -404,23 +424,26 @@ func BuildFuseFilter[T uint8 | uint16](b *block.Block) (*fuse.BinaryFuse[T], err
 
 	case block.BlockInt256:
 		// write individual elements (no optimization exists)
-		u64 = make([]uint64, b.Len())
+		u64 = arena.AllocUint64(b.Len())
+		defer arena.Free(u64)
 		for i, v := range b.Int256().Iterator() {
-			u64[i] = filter.Hash(v.Bytes())
+			u64[i] = hash.Hash(v.Bytes())
 		}
 
 	case block.BlockInt128:
 		// write individual elements (no optimization exists)
-		u64 = make([]uint64, b.Len())
+		u64 = arena.AllocUint64(b.Len())
+		defer arena.Free(u64)
 		for i, v := range b.Int128().Iterator() {
-			u64[i] = filter.Hash(v.Bytes())
+			u64[i] = hash.Hash(v.Bytes())
 		}
 
 	case block.BlockBytes:
 		// write all strings
-		u64 = make([]uint64, b.Len())
+		u64 = arena.AllocUint64(b.Len())
+		defer arena.Free(u64)
 		for i, v := range b.Bytes().Iterator() {
-			u64[i] = filter.Hash(v)
+			u64[i] = hash.Hash(v)
 		}
 
 	default:

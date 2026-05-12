@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"sync"
 
-	"blockwatch.cc/knoxdb/internal/hash/xxhash"
+	"blockwatch.cc/knoxdb/internal/hash"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
@@ -64,7 +64,7 @@ func (p *DedupPool) HeapSize() int {
 }
 
 func (p *DedupPool) Append(val []byte) int {
-	hash := xxhash.Sum64(val)
+	hash := hash.Hash(val)
 	n, ok := p.hash[hash]
 	if !ok {
 		p.hash[hash] = len(p.ptr)

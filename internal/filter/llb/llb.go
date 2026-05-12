@@ -1,5 +1,5 @@
-// Copyright (c) 2021 Blockwatch Data Inc.
-// Author: stefan@blockwatch.cc
+// Copyright (c) 2021-2026 Blockwatch Data Inc.
+// Author: stefan@blockwatch.cc, alex@blockwatch.cc
 
 package llb
 
@@ -7,17 +7,11 @@ import (
 	"fmt"
 	"math"
 	"math/bits"
-
-	"blockwatch.cc/knoxdb/internal/hash/xxhash"
-	"blockwatch.cc/knoxdb/internal/hash/xxhash32"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 const (
 	precision = 14
 	m         = uint32(1 << precision) // 16384
-	max       = 32 - precision
-	maxX      = math.MaxUint32 >> max
 	alpha     = 0.7213 / (1 + 1.079/float64(m))
 )
 
@@ -33,49 +27,58 @@ func beta(ez float64) float64 {
 		0.00042419*math.Pow(zl, 7)
 }
 
-func regSumAndZeros(registers []uint8) (float64, float64) {
-	var sum, ez float32
-	for _, val := range registers {
+func regSumAndZeros(regs []uint8) (float64, float64) {
+	var sum, ez float64
+	for _, val := range regs {
 		if val == 0 {
 			ez++
 		}
-		// sum += 1.0 / math.Pow(2.0, float64(val))
-		tmp := float32(uint32(1) << val)
-		sum += 1.0 / tmp
+
+		// float64 pow is expensive, we can get 4-18x faster
+		// with integer math; to prevent  although this clips precision as
+		// ints saturate after a count of 63
+		if val < 64 {
+			tmp := float64(uint64(1) << val)
+			sum += 1.0 / tmp
+		} else {
+			sum += 1.0 / math.Pow(2.0, float64(val))
+		}
 	}
 	return float64(sum), float64(ez)
 }
 
 type LogLogBeta struct {
-	precision uint32
-	m         uint32
-	max       uint32
-	maxX      uint32
-	alpha     float64
-	buf       []uint8
+	prec  uint32
+	m     uint32
+	max   uint32
+	maxX  uint32
+	alpha float64
+	buf   []uint8
 }
 
-// New returns a LogLogBeta
+// New returns a LogLogBeta with fixed precision 14.
 func NewFilter() *LogLogBeta {
 	return &LogLogBeta{
-		precision: precision,
-		m:         m,
-		max:       32 - precision,
-		maxX:      math.MaxUint32 >> (32 - precision),
-		alpha:     alpha,
-		buf:       make([]uint8, int(m)),
+		prec:  precision, // fixed 14
+		m:     m,
+		max:   32 - precision,
+		maxX:  math.MaxUint32 >> (32 - precision),
+		alpha: alpha,
+		buf:   make([]uint8, int(m)),
 	}
 }
 
+// NewFilterWithPrecision creates a custom filter with
+// user-define precision. Values between 8 and 16 are useful.
 func NewFilterWithPrecision(p uint32) *LogLogBeta {
 	m := uint32(1 << p)
 	return &LogLogBeta{
-		precision: p,
-		m:         m,
-		max:       32 - p,
-		maxX:      math.MaxUint32 >> (32 - p),
-		alpha:     0.7213 / (1 + 1.079/float64(m)),
-		buf:       make([]uint8, m),
+		prec:  p,
+		m:     m,
+		max:   32 - p,
+		maxX:  math.MaxUint32 >> (32 - p),
+		alpha: 0.7213 / (1 + 1.079/float64(m)),
+		buf:   make([]uint8, m),
 	}
 }
 
@@ -85,67 +88,28 @@ func NewFilterBuffer(buf []byte, p uint32) (*LogLogBeta, error) {
 		return nil, fmt.Errorf("llbVec: invalid buffer size %d for precision %d", len(buf), p)
 	}
 	return &LogLogBeta{
-		precision: p,
-		m:         m,
-		max:       32 - p,
-		maxX:      math.MaxUint32 >> (32 - p),
-		alpha:     0.7213 / (1 + 1.079/float64(m)),
-		buf:       buf,
+		prec:  p,
+		m:     m,
+		max:   32 - p,
+		maxX:  math.MaxUint32 >> (32 - p),
+		alpha: 0.7213 / (1 + 1.079/float64(m)),
+		buf:   buf,
 	}, nil
 }
 
 func (llb *LogLogBeta) P() uint32 {
-	return llb.precision
+	return llb.prec
 }
 
-func (llb *LogLogBeta) AddHash(x uint32) {
-	k := x >> uint(llb.max)
-	val := uint8(bits.LeadingZeros32((x<<llb.precision)^llb.maxX)) + 1
-	if llb.buf[k] < val {
-		llb.buf[k] = val
+func (llb *LogLogBeta) Add(hashes ...uint64) {
+	for _, h := range hashes {
+		x := uint32(h)
+		k := x >> uint(llb.max)
+		val := uint8(bits.LeadingZeros32((x<<llb.prec)^llb.maxX)) + 1
+		if llb.buf[k] < val {
+			llb.buf[k] = val
+		}
 	}
-}
-
-func (llb *LogLogBeta) AddHashes(h []uint64) {
-	for _, v := range h {
-		llb.AddHash(uint32(v))
-	}
-}
-
-func (llb *LogLogBeta) Add(value []byte) {
-	llb.AddHash(xxhash32.Checksum(value, 0))
-}
-
-func (llb *LogLogBeta) AddUint32(val uint32) {
-	llb.AddHash(xxhash.Hash32u32(val, 0))
-}
-
-func (llb *LogLogBeta) AddInt32(val int32) {
-	llb.AddHash(xxhash.Hash32u32(uint32(val), 0))
-}
-
-func (llb *LogLogBeta) AddUint64(val uint64) {
-	llb.AddHash(xxhash.Hash32u64(val, 0))
-}
-
-func (llb *LogLogBeta) AddInt64(val int64) {
-	llb.AddHash(xxhash.Hash32u64(uint64(val), 0))
-}
-
-func (llb *LogLogBeta) AddMultiUint32(data []uint32) {
-	llb_add_u32(llb, data, 0)
-}
-
-func (llb *LogLogBeta) AddMultiInt32(data []int32) {
-	llb_add_u32(llb, util.ReinterpretSlice[int32, uint32](data), 0)
-}
-
-func (llb *LogLogBeta) AddMultiUint64(data []uint64) {
-	llb_add_u64(llb, data, 0)
-}
-
-func (llb *LogLogBeta) AddMultiInt64(data []int64) {
-	llb_add_u64(llb, util.ReinterpretSlice[int64, uint64](data), 0)
 }
 
 // Cardinality returns the number of unique elements added to the sketch
@@ -153,9 +117,10 @@ func (llb *LogLogBeta) Cardinality() uint64 {
 	return llb_cardinality(llb)
 }
 
-// Merge takes another LogLogBeta and combines it with llb one, making llb the union of both.
+// Merge creates the union between llb and other merging the
+// result into llb.
 func (llb *LogLogBeta) Merge(other *LogLogBeta) {
-	if llb.precision != other.precision {
+	if llb.prec != other.prec {
 		return
 	}
 	if len(llb.buf) != len(other.buf) {

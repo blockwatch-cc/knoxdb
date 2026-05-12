@@ -8,6 +8,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/filter"
+	"blockwatch.cc/knoxdb/internal/hash"
 	"blockwatch.cc/knoxdb/pkg/num"
 )
 
@@ -53,7 +54,7 @@ func (m *i256Matcher) Weight() int { return 4 }
 
 func (m *i256Matcher) WithValue(v any) {
 	m.val = v.(num.Int256)
-	m.hash = filter.Hash(m.val.Bytes())
+	m.hash = hash.Hash(m.val.Bytes())
 }
 
 func (m *i256Matcher) Value() any {
@@ -350,7 +351,7 @@ func (m *i256InSetMatcher) WithValue(val any) {
 
 func (m *i256InSetMatcher) WithSlice(slice any) {
 	m.slice = num.Int256Sort(slice.([]num.Int256))
-	m.hashes = filter.HashMulti(m.slice)
+	m.hashes = hash.Vec(m.slice, m.hashes)
 }
 
 func (m i256InSetMatcher) MatchValue(v any) bool {

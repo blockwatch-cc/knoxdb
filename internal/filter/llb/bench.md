@@ -1,187 +1,82 @@
-## LLB benchmarks
+## LLB Benchmarks
 
-cpu: Apple M1 Max
+### cpu: Apple M1 Max
 
-BenchmarkAddUint32Go/1k/p=8-10            2441 ns/op	1677.75 MB/s
-BenchmarkAddUint32Go/1k/p=12-10           3221 ns/op	1271.77 MB/s
-BenchmarkAddUint32Go/1k/p=14-10           3817 ns/op	1072.98 MB/s
-BenchmarkAddUint32Go/1k/p=16-10           5826 ns/op	 703.10 MB/s
-BenchmarkAddUint32Go/16k/p=8-10          44994 ns/op	1456.55 MB/s
-BenchmarkAddUint32Go/16k/p=12-10        100654 ns/op	 651.10 MB/s
-BenchmarkAddUint32Go/16k/p=14-10         80044 ns/op	 818.75 MB/s
-BenchmarkAddUint32Go/16k/p=16-10         57841 ns/op	1133.04 MB/s
-BenchmarkAddUint32Go/64k/p=8-10         160538 ns/op	1632.91 MB/s
-BenchmarkAddUint32Go/64k/p=12-10        285296 ns/op	 918.85 MB/s
-BenchmarkAddUint32Go/64k/p=14-10        461081 ns/op	 568.54 MB/s
-BenchmarkAddUint32Go/64k/p=16-10        406537 ns/op	 644.82 MB/s
-BenchmarkAddUint64Go/1k/p=8-10            2879 ns/op	2845.75 MB/s
-BenchmarkAddUint64Go/1k/p=12-10           3511 ns/op	2333.02 MB/s
-BenchmarkAddUint64Go/1k/p=14-10           4285 ns/op	1911.88 MB/s
-BenchmarkAddUint64Go/1k/p=16-10           6469 ns/op	1266.43 MB/s
-BenchmarkAddUint64Go/16k/p=8-10          53074 ns/op	2469.63 MB/s
-BenchmarkAddUint64Go/16k/p=12-10        110683 ns/op	1184.21 MB/s
-BenchmarkAddUint64Go/16k/p=14-10        100342 ns/op	1306.25 MB/s
-BenchmarkAddUint64Go/16k/p=16-10         67581 ns/op	1939.48 MB/s
-BenchmarkAddUint64Go/64k/p=8-10         188995 ns/op	2774.08 MB/s
-BenchmarkAddUint64Go/64k/p=12-10        322613 ns/op	1625.13 MB/s
-BenchmarkAddUint64Go/64k/p=14-10        539587 ns/op	 971.65 MB/s
-BenchmarkAddUint64Go/64k/p=16-10        452604 ns/op	1158.38 MB/s
-BenchmarkAddHashes/1k/p=8-10              2468 ns/op	3318.66 MB/s
-BenchmarkAddHashes/1k/p=12-10             3041 ns/op	2693.53 MB/s
-BenchmarkAddHashes/1k/p=14-10             4091 ns/op	2002.50 MB/s
-BenchmarkAddHashes/1k/p=16-10             6177 ns/op	1326.13 MB/s
-BenchmarkAddHashes/16k/p=8-10            41547 ns/op	3154.80 MB/s
-BenchmarkAddHashes/16k/p=12-10           68791 ns/op	1905.37 MB/s
-BenchmarkAddHashes/16k/p=14-10           65846 ns/op	1990.59 MB/s
-BenchmarkAddHashes/16k/p=16-10           54037 ns/op	2425.61 MB/s
-BenchmarkAddHashes/64k/p=8-10           156980 ns/op	3339.84 MB/s
-BenchmarkAddHashes/64k/p=12-10          221085 ns/op	2371.43 MB/s
-BenchmarkAddHashes/64k/p=14-10          322253 ns/op	1626.94 MB/s
-BenchmarkAddHashes/64k/p=16-10          305964 ns/op	1713.56 MB/s
-BenchmarkCardinalityGo/1k/p=8-10           287.3 ns/op	 891.19 MB/s
-BenchmarkCardinalityGo/1k/p=12-10         3989 ns/op	1026.86 MB/s
-BenchmarkCardinalityGo/1k/p=14-10        15739 ns/op	1040.97 MB/s
-BenchmarkCardinalityGo/1k/p=16-10        63513 ns/op	1031.86 MB/s
-BenchmarkCardinalityGo/16k/p=8-10          239.3 ns/op	1069.74 MB/s
-BenchmarkCardinalityGo/16k/p=12-10        3990 ns/op	1026.62 MB/s
-BenchmarkCardinalityGo/16k/p=14-10       37491 ns/op	 437.01 MB/s
-BenchmarkCardinalityGo/16k/p=16-10      127855 ns/op	 512.58 MB/s
-BenchmarkCardinalityGo/64k/p=8-10          239.5 ns/op	1068.72 MB/s
-BenchmarkCardinalityGo/64k/p=12-10        3927 ns/op	1043.12 MB/s
-BenchmarkCardinalityGo/64k/p=14-10       15720 ns/op	1042.24 MB/s
-BenchmarkCardinalityGo/64k/p=16-10      176625 ns/op	 371.04 MB/s
-BenchmarkMergeGo/1k/p=8-10                 151.5 ns/op	1690.01 MB/s
-BenchmarkMergeGo/1k/p=12-10               1996 ns/op	2052.16 MB/s
-BenchmarkMergeGo/1k/p=14-10               7866 ns/op	2082.79 MB/s
-BenchmarkMergeGo/1k/p=16-10              31275 ns/op	2095.50 MB/s
-BenchmarkMergeGo/16k/p=8-10                151.9 ns/op	1685.06 MB/s
-BenchmarkMergeGo/16k/p=12-10              1997 ns/op	2051.40 MB/s
-BenchmarkMergeGo/16k/p=14-10              7832 ns/op	2091.84 MB/s
-BenchmarkMergeGo/16k/p=16-10             31202 ns/op	2100.37 MB/s
-BenchmarkMergeGo/64k/p=8-10                151.8 ns/op	1686.49 MB/s
-BenchmarkMergeGo/64k/p=12-10              2004 ns/op	2044.13 MB/s
-BenchmarkMergeGo/64k/p=14-10              7865 ns/op	2083.03 MB/s
-BenchmarkMergeGo/64k/p=16-10             31242 ns/op	2097.71 MB/s
-BenchmarkUniqueMap/1k-10  	             11258 ns/op	 727.69 MB/s
-BenchmarkUniqueMap/16k-10 	             192546 ns/op	 680.73 MB/s
-BenchmarkUniqueMap/64k-10 	             773182 ns/op	 678.09 MB/s
-BenchmarkUniqueSort/1k-10 	             29905 ns/op	 273.94 MB/s
-BenchmarkUniqueSort/16k-10              302805 ns/op	 432.86 MB/s
-BenchmarkUniqueSort/64k-10              1494148 ns/op	 350.89 MB/s
+Method                   p=8             p=12           p=14            p=16
+------------------------------------------------------------------------------------
+AddUint32PureGo/1k        1820.74 MB/s   1427.71 MB/s   1086.36 MB/s   715.04 MB/s
+AddUint32PureGo/16k       1722.05 MB/s    960.48 MB/s   1069.00 MB/s  1378.49 MB/s
+AddUint32PureGo/64k       1786.20 MB/s   1243.70 MB/s    856.94 MB/s   957.02 MB/s
+AddUint64PureGo/1k        3499.84 MB/s   2790.49 MB/s   2038.32 MB/s  1327.71 MB/s
+AddUint64PureGo/16k       3358.71 MB/s   1953.36 MB/s   2172.83 MB/s  2735.13 MB/s
+AddUint64PureGo/64k       3635.25 MB/s   2454.31 MB/s   1731.22 MB/s  1874.75 MB/s
 
+HashAndAddPrealloc/1k     3560.29 MB/s   2857.24 MB/s   2305.61 MB/s  1400.13 MB/s
+HashAndAddPrealloc/16k    3470.02 MB/s   1961.99 MB/s   2213.16 MB/s  2640.85 MB/s
+HashAndAddPrealloc/64k    3630.27 MB/s   2561.46 MB/s   1743.75 MB/s  1932.55 MB/s
 
-cpu: 12th Gen Intel(R) Core(TM) i9-12900K
-BenchmarkAddUint32AVX2/1k/p=8-24            934.3 ns/op      4383.88 MB/s
-BenchmarkAddUint32AVX2/1k/p=12-24            7013 ns/op         584.07 MB/s
-BenchmarkAddUint32AVX2/1k/p=14-24           10618 ns/op         385.77 MB/s
-BenchmarkAddUint32AVX2/1k/p=16-24           32735 ns/op         125.13 MB/s
-BenchmarkAddUint32AVX2/16k/p=8-24           14043 ns/op        4666.96 MB/s
-BenchmarkAddUint32AVX2/16k/p=12-24          14763 ns/op        4439.28 MB/s
-BenchmarkAddUint32AVX2/16k/p=14-24          34393 ns/op        1905.52 MB/s
-BenchmarkAddUint32AVX2/16k/p=16-24         115329 ns/op         568.25 MB/s
-BenchmarkAddUint32AVX2/64k/p=8-24           53431 ns/op        4906.23 MB/s
-BenchmarkAddUint32AVX2/64k/p=12-24          55635 ns/op        4711.84 MB/s
-BenchmarkAddUint32AVX2/64k/p=14-24          61331 ns/op        4274.25 MB/s
-BenchmarkAddUint32AVX2/64k/p=16-24         184619 ns/op        1419.92 MB/s
-BenchmarkAddUint64AVX2/1k/p=8-24             1273 ns/op        6434.13 MB/s
-BenchmarkAddUint64AVX2/1k/p=12-24            7954 ns/op        1029.97 MB/s
-BenchmarkAddUint64AVX2/1k/p=14-24           15306 ns/op         535.22 MB/s
-BenchmarkAddUint64AVX2/1k/p=16-24           34502 ns/op         237.43 MB/s
-BenchmarkAddUint64AVX2/16k/p=8-24           17019 ns/op        7701.50 MB/s
-BenchmarkAddUint64AVX2/16k/p=12-24          18944 ns/op        6918.79 MB/s
-BenchmarkAddUint64AVX2/16k/p=14-24          42614 ns/op        3075.80 MB/s
-BenchmarkAddUint64AVX2/16k/p=16-24         139227 ns/op         941.42 MB/s
-BenchmarkAddUint64AVX2/64k/p=8-24           66939 ns/op        7832.36 MB/s
-BenchmarkAddUint64AVX2/64k/p=12-24          70795 ns/op        7405.68 MB/s
-BenchmarkAddUint64AVX2/64k/p=14-24          79646 ns/op        6582.70 MB/s
-BenchmarkAddUint64AVX2/64k/p=16-24         190582 ns/op        2750.98 MB/s
-BenchmarkCardinalityAVX2/1k/p=8-24             78.96 ns/op     3242.13 MB/s
-BenchmarkCardinalityAVX2/1k/p=12-24           257.6 ns/op      15902.18 MB/s
-BenchmarkCardinalityAVX2/1k/p=14-24           830.7 ns/op      19723.57 MB/s
-BenchmarkCardinalityAVX2/1k/p=16-24          3272 ns/op        20029.30 MB/s
-BenchmarkCardinalityAVX2/16k/p=8-24            37.88 ns/op     6759.00 MB/s
-BenchmarkCardinalityAVX2/16k/p=12-24          256.7 ns/op      15955.74 MB/s
-BenchmarkCardinalityAVX2/16k/p=14-24          836.9 ns/op      19577.18 MB/s
-BenchmarkCardinalityAVX2/16k/p=16-24         3128 ns/op        20948.94 MB/s
-BenchmarkCardinalityAVX2/64k/p=8-24            37.96 ns/op     6743.99 MB/s
-BenchmarkCardinalityAVX2/64k/p=12-24          224.6 ns/op      18240.01 MB/s
-BenchmarkCardinalityAVX2/64k/p=14-24          832.5 ns/op      19679.65 MB/s
-BenchmarkCardinalityAVX2/64k/p=16-24         3135 ns/op        20906.89 MB/s
-BenchmarkMergeAVX2/1k/p=8-24                  108.9 ns/op      2351.61 MB/s
-BenchmarkMergeAVX2/1k/p=12-24                 165.3 ns/op      24779.26 MB/s
-BenchmarkMergeAVX2/1k/p=14-24                 244.5 ns/op      67006.32 MB/s
-BenchmarkMergeAVX2/1k/p=16-24                1097 ns/op        59728.89 MB/s
-BenchmarkMergeAVX2/16k/p=8-24                 105.6 ns/op      2424.38 MB/s
-BenchmarkMergeAVX2/16k/p=12-24                171.7 ns/op      23850.82 MB/s
-BenchmarkMergeAVX2/16k/p=14-24                252.3 ns/op      64936.60 MB/s
-BenchmarkMergeAVX2/16k/p=16-24               1088 ns/op        60245.57 MB/s
-BenchmarkMergeAVX2/64k/p=8-24                 108.3 ns/op      2363.92 MB/s
-BenchmarkMergeAVX2/64k/p=12-24                141.0 ns/op      29049.67 MB/s
-BenchmarkMergeAVX2/64k/p=14-24                239.5 ns/op      68420.63 MB/s
-BenchmarkMergeAVX2/64k/p=16-24               1073 ns/op        61100.31 MB/s
-BenchmarkAddUint32Go/1k/p=8-24               2107 ns/op        1944.42 MB/s
-BenchmarkAddUint32Go/1k/p=12-24              9758 ns/op         419.78 MB/s
-BenchmarkAddUint32Go/1k/p=14-24             22124 ns/op         185.14 MB/s
-BenchmarkAddUint32Go/1k/p=16-24             42370 ns/op          96.67 MB/s
-BenchmarkAddUint32Go/16k/p=8-24             32557 ns/op        2012.96 MB/s
-BenchmarkAddUint32Go/16k/p=12-24            59075 ns/op        1109.36 MB/s
-BenchmarkAddUint32Go/16k/p=14-24            63251 ns/op        1036.13 MB/s
-BenchmarkAddUint32Go/16k/p=16-24           180307 ns/op         363.47 MB/s
-BenchmarkAddUint32Go/64k/p=8-24            128863 ns/op        2034.29 MB/s
-BenchmarkAddUint32Go/64k/p=12-24           195859 ns/op        1338.43 MB/s
-BenchmarkAddUint32Go/64k/p=14-24           313037 ns/op         837.42 MB/s
-BenchmarkAddUint32Go/64k/p=16-24           323115 ns/op         811.30 MB/s
-BenchmarkAddUint64Go/1k/p=8-24               2434 ns/op        3365.89 MB/s
-BenchmarkAddUint64Go/1k/p=12-24             10171 ns/op         805.46 MB/s
-BenchmarkAddUint64Go/1k/p=14-24             24462 ns/op         334.89 MB/s
-BenchmarkAddUint64Go/1k/p=16-24             45431 ns/op         180.32 MB/s
-BenchmarkAddUint64Go/16k/p=8-24             38631 ns/op        3392.93 MB/s
-BenchmarkAddUint64Go/16k/p=12-24            66005 ns/op        1985.78 MB/s
-BenchmarkAddUint64Go/16k/p=14-24            68919 ns/op        1901.84 MB/s
-BenchmarkAddUint64Go/16k/p=16-24           147051 ns/op         891.34 MB/s
-BenchmarkAddUint64Go/64k/p=8-24            155704 ns/op        3367.21 MB/s
-BenchmarkAddUint64Go/64k/p=12-24           228212 ns/op        2297.37 MB/s
-BenchmarkAddUint64Go/64k/p=14-24           355341 ns/op        1475.45 MB/s
-BenchmarkAddUint64Go/64k/p=16-24           377103 ns/op        1390.31 MB/s
-BenchmarkAddHashes/1k/p=8-24                 2646 ns/op        3096.16 MB/s
-BenchmarkAddHashes/1k/p=12-24                9761 ns/op         839.27 MB/s
-BenchmarkAddHashes/1k/p=14-24               26786 ns/op         305.83 MB/s
-BenchmarkAddHashes/1k/p=16-24               48529 ns/op         168.81 MB/s
-BenchmarkAddHashes/16k/p=8-24               44034 ns/op        2976.63 MB/s
-BenchmarkAddHashes/16k/p=12-24              62757 ns/op        2088.58 MB/s
-BenchmarkAddHashes/16k/p=14-24              67777 ns/op        1933.88 MB/s
-BenchmarkAddHashes/16k/p=16-24             199771 ns/op         656.11 MB/s
-BenchmarkAddHashes/64k/p=8-24              172411 ns/op        3040.92 MB/s
-BenchmarkAddHashes/64k/p=12-24             217337 ns/op        2412.33 MB/s
-BenchmarkAddHashes/64k/p=14-24             307012 ns/op        1707.71 MB/s
-BenchmarkAddHashes/64k/p=16-24             355384 ns/op        1475.27 MB/s
-BenchmarkCardinalityGo/1k/p=8-24              257.5 ns/op       994.10 MB/s
-BenchmarkCardinalityGo/1k/p=12-24            3036 ns/op        1349.22 MB/s
-BenchmarkCardinalityGo/1k/p=14-24           13067 ns/op        1253.89 MB/s
-BenchmarkCardinalityGo/1k/p=16-24           52463 ns/op        1249.18 MB/s
-BenchmarkCardinalityGo/16k/p=8-24             207.5 ns/op      1233.88 MB/s
-BenchmarkCardinalityGo/16k/p=12-24           3245 ns/op        1262.31 MB/s
-BenchmarkCardinalityGo/16k/p=14-24          31694 ns/op         516.94 MB/s
-BenchmarkCardinalityGo/16k/p=16-24         114622 ns/op         571.76 MB/s
-BenchmarkCardinalityGo/64k/p=8-24             208.2 ns/op      1229.62 MB/s
-BenchmarkCardinalityGo/64k/p=12-24           2933 ns/op        1396.34 MB/s
-BenchmarkCardinalityGo/64k/p=14-24          13003 ns/op        1259.98 MB/s
-BenchmarkCardinalityGo/64k/p=16-24         166584 ns/op         393.41 MB/s
-BenchmarkMergeGo/1k/p=8-24                    153.8 ns/op      1664.02 MB/s
-BenchmarkMergeGo/1k/p=12-24                  1278 ns/op        3203.91 MB/s
-BenchmarkMergeGo/1k/p=14-24                  5015 ns/op        3267.22 MB/s
-BenchmarkMergeGo/1k/p=16-24                 19604 ns/op        3342.91 MB/s
-BenchmarkMergeGo/16k/p=8-24                   182.8 ns/op      1400.22 MB/s
-BenchmarkMergeGo/16k/p=12-24                 1278 ns/op        3205.00 MB/s
-BenchmarkMergeGo/16k/p=14-24                 5069 ns/op        3232.23 MB/s
-BenchmarkMergeGo/16k/p=16-24                19579 ns/op        3347.29 MB/s
-BenchmarkMergeGo/64k/p=8-24                   161.2 ns/op      1587.89 MB/s
-BenchmarkMergeGo/64k/p=12-24                 1269 ns/op        3227.22 MB/s
-BenchmarkMergeGo/64k/p=14-24                 5010 ns/op        3269.96 MB/s
-BenchmarkMergeGo/64k/p=16-24                19602 ns/op        3343.33 MB/s
-BenchmarkUniqueMap/1k-24                    57508 ns/op         142.45 MB/s
-BenchmarkUniqueMap/16k-24                   1149078 ns/op       114.07 MB/s
-BenchmarkUniqueMap/64k-24                   5881820 ns/op        89.14 MB/s
-BenchmarkUniqueSort/1k-24                   31026 ns/op         264.03 MB/s
-BenchmarkUniqueSort/16k-24                  480589 ns/op        272.73 MB/s
-BenchmarkUniqueSort/64k-24                  2085713 ns/op       251.37 MB/s
+CardinalityPureGo/1k       948.79 MB/s   1057.71 MB/s   1068.76 MB/s  1061.67 MB/s
+CardinalityPureGo/16k     1096.23 MB/s   1053.67 MB/s    480.56 MB/s   527.93 MB/s
+CardinalityPureGo/64k     1088.76 MB/s   1039.18 MB/s   1048.45 MB/s   382.12 MB/s
+
+CardinalityPureGo/1k       897.77 MB/s   1014.77 MB/s   1026.58 MB/s   995.30 MB/s
+CardinalityPureGo/16k     1045.33 MB/s   1024.86 MB/s    455.07 MB/s   518.11 MB/s
+CardinalityPureGo/64k     1054.15 MB/s   1035.41 MB/s   1028.97 MB/s   364.06 MB/s
+
+MergePureGo/1k            1705.87 MB/s   2080.22 MB/s   2113.74 MB/s  2120.13 MB/s
+MergePureGo/16k           1700.26 MB/s   2074.55 MB/s   2095.69 MB/s  2069.40 MB/s
+MergePureGo/64k           1702.35 MB/s   2063.33 MB/s   2101.95 MB/s  2115.53 MB/s
+
+UniqueMap/1k                    741.00 MB/s
+UniqueMap/16k                   667.24 MB/s
+UniqueMap/64k                   637.15 MB/s
+UniqueSort/1k                   287.29 MB/s
+UniqueSort/16k                  422.87 MB/s
+UniqueSort/64k                  346.74 MB/s
+
+### cpu: 12th Gen Intel(R) Core(TM) i9-12900K
+
+Method                       p=8             p=12           p=14            p=16
+------------------------------------------------------------------------------------
+AddUint32AVX2/1k         2451.53 MB/s     531.78 MB/s     300.31 MB/s    110.89 MB/s
+AddUint32AVX2/16k        4736.93 MB/s    3184.75 MB/s    1540.55 MB/s    610.74 MB/s
+AddUint32AVX2/64k        4814.53 MB/s    4608.89 MB/s    3494.47 MB/s   1575.38 MB/s
+AddUint64AVX2/1k         4579.20 MB/s     988.74 MB/s     527.33 MB/s    215.67 MB/s
+AddUint64AVX2/16k        7604.70 MB/s    5373.85 MB/s    2853.93 MB/s   1036.99 MB/s
+AddUint64AVX2/64k        8126.54 MB/s    7358.06 MB/s    5544.15 MB/s   2630.49 MB/s
+
+AddUint32PureGo/1k       1845.19 MB/s     355.85 MB/s     191.11 MB/s     96.64 MB/s
+AddUint32PureGo/16k      2171.62 MB/s    1183.96 MB/s     940.55 MB/s    319.13 MB/s
+AddUint32PureGo/64k      2182.25 MB/s    1467.76 MB/s     965.39 MB/s    521.65 MB/s
+AddUint64PureGo/1k       3853.31 MB/s     727.32 MB/s     397.76 MB/s    194.35 MB/s
+AddUint64PureGo/16k      4488.65 MB/s    2435.10 MB/s    1570.54 MB/s    641.71 MB/s
+AddUint64PureGo/64k      4502.98 MB/s    3051.25 MB/s    1953.78 MB/s   1252.73 MB/s
+
+HashAndAddPrealloc/1k    3941.33 MB/s     738.52 MB/s     409.70 MB/s    202.91 MB/s
+HashAndAddPrealloc/16k   4733.75 MB/s    2604.74 MB/s    1553.88 MB/s    721.44 MB/s
+HashAndAddPrealloc/64k   4756.05 MB/s    3171.46 MB/s    2003.90 MB/s   1243.69 MB/s
+
+CardinalityAVX2/1k       3530.93 MB/s   16083.60 MB/s   19787.75 MB/s  20124.56 MB/s
+CardinalityAVX2/16k      6795.77 MB/s   16112.82 MB/s   19814.15 MB/s  20658.48 MB/s
+CardinalityAVX2/64k      6768.96 MB/s   18173.57 MB/s   19638.55 MB/s  20155.82 MB/s
+
+CardinalityPureGo/1k     1024.36 MB/s    1365.55 MB/s    1315.26 MB/s   1234.44 MB/s
+CardinalityPureGo/16k    1231.77 MB/s    1260.37 MB/s     519.42 MB/s    564.73 MB/s
+CardinalityPureGo/64k    1232.16 MB/s    1387.03 MB/s    1257.73 MB/s    393.57 MB/s
+
+MergeAVX2/1k             2279.30 MB/s   24470.29 MB/s   53075.88 MB/s  60066.90 MB/s
+MergeAVX2/16k            2194.99 MB/s   19425.13 MB/s   53619.45 MB/s  61361.83 MB/s
+MergeAVX2/64k            2202.12 MB/s   22854.07 MB/s   57661.90 MB/s  60902.40 MB/s
+
+MergePureGo/1k           1056.35 MB/s    2515.47 MB/s    2711.42 MB/s   2838.42 MB/s
+MergePureGo/16k          1120.71 MB/s    2538.14 MB/s    2721.88 MB/s   2856.65 MB/s
+MergePureGo/64k          1107.01 MB/s    2563.05 MB/s    2788.25 MB/s   2954.74 MB/s
+
+UniqueMap/1k           158.54 MB/s
+UniqueMap/16k          114.75 MB/s
+UniqueMap/64k          109.66 MB/s
+
+UniqueSort/1k          230.84 MB/s
+UniqueSort/16k         180.99 MB/s
+UniqueSort/64k         232.50 MB/s
+
