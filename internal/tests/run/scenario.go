@@ -2,7 +2,7 @@
 // Author: alex@blockwatch.cc
 
 // run as
-// go run -buildvcs=true ./internal/tests/run/ -v
+// go run -buildvcs=true ./internal/tests/run/ -v -logs ./logs
 
 package main
 
@@ -21,7 +21,6 @@ import (
 
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/echa/log"
-	"github.com/minio/minio-go/v7"
 	"golang.org/x/time/rate"
 )
 
@@ -46,11 +45,8 @@ func run() error {
 	defer os.RemoveAll(buildPath) // clean up
 	log.Debugf("Using temp dir %s", buildPath)
 
-	logPath := util.NonEmptyString(os.Getenv("LOGS_PATH"), buildPath)
-
-	// init s3
-	s3, err := initStorage()
-	if err != nil {
+	// init log retention
+	if err := initStorage(); err != nil {
 		return err
 	}
 
@@ -89,7 +85,7 @@ func run() error {
 		// create log file
 		now := time.Now().UTC()
 		logFileName := fmt.Sprintf("%s_0x%016x.log", now.Format(timeFmt), rnd)
-		logFilePath := filepath.Join(logPath, logFileName)
+		logFilePath := filepath.Join(buildPath, logFileName)
 		f, err = os.Create(logFilePath)
 		if err != nil {
 			return err
@@ -160,25 +156,28 @@ func run() error {
 				return fmt.Errorf("stopping due to too high error frequency")
 			}
 
-			// upload
-			if !skipUpload {
-				logFileTarget := fmt.Sprintf("%s/%s", now.Format(time.DateOnly), logFileName)
-				log.Infof("Uploading %s/%s/%s", s3endpoint, s3bucket, logFileTarget)
-				_, err := s3.FPutObject(ctx, s3bucket, logFileTarget, logFilePath, minio.PutObjectOptions{})
-				if err != nil {
+			// retain logfile
+			if !skipRetentiona {
+				targetDir := filepath.Join(logPath, now.Format(time.DateOnly))
+				if err := os.MkdirAll(targetDir, 0755); err != nil {
+					return err
+				}
+				targetPath := filepath.Join(targetDir, logFileName)
+				log.Infof("Retaining log file at %s", targetPath)
+				if err := copyFile(logFilePath, targetPath); err != nil {
 					return err
 				}
 			} else {
+				// copy log file to current working dir (when running local)
 				wd, err := os.Getwd()
 				if err != nil {
 					wd = filepath.FromSlash("./")
 				}
-				// copy log file to local directory
-				target := filepath.Join(wd, logFileName)
-				if err := os.Link(logFilePath, target); err != nil {
+				targetPath := filepath.Join(wd, logFileName)
+				if err := os.Link(logFilePath, targetPath); err != nil {
 					return err
 				}
-				log.Infof("See %s for details", target)
+				log.Infof("See %s for details", targetPath)
 			}
 
 			// stop when max errors was reached

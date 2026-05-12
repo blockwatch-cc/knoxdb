@@ -4,10 +4,10 @@
 package main
 
 import (
-	"crypto/tls"
+	"errors"
 	"flag"
 	"fmt"
-	"net/http"
+	"io"
 	"os"
 	"runtime"
 	"runtime/debug"
@@ -15,27 +15,24 @@ import (
 	"strings"
 	"time"
 
-	"github.com/echa/config"
 	"github.com/echa/log"
-	"github.com/minio/minio-go/v7"
-	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
 var (
-	timeFmt                                = "2006-01-02_15-04-05"
-	arch                                   string // wasm, native
-	testrun                                string
-	numCpu                                 int
-	enableRace                             bool
-	enableVerbose                          bool
-	maxRound                               int
-	maxErrors                              int
-	maxErrorRate                           float64
-	s3endpoint, s3user, s3secret, s3bucket string
-	skipUpload                             bool
-	seedString                             string
-	seedList                               []uint64
-	timeout                                time.Duration
+	timeFmt        = "2006-01-02_15-04-05"
+	arch           string // wasm, native
+	testrun        string
+	numCpu         int
+	enableRace     bool
+	enableVerbose  bool
+	maxRound       int
+	maxErrors      int
+	maxErrorRate   float64
+	logPath        string
+	skipRetentiona bool
+	seedString     string
+	seedList       []uint64
+	timeout        time.Duration
 )
 
 func init() {
@@ -50,13 +47,7 @@ func init() {
 	flag.Float64Var(&maxErrorRate, "max-error-rate", 10, "stops the test runner when the rate of errors observed per second is greater than N (inclusive)")
 	flag.StringVar(&seedString, "seed", "", "comma separated list of random seeds")
 	flag.DurationVar(&timeout, "timeout", time.Minute, "test run timeout (will abort and trace test run)")
-
-	// env vars
-	skipUpload = config.GetBool(os.Getenv("SKIP_UPLOAD"))
-	s3user = os.Getenv("MINIO_USER")
-	s3bucket = os.Getenv("MINIO_BUCKET")
-	s3secret = os.Getenv("MINIO_SECRET")
-	s3endpoint = os.Getenv("MINIO_URL")
+	flag.StringVar(&logPath, "logs", "", "output path for test failure logs")
 }
 
 func initFlags() {
@@ -75,33 +66,24 @@ func initFlags() {
 
 }
 
-func initStorage() (*minio.Client, error) {
-	if s3endpoint == "" {
-		log.Warn("Missing s3 url, disabling file upload. Set MINIO_URL to enable.")
-		skipUpload = true
-		return nil, nil
+func initStorage() error {
+	if logPath == "" {
+		log.Warn("Missing log path, disabling failure log retention. Use -logs to enable.")
+		skipRetentiona = true
+		return nil
 	}
-	if s3bucket == "" {
-		log.Warn("Missing s3 bucket, disabling file upload. Set MINIO_BUCKET to enable.")
-		skipUpload = true
-		return nil, nil
+	// ensure logpath exists and is writable
+	if stat, err := os.Stat(logPath); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return os.MkdirAll(logPath, 0755)
+		}
+		return err
+	} else if !stat.IsDir() {
+		return fmt.Errorf("log retention path %q: not a directory", logPath)
+	} else if stat.Mode()&0200 == 0 {
+		return fmt.Errorf("log retention path %q: not writable", logPath)
 	}
-	if s3user == "" || s3secret == "" {
-		return nil, fmt.Errorf("missing S3 credentails, set MINIO_USER and MINIO_SECRET")
-	}
-	s3, err := minio.New(
-		s3endpoint,
-		&minio.Options{
-			Creds:  credentials.NewStaticV4(s3user, s3secret, ""),
-			Secure: true,
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-			},
-		})
-	if err != nil {
-		return nil, err
-	}
-	return s3, nil
+	return nil
 }
 
 func logBuildInfo() {
@@ -147,9 +129,8 @@ func logDroneBuild() {
 	log.Infof("Build Branch  %s", os.Getenv("DRONE_REPO_BRANCH"))
 	log.Infof("Build Commit  %s", os.Getenv("DRONE_COMMIT"))
 	log.Infof("Test Mode     drone ci")
-	if !skipUpload {
-		ref := os.Getenv("DRONE_COMMIT")
-		log.Infof("Test Upload   %s/%s/%s", s3endpoint, s3bucket, ref[:min(len(ref), 6)])
+	if !skipRetentiona {
+		log.Infof("Failure logs are retained in %s", logPath)
 	}
 }
 
@@ -199,4 +180,24 @@ func logLocalBuild() {
 	log.Infof("Build Commit  %s", revision)
 	log.Infof("Build Version %s", bi.GoVersion)
 	log.Infof("Test Mode     local")
+}
+
+func copyFile(srcPath, dstPath string) error {
+	src, err := os.Open(srcPath)
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+
+	dst, err := os.Create(dstPath)
+	if err != nil {
+		return err
+	}
+	defer dst.Close()
+
+	_, err = io.Copy(dst, src)
+	if err != nil {
+		return err
+	}
+	return dst.Sync()
 }
