@@ -11,7 +11,7 @@ ARG BUILD_ARTIFACT
 ARG PLATFORM
 
 LABEL vendor=Blockwatch\ Data\ Inc \
-  maintainer="Alexander Eichhorn <alex@blockwatch.cc>, Abdul-Harisu Inusah<abdul@blockwatch.cc>" \
+  maintainer="Alexander Eichhorn <alex@blockwatch.cc>" \
   name=${BUILD_ARTIFACT} \
   cx.bwd.service=${BUILD_ARTIFACT} \
   cx.bwd.arch="x86_64" \

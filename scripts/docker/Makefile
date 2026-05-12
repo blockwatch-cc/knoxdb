@@ -3,8 +3,8 @@
 PLATFORM ?= alpine
 BUILD_ARTIFACT := go-dst
 BUILD_TAG ?= master
-BUILD_REPO := blockwatch.cc/go
-BUILD_VERSION ?= 1.24.5
+BUILD_REPO := golang/go
+BUILD_VERSION ?= 1.26.3
 BUILD_COMMIT := $(shell git rev-parse --short ${BUILD_TAG})
 BUILD_DATE := $(shell date -u "+%Y-%m-%dT%H:%M:%SZ")
 BUILD_ID ?= $(shell uuidgen)

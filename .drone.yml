@@ -51,7 +51,7 @@ steps:
       - go test -v $(go list ./... | grep -v /internal/tests) -tags with_assert
 
   - name: scenario wasm/mem/pack
-    image: hub.bwd.cx/go-dst:1.24.5-alpine
+    image: hub.bwd.cx/go-dst:1.26.3-alpine
     volumes:
       - name: cache
         path: /go
@@ -67,7 +67,7 @@ steps:
       - unit
 
   - name: scenario native/bolt/pack
-    image: hub.bwd.cx/go-dst:1.24.5-alpine
+    image: hub.bwd.cx/go-dst:1.26.3-alpine
     volumes:
       - name: cache
         path: /go
