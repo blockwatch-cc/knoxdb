@@ -4,8 +4,8 @@ package btree
 
 import (
 	"bytes"
+	"crypto/rand"
 	"iter"
-	"math/rand"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -586,7 +586,7 @@ func runRandomMergeTest(t *testing.T, merged iter.Seq2[[]byte, []byte], deletes 
 		prev = append([]byte{}, k...)
 		_ = v // values not important
 	}
-	if count == 0 && len(deletes) > 0 {
-		// possible if all deleted, ok
-	}
+	// if count == 0 && len(deletes) > 0 {
+	// 	// possible if all deleted, ok
+	// }
 }

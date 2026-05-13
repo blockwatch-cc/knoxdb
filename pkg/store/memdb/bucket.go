@@ -135,7 +135,7 @@ func (b *bucket) DeleteBucket(key []byte) error {
 
 		// Delete all keys through tx.pending
 		prefix := num.EncodeUvarint(id)
-		for k, _ := range b.tx.db.Scan(prefix) {
+		for k := range b.tx.db.Scan(prefix) {
 			b.tx.pending.Delete(k)
 		}
 

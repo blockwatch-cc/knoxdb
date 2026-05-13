@@ -789,8 +789,7 @@ func TestCursor_RangeScans(t *testing.T) {
 				require.NoError(t, err)
 				var i int
 				for k, v := range bucket.ScanRange([]byte("d"), nil) {
-					switch i {
-					case 0:
+					if i == 0 {
 						require.Equal(t, []byte("d"), k)
 						require.Equal(t, []byte("4"), v)
 					}
@@ -820,8 +819,7 @@ func TestCursor_RangeScans(t *testing.T) {
 				require.NoError(t, err)
 				var i int
 				for k, v := range bucket.ScanRangeReverse([]byte("d"), nil) {
-					switch i {
-					case 0:
+					if i == 0 {
 						require.Equal(t, []byte("d"), k)
 						require.Equal(t, []byte("4"), v)
 					}

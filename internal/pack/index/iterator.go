@@ -507,8 +507,7 @@ func (it *ScanIterator) loadPack(ctx context.Context) (bool, error) {
 		// from the iterator in the next round and advancing it here
 		// is better for state handling)
 		if i == 0 {
-			key, val, ok = it.next()
-			if !ok {
+			if _, val, ok = it.next(); !ok {
 				// unlikely (missing block 1)
 				return ok, fmt.Errorf("scan: missing block 0x%016x:%016x:%d", ikey, rid, 1)
 			}
