@@ -4,16 +4,17 @@
 package bolt
 
 import (
-	"os"
-
 	"blockwatch.cc/knoxdb/pkg/store"
 	bolterr "go.etcd.io/bbolt/errors"
 )
 
-// convertErr converts the passed bolt error into a database error with an
-// equivalent error code  and the passed description.  It also sets the passed
-// error as the underlying error.
+// wrap converts an internal bolt error into an interface error with an
+// equivalent meaning.
 func wrap(err error) error {
+	if err == nil {
+		return nil
+	}
+
 	switch err {
 	// Database errors.
 	case bolterr.ErrInvalid, bolterr.ErrChecksum, bolterr.ErrFreePagesNotLoaded:
@@ -67,24 +68,4 @@ func wrap(err error) error {
 	default:
 		return err
 	}
-}
-
-// filesExists reports whether the named file or directory exists.
-func fileExists(name string) (bool, error) {
-	if _, err := os.Stat(name); err != nil {
-		if os.IsNotExist(err) {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
-}
-
-func syncDir(name string) error {
-	dir, err := os.Open(name)
-	if err != nil {
-		return err
-	}
-	defer dir.Close()
-	return dir.Sync()
 }

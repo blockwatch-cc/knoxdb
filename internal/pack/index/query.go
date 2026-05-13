@@ -192,7 +192,7 @@ func (idx *Index) lookupKeys(ctx context.Context, keys []uint64) (*xroar.Bitmap,
 	if len(keys) == 0 {
 		return xroar.New(), nil
 	}
-	// idx.log.Infof("lookup keys %v", keys)
+	// idx.log.Infof("lookup keys %x", keys)
 	var (
 		next         int
 		nKeysMatched uint32

@@ -72,12 +72,12 @@ func TestTombLoadStore(t *testing.T) {
 	db, err := store.Create(
 		store.WithDriver("mem"),
 		store.WithPath("tomb_test"),
-		store.WithDeleteOnClose(),
+		store.WithDropOnClose(true),
 	)
 	require.NoError(t, err)
 	defer db.Close()
 	err = db.Update(func(tx store.Tx) error {
-		b, err := tx.Root().CreateBucket([]byte("tomb"))
+		b, err := tx.CreateBucket([]byte("tomb"))
 		if err != nil {
 			return err
 		}
@@ -88,7 +88,10 @@ func TestTombLoadStore(t *testing.T) {
 
 	tomb = newTomb(8)
 	err = db.View(func(tx store.Tx) error {
-		b := tx.Bucket([]byte("tomb"))
+		b, err := tx.Bucket([]byte("tomb"))
+		if err != nil {
+			return err
+		}
 		return tomb.Load(ctx, b, 42)
 	})
 	require.NoError(t, err)

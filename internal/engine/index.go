@@ -59,7 +59,7 @@ func (e *Engine) GetIndex(tag uint64) (IndexEngine, bool) {
 	return e.indexes.Get(tag)
 }
 
-func (e *Engine) CreateIndex(ctx context.Context, s *schema.IndexSchema, opts IndexOptions) (IndexEngine, error) {
+func (e *Engine) CreateIndex(ctx context.Context, s *schema.IndexSchema, options ...Option) (IndexEngine, error) {
 	// lookup table
 	tableTag := types.TaggedHash(types.ObjectTagTable, s.Base.Name)
 
@@ -74,8 +74,11 @@ func (e *Engine) CreateIndex(ctx context.Context, s *schema.IndexSchema, opts In
 		return nil, schema.ErrSchemaMismatch
 	}
 
+	// handle table options
+	opts := defaultDatabaseOptions.Apply(options...)
+
 	// check engine and driver
-	factory, ok := indexEngineRegistry[opts.Engine]
+	factory, ok := indexEngineRegistry[IndexKind(opts.Engine)]
 	if !ok {
 		return nil, fmt.Errorf("%s: %v", opts.Engine, ErrNoEngine)
 	}
@@ -94,8 +97,8 @@ func (e *Engine) CreateIndex(ctx context.Context, s *schema.IndexSchema, opts In
 	index := factory()
 
 	// ensure logger
-	if opts.Logger == nil {
-		opts.Logger = e.opts.Logger
+	if opts.Log == nil {
+		opts.Log = e.opts.Log
 	}
 
 	// start (or use) transaction and amend context
@@ -117,7 +120,7 @@ func (e *Engine) CreateIndex(ctx context.Context, s *schema.IndexSchema, opts In
 	}
 
 	// creata index
-	if err := index.Create(ctx, table, s, opts); err != nil {
+	if err := index.Create(ctx, table, s, opts.IndexOptions()...); err != nil {
 		return nil, err
 	}
 
@@ -220,7 +223,7 @@ func (e *Engine) DropIndex(ctx context.Context, name string) error {
 	}
 
 	// write wal and schedule drop on commit
-	if err := e.cat.AppendIndexCmd(ctx, DROP, index.IndexSchema(), IndexOptions{}); err != nil {
+	if err := e.cat.AppendIndexCmd(ctx, DROP, index.IndexSchema(), Options{}); err != nil {
 		return err
 	}
 
@@ -268,14 +271,14 @@ func (e *Engine) openIndexes(ctx context.Context, table TableEngine, ts *schema.
 		if err != nil {
 			return err
 		}
-		factory, ok := indexEngineRegistry[opts.Engine]
+		factory, ok := indexEngineRegistry[IndexKind(opts.Engine)]
 		if !ok {
 			return ErrNoEngine
 		}
 		idx := factory()
-		opts.Logger = e.opts.Logger
+		opts.Log = e.opts.Log
 		opts.ReadOnly = e.opts.ReadOnly
-		if err := idx.Open(ctx, table, s, opts); err != nil {
+		if err := idx.Open(ctx, table, s, opts.IndexOptions()...); err != nil {
 			return err
 		}
 		table.ConnectIndex(idx)

@@ -6,6 +6,7 @@ package engine_tests
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/engine"
@@ -13,13 +14,14 @@ import (
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/schema"
+	"blockwatch.cc/knoxdb/pkg/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 type TestCase struct {
 	Name string
-	Run  func(*testing.T, *engine.Engine, engine.TableEngine, engine.TableOptions)
+	Run  func(*testing.T, *engine.Engine, engine.TableEngine, engine.Options)
 }
 
 type TF[T any] interface {
@@ -101,13 +103,13 @@ func TestTableEngine[T any, F TF[T]](t *testing.T, driver, eng string) {
 	}
 }
 
-func SetupTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions) {
+func SetupTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.Options) {
 	t.Helper()
 	CreateEnum(t, e)
 	CreateTable(t, e, tab, opts, allTypesSchema)
 }
 
-func CreateTable(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions, s *schema.Schema) {
+func CreateTable(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.Options, s *schema.Schema) {
 	t.Helper()
 	ctx, tx, commit, abort, err := e.WithTransaction(context.Background())
 	tx.WithFlags(engine.TxFlagCatalog) // let tx sync wal
@@ -116,7 +118,7 @@ func CreateTable(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts en
 
 	// extend schema with enums and metadata (same as engine would do)
 	s = s.Clone().WithEnums(e.CloneEnums(s.EnumNames()...)).WithMeta().Finalize()
-	require.NoError(t, tab.Create(ctx, s, opts))
+	require.NoError(t, tab.Create(ctx, s, opts.TableOptions()...))
 	require.NoError(t, commit())
 
 	// reopen read-only if requested
@@ -125,7 +127,7 @@ func CreateTable(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts en
 		ctx, _, commit, abort, err = e.WithTransaction(context.Background())
 		require.NoError(t, err)
 		defer abort()
-		require.NoError(t, tab.Open(ctx, s, opts))
+		require.NoError(t, tab.Open(ctx, s, opts.TableOptions()...))
 		require.NoError(t, commit())
 	}
 }
@@ -167,39 +169,49 @@ func InsertData(t *testing.T, e *engine.Engine, tab engine.TableEngine) {
 	require.Equal(t, len(data), cnt)
 }
 
-func CreateTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions) {
+func CreateTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.Options) {
 	CreateEnum(t, e)
 	CreateTable(t, e, tab, opts, allTypesSchema)
 }
 
-func CreateMultipleTableSequentialTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions) {
+func CreateMultipleTableSequentialTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.Options) {
 	t.Helper()
 	CreateEnum(t, e)
 	CreateTable(t, e, tab, opts, allTypesSchema)
 	CreateTable(t, e, tab, opts, securitySchema)
 }
 
-func OpenTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions) {
+func OpenTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.Options) {
 	SetupTableTest(t, e, tab, opts)
 	require.NoError(t, tab.Close(context.Background()))
 	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
 	defer abort()
 	require.NoError(t, err)
 	s := allTypesSchema.Clone().WithEnums(e.CloneEnums(allTypesSchema.EnumNames()...)).Finalize()
-	require.NoError(t, tab.Open(ctx, s, opts))
+	require.NoError(t, tab.Open(ctx, s, opts.TableOptions()...))
 	require.NoError(t, commit())
 }
 
-func DropTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions) {
+func DropTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.Options) {
 	SetupTableTest(t, e, tab, opts)
 	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
 	defer abort()
 	require.NoError(t, err)
+
+	dbpath := filepath.Join(e.RootPath(), tab.Schema().Name+".db")
+	ok, err := store.Exists(opts.Driver, dbpath)
+	require.NoError(t, err, "driver says access error")
+	require.True(t, ok, "driver says db file %q does not exist", dbpath)
+
 	require.NoError(t, tab.Drop(ctx))
 	require.NoError(t, commit())
+
+	ok, err = store.Exists(opts.Driver, dbpath)
+	require.NoError(t, err, "driver says access error")
+	require.False(t, ok, "driver says db file %q still exist", dbpath)
 }
 
-func SyncTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions) {
+func SyncTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.Options) {
 	SetupTableTest(t, e, tab, opts)
 	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
 	defer abort()
@@ -218,7 +230,7 @@ func SyncTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts 
 // 	require.NoError(t, commit())
 // }
 
-func TruncateTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions) {
+func TruncateTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.Options) {
 	SetupTableTest(t, e, tab, opts)
 	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
 	require.NoError(t, err)
@@ -227,12 +239,12 @@ func TruncateTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, o
 	require.NoError(t, commit())
 }
 
-func InsertRowsTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions) {
+func InsertRowsTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.Options) {
 	SetupTableTest(t, e, tab, opts)
 	InsertData(t, e, tab)
 }
 
-func InsertRowsReadOnlyTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions) {
+func InsertRowsReadOnlyTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.Options) {
 	opts.ReadOnly = true
 	SetupTableTest(t, e, tab, opts)
 
@@ -251,7 +263,7 @@ func InsertRowsReadOnlyTableTest(t *testing.T, e *engine.Engine, tab engine.Tabl
 	require.NoError(t, commit())
 }
 
-func UpdateRowsTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions) {
+func UpdateRowsTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.Options) {
 	SetupTableTest(t, e, tab, opts)
 	InsertData(t, e, tab)
 
@@ -279,7 +291,7 @@ func UpdateRowsTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine,
 	require.NoError(t, commit())
 }
 
-func QueryTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions) {
+func QueryTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.Options) {
 	SetupTableTest(t, e, tab, opts)
 	InsertData(t, e, tab)
 
@@ -306,7 +318,7 @@ func QueryTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts
 	require.NoError(t, commit())
 }
 
-func CountTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions) {
+func CountTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.Options) {
 	SetupTableTest(t, e, tab, opts)
 	InsertData(t, e, tab)
 
@@ -332,7 +344,7 @@ func CountTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts
 	require.NoError(t, commit())
 }
 
-func DeleteTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions) {
+func DeleteTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.Options) {
 	SetupTableTest(t, e, tab, opts)
 	InsertData(t, e, tab)
 
@@ -358,7 +370,7 @@ func DeleteTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opt
 	require.NoError(t, commit())
 }
 
-func StreamTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions) {
+func StreamTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.Options) {
 	SetupTableTest(t, e, tab, opts)
 	InsertData(t, e, tab)
 

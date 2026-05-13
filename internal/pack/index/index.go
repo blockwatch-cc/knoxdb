@@ -35,7 +35,7 @@ func init() {
 }
 
 var (
-	DefaultIndexOptions = engine.IndexOptions{
+	defaultIndexOptions = engine.Options{
 		Driver:      "bolt",
 		PackSize:    1 << 11, // 2k
 		JournalSize: 1 << 17, // 128k
@@ -44,7 +44,7 @@ var (
 		TxMaxSize:   1 << 20, // 1 MB
 		ReadOnly:    false,
 		NoSync:      true,
-		Logger:      log.Disabled,
+		Log:         log.Disabled,
 	}
 )
 
@@ -54,10 +54,10 @@ type Index struct {
 	sstore  *schema.Schema      // on-disk storage schema
 	id      uint64              // unique tagged name hash
 	name    string              // index name (for logging)
-	opts    engine.IndexOptions // copy of config options
+	opts    engine.Options      // copy of config options
 	table   engine.TableEngine  // related table
 	state   engine.ObjectState  // volatile state
-	db      store.DB            // storage backend
+	db      store.DBManager     // storage backend
 	journal *pack.Package       // in-memory updates
 	tomb    *pack.Package       // in-memory deletes
 	convert Converter           // table to index schema converter
@@ -73,14 +73,14 @@ func (idx *Index) IsReadOnly() bool {
 	return idx.opts.ReadOnly
 }
 
-func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.IndexSchema, opts engine.IndexOptions) error {
+func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.IndexSchema, options ...engine.Option) error {
 	// require primary key
 	if !s.Base.HasMeta() {
 		return engine.ErrNoMeta
 	}
 
 	// init names
-	opts = DefaultIndexOptions.Merge(opts)
+	opts := defaultIndexOptions.Apply(options...)
 
 	// storage schema depends on index type
 	sout, conv, err := convertSchema(s)
@@ -107,7 +107,7 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.In
 		Alloc()
 	idx.convert = conv
 	idx.metrics = engine.NewIndexMetrics(s.Name)
-	idx.log = idx.opts.Logger.Clone("index:" + s.Name)
+	idx.log = idx.opts.Log.Clone("index:" + s.Name)
 
 	// create backend and store initial state
 	if err := idx.createBackend(ctx); err != nil {
@@ -142,7 +142,7 @@ func (idx *Index) createBackend(ctx context.Context) error {
 	idx.db = db
 
 	// init table storage
-	tx, err := idx.db.Begin(true)
+	tx, err := idx.db.Begin(store.WithTxWrite())
 	if err != nil {
 		return err
 	}
@@ -153,7 +153,7 @@ func (idx *Index) createBackend(ctx context.Context) error {
 		engine.StateKeySuffix,
 	} {
 		key := append([]byte(idx.name), v...)
-		if _, err := tx.Root().CreateBucket(key); err != nil {
+		if _, err := tx.CreateBucket(key); err != nil {
 			return err
 		}
 	}
@@ -167,7 +167,7 @@ func (idx *Index) createBackend(ctx context.Context) error {
 	return tx.Commit()
 }
 
-func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.IndexSchema, opts engine.IndexOptions) error {
+func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.IndexSchema, options ...engine.Option) error {
 	// storage schema depends on index type
 	sout, conv, err := convertSchema(s)
 	if err != nil {
@@ -180,20 +180,20 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Inde
 	idx.sstore = sout
 	idx.id = s.TaggedHash(types.ObjectTagIndex)
 	idx.name = s.Name
-	idx.opts = DefaultIndexOptions.Merge(opts)
+	idx.opts = defaultIndexOptions.Apply(options...)
 	idx.table = t
 	idx.state = engine.NewObjectState(s.Name)
 	idx.journal = pack.New().
-		WithMaxRows(opts.JournalSize).
+		WithMaxRows(idx.opts.JournalSize).
 		WithSchema(sout).
 		Alloc()
 	idx.tomb = pack.New().
-		WithMaxRows(opts.JournalSize).
+		WithMaxRows(idx.opts.JournalSize).
 		WithSchema(sout).
 		Alloc()
 	idx.convert = conv
 	idx.metrics = engine.NewIndexMetrics(s.Name)
-	idx.log = idx.opts.Logger.Clone("index:" + s.Name)
+	idx.log = idx.opts.Log.Clone("index:" + s.Name)
 
 	// open db backend and load latest state
 	if err := idx.openBackend(ctx); err != nil {
@@ -245,8 +245,8 @@ func (idx *Index) openBackend(ctx context.Context) error {
 			engine.StateKeySuffix,
 		} {
 			key := append([]byte(idx.name), v...)
-			if tx.Bucket(key) == nil {
-				return fmt.Errorf("%q: %v", string(key), store.ErrBucketNotFound)
+			if _, err := tx.Bucket(key); err != nil {
+				return fmt.Errorf("%q: %v", string(key), err)
 			}
 		}
 
@@ -272,7 +272,7 @@ func (idx *Index) Close(ctx context.Context) (err error) {
 	idx.table = nil
 	idx.id = 0
 	idx.db = nil
-	idx.opts = engine.IndexOptions{}
+	idx.opts = engine.Options{}
 	idx.metrics = engine.IndexMetrics{}
 	idx.convert = nil
 	idx.state.Reset()
@@ -333,10 +333,10 @@ func (idx *Index) Truncate(ctx context.Context) error {
 			engine.StateKeySuffix,
 		} {
 			key := append([]byte(idx.name), v...)
-			if err := tx.Root().DeleteBucket(key); err != nil {
+			if err := tx.DeleteBucket(key); err != nil {
 				return err
 			}
-			if _, err := tx.Root().CreateBucket(key); err != nil {
+			if _, err := tx.CreateBucket(key); err != nil {
 				return err
 			}
 		}
@@ -455,7 +455,7 @@ func (idx *Index) DelPack(ctx context.Context, pkg *pack.Package, mode pack.Writ
 func (idx *Index) Finalize(ctx context.Context, epoch uint32) error {
 	// flush remaining journal entries
 	if idx.journal.Len() > 0 {
-		// idx.log.Debugf("merge %d journal records", idx.journal.Len())
+		idx.log.Debugf("merge %d journal records", idx.journal.Len())
 		if err := idx.mergeAppend(ctx); err != nil {
 			return err
 		}
@@ -520,22 +520,18 @@ func (idx *Index) Cleanup(ctx context.Context, epoch uint32) error {
 	idx.log.Debugf("cleanup until epoch %d", epoch)
 	var drop []uint32
 	err := idx.db.View(func(tx store.Tx) error {
-		b := tx.Bucket(append([]byte(idx.name), engine.TombKeySuffix...))
-		if b == nil {
+		b, err := tx.Bucket(append([]byte(idx.name), engine.TombKeySuffix...))
+		if err != nil {
 			return store.ErrBucketNotFound
 		}
-		c := b.Cursor()
-		defer c.Close()
-		if !c.First() {
-			return nil
+		for key := range b.Scan(nil) {
+			// decode version (Note: block key uses 16bit stripped epoch version)
+			_, v, _ := pack.DecodeBlockKey(key)
+			for e := v; e <= epoch&0xFFFF; e++ {
+				drop = append(drop, e)
+			}
+			break
 		}
-
-		// decode version (Note: block key uses 16bit stripped epoch version)
-		_, v, _ := pack.DecodeBlockKey(c.Key())
-		for e := v; e <= epoch&0xFFFF; e++ {
-			drop = append(drop, e)
-		}
-
 		return nil
 	})
 	if err != nil {

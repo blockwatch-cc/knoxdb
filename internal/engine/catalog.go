@@ -23,7 +23,6 @@ import (
 // TODO Design
 // - handle schema evolution (latest schema is referenced by object, list of prev schemas?)
 // - foreign tables + engines
-// - enums
 // - views
 // - snapshots
 // - streams
@@ -39,12 +38,6 @@ import (
 //     - schema_hash
 //     - last_id -> state
 //     - num_tuples -> state
-//     - opts -> options
-// - stores
-//   - name_hash
-//     - name
-//     - schema_hash
-//     - num_keys -> state
 //     - opts -> options
 // - indexes
 //   - name_hash
@@ -83,7 +76,6 @@ var (
 	indexesKey   = []byte("indexes")   // tag => name=str, schema=u64, table=u64, status=u8
 	viewsKey     = []byte("views")     // key => name=str, schema=u64, data=query
 	enumsKey     = []byte("enums")     // key => name=str, data=package (id, string)
-	storesKey    = []byte("stores")    // key => name=str, schema=u64
 	snapshotsKey = []byte("snapshots") // key => serialized snapshot config
 	streamsKey   = []byte("streams")   // key => serialized stream config
 
@@ -101,22 +93,28 @@ var (
 	LE = binary.LittleEndian
 )
 
-var DefaultDatabaseOptions = DatabaseOptions{
+var defaultDatabaseOptions = Options{
 	Path:            "./db",
-	Driver:          "bolt",
-	PageSize:        1024,
-	PageFill:        0.5,
 	CacheSize:       16 << 20,
 	WalSegmentSize:  128 << 20,
 	WalRecoveryMode: wal.RecoveryModeTruncate,
 	MaxWorkers:      runtime.NumCPU(),
-	MaxTasks:        128,
+	MaxTasks:        16,
+	Engine:          "pack",
+	PackSize:        1 << 14, // 16k
+	JournalSize:     1 << 15, // 32k
+	JournalSegments: 16,
+	Driver:          "bolt",
+	TxMaxSize:       10 << 24, // 16 MB
+	PageSize:        1 << 16,  // 64kB
+	PageFill:        0.9,
+	Log:             log.Disabled,
 }
 
 // knoxdb.schemas.catalog.v1
 type Catalog struct {
 	mu         sync.RWMutex           // guard write access to catalog internals
-	db         store.DB               // catalog database file
+	db         store.DBManager        // catalog database file
 	path       string                 // database path, used for object file cleanup
 	name       string                 // database name
 	id         uint64                 // database tag
@@ -145,10 +143,10 @@ func (c *Catalog) WithLogger(l log.Logger) *Catalog {
 	return c
 }
 
-func (c *Catalog) Create(ctx context.Context, opts DatabaseOptions) error {
+func (c *Catalog) Create(ctx context.Context, opts Options) error {
 	c.path = filepath.Join(opts.Path, c.name)
 	c.log.Debugf("create catalog at %s", c.path)
-	db, err := store.Create(opts.WithLogger(c.log).CatalogOptions(c.name)...)
+	db, err := store.Create(opts.CatalogOptions(c.name)...)
 	if err != nil {
 		return fmt.Errorf("create catalog %s: %w", c.name, err)
 	}
@@ -163,16 +161,19 @@ func (c *Catalog) Create(ctx context.Context, opts DatabaseOptions) error {
 			indexesKey,
 			viewsKey,
 			enumsKey,
-			storesKey,
 			snapshotsKey,
 			streamsKey,
 		} {
-			if _, err := tx.Root().CreateBucket(key); err != nil {
+			if _, err := tx.CreateBucket(key); err != nil {
 				return err
 			}
 		}
 		var b [8]byte
-		return tx.Bucket(databaseKey).Put(checkpointKey, b[:])
+		bucket, err := tx.Bucket(databaseKey)
+		if err != nil {
+			return err
+		}
+		return bucket.Put(checkpointKey, b[:])
 	})
 	if err != nil {
 		_ = db.Close()
@@ -183,11 +184,10 @@ func (c *Catalog) Create(ctx context.Context, opts DatabaseOptions) error {
 	return nil
 }
 
-func (c *Catalog) Open(ctx context.Context, opts DatabaseOptions) error {
-	opts = DefaultDatabaseOptions.Merge(opts)
+func (c *Catalog) Open(ctx context.Context, opts Options) error {
 	c.path = filepath.Join(opts.Path, c.name)
 	c.log.Debugf("open catalog at %s", c.path)
-	db, err := store.Open(opts.WithLogger(c.log).CatalogOptions(c.name)...)
+	db, err := store.Open(opts.CatalogOptions(c.name)...)
 	if err != nil {
 		c.log.Errorf("open catalog %s: %v", c.name, err)
 		return ErrDatabaseCorrupt
@@ -195,7 +195,11 @@ func (c *Catalog) Open(ctx context.Context, opts DatabaseOptions) error {
 
 	// load catalog checkpoint
 	err = db.View(func(tx store.Tx) error {
-		c.checkpoint = wal.LSN(BE.Uint64(tx.Bucket(databaseKey).Get(checkpointKey)))
+		val, err := store.GetKey(tx, databaseKey, checkpointKey)
+		if err != nil {
+			return ErrNoKey
+		}
+		c.checkpoint = wal.LSN(BE.Uint64(val))
 		return nil
 	})
 	if err != nil {
@@ -255,13 +259,13 @@ func (c *Catalog) Checkpoint() wal.LSN {
 
 func (c *Catalog) PutCheckpoint(ctx context.Context, lsn wal.LSN) error {
 	writeCheckpoint := func(tx store.Tx) error {
-		bucket := tx.Bucket(databaseKey)
-		if bucket == nil {
+		bucket, err := tx.Bucket(databaseKey)
+		if err != nil {
 			return ErrDatabaseCorrupt
 		}
 		var b [8]byte
 		BE.PutUint64(b[:], uint64(lsn))
-		err := bucket.Put(checkpointKey, b[:])
+		err = bucket.Put(checkpointKey, b[:])
 		if err != nil {
 			return err
 		}
@@ -287,12 +291,8 @@ func (c *Catalog) GetSchema(ctx context.Context, key uint64) (*schema.Schema, er
 	if err != nil {
 		return nil, err
 	}
-	bucket := tx.Bucket(schemasKey)
-	if bucket == nil {
-		return nil, ErrDatabaseCorrupt
-	}
-	buf := bucket.Get(util.U64Bytes(key))
-	if buf == nil {
+	buf, err := store.GetKey(tx, schemasKey, util.U64Bytes(key))
+	if err != nil {
 		return nil, ErrNoKey
 	}
 	s := schema.NewSchema()
@@ -307,8 +307,8 @@ func (c *Catalog) PutSchema(ctx context.Context, s *schema.Schema) error {
 	if err != nil {
 		return err
 	}
-	bucket := tx.Bucket(schemasKey)
-	if bucket == nil {
+	bucket, err := tx.Bucket(schemasKey)
+	if err != nil {
 		return ErrDatabaseCorrupt
 	}
 	buf, err := s.MarshalBinary()
@@ -323,12 +323,8 @@ func (c *Catalog) GetIndexSchema(ctx context.Context, key uint64) (*schema.Index
 	if err != nil {
 		return nil, err
 	}
-	bucket := tx.Bucket(schemasKey)
-	if bucket == nil {
-		return nil, ErrDatabaseCorrupt
-	}
-	buf := bucket.Get(util.U64Bytes(key))
-	if buf == nil {
+	buf, err := store.GetKey(tx, schemasKey, util.U64Bytes(key))
+	if err != nil {
 		return nil, ErrNoKey
 	}
 	s := &schema.IndexSchema{}
@@ -347,8 +343,8 @@ func (c *Catalog) PutIndexSchema(ctx context.Context, s *schema.IndexSchema) err
 	if err != nil {
 		return err
 	}
-	bucket := tx.Bucket(schemasKey)
-	if bucket == nil {
+	bucket, err := tx.Bucket(schemasKey)
+	if err != nil {
 		return ErrDatabaseCorrupt
 	}
 	buf, err := s.MarshalBinary()
@@ -363,8 +359,8 @@ func (c *Catalog) DelSchema(ctx context.Context, key uint64) error {
 	if err != nil {
 		return err
 	}
-	bucket := tx.Bucket(schemasKey)
-	if bucket == nil {
+	bucket, err := tx.Bucket(schemasKey)
+	if err != nil {
 		return ErrDatabaseCorrupt
 	}
 	return bucket.Delete(util.U64Bytes(key))
@@ -379,12 +375,8 @@ func (c *Catalog) GetOptions(ctx context.Context, key uint64, opts any) error {
 	if err != nil {
 		return err
 	}
-	bucket := tx.Bucket(optionsKey)
-	if bucket == nil {
-		return ErrDatabaseCorrupt
-	}
-	buf := bucket.Get(util.U64Bytes(key))
-	if buf == nil {
+	buf, err := store.GetKey(tx, optionsKey, util.U64Bytes(key))
+	if err != nil {
 		return ErrNoKey
 	}
 	dec := schema.NewDecoder(s)
@@ -406,8 +398,8 @@ func (c *Catalog) PutOptions(ctx context.Context, key uint64, opts any) error {
 	if err != nil {
 		return err
 	}
-	bucket := tx.Bucket(optionsKey)
-	if bucket == nil {
+	bucket, err := tx.Bucket(optionsKey)
+	if err != nil {
 		return ErrDatabaseCorrupt
 	}
 	enc := schema.NewEncoder(s)
@@ -423,35 +415,25 @@ func (c *Catalog) DelOptions(ctx context.Context, key uint64) error {
 	if err != nil {
 		return err
 	}
-	bucket := tx.Bucket(optionsKey)
-	if bucket == nil {
+	bucket, err := tx.Bucket(optionsKey)
+	if err != nil {
 		return ErrDatabaseCorrupt
 	}
 	return bucket.Delete(util.U64Bytes(key))
 }
 
 func (c *Catalog) ListTables(ctx context.Context) ([]uint64, error) {
-	return c.listKeys(ctx, tablesKey)
+	return c.listObjectKeys(ctx, tablesKey)
 }
 
-func (c *Catalog) GetTable(ctx context.Context, key uint64) (s *schema.Schema, o TableOptions, err error) {
+func (c *Catalog) GetTable(ctx context.Context, key uint64) (s *schema.Schema, o Options, err error) {
 	var tx store.Tx
 	tx, err = GetTx(ctx).CatalogTx(c.db, false)
 	if err != nil {
 		return
 	}
-	bucket := tx.Bucket(tablesKey)
-	if bucket == nil {
-		err = ErrDatabaseCorrupt
-		return
-	}
-	bucket = bucket.Bucket(util.U64Bytes(key))
-	if bucket == nil {
-		err = ErrNoTable
-		return
-	}
-	skey := bucket.Get(schemaKey)
-	if skey == nil {
+	skey, err := store.GetKey(tx, tablesKey, util.U64Bytes(key), schemaKey)
+	if err != nil {
 		err = ErrNoKey
 		return
 	}
@@ -463,7 +445,7 @@ func (c *Catalog) GetTable(ctx context.Context, key uint64) (s *schema.Schema, o
 	return
 }
 
-func (c *Catalog) AddTable(ctx context.Context, key uint64, s *schema.Schema, o TableOptions) error {
+func (c *Catalog) AddTable(ctx context.Context, key uint64, s *schema.Schema, o Options) error {
 	if err := c.PutSchema(ctx, s); err != nil {
 		return err
 	}
@@ -477,8 +459,8 @@ func (c *Catalog) AddTable(ctx context.Context, key uint64, s *schema.Schema, o 
 	if err != nil {
 		return err
 	}
-	bucket := tx.Bucket(tablesKey)
-	if bucket == nil {
+	bucket, err := tx.Bucket(tablesKey)
+	if err != nil {
 		return ErrDatabaseCorrupt
 	}
 	bucket, err = bucket.CreateBucket(util.U64Bytes(key))
@@ -501,16 +483,16 @@ func (c *Catalog) DropTable(ctx context.Context, key uint64) error {
 	if err != nil {
 		return err
 	}
-	tables := tx.Bucket(tablesKey)
-	if tables == nil {
+	tables, err := tx.Bucket(tablesKey)
+	if err != nil {
 		return ErrDatabaseCorrupt
 	}
-	bucket := tables.Bucket(util.U64Bytes(key))
-	if bucket == nil {
+	bucket, err := tables.Bucket(util.U64Bytes(key))
+	if err != nil {
 		return ErrNoTable
 	}
-	skey := bucket.Get(schemaKey)
-	if skey == nil {
+	skey, err := bucket.Get(schemaKey)
+	if err != nil {
 		return ErrNoKey
 	}
 	if err := tables.DeleteBucket(util.U64Bytes(key)); err != nil {
@@ -526,24 +508,14 @@ func (c *Catalog) DropTable(ctx context.Context, key uint64) error {
 	return nil
 }
 
-func (c *Catalog) GetIndex(ctx context.Context, key uint64) (s *schema.IndexSchema, o IndexOptions, err error) {
+func (c *Catalog) GetIndex(ctx context.Context, key uint64) (s *schema.IndexSchema, o Options, err error) {
 	var tx store.Tx
 	tx, err = GetTx(ctx).CatalogTx(c.db, false)
 	if err != nil {
 		return
 	}
-	indexes := tx.Bucket(indexesKey)
-	if indexes == nil {
-		err = ErrDatabaseCorrupt
-		return
-	}
-	bucket := indexes.Bucket(util.U64Bytes(key))
-	if bucket == nil {
-		err = ErrNoIndex
-		return
-	}
-	skey := bucket.Get(schemaKey)
-	if skey == nil {
+	skey, err := store.GetKey(tx, indexesKey, util.U64Bytes(key), schemaKey)
+	if err != nil {
 		err = ErrNoKey
 		return
 	}
@@ -560,28 +532,24 @@ func (c *Catalog) ListIndexes(ctx context.Context, key uint64) ([]uint64, error)
 	if err != nil {
 		return nil, err
 	}
-	bucket := tx.Bucket(indexesKey)
-	if bucket == nil {
+	bucket, err := tx.Bucket(indexesKey)
+	if err != nil {
 		return nil, ErrDatabaseCorrupt
 	}
 	res := make([]uint64, 0)
-	err = bucket.ForEachBucket(func(k []byte, b store.Bucket) error {
-		tkey := b.Get(tableKey)
-		if tkey == nil {
-			return ErrNoKey
+	for k, b := range bucket.Buckets() {
+		tkey, err := b.Get(tableKey)
+		if err != nil {
+			return nil, ErrNoKey
 		}
 		if BE.Uint64(tkey) == key {
 			res = append(res, BE.Uint64(k))
 		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
 	}
 	return res, nil
 }
 
-func (c *Catalog) AddIndex(ctx context.Context, ikey, tkey uint64, s *schema.IndexSchema, o IndexOptions) error {
+func (c *Catalog) AddIndex(ctx context.Context, ikey, tkey uint64, s *schema.IndexSchema, o Options) error {
 	if err := c.PutIndexSchema(ctx, s); err != nil {
 		return err
 	}
@@ -594,8 +562,8 @@ func (c *Catalog) AddIndex(ctx context.Context, ikey, tkey uint64, s *schema.Ind
 	if err != nil {
 		return err
 	}
-	bucket := tx.Bucket(indexesKey)
-	if bucket == nil {
+	bucket, err := tx.Bucket(indexesKey)
+	if err != nil {
 		return ErrDatabaseCorrupt
 	}
 	bucket, err = bucket.CreateBucket(util.U64Bytes(ikey))
@@ -620,16 +588,16 @@ func (c *Catalog) DropIndex(ctx context.Context, key uint64) error {
 	if err != nil {
 		return err
 	}
-	indexes := tx.Bucket(indexesKey)
-	if indexes == nil {
+	indexes, err := tx.Bucket(indexesKey)
+	if err != nil {
 		return ErrDatabaseCorrupt
 	}
-	bucket := indexes.Bucket(util.U64Bytes(key))
-	if bucket == nil {
+	bucket, err := indexes.Bucket(util.U64Bytes(key))
+	if err != nil {
 		return ErrNoIndex
 	}
-	skey := bucket.Get(schemaKey)
-	if skey == nil {
+	skey, err := bucket.Get(schemaKey)
+	if err != nil {
 		return ErrNoKey
 	}
 	if err := indexes.DeleteBucket(util.U64Bytes(key)); err != nil {
@@ -645,103 +613,8 @@ func (c *Catalog) DropIndex(ctx context.Context, key uint64) error {
 	return nil
 }
 
-func (c *Catalog) ListStores(ctx context.Context) ([]uint64, error) {
-	return c.listKeys(ctx, storesKey)
-}
-
-func (c *Catalog) GetStore(ctx context.Context, key uint64) (s *schema.Schema, o StoreOptions, err error) {
-	var tx store.Tx
-	tx, err = GetTx(ctx).CatalogTx(c.db, false)
-	if err != nil {
-		return
-	}
-	stores := tx.Bucket(storesKey)
-	if stores == nil {
-		err = ErrDatabaseCorrupt
-		return
-	}
-	bucket := stores.Bucket(util.U64Bytes(key))
-	if bucket == nil {
-		err = ErrNoStore
-		return
-	}
-	skey := bucket.Get(schemaKey)
-	if skey == nil {
-		err = ErrNoKey
-		return
-	}
-	s, err = c.GetSchema(ctx, BE.Uint64(skey))
-	if err != nil {
-		return
-	}
-	err = c.GetOptions(ctx, key, &o)
-	return
-}
-
-func (c *Catalog) AddStore(ctx context.Context, key uint64, s *schema.Schema, o StoreOptions) error {
-	if err := c.PutSchema(ctx, s); err != nil {
-		return err
-	}
-
-	if err := c.PutOptions(ctx, key, &o); err != nil {
-		return err
-	}
-
-	// create store bucket, add name and current schema
-	tx, err := GetTx(ctx).CatalogTx(c.db, true)
-	if err != nil {
-		return err
-	}
-	bucket := tx.Bucket(storesKey)
-	if bucket == nil {
-		return ErrDatabaseCorrupt
-	}
-	bucket, err = bucket.CreateBucket(util.U64Bytes(key))
-	if err != nil {
-		return err
-	}
-	if err := bucket.Put(schemaKey, util.U64Bytes(s.Hash)); err != nil {
-		return err
-	}
-	if err := bucket.Put(nameKey, []byte(s.Name)); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (c *Catalog) DropStore(ctx context.Context, key uint64) error {
-	// TODO: we don't have a reference to previous schema versions/hashes for removal
-	tx, err := GetTx(ctx).CatalogTx(c.db, true)
-	if err != nil {
-		return err
-	}
-	stores := tx.Bucket(storesKey)
-	if stores == nil {
-		return ErrDatabaseCorrupt
-	}
-	bucket := stores.Bucket(util.U64Bytes(key))
-	if bucket == nil {
-		return ErrNoStore
-	}
-	skey := bucket.Get(schemaKey)
-	if skey == nil {
-		return ErrNoKey
-	}
-	if err := stores.DeleteBucket(util.U64Bytes(key)); err != nil {
-		return err
-	}
-	if err := c.DelOptions(ctx, key); err != nil {
-		return err
-	}
-	if err := c.DelSchema(ctx, BE.Uint64(skey)); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (c *Catalog) ListEnums(ctx context.Context) ([]uint64, error) {
-	return c.listKeys(ctx, enumsKey)
+	return c.listObjectKeys(ctx, enumsKey)
 }
 
 func (c *Catalog) GetEnum(ctx context.Context, key uint64) (e *schema.EnumDictionary, err error) {
@@ -750,19 +623,18 @@ func (c *Catalog) GetEnum(ctx context.Context, key uint64) (e *schema.EnumDictio
 	if err != nil {
 		return
 	}
-	stores := tx.Bucket(enumsKey)
-	if stores == nil {
+	bucket, err := store.GetBucket(tx, enumsKey, util.U64Bytes(key))
+	if err != nil {
 		err = ErrDatabaseCorrupt
 		return
 	}
-	bucket := stores.Bucket(util.U64Bytes(key))
-	if bucket == nil {
-		err = ErrNoStore
+	name, err := bucket.Get(nameKey)
+	if err != nil {
+		err = ErrNoKey
 		return
 	}
-	name := bucket.Get(nameKey)
-	data := bucket.Get(dataKey)
-	if name == nil || data == nil {
+	data, err := bucket.Get(dataKey)
+	if err != nil {
 		err = ErrNoKey
 		return
 	}
@@ -776,12 +648,8 @@ func (c *Catalog) PutEnum(ctx context.Context, e *schema.EnumDictionary) error {
 	if err != nil {
 		return err
 	}
-	enums := tx.Bucket(enumsKey)
-	if enums == nil {
-		return ErrDatabaseCorrupt
-	}
-	bucket := enums.Bucket(util.U64Bytes(e.Tag()))
-	if bucket == nil {
+	bucket, err := store.GetBucket(tx, enumsKey, util.U64Bytes(e.Tag()))
+	if err != nil {
 		return ErrDatabaseCorrupt
 	}
 	buf, err := e.MarshalBinary()
@@ -797,8 +665,8 @@ func (c *Catalog) AddEnum(ctx context.Context, e *schema.EnumDictionary) error {
 	if err != nil {
 		return err
 	}
-	enums := tx.Bucket(enumsKey)
-	if enums == nil {
+	enums, err := tx.Bucket(enumsKey)
+	if err != nil {
 		return ErrDatabaseCorrupt
 	}
 	bucket, err := enums.CreateBucket(util.U64Bytes(e.Tag()))
@@ -823,8 +691,8 @@ func (c *Catalog) DropEnum(ctx context.Context, key uint64) error {
 	if err != nil {
 		return err
 	}
-	enums := tx.Bucket(enumsKey)
-	if enums == nil {
+	enums, err := tx.Bucket(enumsKey)
+	if err != nil {
 		return ErrDatabaseCorrupt
 	}
 	if err := enums.DeleteBucket(util.U64Bytes(key)); err != nil {
@@ -834,22 +702,18 @@ func (c *Catalog) DropEnum(ctx context.Context, key uint64) error {
 	return nil
 }
 
-func (c *Catalog) listKeys(ctx context.Context, bucketKey []byte) ([]uint64, error) {
+func (c *Catalog) listObjectKeys(ctx context.Context, bucketKey []byte) ([]uint64, error) {
 	tx, err := GetTx(ctx).CatalogTx(c.db, false)
 	if err != nil {
 		return nil, err
 	}
-	bucket := tx.Bucket(bucketKey)
-	if bucket == nil {
+	bucket, err := tx.Bucket(bucketKey)
+	if err != nil {
 		return nil, ErrDatabaseCorrupt
 	}
 	res := make([]uint64, 0)
-	err = bucket.ForEachBucket(func(k []byte, b store.Bucket) error {
+	for k := range bucket.Buckets() {
 		res = append(res, BE.Uint64(k))
-		return nil
-	})
-	if err != nil {
-		return nil, err
 	}
 	return res, nil
 }
@@ -1117,8 +981,6 @@ func (c *Catalog) decodeWalRecord(ctx context.Context, rec *wal.Record) (Object,
 	switch types.ObjectTag(rec.Data[0][0]) {
 	case types.ObjectTagTable:
 		obj = &TableObject{cat: c}
-	case types.ObjectTagStore:
-		obj = &StoreObject{cat: c}
 	case types.ObjectTagEnum:
 		obj = &EnumObject{cat: c}
 	case types.ObjectTagIndex:

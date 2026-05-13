@@ -151,8 +151,8 @@ func (p *Package) LoadFromDisk(ctx context.Context, bucket store.Bucket, fids []
 		bkey := EncodeBlockKey(p.key, p.version, f.Id)
 
 		// load block data
-		buf := bucket.Get(bkey)
-		if buf == nil {
+		buf, err := bucket.Get(bkey)
+		if err != nil {
 			// when missing (new fields in old packs) keep block nil
 			continue
 		}
@@ -225,11 +225,12 @@ func (p *Package) StoreToDisk(ctx context.Context, bucket store.Bucket) (int, er
 
 		// export block statistics
 		if p.stats != nil {
+			val, _ := bucket.Get(okey)
 			minv, maxv := stats.MinMax()
 			p.stats.MinMax[i][0] = minv
 			p.stats.MinMax[i][1] = maxv
 			p.stats.Unique[i] = stats.Unique()
-			p.stats.DiffSize[i] = len(buf) - len(bucket.Get(okey))
+			p.stats.DiffSize[i] = len(buf) - len(val)
 		}
 		stats.Close()
 		n += len(buf)

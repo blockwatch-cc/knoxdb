@@ -85,6 +85,11 @@ func (e *Engine) WithTransaction(ctx context.Context, flags ...TxFlags) (context
 		return ctx, nil, noop, noop, ErrDatabaseShutdown
 	}
 
+	// apply engine nosync
+	if e.opts.NoSync {
+		uflags |= TxFlagNoSync
+	}
+
 	// potentially wait
 	ok := true
 	if uflags.IsReadOnly() {

@@ -25,10 +25,10 @@ type IndexTestCase struct {
 		*engine.Engine,
 		engine.TableEngine,
 		*schema.Schema,
-		engine.TableOptions,
+		engine.Options,
 		engine.IndexEngine,
 		*schema.IndexSchema,
-		engine.IndexOptions,
+		engine.Options,
 	)
 }
 
@@ -122,10 +122,10 @@ func TestIndexEngine[T any, F IF[T]](t *testing.T, driver, eng string, table eng
 	}
 }
 
-func CreateIndex(t *testing.T, e *engine.Engine, te engine.TableEngine, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+func CreateIndex(t *testing.T, e *engine.Engine, te engine.TableEngine, ie engine.IndexEngine, is *schema.IndexSchema, io engine.Options) {
 	t.Helper()
 	ctx := engine.WithEngine(context.Background(), e)
-	require.NoError(t, ie.Create(ctx, te, is, io))
+	require.NoError(t, ie.Create(ctx, te, is, io.IndexOptions()...))
 	te.ConnectIndex(ie)
 }
 
@@ -166,51 +166,53 @@ func QueryIndexFail(t *testing.T, ctx context.Context, idx engine.IndexEngine, f
 	require.Nil(t, res, "nil result bitmap")
 }
 
-func CreateIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+func CreateIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.Options, ie engine.IndexEngine, is *schema.IndexSchema, io engine.Options) {
 	CreateIndex(t, e, te, ie, is, io)
 }
 
-func OpenIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+func OpenIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.Options, ie engine.IndexEngine, is *schema.IndexSchema, io engine.Options) {
 	CreateIndex(t, e, te, ie, is, io)
 	require.NoError(t, ie.Close(context.Background()))
 	ctx := engine.WithEngine(context.Background(), e)
-	require.NoError(t, ie.Open(ctx, te, is, io))
+	require.NoError(t, ie.Open(ctx, te, is, io.IndexOptions()...))
 	require.NoError(t, ie.Close(ctx))
 }
 
-func CloseIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+func CloseIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.Options, ie engine.IndexEngine, is *schema.IndexSchema, io engine.Options) {
 	CreateIndex(t, e, te, ie, is, io)
 	ctx := engine.WithEngine(context.Background(), e)
 	require.NoError(t, ie.Close(ctx))
 }
 
-func DropIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+func DropIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.Options, ie engine.IndexEngine, is *schema.IndexSchema, io engine.Options) {
 	CreateIndex(t, e, te, ie, is, io)
 	ctx := engine.WithEngine(context.Background(), e)
-	dbpath := filepath.Join(e.RootPath(), is.Name)
+
+	dbpath := filepath.Join(e.RootPath(), is.Name+".db")
 	ok, err := store.Exists(io.Driver, dbpath)
-	require.NoError(t, err, "access error")
-	require.True(t, ok, "db not exists")
+	require.NoError(t, err, "driver says access error")
+	require.True(t, ok, "driver says db file %q does not exist", dbpath)
+
 	require.NoError(t, ie.Drop(ctx))
 	ok, err = store.Exists(io.Driver, dbpath)
-	require.NoError(t, err, "access error")
-	require.False(t, ok, "db not deleted")
+	require.NoError(t, err, "driver says access error")
+	require.False(t, ok, "driver says db file %q still exist", dbpath)
 }
 
-func TruncateIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+func TruncateIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.Options, ie engine.IndexEngine, is *schema.IndexSchema, io engine.Options) {
 	CreateIndex(t, e, te, ie, is, io)
 	FillIndex(t, e, ie)
 	ctx := engine.WithEngine(context.Background(), e)
 	require.NoError(t, ie.Truncate(ctx))
 }
 
-func RebuildIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+func RebuildIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.Options, ie engine.IndexEngine, is *schema.IndexSchema, io engine.Options) {
 	CreateIndex(t, e, te, ie, is, io)
 	ctx := engine.WithEngine(context.Background(), e)
 	require.NoError(t, ie.Rebuild(ctx))
 }
 
-func SyncIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+func SyncIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.Options, ie engine.IndexEngine, is *schema.IndexSchema, io engine.Options) {
 	CreateIndex(t, e, te, ie, is, io)
 	ctx := engine.WithEngine(context.Background(), e)
 	require.NoError(t, ie.Sync(ctx))
@@ -218,7 +220,7 @@ func SyncIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *sc
 	require.NoError(t, ie.Sync(ctx))
 }
 
-func CanMatchIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+func CanMatchIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.Options, ie engine.IndexEngine, is *schema.IndexSchema, io engine.Options) {
 	CreateIndex(t, e, te, ie, is, io)
 
 	// check by type
@@ -271,7 +273,7 @@ func CanMatchIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts
 	}
 }
 
-func AddIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+func AddIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.Options, ie engine.IndexEngine, is *schema.IndexSchema, io engine.Options) {
 	CreateIndex(t, e, te, ie, is, io)
 	FillIndex(t, e, ie)
 	ctx := engine.WithEngine(context.Background(), e)
@@ -291,7 +293,7 @@ func AddIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *sch
 	}
 }
 
-func DeleteIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+func DeleteIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.Options, ie engine.IndexEngine, is *schema.IndexSchema, io engine.Options) {
 	CreateIndex(t, e, te, ie, is, io)
 	prev := FillIndex(t, e, ie)
 	ctx := engine.WithEngine(context.Background(), e)
@@ -325,7 +327,7 @@ func DeleteIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *
 	}
 }
 
-func QueryIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+func QueryIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.Options, ie engine.IndexEngine, is *schema.IndexSchema, io engine.Options) {
 	CreateIndex(t, e, te, ie, is, io)
 	FillIndex(t, e, ie)
 	ctx := engine.WithEngine(context.Background(), e)

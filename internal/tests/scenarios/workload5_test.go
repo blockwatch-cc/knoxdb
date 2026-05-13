@@ -165,8 +165,9 @@ func TestWorkload5(t *testing.T) {
 		if eng.IsShutdown() {
 			// reopen
 			dir := db.Load().Options().Path
-			dbo := tests.NewTestDatabaseOptions(t, "").WithPath(dir)
-			eng, _ = engine.Open(ctx, tests.TEST_DB_NAME, dbo)
+			dbo := tests.NewTestDatabaseOptions(t, "")
+			dbo.Path = dir
+			eng, _ = engine.Open(ctx, tests.TEST_DB_NAME, dbo.DatabaseOptions()...)
 		}
 		if eng != nil {
 			for _, name := range eng.TableNames() {
@@ -175,15 +176,12 @@ func TestWorkload5(t *testing.T) {
 				}
 				eng.DropTable(ctx, name)
 			}
-			for _, name := range eng.StoreNames() {
-				eng.DropStore(ctx, name)
-			}
 			for _, name := range eng.EnumNames() {
 				eng.DropEnum(ctx, name)
 			}
 			eng.Close(ctx)
 		}
-		require.NoError(t, engine.Drop(tests.TEST_DB_NAME, dbo))
+		require.NoError(t, engine.Drop(tests.TEST_DB_NAME, dbo.DatabaseOptions()...))
 	})
 
 	// set test failed when we detect a panic, this ensures cleanup above
@@ -564,8 +562,9 @@ func TestWorkload5(t *testing.T) {
 
 				// reopen
 				t.Logf("%04d [%s] reopening DB at %s", round, cmd, dir)
-				dbo := tests.NewTestDatabaseOptions(t, "").WithPath(dir)
-				eng, err := engine.Open(context.Background(), tests.TEST_DB_NAME, dbo)
+				dbo := tests.NewTestDatabaseOptions(t, "")
+				dbo.Path = dir
+				eng, err := engine.Open(context.Background(), tests.TEST_DB_NAME, dbo.DatabaseOptions()...)
 				if err != nil {
 					lastCrash.Store(int64(len(schedule)))
 				}
@@ -586,8 +585,9 @@ func TestWorkload5(t *testing.T) {
 
 				// reopen
 				t.Logf("%04d [%s] reopening DB at %s", round, cmd, dir)
-				dbo := tests.NewTestDatabaseOptions(t, "").WithPath(dir)
-				eng, err := engine.Open(context.Background(), tests.TEST_DB_NAME, dbo)
+				dbo := tests.NewTestDatabaseOptions(t, "")
+				dbo.Path = dir
+				eng, err := engine.Open(context.Background(), tests.TEST_DB_NAME, dbo.DatabaseOptions()...)
 				if err != nil {
 					lastCrash.Store(int64(len(schedule)))
 				}

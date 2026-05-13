@@ -146,6 +146,7 @@ func matchFilterVector(f *filter.Filter, pkg *pack.Package, bits, mask *bitset.B
 
 		// select filter type
 		var (
+			buf []byte
 			flt hashfilter.Filter
 			err error
 		)
@@ -154,20 +155,26 @@ func matchFilterVector(f *filter.Filter, pkg *pack.Package, bits, mask *bitset.B
 		switch ftyp {
 		case types.FilterTypeBloom2b, types.FilterTypeBloom3b,
 			types.FilterTypeBloom4b, types.FilterTypeBloom5b:
-			buf := b[STATS_FILTER_KEY].Get(bkey)
-			n += len(buf)
-			flt, err = bloom.NewFilterBuffer(buf)
+			buf, err = b[STATS_FILTER_KEY].Get(bkey)
+			if err == nil {
+				n += len(buf)
+				flt, err = bloom.NewFilterBuffer(buf)
+			}
 		case types.FilterTypeBfuse8:
-			buf := b[STATS_FILTER_KEY].Get(bkey)
-			n += len(buf)
-			flt, err = fuse.NewFromBytes[uint8](buf)
+			buf, err = b[STATS_FILTER_KEY].Get(bkey)
+			if err == nil {
+				n += len(buf)
+				flt, err = fuse.NewFromBytes[uint8](buf)
+			}
 		case types.FilterTypeBfuse16:
-			buf := b[STATS_FILTER_KEY].Get(bkey)
-			n += len(buf)
-			flt, err = fuse.NewFromBytes[uint16](buf)
+			buf, err = b[STATS_FILTER_KEY].Get(bkey)
+			if err == nil {
+				n += len(buf)
+				flt, err = fuse.NewFromBytes[uint16](buf)
+			}
 		case types.FilterTypeBits:
-			buf := b[STATS_FILTER_KEY].Get(bkey)
-			if len(buf) > 0 {
+			buf, err = b[STATS_FILTER_KEY].Get(bkey)
+			if err == nil && len(buf) > 0 {
 				n += len(buf)
 				flt = xroar.NewFromBytes(buf)
 			}

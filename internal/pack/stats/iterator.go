@@ -247,7 +247,11 @@ func (it *Iterator) Range() types.Range {
 func (it *Iterator) combinedRange(b store.Bucket, key, ver uint32, n *filter.Node, nRows int) types.Range {
 	if n.IsLeaf() {
 		// load range index data
-		idx := RangeIndexFromBytes(b.Get(encodeFilterKey(key, ver, n.Filter.Id)))
+		buf, err := b.Get(encodeFilterKey(key, ver, n.Filter.Id))
+		if err != nil {
+			return types.InvalidRange
+		}
+		idx := RangeIndexFromBytes(buf)
 		defer idx.Close()
 
 		// ignore errors

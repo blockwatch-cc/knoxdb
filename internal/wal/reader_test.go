@@ -24,7 +24,7 @@ func TestReaderFilter(t *testing.T) {
 	// Write test records
 	records := []*Record{
 		{Type: RecordTypeInsert, Tag: types.ObjectTagDatabase, Entity: 1, TxID: 100, Data: [][]byte{[]byte("data1")}},
-		{Type: RecordTypeUpdate, Tag: types.ObjectTagStore, Entity: 2, TxID: 200, Data: [][]byte{[]byte("data2")}},
+		{Type: RecordTypeUpdate, Tag: types.ObjectTagTable, Entity: 2, TxID: 200, Data: [][]byte{[]byte("data2")}},
 		{Type: RecordTypeDelete, Tag: types.ObjectTagStream, Entity: 3, TxID: 300, Data: [][]byte{[]byte("data3")}},
 	}
 
@@ -43,8 +43,8 @@ func TestReaderFilter(t *testing.T) {
 		{"FilterByTag", func(r WalReader) WalReader { return r.WithTag(types.ObjectTagDatabase) }, records[0]},
 		{"FilterByEntity", func(r WalReader) WalReader { return r.WithEntity(2) }, records[1]},
 		{"FilterByTxID", func(r WalReader) WalReader { return r.WithTxID(300) }, records[2]},
-		{"CombinedFilters", func(r WalReader) WalReader { return r.WithType(RecordTypeUpdate).WithTag(types.ObjectTagStore) }, records[1]},
-		{"NoMatchFilter", func(r WalReader) WalReader { return r.WithType(RecordTypeInsert).WithTag(types.ObjectTagStore) }, nil},
+		{"CombinedFilters", func(r WalReader) WalReader { return r.WithType(RecordTypeUpdate).WithTag(types.ObjectTagTable) }, records[1]},
+		{"NoMatchFilter", func(r WalReader) WalReader { return r.WithType(RecordTypeInsert).WithTag(types.ObjectTagTable) }, nil},
 	}
 
 	for _, tt := range tests {

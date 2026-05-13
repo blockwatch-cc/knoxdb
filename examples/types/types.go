@@ -246,7 +246,7 @@ func run() error {
 func OpenOrCreate(ctx context.Context) (db knox.Database, table knox.Table, err error) {
 	ok, err := knox.IsDatabaseExist(
 		"types",
-		knox.DefaultDatabaseOptions.WithPath("./db"),
+		append(knox.NewDefaultOptions(), knox.WithPath("./db"))...,
 	)
 	if err != nil {
 		return nil, nil, err
@@ -265,14 +265,16 @@ func Create(ctx context.Context) (db knox.Database, table knox.Table, err error)
 		return
 	}
 
-	opts := knox.DefaultDatabaseOptions.
-		WithPath("./db").
-		WithNamespace("cx.bwd.knox.types-demo").
-		WithCacheSize(1 << 20 * TypesCacheSize).
-		WithLogger(log.Log.Clone(""))
+	opts := append(
+		knox.NewDefaultOptions(),
+		knox.WithPath("./db"),
+		knox.WithNamespace("cx.bwd.knox.types-demo"),
+		knox.WithCacheSize(1<<20*TypesCacheSize),
+		knox.WithLogger(log.Log.Clone("")),
+	)
 
 	log.Info("Creating DB")
-	db, err = knox.CreateDatabase(ctx, "types", opts)
+	db, err = knox.CreateDatabase(ctx, "types", opts...)
 	if err != nil {
 		return
 	}
@@ -289,14 +291,15 @@ func Create(ctx context.Context) (db knox.Database, table knox.Table, err error)
 
 	log.Infof("Creating Table %s", s.Name)
 	log.Tracef("Input Schema %s", s)
-	table, err = db.CreateTable(ctx, s, knox.TableOptions{
-		Engine:      "pack",
-		Driver:      "bolt",
-		PackSize:    1 << TypesPackSizeLog2,
-		JournalSize: 1 << TypesJournalSizeLog2,
-		PageFill:    TypesFillLevel,
-		NoSync:      true,
-	})
+	table, err = db.CreateTable(ctx, s, append(
+		knox.NewTableOptions(),
+		knox.WithEngineType("pack"),
+		knox.WithDriverType("bolt"),
+		knox.WithPackSize(1<<TypesPackSizeLog2),
+		knox.WithJournalSize(1<<TypesJournalSizeLog2),
+		knox.WithPageFill(TypesFillLevel),
+		knox.WithNoSync(true),
+	)...)
 	if err != nil {
 		return
 	}
@@ -305,14 +308,15 @@ func Create(ctx context.Context) (db knox.Database, table knox.Table, err error)
 
 	for _, s := range ts.Indexes {
 		log.Infof("Creating Index %s", s.Name)
-		err = db.CreateIndex(ctx, s, knox.IndexOptions{
-			Engine:      "pack",
-			Driver:      "bolt",
-			PackSize:    1 << TypesIndexPackSizeLog2,
-			JournalSize: 1 << TypesIndexJournalSizeLog2,
-			PageFill:    TypesIndexFillLevel,
-			NoSync:      true,
-		})
+		err = db.CreateIndex(ctx, s, append(
+			knox.NewIndexOptions(),
+			knox.WithEngineType("pack"),
+			knox.WithDriverType("bolt"),
+			knox.WithPackSize(1<<TypesIndexPackSizeLog2),
+			knox.WithJournalSize(1<<TypesIndexJournalSizeLog2),
+			knox.WithPageFill(TypesIndexFillLevel),
+			knox.WithNoSync(true),
+		)...)
 		if err != nil {
 			return
 		}
@@ -322,11 +326,13 @@ func Create(ctx context.Context) (db knox.Database, table knox.Table, err error)
 
 func Open(ctx context.Context) (db knox.Database, table knox.Table, err error) {
 	log.Info("Opening DB")
-	db, err = knox.OpenDatabase(ctx, "types", knox.DatabaseOptions{
-		Path:      "./db",
-		Namespace: "cx.bwd.knox.types-demo",
-		Logger:    log.Log.Clone(""),
-	})
+	db, err = knox.OpenDatabase(ctx, "types", append(
+		knox.NewDefaultOptions(),
+		knox.WithPath("./db"),
+		knox.WithNamespace("cx.bwd.knox.types-demo"),
+		knox.WithCacheSize(1<<20*TypesCacheSize),
+		knox.WithLogger(log.Log.Clone("")),
+	)...)
 	if err != nil {
 		return
 	}

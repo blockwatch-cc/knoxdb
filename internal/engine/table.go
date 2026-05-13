@@ -48,7 +48,7 @@ func (e *Engine) GetTable(tag uint64) (TableEngine, bool) {
 	return e.tables.Get(tag)
 }
 
-func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, opts TableOptions) (TableEngine, error) {
+func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, options ...Option) (TableEngine, error) {
 	// check name is unique
 	tag := s.TaggedHash(types.ObjectTagTable)
 	_, ok := e.tables.Get(tag)
@@ -84,6 +84,9 @@ func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, opts TableOp
 		s, _ = s.ResetPk(schema.MetaRid)
 	}
 
+	// handle table options
+	opts := defaultDatabaseOptions.Apply(options...)
+
 	// on history tables set pk to $rid, may clone & alter schema
 	if opts.Engine == TableKindHistory {
 		if s.PkId() != schema.MetaRid {
@@ -92,7 +95,7 @@ func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, opts TableOp
 	}
 
 	// check engine and driver
-	factory, ok := tableEngineRegistry[opts.Engine]
+	factory, ok := tableEngineRegistry[TableKind(opts.Engine)]
 	if !ok {
 		return nil, fmt.Errorf("%s: %v", opts.Engine, ErrNoEngine)
 	}
@@ -101,8 +104,8 @@ func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, opts TableOp
 	}
 
 	// ensure logger
-	if opts.Logger == nil {
-		opts.Logger = e.opts.Logger
+	if opts.Log == nil {
+		opts.Log = e.opts.Log
 	}
 	// create table engine
 	table := factory()
@@ -126,7 +129,7 @@ func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, opts TableOp
 	}
 
 	// create table
-	err = table.Create(ctx, s, opts)
+	err = table.Create(ctx, s, opts.TableOptions()...)
 	if err != nil {
 		return nil, err
 	}
@@ -227,7 +230,7 @@ func (e *Engine) DropTable(ctx context.Context, name string) error {
 	}
 
 	// schedule drop
-	if err := e.cat.AppendTableCmd(ctx, DROP, t.Schema(), TableOptions{}); err != nil {
+	if err := e.cat.AppendTableCmd(ctx, DROP, t.Schema(), Options{}); err != nil {
 		return err
 	}
 
@@ -332,7 +335,7 @@ func (e *Engine) openTables(ctx context.Context) error {
 		s.WithEnums(e.CloneEnums(s.EnumNames()...))
 
 		// get table factory
-		factory, ok := tableEngineRegistry[opts.Engine]
+		factory, ok := tableEngineRegistry[TableKind(opts.Engine)]
 		if !ok {
 			return ErrNoEngine
 		}
@@ -343,7 +346,7 @@ func (e *Engine) openTables(ctx context.Context) error {
 		table := factory()
 
 		// ensure logger and override flags
-		opts.Logger = e.opts.Logger
+		opts.Log = e.opts.Log
 		opts.ReadOnly = e.opts.ReadOnly
 
 		// open indexes first so merge during WAL replay can find them
@@ -352,7 +355,7 @@ func (e *Engine) openTables(ctx context.Context) error {
 		}
 
 		// open the table, load journals, replay wal after crash
-		if err := table.Open(ctx, s, opts); err != nil {
+		if err := table.Open(ctx, s, opts.TableOptions()...); err != nil {
 			return err
 		}
 

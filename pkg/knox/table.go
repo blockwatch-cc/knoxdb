@@ -10,7 +10,6 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/pkg/schema"
-	"github.com/echa/log"
 )
 
 var _ Table = (*TableImpl)(nil)
@@ -19,7 +18,6 @@ type TableImpl struct {
 	db    Database
 	table engine.TableEngine
 	enc   *schema.Encoder
-	log   log.Logger
 }
 
 func (t TableImpl) Schema() *schema.Schema {
@@ -288,7 +286,6 @@ func (t *GenericTable[T]) Table() Table {
 	return &TableImpl{
 		table: t.table,
 		db:    t.db,
-		log:   log.Disabled,
 	}
 }
 

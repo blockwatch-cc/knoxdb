@@ -1,4 +1,4 @@
-// Copyright (c) 2025 Blockwatch Data Inc.
+// Copyright (c) 2026 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package bolt
@@ -22,9 +22,6 @@ const (
 	// backend name
 	dbType = "bolt"
 
-	// max size of compact transactions
-	compactTxSize int64 = 1048576
-
 	// default directory permissions
 	permPath = 0700
 	permFile = 0600
@@ -37,12 +34,11 @@ var (
 
 // ensure types implement store interface
 var (
-	_ store.Factory  = (*driver)(nil)
-	_ store.DB       = (*db)(nil)
-	_ store.Tx       = (*transaction)(nil)
-	_ store.Bucket   = (*bucket)(nil)
-	_ store.Sequence = (*sequence)(nil)
-	_ store.Cursor   = (*cursor)(nil)
+	_ store.Factory   = (*driver)(nil)
+	_ store.DB        = (*db)(nil)
+	_ store.DBManager = (*db)(nil)
+	_ store.Tx        = (*tx)(nil)
+	_ store.Bucket    = (*bucket)(nil)
 )
 
 func init() {
@@ -53,13 +49,18 @@ func init() {
 
 type driver struct{}
 
-func (d *driver) Name() string {
+func (d *driver) Type() string {
 	return dbType
 }
 
-func (d *driver) Create(opts store.Options) (store.DB, error) {
-	// check file exists, only fail on permissions not of path/file does not exist
-	exists, err := fileExists(opts.Path)
+func (d *driver) Create(opts store.Options) (store.DBManager, error) {
+	// make directory
+	if err := store.EnsureDirExists(filepath.Dir(opts.Path)); err != nil {
+		return nil, err
+	}
+
+	// check file exists, only fail on permissions not if file does not exist
+	exists, err := store.CheckFileExists(opts.Path)
 	if err != nil {
 		return nil, err
 	}
@@ -72,15 +73,12 @@ func (d *driver) Create(opts store.Options) (store.DB, error) {
 		return nil, err
 	}
 
-	// opts.Log.Debug("Creating database %s", opts.Path)
-
 	// boltdb will create the database file
 	b, err := bolt.Open(opts.Path, permFile, makeBoltOpts(opts))
 	if err != nil {
 		return nil, wrap(err)
 	}
 
-	// opts.Log.Debug("Initializing database.")
 	m := opts.Manifest
 	if m == nil {
 		m = store.NewManifestFromOpts(opts)
@@ -99,8 +97,8 @@ func (d *driver) Create(opts store.Options) (store.DB, error) {
 	return &db{store: b, opts: opts}, nil
 }
 
-func (d *driver) Open(opts store.Options) (store.DB, error) {
-	exists, err := fileExists(opts.Path)
+func (d *driver) Open(opts store.Options) (store.DBManager, error) {
+	exists, err := store.CheckFileExists(opts.Path)
 	if err != nil {
 		return nil, err
 	}
@@ -146,21 +144,19 @@ func (d *driver) Drop(path string) error {
 }
 
 func (d *driver) Exists(path string) (bool, error) {
-	return fileExists(path)
+	return store.CheckFileExists(path)
 }
 
 func makeBoltOpts(o store.Options) *bolt.Options {
 	return &bolt.Options{
-		ReadOnly:        o.Readonly,
-		Timeout:         time.Second,
-		FreelistType:    bolt.FreelistMapType,
-		NoSync:          o.NoSync,
-		NoGrowSync:      o.NoGrowSync,
-		NoFreelistSync:  o.NoSync,
-		PageSize:        o.PageSize,
-		MmapFlags:       o.MmapFlags,
-		InitialMmapSize: o.InitialMmapSize,
-		Logger:          logger{o.Log},
+		ReadOnly:       o.Readonly,
+		Timeout:        time.Second,
+		FreelistType:   bolt.FreelistMapType,
+		NoSync:         o.NoSync,
+		NoGrowSync:     o.NoSync,
+		NoFreelistSync: o.NoSync,
+		PageSize:       o.PageSize,
+		Logger:         logger{o.Log},
 	}
 }
 

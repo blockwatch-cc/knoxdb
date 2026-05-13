@@ -4,9 +4,9 @@ go 1.26.0
 
 require (
 	github.com/FastFilter/xorfilter v0.5.1
+	github.com/RaduBerinde/btreemap v0.0.0-20260105202824-d3184786f603
 	github.com/echa/log v1.4.1
 	github.com/gofrs/flock v0.13.0
-	github.com/google/btree v1.1.3
 	github.com/jedib0t/go-pretty/v6 v6.7.10
 	github.com/klauspost/compress v1.18.6
 	github.com/klauspost/cpuid/v2 v2.3.0

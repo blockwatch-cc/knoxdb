@@ -70,29 +70,46 @@ func (idx *Index) loadPack(i int) (*pack.Package, int, error) {
 		if bkt == nil {
 			return store.ErrBucketNotFound
 		}
-		cur := bkt.Cursor()
-		defer cur.Close()
-		for n, ok := 0, cur.First(); ok && n < i*2; n, ok = n+1, cur.Next() {
+		// cur := bkt.Cursor()
+		// defer cur.Close()
+		// for n, ok := 0, cur.First(); ok && n < i*2; n, ok = n+1, cur.Next() {
+		// }
+		var (
+			blk1, blk2 *block.Block
+			err        error
+			n          int
+		)
+		for key, val := range bkt.Scan(nil) {
+			if n < i*2 {
+				n++
+				continue
+			}
+			ik, pk, _ := idx.decodePackKey(key)
+			if blk1 == nil {
+				f1 := idx.sstore.Fields[0]
+				blk1, err = block.Decode(f1.Type.BlockType(), val)
+				if err != nil {
+					return fmt.Errorf("loading block 0x%08x:%08x:%d: %v", ik, pk, 0, err)
+				}
+				nBytes += len(val)
+				continue
+			}
+			if blk2 == nil {
+				f2 := idx.sstore.Fields[1]
+				blk2, err = block.Decode(f2.Type.BlockType(), val)
+				if err != nil {
+					return fmt.Errorf("loading block 0x%08x:%08x:%d: %v", ik, pk, 1, err)
+				}
+				nBytes += len(val)
+				break
+			}
 		}
-		if cur.Key() == nil {
+		if blk1 == nil {
 			return engine.ErrNoKey
 		}
-		ik, pk, _ := idx.decodePackKey(cur.Key())
-		f1 := idx.sstore.Fields[0]
-		blk1, err := block.Decode(f1.Type.BlockType(), cur.Value())
-		if err != nil {
-			return fmt.Errorf("loading block 0x%08x:%08x:%d: %v", ik, pk, 0, err)
+		if blk2 == nil {
+			return fmt.Errorf("missing index block 2")
 		}
-		nBytes += len(cur.Value())
-		if !cur.Next() {
-			return fmt.Errorf("loading block 0x%08x:%08x:%d: %v", ik, pk, 1, engine.ErrDatabaseCorrupt)
-		}
-		f2 := idx.sstore.Fields[1]
-		blk2, err := block.Decode(f2.Type.BlockType(), cur.Value())
-		if err != nil {
-			return fmt.Errorf("loading block 0x%08x:%08x:%d: %v", ik, pk, 1, err)
-		}
-		nBytes += len(cur.Value())
 		pkg = pack.New().
 			WithKey(uint32(i)).
 			WithSchema(idx.sstore).

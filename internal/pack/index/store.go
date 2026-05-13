@@ -19,10 +19,7 @@ var BE = binary.BigEndian
 
 func (idx *Index) dataBucket(tx store.Tx) store.Bucket {
 	key := append([]byte(idx.name), engine.DataKeySuffix...)
-	b := tx.Bucket(key)
-	if b != nil {
-		b.FillPercent(idx.opts.PageFill)
-	}
+	b, _ := tx.Bucket(key)
 	return b
 }
 
@@ -86,11 +83,11 @@ func (idx *Index) storeTomb(ctx context.Context, epoch uint32) error {
 
 	// write in storage tx
 	err := idx.db.Update(func(tx store.Tx) error {
-		b := tx.Bucket(append([]byte(idx.name), engine.TombKeySuffix...))
-		if b == nil {
-			return store.ErrBucketNotFound
+		b, err := tx.Bucket(append([]byte(idx.name), engine.TombKeySuffix...))
+		if err != nil {
+			return err
 		}
-		_, err := idx.tomb.StoreToDisk(ctx, b)
+		_, err = idx.tomb.StoreToDisk(ctx, b)
 		return err
 	})
 	if err != nil {
@@ -111,11 +108,11 @@ func (idx *Index) loadTomb(ctx context.Context, key, epoch uint32) (*pack.Packag
 		WithKey(key).
 		WithVersion(epoch)
 	err := idx.db.View(func(tx store.Tx) error {
-		b := tx.Bucket(append([]byte(idx.name), engine.TombKeySuffix...))
-		if b == nil {
-			return store.ErrBucketNotFound
+		b, err := tx.Bucket(append([]byte(idx.name), engine.TombKeySuffix...))
+		if err != nil {
+			return err
 		}
-		_, err := pkg.LoadFromDisk(ctx, b, nil, 0)
+		_, err = pkg.LoadFromDisk(ctx, b, nil, 0)
 		return err
 	})
 	if err != nil {
@@ -138,9 +135,9 @@ func (idx *Index) loadTomb(ctx context.Context, key, epoch uint32) (*pack.Packag
 func (idx *Index) dropTomb(_ context.Context, key, epoch uint32) error {
 	idx.log.Debugf("drop tomb %d[v%d]", key, epoch)
 	return idx.db.Update(func(tx store.Tx) error {
-		b := tx.Bucket(append([]byte(idx.name), engine.TombKeySuffix...))
-		if b == nil {
-			return store.ErrBucketNotFound
+		b, err := tx.Bucket(append([]byte(idx.name), engine.TombKeySuffix...))
+		if err != nil {
+			return err
 		}
 		for _, f := range idx.sstore.Fields {
 			if err := b.Delete(pack.EncodeBlockKey(key, epoch, f.Id)); err != nil {

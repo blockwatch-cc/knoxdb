@@ -24,65 +24,70 @@ const (
 	SAVE_PATH    = "./data"
 )
 
-func NewTestDatabaseOptions(t testing.TB, driver string) engine.DatabaseOptions {
+func NewTestDatabaseOptions(t testing.TB, driver string) engine.Options {
 	t.Helper()
 	driver = util.NonEmptyString(driver, os.Getenv("KNOX_DRIVER"), "bolt")
-	return engine.DatabaseOptions{
-		Path:      t.TempDir(),
-		Driver:    driver,
-		PageSize:  4096,
-		PageFill:  1.0,
-		CacheSize: 1 << 20,
-		NoSync:    false,
-		ReadOnly:  false,
-		Logger:    log.Log.Clone(""),
+	return engine.Options{
+		Path:       t.TempDir(),
+		MaxWorkers: 2,
+		MaxTasks:   4,
+		Driver:     driver,
+		PageSize:   4096,
+		PageFill:   1.0,
+		CacheSize:  1 << 20,
+		// NoSync:     true, // required for table wal tests
+		ReadOnly: false,
+		Log:      log.Log.Clone(""),
+		IsTemp:   false,
 	}
 }
 
-func NewTestTableOptions(t testing.TB, driver, eng string) engine.TableOptions {
+func NewTestTableOptions(t testing.TB, driver, eng string) engine.Options {
 	t.Helper()
 	driver = util.NonEmptyString(driver, os.Getenv("KNOX_DRIVER"), "bolt")
 	eng = util.NonEmptyString(eng, os.Getenv("KNOX_ENGINE"), "pack")
-	return engine.TableOptions{
+	return engine.Options{
 		Driver:      driver,
-		Engine:      engine.TableKind(eng),
+		Engine:      eng,
 		PageSize:    1 << 16, // 64kB
 		PageFill:    0.9,
 		PackSize:    1 << 16, // 64k
 		JournalSize: 1 << 16, // 64k
-		NoSync:      true,
-		ReadOnly:    false,
-		Logger:      log.Log.Clone(""),
+		// NoSync:      true,
+		ReadOnly: false,
+		Log:      log.Log.Clone(""),
+		IsTemp:   false,
 	}
 }
 
-func NewTestIndexOptions(t testing.TB, driver, eng string) engine.IndexOptions {
+func NewTestIndexOptions(t testing.TB, driver, eng string) engine.Options {
 	t.Helper()
 	driver = util.NonEmptyString(driver, os.Getenv("KNOX_DRIVER"), "bolt")
 	eng = util.NonEmptyString(eng, os.Getenv("KNOX_ENGINE"), "pack")
-	return engine.IndexOptions{
+	return engine.Options{
 		Driver:      driver,
-		Engine:      engine.IndexKind(eng),
+		Engine:      eng,
 		JournalSize: 1 << 16, // 64k
 		PageSize:    1 << 16, // 64kB
 		PageFill:    0.9,
 		PackSize:    1 << 12, // 4k
 		ReadOnly:    false,
-		NoSync:      true,
-		Logger:      log.Log.Clone(""),
+		// NoSync:      true,
+		Log:    log.Log.Clone(""),
+		IsTemp: false,
 	}
 }
 
-func NewTestEngine(t testing.TB, opts engine.DatabaseOptions) *engine.Engine {
+func NewTestEngine(t testing.TB, opts engine.Options) *engine.Engine {
 	t.Helper()
-	eng, err := engine.Create(context.Background(), TEST_DB_NAME, opts)
+	eng, err := engine.Create(context.Background(), TEST_DB_NAME, opts.DatabaseOptions()...)
 	require.NoError(t, err, "Failed to create database")
 	return eng
 }
 
-func OpenTestEngine(t testing.TB, opts engine.DatabaseOptions) *engine.Engine {
+func OpenTestEngine(t testing.TB, opts engine.Options) *engine.Engine {
 	t.Helper()
-	eng, err := engine.Open(context.Background(), TEST_DB_NAME, opts)
+	eng, err := engine.Open(context.Background(), TEST_DB_NAME, opts.DatabaseOptions()...)
 	require.NoError(t, err, "Failed to open database at %s", opts.Path)
 	return eng
 }
@@ -113,13 +118,13 @@ func NewDatabase(t testing.TB, typs ...any) (*engine.Engine, func()) {
 		if testing.Verbose() {
 			t.Logf("NEW table=%s driver=%s engine=%s", s.Name, opts.Driver, opts.Engine)
 		}
-		_, err = db.CreateTable(ctx, s, opts)
+		_, err = db.CreateTable(ctx, s, opts.TableOptions()...)
 		require.NoError(t, err, "Failed to create table for type %T", typ)
 
 		// create indexes for type
 		for _, is := range s.Indexes {
 			iopts := NewTestIndexOptions(t, "", "")
-			_, err = db.CreateIndex(ctx, is, iopts)
+			_, err = db.CreateIndex(ctx, is, iopts.IndexOptions()...)
 			require.NoError(t, err, "create pk index")
 		}
 	}
@@ -137,7 +142,7 @@ func NewDatabase(t testing.TB, typs ...any) (*engine.Engine, func()) {
 		}
 		require.NoError(t, db.DropEnum(ctx, "my_enum"))
 		require.NoError(t, db.Close(ctx))
-		require.NoError(t, engine.Drop(TEST_DB_NAME, dbo))
+		require.NoError(t, engine.Drop(TEST_DB_NAME, dbo.DatabaseOptions()...))
 	}
 }
 

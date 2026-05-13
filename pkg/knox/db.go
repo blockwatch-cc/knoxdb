@@ -8,7 +8,6 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/pkg/schema"
-	"github.com/echa/log"
 )
 
 type TxFlags = engine.TxFlags
@@ -26,45 +25,36 @@ var _ Database = (*DB)(nil)
 
 type DB struct {
 	engine *engine.Engine
-	log    log.Logger
 }
 
-func IsDatabaseExist(name string, opts DatabaseOptions) (bool, error) {
-	return engine.IsExist(name, opts)
+func IsDatabaseExist(name string, opts ...Option) (bool, error) {
+	return engine.IsExist(name, opts...)
 }
 
-func DropDatabase(name string, opts DatabaseOptions) error {
-	return engine.Drop(name, opts)
+func DropDatabase(name string, opts ...Option) error {
+	return engine.Drop(name, opts...)
 }
 
 func WrapEngine(e *engine.Engine) Database {
-	return &DB{engine: e, log: log.Log}
+	return &DB{engine: e}
 }
 
 // local
-func CreateDatabase(ctx context.Context, name string, opts DatabaseOptions) (Database, error) {
-	eng, err := engine.Create(ctx, name, opts)
+func CreateDatabase(ctx context.Context, name string, opts ...Option) (Database, error) {
+	eng, err := engine.Create(ctx, name, opts...)
 	if err != nil {
 		return nil, err
 	}
-	l := opts.Logger
-	if l == nil {
-		l = log.Log
-	}
-	db := &DB{engine: eng, log: l}
+	db := &DB{engine: eng}
 	return db, nil
 }
 
-func OpenDatabase(ctx context.Context, name string, opts DatabaseOptions) (Database, error) {
-	eng, err := engine.Open(ctx, name, opts)
+func OpenDatabase(ctx context.Context, name string, opts ...Option) (Database, error) {
+	eng, err := engine.Open(ctx, name, opts...)
 	if err != nil {
 		return nil, err
 	}
-	l := opts.Logger
-	if l == nil {
-		l = log.Log
-	}
-	db := &DB{engine: eng, log: l}
+	db := &DB{engine: eng}
 	return db, nil
 }
 
@@ -87,12 +77,12 @@ func (d *DB) ListTables() []string {
 	return d.engine.TableNames()
 }
 
-func (d *DB) CreateTable(ctx context.Context, s *schema.Schema, opts TableOptions) (Table, error) {
-	t, err := d.engine.CreateTable(ctx, s, opts)
+func (d *DB) CreateTable(ctx context.Context, s *schema.Schema, opts ...Option) (Table, error) {
+	t, err := d.engine.CreateTable(ctx, s, opts...)
 	if err != nil {
 		return nil, err
 	}
-	return &TableImpl{d, t, nil, d.log}, nil
+	return &TableImpl{d, t, nil}, nil
 }
 
 func (d *DB) GetTable(tag uint64) (Table, bool) {
@@ -100,7 +90,7 @@ func (d *DB) GetTable(tag uint64) (Table, bool) {
 	if !ok {
 		return nil, false
 	}
-	return &TableImpl{d, t, nil, d.log}, true
+	return &TableImpl{d, t, nil}, true
 }
 
 func (d *DB) FindTable(name string) (Table, error) {
@@ -108,7 +98,7 @@ func (d *DB) FindTable(name string) (Table, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &TableImpl{d, t, nil, d.log}, nil
+	return &TableImpl{d, t, nil}, nil
 }
 
 func (d *DB) DropTable(ctx context.Context, name string) error {
@@ -127,31 +117,6 @@ func (d *DB) CompactTable(ctx context.Context, name string) error {
 	return d.engine.CompactTable(ctx, name)
 }
 
-// Store
-func (d *DB) ListStores() []string {
-	return d.engine.StoreNames()
-}
-
-func (d *DB) CreateStore(ctx context.Context, s *schema.Schema, opts StoreOptions) (Store, error) {
-	st, err := d.engine.CreateStore(ctx, s, opts)
-	if err != nil {
-		return nil, err
-	}
-	return &StoreImpl{store: st}, nil
-}
-
-func (d *DB) FindStore(name string) (Store, error) {
-	s, err := d.engine.FindStore(name)
-	if err != nil {
-		return nil, err
-	}
-	return &StoreImpl{db: d, store: s}, nil
-}
-
-func (d *DB) DropStore(ctx context.Context, name string) error {
-	return d.engine.DropStore(ctx, name)
-}
-
 // Index
 func (d *DB) ListIndexes(name string) []string {
 	return d.engine.IndexNames(name)
@@ -162,11 +127,11 @@ func (d *DB) FindIndex(name string) (Index, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &IndexImpl{i, d, d.log}, nil
+	return &IndexImpl{i, d}, nil
 }
 
-func (d *DB) CreateIndex(ctx context.Context, s *schema.IndexSchema, opts IndexOptions) error {
-	_, err := d.engine.CreateIndex(ctx, s, opts)
+func (d *DB) CreateIndex(ctx context.Context, s *schema.IndexSchema, opts ...Option) error {
+	_, err := d.engine.CreateIndex(ctx, s, opts...)
 	return err
 }
 

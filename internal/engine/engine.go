@@ -69,10 +69,9 @@ type Engine struct {
 	cat      *Catalog                               // objects, identities, configurations
 	cache    CacheManager                           // block and buffer caches
 	tables   *util.LockFreeMap[uint64, TableEngine] // table objects
-	stores   *util.LockFreeMap[uint64, StoreEngine] // store objects
 	indexes  *util.LockFreeMap[uint64, IndexEngine] // index objects
 	enums    *schema.EnumRegistry                   // enum objects
-	opts     DatabaseOptions                        // engine-wide configuration
+	opts     Options                                // engine-wide configuration
 	txchan   chan struct{}                          // single writer enforcement
 	txs      TxList                                 // active read transactions
 	wtx      *Tx                                    // active write transaction (single)
@@ -115,7 +114,7 @@ func (e *Engine) Wal() *wal.Wal {
 	return e.wal
 }
 
-func (e *Engine) Options() DatabaseOptions {
+func (e *Engine) Options() Options {
 	return e.opts
 }
 
@@ -153,20 +152,21 @@ func (e *Engine) NeedsCheckpoint() bool {
 }
 
 // checks if catalog backend file exists
-func IsExist(name string, opts DatabaseOptions) (bool, error) {
-	opts = DefaultDatabaseOptions.Merge(opts)
+func IsExist(name string, options ...Option) (bool, error) {
+	opts := defaultDatabaseOptions.Apply(options...)
 	return store.Exists(opts.Driver, filepath.Join(opts.Path, name, CATALOG_NAME))
 }
 
 // drops entire DB directory, fails if DB is open or does not exist
-func Drop(name string, opts DatabaseOptions) error {
-	ok, err := IsExist(name, opts)
+func Drop(name string, options ...Option) error {
+	ok, err := IsExist(name, options...)
 	if err != nil {
 		return err
 	}
 	if !ok {
 		return ErrNoDatabase
 	}
+	opts := defaultDatabaseOptions.Apply(options...)
 	dir := filepath.Join(opts.Path, name)
 	lock := flock.New(filepath.Join(dir, ENGINE_LOCK_NAME))
 	_, err = lock.TryLock()
@@ -176,18 +176,18 @@ func Drop(name string, opts DatabaseOptions) error {
 	defer lock.Close()
 
 	// drop catalog
-	opts.Logger.Infof("[db:%s] dropping catalog", name)
+	opts.Log.Infof("[db:%s] dropping catalog", name)
 	err = store.Drop(opts.Driver, filepath.Join(dir, CATALOG_NAME))
 	if err != nil {
 		return err
 	}
 
 	// remove wal (and other outstanding files)
-	opts.Logger.Infof("[db:%s] dropping wal and temp files", name)
+	opts.Log.Infof("[db:%s] dropping wal and temp files", name)
 	return os.RemoveAll(dir)
 }
 
-func prepareDatabaseDirectory(name string, opts DatabaseOptions) error {
+func prepareDatabaseDirectory(name string, opts Options) error {
 	dir := filepath.Join(opts.Path, name)
 	s, err := os.Stat(dir)
 
@@ -223,8 +223,9 @@ func prepareDatabaseDirectory(name string, opts DatabaseOptions) error {
 	return nil
 }
 
-func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, error) {
-	opts = DefaultDatabaseOptions.Merge(opts)
+func Create(ctx context.Context, name string, options ...Option) (*Engine, error) {
+	// apply options
+	opts := defaultDatabaseOptions.Apply(options...)
 
 	// check database directory is empty
 	if err := prepareDatabaseDirectory(name, opts); err != nil {
@@ -239,7 +240,6 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 			buffers: NewBufferCache(0),
 		},
 		tables:  util.NewLockFreeMap[uint64, TableEngine](),
-		stores:  util.NewLockFreeMap[uint64, StoreEngine](),
 		indexes: util.NewLockFreeMap[uint64, IndexEngine](),
 		enums:   schema.NewEnumRegistry(),
 		txs:     make(TxList, 0),
@@ -257,10 +257,11 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 	e.tasks.WithContext(WithEngine(ctx, e))
 	e.shutdown.Store(false)
 
-	if opts.Logger != nil {
-		e.log = opts.Logger.Clone("db:" + name)
+	if opts.Log != nil {
+		e.log = opts.Log.Clone("db:" + name)
 		e.tasks.WithLogger(e.log)
 		e.cat.WithLogger(e.log)
+		opts.Log = e.log
 	}
 	e.log.Debugf("create database %q at %q", name, e.path)
 
@@ -328,8 +329,8 @@ func Create(ctx context.Context, name string, opts DatabaseOptions) (*Engine, er
 	return e, nil
 }
 
-func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, error) {
-	opts = DefaultDatabaseOptions.Merge(opts)
+func Open(ctx context.Context, name string, options ...Option) (*Engine, error) {
+	opts := defaultDatabaseOptions.Apply(options...)
 	e := &Engine{
 		path: filepath.Join(opts.Path, name),
 		cache: CacheManager{
@@ -337,7 +338,6 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 			buffers: NewBufferCache(0),
 		},
 		tables:  util.NewLockFreeMap[uint64, TableEngine](),
-		stores:  util.NewLockFreeMap[uint64, StoreEngine](),
 		indexes: util.NewLockFreeMap[uint64, IndexEngine](),
 		enums:   schema.NewEnumRegistry(),
 		txs:     make(TxList, 0),
@@ -353,10 +353,11 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 	}
 	e.tasks.WithContext(WithEngine(ctx, e))
 	e.shutdown.Store(false)
-	if opts.Logger != nil {
-		e.log = opts.Logger.Clone("db:" + name)
+	if opts.Log != nil {
+		e.log = opts.Log.Clone("db:" + name)
 		e.tasks.WithLogger(e.log)
 		e.cat.WithLogger(e.log)
+		opts.Log = e.log
 	}
 
 	e.log.Debugf("open database %q at %q", name, e.path)
@@ -402,13 +403,14 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 	}
 
 	// load stored database options
-	var sopts DatabaseOptions
+	var sopts Options
 	err = e.cat.GetOptions(ctx, e.dbId, &sopts)
 	if err != nil {
 		return nil, err
 	}
-	// merge options
-	e.opts = sopts.Merge(opts)
+
+	// merge fixed options (cannot change after create)
+	e.opts = opts.Apply(sopts.FixedOptions()...)
 	e.lm.WithTimeout(e.opts.LockTimeout)
 
 	// open and validate wal (recovery happens individually at catalog and table level)
@@ -458,10 +460,6 @@ func Open(ctx context.Context, name string, opts DatabaseOptions) (*Engine, erro
 	}
 
 	if err = e.openTables(ctx); err != nil {
-		return nil, err
-	}
-
-	if err = e.openStores(ctx); err != nil {
 		return nil, err
 	}
 
@@ -547,21 +545,6 @@ func (e *Engine) Close(ctx context.Context) error {
 		}
 	}
 	e.tables.Clear()
-
-	// close all open stores (set checkpoints)
-	e.log.Trace("Close stores")
-	for _, s := range e.stores.Map() {
-		name := s.Schema().Name
-		if !e.IsReadOnly() {
-			if err := s.Sync(ctx); err != nil {
-				e.log.Errorf("sync store %s: %v", name, err)
-			}
-		}
-		if err := s.Close(ctx); err != nil {
-			e.log.Errorf("close store %s: %v", name, err)
-		}
-	}
-	e.stores.Clear()
 
 	// close enums
 	e.log.Trace("close enums")
@@ -689,15 +672,6 @@ func (e *Engine) ForceShutdown() error {
 	}
 	e.tables.Clear()
 
-	// close all open stores (without checkpoints)
-	e.log.Trace("close stores")
-	for _, s := range e.stores.Map() {
-		if err := s.Close(ctx); err != nil {
-			e.log.Errorf("close store %s: %v", s.Schema().Name, err)
-		}
-	}
-	e.stores.Clear()
-
 	// release directory lock
 	if e.flock != nil {
 		e.log.Trace("free flock")
@@ -725,23 +699,16 @@ func (e *Engine) Sync(ctx context.Context) error {
 		errg.Go(func() error { return t.Sync(ctx) })
 	}
 
-	// sync stores
-	for _, s := range e.stores.Map() {
-		errg.Go(func() error { return s.Sync(ctx) })
+	// sync indexes
+	for _, idx := range e.indexes.Map() {
+		errg.Go(func() error { return idx.Sync(ctx) })
 	}
 
 	return errg.Wait()
 }
 
 func (e *Engine) CommitTx(ctx context.Context, oid uint64, xid types.XID) <-chan struct{} {
-	var (
-		t  TxTracker
-		ok bool
-	)
-	t, ok = e.tables.Get(oid)
-	if !ok {
-		t, ok = e.stores.Get(oid)
-	}
+	t, ok := e.tables.Get(oid)
 	if !ok {
 		return nil
 	}
@@ -749,14 +716,7 @@ func (e *Engine) CommitTx(ctx context.Context, oid uint64, xid types.XID) <-chan
 }
 
 func (e *Engine) AbortTx(ctx context.Context, oid uint64, xid types.XID) {
-	var (
-		t  TxTracker
-		ok bool
-	)
-	t, ok = e.tables.Get(oid)
-	if !ok {
-		t, ok = e.stores.Get(oid)
-	}
+	t, ok := e.tables.Get(oid)
 	if ok {
 		t.AbortTx(ctx, xid)
 	}

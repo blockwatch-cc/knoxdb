@@ -6,7 +6,6 @@ package knox
 import (
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/pkg/schema"
-	"github.com/echa/log"
 )
 
 var _ Index = (*IndexImpl)(nil)
@@ -14,7 +13,6 @@ var _ Index = (*IndexImpl)(nil)
 type IndexImpl struct {
 	index engine.IndexEngine
 	db    Database
-	log   log.Logger
 }
 
 func (t IndexImpl) DB() Database {

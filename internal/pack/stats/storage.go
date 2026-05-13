@@ -73,7 +73,7 @@ func decodeNodeKey(buf []byte) (kind byte, id, key, ver uint32) {
 func (idx *Index) InitStore(ctx context.Context) error {
 	return idx.db.Update(func(tx store.Tx) error {
 		for _, k := range idx.keys {
-			if _, err := tx.Root().CreateBucket(k); err != nil {
+			if _, err := tx.CreateBucket(k); err != nil {
 				return err
 			}
 		}
@@ -105,7 +105,7 @@ func (idx *Index) Store(ctx context.Context, tx store.Tx) error {
 	// create buckets if not exist
 	if tree == nil || blocks == nil {
 		for _, k := range idx.keys {
-			if _, err := tx.Root().CreateBucket(k); err != nil {
+			if _, err := tx.CreateBucket(k); err != nil {
 				return err
 			}
 		}
@@ -281,15 +281,13 @@ func (idx *Index) Load(ctx context.Context, tx store.Tx) error {
 	idx.clean = !idx.NeedCleanup(tx)
 
 	// walk reverse finds snode entries first
-	c := tree.Cursor(store.ReverseCursor)
-	defer c.Close()
 	var (
 		lastKind        byte
 		lastId, lastKey uint32 = 1<<32 - 1, 1<<32 - 1
 	)
-	for ok := c.Last(); ok; ok = c.Prev() {
+	for key, val := range tree.ScanReverse(nil) {
 		// read tree node type, id and snode pack key, ignore version
-		kind, id, key, _ := decodeNodeKey(c.Key())
+		kind, id, key, _ := decodeNodeKey(key)
 
 		// FIXME: on version wrap-around (versions are per-node update, not global
 		// unless a tree rewrite happens regularly a wrap around remains unlikely)
@@ -324,10 +322,10 @@ func (idx *Index) Load(ctx context.Context, tx store.Tx) error {
 			// snode
 			// idx.log.Debugf("load snode %d [%x]", id, c.Key())
 			node := NewSNode(key, idx.schema, false)
-			node.meta = bytes.Clone(c.Value())
+			node.meta = bytes.Clone(val)
 			node.LoadVersion(idx.view)
 			idx.snodes[id] = node
-			idx.bytesRead += int64(len(c.Value()))
+			idx.bytesRead += int64(len(val))
 
 			// load key and nvals columns
 			pkg := node.spack.Load()
@@ -355,8 +353,8 @@ func (idx *Index) Load(ctx context.Context, tx store.Tx) error {
 			// inode
 			// idx.log.Tracef("load inode %d [%x]", id, c.Key())
 			idx.inodes[id] = NewINode()
-			idx.inodes[id].meta = bytes.Clone(c.Value())
-			idx.bytesRead += int64(len(c.Value()))
+			idx.inodes[id].meta = bytes.Clone(val)
+			idx.bytesRead += int64(len(val))
 		default:
 			return fmt.Errorf("invalid tree node kind")
 		}
@@ -368,7 +366,7 @@ func (idx *Index) Load(ctx context.Context, tx store.Tx) error {
 func (idx *Index) Drop(ctx context.Context, tx store.Tx) error {
 	idx.Clear()
 	for _, k := range idx.keys {
-		_ = tx.Root().DeleteBucket(k)
+		_ = tx.DeleteBucket(k)
 	}
 	return nil
 }
@@ -419,14 +417,12 @@ func (idx *Index) tombBucket(tx store.Tx) store.Bucket {
 }
 
 func (idx *Index) tableBucket(tx store.Tx) store.Bucket {
-	return tx.Bucket(append([]byte(idx.schema.Name), engine.DataKeySuffix...))
+	b, _ := tx.Bucket(append([]byte(idx.schema.Name), engine.DataKeySuffix...))
+	return b
 }
 
 func (idx *Index) bucket(tx store.Tx, id int) store.Bucket {
-	b := tx.Bucket(idx.keys[id])
-	if b != nil {
-		b.FillPercent(1.0)
-	}
+	b, _ := tx.Bucket(idx.keys[id])
 	return b
 }
 

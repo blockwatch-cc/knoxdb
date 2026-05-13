@@ -213,7 +213,6 @@ func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, maps []
 	assert.Always(dstSchema != nil, "nil target schema")
 	assert.Always(maps != nil, "nil target mapping")
 
-	var err error
 	enums := dstSchema.Enums.Load()
 	base := rval.Addr().UnsafePointer()
 	for i, field := range dstSchema.Fields {
@@ -350,9 +349,6 @@ func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, maps []
 				"schema", p.schema.Name,
 				"version", p.schema.Version,
 			)
-		}
-		if err != nil {
-			return err
 		}
 	}
 	return nil

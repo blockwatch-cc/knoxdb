@@ -10,7 +10,7 @@ import (
 
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/store"
-	_ "blockwatch.cc/knoxdb/pkg/store/mem"
+	_ "blockwatch.cc/knoxdb/pkg/store/memdb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,11 +32,12 @@ func TestCatalogCreate(t *testing.T) {
 				indexesKey,
 				viewsKey,
 				enumsKey,
-				storesKey,
 				snapshotsKey,
 				streamsKey,
 			} {
-				require.NotNil(t, tx.Bucket(key), string(key))
+				bucket, err := tx.Bucket(key)
+				require.NoError(t, err, string(key))
+				require.NotNil(t, bucket, string(key))
 			}
 			return nil
 		})
@@ -75,11 +76,12 @@ func TestCatalogOpen(t *testing.T) {
 				indexesKey,
 				viewsKey,
 				enumsKey,
-				storesKey,
 				snapshotsKey,
 				streamsKey,
 			} {
-				require.NotNil(t, tx.Bucket(key), string(key))
+				bucket, err := tx.Bucket(key)
+				require.NoError(t, err, string(key))
+				require.NotNil(t, bucket, string(key))
 			}
 			return nil
 		})
@@ -115,7 +117,7 @@ func TestCatalogAddTable(t *testing.T) {
 	s, err := schema.SchemaOf(&TestTable{})
 	s.WithMeta()
 	require.NoError(t, err)
-	opts := TableOptions{
+	opts := Options{
 		Engine:   "pack",
 		Driver:   "mem",
 		PageSize: 1024,
@@ -171,12 +173,12 @@ func TestCatalogAddIndex(t *testing.T) {
 	defer abort()
 	s, err := schema.SchemaOf(&TestTable{})
 	require.NoError(t, err)
-	topts := TableOptions{
+	topts := Options{
 		Engine:   "pack",
 		Driver:   "mem",
 		PageSize: 1024,
 	}
-	iopts := IndexOptions{
+	iopts := Options{
 		Engine:   "pack",
 		Driver:   "mem",
 		PageSize: 1024,
@@ -223,62 +225,6 @@ func TestCatalogAddIndex(t *testing.T) {
 	require.NoError(t, err)
 	defer abort()
 	require.Error(t, cat.DropIndex(tctx, 1))
-}
-
-func TestCatalogAddStore(t *testing.T) {
-	ctx, eng, cat, close := WithCatalog(t)
-	defer close()
-	tctx, _, commit, abort, err := eng.WithTransaction(ctx)
-	require.NoError(t, err)
-	defer abort()
-	s, err := schema.SchemaOf(&TestTable{})
-	require.NoError(t, err)
-	s.WithName(s.Name + "_store")
-	opts := StoreOptions{
-		Driver:   "mem",
-		PageSize: 1024,
-	}
-	require.NoError(t, cat.AddStore(tctx, 1, s, opts))
-	require.NoError(t, commit())
-
-	// list stores
-	tctx, _, _, abort, err = eng.WithTransaction(ctx)
-	require.NoError(t, err)
-	defer abort()
-	keys, err := cat.ListStores(tctx)
-	require.NoError(t, err)
-	require.Len(t, keys, 1)
-	require.Equal(t, keys[0], uint64(1))
-
-	// get store
-	s2, opts2, err := cat.GetStore(tctx, 1)
-	require.NoError(t, err)
-	require.NotNil(t, s2)
-	require.Equal(t, s2.Name, s.Name)
-	require.Equal(t, s2.Hash, s.Hash)
-	require.Equal(t, opts2, opts)
-	require.NoError(t, abort())
-
-	// drop store
-	tctx, _, commit, abort, err = eng.WithTransaction(ctx)
-	require.NoError(t, err)
-	defer abort()
-	require.NoError(t, cat.DropStore(tctx, 1))
-	require.NoError(t, commit())
-
-	tctx, _, _, abort, err = eng.WithTransaction(ctx)
-	require.NoError(t, err)
-	defer abort()
-	keys, err = cat.ListStores(tctx)
-	require.NoError(t, err)
-	require.Len(t, keys, 0)
-	require.NoError(t, abort())
-
-	// drop unknown store
-	tctx, _, _, abort, err = eng.WithTransaction(ctx)
-	require.NoError(t, err)
-	defer abort()
-	require.Error(t, cat.DropStore(tctx, 1))
 }
 
 func TestCatalogAddEnum(t *testing.T) {

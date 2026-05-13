@@ -5,6 +5,7 @@ package index
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -15,7 +16,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/assert"
 	"blockwatch.cc/knoxdb/pkg/store"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
@@ -64,12 +64,13 @@ func (v MergeValue) Less(w MergeValue) bool {
 type MergeIterator struct {
 	idx     *Index                    // ref to index
 	tx      store.Tx                  // current write tx
-	cur     store.Cursor              // current read cursor
+	bucket  store.Bucket              // current read/write bucket
 	pack    *pack.Package             // current read-only pack
 	bcache  block.BlockCachePartition // cache reference
 	last    MergeValue                // current pack keys (used on store/delete)
 	lastSz  int                       // current pack data size (to calculate diff)
 	halfSel []uint32                  // selector for second half of a pack for splitting
+	btypes  [2]types.BlockType        // expected block types for decode
 
 	// stats
 	nTxBytes      int // pending tx bytes to write
@@ -88,6 +89,10 @@ func NewMergeIterator(idx *Index) *MergeIterator {
 	return &MergeIterator{
 		idx:     idx,
 		halfSel: types.NewRange(idx.opts.PackSize/2, idx.opts.PackSize).AsSelection(),
+		btypes: [2]types.BlockType{
+			idx.sstore.Fields[0].Type.BlockType(),
+			idx.sstore.Fields[1].Type.BlockType(),
+		},
 	}
 }
 
@@ -96,13 +101,10 @@ func (it *MergeIterator) Close() {
 		it.pack.Release()
 		it.pack = nil
 	}
-	if it.cur != nil {
-		it.cur.Close()
-		it.cur = nil
-	}
 	if it.tx != nil {
 		it.tx.Rollback()
 		it.tx = nil
+		it.bucket = nil
 	}
 	arena.Free(it.halfSel)
 	it.idx = nil
@@ -123,15 +125,12 @@ func (it *MergeIterator) Complete(ctx context.Context) error {
 	if it.nTxBytes == 0 {
 		return nil
 	}
-	if it.cur != nil {
-		it.cur.Close()
-		it.cur = nil
-	}
 	if it.tx != nil {
 		if err := it.tx.Commit(); err != nil {
 			return err
 		}
 		it.tx = nil
+		it.bucket = nil
 		it.nTxBytes = 0
 	}
 	return nil
@@ -195,12 +194,6 @@ func (it *MergeIterator) SplitAndStore(pkg *pack.Package) (*pack.Package, error)
 }
 
 func (it *MergeIterator) Store(pkg *pack.Package) error {
-	// init data bucket
-	bucket := it.idx.dataBucket(it.tx)
-	if bucket == nil {
-		return store.ErrBucketNotFound
-	}
-
 	// keep loaded keys or compute new block keys from first record when zero
 	id := it.last
 	if !id.IsValid() && pkg.Len() > 0 {
@@ -214,7 +207,7 @@ func (it *MergeIterator) Store(pkg *pack.Package) error {
 		var err error
 		key := it.idx.encodePackKey(id.Key, id.Rid, i)
 		if pkg.Len() == 0 {
-			err = bucket.Delete(key)
+			err = it.bucket.Delete(key)
 			it.nTxBytes++
 		} else {
 			var (
@@ -223,7 +216,7 @@ func (it *MergeIterator) Store(pkg *pack.Package) error {
 			)
 			buf, stats, err = pkg.Block(i).Encode(types.BlockCompressNone)
 			if err == nil {
-				err = bucket.Put(key, buf)
+				err = it.bucket.Put(key, buf)
 				// it.idx.log.Tracef("merge storing block 0x%016x:%016x:%d len=%d size=%d",
 				// 	id.Key, id.Rid, i, pkg.Len(), len(buf))
 				stats.Close()
@@ -267,26 +260,23 @@ func (it *MergeIterator) Next(ctx context.Context, id MergeValue) (*pack.Package
 	// by journal size (we never insert more data than in journal).
 	if it.nTxBytes >= it.idx.opts.TxMaxSize {
 		var err error
-		it.cur.Close()
-		it.cur = nil
+		it.bucket = nil
 		it.tx, err = store.CommitAndContinue(it.tx)
 		if err != nil {
 			return nil, MergeValue{}, err
 		}
-		it.cur = it.idx.dataBucket(it.tx).Cursor()
+		it.bucket = it.idx.dataBucket(it.tx)
 		it.nTxBytes = 0
 	}
 
-	// init cursor
-	if it.cur == nil {
+	// init tx and bucket for the first time, fetch engine cache
+	if it.bucket == nil {
 		var err error
-		it.tx, err = it.idx.db.Begin(true)
+		it.tx, err = it.idx.db.Begin(store.WithTxWrite())
 		if err != nil {
 			return nil, MergeValue{}, err
 		}
-		if bucket := it.idx.dataBucket(it.tx); bucket != nil {
-			it.cur = bucket.Cursor()
-		} else {
+		if it.bucket = it.idx.dataBucket(it.tx); it.bucket == nil {
 			return nil, MergeValue{}, store.ErrBucketNotFound
 		}
 		if e := engine.GetEngine(ctx); e != nil {
@@ -294,112 +284,105 @@ func (it *MergeIterator) Next(ctx context.Context, id MergeValue) (*pack.Package
 		}
 	}
 
-	// load source pack pack that matches key+rid combi, when nil create new pack
-	if err := it.loadNextPack(id); err != nil {
+	// load source pack that matches key+rid combi
+	key, err := it.loadNextPack(id)
+	if err != nil {
 		return nil, MergeValue{}, err
 	}
 
-	// cursor either points one key behind the loaded pack's blocks now or
-	// is invalid in which case we will create a new pack at the end. we try
-	// decoding the next key either way which yields zero or correct ids
-	// which we'll use as boundary during merge.
-	if it.cur.Key() != nil {
-		id.Key, id.Rid, _ = it.idx.decodePackKey(it.cur.Key())
-		id.Ok = true
-		// it.idx.log.Tracef("merge: next id 0x%016x:%016x", id.Key, id.Rid)
-	} else {
-		id.Reset()
-		// it.idx.log.Tracef("merge: next id not yet on storage, need new pack")
+	// key either points to the follower pack's first block or is nil
+	// when no more blocks/packs follow. use as next merge boundary hint.
+	boundary := MergeValue{}
+	if key != nil {
+		boundary.Key, boundary.Rid, _ = it.idx.decodePackKey(key)
+		boundary.Ok = true
+		// it.idx.log.Tracef("merge: next boundary 0x%016x:%016x", boundary.Key, boundary.Rid)
+		// } else {
+		// 	it.idx.log.Tracef("merge: no more boundary, will append new pack")
 	}
 
-	// return current pack and boundary of next pack
-	return it.pack, id, nil
+	// return current pack and its boundary
+	return it.pack, boundary, nil
 }
 
-func (it *MergeIterator) loadNextPack(search MergeValue) error {
-	// seek to search MergeValue's position, most likely we will find the next
-	// higher pack in which case we rewind one pack
-	ok := it.cur.Seek(it.idx.encodePackKey(search.Key, search.Rid, 0))
-	// it.idx.log.Tracef("merge: seek 0x%016x:%016x:%d key=%x ok=%t", search.Key, search.Rid, 0,
-	// 	it.idx.encodePackKey(search.Key, search.Rid, 0), ok)
-
-	// seek to last pack when not found (our search key is within this pack's range)
-	if !ok {
-		// if not found, set cur to the first block of the last pack
-		it.cur.Last()
-		ok = it.cur.Prev()
-		// it.idx.log.Tracef("merge: seek last>prev %t, key=%x", ok, it.cur.Key())
-	}
-
-	// still not found? this must be an empty bucket, we'll create our first pack
-	if !ok {
-		// it.idx.log.Tracef("merge: no pack found")
-		return nil
-	}
-
-	// decode the block's key
-	key, rid, id := it.idx.decodePackKey(it.cur.Key())
-	// it.idx.log.Tracef("merge: found 0x%016x:%016x:%d", key, rid, id)
-
-	// rewind if we're behind the search key
-	if key > search.Key || (key == search.Key && rid > search.Rid) {
-		// if exists, calling `prev` again will set cur the first block of the previous pair
-		it.cur.Prev()
-		ok = it.cur.Prev()
-		// it.idx.log.Tracef("merge: rewind prev>prev %t", ok)
-
-		// decode the previous key
-		if ok {
-			key, rid, id = it.idx.decodePackKey(it.cur.Key())
-			// it.idx.log.Tracef("merge: now 0x%016x:%016x:%d", key, rid, id)
-			// assert we're actually at the first block
+func (it *MergeIterator) loadNextPack(find MergeValue) ([]byte, error) {
+	// seek to the pack that should contain find, most likely we will
+	// hit the second block of the searched pack or less likely (on equal
+	// match) the first block, or very unlikely nothing (empty bucket
+	// or find key is smaller than the first pack)
+	key, val, err := it.bucket.SearchLE(it.idx.encodePackKey(find.Key, find.Rid, 0))
+	if err != nil {
+		// it.idx.log.Tracef("merge: search 0x%016x:%016x:%d: %v", find.Key, find.Rid, 0, err)
+		if !errors.Is(err, store.ErrKeyNotFound) {
+			return nil, err
 		}
-	}
-	assert.Always(id == 0, "must be at first block in index pair")
 
-	// looks like this was the first pack and it did not contain
-	// our search key, we're going to create a new pack to place in front
-	if !ok {
-		// it.idx.log.Tracef("merge: must create new pack in front")
-		return nil
+		// empty bucket or the first pack did not contain our search key.
+		// we're going to create a new pack in front. however we need the
+		// boundary key (the follower pack's first entry), so lets do another
+		// search for the first pack in the bucket (if any)
+		key, val, err = it.bucket.SearchGE([]byte{0})
+		if errors.Is(err, store.ErrKeyNotFound) {
+			// empty bucket
+			return nil, nil
+		}
+		it.nBytesRead += len(val)
+
+		// use first pack's key as boundary
+		return key, nil
 	}
 
-	// we're at the correct pack now, load blocks into package
+	// decode the found block's key
+	ikey, rid, idx := it.idx.decodePackKey(key)
+
+	// it.idx.log.Tracef("merge: search 0x%016x:%016x:%d found 0x%016x:%016x:%d",
+	// 	find.Key, find.Rid, 0, ikey, rid, idx,
+	// )
+
+	// we're at the correct pack, load blocks into package
 	it.pack = pack.New().
 		WithSchema(it.idx.sstore).
 		WithMaxRows(it.idx.opts.PackSize)
 
-	// load block pair from cursor
+	// load block pair from disk (avoid cache)
 	var n int
 	for i := range []int{0, 1} {
-		// assert block is correct
-		bkey, brid, bid := it.idx.decodePackKey(it.cur.Key())
-		assert.Always(bid == i, "unexpected block id", "key", bkey, "rid", brid, "id", bid)
-
-		// create and decode block
-		b, err := block.Decode(
-			it.idx.sstore.Fields[i].Type.BlockType(),
-			it.cur.Value(),
-		)
-		if err != nil {
-			return fmt.Errorf("loading block 0x%08x:%08x:%d: %v", bkey, brid, bid, err)
+		var buf []byte
+		if idx == i {
+			// we found this block during search above
+			buf = val
+		} else {
+			// we must load this block
+			buf, err = it.bucket.Get(it.idx.encodePackKey(ikey, rid, i))
+			if err != nil {
+				return nil, fmt.Errorf("loading block 0x%016x:%016x:%d: %v", ikey, rid, i, err)
+			}
 		}
 
-		// it.idx.log.Tracef("merge loading block 0x%016x:%016x:%d len=%d",
-		// 	bkey, brid, i, b.Len())
-
+		// decode block
+		b, err := block.Decode(it.btypes[i], buf)
+		if err != nil {
+			return nil, fmt.Errorf("loading block 0x%08x:%08x:%d: %v", ikey, rid, i, err)
+		}
+		// it.idx.log.Tracef("merge: using block %d len=%d count=%d", i, len(buf), b.Len())
 		it.pack.WithBlock(i, b)
-		n += len(it.cur.Value())
-
-		// go to next storage key (may be end of bucket)
-		it.cur.Next()
+		n += len(buf)
 	}
 	it.nPacksLoaded++
-	it.last = NewMergeValue(key, rid)
+	it.last = NewMergeValue(ikey, rid)
 	it.lastSz = n
 	it.nBytesRead += n
 
-	return nil
+	// peek into the next key on disk to identify the boundary
+	key, val, err = it.bucket.SearchGE(it.idx.encodePackKey(ikey, rid+1, 0))
+	if err != nil {
+		if !errors.Is(err, store.ErrKeyNotFound) {
+			return nil, err
+		}
+	}
+	it.nBytesRead += len(val)
+
+	return key, nil
 }
 
 // Merge journal and tomb entries into data partitions, repack and store.
@@ -407,18 +390,30 @@ func (it *MergeIterator) loadNextPack(search MergeValue) error {
 // Algo design
 //   - append happens direct, delete is deferred to GC
 //   - on-disk packs are read-only, merge appends to new packs
+//   - packs are sorted and never overlap each other (placement is unique)
 //   - pack keys are shared keys so that merge effectively overwrites/replaces versions
 //   - append pass: merge src & journal records into output
 //   - delete pass: copy src records while skipping tomb entries
 //
+// Terminology
+//   - key: the index key (typically a hash value)
+//   - rid: the unique row id of a table record (a uint64)
+//   - pack: a sorted group of key/rid pairs stored as a pair of compressed blocks
+//   - block key: the unique key of a block on storage <key>:<rid>:<idx> (idx=0|1)
+//
 // Details
 //   - block keys encode the key/rid combination of the first record in a pack
-//   - keys remain unchanged even if the first record is removed later
-//   - merge find source packs where new/old rids are in range
-//   - writable output packs inherit the source pack's key (if a src exist)
-//   - data is merged in sorted order (sort by first key then rid)
-//   - merge allocates records to a pack until key/rid crosses the next packs start boundary
-//   - when an output pack is full (happens during append only)
+//   - with many duplicate source values hashing to the same key a key can
+//     range over multiple index packs, hence the rid is needed for uniquenss
+//     (also handles collisions naturally)
+//   - block keys remain unchanged even if the first record is removed later,
+//     i.e. on write an output pack either inherits the source pack's block keys
+//     or new block keys are created from the first record when the output is new
+//   - for each target key/rids merge searches and loads a matching source pack
+//   - packs are then merged in sorted order (src + journal -> out)
+//   - merge stops when a pack is full or a key/rid crosses the next pack's
+//     start boundary (invariant: packs never overlap)
+//   - when an output pack is full (only happens during append)
 //     - the pack is split in half
 //     - the first half is stored
 //     - the second half continues to be used as output
@@ -429,12 +424,12 @@ func (it *MergeIterator) loadNextPack(search MergeValue) error {
 // Data placement
 //   - block vector KV keys are generated from the first record in a pack
 //     with format `index key + rowid + block id`
-//   - merge iterator peeks into next KV store keys to identify next pack's start ids
-//     which serves as boundary for insertion
+//   - merge iterator peeks into the next KV store key to identify the
+//     follower pack's start ids which serves as merge boundary
 //
 // Edge cases
 //   - nextMinKey & nextMinRid can be 0 (empty index, behind last index pack)
-//   - a pack becomes empty -> dropped from storage (iterator remembers last read KV keys)
+//   - a pack becomes empty -> drop from storage (iterator remembers last read KV keys)
 //   - first record in a pack is deleted (keep the original pack storage key)
 //   - stale tombstones without match in source packs may exist
 //     when GC restarts after error/crash as some packs may have committed
@@ -458,7 +453,7 @@ func (idx *Index) mergeAppend(ctx context.Context) error {
 	// co-sort journal vectors in-place
 	util.Sort2(j0, j1)
 
-	// iterator to lookup matching packages
+	// iterator to lookup & load matching source packages
 	it := NewMergeIterator(idx)
 	defer it.Close()
 
@@ -481,7 +476,7 @@ func (idx *Index) mergeAppend(ctx context.Context) error {
 			spos, slen int
 			s0, s1     types.NumberAccessor[uint64]
 		)
-		src, next, err := it.Next(ctx, NewMergeValue(j0[jpos], j1[jpos]))
+		src, bound, err := it.Next(ctx, NewMergeValue(j0[jpos], j1[jpos]))
 		if err != nil {
 			return err
 		}
@@ -491,21 +486,19 @@ func (idx *Index) mergeAppend(ctx context.Context) error {
 			s0 = src.Block(0).Uint64()
 			s1 = src.Block(1).Uint64()
 		}
-		// idx.log.Infof("merge next src=%d/%d j=%d/%d next=%016x:%016x:%t",
-		// 	spos, slen, jpos, jlen, next.Key, next.Rid, next.Ok)
-
-		// 2-way merge: src & journal
+		// idx.log.Tracef("merge: src=%d/%d j=%d/%d boundary=%016x:%016x:%t",
+		// 	spos, slen, jpos, jlen, bound.Key, bound.Rid, bound.Ok)
 
 		// create a new output pack
 		out := it.NewPack()
 		o0 := out.Block(0).Uint64()
 		o1 := out.Block(1).Uint64()
 
-		// assign src/journal -> out
+		// merge src and journal content into out
 		var sval, jval MergeValue
 	mergeloop:
 		for {
-			// load values
+			// load next values
 			if spos < slen && !sval.IsValid() {
 				sval = NewMergeValue(s0.Get(spos), s1.Get(spos))
 			}
@@ -513,8 +506,8 @@ func (idx *Index) mergeAppend(ctx context.Context) error {
 				jval = NewMergeValue(j0[jpos], j1[jpos])
 
 				// stop when this journal value crosses next src pack's min
-				if next.IsValid() && !jval.Less(next) {
-					// idx.log.Infof("merge: break to next pack at jval %d/%d", jval.Key, jval.Rid)
+				if bound.IsValid() && !jval.Less(bound) {
+					// idx.log.Tracef("merge: break at boundary jval %x:%d", jval.Key, jval.Rid)
 					break mergeloop
 				}
 			}

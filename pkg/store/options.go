@@ -15,21 +15,15 @@ const dbFileExt = ".db"
 type Option func(cfg *Options) error
 
 type Options struct {
-	Driver          string
-	Path            string
-	Manifest        *Manifest
-	Log             log.Logger
-	Readonly        bool
-	PageSize        int
-	InitialMmapSize int
-	MmapFlags       int
-	PageFill        float64
-	NoSync          bool // skip fsync on commit (dangerous)
-	NoGrowSync      bool // skip fsync+alloc on grow
-	KeepOnClose     bool
-	GetCallback     func(k, v []byte) []byte
-	PutCallback     func(k, v []byte) ([]byte, []byte, error)
-	DeleteCallback  func(k []byte) ([]byte, error)
+	Driver      string
+	Path        string
+	Manifest    *Manifest
+	Log         log.Logger
+	Readonly    bool
+	PageSize    int
+	PageFill    float64
+	NoSync      bool
+	KeepOnClose bool
 }
 
 func defaultOptions() Options {
@@ -38,7 +32,7 @@ func defaultOptions() Options {
 		Path:        "./db", // will append `mem.db`
 		Log:         log.Disabled,
 		PageFill:    0.5,
-		KeepOnClose: true,
+		KeepOnClose: false,
 	}
 }
 
@@ -71,91 +65,48 @@ func WithManifest(m *Manifest) Option {
 
 func WithLogger(l log.Logger) Option {
 	return func(cfg *Options) error {
-		cfg.Log = l
+		if l != nil {
+			cfg.Log = l
+		}
 		return nil
 	}
 }
 
-func WithReadonly() Option {
+func WithReadonly(b bool) Option {
 	return func(cfg *Options) error {
-		cfg.Readonly = true
+		cfg.Readonly = b
 		return nil
 	}
 }
 
 func WithPageSize(n int) Option {
 	return func(cfg *Options) error {
-		cfg.PageSize = n
-		return nil
-	}
-}
-
-func WithInitialMmapSize(n int) Option {
-	return func(cfg *Options) error {
-		cfg.InitialMmapSize = n
-		return nil
-	}
-}
-
-func WithMmapFlags(n int) Option {
-	return func(cfg *Options) error {
-		cfg.MmapFlags = n
+		if n > 0 {
+			cfg.PageSize = n
+		}
 		return nil
 	}
 }
 
 func WithPageFill(f float64) Option {
 	return func(cfg *Options) error {
-		cfg.PageFill = f
+		if f > 0 {
+			cfg.PageFill = f
+		}
 		return nil
 	}
 }
 
-func WithNoSync() Option {
+func WithNoSync(b bool) Option {
 	return func(cfg *Options) error {
-		cfg.NoSync = true
+		cfg.NoSync = b
 		return nil
 	}
 }
 
-func WithNoGrowSync() Option {
+func WithDropOnClose(b bool) Option {
 	return func(cfg *Options) error {
-		cfg.NoGrowSync = true
-		return nil
-	}
-}
-
-func WithKeepOnClose() Option {
-	return func(cfg *Options) error {
-		cfg.KeepOnClose = true
-		return nil
-	}
-}
-
-func WithDeleteOnClose() Option {
-	return func(cfg *Options) error {
-		cfg.KeepOnClose = false
-		return nil
-	}
-}
-
-func WithGetCallback(fn func(k, v []byte) []byte) Option {
-	return func(cfg *Options) error {
-		cfg.GetCallback = fn
-		return nil
-	}
-}
-
-func WithPutCallback(fn func(k, v []byte) ([]byte, []byte, error)) Option {
-	return func(cfg *Options) error {
-		cfg.PutCallback = fn
-		return nil
-	}
-}
-
-func WithDeleteCallback(fn func(k []byte) ([]byte, error)) Option {
-	return func(cfg *Options) error {
-		cfg.DeleteCallback = fn
+		cfg.KeepOnClose = !b
 		return nil
 	}
 }

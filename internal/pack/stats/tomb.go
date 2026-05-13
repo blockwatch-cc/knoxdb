@@ -144,27 +144,25 @@ func (t *Tomb) AddDataPack(tx store.Tx, key, ver uint32) error {
 }
 
 func (t *Tomb) bucket(tx store.Tx, kind byte) (store.Bucket, error) {
-	tb := tx.Bucket(t.tkey)
-	if tb == nil {
-		return nil, fmt.Errorf("tomb: %v", store.ErrBucketNotFound)
+	tb, err := tx.Bucket(t.tkey)
+	if err != nil {
+		return nil, fmt.Errorf("tomb: %w", err)
 	}
-	eb := tb.Bucket(t.ekey)
-	var err error
-	if eb == nil {
+	eb, err := tb.Bucket(t.ekey)
+	if err != nil {
 		// fmt.Printf("Create tomb bucket %x for epoch %d\n", t.ekey, t.epoch)
 		eb, err = tb.CreateBucket(t.ekey)
 		if err != nil {
 			return nil, fmt.Errorf("create epoch bucket: %v", err)
 		}
 	}
-	kb := eb.Bucket([]byte{kind})
-	if kb == nil {
+	kb, err := eb.Bucket([]byte{kind})
+	if err != nil {
 		// fmt.Printf("Create kind bucket %x for epoch %d\n", kind, t.epoch)
 		kb, err = eb.CreateBucket([]byte{kind})
 		if err != nil {
 			return nil, fmt.Errorf("create kind bucket: %v", err)
 		}
 	}
-	kb.FillPercent(1.0)
 	return kb, nil
 }

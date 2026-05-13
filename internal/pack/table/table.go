@@ -30,7 +30,7 @@ func init() {
 }
 
 var (
-	DefaultTableOptions = engine.TableOptions{
+	defaultTableOptions = engine.Options{
 		Driver:          "bolt",
 		NoSync:          true,
 		ReadOnly:        false,
@@ -40,10 +40,10 @@ var (
 		JournalSize:     1 << 15, // 32k
 		JournalSegments: 0,       // max 256 (unused)
 		TxMaxSize:       1 << 24, // 16 MB,
-		Logger:          log.Disabled,
+		Log:             log.Disabled,
 	}
 
-	DefaultHistoryOptions = engine.TableOptions{
+	defaultHistoryOptions = engine.Options{
 		Driver:    "bolt",
 		NoSync:    true,
 		ReadOnly:  false,
@@ -51,7 +51,7 @@ var (
 		PageFill:  1.0,     // append only
 		PackSize:  1 << 14, // 16k
 		TxMaxSize: 1 << 24, // 16 MB,
-		Logger:    log.Disabled,
+		Log:       log.Disabled,
 	}
 )
 
@@ -59,10 +59,10 @@ type Table struct {
 	mu      sync.RWMutex                // global table lock (syncs r/w access, single writer)
 	engine  *engine.Engine              // engine access
 	schema  *schema.Schema              // ordered list of table fields as central type info
-	opts    engine.TableOptions         // copy of config options
+	opts    engine.Options              // copy of config options
 	id      uint64                      // unique table id (tagged name hash)
 	px      int                         // field index for primary key (required)
-	db      store.DB                    // lower-level storage (e.g. boltdb wrapper)
+	db      store.DBManager             // lower-level storage (e.g. boltdb wrapper)
 	state   engine.ObjectState          // volatile state
 	indexes []engine.QueryableIndex     // list of indexes
 	stats   *stats.AtomicPointer        // in-memory metadata
@@ -123,25 +123,24 @@ func (t *Table) DisconnectIndex(idx engine.QueryableIndex) {
 }
 
 // main and history tables use different setups
-func mergeDefaultOptions(opts engine.TableOptions) engine.TableOptions {
+func mergeDefaultOptions(options ...engine.Option) engine.Options {
+	opts := defaultTableOptions.Apply(options...)
 	if opts.Engine == engine.TableKindHistory {
-		opts = DefaultHistoryOptions.Merge(opts)
-	} else {
-		opts = DefaultTableOptions.Merge(opts)
+		opts = defaultHistoryOptions.Apply(options...)
 	}
 	return opts
 }
 
-func (t *Table) Create(ctx context.Context, s *schema.Schema, opts engine.TableOptions) error {
+func (t *Table) Create(ctx context.Context, s *schema.Schema, options ...engine.Option) error {
 	// setup table
 	t.engine = engine.GetEngine(ctx)
 	t.schema = s
 	t.id = s.TaggedHash(types.ObjectTagTable)
 	t.px = s.PkIndex()
-	t.opts = mergeDefaultOptions(opts)
+	t.opts = mergeDefaultOptions(options...)
 	t.state = engine.NewObjectState(s.Name)
 	t.metrics = engine.NewTableMetrics(s.Name)
-	t.log = t.opts.Logger.Clone("table:" + s.Name)
+	t.log = t.opts.Log.Clone("table:" + s.Name)
 
 	// write initial checkpoint
 	lsn, err := t.engine.Wal().Write(&wal.Record{
@@ -187,7 +186,7 @@ func (t *Table) createBackend(ctx context.Context) error {
 	t.db = db
 
 	// init table storage
-	tx, err := t.db.Begin(true)
+	tx, err := t.db.Begin(store.WithTxWrite())
 	if err != nil {
 		return err
 	}
@@ -197,7 +196,7 @@ func (t *Table) createBackend(ctx context.Context) error {
 		engine.StateKeySuffix,
 	} {
 		key := append([]byte(name), v...)
-		if _, err := tx.Root().CreateBucket(key); err != nil {
+		if _, err := tx.CreateBucket(key); err != nil {
 			if errors.Is(err, store.ErrBucketExists) {
 				return engine.ErrTableExists
 			}
@@ -235,22 +234,22 @@ func (t *Table) createBackend(ctx context.Context) error {
 	return tx.Commit()
 }
 
-func (t *Table) Open(ctx context.Context, s *schema.Schema, opts engine.TableOptions) error {
+func (t *Table) Open(ctx context.Context, s *schema.Schema, options ...engine.Option) error {
 	// setup table
 	t.engine = engine.GetEngine(ctx)
 	t.schema = s
 	t.id = s.TaggedHash(types.ObjectTagTable)
 	t.px = s.PkIndex()
-	t.opts = mergeDefaultOptions(opts)
+	t.opts = mergeDefaultOptions(options...)
 	t.state = engine.NewObjectState(s.Name)
 	t.metrics = engine.NewTableMetrics(s.Name)
-	t.log = t.opts.Logger.Clone("table:" + s.Name)
+	t.log = t.opts.Log.Clone("table:" + s.Name)
 
 	// open db backend and load latest state
 	if err := t.openBackend(ctx); err != nil {
 		t.log.Errorf("open: %v", err)
 		_ = t.Close(ctx)
-		return engine.ErrDatabaseCorrupt
+		return err
 	}
 
 	// cleanup after crash
@@ -312,8 +311,8 @@ func (t *Table) openBackend(ctx context.Context) error {
 			engine.StateKeySuffix,
 		} {
 			key := append([]byte(name), v...)
-			if tx.Bucket(key) == nil {
-				return fmt.Errorf("bucket %s: %v", string(key), store.ErrBucketNotFound)
+			if _, err := tx.Bucket(key); err != nil {
+				return fmt.Errorf("bucket %s: %v", string(key), err)
 			}
 		}
 
@@ -370,7 +369,7 @@ func (t *Table) Close(ctx context.Context) (err error) {
 	t.schema = nil
 	t.id = 0
 	t.px = 0
-	t.opts = engine.TableOptions{}
+	t.opts = engine.Options{}
 	t.metrics = engine.TableMetrics{}
 	t.state.Reset()
 	t.indexes = nil
@@ -428,10 +427,10 @@ func (t *Table) Truncate(ctx context.Context) error {
 			engine.StateKeySuffix,
 		} {
 			key := append([]byte(t.schema.Name), v...)
-			if err := tx.Root().DeleteBucket(key); err != nil {
+			if err := tx.DeleteBucket(key); err != nil {
 				return err
 			}
-			if _, err := tx.Root().CreateBucket(key); err != nil {
+			if _, err := tx.CreateBucket(key); err != nil {
 				return err
 			}
 		}
@@ -534,9 +533,6 @@ func (t *Table) Checkpoint(ctx context.Context) error {
 
 func (t *Table) dataBucket(tx store.Tx) store.Bucket {
 	key := append([]byte(t.schema.Name), engine.DataKeySuffix...)
-	b := tx.Bucket(key)
-	if b != nil {
-		b.FillPercent(t.opts.PageFill)
-	}
+	b, _ := tx.Bucket(key)
 	return b
 }

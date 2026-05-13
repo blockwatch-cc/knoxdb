@@ -3,31 +3,27 @@
 
 package store
 
-import "strings"
-
-// Factory defines a structure for backend drivers to use when they register
-// themselves as a backend which implements the DB interface.
+// Factory defines the interface required for store backend drivers.
 type Factory interface {
-	// Name is the identifier used to uniquely identify a specific
-	// database driver.  There can be only one driver with the same name.
-	Name() string
+	// Type is a unique database driver name. There can be only one
+	// registred driver with the same name.
+	Type() string
 
-	// Create is the function that will be invoked with all user-specified
-	// arguments to create the database.  This function must return
-	// ErrDbExists if the database already exists.
-	Create(Options) (DB, error)
+	// Create is called to create a database instance with given
+	// options. This function must return ErrDbExists if the database
+	// already exists.
+	Create(Options) (DBManager, error)
 
-	// Open is the function that will be invoked with all user-specified
-	// arguments to open the database.  This function must return
-	// ErrDbDoesNotExist if the database has not already been created.
-	Open(Options) (DB, error)
+	// Open is called to open a database instance with given options.
+	// This function must return ErrDbDoesNotExist if the database has
+	// not already been created.
+	Open(Options) (DBManager, error)
 
-	// Drop is the function that will remove any database files belonging
-	// to the database at path.
+	// Drop is called to remove the database at path from backend storage.
 	Drop(path string) error
 
-	// Exists checks if a database files exists at path. A backend may return
-	// related errors when permissions or connections fail.
+	// Exists checks if a database exists at path. A backend may return
+	// permission or connection errors.
 	Exists(path string) (bool, error)
 }
 
@@ -36,10 +32,10 @@ var backends = make(map[string]Factory)
 
 // Register adds a backend database driver.
 func RegisterDriver(f Factory) error {
-	if _, exists := backends[f.Name()]; exists {
+	if _, exists := backends[f.Type()]; exists {
 		return ErrDriverRegistered
 	}
-	backends[f.Name()] = f
+	backends[f.Type()] = f
 	return nil
 }
 
@@ -47,7 +43,7 @@ func RegisterDriver(f Factory) error {
 func Supported() []string {
 	names := make([]string, 0, len(backends))
 	for _, f := range backends {
-		names = append(names, f.Name())
+		names = append(names, f.Type())
 	}
 	return names
 }
@@ -68,7 +64,7 @@ func lookup(name string) (Factory, error) {
 
 // Create initializes and opens a database of the specified backend type.
 // Options are backend specific.
-func Create(opts ...Option) (DB, error) {
+func Create(opts ...Option) (DBManager, error) {
 	cfg := defaultOptions()
 	for _, v := range opts {
 		if err := v(&cfg); err != nil {
@@ -84,7 +80,7 @@ func Create(opts ...Option) (DB, error) {
 
 // Open opens an existing database of the specified backend type.
 // Options are backend specific.
-func Open(opts ...Option) (DB, error) {
+func Open(opts ...Option) (DBManager, error) {
 	cfg := defaultOptions()
 	for _, v := range opts {
 		if err := v(&cfg); err != nil {
@@ -100,7 +96,7 @@ func Open(opts ...Option) (DB, error) {
 
 // OpenOrCreate is a helper that opens a database when it exists
 // of creates it otherwise.
-func OpenOrCreate(opts ...Option) (DB, error) {
+func OpenOrCreate(opts ...Option) (DBManager, error) {
 	cfg := defaultOptions()
 	for _, v := range opts {
 		if err := v(&cfg); err != nil {
@@ -135,21 +131,5 @@ func Exists(driver string, path string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if !strings.HasSuffix(path, dbFileExt) {
-		path += dbFileExt
-	}
 	return drv.Exists(path)
-}
-
-// CommitAndContinue commits the current transaction and
-// opens a new transaction of the same type. This is useful
-// to batch commit large quantities of data in a loop.
-func CommitAndContinue(tx Tx) (Tx, error) {
-	db := tx.DB()
-	iswrite := tx.IsWriteable()
-	err := tx.Commit()
-	if err != nil {
-		return nil, err
-	}
-	return db.Begin(iswrite)
 }

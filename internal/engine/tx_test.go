@@ -359,7 +359,9 @@ func TestTxWait(t *testing.T) {
 }
 
 func TestTxReadOnlyEngine(t *testing.T) {
-	e := NewTestEngine(t, NewTestDatabaseOptions(t, "mem").WithReadOnly())
+	dbo := NewTestDatabaseOptions(t, "mem")
+	dbo.ReadOnly = true
+	e := NewTestEngine(t, dbo)
 	ctx := context.Background()
 
 	// read is ok
@@ -391,7 +393,7 @@ func TestReadTxShutdown(t *testing.T) {
 	require.Eventually(t, func() bool {
 		<-ctx.Done()
 		return true
-	}, time.Second, 5*time.Millisecond)
+	}, time.Second, 100*time.Millisecond)
 
 	assert.True(t, tx.IsClosed())
 	assert.True(t, tx.IsAborted())

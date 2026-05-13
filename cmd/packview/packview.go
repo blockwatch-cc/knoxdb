@@ -132,8 +132,11 @@ func run() (err error) {
 	}
 
 	ctx := context.Background()
-	opts := knox.ReadonlyDatabaseOptions.WithPath(desc.Dir).WithLogger(log.Log)
-	db, err := knox.OpenDatabase(ctx, desc.Name, opts)
+	opts := append(knox.NewReadOnlyOptions(),
+		knox.WithPath(desc.Dir),
+		knox.WithLogger(log.Log),
+	)
+	db, err := knox.OpenDatabase(ctx, desc.Name, opts...)
 	if err != nil {
 		return fmt.Errorf("opening database %s: %v", desc.Dir, err)
 	}

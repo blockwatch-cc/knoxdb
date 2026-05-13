@@ -13,22 +13,41 @@ import (
 
 // EXTERNAL user interface implemented by local and remote clients
 type (
-	DatabaseOptions = engine.DatabaseOptions
-	TableOptions    = engine.TableOptions
-	IndexOptions    = engine.IndexOptions
-	StoreOptions    = engine.StoreOptions
+	Options = engine.Options
+	Option  = engine.Option
 
 	TableKind = engine.TableKind
-	StoreKind = engine.StoreKind
 	IndexKind = engine.IndexKind
 	IndexType = types.IndexType
 
-	StoreMetrics = engine.StoreMetrics
 	TableMetrics = engine.TableMetrics
 	IndexMetrics = engine.IndexMetrics
 
 	QueryResult = engine.QueryResult
 	QueryRow    = engine.QueryRow
+)
+
+var (
+	WithNamespace       = engine.WithNamespace
+	WithPath            = engine.WithPath
+	WithCacheSize       = engine.WithCacheSize
+	WithWalSegmentSize  = engine.WithWalSegmentSize
+	WithWalRecoveryMode = engine.WithWalRecoveryMode
+	WithLockTimeout     = engine.WithLockTimeout
+	WithTxWaitTimeout   = engine.WithTxWaitTimeout
+	WithMaxWorkers      = engine.WithMaxWorkers
+	WithMaxTasks        = engine.WithMaxTasks
+	WithLogger          = engine.WithLogger
+	WithEngineType      = engine.WithEngineType
+	WithPackSize        = engine.WithPackSize
+	WithJournalSize     = engine.WithJournalSize
+	WithJournalSegments = engine.WithJournalSegments
+	WithDriverType      = engine.WithDriverType
+	WithTxMaxSize       = engine.WithTxMaxSize
+	WithPageSize        = engine.WithPageSize
+	WithPageFill        = engine.WithPageFill
+	WithNoSync          = engine.WithNoSync
+	WithReadOnly        = engine.WithReadOnly
 )
 
 const (
@@ -86,18 +105,6 @@ type Index interface {
 	Engine() engine.IndexEngine
 }
 
-// external user interface
-type Store interface {
-	DB() Database
-	Schema() *schema.Schema
-	Metrics() StoreMetrics
-	Get(ctx context.Context, key []byte) ([]byte, error)
-	Put(ctx context.Context, key, val []byte) error
-	Del(ctx context.Context, key []byte) error
-	Range(ctx context.Context, prefix []byte, fn func(ctx context.Context, k, v []byte) error) error
-	Scan(ctx context.Context, from, to []byte, fn func(ctx context.Context, k, v []byte) error) error
-}
-
 type Database interface {
 	// db global
 	Sync(ctx context.Context) error
@@ -106,7 +113,7 @@ type Database interface {
 
 	// tables
 	ListTables() []string
-	CreateTable(ctx context.Context, s *schema.Schema, opts TableOptions) (Table, error)
+	CreateTable(ctx context.Context, s *schema.Schema, opts ...Option) (Table, error)
 	FindTable(name string) (Table, error)
 	GetTable(tag uint64) (Table, bool)
 	DropTable(ctx context.Context, name string) error
@@ -117,15 +124,9 @@ type Database interface {
 	// indexes
 	ListIndexes(name string) []string
 	FindIndex(name string) (Index, error)
-	CreateIndex(ctx context.Context, s *schema.IndexSchema, opts IndexOptions) error
+	CreateIndex(ctx context.Context, s *schema.IndexSchema, opts ...Option) error
 	RebuildIndex(ctx context.Context, name string) error
 	DropIndex(ctx context.Context, name string) error
-
-	// stores
-	ListStores() []string
-	CreateStore(ctx context.Context, s *schema.Schema, opts StoreOptions) (Store, error)
-	FindStore(name string) (Store, error)
-	DropStore(ctx context.Context, name string) error
 
 	// enums
 	ListEnums() []string

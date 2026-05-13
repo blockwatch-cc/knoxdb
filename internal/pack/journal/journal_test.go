@@ -25,7 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	// import mem driver
-	_ "blockwatch.cc/knoxdb/pkg/store/mem"
+	_ "blockwatch.cc/knoxdb/pkg/store/memdb"
 )
 
 func TestJournalInsert(t *testing.T) {

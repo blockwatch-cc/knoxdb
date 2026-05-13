@@ -100,52 +100,54 @@ func TestCompositeIndexEngine[T any, F IF[T]](t *testing.T, driver, eng string, 
 	}
 }
 
-func CreateCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+func CreateCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.Options, ie engine.IndexEngine, is *schema.IndexSchema, io engine.Options) {
 	CreateIndex(t, e, te, ie, is, io)
 }
 
-func OpenCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+func OpenCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.Options, ie engine.IndexEngine, is *schema.IndexSchema, io engine.Options) {
 	ctx := context.Background()
 	CreateIndex(t, e, te, ie, is, io)
 	require.NoError(t, ie.Close(ctx))
 	ctx = engine.WithEngine(ctx, e)
-	require.NoError(t, ie.Open(ctx, te, is, io))
+	require.NoError(t, ie.Open(ctx, te, is, io.IndexOptions()...))
 	require.NoError(t, ie.Close(ctx))
 }
 
-func CloseCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+func CloseCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.Options, ie engine.IndexEngine, is *schema.IndexSchema, io engine.Options) {
 	CreateIndex(t, e, te, ie, is, io)
 	ctx := engine.WithEngine(context.Background(), e)
 	require.NoError(t, ie.Close(ctx))
 }
 
-func DropCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+func DropCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.Options, ie engine.IndexEngine, is *schema.IndexSchema, io engine.Options) {
 	CreateIndex(t, e, te, ie, is, io)
 	ctx := engine.WithEngine(context.Background(), e)
 
-	dbpath := filepath.Join(e.RootPath(), is.Name)
+	dbpath := filepath.Join(e.RootPath(), is.Name+".db")
 	ok, err := store.Exists(io.Driver, dbpath)
-	require.NoError(t, err, "access error")
-	require.True(t, ok, "db not exists")
+	require.NoError(t, err, "driver says access error")
+	require.True(t, ok, "driver says db file %q does not exist", dbpath)
+
 	require.NoError(t, ie.Drop(ctx))
+
 	ok, err = store.Exists(io.Driver, dbpath)
-	require.NoError(t, err, "access error")
-	require.False(t, ok, "db not deleted")
+	require.NoError(t, err, "driver says access error")
+	require.False(t, ok, "driver says db file %q still exist", dbpath)
 }
 
-func TruncateCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+func TruncateCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.Options, ie engine.IndexEngine, is *schema.IndexSchema, io engine.Options) {
 	CreateIndex(t, e, te, ie, is, io)
 	ctx := engine.WithEngine(context.Background(), e)
 	require.NoError(t, ie.Truncate(ctx))
 }
 
-func RebuildCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+func RebuildCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.Options, ie engine.IndexEngine, is *schema.IndexSchema, io engine.Options) {
 	CreateIndex(t, e, te, ie, is, io)
 	ctx := engine.WithEngine(context.Background(), e)
 	require.NoError(t, ie.Rebuild(ctx))
 }
 
-func SyncCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+func SyncCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.Options, ie engine.IndexEngine, is *schema.IndexSchema, io engine.Options) {
 	CreateIndex(t, e, te, ie, is, io)
 	ctx := engine.WithEngine(context.Background(), e)
 	require.NoError(t, ie.Sync(ctx))
@@ -153,7 +155,7 @@ func SyncCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngin
 	require.NoError(t, ie.Sync(ctx))
 }
 
-func CanMatchCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+func CanMatchCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.Options, ie engine.IndexEngine, is *schema.IndexSchema, io engine.Options) {
 	CreateIndex(t, e, te, ie, is, io)
 
 	switch to.Engine {
@@ -211,7 +213,7 @@ func CanMatchCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableE
 	}
 }
 
-func AddCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+func AddCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.Options, ie engine.IndexEngine, is *schema.IndexSchema, io engine.Options) {
 	CreateIndex(t, e, te, ie, is, io)
 	FillIndex(t, e, ie)
 	ctx := engine.WithEngine(context.Background(), e)
@@ -226,7 +228,7 @@ func AddCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine
 	require.Equal(t, 1, res.Count())
 }
 
-func DeleteCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+func DeleteCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.Options, ie engine.IndexEngine, is *schema.IndexSchema, io engine.Options) {
 	CreateIndex(t, e, te, ie, is, io)
 	prev := FillIndex(t, e, ie)
 	ctx := engine.WithEngine(context.Background(), e)
@@ -254,7 +256,7 @@ func DeleteCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEng
 	require.Equal(t, 0, res.Count())
 }
 
-func QueryCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+func QueryCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.Options, ie engine.IndexEngine, is *schema.IndexSchema, io engine.Options) {
 	CreateIndex(t, e, te, ie, is, io)
 	FillIndex(t, e, ie)
 	ctx := engine.WithEngine(context.Background(), e)
@@ -284,7 +286,7 @@ func QueryCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngi
 	}
 }
 
-func IsCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.TableOptions, ie engine.IndexEngine, is *schema.IndexSchema, io engine.IndexOptions) {
+func IsCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngine, ts *schema.Schema, to engine.Options, ie engine.IndexEngine, is *schema.IndexSchema, io engine.Options) {
 	t.Helper()
 
 	if is.Type != types.IndexTypeComposite {

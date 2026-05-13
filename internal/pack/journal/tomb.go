@@ -229,12 +229,9 @@ func (t *Tomb) MergeVisible(set *xroar.Bitmap, snap *types.Snapshot) {
 }
 
 func (t *Tomb) Load(ctx context.Context, bucket store.Bucket, id uint32) error {
-	if bucket == nil {
-		return store.ErrBucketNotFound
-	}
-	buf := bucket.Get(pack.EncodeBlockKey(id, 0, TombKey))
-	if buf == nil {
-		return nil
+	buf, err := bucket.Get(pack.EncodeBlockKey(id, 0, TombKey))
+	if err != nil {
+		return nil // accept missing tomstone
 	}
 	return t.UnmarshalBinary(buf)
 }

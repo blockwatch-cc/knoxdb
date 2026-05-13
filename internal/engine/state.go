@@ -79,16 +79,20 @@ func (s *ObjectState) Decode(buf []byte) error {
 }
 
 func (s *ObjectState) Load(ctx context.Context, tx store.Tx) error {
-	buf := tx.Bucket(s.Key).Get(StateKey)
-	if buf == nil {
+	buf, err := store.GetKey(tx, s.Key, StateKey)
+	if err != nil {
 		return ErrDatabaseCorrupt
 	}
 	return s.Decode(buf)
 }
 
 func (s *ObjectState) Store(ctx context.Context, tx store.Tx) error {
-	if s.NextPk == 0 || s.NextRid == 0 {
-		return tx.Bucket(s.Key).Delete(StateKey)
+	b, err := tx.Bucket(s.Key)
+	if err != nil {
+		return err
 	}
-	return tx.Bucket(s.Key).Put(StateKey, s.Encode())
+	if s.NextPk == 0 || s.NextRid == 0 {
+		return b.Delete(StateKey)
+	}
+	return b.Put(StateKey, s.Encode())
 }

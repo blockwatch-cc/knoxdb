@@ -41,8 +41,8 @@ type WaitCh <-chan struct{}
 
 // internal interface required for all table engines
 type TableEngine interface {
-	Create(Context, *Schema, TableOptions) error
-	Open(Context, *Schema, TableOptions) error
+	Create(Context, *Schema, ...Option) error
+	Open(Context, *Schema, ...Option) error
 	Close(Context) error
 	Schema() *Schema
 	State() ObjectState
@@ -191,8 +191,8 @@ type IndexFactory func() IndexEngine
 
 // internal interface required for all index engines
 type IndexEngine interface {
-	Create(Context, TableEngine, *IndexSchema, IndexOptions) error
-	Open(Context, TableEngine, *IndexSchema, IndexOptions) error
+	Create(Context, TableEngine, *IndexSchema, ...Option) error
+	Open(Context, TableEngine, *IndexSchema, ...Option) error
 	Close(Context) error
 	IndexSchema() *IndexSchema
 	Schema() *Schema
@@ -216,37 +216,6 @@ type IndexEngine interface {
 	Query(Context, QueryCondition) (*Bitmap, bool, error)
 	QueryComposite(Context, QueryCondition) (*Bitmap, bool, error)
 	Lookup(Context, []uint64, map[uint64]uint64) error
-}
-
-type StoreKind string
-
-const (
-	StoreKindKV = "kv"
-)
-
-type StoreFactory func() StoreEngine
-
-// internal interface required for all store engines
-type StoreEngine interface {
-	Create(Context, *Schema, StoreOptions) error
-	Open(Context, *Schema, StoreOptions) error
-	Close(Context) error
-	Schema() *Schema
-	State() ObjectState
-	Metrics() StoreMetrics
-	Drop(Context) error
-	Sync(Context) error
-
-	// data interface
-	Get(ctx Context, key []byte) ([]byte, error)
-	Put(ctx Context, key, val []byte) error
-	Del(ctx Context, key []byte) error
-	Range(ctx Context, prefix []byte, fn func(ctx Context, k, v []byte) error) error
-	Scan(ctx Context, from, to []byte, fn func(ctx Context, k, v []byte) error) error
-
-	// Tx Management
-	CommitTx(ctx Context, xid XID) WaitCh
-	AbortTx(ctx Context, xid XID)
 }
 
 type ConditionMatcher interface {

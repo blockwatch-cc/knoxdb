@@ -5,7 +5,7 @@ import (
 
 	etests "blockwatch.cc/knoxdb/internal/tests/engine"
 
-	_ "blockwatch.cc/knoxdb/pkg/store/bolt"
+	_ "blockwatch.cc/knoxdb/pkg/store/memdb"
 )
 
 func TestMain(m *testing.M) {
@@ -15,5 +15,5 @@ func TestMain(m *testing.M) {
 }
 
 func TestTable(t *testing.T) {
-	etests.TestTableEngine[Table, *Table](t, "bolt", "pack")
+	etests.TestTableEngine[Table, *Table](t, "mem", "pack")
 }

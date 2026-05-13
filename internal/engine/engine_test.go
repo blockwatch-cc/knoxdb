@@ -19,8 +19,8 @@ import (
 
 const TEST_DB_NAME = "test"
 
-func NewTestDatabaseOptions(t testing.TB, driver string) DatabaseOptions {
-	return DatabaseOptions{
+func NewTestDatabaseOptions(t testing.TB, driver string) Options {
+	return Options{
 		Path:          t.TempDir(),
 		Driver:        driver,
 		PageSize:      4096,
@@ -30,11 +30,12 @@ func NewTestDatabaseOptions(t testing.TB, driver string) DatabaseOptions {
 		TxWaitTimeout: 0,
 		NoSync:        false,
 		ReadOnly:      false,
-		Logger:        log.Log,
+		Log:           log.Log,
+		IsTemp:        false,
 	}
 }
 
-func NewTestEngine(t testing.TB, opts DatabaseOptions) *Engine {
+func NewTestEngine(t testing.TB, opts Options) *Engine {
 	path := filepath.Join(opts.Path, TEST_DB_NAME)
 	e := &Engine{
 		path: path,
@@ -43,7 +44,6 @@ func NewTestEngine(t testing.TB, opts DatabaseOptions) *Engine {
 			buffers: NewBufferCache(0),
 		},
 		tables:  util.NewLockFreeMap[uint64, TableEngine](),
-		stores:  util.NewLockFreeMap[uint64, StoreEngine](),
 		indexes: util.NewLockFreeMap[uint64, IndexEngine](),
 		enums:   schema.NewEnumRegistry(),
 		txs:     make(TxList, 0),
@@ -54,7 +54,7 @@ func NewTestEngine(t testing.TB, opts DatabaseOptions) *Engine {
 		dbId:    types.TaggedHash(types.ObjectTagDatabase, TEST_DB_NAME),
 		opts:    opts,
 		cat:     NewCatalog(TEST_DB_NAME),
-		log:     opts.Logger,
+		log:     opts.Log,
 		lm:      NewLockManager(),
 	}
 	var err error
@@ -63,7 +63,7 @@ func NewTestEngine(t testing.TB, opts DatabaseOptions) *Engine {
 		Path:           path,
 		MaxSegmentSize: 1024,
 		RecoveryMode:   wal.RecoveryModeTruncate,
-		Logger:         opts.Logger,
+		Logger:         opts.Log,
 	})
 	require.NoError(t, err)
 	e.cat.WithWal(e.wal)
@@ -71,7 +71,7 @@ func NewTestEngine(t testing.TB, opts DatabaseOptions) *Engine {
 	return e
 }
 
-func OpenTestEngine(t testing.TB, opts DatabaseOptions) *Engine {
+func OpenTestEngine(t testing.TB, opts Options) *Engine {
 	path := filepath.Join(opts.Path, TEST_DB_NAME)
 	e := &Engine{
 		path: path,
@@ -80,7 +80,6 @@ func OpenTestEngine(t testing.TB, opts DatabaseOptions) *Engine {
 			buffers: NewBufferCache(0),
 		},
 		tables:  util.NewLockFreeMap[uint64, TableEngine](),
-		stores:  util.NewLockFreeMap[uint64, StoreEngine](),
 		indexes: util.NewLockFreeMap[uint64, IndexEngine](),
 		enums:   schema.NewEnumRegistry(),
 		txs:     make(TxList, 0),
@@ -91,7 +90,7 @@ func OpenTestEngine(t testing.TB, opts DatabaseOptions) *Engine {
 		dbId:    types.TaggedHash(types.ObjectTagDatabase, TEST_DB_NAME),
 		opts:    opts,
 		cat:     NewCatalog(TEST_DB_NAME),
-		log:     opts.Logger,
+		log:     opts.Log,
 		lm:      NewLockManager(),
 	}
 
@@ -101,7 +100,7 @@ func OpenTestEngine(t testing.TB, opts DatabaseOptions) *Engine {
 		Path:           path,
 		MaxSegmentSize: 1024,
 		RecoveryMode:   wal.RecoveryModeTruncate,
-		Logger:         opts.Logger,
+		Logger:         opts.Log,
 	})
 	require.NoError(t, err)
 	e.txchan <- struct{}{}

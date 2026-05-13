@@ -12,10 +12,9 @@ const (
 	ObjectTagTable    ObjectTag = 'T'
 	ObjectTagIndex    ObjectTag = 'I'
 	ObjectTagView     ObjectTag = 'V'
-	ObjectTagStore    ObjectTag = 'S'
 	ObjectTagEnum     ObjectTag = 'E'
 	ObjectTagStream   ObjectTag = 'R'
-	ObjectTagSnapshot ObjectTag = 'N'
+	ObjectTagSnapshot ObjectTag = 'S'
 )
 
 func (t ObjectTag) IsValid() bool {
@@ -24,7 +23,6 @@ func (t ObjectTag) IsValid() bool {
 		ObjectTagTable,
 		ObjectTagIndex,
 		ObjectTagView,
-		ObjectTagStore,
 		ObjectTagEnum,
 		ObjectTagStream,
 		ObjectTagSnapshot:
@@ -44,8 +42,6 @@ func (t ObjectTag) String() string {
 		return "index"
 	case ObjectTagView:
 		return "view"
-	case ObjectTagStore:
-		return "store"
 	case ObjectTagEnum:
 		return "enum"
 	case ObjectTagStream:

@@ -396,15 +396,10 @@ func (t *Tx) Commit() error {
 		}
 	}
 
-	// close and write catalog updates
+	// close and write catalog updates (commit will turn into rollback
+	// on read-only storage tx)
 	if t.catTx != nil {
-		var err error
-		if t.catTx.IsWriteable() {
-			err = t.catTx.Commit()
-		} else {
-			err = t.catTx.Rollback()
-		}
-		if err != nil {
+		if err := t.catTx.Commit(); err != nil {
 			t.Fail(err)
 		}
 		t.catTx = nil
@@ -592,7 +587,15 @@ func (t *Tx) CatalogTx(db store.DB, write bool) (store.Tx, error) {
 			return t.catTx, nil
 		}
 	}
-	tx, err := db.Begin(write)
+	var (
+		tx  store.Tx
+		err error
+	)
+	if write {
+		tx, err = db.Begin(store.WithTxWrite())
+	} else {
+		tx, err = db.Begin()
+	}
 	if err != nil {
 		return nil, err
 	}

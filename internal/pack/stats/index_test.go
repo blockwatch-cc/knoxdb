@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	// import mem driver
-	_ "blockwatch.cc/knoxdb/pkg/store/mem"
+	_ "blockwatch.cc/knoxdb/pkg/store/memdb"
 )
 
 // -------------------------------------------------------------
@@ -160,7 +160,7 @@ func TestIndexCreate(t *testing.T) {
 	db, err := store.Create(
 		store.WithDriver("mem"),
 		store.WithPath("index_test"),
-		store.WithDeleteOnClose(),
+		store.WithDropOnClose(true),
 	)
 	require.NoError(t, err)
 	defer db.Close()
@@ -194,7 +194,7 @@ func TestIndexAddSingle(t *testing.T) {
 	db, err := store.Create(
 		store.WithDriver("mem"),
 		store.WithPath("index_test"),
-		store.WithDeleteOnClose(),
+		store.WithDropOnClose(true),
 	)
 	require.NoError(t, err)
 	defer db.Close()
@@ -243,7 +243,7 @@ func TestIndexAddMany(t *testing.T) {
 	db, err := store.Create(
 		store.WithDriver("mem"),
 		store.WithPath("index_test"),
-		store.WithDeleteOnClose(),
+		store.WithDropOnClose(true),
 	)
 	require.NoError(t, err)
 	defer db.Close()
@@ -286,7 +286,7 @@ func TestIndexUpdate(t *testing.T) {
 	db, err := store.Create(
 		store.WithDriver("mem"),
 		store.WithPath("index_test"),
-		store.WithDeleteOnClose(),
+		store.WithDropOnClose(true),
 	)
 	require.NoError(t, err)
 	defer db.Close()
@@ -349,7 +349,7 @@ func TestIndexDeleteSingle(t *testing.T) {
 	db, err := store.Create(
 		store.WithDriver("mem"),
 		store.WithPath("index_test"),
-		store.WithDeleteOnClose(),
+		store.WithDropOnClose(true),
 	)
 	require.NoError(t, err)
 	defer db.Close()
@@ -390,7 +390,7 @@ func TestIndexDeleteMany(t *testing.T) {
 	db, err := store.Create(
 		store.WithDriver("mem"),
 		store.WithPath("index_test"),
-		store.WithDeleteOnClose(),
+		store.WithDropOnClose(true),
 	)
 	require.NoError(t, err)
 	defer db.Close()
@@ -415,7 +415,7 @@ func TestIndexDeleteMany(t *testing.T) {
 	}
 
 	// store should remove first spack and rebuild the full tree
-	tx, err := idx.db.Begin(true)
+	tx, err := idx.db.Begin(store.WithTxWrite())
 	defer tx.Rollback()
 	require.NoError(t, err)
 	require.NoError(t, idx.Store(ctx, tx))
@@ -449,7 +449,7 @@ func TestIndexStore(t *testing.T) {
 	db, err := store.Create(
 		store.WithDriver("mem"),
 		store.WithPath("index_test"),
-		store.WithDeleteOnClose(),
+		store.WithDropOnClose(true),
 	)
 	require.NoError(t, err)
 	defer db.Close()
@@ -472,7 +472,7 @@ func TestIndexStore(t *testing.T) {
 	assert.Equal(t, uint64(1), src.GlobalMinRid(), "global min rid")
 	assert.Equal(t, uint64(sz*STATS_PACK_SIZE*TEST_PKG_SIZE), src.GlobalMaxRid(), "global max rid")
 
-	tx, err := src.db.Begin(true)
+	tx, err := src.db.Begin(store.WithTxWrite())
 	require.NoError(t, err)
 	require.NoError(t, src.Store(ctx, tx))
 	require.NoError(t, tx.Commit())
@@ -481,7 +481,7 @@ func TestIndexStore(t *testing.T) {
 	// load 2nd index
 	idx := NewIndex().WithDB(db).WithSchema(TestSchema).WithMaxSize(TEST_PKG_SIZE)
 	defer idx.Close()
-	tx, err = idx.db.Begin(false)
+	tx, err = idx.db.Begin()
 	require.NoError(t, err)
 	require.NoError(t, idx.Load(ctx, tx))
 	require.NoError(t, tx.Rollback())
@@ -506,7 +506,7 @@ func TestIndexStoreAndAdd(t *testing.T) {
 	db, err := store.Create(
 		store.WithDriver("mem"),
 		store.WithPath("index_test"),
-		store.WithDeleteOnClose(),
+		store.WithDropOnClose(true),
 	)
 	require.NoError(t, err)
 	defer db.Close()
@@ -520,7 +520,7 @@ func TestIndexStoreAndAdd(t *testing.T) {
 	}
 
 	// store
-	tx, err := idx.db.Begin(true)
+	tx, err := idx.db.Begin(store.WithTxWrite())
 	require.NoError(t, err)
 	require.NoError(t, idx.Store(ctx, tx))
 	require.NoError(t, tx.Commit())
@@ -542,7 +542,7 @@ func TestIndexQueryEqual(t *testing.T) {
 	db, err := store.Create(
 		store.WithDriver("mem"),
 		store.WithPath("index_test"),
-		store.WithDeleteOnClose(),
+		store.WithDropOnClose(true),
 	)
 	require.NoError(t, err)
 	defer db.Close()
@@ -586,7 +586,7 @@ func TestIndexQueryAll(t *testing.T) {
 	db, err := store.Create(
 		store.WithDriver("mem"),
 		store.WithPath("index_test"),
-		store.WithDeleteOnClose(),
+		store.WithDropOnClose(true),
 	)
 	require.NoError(t, err)
 	defer db.Close()
@@ -640,7 +640,7 @@ func TestIndexQueryLess(t *testing.T) {
 	db, err := store.Create(
 		store.WithDriver("mem"),
 		store.WithPath("index_test"),
-		store.WithDeleteOnClose(),
+		store.WithDropOnClose(true),
 	)
 	require.NoError(t, err)
 	defer db.Close()
@@ -697,7 +697,7 @@ func TestIndexQueryRange(t *testing.T) {
 	db, err := store.Create(
 		store.WithDriver("mem"),
 		store.WithPath("index_test"),
-		store.WithDeleteOnClose(),
+		store.WithDropOnClose(true),
 	)
 	require.NoError(t, err)
 	defer db.Close()
@@ -753,7 +753,7 @@ func TestIndexFindPk(t *testing.T) {
 	db, err := store.Create(
 		store.WithDriver("mem"),
 		store.WithPath("index_test"),
-		store.WithDeleteOnClose(),
+		store.WithDropOnClose(true),
 	)
 	require.NoError(t, err)
 	defer db.Close()
@@ -793,7 +793,7 @@ func TestIndexFindPkEnd(t *testing.T) {
 	db, err := store.Create(
 		store.WithDriver("mem"),
 		store.WithPath("index_test"),
-		store.WithDeleteOnClose(),
+		store.WithDropOnClose(true),
 	)
 	require.NoError(t, err)
 	defer db.Close()
@@ -825,7 +825,7 @@ func TestIndexFindPkEndWithSpace(t *testing.T) {
 	db, err := store.Create(
 		store.WithDriver("mem"),
 		store.WithPath("index_test"),
-		store.WithDeleteOnClose(),
+		store.WithDropOnClose(true),
 	)
 	require.NoError(t, err)
 	defer db.Close()
@@ -870,7 +870,7 @@ func BenchmarkIndexQueryEqual(b *testing.B) {
 		db, err := store.Create(
 			store.WithDriver("mem"),
 			store.WithPath("index_test"),
-			store.WithDeleteOnClose(),
+			store.WithDropOnClose(true),
 		)
 		require.NoError(b, err)
 		idx := NewIndex().WithDB(db).WithSchema(TestSchema).WithMaxSize(TEST_PKG_SIZE)
@@ -908,7 +908,7 @@ func BenchmarkIndexQueryAll(b *testing.B) {
 		db, err := store.Create(
 			store.WithDriver("mem"),
 			store.WithPath("index_test"),
-			store.WithDeleteOnClose(),
+			store.WithDropOnClose(true),
 		)
 		require.NoError(b, err)
 		idx := NewIndex().WithDB(db).WithSchema(TestSchema).WithMaxSize(TEST_PKG_SIZE)
