@@ -83,9 +83,10 @@ type Field struct {
 	Scale    uint8                  // 0..255 fixed point scale, time scale
 
 	// encoder values for INSERT, UPDATE, QUERY
-	Path   []int   // reflect struct nested positions
-	Offset uintptr // struct field offset from reflect
-	Size   uint16  // wire encoding field size in bytes, min size for []byte & string
+	Path   []int           // reflect struct nested positions
+	Offset uintptr         // struct field offset from reflect
+	Size   uint16          // wire encoding field size in bytes, min size for []byte & string
+	Enum   *EnumDictionary // ptr to enum dictionary when field is an enum
 }
 
 func NewField(typ FieldType) *Field {

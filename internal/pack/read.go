@@ -213,7 +213,6 @@ func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, maps []
 	assert.Always(dstSchema != nil, "nil target schema")
 	assert.Always(maps != nil, "nil target mapping")
 
-	enums := dstSchema.Enums.Load()
 	base := rval.Addr().UnsafePointer()
 	for i, field := range dstSchema.Fields {
 		// identify source field
@@ -267,13 +266,9 @@ func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, maps []
 			*(*int16)(fptr) = b.Int16().Get(row)
 
 		case types.FieldTypeUint16:
-			if field.IsEnum() && enums != nil {
-				enum, ok := enums.Lookup(field.Name)
-				if !ok {
-					return fmt.Errorf("%s: missing enum dictionary", field.Name)
-				}
+			if field.IsEnum() {
 				u16 := b.Uint16().Get(row)
-				val, ok := enum.Value(u16)
+				val, ok := field.Enum.Value(u16)
 				if !ok {
 					return fmt.Errorf("%s: invalid enum value %d", field.Name, u16)
 				}
@@ -298,6 +293,8 @@ func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, maps []
 			if field.Fixed > 0 {
 				copy(unsafe.Slice((*byte)(fptr), field.Fixed), b.Bytes().Get(row))
 			} else {
+				// safe version with copy (check length of struct in slice or alloc
+				// then copy)
 				// b := b.Bytes().Get(row)
 				// if cap(*(*[]byte)(fptr)) < len(b) {
 				// 	*(*[]byte)(fptr) = make([]byte, len(b))

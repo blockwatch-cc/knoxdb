@@ -77,6 +77,13 @@ func (s *Schema) WithField(f *Field) *Schema {
 
 func (s *Schema) WithEnums(r *EnumRegistry) *Schema {
 	s.Enums.Store(r)
+	for _, f := range s.Fields {
+		if f.IsEnum() {
+			if e, ok := r.Lookup(f.Name); ok {
+				f.Enum = e
+			}
+		}
+	}
 	return s
 }
 
@@ -768,11 +775,12 @@ func (s *Schema) Finalize() *Schema {
 			s.Enums.CompareAndSwap(nil, NewEnumRegistry())
 			enums := s.Enums.Load()
 			if _, ok := enums.Lookup(f.Name); !ok {
-				if e, ok := LookupEnum(0, f.Name); ok {
-					enums.Register(e)
-				} else {
-					enums.Register(NewEnumDictionary(f.Name))
+				e, ok := LookupEnum(0, f.Name)
+				if !ok {
+					e = NewEnumDictionary(f.Name)
 				}
+				enums.Register(e)
+				f.Enum = e
 			}
 		}
 	}
