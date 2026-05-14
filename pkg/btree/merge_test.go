@@ -515,7 +515,7 @@ func TestMerge_RandomKeysWithDeletes(t *testing.T) {
 		for len(allKeys) < n {
 			k := util.RandString(16)
 			if _, ok := keySet[k]; !ok {
-				keySet[string(k)] = struct{}{}
+				keySet[k] = struct{}{}
 				allKeys = append(allKeys, k)
 			}
 		}
@@ -527,7 +527,7 @@ func TestMerge_RandomKeysWithDeletes(t *testing.T) {
 		}
 		deleteSet := make(map[string]struct{})
 		for i := 0; i < numDeletes && i < len(allKeys); i++ {
-			deleteSet[string(allKeys[i])] = struct{}{}
+			deleteSet[allKeys[i]] = struct{}{}
 		}
 
 		// base layer gets all
