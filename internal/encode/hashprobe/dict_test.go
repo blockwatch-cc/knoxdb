@@ -61,16 +61,16 @@ func DictTest[T Integer](t *testing.T, fn buildFunc[T]) {
 			dict, codes := fn(c.Data, card)
 			require.Equal(t, card, len(dict), "dict len")
 			require.Equal(t, len(c.Data), len(codes), "codes len")
-			if len(codes) < 16 {
-				for i, v := range codes {
-					t.Logf("Val 0x%x => 0x%x code=%d %s", c.Data[i], dict[v], v, WarnSym[c.Data[i] == dict[v]])
-				}
-			}
+			// if len(codes) < 16 {
+			// 	for i, v := range codes {
+			// 		t.Logf("Val 0x%x => 0x%x code=%d %s", c.Data[i], dict[v], v, WarnSym[c.Data[i] == dict[v]])
+			// 	}
+			// }
 			for i, v := range codes {
 				require.Equal(t, c.Data[i], dict[v], "bad code")
 			}
 			if cpu.UseAVX2 {
-				dictGen, codesGen := buildDictGeneric[T](c.Data, card)
+				dictGen, codesGen := buildDictGeneric(c.Data, card)
 				require.Equal(t, dictGen, dict, "dict mismatch")
 				require.Equal(t, codesGen, codes, "codes mismatch")
 			}

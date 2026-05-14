@@ -120,7 +120,7 @@ func makeRandomBlock(typ BlockType, sz int) *block.Block {
 func TestMatchValue(t *testing.T) {
 	for _, typ := range testMatchBlockTypes {
 		for _, mode := range testMatchSingleValueModes {
-			t.Logf("%s_%s", typ, mode)
+			// t.Logf("%s_%s", typ, mode)
 			for range 10 {
 				m := newFactory(typ).New(mode)
 				v1, v2 := makeRandomValue(typ), makeRandomValue(typ)
@@ -147,7 +147,7 @@ const matchBlockSize = 16
 func TestMatchVector(t *testing.T) {
 	for _, typ := range testMatchBlockTypes {
 		for _, mode := range testMatchSingleValueModes {
-			t.Logf("%s_%s", typ, mode)
+			// t.Logf("%s_%s", typ, mode)
 			m := newFactory(typ).New(mode)
 			v := makeRandomValue(typ)
 			b := makeRandomBlock(typ, matchBlockSize)

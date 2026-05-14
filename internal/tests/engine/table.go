@@ -165,7 +165,7 @@ func InsertData(t *testing.T, e *engine.Engine, tab engine.TableEngine) {
 		abort()
 		cnt++
 	}
-	t.Logf("Inserted %d rows", cnt)
+	// t.Logf("Inserted %d rows", cnt)
 	require.Equal(t, len(data), cnt)
 }
 

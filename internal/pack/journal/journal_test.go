@@ -376,8 +376,8 @@ func TestJournalRandom(t *testing.T) {
 		live[pk] = pk
 		pks.Insert(pk)
 	}
-	t.Log("Insert 1..16")
-	t.Logf("Commit %d", engine.GetTxId(ctx))
+	// t.Log("Insert 1..16")
+	// t.Logf("Commit %d", engine.GetTxId(ctx))
 	j.CommitTx(engine.GetTxId(ctx))
 	ctx = setupNextTx(t, ctx)
 	snap = j.Tip().State()
@@ -393,8 +393,8 @@ func TestJournalRandom(t *testing.T) {
 		xid := engine.GetTxId(ctx)
 		switch util.RandIntn(5) {
 		case 0: // insert
-			t.Logf("X-%d Insert %d[%d] into #%d",
-				xid, j.Tip().State().NextPk, j.Tip().State().NextRid, j.Tip().Id())
+			// t.Logf("X-%d Insert %d[%d] into #%d",
+			// 	xid, j.Tip().State().NextPk, j.Tip().State().NextRid, j.Tip().Id())
 			pk, n, err := j.InsertRecords(ctx, makeRecord(0))
 			require.NoError(t, err)
 			require.Equal(t, 1, n, "n = 1")
@@ -405,8 +405,8 @@ func TestJournalRandom(t *testing.T) {
 		case 1: // update a random live record
 			if len(live) > 0 {
 				pk := pks.Values[util.RandIntn(len(live))]
-				t.Logf("X-%d Update %d[%d] => [%d] into #%d",
-					xid, pk, live[pk], j.Tip().State().NextRid, j.Tip().Id())
+				// t.Logf("X-%d Update %d[%d] => [%d] into #%d",
+				// 	xid, pk, live[pk], j.Tip().State().NextRid, j.Tip().Id())
 				// note update rewrites the live map with new rid
 				n, err := j.UpdateRecords(ctx, makeRecord(int(pk)), live)
 				require.NoError(t, err)
@@ -421,7 +421,7 @@ func TestJournalRandom(t *testing.T) {
 				// delete. we use a journal query to identify the
 				// live record which has the nice side effect that we
 				// can also test the query code this way.
-				t.Logf("X-%d Delete %d[%d] into #%d", xid, pk, live[pk], j.Tip().Id())
+				// t.Logf("X-%d Delete %d[%d] into #%d", xid, pk, live[pk], j.Tip().Id())
 				plan := &query.QueryPlan{
 					Filters: filter.NewNode().AddLeaf(
 						filter.NewFilter(j.schema.Pk(), j.schema.PkIndex(), types.FilterModeEqual, pk),
@@ -447,7 +447,7 @@ func TestJournalRandom(t *testing.T) {
 			}
 
 		case 3: // commit
-			t.Logf("X-%d Commit", xid)
+			// t.Logf("X-%d Commit", xid)
 			j.CommitTx(xid)
 
 			// make a new snapshot for comparison
@@ -461,7 +461,7 @@ func TestJournalRandom(t *testing.T) {
 			ctx = setupNextTx(t, ctx)
 
 		case 4: // abort
-			t.Logf("X-%d Abort", xid)
+			// t.Logf("X-%d Abort", xid)
 			j.AbortTx(xid)
 			validate(ctx)
 
@@ -475,7 +475,7 @@ func TestJournalRandom(t *testing.T) {
 	}
 
 	// final commit (in case none happened)
-	t.Logf("X-%d Commit", engine.GetTxId(ctx))
+	// t.Logf("X-%d Commit", engine.GetTxId(ctx))
 	j.CommitTx(engine.GetTxId(ctx))
 	snap = j.Tip().State()
 	// liveSnap = maps.Clone(live)

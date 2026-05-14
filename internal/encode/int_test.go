@@ -456,7 +456,7 @@ func testIntContainerIterator[T types.Integer](t *testing.T, scheme ContainerTyp
 			enc := NewInt[T](scheme)
 			ctx := AnalyzeInt(src, true).WithLevel(1)
 
-			if !isCompatibleTest[T](scheme, ctx) {
+			if !isCompatibleTest(scheme, ctx) {
 				t.Logf("Skipping int iterator test for sz=%d %s/%T", sz, scheme, T(0))
 				t.Skip()
 			}

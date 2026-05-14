@@ -144,8 +144,8 @@ func FuzzHeaderCheck(f *testing.F) {
 
 		// catch unexpected cases
 		if LSN(0).Add(head.BodySize()) > maxWal {
-			t.Logf("Input: RecordType=%d, Tag=%c, EntityID=%d, TxID=%d, BodyLen=%d, MaxWalSize=%d",
-				head.Type(), head.Tag(), head.Entity(), head.TxId(), head.BodySize(), maxWal)
+			// t.Logf("Input: RecordType=%d, Tag=%c, EntityID=%d, TxID=%d, BodyLen=%d, MaxWalSize=%d",
+			// head.Type(), head.Tag(), head.Entity(), head.TxId(), head.BodySize(), maxWal)
 			t.Error("body too large")
 		}
 	})

@@ -154,8 +154,8 @@ func TestSegmentMatch(t *testing.T) {
 	snap := types.NewSnapshot(3, 3, 4) // pretend 3 is the only tx
 	set := xroar.New()
 	seg.MergeDeleted(set, snap)
-	t.Logf("Tomb set with %d vals", set.Count())
-	t.Logf("Tomb %#v", seg.tomb.stones)
+	// t.Logf("Tomb set with %d vals", set.Count())
+	// t.Logf("Tomb %#v", seg.tomb.stones)
 
 	// logOp := operator.NewLogger(os.Stdout, 8)
 	// logOp.Process(context.Background(), seg.data)

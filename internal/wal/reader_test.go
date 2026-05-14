@@ -54,7 +54,7 @@ func TestReaderFilter(t *testing.T) {
 			if tt.expect == nil {
 				assert.Equal(t, io.EOF, err, "Expected EOF when no records match the filter")
 			} else if assert.NoError(t, err) {
-				t.Logf("Read record: %+v", rec)
+				// t.Logf("Read record: %+v", rec)
 				require.Equal(t, tt.expect.Type, rec.Type, "Record type mismatch")
 				require.Equal(t, tt.expect.Tag, rec.Tag, "Record tag mismatch")
 				require.Equal(t, tt.expect.Entity, rec.Entity, "Record entity mismatch")
@@ -99,13 +99,13 @@ func TestReaderSeek(t *testing.T) {
 		if i%2 == 0 {
 			continue
 		}
-		t.Logf("Seeking to LSN: %v", lsn)
+		// t.Logf("Seeking to LSN: %v", lsn)
 		err := reader.Seek(lsn)
 		require.NoError(t, err)
 
 		rec, err := reader.Next()
 		require.NoError(t, err)
-		t.Logf("Read record: %+v", rec)
+		// t.Logf("Read record: %+v", rec)
 		assert.Equal(t, records[i+1], rec)
 	}
 
@@ -137,7 +137,7 @@ func TestReaderSeekInvalidLSN(t *testing.T) {
 	}
 	validLSN, err := w.Write(validRec)
 	require.NoError(t, err, "Failed to write valid record")
-	t.Logf("Valid LSN: %v", validLSN)
+	// t.Logf("Valid LSN: %v", validLSN)
 	require.NoError(t, w.Sync())
 
 	// Define invalid LSN scenarios

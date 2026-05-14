@@ -53,19 +53,20 @@ index ed4f646a62..70f8801cca 100644
  		return 0
  	}
 diff --git a/src/runtime/proc.go b/src/runtime/proc.go
-index 005c875cbf..39a1ff9a81 100644
+index 005c875cbf..be65c1ce14 100644
 --- a/src/runtime/proc.go
 +++ b/src/runtime/proc.go
-@@ -873,7 +873,7 @@ func schedinit() {
+@@ -873,7 +873,8 @@ func schedinit() {
  	ticks.init() // run as early as possible
  	moduledataverify()
  	stackinit()
 -	randinit() // must run before mallocinit, alginit, mcommoninit
++	dstinit()  // must run before randinit
 +	randinit() // must run before mallocinit, AlgInit, mcommoninit
  	mallocinit()
  	cpuinit(godebug) // must run before alginit
  	alginit()        // maps, hash, rand must not be used before this call
-@@ -7468,7 +7468,8 @@ func runqempty(pp *p) bool {
+@@ -7468,7 +7469,8 @@ func runqempty(pp *p) bool {
  // With the randomness here, as long as the tests pass
  // consistently with -race, they shouldn't have latent scheduling
  // assumptions.
@@ -75,25 +76,26 @@ index 005c875cbf..39a1ff9a81 100644
  
  // runqput tries to put g on the local runnable queue.
  // If next is false, runqput adds g to the tail of the runnable queue.
-diff --git a/src/runtime/rand.go b/src/runtime/rand.go
-index 1739e9f8f5..b25aac673f 100644
---- a/src/runtime/rand.go
-+++ b/src/runtime/rand.go
-@@ -11,6 +11,7 @@ import (
- 	"internal/chacha8rand"
- 	"internal/goarch"
- 	"internal/runtime/math"
+diff --git a/src/runtime/dst_linux.go b/src/runtime/dst_linux.go
+new file mode 100644
+index 0000000000..8fa8feec9d
+--- /dev/null
++++ b/src/runtime/dst_linux.go
+@@ -0,0 +1,41 @@
++package runtime
++
++import (
 +	"internal/stringslite"
- 	"unsafe"
- 	_ "unsafe" // for go:linkname
- )
-@@ -33,6 +34,30 @@ var globalRand struct {
- 
- var readRandomFailed bool
- 
-+// DST: read user defined seed from env (will only take effect when >= 16 char long!)
-+func getGorandseed() {
-+	const prefix = "GORANDSEED=0x"
++	"unsafe"
++	_ "unsafe" // for go:linkname
++)
++
++// use static allocation because malloc is not yet available
++var dstSeed [16]byte
++
++// DST: read user defined seed from env
++func dstinit() {
++	const prefix = "GORANDSEED="
 +	// Similar to goenv_unix but extracts the environment value for
 +	// GORANDSEED directly.
 +	n := int32(0)
@@ -106,26 +108,89 @@ index 1739e9f8f5..b25aac673f 100644
 +		s := unsafe.String(p, findnull(p))
 +
 +		if stringslite.HasPrefix(s, prefix) {
-+			if len(startupRand) < 16 {
-+				startupRand = make([]byte, 16)
++			s = s[len(prefix):]
++			if stringslite.HasPrefix(s, "0x") {
++				s = s[2:]
 +			}
-+			copy(startupRand, s[len(prefix):])
++			if len(startupRand) < 16 {
++				startupRand = (*[16]byte)(unsafe.Pointer(&dstSeed))[:]
++			}
++			var l int
++			for l < 16 {
++				l += copy(startupRand[l:], s)
++			}
 +			break
 +		}
 +	}
 +}
+diff --git a/src/runtime/dst_wasip1.go b/src/runtime/dst_wasip1.go
+new file mode 100644
+index 0000000000..0ff3e0a848
+--- /dev/null
++++ b/src/runtime/dst_wasip1.go
+@@ -0,0 +1,65 @@
++//go:build wasip1
 +
- // randinit initializes the global random state.
- // It must be called before any use of grand.
- func randinit() {
-@@ -42,6 +67,10 @@ func randinit() {
- 	}
- 
- 	seed := &globalRand.seed
++package runtime
 +
-+	// DST: allow user defined seed
-+	getGorandseed()
++import (
++	"internal/stringslite"
++	"unsafe"
++	_ "unsafe" // for go:linkname
++)
 +
- 	if len(startupRand) >= 16 &&
- 		// Check that at least the first two words of startupRand weren't
- 		// cleared by any libc initialization.
++// use static allocation because malloc is not yet available
++var (
++	dstSeed [16]byte
++	dstEnv  [4096]byte
++)
++
++// DST: read user defined seed from env
++func dstinit() {
++	const prefix = "GORANDSEED="
++	// Similar to wasip1:goenvs but extracts the environment value for
++	// GORANDSEED directly.
++
++	// environment
++	var environCount size
++	var environBufLen size
++	if environ_sizes_get(&environCount, &environBufLen) != 0 {
++		throw("environ_sizes_get failed")
++	}
++
++	if 4*environCount+environBufLen > 4096 {
++		throw("environ buffer too small")
++	}
++
++	if environCount > 0 {
++		environ := unsafe.Slice((*uintptr32)(unsafe.Pointer(&dstEnv[0])), environCount*4) // make([]uintptr32, environCount)
++		environBuf := dstEnv[len(environ) : size(len(environ))+environBufLen]             // make([]byte, environBufLen)
++		if environ_get(&environ[0], &environBuf[0]) != 0 {
++			throw("environ_get failed")
++		}
++
++		for i := range environCount {
++			start := environ[i] - uintptr32(uintptr(unsafe.Pointer(&environBuf[0])))
++			end := start
++			for environBuf[end] != 0 {
++				end++
++			}
++			s := unsafe.String(&environBuf[start], end-start)
++
++			if stringslite.HasPrefix(s, prefix) {
++				s = s[len(prefix):]
++				if stringslite.HasPrefix(s, "0x") {
++					s = s[2:]
++				}
++				if len(startupRand) < 16 {
++					startupRand = (*[16]byte)(unsafe.Pointer(&dstSeed))[:]
++				}
++				var l int
++				for l < 16 {
++					l += copy(startupRand[l:], s)
++				}
++				break
++			}
++		}
++	}
++}

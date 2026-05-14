@@ -26,14 +26,14 @@ func TestIterator(t *testing.T) {
 				t.Skip()
 			}
 			minv, maxv := slices.Min(src), slices.Max(src)
-			t.Logf("Encode len=%d minv=%d maxv=%d", len(src), minv, maxv)
+			// t.Logf("Encode len=%d minv=%d maxv=%d", len(src), minv, maxv)
 			buf, err := Encode(make([]byte, len(src)*8), src, minv, maxv)
 			require.NoError(t, err)
 
 			// --------------------------
 			// test next
 			//
-			it := NewIterator[uint64](buf, len(src), minv)
+			it := NewIterator(buf, len(src), minv)
 			require.Equal(t, len(src), it.Len(), "bad it len")
 			for i, v := range src {
 				val, ok := it.Next()
