@@ -76,7 +76,7 @@ index 005c875cbf..39a1ff9a81 100644
  // runqput tries to put g on the local runnable queue.
  // If next is false, runqput adds g to the tail of the runnable queue.
 diff --git a/src/runtime/rand.go b/src/runtime/rand.go
-index 1739e9f8f5..9ee8ffc32e 100644
+index 1739e9f8f5..b25aac673f 100644
 --- a/src/runtime/rand.go
 +++ b/src/runtime/rand.go
 @@ -11,6 +11,7 @@ import (
@@ -87,33 +87,30 @@ index 1739e9f8f5..9ee8ffc32e 100644
  	"unsafe"
  	_ "unsafe" // for go:linkname
  )
-@@ -33,6 +34,33 @@ var globalRand struct {
+@@ -33,6 +34,30 @@ var globalRand struct {
  
  var readRandomFailed bool
  
 +// DST: read user defined seed from env (will only take effect when >= 16 char long!)
 +func getGorandseed() {
 +	const prefix = "GORANDSEED="
-+	switch GOOS {
-+	case "aix", "darwin", "ios", "dragonfly", "freebsd", "netbsd", "openbsd", "illumos", "solaris", "linux", "wasip1":
-+		// Similar to goenv_unix but extracts the environment value for
-+		// GORANDSEED directly.
-+		n := int32(0)
-+		for argv_index(argv, argc+1+n) != nil {
-+			n++
-+		}
++	// Similar to goenv_unix but extracts the environment value for
++	// GORANDSEED directly.
++	n := int32(0)
++	for argv_index(argv, argc+1+n) != nil {
++		n++
++	}
 +
-+		for i := int32(0); i < n; i++ {
-+			p := argv_index(argv, argc+1+i)
-+			s := unsafe.String(p, findnull(p))
++	for i := int32(0); i < n; i++ {
++		p := argv_index(argv, argc+1+i)
++		s := unsafe.String(p, findnull(p))
 +
-+			if stringslite.HasPrefix(s, prefix) {
-+				if len(startupRand) < 16 {
-+					startupRand = make([]byte, 16)
-+				}
-+				copy(startupRand, s[len(prefix):])
-+				break
++		if stringslite.HasPrefix(s, prefix) {
++			if len(startupRand) < 16 {
++				startupRand = make([]byte, 16)
 +			}
++			copy(startupRand, s[len(prefix):])
++			break
 +		}
 +	}
 +}
@@ -121,7 +118,7 @@ index 1739e9f8f5..9ee8ffc32e 100644
  // randinit initializes the global random state.
  // It must be called before any use of grand.
  func randinit() {
-@@ -42,6 +70,10 @@ func randinit() {
+@@ -42,6 +67,10 @@ func randinit() {
  	}
  
  	seed := &globalRand.seed
