@@ -1,7 +1,17 @@
 # Scenario test runner
 
+Runs tests scenarios using Deterministic Simulation Testing (DST) with user defined random seeds which control the Go runtime. It requires single-threaded scheduling and some tweaks to the Go runtime. For this reason DST only works "deterministic" inside WASM.
+
+Read more about DST at https://www.polarsignals.com/blog/posts/2024/05/28/mostly-dst-in-go
+
+
+### Test runner
+
+```sh
+go run -buildvcs=true ./internal/tests/run/ -v -seed 0x123456789ABCDEF0 -logs ./retain-logs-here
+
+
 Arguments
-```
   -arch string
       test with arch wasm/native (default "native")
   -count int

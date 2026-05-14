@@ -4,10 +4,10 @@ package btree
 
 import (
 	"bytes"
-	"crypto/rand"
 	"iter"
 	"testing"
 
+	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -511,11 +511,10 @@ func TestMerge_RandomKeysWithDeletes(t *testing.T) {
 	for _, n := range sizes {
 		// generate n random unique keys
 		keySet := make(map[string]struct{})
-		var allKeys [][]byte
+		var allKeys []string
 		for len(allKeys) < n {
-			k := make([]byte, 16)
-			rand.Read(k)
-			if _, ok := keySet[string(k)]; !ok {
+			k := util.RandString(16)
+			if _, ok := keySet[k]; !ok {
 				keySet[string(k)] = struct{}{}
 				allKeys = append(allKeys, k)
 			}
@@ -534,7 +533,7 @@ func TestMerge_RandomKeysWithDeletes(t *testing.T) {
 		// base layer gets all
 		ctBase := NewChangeTree()
 		for _, k := range allKeys {
-			ctBase.Put(k, []byte("val"))
+			ctBase.Put([]byte(k), []byte("val"))
 		}
 
 		// top layer deletes some
