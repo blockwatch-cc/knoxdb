@@ -24,7 +24,6 @@ type Hasher interface {
 
 var (
 	Hash   = xxh3.Hash       // []byte
-	New    = xxh3.New        // Hasher
 	Vec8   = xxh3_u8_purego  // []uint8
 	Vec16  = xxh3_u16_purego // []uint16
 	Vec32  = xxh3_u32_purego // []uint32, AVX2, AVX512
@@ -37,6 +36,11 @@ var (
 	Zero = Hash([]byte{0})
 	One  = Hash([]byte{1})
 )
+
+func New() Hasher {
+	var h xxh3.Hasher
+	return &h
+}
 
 func Float64(v float64) uint64 {
 	u := math.Float64bits(v)

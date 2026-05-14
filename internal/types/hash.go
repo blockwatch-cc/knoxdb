@@ -3,7 +3,7 @@
 
 package types
 
-import "blockwatch.cc/knoxdb/internal/hash"
+import "github.com/zeebo/xxh3"
 
 type ObjectTag byte
 
@@ -54,7 +54,7 @@ func (t ObjectTag) String() string {
 }
 
 func TaggedHash(tag ObjectTag, name string) uint64 {
-	h := hash.New()
+	var h xxh3.Hasher
 	h.Write([]byte{byte(tag)})
 	h.WriteString(name)
 	return h.Sum64()
