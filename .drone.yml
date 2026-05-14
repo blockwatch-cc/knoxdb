@@ -66,6 +66,22 @@ steps:
       - vet
       - unit
 
+  - name: scenario native/mem/pack
+    image: hub.bwd.cx/go-dst:1.26.3-alpine
+    volumes:
+      - name: cache
+        path: /go
+    environment:
+      KNOX_DRIVER: mem
+      KNOX_ENGINE: pack
+    commands:
+      - apk add --no-cache git
+      - go run -buildvcs=true ./internal/tests/run -count 100 -arch native -logs /go/logs
+    depends_on:
+      - lint
+      - vet
+      - unit
+
   - name: scenario native/bolt/pack
     image: hub.bwd.cx/go-dst:1.26.3-alpine
     volumes:
@@ -81,3 +97,4 @@ steps:
       - lint
       - vet
       - unit
+
