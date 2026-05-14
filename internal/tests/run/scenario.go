@@ -82,13 +82,13 @@ func run() error {
 			for {
 				// ensure seed is at least 16 char long
 				rnd = util.RandUint64n(1<<64 - 1)
-				if len(strconv.FormatUint(rnd, 16)) >= 16 {
+				if len(strconv.FormatUint(rnd, 16)) == 16 {
 					break
 				}
 			}
 		}
 
-		os.Setenv(util.GORANDSEED, strconv.FormatUint(rnd, 16))
+		os.Setenv(util.GORANDSEED, "0x"+strconv.FormatUint(rnd, 16))
 
 		// create log file
 		now := time.Now().UTC()

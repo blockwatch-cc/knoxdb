@@ -6,7 +6,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"math/rand"
 	"os"
 	"strings"
 
@@ -24,7 +23,6 @@ var (
 	verbose   bool
 	vdebug    bool
 	vtrace    bool
-	random    *rand.Rand
 )
 
 func init() {
@@ -35,7 +33,7 @@ func init() {
 	flags.StringVar(&module, "module", "dst.test", "WASM module to run")
 	flags.StringVar(&cachedir, "cachedir", os.TempDir(), "WASM compiler cache directory")
 	flags.StringVar(&tracefile, "tracefile", "", "file activity trace file")
-	flags.StringVar(&seed, "seed", os.Getenv(util.GORANDSEED), "determinism seed")
+	flags.StringVar(&seed, "seed", os.Getenv(util.GORANDSEED), "determinism seed (format: 0x1234567890ABCDEF)")
 	flags.BoolVar(&randomize, "randomize", false, "randomize seeds")
 	flags.IntVar(&runs, "runs", 1, "execute test with `n` different seeds")
 }

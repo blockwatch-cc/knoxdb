@@ -93,7 +93,7 @@ index 1739e9f8f5..b25aac673f 100644
  
 +// DST: read user defined seed from env (will only take effect when >= 16 char long!)
 +func getGorandseed() {
-+	const prefix = "GORANDSEED="
++	const prefix = "GORANDSEED=0x"
 +	// Similar to goenv_unix but extracts the environment value for
 +	// GORANDSEED directly.
 +	n := int32(0)

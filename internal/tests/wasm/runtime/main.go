@@ -144,7 +144,7 @@ func run() error {
 	// Instantiate the guest Wasm into the same runtime.
 	for i := 0; i < runs; i++ {
 		if randomize {
-			seed = fmt.Sprintf("0x%016x", random.Uint64())
+			seed = fmt.Sprintf("0x%016x", util.RandUint64())
 		}
 		log.Debugf("Using random seed %s", seed)
 		config = config.WithEnv(util.GORANDSEED, seed)
