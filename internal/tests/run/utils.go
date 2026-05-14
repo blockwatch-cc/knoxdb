@@ -45,16 +45,19 @@ func init() {
 	flag.IntVar(&numCpu, "cpu", runtime.NumCPU(), "number of CPU cores to use for running tests")
 	flag.IntVar(&maxErrors, "max-errors", 1, "stop the test runner after N total observed errors")
 	flag.Float64Var(&maxErrorRate, "max-error-rate", 10, "stops the test runner when the rate of errors observed per second is greater than N (inclusive)")
-	flag.StringVar(&seedString, "seed", "", "comma separated list of random seeds")
+	flag.StringVar(&seedString, "seed", "", "comma separated list of random seeds (uint64, each min 16 char long)")
 	flag.DurationVar(&timeout, "timeout", time.Minute, "test run timeout (will abort and trace test run)")
 	flag.StringVar(&logPath, "logs", "", "output path for test failure logs")
 }
 
-func initFlags() {
+func initFlags() error {
 	flag.Parse()
 
 	if seedString != "" {
 		for v := range strings.SplitSeq(seedString, ",") {
+			if len(v) < 16 {
+				return fmt.Errorf("seed %q too short, need at least 16 chars", v)
+			}
 			val, _ := strconv.ParseUint(v, 0, 64)
 			seedList = append(seedList, val)
 		}
@@ -63,7 +66,7 @@ func initFlags() {
 	if enableVerbose {
 		log.SetLevel(log.LevelDebug)
 	}
-
+	return nil
 }
 
 func initStorage() error {

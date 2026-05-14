@@ -32,7 +32,9 @@ func main() {
 }
 
 func run() error {
-	initFlags()
+	if err := initFlags(); err != nil {
+		return err
+	}
 
 	// log repo and build identity info
 	logBuildInfo()
@@ -77,10 +79,16 @@ func run() error {
 		if len(seedList) > 0 {
 			rnd = seedList[round%len(seedList)]
 		} else {
-			rnd = util.RandUint64n(1<<64 - 1)
+			for {
+				// ensure seed is at least 16 char long
+				rnd = util.RandUint64n(1<<64 - 1)
+				if len(strconv.FormatUint(rnd, 16)) >= 16 {
+					break
+				}
+			}
 		}
 
-		os.Setenv(util.GORANDSEED, strconv.FormatUint(rnd, 10))
+		os.Setenv(util.GORANDSEED, strconv.FormatUint(rnd, 16))
 
 		// create log file
 		now := time.Now().UTC()

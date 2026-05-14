@@ -53,20 +53,19 @@ index ed4f646a62..70f8801cca 100644
  		return 0
  	}
 diff --git a/src/runtime/proc.go b/src/runtime/proc.go
-index 005c875cbf..0bea8f8b85 100644
+index 005c875cbf..39a1ff9a81 100644
 --- a/src/runtime/proc.go
 +++ b/src/runtime/proc.go
-@@ -873,7 +873,8 @@ func schedinit() {
+@@ -873,7 +873,7 @@ func schedinit() {
  	ticks.init() // run as early as possible
  	moduledataverify()
  	stackinit()
 -	randinit() // must run before mallocinit, alginit, mcommoninit
-+	goenvs()   // DST: read env variables like GORANDSEED before rand init
 +	randinit() // must run before mallocinit, AlgInit, mcommoninit
  	mallocinit()
  	cpuinit(godebug) // must run before alginit
  	alginit()        // maps, hash, rand must not be used before this call
-@@ -7468,7 +7469,8 @@ func runqempty(pp *p) bool {
+@@ -7468,7 +7468,8 @@ func runqempty(pp *p) bool {
  // With the randomness here, as long as the tests pass
  // consistently with -race, they shouldn't have latent scheduling
  // assumptions.
@@ -77,24 +76,58 @@ index 005c875cbf..0bea8f8b85 100644
  // runqput tries to put g on the local runnable queue.
  // If next is false, runqput adds g to the tail of the runnable queue.
 diff --git a/src/runtime/rand.go b/src/runtime/rand.go
-index 1739e9f8f5..063f4ff25e 100644
+index 1739e9f8f5..9ee8ffc32e 100644
 --- a/src/runtime/rand.go
 +++ b/src/runtime/rand.go
-@@ -42,6 +42,18 @@ func randinit() {
+@@ -11,6 +11,7 @@ import (
+ 	"internal/chacha8rand"
+ 	"internal/goarch"
+ 	"internal/runtime/math"
++	"internal/stringslite"
+ 	"unsafe"
+ 	_ "unsafe" // for go:linkname
+ )
+@@ -33,6 +34,33 @@ var globalRand struct {
+ 
+ var readRandomFailed bool
+ 
++// DST: read user defined seed from env (will only take effect when >= 16 char long!)
++func getGorandseed() {
++	const prefix = "GORANDSEED="
++	switch GOOS {
++	case "aix", "darwin", "ios", "dragonfly", "freebsd", "netbsd", "openbsd", "illumos", "solaris", "linux", "wasip1":
++		// Similar to goenv_unix but extracts the environment value for
++		// GORANDSEED directly.
++		n := int32(0)
++		for argv_index(argv, argc+1+n) != nil {
++			n++
++		}
++
++		for i := int32(0); i < n; i++ {
++			p := argv_index(argv, argc+1+i)
++			s := unsafe.String(p, findnull(p))
++
++			if stringslite.HasPrefix(s, prefix) {
++				if len(startupRand) < 16 {
++					startupRand = make([]byte, 16)
++				}
++				copy(startupRand, s[len(prefix):])
++				break
++			}
++		}
++	}
++}
++
+ // randinit initializes the global random state.
+ // It must be called before any use of grand.
+ func randinit() {
+@@ -42,6 +70,10 @@ func randinit() {
  	}
  
  	seed := &globalRand.seed
 +
-+
-+    // DST: allow user defined seed
-+    psSeed := gogetenv("GORANDSEED")
-+    if psSeed != "" {
-+        // println("Go runtime is using GORANDSEED=", psSeed)
-+        startupRand = make([]byte, len(psSeed))
-+        for i, c := range psSeed {
-+            startupRand[i] = byte(c)
-+        }
-+    }
++	// DST: allow user defined seed
++	getGorandseed()
 +
  	if len(startupRand) >= 16 &&
  		// Check that at least the first two words of startupRand weren't
