@@ -48,8 +48,8 @@ func NewLookupIterator(idx *Index, keys []uint64, useCache bool) *LookupIterator
 		idx:      idx,
 		useCache: useCache,
 		btypes: [2]types.BlockType{
-			idx.sstore.Fields[0].Type.BlockType(),
-			idx.sstore.Fields[1].Type.BlockType(),
+			types.ToBlockType(idx.sstore.Fields[0].Type),
+			types.ToBlockType(idx.sstore.Fields[1].Type),
 		},
 	}
 }
@@ -275,8 +275,8 @@ func NewScanIterator(idx *Index, node *filter.Node, useCache bool) *ScanIterator
 		bits:     bitset.New(idx.opts.PackSize),
 		useCache: useCache,
 		btypes: [2]types.BlockType{
-			idx.sstore.Fields[0].Type.BlockType(),
-			idx.sstore.Fields[1].Type.BlockType(),
+			types.ToBlockType(idx.sstore.Fields[0].Type),
+			types.ToBlockType(idx.sstore.Fields[1].Type),
 		},
 	}
 }

@@ -49,17 +49,17 @@ var (
 	)
 )
 
-func NewCompressor(w io.Writer, c BlockCompression) io.WriteCloser {
+func NewCompressor(w io.Writer, c Compression) io.WriteCloser {
 	switch c {
-	case BlockCompressSnappy:
+	case CompressSnappy:
 		enc := snappyWriterPool.Get().(*s2.Writer)
 		enc.Reset(w)
 		return &pooledWriteCloser{pool: snappyWriterPool, w: enc}
-	case BlockCompressLZ4:
+	case CompressLZ4:
 		enc := lz4WriterPool.Get().(*lz4.Writer)
 		enc.Reset(w)
 		return &pooledWriteCloser{pool: lz4WriterPool, w: enc}
-	case BlockCompressZstd:
+	case CompressZstd:
 		enc := zstdWriterPool.Get().(*zstd.Encoder)
 		enc.Reset(w)
 		return &pooledWriteCloser{pool: zstdWriterPool, w: enc}
@@ -68,17 +68,17 @@ func NewCompressor(w io.Writer, c BlockCompression) io.WriteCloser {
 	}
 }
 
-func NewDecompressor(r io.Reader, c BlockCompression) io.ReadCloser {
+func NewDecompressor(r io.Reader, c Compression) io.ReadCloser {
 	switch c {
-	case BlockCompressSnappy:
+	case CompressSnappy:
 		dec := snappyReaderPool.Get().(*s2.Reader)
 		dec.Reset(r)
 		return &pooledReadCloser{pool: snappyReaderPool, r: dec}
-	case BlockCompressLZ4:
+	case CompressLZ4:
 		dec := lz4ReaderPool.Get().(*lz4.Reader)
 		dec.Reset(r)
 		return &pooledReadCloser{pool: lz4WriterPool, r: dec}
-	case BlockCompressZstd:
+	case CompressZstd:
 		dec := zstdReaderPool.Get().(*zstd.Decoder)
 		dec.Reset(r)
 		return &pooledReadCloser{pool: zstdWriterPool, r: dec}

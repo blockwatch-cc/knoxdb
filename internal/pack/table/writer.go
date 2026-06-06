@@ -153,7 +153,7 @@ func (w *Writer) Replace(ctx context.Context, src *pack.Package, mode engine.Wri
 	w.tail = pack.New().
 		WithKey(src.Key()).
 		WithVersion(src.Version() + 1).
-		WithSchema(w.table.schema).
+		WithSchema(w.table.schema.Schema).
 		WithMaxRows(w.table.opts.PackSize).
 		Alloc()
 	w.vtail = src.Version()
@@ -281,7 +281,7 @@ func (w *Writer) appendTail(ctx context.Context, src *pack.Package, mode pack.Wr
 			w.tail = pack.New().
 				WithKey(w.stats.NextKey()).
 				WithVersion(1).
-				WithSchema(w.table.schema).
+				WithSchema(w.table.schema.Schema).
 				WithMaxRows(w.table.opts.PackSize).
 				Alloc()
 			w.wasFull = false
@@ -382,7 +382,7 @@ func (w *Writer) loadTail(ctx context.Context) (*pack.Package, error) {
 	pkg := pack.New().
 		WithKey(key).
 		WithVersion(ver).
-		WithSchema(w.table.schema).
+		WithSchema(w.table.schema.Schema).
 		WithMaxRows(w.table.opts.PackSize)
 
 	// try load from cache using tableid as cache tag

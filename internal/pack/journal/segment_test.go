@@ -17,11 +17,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var testSchema = reflect.MustSchemaFor[reflect.BaseModel]()
+type BaseModel struct {
+	Id uint64 `knox:"id,pk"`
+}
+
+var testSchema, _ = types.MakeTableSchema(reflect.MustSchemaFor[BaseModel]())
 
 func TestSegmentInsert(t *testing.T) {
-	seg := newSegment(testSchema.WithMeta(), 42, 8).setState(SegmentStateActive)
-	enc := encode.NewEncoderFor[reflect.BaseModel]()
+	seg := newSegment(testSchema.Schema, 42, 8).setState(SegmentStateActive)
+	enc := encode.NewEncoderFor[BaseModel]()
 	require.Equal(t, uint32(42), seg.Id())
 	require.NotNil(t, seg.Data())
 	require.NotNil(t, seg.Tomb())
@@ -33,7 +37,7 @@ func TestSegmentInsert(t *testing.T) {
 	require.False(t, seg.ContainsRid(1))
 
 	// insert val
-	buf, err := enc.Encode(reflect.BaseModel{Id: 1}, nil)
+	buf, err := enc.Encode(BaseModel{Id: 1}, nil)
 	require.NoError(t, err)
 	seg.InsertRecord(1, 1, buf)
 	require.Equal(t, 1, seg.Data().Len())
@@ -52,16 +56,16 @@ func TestSegmentInsert(t *testing.T) {
 }
 
 func TestSegmentUpdate(t *testing.T) {
-	seg := newSegment(testSchema.WithMeta(), 42, 8).setState(SegmentStateActive)
-	enc := encode.NewEncoderFor[reflect.BaseModel]()
+	seg := newSegment(testSchema.Schema, 42, 8).setState(SegmentStateActive)
+	enc := encode.NewEncoderFor[BaseModel]()
 
 	// insert val1
-	buf, err := enc.Encode(reflect.BaseModel{Id: 1}, nil)
+	buf, err := enc.Encode(BaseModel{Id: 1}, nil)
 	require.NoError(t, err)
 	seg.InsertRecord(1, 1, buf)
 
 	// update val
-	buf, err = enc.Encode(reflect.BaseModel{Id: 2}, nil)
+	buf, err = enc.Encode(BaseModel{Id: 2}, nil)
 	require.NoError(t, err)
 	seg.UpdateRecord(1, 2, 1, buf)
 	require.True(t, seg.ContainsTx(1))
@@ -82,14 +86,14 @@ func TestSegmentUpdate(t *testing.T) {
 }
 
 func TestSegmentDelete(t *testing.T) {
-	seg := newSegment(testSchema.WithMeta(), 42, 8).setState(SegmentStateActive)
-	enc := encode.NewEncoderFor[reflect.BaseModel]()
+	seg := newSegment(testSchema.Schema, 42, 8).setState(SegmentStateActive)
+	enc := encode.NewEncoderFor[BaseModel]()
 
 	// insert val 1 & 2 and commit
-	buf, err := enc.Encode(reflect.BaseModel{Id: 1}, nil)
+	buf, err := enc.Encode(BaseModel{Id: 1}, nil)
 	require.NoError(t, err)
 	seg.InsertRecord(1, 1, buf)
-	buf, err = enc.Encode(reflect.BaseModel{Id: 2}, nil)
+	buf, err = enc.Encode(BaseModel{Id: 2}, nil)
 	require.NoError(t, err)
 	seg.InsertRecord(1, 2, buf)
 	seg.CommitTx(1)
@@ -125,29 +129,29 @@ func TestSegmentMatch(t *testing.T) {
 	// 4 xids: 1 aborted, 2 committed, 1 open
 	// insert, update, delete mix
 	// snapshot at 3rd xid
-	seg := newSegment(testSchema.WithMeta(), 42, 8).setState(SegmentStateActive)
-	enc := encode.NewEncoderFor[reflect.BaseModel]()
+	seg := newSegment(testSchema.Schema, 42, 8).setState(SegmentStateActive)
+	enc := encode.NewEncoderFor[BaseModel]()
 
 	// xid 1 committed
-	buf, err := enc.Encode(reflect.BaseModel{Id: 1}, nil)
+	buf, err := enc.Encode(BaseModel{Id: 1}, nil)
 	require.NoError(t, err)
 	seg.InsertRecord(1, 1, buf)
 	seg.CommitTx(1)
 
 	// xid 2 aborted
-	buf, err = enc.Encode(reflect.BaseModel{Id: 2}, nil)
+	buf, err = enc.Encode(BaseModel{Id: 2}, nil)
 	require.NoError(t, err)
 	seg.InsertRecord(2, 2, buf)
 	seg.AbortTx(2)
 
 	// xid 3 committed, replaces rid 1
-	buf, err = enc.Encode(reflect.BaseModel{Id: 1}, nil)
+	buf, err = enc.Encode(BaseModel{Id: 1}, nil)
 	require.NoError(t, err)
 	seg.UpdateRecord(3, 2, 1, buf)
 	seg.CommitTx(3)
 
 	// xid 4 open
-	buf, err = enc.Encode(reflect.BaseModel{Id: 3}, nil)
+	buf, err = enc.Encode(BaseModel{Id: 3}, nil)
 	require.NoError(t, err)
 	seg.InsertRecord(4, 3, buf)
 
@@ -182,13 +186,13 @@ func TestSegmentMatch(t *testing.T) {
 }
 
 func TestSegmentStateUpdates(t *testing.T) {
-	seg := newSegment(testSchema.WithMeta(), 42, 8).
+	seg := newSegment(testSchema.Schema, 42, 8).
 		setState(SegmentStateActive).
 		WithState(engine.NewObjectState("test")).
 		setCheckpoint(42)
-	enc := encode.NewEncoderFor[reflect.BaseModel]()
+	enc := encode.NewEncoderFor[BaseModel]()
 	makeRecord := func(i int) []byte {
-		buf, err := enc.Encode(reflect.BaseModel{Id: uint64(i)}, nil)
+		buf, err := enc.Encode(BaseModel{Id: uint64(i)}, nil)
 		require.NoError(t, err)
 		return buf
 	}

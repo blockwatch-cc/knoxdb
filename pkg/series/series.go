@@ -111,9 +111,9 @@ func (r Request) Query(key string) (*query.QueryPlan, error) {
 	if err != nil {
 		return nil, err
 	}
-	s.WithName(key)
+	s.As(key)
 
-	filters, err := query.Range("time", r.Range.From, r.Range.To).Compile(r.table.Schema())
+	filters, err := query.Range("time", r.Range.From, r.Range.To).Compile(r.table.Schema().Base())
 	if err != nil {
 		return nil, err
 	}

@@ -10,7 +10,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/operator/filter"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/pkg/schema"
-	"blockwatch.cc/knoxdb/pkg/schema/encode"
+	"blockwatch.cc/knoxdb/pkg/schema/reflect"
 )
 
 const (
@@ -37,45 +37,49 @@ type Record struct {
 	view *schema.View
 }
 
-var _ engine.StatsReader = (*Record)(nil)
+var (
+	// will use record schema for derived metadata schemas
+	RecordSchema = reflect.MustSchemaFor[Record]()
+
+	// buffers are written in little endian
+	LE = binary.LittleEndian
+
+	// ensure record implements stats reader interface
+	_ engine.StatsReader = (*Record)(nil)
+)
 
 func NewRecordFromWire(s *schema.Schema, buf []byte) *Record {
 	r := &Record{
 		view: schema.NewView(s).Reset(buf),
 	}
-	if val, ok := r.view.Get(STATS_ROW_KEY); ok {
+	if val := r.view.Get(STATS_ROW_KEY); val != nil {
 		r.Key = val.(uint32)
 	}
-	if val, ok := r.view.Get(STATS_ROW_VERSION); ok {
+	if val := r.view.Get(STATS_ROW_VERSION); val != nil {
 		r.Version = val.(uint32)
 	}
-	if val, ok := r.view.Get(STATS_ROW_SCHEMA); ok {
+	if val := r.view.Get(STATS_ROW_SCHEMA); val != nil {
 		r.SchemaId = val.(uint64)
 	}
-	if val, ok := r.view.Get(STATS_ROW_NVALS); ok {
+	if val := r.view.Get(STATS_ROW_NVALS); val != nil {
 		r.NValues = val.(uint64)
 	}
-	if val, ok := r.view.Get(STATS_ROW_SIZE); ok {
+	if val := r.view.Get(STATS_ROW_SIZE); val != nil {
 		r.DiskSize = val.(int64)
 	}
 	return r
 }
 
 func (r *Record) MinMax(col int) (any, any) {
-	minx, maxx := minColIndex(col), maxColIndex(col)
-	minv, _ := r.view.Get(minx)
-	maxv, _ := r.view.Get(maxx)
-	return minv, maxv
+	return r.view.Get(minColIndex(col)), r.view.Get(maxColIndex(col))
 }
 
 func (r *Record) Min(col int) any {
-	minv, _ := r.view.Get(minColIndex(col))
-	return minv
+	return r.view.Get(minColIndex(col))
 }
 
 func (r *Record) Max(col int) any {
-	maxv, _ := r.view.Get(maxColIndex(col))
-	return maxv
+	return r.view.Get(maxColIndex(col))
 }
 
 func (r Record) View() *schema.View {
@@ -93,12 +97,12 @@ func NewRecordFromPack(pkg *pack.Package, n int) *Record {
 		view:     schema.NewView(s),
 	}
 	pstats := pkg.Stats()
-	wr := encode.NewWriter(s, binary.LittleEndian)
-	wr.Write(STATS_ROW_KEY, pkg.Key())
-	wr.Write(STATS_ROW_VERSION, pkg.Version())
-	wr.Write(STATS_ROW_SCHEMA, pkg.Schema().Hash)
-	wr.Write(STATS_ROW_NVALS, uint64(pkg.Len()))
-	wr.Write(STATS_ROW_SIZE, pstats.SizeDiff())
+	wr := s.NewBuffer(1)
+	s.Fields[STATS_ROW_KEY].WriteValue(wr, rec.Key, LE)
+	s.Fields[STATS_ROW_VERSION].WriteValue(wr, rec.Version, LE)
+	s.Fields[STATS_ROW_SCHEMA].WriteValue(wr, rec.SchemaId, LE)
+	s.Fields[STATS_ROW_NVALS].WriteValue(wr, rec.NValues, LE)
+	s.Fields[STATS_ROW_SIZE].WriteValue(wr, rec.DiskSize+pstats.SizeDiff(), LE)
 
 	for i, b := range pkg.Blocks() {
 		var minv, maxv any
@@ -116,47 +120,9 @@ func NewRecordFromPack(pkg *pack.Package, n int) *Record {
 		minx, maxx := minColIndex(i), maxColIndex(i)
 
 		// append statistics values
-		wr.Write(minx, minv)
-		wr.Write(maxx, maxv)
+		s.Fields[minx].WriteValue(wr, minv, LE)
+		s.Fields[maxx].WriteValue(wr, maxv, LE)
 	}
 	rec.view.Reset(wr.Bytes())
-	wr.Reset()
 	return rec
-}
-
-func (r *Record) Update(pkg *pack.Package) {
-	pstats := pkg.Stats()
-	wr := encode.NewWriter(r.view.Schema(), binary.LittleEndian)
-	wr.Write(STATS_ROW_KEY, pkg.Key())
-	wr.Write(STATS_ROW_VERSION, pkg.Version())
-	wr.Write(STATS_ROW_SCHEMA, pkg.Schema().Hash)
-	wr.Write(STATS_ROW_NVALS, uint64(pkg.Len()))
-	wr.Write(STATS_ROW_SIZE, r.DiskSize+pstats.SizeDiff())
-
-	for i, b := range pkg.Blocks() {
-		// calculate data column positions inside statistics schema
-		minx, maxx := minColIndex(i), maxColIndex(i)
-
-		var minv, maxv any
-		switch {
-		case b == nil:
-			// use zero values for invalid blocks (deleted from schema)
-			minv = filter.ValueType(b.Type()).Zero()
-			maxv = minv
-		case b.IsDirty():
-			// use min/max statistics
-			minv = pstats.MinMax[i][0]
-			maxv = pstats.MinMax[i][1]
-		default:
-			// reuse existing values when block is not dirty
-			minv, _ = r.view.Get(minx)
-			maxv, _ = r.view.Get(maxx)
-		}
-
-		// append statistics values
-		wr.Write(minx, minv)
-		wr.Write(maxx, maxv)
-	}
-	r.view.Reset(wr.Bytes())
-	wr.Reset()
 }

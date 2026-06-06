@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"blockwatch.cc/knoxdb/pkg/schema/types"
+	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
 type TimeFormat int
@@ -146,7 +146,7 @@ func ParseTime(value string) (Time, error) {
 
 	default:
 		// 3rd try the different time formats from most to least specific
-		_, scale, isTimeOnly, ok := types.DetectTimeFormat(value)
+		_, scale, isTimeOnly, ok := schema.DetectTimeFormat(value)
 		if ok {
 			t, err := scale.ParseTime(value, isTimeOnly)
 			if err == nil {
@@ -157,7 +157,7 @@ func ParseTime(value string) (Time, error) {
 					hour, min, sec := t.Clock()
 					t = time.Date(yy, mm, dd, hour, min, sec, t.Nanosecond(), t.Location())
 				}
-				if scale == types.TIME_SCALE_DAY {
+				if scale == schema.TIME_SCALE_DAY {
 					return Time{tm: t, format: TimeFormatDate}, nil
 				}
 				return Time{tm: t}, nil

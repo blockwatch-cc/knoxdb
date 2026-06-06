@@ -279,9 +279,7 @@ func (j *Journal) updatePackWithWal(src *pack.Package, xid types.XID, w *wal.Wal
 				writeBinaryUvarint(msg, ref)
 
 				// extract wire change format for the record
-				if err := src.ReadWireFields(msg, i, changed); err != nil {
-					return 0, err
-				}
+				src.ReadWireFields(msg, i, changed)
 
 				// add insert + delete info, set xmax on ref when in tip segment
 				j.tip.NotifyUpdate(xid, nextRid, ref)
@@ -323,9 +321,7 @@ func (j *Journal) updatePackWithWal(src *pack.Package, xid types.XID, w *wal.Wal
 				writeBinaryUvarint(msg, ref)
 
 				// extract wire change format for this record
-				if err := src.ReadWireFields(msg, int(v), changed); err != nil {
-					return 0, err
-				}
+				src.ReadWireFields(msg, int(v), changed)
 
 				// add insert + delete record, set xmax on ref when in tip segment
 				j.tip.NotifyUpdate(xid, nextRid, ref)

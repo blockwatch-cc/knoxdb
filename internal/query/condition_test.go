@@ -112,7 +112,7 @@ func TestConditionParse(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			parsed, err := ParseCondition(tt.key, tt.val, testSchema)
+			parsed, err := ParseCondition(tt.key, tt.val, testSchema.Schema)
 			if tt.wantErr {
 				require.Error(t, err)
 			} else {
@@ -322,7 +322,7 @@ func TestConditionCompile(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// compile error
-			_, err := tt.cond.Compile(testSchema)
+			_, err := tt.cond.Compile(testSchema.Schema)
 			if tt.wantErr {
 				assert.Error(t, err, "compile error for %s", tt.cond)
 			} else {
@@ -598,7 +598,7 @@ func BenchmarkConditionTree(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				_, err := c.Compile(testSchema)
+				_, err := c.Compile(testSchema.Schema)
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -615,9 +615,9 @@ func FuzzConditionParse(f *testing.F) {
 	f.Add("name", "test")
 
 	f.Fuzz(func(t *testing.T, field, value string) {
-		c, err := ParseCondition(field, value, testSchema)
+		c, err := ParseCondition(field, value, testSchema.Schema)
 		if err == nil {
-			_, err = c.Compile(testSchema)
+			_, err = c.Compile(testSchema.Schema)
 			if err != nil {
 				t.Errorf("valid parse but invalid compile: %v", err)
 			}

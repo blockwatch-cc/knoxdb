@@ -123,7 +123,7 @@ func (t *Table) Count(ctx context.Context, q engine.QueryPlan) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	plan.ResultSchema = rs.WithName("count")
+	plan.ResultSchema = rs.As("count")
 
 	// use count result
 	res := query.NewCountResult()

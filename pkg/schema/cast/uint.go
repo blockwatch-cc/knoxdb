@@ -9,12 +9,12 @@ import (
 	"strconv"
 
 	"blockwatch.cc/knoxdb/pkg/num"
-	"blockwatch.cc/knoxdb/pkg/schema/types"
+	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 // uint caster
-type UintCaster[T types.Unsigned] struct{}
+type UintCaster[T schema.Unsigned] struct{}
 
 func (c UintCaster[T]) CastValue(val any) (res any, err error) {
 	var ok bool

@@ -43,7 +43,7 @@ func (t *Table) UpdateRows(ctx context.Context, buf []byte) (int, error) {
 	if len(buf) == 0 {
 		return 0, nil
 	}
-	if len(buf) < t.schema.WireSize() {
+	if len(buf) < t.schema.MinWireSize {
 		return 0, engine.ErrShortMessage
 	}
 
@@ -61,8 +61,8 @@ func (t *Table) UpdateRows(ctx context.Context, buf []byte) (int, error) {
 
 	// extract list of primary keys
 	var (
-		view = schema.NewView(t.schema)
-		pks  = make([]uint64, 0, len(buf)/t.schema.WireSize()) // upper bound
+		view = schema.NewView(t.schema.Schema)
+		pks  = make([]uint64, 0, len(buf)/t.schema.MinWireSize) // upper bound
 	)
 
 	// split buf into wire messages

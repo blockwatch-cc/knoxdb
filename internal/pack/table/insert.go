@@ -56,7 +56,7 @@ func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, int, error)
 	if len(buf) == 0 {
 		return 0, 0, nil
 	}
-	if len(buf) < t.schema.WireSize() {
+	if len(buf) < t.schema.MinWireSize {
 		return 0, 0, engine.ErrShortMessage
 	}
 
@@ -94,7 +94,7 @@ func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, int, error)
 // mix of materialized and not materialized, with or without selection vector)
 func (t *Table) InsertInto(ctx context.Context, src *pack.Package) (uint64, int, error) {
 	// ensure pack schemas match
-	if !src.Schema().Equal(t.schema) {
+	if !src.Schema().Equal(t.schema.Schema) {
 		return 0, 0, schema.ErrSchemaMismatch
 	}
 

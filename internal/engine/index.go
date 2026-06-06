@@ -30,7 +30,7 @@ func (e *Engine) IndexNames(tableName string) []string {
 	idxs := table.Indexes()
 	names := make([]string, 0, len(idxs))
 	for _, v := range idxs {
-		names = append(names, v.Schema().Name)
+		names = append(names, v.IndexSchema().Name)
 	}
 	return names
 }
@@ -69,8 +69,10 @@ func (e *Engine) CreateIndex(ctx context.Context, s *schema.IndexSchema, options
 		return nil, fmt.Errorf("%s: %v", s.Base.Name, ErrNoTable)
 	}
 
-	// schema must be a child of table schema
-	if !table.Schema().Equal(s.Base) {
+	// schema must be a child of table schema; rebase to table schema
+	// because only this contains metadata
+	s, ok = s.Rebase(table.Schema().Base())
+	if !ok {
 		return nil, schema.ErrSchemaMismatch
 	}
 
@@ -256,7 +258,7 @@ func (e *Engine) DropIndex(ctx context.Context, name string) error {
 	return commit()
 }
 
-func (e *Engine) openIndexes(ctx context.Context, table TableEngine, ts *schema.Schema) error {
+func (e *Engine) openIndexes(ctx context.Context, table TableEngine, ts *TableSchema) error {
 	// tag := types.TaggedHash(types.ObjectTagTable, table.Schema().Name)
 	tag := types.TaggedHash(types.ObjectTagTable, ts.Name)
 

@@ -13,7 +13,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/assert"
 	"blockwatch.cc/knoxdb/pkg/num"
-	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
@@ -40,15 +39,15 @@ func (p *Package) AppendWire(buf []byte, meta *types.Meta) {
 		if field.IsMeta() {
 			if meta != nil {
 				switch field.Id {
-				case schema.MetaRid:
+				case types.MetaRid:
 					b.Uint64().Append(meta.Rid)
-				case schema.MetaRef:
+				case types.MetaRef:
 					b.Uint64().Append(meta.Ref)
-				case schema.MetaXmin:
+				case types.MetaXmin:
 					b.Uint64().Append(uint64(meta.Xmin))
-				case schema.MetaXmax:
+				case types.MetaXmax:
 					b.Uint64().Append(uint64(meta.Xmax))
-				case schema.MetaDel:
+				case types.MetaDel:
 					b.Bool().Append(meta.IsDel)
 				}
 			} else {

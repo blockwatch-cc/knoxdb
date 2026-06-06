@@ -90,12 +90,12 @@ func TestCompositeIndexEngine[T any, F IF[T]](t *testing.T, driver, eng string, 
 			indexSchema := &schema.IndexSchema{
 				Name:   "test_index",
 				Type:   types.IT_COMPOSITE,
-				Base:   ts,
+				Base:   ts.Base(),
 				Fields: ss.Fields,
 			}
 
 			var indexEngine F = new(T)
-			c.Run(t, e, table, ts, topts, indexEngine, indexSchema, iopts)
+			c.Run(t, e, table, ts.Base(), topts, indexEngine, indexSchema, iopts)
 		})
 	}
 }

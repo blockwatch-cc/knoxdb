@@ -7,6 +7,7 @@ import (
 	"context"
 
 	"blockwatch.cc/knoxdb/internal/engine"
+	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
@@ -37,8 +38,7 @@ func (idx *MockIndex) IndexSchema() *schema.IndexSchema {
 }
 
 func (idx *MockIndex) Schema() *schema.Schema {
-	s, _ := idx.schema.StorageSchema()
-	return s
+	return idx.schema.Base
 }
 
 func (idx *MockIndex) IsComposite() bool {
@@ -65,12 +65,12 @@ func (idx *MockIndex) Lookup(_ context.Context, pks []uint64, ridMap map[uint64]
 }
 
 type MockTable struct {
-	schema  *schema.Schema
+	schema  *types.TableSchema
 	indexes []engine.QueryableIndex
 	result  engine.QueryResult
 }
 
-func NewMockTable(s *schema.Schema, idxs []engine.QueryableIndex, res engine.QueryResult) engine.QueryableTable {
+func NewMockTable(s *types.TableSchema, idxs []engine.QueryableIndex, res engine.QueryResult) engine.QueryableTable {
 	return &MockTable{
 		schema:  s,
 		indexes: idxs,
@@ -78,7 +78,7 @@ func NewMockTable(s *schema.Schema, idxs []engine.QueryableIndex, res engine.Que
 	}
 }
 
-func (t *MockTable) Schema() *schema.Schema {
+func (t *MockTable) Schema() *types.TableSchema {
 	return t.schema
 }
 

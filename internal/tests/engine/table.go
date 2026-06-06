@@ -118,8 +118,10 @@ func CreateTable(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts en
 	defer abort()
 
 	// extend schema with enums and metadata (same as engine would do)
-	s = s.Clone().WithEnums(e.CloneEnums(s.EnumNames()...)).WithMeta().Finalize()
-	require.NoError(t, tab.Create(ctx, s, opts.TableOptions()...))
+	s = s.Clone().UseEnums(e.CloneEnums(s.EnumNames()...)).Finalize()
+	ts, err := types.MakeTableSchema(s)
+	require.NoError(t, err)
+	require.NoError(t, tab.Create(ctx, ts, opts.TableOptions()...))
 	require.NoError(t, commit())
 
 	// reopen read-only if requested
@@ -128,7 +130,7 @@ func CreateTable(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts en
 		ctx, _, commit, abort, err = e.WithTransaction(context.Background())
 		require.NoError(t, err)
 		defer abort()
-		require.NoError(t, tab.Open(ctx, s, opts.TableOptions()...))
+		require.NoError(t, tab.Open(ctx, ts, opts.TableOptions()...))
 		require.NoError(t, commit())
 	}
 }
@@ -154,7 +156,7 @@ func InsertData(t *testing.T, e *engine.Engine, tab engine.TableEngine) {
 	}
 
 	var cnt int
-	enc := encode.NewEncoder(tab.Schema())
+	enc := encode.NewEncoder(tab.Schema().Base())
 	for _, rec := range data {
 		buf, err := enc.Encode(rec, nil)
 		require.NoError(t, err)
@@ -188,8 +190,10 @@ func OpenTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts 
 	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
 	defer abort()
 	require.NoError(t, err)
-	s := allTypesSchema.Clone().WithEnums(e.CloneEnums(allTypesSchema.EnumNames()...)).Finalize()
-	require.NoError(t, tab.Open(ctx, s, opts.TableOptions()...))
+	s := allTypesSchema.Clone().UseEnums(e.CloneEnums(allTypesSchema.EnumNames()...)).Finalize()
+	ts, err := types.MakeTableSchema(s)
+	require.NoError(t, err)
+	require.NoError(t, tab.Open(ctx, ts, opts.TableOptions()...))
 	require.NoError(t, commit())
 }
 
@@ -253,7 +257,7 @@ func InsertRowsReadOnlyTableTest(t *testing.T, e *engine.Engine, tab engine.Tabl
 	defer abort()
 	require.NoError(t, err)
 
-	enc := encode.NewEncoder(tab.Schema())
+	enc := encode.NewEncoder(tab.Schema().Base())
 	buf, err := enc.Encode(NewAllTypes(10), nil)
 	require.NoError(t, err)
 
@@ -269,11 +273,14 @@ func UpdateRowsTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine,
 	InsertData(t, e, tab)
 
 	// create fake pk index
-	idxSchema := schema.NewIndexSchema(types.IT_PK, tab.Schema(), tab.Schema().Pk(), tab.Schema().RowId())
+	idxSchema := schema.NewIndexSchema(types.IT_PK, tab.Schema().Base(),
+		schema.WithIndexFieldId(tab.Schema().PkId()),
+		schema.WithIndexFieldId(types.MetaRid),
+	)
 	idx := query.NewMockIndex(idxSchema, xroar.New())
 	tab.ConnectIndex(idx)
 
-	enc := encode.NewEncoder(tab.Schema())
+	enc := encode.NewEncoder(tab.Schema().Base())
 	data := make([]*AllTypes, 10)
 	for i := range data {
 		data[i] = NewAllTypes(i)
@@ -301,8 +308,8 @@ func QueryTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts
 	require.NoError(t, err)
 
 	plan := query.NewQueryPlan().
-		WithFilters(makeFilter(tab.Schema(), "id", EQ, 5, nil)).
-		WithSchema(tab.Schema()).
+		WithFilters(makeFilter(tab.Schema().Base(), "id", EQ, 5, nil)).
+		WithSchema(tab.Schema().Base()).
 		WithLimit(10).
 		WithTable(tab)
 	if testing.Verbose() {
@@ -328,8 +335,8 @@ func CountTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts
 	require.NoError(t, err)
 
 	plan := query.NewQueryPlan().
-		WithFilters(makeFilter(tab.Schema(), "id", LT, 5, nil)).
-		WithSchema(tab.Schema()).
+		WithFilters(makeFilter(tab.Schema().Base(), "id", LT, 5, nil)).
+		WithSchema(tab.Schema().Base()).
 		WithLimit(10).
 		WithTable(tab)
 	if testing.Verbose() {
@@ -354,8 +361,8 @@ func DeleteTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opt
 	require.NoError(t, err)
 
 	plan := query.NewQueryPlan().
-		WithFilters(makeFilter(tab.Schema(), "id", GE, 5, nil)).
-		WithSchema(tab.Schema()).
+		WithFilters(makeFilter(tab.Schema().Base(), "id", GE, 5, nil)).
+		WithSchema(tab.Schema().Base()).
 		WithLimit(10).
 		WithTable(tab)
 	if testing.Verbose() {
@@ -380,8 +387,8 @@ func StreamTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opt
 	require.NoError(t, err)
 
 	plan := query.NewQueryPlan().
-		WithFilters(makeFilter(tab.Schema(), "id", LT, 5, nil)).
-		WithSchema(tab.Schema()).
+		WithFilters(makeFilter(tab.Schema().Base(), "id", LT, 5, nil)).
+		WithSchema(tab.Schema().Base()).
 		WithLimit(10).
 		WithTable(tab)
 	if testing.Verbose() {

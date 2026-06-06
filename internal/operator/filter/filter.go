@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 
+	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
@@ -29,11 +30,12 @@ type Filter struct {
 }
 
 func NewFilter(f *schema.Field, idx int, mode FilterMode, val any) *Filter {
-	m := newFactory(f.Type.BlockType()).New(mode)
+	typ := types.ToBlockType(f.Type)
+	m := newFactory(typ).New(mode)
 	m.WithValue(val)
 	return &Filter{
 		Name:    f.Name,
-		Type:    ValueType(f.Type.BlockType()),
+		Type:    ValueType(typ),
 		Mode:    mode,
 		Index:   idx,
 		Id:      f.Id,

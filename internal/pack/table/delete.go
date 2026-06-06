@@ -14,7 +14,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/pack/journal"
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
 var _ engine.QueryResultConsumer = (*DeleteAdapter)(nil)
@@ -114,11 +113,11 @@ func (t *Table) Delete(ctx context.Context, q engine.QueryPlan) (int, error) {
 	}
 
 	// amend query plan to only output rid field
-	rs, err := t.schema.SelectIds(schema.MetaRid)
+	rs, err := t.schema.SelectIds(types.MetaRid)
 	if err != nil {
 		return 0, err
 	}
-	plan.ResultSchema = rs.WithName("delete")
+	plan.ResultSchema = rs.As("delete")
 
 	// register table for commit/abort callbacks
 	tx.Touch(t.id)

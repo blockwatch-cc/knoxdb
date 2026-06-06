@@ -8,7 +8,6 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/operator/filter"
 	"blockwatch.cc/knoxdb/pkg/schema"
-	"blockwatch.cc/knoxdb/pkg/schema/encode"
 )
 
 type Node interface {
@@ -33,9 +32,9 @@ func (n INode) MinKey(view *schema.View) uint32 {
 	if len(n.meta) == 0 {
 		return 0
 	}
-	val, ok := view.Reset(n.meta).GetPhy(STATS_ROW_KEY)
+	val := view.Reset(n.meta).GetPhy(STATS_ROW_KEY)
 	view.Reset(nil)
-	if !ok {
+	if val == nil {
 		return 0
 	}
 	return val.(uint32)
@@ -45,9 +44,9 @@ func (n INode) Version(view *schema.View) uint32 {
 	if len(n.meta) == 0 {
 		return 0
 	}
-	val, ok := view.Reset(n.meta).GetPhy(STATS_ROW_VERSION)
+	val := view.Reset(n.meta).GetPhy(STATS_ROW_VERSION)
 	view.Reset(nil)
-	if !ok {
+	if val == nil {
 		return 0
 	}
 	return val.(uint32)
@@ -58,9 +57,9 @@ func (n INode) NPacks(view *schema.View) int {
 	if len(n.meta) == 0 {
 		return 0
 	}
-	val, ok := view.Reset(n.meta).GetPhy(STATS_ROW_SCHEMA)
+	val := view.Reset(n.meta).GetPhy(STATS_ROW_SCHEMA)
 	view.Reset(nil)
-	if !ok {
+	if val == nil {
 		return 0
 	}
 	return int(val.(uint64))
@@ -70,9 +69,9 @@ func (n INode) NValues(view *schema.View) uint64 {
 	if len(n.meta) == 0 {
 		return 0
 	}
-	val, ok := view.Reset(n.meta).GetPhy(STATS_ROW_NVALS)
+	val := view.Reset(n.meta).GetPhy(STATS_ROW_NVALS)
 	view.Reset(nil)
-	if !ok {
+	if val == nil {
 		return 0
 	}
 	return val.(uint64)
@@ -82,18 +81,18 @@ func (n INode) Size(view *schema.View) int64 {
 	if len(n.meta) == 0 {
 		return 0
 	}
-	val, ok := view.Reset(n.meta).GetPhy(STATS_ROW_SIZE)
+	val := view.Reset(n.meta).GetPhy(STATS_ROW_SIZE)
 	view.Reset(nil)
-	if !ok {
+	if val == nil {
 		return 0
 	}
 	return val.(int64)
 }
 
 func (n INode) Get(view *schema.View, i int) (any, bool) {
-	val, ok := view.Reset(n.meta).GetPhy(i)
+	val := view.Reset(n.meta).GetPhy(i)
 	view.Reset(nil)
-	return val, ok
+	return val, val != nil
 }
 
 func (n *INode) SetVersion(view *schema.View, ver uint32) {
@@ -101,7 +100,7 @@ func (n *INode) SetVersion(view *schema.View, ver uint32) {
 	view.Reset(nil)
 }
 
-func (n *INode) Update(view *schema.View, wr *encode.Writer, left, right Node) bool {
+func (n *INode) Update(view *schema.View, left, right Node) bool {
 	// update min/max/sum statistics from left and right children
 	// note right may be nil
 	if right == nil {
@@ -116,28 +115,29 @@ func (n *INode) Update(view *schema.View, wr *encode.Writer, left, right Node) b
 	}
 
 	// allocate meta buffer when nil
+	s := view.Schema()
 	if n.meta == nil {
-		n.meta = make([]byte, wr.Len())
+		n.meta = make([]byte, s.MinWireSize)
 	}
 
 	// merge left and right data when changed
-	wr.Reset()
+	wr := s.NewBuffer(1)
 
-	for i, f := range view.Schema().Fields {
-		typ := filter.ValueType(f.Type.BlockType())
-		lval, _ := view.Reset(left.Bytes()).GetPhy(i)
-		rval, _ := view.Reset(right.Bytes()).GetPhy(i)
-		vval, _ := view.Reset(n.meta).GetPhy(i)
+	for i, f := range s.Fields {
+		typ := filter.ToValueType(f.Type)
+		lval := view.Reset(left.Bytes()).GetPhy(i)
+		rval := view.Reset(right.Bytes()).GetPhy(i)
+		vval := view.Reset(n.meta).GetPhy(i)
 		switch i {
 		case STATS_ROW_KEY:
 			// handle data pack key
 			// min key is the left subtree's min key
 			n.dirty = n.dirty || !typ.EQ(lval, vval)
-			wr.Write(i, lval)
+			f.WriteValue(wr, lval, LE)
 
 		case STATS_ROW_VERSION:
 			// keep current value (will update on store)
-			wr.Write(i, vval)
+			f.WriteValue(wr, vval, LE)
 
 		case STATS_ROW_SCHEMA, STATS_ROW_NVALS, STATS_ROW_SIZE:
 			// 1: sum data pack count (in u64 field)
@@ -145,7 +145,7 @@ func (n *INode) Update(view *schema.View, wr *encode.Writer, left, right Node) b
 			// 3: sum of disk sizes
 			val := typ.Add(lval, rval)
 			n.dirty = n.dirty || !typ.EQ(val, vval)
-			wr.Write(i, val)
+			f.WriteValue(wr, val, LE)
 
 		default:
 			// data column statistics
@@ -153,12 +153,12 @@ func (n *INode) Update(view *schema.View, wr *encode.Writer, left, right Node) b
 				// min fields
 				minVal := typ.Min(lval, rval)
 				n.dirty = n.dirty || !typ.EQ(minVal, vval)
-				wr.Write(i, minVal)
+				f.WriteValue(wr, minVal, LE)
 			} else {
 				// max fields
 				maxVal := typ.Max(lval, rval)
 				n.dirty = n.dirty || !typ.EQ(maxVal, vval)
-				wr.Write(i, maxVal)
+				f.WriteValue(wr, maxVal, LE)
 			}
 		}
 	}
@@ -167,7 +167,6 @@ func (n *INode) Update(view *schema.View, wr *encode.Writer, left, right Node) b
 	if n.dirty {
 		n.meta = wr.Bytes()
 	}
-	wr.Reset()
 
 	// release view buffer
 	view.Reset(nil)

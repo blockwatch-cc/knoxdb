@@ -73,26 +73,24 @@ func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, options ...O
 		return nil, err
 	}
 
+	// create table schema
+	// - adds metadata fields extending the schema
+	// - ensure we have a pk field, uses $rid when missing
+	ts, err := types.MakeTableSchema(s)
+	if err != nil {
+		return nil, err
+	}
+
 	// connect schema enums
-	s.WithEnums(enums)
-
-	// ensure table has metadata, may clone & extend schema
-	if !s.HasMeta() {
-		s = s.WithMeta()
-	}
-
-	// ensure we have a pk field, use $rid when missing, may clone & alter schema
-	if s.PkId() == 0 {
-		s, _ = s.ResetPk(schema.MetaRid)
-	}
+	ts.UseEnums(enums)
 
 	// handle table options
 	opts := defaultDatabaseOptions.Apply(options...)
 
 	// on history tables set pk to $rid, may clone & alter schema
 	if opts.Engine == TableKindHistory {
-		if s.PkId() != schema.MetaRid {
-			s, _ = s.ResetPk(schema.MetaRid)
+		if ts.PkId() != types.MetaRid {
+			ts.ResetPk(types.MetaRid)
 		}
 	}
 
@@ -120,7 +118,7 @@ func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, options ...O
 	defer abort()
 
 	// schedule create
-	if err := e.cat.AppendTableCmd(ctx, CREATE, s, opts); err != nil {
+	if err := e.cat.AppendTableCmd(ctx, CREATE, ts, opts); err != nil {
 		return nil, err
 	}
 
@@ -131,7 +129,7 @@ func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, options ...O
 	}
 
 	// create table
-	err = table.Create(ctx, s, opts.TableOptions()...)
+	err = table.Create(ctx, ts, opts.TableOptions()...)
 	if err != nil {
 		return nil, err
 	}
@@ -334,7 +332,7 @@ func (e *Engine) openTables(ctx context.Context) error {
 		}
 
 		// lookup schema enums
-		s.WithEnums(e.CloneEnums(s.EnumNames()...))
+		s.UseEnums(e.CloneEnums(s.EnumNames()...))
 
 		// get table factory
 		factory, ok := tableEngineRegistry[TableKind(opts.Engine)]

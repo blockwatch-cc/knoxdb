@@ -188,9 +188,9 @@ func (j *Journal) insertPackWithWal(_ context.Context, src *pack.Package, xid ty
 	// dimension WAL write buffer (may still with grow with long strings)
 	sz := binary.MaxVarintLen64
 	if sel == nil {
-		sz += j.schema.AverageSize() * src.Len()
+		sz += j.schema.EstWireSize * src.Len()
 	} else {
-		sz += j.schema.AverageSize() * len(sel)
+		sz += j.schema.EstWireSize * len(sel)
 	}
 	buf := arena.AllocBytes(sz)
 	msg := bytes.NewBuffer(buf)
@@ -206,9 +206,7 @@ func (j *Journal) insertPackWithWal(_ context.Context, src *pack.Package, xid ty
 			for range n {
 				// create wire format for wal write
 				start := msg.Len()
-				if err := src.ReadWireBuffer(msg, i); err != nil {
-					return 0, 0, err
-				}
+				src.ReadWireBuffer(msg, i)
 				view.Reset(msg.Bytes()[start:]).SetPk(nextPk)
 				j.tip.InsertRecord(xid, nextRid, view.Buffer())
 				i++
@@ -249,9 +247,7 @@ func (j *Journal) insertPackWithWal(_ context.Context, src *pack.Package, xid ty
 			writeBinaryUvarint(msg, nextRid)
 			for _, v := range sel[:n] {
 				start := msg.Len()
-				if err := src.ReadWireBuffer(msg, int(v)); err != nil {
-					return 0, 0, err
-				}
+				src.ReadWireBuffer(msg, int(v))
 				view.Reset(msg.Bytes()[start:]).SetPk(nextPk)
 				j.tip.InsertRecord(xid, nextRid, view.Buffer())
 

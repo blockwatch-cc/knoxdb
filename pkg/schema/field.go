@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Blockwatch Data Inc.
+// Copyright (c) 2024-2026 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package schema
@@ -13,133 +13,42 @@ import (
 
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/schema/enum"
-	"blockwatch.cc/knoxdb/pkg/schema/types"
 )
 
-// type aliases
-type (
-	FieldType        = types.FieldType
-	FieldFlags       = types.FieldFlags
-	IndexType        = types.IndexType
-	FilterType       = types.FilterType
-	BlockCompression = types.BlockCompression
-)
-
-// const aliases
 const (
-	FT_TIMESTAMP = types.FieldTypeTimestamp
-	FT_I8        = types.FieldTypeInt8
-	FT_I16       = types.FieldTypeInt16
-	FT_I32       = types.FieldTypeInt32
-	FT_I64       = types.FieldTypeInt64
-	FT_I128      = types.FieldTypeInt128
-	FT_I256      = types.FieldTypeInt256
-	FT_U8        = types.FieldTypeUint8
-	FT_U16       = types.FieldTypeUint16
-	FT_U32       = types.FieldTypeUint32
-	FT_U64       = types.FieldTypeUint64
-	FT_F32       = types.FieldTypeFloat32
-	FT_F64       = types.FieldTypeFloat64
-	FT_D32       = types.FieldTypeDecimal32
-	FT_D64       = types.FieldTypeDecimal64
-	FT_D128      = types.FieldTypeDecimal128
-	FT_D256      = types.FieldTypeDecimal256
-	FT_BOOL      = types.FieldTypeBoolean
-	FT_STRING    = types.FieldTypeString
-	FT_BYTES     = types.FieldTypeBytes
-	FT_BIGINT    = types.FieldTypeBigint
-	FT_TIME      = types.FieldTypeTime
-	FT_DATE      = types.FieldTypeDate
-	FT_TEXT      = types.FieldTypeText
-	FT_BLOB      = types.FieldTypeBlob
+	// defaultVarFieldSize is an estimation for variable sized
+	// bytes slices and strings used as hint for buffer allocs
+	defaultVarFieldSize = 64
+)
 
-	F_PRIMARY  = types.FieldFlagPrimary
-	F_ARRAY    = types.FieldFlagArray
-	F_ENUM     = types.FieldFlagEnum
-	F_DELETED  = types.FieldFlagDeleted
-	F_METADATA = types.FieldFlagMetadata
-	F_NULLABLE = types.FieldFlagNullable
-	F_TIMEBASE = types.FieldFlagTimebase
-	F_ACTION   = types.FieldFlagAction
-
-	IT_HASH      = types.IndexTypeHash
-	IT_INT       = types.IndexTypeInt
-	IT_PK        = types.IndexTypePk
-	IT_COMPOSITE = types.IndexTypeComposite
-
-	FL_BITS    = types.FilterTypeBits
-	FL_BLOOM2B = types.FilterTypeBloom2b
-	FL_BLOOM3B = types.FilterTypeBloom3b
-	FL_BLOOM4B = types.FilterTypeBloom4b
-	FL_BLOOM5B = types.FilterTypeBloom5b
-	FL_BFUSE8  = types.FilterTypeBfuse8
-	FL_BFUSE16 = types.FilterTypeBfuse16
+var (
+	// default field names for list/map
+	ElementName = "element"
+	EntriesName = "entries"
+	KeyName     = "key"
+	ValueName   = "value"
 )
 
 type Field struct {
-	// schema values for CREATE TABLE
-	Name     string           // field name
-	Id       uint16           // unique lifetime id
-	Type     FieldType        // schema field type
-	SubType  FieldType        // list/map value type (TODO)
-	Flags    FieldFlags       // schema flags
-	Compress BlockCompression // data compression
-	Filter   FilterType       // metadata filter type
-	Scale    uint8            // 0..255 fixed point scale, time scale, array len
-
-	// encoder values for INSERT, UPDATE, QUERY
-	Path   []int                // reflect struct nested positions
-	Offset uintptr              // struct field offset from reflect
-	Enum   *enum.EnumDictionary // enum dictionary when field is an enum
+	// core schema values
+	Name     string               // field name
+	Id       uint16               // unique lifetime id
+	ParentId uint16               // reference to parent field id (nested fields only)
+	Scale    uint8                // 0..255 fixed point scale, time scale, array len
+	Level    uint8                // nesting level
+	Type     FieldType            // schema field type
+	Flags    FieldFlags           // schema flags
+	Compress Compression          // data compression
+	Filter   FilterType           // metadata filter type
+	Child    *Schema              // nested schemas for LIST (elem), MAP (key/val pair)
+	Enum     *enum.EnumDictionary // enum dictionary when field is an enum
 }
 
-func NewField(typ FieldType) *Field {
-	return &Field{Type: typ}
-}
-
-func (f *Field) WithName(n string) *Field {
-	f.Name = n
-	return f
-}
-
-func (f *Field) WithFlags(v FieldFlags) *Field {
-	f.Flags = v
-	return f
-}
-
-func (f *Field) WithEnum(d *enum.EnumDictionary) *Field {
-	f.Enum = d
-	if d != nil {
-		f.Flags |= F_ENUM
-	} else {
-		f.Flags &^= F_ENUM
+func NewField(typ FieldType, opts ...FieldOption) *Field {
+	f := &Field{Type: typ}
+	for _, o := range opts {
+		o(f)
 	}
-	return f
-}
-
-func (f *Field) WithCompression(c BlockCompression) *Field {
-	f.Compress = c
-	return f
-}
-
-func (f *Field) WithArray(n uint8) *Field {
-	if n > 0 {
-		f.Flags |= F_ARRAY
-	} else {
-		f.Flags &^= F_ARRAY
-	}
-	f.Scale = n
-	return f
-}
-
-func (f *Field) WithScale(n uint8) *Field {
-	f.Flags &^= F_ARRAY
-	f.Scale = n
-	return f
-}
-
-func (f *Field) WithFilter(typ FilterType) *Field {
-	f.Filter = typ
 	return f
 }
 
@@ -155,6 +64,13 @@ func (f *Field) WireSize() int {
 	return f.Type.Size()
 }
 
+func (f *Field) VarSizeEstimate() int {
+	if f.IsFixedSize() {
+		return 0
+	}
+	return defaultVarFieldSize
+}
+
 func (f *Field) IsValid() bool {
 	return len(f.Name) > 0 && f.Type.IsValid()
 }
@@ -164,42 +80,42 @@ func (f *Field) Is(v FieldFlags) bool {
 }
 
 func (f *Field) IsVisible() bool {
-	return f.Flags&(F_DELETED|F_METADATA) == 0
+	return f.Flags&(FlagDeleted|FlagMetadata) == 0
 }
 
 func (f *Field) IsActive() bool {
-	return f.Flags&F_DELETED == 0
+	return f.Flags&FlagDeleted == 0
 }
 
 func (f *Field) IsMeta() bool {
-	return f.Flags&F_METADATA > 0
+	return f.Flags&FlagMetadata > 0
 }
 
 func (f *Field) IsPrimary() bool {
-	return f.Flags&F_PRIMARY > 0
+	return f.Flags&FlagPrimary > 0
 }
 
 func (f *Field) IsTimebase() bool {
-	return f.Flags&F_TIMEBASE > 0
+	return f.Flags&FlagTimebase > 0
 }
 
 func (f *Field) IsNullable() bool {
-	return f.Flags&F_NULLABLE > 0
+	return f.Flags&FlagNullable > 0
 }
 
 func (f *Field) IsEnum() bool {
-	return f.Flags&F_ENUM > 0
+	return f.Flags&FlagEnum > 0
 }
 
 func (f *Field) IsArray() bool {
-	return f.Flags&F_ARRAY > 0
+	return f.Flags&FlagArray > 0
 }
 
 func (f *Field) IsFixedSize() bool {
 	switch f.Type {
-	case FT_STRING, FT_BYTES:
+	case String, Bytes:
 		return f.IsArray()
-	case FT_BIGINT, FT_TEXT, FT_BLOB:
+	case Bigint, Text, Binary, List, Map:
 		return false
 	default:
 		return true
@@ -207,35 +123,64 @@ func (f *Field) IsFixedSize() bool {
 }
 
 func (f *Field) IsCompressed() bool {
-	return f.Compress > types.BlockCompressNone
+	return f.Compress > Uncompressed
 }
 
 func (f *Field) TimeFormat() string {
 	switch f.Type {
-	case FT_TIMESTAMP, FT_DATE:
-		return types.TimeScale(f.Scale).DateTimeFormat()
-	case FT_TIME:
-		return types.TimeScale(f.Scale).TimeOnlyFormat()
+	case Timestamp, Date:
+		return TimeScale(f.Scale).DateTimeFormat()
+	case Time:
+		return TimeScale(f.Scale).TimeOnlyFormat()
 	default:
 		return ""
 	}
 }
 
+// TODO
+// - does not handle nested struct child schemas in list/map
 func (f *Field) TypeName() (typ string) {
 	typ = f.Type.String()
 	switch f.Type {
-	case FT_TIME, FT_TIMESTAMP:
-		typ += "(" + types.TimeScale(f.Scale).ShortName() + ")"
-	case FT_D32, FT_D64, FT_D128, FT_D256:
+	case Time, Timestamp:
+		typ += "(" + TimeScale(f.Scale).ShortName() + ")"
+	case Decimal32, Decimal64, Decimal128, Decimal256:
 		typ += "(" + strconv.Itoa(int(f.Scale)) + ")"
-	case FT_STRING, FT_BYTES:
+	case String, Bytes:
 		if f.IsArray() {
 			typ = "[" + strconv.Itoa(int(f.Scale)) + "]" + typ
 		}
+	case List:
+		if f.Child.NumFields() == 1 {
+			typ += "[" + f.Child.Fields[0].TypeName() + "]"
+		} else {
+			typ += "[" + f.Child.Name + "]"
+		}
+	case Map:
+		typ += "["
+		// child is a key/value struct
+		if f.Child.Fields[0].Child == nil {
+			// primitive key type
+			typ += f.Child.Fields[0].TypeName()
+		} else {
+			// complex key type
+			typ += f.Child.Fields[0].Child.Name
+		}
+		typ += ","
+		if f.Child.Fields[1].Child == nil {
+			// primitive value type
+			typ += f.Child.Fields[1].TypeName()
+		} else {
+			// complex value type
+			typ += f.Child.Fields[1].Child.Name
+		}
+		typ += "]"
 	}
 	return
 }
 
+// TODO
+// - does not handle struct child schemas in list/map
 func ParseFieldFromTypename(typ string) (*Field, error) {
 	if len(typ) == 0 {
 		return nil, fmt.Errorf("empty type name")
@@ -244,8 +189,11 @@ func ParseFieldFromTypename(typ string) (*Field, error) {
 		f     *Field
 		scale uint8
 		flags FieldFlags
+		child *Schema
 	)
-	if typ[0] == '[' {
+	switch {
+	case typ[0] == '[':
+		// array
 		num, typstr, ok := strings.Cut(typ[1:], "]")
 		if !ok {
 			return nil, fmt.Errorf("invalid array type: %q", typ)
@@ -256,8 +204,26 @@ func ParseFieldFromTypename(typ string) (*Field, error) {
 		}
 		scale = uint8(n)
 		typ = typstr
-		flags |= F_ARRAY
-	} else {
+		flags |= FlagArray
+	case strings.HasSuffix(typ, "]"):
+		// LIST or MAP
+		typstr, subtypstr, ok := strings.Cut(typ, "[")
+		if ok {
+			ty := ParseFieldType(typstr)
+			if !ty.IsValid() {
+				return nil, fmt.Errorf("invalid field type: %s", typ)
+			}
+			subtypstr = strings.TrimSuffix(subtypstr, "]")
+			sub, err := ParseFieldFromTypename(subtypstr)
+			if err != nil {
+				return nil, fmt.Errorf("invalid %s type: %s", ty, typ)
+			}
+			typ = typstr
+			sub.Name = ElementName
+			child = SchemaOf([]*Field{sub}).Finalize()
+		}
+	default:
+		// primitive types only
 		typstr, scalestr, ok := strings.Cut(typ, "(")
 		if ok {
 			if !strings.HasSuffix(scalestr, ")") {
@@ -268,7 +234,7 @@ func ParseFieldFromTypename(typ string) (*Field, error) {
 			if err == nil {
 				scale = uint8(n)
 			} else {
-				tscale, ok := types.ParseTimeScale(scalestr)
+				tscale, ok := ParseTimeScale(scalestr)
 				if !ok {
 					return nil, fmt.Errorf("invalid scale factor: %s", typ)
 				}
@@ -277,7 +243,7 @@ func ParseFieldFromTypename(typ string) (*Field, error) {
 		}
 		typ = typstr
 	}
-	ty := types.ParseFieldType(typ)
+	ty := ParseFieldType(typ)
 	if !ty.IsValid() {
 		return nil, fmt.Errorf("invalid field type: %s", typ)
 	}
@@ -285,6 +251,7 @@ func ParseFieldFromTypename(typ string) (*Field, error) {
 		Type:  ty,
 		Scale: scale,
 		Flags: flags,
+		Child: child,
 	}
 	return f, f.Validate()
 }
@@ -292,7 +259,7 @@ func ParseFieldFromTypename(typ string) (*Field, error) {
 func ParseFieldFlags(s string) (FieldFlags, error) {
 	var flags FieldFlags
 	for f := range strings.SplitSeq(s, ",") {
-		ff := types.ParseFieldFlag(f)
+		ff := ParseFieldFlag(f)
 		if ff == 0 {
 			return 0, fmt.Errorf("invalid field flag: %s", f)
 		}
@@ -301,10 +268,11 @@ func ParseFieldFlags(s string) (FieldFlags, error) {
 	return flags, nil
 }
 
-func (f *Field) Validate() error {
+func (f *Field) Validate(withNested ...bool) error {
 	// require name between 1..255 bytes length
-	if l := len(f.Name); l > 255 {
-		return fmt.Errorf("field[%d:%s]: name too long, max 255 chars", f.Id, f.Type)
+	if l := len(f.Name); l > MAX_NAME {
+		return fmt.Errorf("field[%d:%s]: name %q too long, max %d chars",
+			f.Id, f.Type, f.Name, MAX_NAME)
 	} else if l < 1 {
 		return fmt.Errorf("field[%d:%s]: missing name", f.Id, f.Type)
 	}
@@ -313,28 +281,28 @@ func (f *Field) Validate() error {
 	if f.Scale != 0 {
 		var minScale, maxScale uint8
 		switch f.Type {
-		case FT_D32:
+		case Decimal32:
 			maxScale = num.MaxDecimal32Precision
-		case FT_D64:
+		case Decimal64:
 			maxScale = num.MaxDecimal64Precision
-		case FT_D128:
+		case Decimal128:
 			maxScale = num.MaxDecimal128Precision
-		case FT_D256:
+		case Decimal256:
 			maxScale = num.MaxDecimal256Precision
-		case FT_TIMESTAMP:
-			maxScale = uint8(types.TIME_SCALE_SECOND)
-		case FT_TIME:
-			maxScale = uint8(types.TIME_SCALE_SECOND)
-		case FT_DATE:
-			minScale = uint8(types.TIME_SCALE_DAY)
-			maxScale = uint8(types.TIME_SCALE_DAY)
-		case FT_STRING, FT_BYTES:
+		case Timestamp:
+			maxScale = uint8(TIME_SCALE_SECOND)
+		case Time:
+			maxScale = uint8(TIME_SCALE_SECOND)
+		case Date:
+			minScale = uint8(TIME_SCALE_DAY)
+			maxScale = uint8(TIME_SCALE_DAY)
+		case String, Bytes:
 			minScale = 1
-			maxScale = types.MAX_ARRAY
+			maxScale = MAX_ARRAY
 		default:
 			return fmt.Errorf("field[%s]: scale unsupported on type %s", f.Name, f.Type)
 		}
-		if _, err := types.ValidateInt("scale", int(f.Scale), int(minScale), int(maxScale)); err != nil {
+		if err := validateInt("scale", int(f.Scale), int(minScale), int(maxScale)); err != nil {
 			return fmt.Errorf("field[%s]: %v", f.Name, err)
 		}
 	}
@@ -348,11 +316,11 @@ func (f *Field) Validate() error {
 
 	// require array on string/byte fields only
 	if f.IsArray() {
-		if _, err := types.ValidateInt("array", int(f.Scale), 1, types.MAX_ARRAY); err != nil {
+		if err := validateInt("array", int(f.Scale), 1, MAX_ARRAY); err != nil {
 			return fmt.Errorf("field[%s]: %v", f.Name, err)
 		}
 		switch f.Type {
-		case FT_BYTES, FT_STRING:
+		case Bytes, String:
 			// ok
 		default:
 			return fmt.Errorf("field[%s]: array unsupported on type %s", f.Name, f.Type)
@@ -360,7 +328,7 @@ func (f *Field) Validate() error {
 	}
 
 	// require uint16 for enum types
-	if f.IsEnum() && f.Type != FT_U16 {
+	if f.IsEnum() && f.Type != Uint16 {
 		return fmt.Errorf("field[%s]: invalid type %s for enum, requires uint16", f.Name, f.Type)
 	}
 	if f.IsEnum() && f.Enum == nil {
@@ -368,13 +336,35 @@ func (f *Field) Validate() error {
 	}
 
 	// allow timebase flag only on timestamp fields
-	if f.IsTimebase() && f.Type != FT_TIMESTAMP {
+	if f.IsTimebase() && f.Type != Timestamp {
 		return fmt.Errorf("field[%s]: invalid use of timebase flag on type %s", f.Name, f.Type)
 	}
 
 	// primary key field is limited to uint64 (TODO: relax)
-	if f.IsPrimary() && f.Type != FT_U64 {
+	if f.IsPrimary() && f.Type != Uint64 {
 		return fmt.Errorf("field[%s]: invalid primary key type %s", f.Name, f.Type)
+	}
+
+	// require nested schema for LIST type
+	if f.Type == List && len(withNested) > 0 && withNested[0] {
+		// TODO: validate level
+
+		if f.Child == nil {
+			return fmt.Errorf("field[%s]: missing %s child schema", f.Name, f.Type)
+		}
+		if err := f.Child.Validate(); err != nil {
+			return fmt.Errorf("field[%s]: invalid %s child schema: %w", f.Name, f.Type, err)
+		}
+		id := f.Id
+		for _, c := range f.Child.Fields {
+			if !strings.HasPrefix(c.Name, f.Name) {
+				return fmt.Errorf("field[%s]: invalid child name %s", f.Name, c.Name)
+			}
+			id++
+			if c.Id != id {
+				return fmt.Errorf("field[%s]: invalid child %s id %d (want %d)", f.Name, c.Name, c.Id, id)
+			}
+		}
 	}
 
 	return nil
@@ -383,6 +373,9 @@ func (f *Field) Validate() error {
 func (f *Field) WriteTo(w *bytes.Buffer) error {
 	// id: u16
 	binary.Write(w, LE, f.Id)
+
+	// parent id: u16
+	binary.Write(w, LE, f.ParentId)
 
 	// name: 1 byte len, string
 	w.Write([]byte{byte(len(f.Name))})
@@ -395,6 +388,7 @@ func (f *Field) WriteTo(w *bytes.Buffer) error {
 		byte(f.Compress),
 		byte(f.Filter),
 		f.Scale,
+		f.Level,
 	})
 
 	return nil
@@ -411,6 +405,12 @@ func (f *Field) ReadFrom(buf *bytes.Buffer) (err error) {
 		return
 	}
 
+	// parent id: u16
+	err = binary.Read(buf, LE, &f.ParentId)
+	if err != nil {
+		return
+	}
+
 	// name: string
 	l := int(buf.Next(1)[0])
 	f.Name = string(buf.Next(l))
@@ -418,15 +418,16 @@ func (f *Field) ReadFrom(buf *bytes.Buffer) (err error) {
 		return io.ErrShortBuffer
 	}
 
-	// typ, flags, compression, filter, scale: byte
+	// typ, flags, compression, filter, scale, level: byte
 	if buf.Len() < 5 {
 		return io.ErrShortBuffer
 	}
 	f.Type = FieldType(buf.Next(1)[0])
 	f.Flags = FieldFlags(buf.Next(1)[0])
-	f.Compress = BlockCompression(buf.Next(1)[0])
+	f.Compress = Compression(buf.Next(1)[0])
 	f.Filter = FilterType(buf.Next(1)[0])
 	f.Scale = buf.Next(1)[0]
+	f.Level = buf.Next(1)[0]
 
 	// alloc empty enum dict to satisfy field validity
 	if f.IsEnum() {

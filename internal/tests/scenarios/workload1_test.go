@@ -51,10 +51,11 @@ func TestWorkload1(t *testing.T) {
 	err = knox.NewQueryFor[tests.Types]().
 		WithTable(table).
 		WithTag("validate-stream").
+		WithDebug(true).
 		// WithDebug(testing.Verbose()). // Enable detailed query logging
 		Stream(ctx, func(res *tests.Types) error {
 			require.NotEmpty(t, res.MyEnum, "Unexpected empty enum value %#v", res)
-			// log.Infof("Streamed record: ID=%d, Int64=%d, MyEnum=%s", res.Id, res.Int64, res.MyEnum)
+			// t.Logf("Streamed record: ID=%d, Int64=%d, MyEnum=%s", res.Id, res.Int64, res.MyEnum)
 			require.Equal(t, data[count].Id, res.Id, "Record ID mismatch")
 			require.Equal(t, data[count].Int64, res.Int64, "Int64 mismatch")
 			require.Equal(t, data[count].MyEnum, res.MyEnum, "Enum mismatch")

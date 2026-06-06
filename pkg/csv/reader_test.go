@@ -4,6 +4,7 @@
 package csv
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -16,11 +17,11 @@ import (
 
 func TestMain(m *testing.M) {
 	if buf, err := os.ReadFile("bench.csv"); err == nil {
-		netBench = string(buf)
+		netBench = buf
 	} else {
 		log.Warn(err)
 		log.Warn("cloning internal CSV line with less data variablity")
-		netBench = strings.Repeat(netBenchLine, 1695)
+		netBench = bytes.Repeat([]byte(netBenchLine), 1695)
 	}
 	m.Run()
 }
@@ -114,7 +115,7 @@ var (
 	I1 = []string{"1", "DEPARTMENT OF STATE", "343753471", `"ANTON" SONNENSCHUTZSYSTEME GESELLSCHAFT MIT BESCHRÂ¿NKTER HAFTUNG`, "", "2012"}
 	I2 = []string{"186473", "null", `""Quality is a`, "null", "mix", "null", `""Mix is an`, "Mix", "0"}
 
-	netBench string
+	netBench []byte
 )
 
 var readerCases = []readerTest{
@@ -399,10 +400,14 @@ type InfReader struct {
 	n   int
 }
 
-func NewInfReader(s string) *InfReader {
+func NewInfReader(buf []byte) *InfReader {
 	return &InfReader{
-		buf: []byte(s),
+		buf: buf,
 	}
+}
+
+func (r *InfReader) Reset() {
+	r.n = 0
 }
 
 func (r *InfReader) Read(b []byte) (int, error) {
@@ -422,7 +427,7 @@ func BenchmarkReadSimple(b *testing.B) {
 			sb.WriteString("field")
 		}
 		sb.WriteRune('\n')
-		s := strings.Repeat(sb.String(), 1000)
+		s := bytes.Repeat([]byte(sb.String()), 1000)
 		rd := NewReader(NewInfReader(s), sz).WithTrim(false)
 		b.Run(fmt.Sprintf("%d", sz), func(b *testing.B) {
 			for b.Loop() {
@@ -448,7 +453,7 @@ func BenchmarkReadQuoted(b *testing.B) {
 		sb.WriteRune(',')
 		sb.WriteString(`"field,sep"`)
 		sb.WriteRune('\n')
-		s := strings.Repeat(sb.String(), 1000)
+		s := bytes.Repeat([]byte(sb.String()), 1000)
 		rd := NewReader(NewInfReader(s), sz).WithTrim(false)
 		b.Run(fmt.Sprintf("%d", sz), func(b *testing.B) {
 			for b.Loop() {

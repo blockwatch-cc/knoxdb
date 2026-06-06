@@ -31,14 +31,14 @@ func init() {
 	enums.Register(0, myEnum)
 
 	// init schema and link enums (will lookup myEnum and link to field)
-	sreflect.MustSchemaFor[specialStruct](schema.WithEnums(enums))
+	sreflect.MustSchemaFor[specialStruct](schema.Enums(enums))
 }
 
 var (
 	testStructs = []Encodable{
 		&scalarStruct{},
 		&byteStruct{},
-		&byteUnmarshalStruct{},
+		&arrayStruct{},
 		&smallStruct{},
 		&largeStruct{},
 		&tradeStruct{},
@@ -54,9 +54,9 @@ var (
 	byteStructDec = encode.NewDecoderFor[byteStruct]()
 	byteStructBuf = byteStructEnc.NewBuffer(1)
 
-	byteUnmarshalStructEnc = encode.NewEncoderFor[byteUnmarshalStruct]()
-	byteUnmarshalStructDec = encode.NewDecoderFor[byteUnmarshalStruct]()
-	byteUnmarshalStructBuf = byteUnmarshalStructEnc.NewBuffer(1)
+	arrayStructEnc = encode.NewEncoderFor[arrayStruct]()
+	arrayStructDec = encode.NewDecoderFor[arrayStruct]()
+	arrayStructBuf = arrayStructEnc.NewBuffer(1)
 
 	smallStructEnc = encode.NewEncoderFor[smallStruct]()
 	smallStructDec = encode.NewDecoderFor[smallStruct]()
@@ -81,12 +81,11 @@ var (
 )
 
 func makeTypedPackage(typ any, fill int) *Package {
-	s, err := sreflect.SchemaOf(typ, schema.WithEnums(enums))
+	s, err := sreflect.SchemaOf(typ, schema.Enums(enums))
 	if err != nil {
 		panic(err)
 	}
-	s.WithEnums(enums)
-	pkg := New().WithMaxRows(PACK_SIZE).WithSchema(s)
+	pkg := New().WithMaxRows(PACK_SIZE).WithSchema(s).Alloc()
 	enc := encode.NewEncoder(s)
 	buf, err := enc.Encode(makeZeroStruct(typ), nil)
 	if err != nil {
@@ -157,21 +156,21 @@ func (s *byteStruct) Decode(buf []byte) error {
 	return err
 }
 
-type OpHash [32]byte
+type Hash [32]byte
 
-type byteUnmarshalStruct struct {
+type arrayStruct struct {
 	Id    uint64 `knox:"id,pk"`
-	Seven OpHash `knox:"seven"`
+	Seven Hash   `knox:"seven"`
 }
 
-func (s byteUnmarshalStruct) Encode() []byte {
-	byteUnmarshalStructBuf.Reset()
-	byteUnmarshalStructEnc.Encode(s, byteUnmarshalStructBuf)
-	return byteUnmarshalStructBuf.Bytes()
+func (s arrayStruct) Encode() []byte {
+	arrayStructBuf.Reset()
+	arrayStructEnc.Encode(s, arrayStructBuf)
+	return arrayStructBuf.Bytes()
 }
 
-func (s *byteUnmarshalStruct) Decode(buf []byte) error {
-	_, err := byteUnmarshalStructDec.Decode(buf, s)
+func (s *arrayStruct) Decode(buf []byte) error {
+	_, err := arrayStructDec.Decode(buf, s)
 	return err
 }
 
@@ -295,7 +294,7 @@ type tradeStruct struct {
 	Receiver    AccountID     `knox:"receiver,filter=bloom3b"`
 	Router      AccountID     `knox:"router"`
 	IsWash      bool          `knox:"is_wash_trade"`
-	TxHash      OpHash        `knox:"tx_hash,filter=bloom3b"`
+	TxHash      Hash          `knox:"tx_hash,filter=bloom3b"`
 	TxFee       int64         `knox:"tx_fee"`
 	Block       int64         `knox:"block"`
 	Time        time.Time     `knox:"time"`
@@ -349,7 +348,7 @@ func (s specialStruct) init() {
 type encodeTestStruct struct {
 	Id      uint64         `knox:"id,pk"`
 	Time    time.Time      `knox:"time"`
-	Hash    OpHash         `knox:"hash,filter=bloom3b"`
+	Hash    Hash           `knox:"hash,filter=bloom3b"`
 	String  string         `knox:"str"`
 	Bool    bool           `knox:"bool"`
 	Enum    string         `knox:"my_enum,enum"`
@@ -396,6 +395,6 @@ func (s encodeTestStruct) init() {
 type encodeTestSubStruct struct {
 	Id    uint64    `knox:"id,pk"`
 	Int64 int64     `knox:"i64"`
-	Hash  OpHash    `knox:"hash,filter=bloom3b"`
+	Hash  Hash      `knox:"hash,filter=bloom3b"`
 	Time  time.Time `knox:"time"`
 }

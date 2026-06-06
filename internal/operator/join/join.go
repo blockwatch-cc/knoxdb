@@ -280,13 +280,13 @@ func (p *JoinPlan) Compile(ctx context.Context) error {
 	// construct result schema
 	ltab := p.Left.Table.Schema()
 	rtab := p.Right.Table.Schema()
-	p.schema = schema.NewSchema().WithName(p.Name())
+	fields := make([]*schema.Field, len(p.Right.Select.Fields)+len(p.Left.Select.Fields))
 
 	// set pk field (optimization) and remember block type
 	p.Left.PkIdx = ltab.PkIndex()
 	p.Right.PkIdx = rtab.PkIndex()
-	p.Left.Typ = filter.ValueType(p.Left.On.Type.BlockType())
-	p.Right.Typ = filter.ValueType(p.Right.On.Type.BlockType())
+	p.Left.Typ = filter.ToValueType(p.Left.On.Type)
+	p.Right.Typ = filter.ToValueType(p.Right.On.Type)
 	p.Left.OnIdx, _ = ltab.IndexId(p.Left.On.Id)
 	p.Right.OnIdx, _ = ltab.IndexId(p.Right.On.Id)
 
@@ -296,11 +296,12 @@ func (p *JoinPlan) Compile(ctx context.Context) error {
 		if alias == "" {
 			alias = ltab.Name + "." + field.Name
 		}
-		p.schema.WithField(
-			schema.NewField(field.Type).
-				WithName(alias).
-				WithScale(field.Scale).
-				WithFlags(field.Flags),
+		fields = append(fields,
+			schema.FieldOf(field.Type,
+				schema.WithName(alias),
+				schema.WithScale(field.Scale),
+				schema.WithFlags(field.Flags),
+			),
 		)
 	}
 
@@ -309,22 +310,24 @@ func (p *JoinPlan) Compile(ctx context.Context) error {
 		if alias == "" {
 			alias = rtab.Name + "." + field.Name
 		}
-		p.schema.WithField(
-			schema.NewField(field.Type).
-				WithName(alias).
-				WithScale(field.Scale).
-				WithFlags(field.Flags),
+		fields = append(fields,
+			schema.FieldOf(field.Type,
+				schema.WithName(alias),
+				schema.WithScale(field.Scale),
+				schema.WithFlags(field.Flags),
+			),
 		)
 	}
 
 	// finalize result schema
-	p.schema.Finalize()
+	p.schema = schema.SchemaOf(fields, schema.Name(p.Name())).Finalize()
+
 	if err := p.schema.Validate(); err != nil {
 		return err
 	}
 
 	// alloc staging buffer
-	p.buf = bytes.NewBuffer(make([]byte, 0, p.schema.WireSize()))
+	p.buf = bytes.NewBuffer(make([]byte, 0, p.schema.EstWireSize))
 
 	// construct and compile query plans, run index scans
 	p.Left.Plan = query.NewQueryPlan().
@@ -388,7 +391,7 @@ func (p *JoinPlan) Compile(ctx context.Context) error {
 
 	// pk cursor on large side
 	pkField := x.Table.Schema().Pk()
-	pkBlockTyp := pkField.Type.BlockType()
+	pkBlockTyp := types.ToBlockType(pkField.Type)
 	matcher := filter.NewFactory(pkField.Type).New(types.FilterModeGt)
 	x.Filter = &Filter{
 		Name:    pkField.Name,
@@ -407,7 +410,7 @@ func (p *JoinPlan) Compile(ctx context.Context) error {
 	// IN condition for join predicate column on small side ONLY for equi-joins
 	if p.IsEquiJoin() {
 		joinField := y.On
-		joinBlockType := joinField.Type.BlockType()
+		joinBlockType := types.ToBlockType(joinField.Type)
 		matcher = filter.NewFactory(joinField.Type).New(types.FilterModeIn)
 		y.Filter = &Filter{
 			Name:    joinField.Name,

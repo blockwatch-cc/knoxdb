@@ -27,11 +27,11 @@ import (
 	pi "blockwatch.cc/knoxdb/internal/pack/index"
 	"blockwatch.cc/knoxdb/internal/pack/stats"
 	pt "blockwatch.cc/knoxdb/internal/pack/table"
+	itypes "blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/encode"
 	"blockwatch.cc/knoxdb/pkg/knox"
 	"blockwatch.cc/knoxdb/pkg/schema"
-	"blockwatch.cc/knoxdb/pkg/schema/types"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/jedib0t/go-pretty/v6/text"
@@ -194,11 +194,19 @@ type Viewer interface {
 	ContentViewer
 }
 
+type TableViewer struct {
+	*pt.Table
+}
+
+func (t TableViewer) Schema() *schema.Schema {
+	return t.Table.Schema().Base()
+}
+
 //nolint:all
 func getTableOrIndexView(db knox.Database, name string) Viewer {
 	t, err := db.FindTable(name)
 	if err == nil {
-		return t.Engine().(*pt.Table)
+		return TableViewer{t.Engine().(*pt.Table)}
 	}
 	if idx, err := db.FindIndex(name); err == nil {
 		return idx.Engine().(*pi.Index)
@@ -210,7 +218,7 @@ func getTableOrIndexView(db knox.Database, name string) Viewer {
 func getTableOrIndexStatsView(db knox.Database, name string) StatsViewer {
 	t, err := db.FindTable(name)
 	if err == nil {
-		return t.Engine().(*pt.Table)
+		return TableViewer{t.Engine().(*pt.Table)}
 	}
 	if idx, err := db.FindIndex(name); err == nil {
 		return idx.Engine().(*pi.Index)
@@ -260,7 +268,7 @@ func separateTarget(s string) TableDescriptor {
 func PrintSchema(s *schema.Schema, w io.Writer) {
 	t := table.NewWriter()
 	t.SetOutputMirror(w)
-	t.SetTitle("Schema %s [0x%x] - %d fields - %d bytes", s.Name, s.Hash, s.NumFields(), s.WireSize())
+	t.SetTitle("Schema %s [0x%x] - %d fields - %d bytes", s.Name, s.Hash, s.NumFields(), s.MinWireSize)
 	t.AppendHeader(table.Row{"#", "Name", "Type", "Flags", "Filter", "Size", "Compress"})
 	for _, f := range s.Fields {
 		var filter string
@@ -282,7 +290,7 @@ func PrintSchema(s *schema.Schema, w io.Writer) {
 
 func PrintMetadata(view StatsViewer, desc TableDescriptor, w io.Writer) {
 	s := view.Schema()
-	rx := s.RowIdIndex()
+	rx, _ := s.IndexId(itypes.MetaRid)
 	t := table.NewWriter()
 	t.SetPageSize(headRepeat)
 	t.SetOutputMirror(w)
@@ -393,9 +401,9 @@ func PrintDetail(view Viewer, desc TableDescriptor, w io.Writer) {
 
 func printValue(f *schema.Field, val any) any {
 	switch f.Type {
-	case types.FieldTypeBytes:
+	case schema.Bytes:
 		return LimitStringEllipsis(fmt.Sprintf("%x", val), 33)
-	case types.FieldTypeUint16:
+	case schema.Uint16:
 		if f.IsEnum() && f.Enum != nil {
 			enum, ok := f.Enum.Value(val.(uint16))
 			if ok {
@@ -403,9 +411,9 @@ func printValue(f *schema.Field, val any) any {
 			}
 		}
 		return val
-	case types.FieldTypeTimestamp, types.FieldTypeDate, types.FieldTypeTime:
-		return types.TimeScale(f.Scale).Format(val.(time.Time))
-	case types.FieldTypeInt128, types.FieldTypeInt256, types.FieldTypeDecimal128, types.FieldTypeDecimal256:
+	case schema.Timestamp, schema.Date, schema.Time:
+		return schema.TimeScale(f.Scale).Format(val.(time.Time))
+	case schema.Int128, schema.Int256, schema.Decimal128, schema.Decimal256:
 		return LimitStringEllipsis(val.(fmt.Stringer).String(), 33)
 	default:
 		return val
@@ -422,14 +430,14 @@ func PrintContent(ctx context.Context, view ContentViewer, desc TableDescriptor,
 	var cfgs []table.ColumnConfig
 	for _, field := range s.Fields {
 		switch field.Type {
-		case types.FieldTypeBytes:
+		case schema.Bytes:
 			cfgs = append(cfgs, table.ColumnConfig{
 				Name: field.Name,
 				Transformer: func(val any) string {
 					return hex.EncodeToString(val.([]byte))
 				},
 			})
-		case types.FieldTypeUint16:
+		case schema.Uint16:
 			if field.IsEnum() && field.Enum != nil {
 				cfgs = append(cfgs, table.ColumnConfig{
 					Name: field.Name,
@@ -442,11 +450,11 @@ func PrintContent(ctx context.Context, view ContentViewer, desc TableDescriptor,
 					},
 				})
 			}
-		case types.FieldTypeTimestamp, types.FieldTypeDate, types.FieldTypeTime:
+		case schema.Timestamp, schema.Date, schema.Time:
 			cfgs = append(cfgs, table.ColumnConfig{
 				Name: field.Name,
 				Transformer: func(val any) string {
-					return types.TimeScale(field.Scale).Format(val.(time.Time))
+					return schema.TimeScale(field.Scale).Format(val.(time.Time))
 				},
 			})
 		}
@@ -460,7 +468,7 @@ func PrintContent(ctx context.Context, view ContentViewer, desc TableDescriptor,
 	if desc.PackId < 0 {
 		pkg := view.ViewPackage(ctx, desc.PackId)
 		tomb := view.ViewTomb(desc.PackId)
-		rx := s.RowIdIndex()
+		rx, _ := s.IndexId(itypes.MetaRid)
 		head := make(table.Row, 0, s.NumFields()+1)
 		for _, v := range append([]string{"DEL"}, s.Names()...) {
 			head = append(head, any(v))

@@ -75,12 +75,13 @@ func (a Accessor[T]) Size() int {
 }
 
 func (a Accessor[T]) Get(n int) (t T) {
+	i := uint32(n)
 	assert.Always(a.block != nil, "get: nil block")
-	assert.Always(n < int(a.block.len), "get: block bounds out of range", "n", n, "len", a.block.len)
-	if n >= int(a.block.len) {
-		panic(ErrBlockOutOfBounds)
-	}
-	ptr := unsafe.Add(unsafe.Pointer(a.block.buf), n*int(a.block.sz))
+	assert.Always(i < a.block.len, "get: block bounds out of range", "n", n, "len", a.block.len)
+	// if i >= a.block.len {
+	// 	panic(ErrBlockOutOfBounds)
+	// }
+	ptr := unsafe.Add(unsafe.Pointer(a.block.buf), i*uint32(a.block.sz))
 	return *(*T)(ptr)
 }
 

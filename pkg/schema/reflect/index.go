@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 Blockwatch Data Inc.
+// Author: alex@blockwatch.cc
+
 package reflect
 
 import (
@@ -7,31 +10,56 @@ import (
 	"strings"
 
 	"blockwatch.cc/knoxdb/internal/hash"
+	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
-func IndexesOf(m any) ([]*IndexSchema, error) {
-	// need base schema which implictly parses indexes
-	base, err := SchemaOf(m)
-	if err != nil {
-		return nil, err
+func IndexesOf(m any, opts ...schema.Option) ([]*schema.IndexSchema, error) {
+	// interface must not be nil
+	if m == nil {
+		return nil, schema.ErrNilValue
 	}
-	return base.Indexes, nil
+	// validate type
+	val := reflect.Indirect(reflect.ValueOf(m))
+	if !val.IsValid() {
+		return nil, fmt.Errorf("invalid value of type %T", m)
+	}
+	return IndexesOfTag(reflect.TypeOf(m), TAG_NAME, opts...)
 }
 
-func MustIndexesOf(m any) []*IndexSchema {
-	v, err := IndexesOf(m)
+func MustIndexesOf(m any, opts ...schema.Option) []*schema.IndexSchema {
+	v, err := IndexesOf(m, opts...)
 	if err != nil {
 		panic(err)
 	}
 	return v
 }
 
-func IndexesOfTag(m any, tag string, base *Schema) ([]*IndexSchema, error) {
-	// reflect type
-	typ := reflect.Indirect(reflect.ValueOf(m)).Type()
+func IndexesFor[T any](opts ...schema.Option) ([]*schema.IndexSchema, error) {
+	return IndexesOfTag(reflect.TypeFor[T](), TAG_NAME, opts...)
+}
+
+func MustIndexesFor[T any](opts ...schema.Option) []*schema.IndexSchema {
+	v, err := IndexesFor[T]()
+	if err != nil {
+		panic(err)
+	}
+	return v
+}
+
+func IndexesOfTag(typ reflect.Type, tag string, opts ...schema.Option) ([]*schema.IndexSchema, error) {
+	// unwrap pointer
+	if typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+
+	// get base schema
+	base, err := detectSchema(typ, tag, opts...)
+	if err != nil {
+		return nil, err
+	}
 
 	// prepare result
-	res := make([]*IndexSchema, 0)
+	res := make([]*schema.IndexSchema, 0)
 
 	// detect duplicate index names
 	unique := make(map[string]struct{})
@@ -98,7 +126,7 @@ func nestedStructFields(typ reflect.Type) []reflect.StructField {
 	return fields
 }
 
-func reflectStructFieldForIndex(f reflect.StructField, tagName string, base *Schema) (*IndexSchema, error) {
+func reflectStructFieldForIndex(f reflect.StructField, tagName string, base *schema.Schema) (*schema.IndexSchema, error) {
 	tag := f.Tag.Get(tagName)
 
 	// skip fields with empty tags
@@ -106,7 +134,7 @@ func reflectStructFieldForIndex(f reflect.StructField, tagName string, base *Sch
 		return nil, nil
 	}
 
-	index := &IndexSchema{
+	index := &schema.IndexSchema{
 		Name: f.Name,
 		Base: base,
 	}
@@ -147,22 +175,22 @@ func reflectStructFieldForIndex(f reflect.StructField, tagName string, base *Sch
 		val = strings.TrimSpace(val)
 		switch key {
 		case "pk":
-			index.Type = IT_PK
+			index.Type = schema.PrimaryKeyIndex
 		case "index":
 			switch val {
 			case "hash":
-				index.Type = IT_HASH
+				index.Type = schema.HashIndex
 			case "int":
-				index.Type = IT_INT
+				index.Type = schema.IntegerIndex
 			case "pk":
-				index.Type = IT_PK
+				index.Type = schema.PrimaryKeyIndex
 			case "composite":
-				index.Type = IT_COMPOSITE
+				index.Type = schema.CompositeIndex
 			default:
 				return nil, fmt.Errorf("unsupported index type %q", val)
 			}
 		case "fields":
-			if index.Type != IT_COMPOSITE {
+			if index.Type != schema.CompositeIndex {
 				return nil, fmt.Errorf("unsupported fields list for index type %q", index.Type)
 			}
 			// parse field names

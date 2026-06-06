@@ -1,320 +1,190 @@
-// Copyright (c) 2025 Blockwatch Data Inc.
+// Copyright (c) 2026 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package schema
 
 import (
-	"strconv"
+	"slices"
+	"strings"
 
 	"blockwatch.cc/knoxdb/pkg/schema/enum"
 )
 
-type (
-	BuilderOption func(*Field)
-	IndexOption   func(*IndexSchema)
-)
+// SchemaOf creates a new schema for a struct or table
+// from provided fields and options.
+func SchemaOf(fields []*Field, opts ...Option) *Schema {
+	s := NewSchema(opts...)
 
-func Array[T int | uint8](n T) BuilderOption {
-	return func(f *Field) {
-		f.Flags |= F_ARRAY
-		f.Scale = uint8(n)
-	}
-}
-
-func Scale[T int | uint8](n T) BuilderOption {
-	return func(f *Field) {
-		f.Flags &^= F_ARRAY
-		f.Scale = uint8(n)
-	}
-}
-
-func Filter(t FilterType) BuilderOption {
-	return func(f *Field) {
-		f.Filter = t
-	}
-}
-
-func Compression(c BlockCompression) BuilderOption {
-	return func(f *Field) {
-		f.Compress = c
-	}
-}
-
-func Primary() BuilderOption {
-	return func(f *Field) {
-		f.Flags |= F_PRIMARY
-	}
-}
-
-func Timebase() BuilderOption {
-	return func(f *Field) {
-		f.Flags |= F_TIMEBASE
-	}
-}
-
-func Nullable() BuilderOption {
-	return func(f *Field) {
-		f.Flags |= F_NULLABLE
-	}
-}
-
-func Metadata() BuilderOption {
-	return func(f *Field) {
-		f.Flags |= F_METADATA
-	}
-}
-
-func Action() BuilderOption {
-	return func(f *Field) {
-		f.Flags |= F_ACTION
-	}
-}
-
-func Enum(e *enum.EnumDictionary) BuilderOption {
-	return func(f *Field) {
-		if e != nil {
-			f.Flags |= F_ENUM
-			f.Type = FT_U16
-			f.Enum = e
-		}
-	}
-}
-
-func Id(id uint16) BuilderOption {
-	return func(f *Field) {
-		f.Id = id
-	}
-}
-
-func IndexField(name string) IndexOption {
-	return func(idx *IndexSchema) {
-		f, ok := idx.Base.Find(name)
-		if ok {
-			idx.Fields = append(idx.Fields, f)
-		}
-	}
-}
-
-func ExtraField(name string) IndexOption {
-	return func(idx *IndexSchema) {
-		f, ok := idx.Base.Find(name)
-		if ok {
-			idx.Extra = append(idx.Extra, f)
-		}
-	}
-}
-
-type Builder struct {
-	s     *Schema
-	meta  bool
-	final bool
-}
-
-func NewBuilder() *Builder {
-	return &Builder{
-		s: NewSchema(),
-	}
-}
-
-func (b *Builder) Validate() error {
-	return b.s.Validate()
-}
-
-func (b *Builder) Finalize() *Builder {
-	if b.meta && !b.s.HasMeta() {
-		b.s = b.s.WithMeta() // clones and calls finalize
-	} else {
-		b.s.Finalize()
-	}
-	b.final = true
-	return b
-}
-
-func (b *Builder) Schema() *Schema {
-	if !b.final {
-		b.Finalize()
-	}
-	return b.s
-}
-
-func (b *Builder) WithName(s string) *Builder {
-	b.s.WithName(s)
-	b.final = false
-	return b
-}
-
-func (b *Builder) WithMeta(v bool) *Builder {
-	b.meta = v
-	b.final = false
-	return b
-}
-
-func (b *Builder) WithVersion(v uint32) *Builder {
-	b.s.WithVersion(v)
-	b.final = false
-	return b
-}
-
-func (b *Builder) addField(typ FieldType, name string, opts ...BuilderOption) *Builder {
-	if name == "" {
-		name = "F" + strconv.Itoa(len(b.s.Fields))
-	}
-	f := NewField(typ).WithName(name)
-	for _, o := range opts {
-		o(f)
-	}
-	b.s.WithField(f)
-	b.final = false
-	return b
-}
-
-func (b *Builder) Field(fields ...*Field) *Builder {
+	// clone fields, relink child fields and assign new ids
 	for _, f := range fields {
-		b.s.WithField(f.Clone())
+		f = f.Clone()
+		if f.Id == 0 {
+			f.Id = s.nextFieldId()
+		}
+		s.Fields = append(s.Fields, f)
+
+		// unroll nested child schema fields in pre-order;
+		// append, relink, assign new ids
+		if f.Child != nil {
+			// clone child schema including all nested fields
+			newChild := f.Child.Clone()
+
+			// enforce all child schema versions are equal
+			newChild.Version = s.Version
+
+			// add child fields to main schema
+			for _, c := range newChild.Fields {
+				// always create new ids
+				c.Id = s.nextFieldId()
+				s.Fields = append(s.Fields, c)
+			}
+
+			// replace child pointer
+			f.Child = newChild
+		}
 	}
-	b.final = false
-	return b
-}
 
-func (b *Builder) Add(name string, typ FieldType, opts ...BuilderOption) *Builder {
-	return b.addField(typ, name, opts...)
-}
-
-func (b *Builder) Int64(name string, opts ...BuilderOption) *Builder {
-	return b.addField(FT_I64, name, opts...)
-}
-
-func (b *Builder) Int32(name string, opts ...BuilderOption) *Builder {
-	return b.addField(FT_I32, name, opts...)
-}
-
-func (b *Builder) Int16(name string, opts ...BuilderOption) *Builder {
-	return b.addField(FT_I16, name, opts...)
-}
-
-func (b *Builder) Int8(name string, opts ...BuilderOption) *Builder {
-	return b.addField(FT_I8, name, opts...)
-}
-
-func (b *Builder) Uint64(name string, opts ...BuilderOption) *Builder {
-	return b.addField(FT_U64, name, opts...)
-}
-
-func (b *Builder) Uint32(name string, opts ...BuilderOption) *Builder {
-	return b.addField(FT_U32, name, opts...)
-}
-
-func (b *Builder) Uint16(name string, opts ...BuilderOption) *Builder {
-	return b.addField(FT_U16, name, opts...)
-}
-
-func (b *Builder) Uint8(name string, opts ...BuilderOption) *Builder {
-	return b.addField(FT_U8, name, opts...)
-}
-
-func (b *Builder) Timestamp(name string, opts ...BuilderOption) *Builder {
-	return b.addField(FT_TIMESTAMP, name, opts...)
-}
-
-func (b *Builder) Date(name string, opts ...BuilderOption) *Builder {
-	return b.addField(FT_DATE, name, opts...)
-}
-
-func (b *Builder) Time(name string, opts ...BuilderOption) *Builder {
-	return b.addField(FT_TIME, name, opts...)
-}
-
-func (b *Builder) Float64(name string, opts ...BuilderOption) *Builder {
-	return b.addField(FT_F64, name, opts...)
-}
-
-func (b *Builder) Float32(name string, opts ...BuilderOption) *Builder {
-	return b.addField(FT_F32, name, opts...)
-}
-
-func (b *Builder) Bool(name string, opts ...BuilderOption) *Builder {
-	return b.addField(FT_BOOL, name, opts...)
-}
-
-func (b *Builder) String(name string, opts ...BuilderOption) *Builder {
-	return b.addField(FT_STRING, name, opts...)
-}
-
-func (b *Builder) Text(name string, opts ...BuilderOption) *Builder {
-	return b.addField(FT_TEXT, name, opts...)
-}
-
-func (b *Builder) Bytes(name string, opts ...BuilderOption) *Builder {
-	return b.addField(FT_BYTES, name, opts...)
-}
-
-func (b *Builder) Blob(name string, opts ...BuilderOption) *Builder {
-	return b.addField(FT_BLOB, name, opts...)
-}
-
-func (b *Builder) Int128(name string, opts ...BuilderOption) *Builder {
-	return b.addField(FT_I128, name, opts...)
-}
-
-func (b *Builder) Int256(name string, opts ...BuilderOption) *Builder {
-	return b.addField(FT_I256, name, opts...)
-}
-
-func (b *Builder) Decimal32(name string, opts ...BuilderOption) *Builder {
-	return b.addField(FT_D32, name, opts...)
-}
-
-func (b *Builder) Decimal64(name string, opts ...BuilderOption) *Builder {
-	return b.addField(FT_D64, name, opts...)
-}
-
-func (b *Builder) Decimal128(name string, opts ...BuilderOption) *Builder {
-	return b.addField(FT_D128, name, opts...)
-}
-
-func (b *Builder) Decimal256(name string, opts ...BuilderOption) *Builder {
-	return b.addField(FT_D256, name, opts...)
-}
-
-func (b *Builder) Bigint(name string, opts ...BuilderOption) *Builder {
-	return b.addField(FT_BIGINT, name, opts...)
-}
-
-func (b *Builder) Enum(name string, e *enum.EnumDictionary, opts ...BuilderOption) *Builder {
-	return b.addField(FT_U16, name, append(opts, Enum(e))...)
-}
-
-func (b *Builder) AddIndex(name string, typ IndexType, opts ...IndexOption) *Builder {
-	if name == "" {
-		name = "I" + strconv.Itoa(len(b.s.Indexes))
+	// finalize child fields backwards for bottom up hashing
+	for _, f := range slices.Backward(s.Fields) {
+		if f.Child == nil {
+			continue
+		}
+		f.Child.Finalize()
 	}
-	idx := &IndexSchema{
-		Name: name,
-		Type: typ,
-		Base: b.s,
+
+	// relevel the type tree and assign parents
+	s.Relevel(0, 0)
+
+	// finalize, apply opts again
+	return s.Finalize(opts...)
+}
+
+// FieldOf creates a new field with type and options. It allows
+// easy construction of primitive type fields, but also provides
+// advanced users the ability to create customized complex fields
+// using options. Note not all combinations of types, flags and
+// options will produce valid fields for schemas and indexes. See
+// options documentation for details.
+func FieldOf(typ FieldType, opts ...FieldOption) *Field {
+	return NewField(typ, opts...)
+}
+
+// EnumOf creates a new enu field from an enum dictionary.
+func EnumOf(e *enum.EnumDictionary, opts ...FieldOption) *Field {
+	return NewField(Uint16, append([]FieldOption{
+		WithEnum(e),
+		WithName(e.Name()),
+	}, opts...)...)
+}
+
+// ArrayOf creates a new fixed length string or byte array.
+func ArrayOf(typ FieldType, n int, opts ...FieldOption) *Field {
+	return NewField(typ, append([]FieldOption{WithArray(n)}, opts...)...)
+}
+
+// ListOf creates a new list (slice) of a primitive type. Options
+// apply to the list field. To control options of the inner type
+// use ListFor with a pre-built schema.
+func ListOf(typ FieldType, opts ...FieldOption) *Field {
+	// prepare child type
+	child := NewField(typ, WithNullable(typ == Bytes || typ == Binary))
+
+	// use dummy to extract field name from options
+	dummy := NewField(typ, opts...)
+	name := dummy.Name
+	if name != "" {
+		child.Name = name + "." + ElementName
+	} else {
+		child.Name = ElementName
 	}
-	for _, o := range opts {
-		o(idx)
+
+	s := &Schema{
+		Name:    dummy.Name,
+		Fields:  []*Field{child},
+		Version: 1,
 	}
-	b.s.Indexes = append(b.s.Indexes, idx)
-	b.final = false
-	return b
+
+	return NewField(List, append([]FieldOption{
+		WithChildSchema(s),
+		WithNullable(),
+	},
+		opts...)...,
+	)
 }
 
-func (b *Builder) PkIndex() *Builder {
-	return b.AddIndex("pk_index", IT_PK, IndexField(b.s.Pk().Name))
+// ListFor creates a new list for complex types like structs or
+// arrays. Options apply to the outer list type. Options for content
+// types should be set when constructing fields for the internal schema.
+func ListFor(s *Schema, opts ...FieldOption) *Field {
+	f := NewField(List, append([]FieldOption{
+		WithNullable(),
+		WithChildSchema(s),
+	}, opts...)...)
+
+	for _, v := range f.Child.Fields {
+		if f.Name != "" {
+			if v.Name == "" {
+				v.Name = f.Name + "." + ElementName
+			} else {
+				v.Name = strings.Join([]string{f.Name, ElementName, v.Name}, ".")
+			}
+		}
+	}
+
+	return f
 }
 
-func (b *Builder) HashIndex(fname string, opts ...IndexOption) *Builder {
-	opts = append([]IndexOption{IndexField(fname)}, opts...)
-	return b.AddIndex(fname+"_index", IT_HASH, opts...)
+// IndexOf creates a new table index for one or multiple fields in
+// a base schema. Options control which fields are indexed and which
+// extra fields are included in the index.
+func IndexOf(base *Schema, typ IndexType, opts ...IndexOption) *IndexSchema {
+	if typ == PrimaryKeyIndex {
+		opts = append([]IndexOption{WithIndexFieldId(base.PkId())}, opts...)
+	}
+	return NewIndexSchema(typ, base, opts...)
 }
 
-func (b *Builder) IntIndex(fname string, opts ...IndexOption) *Builder {
-	opts = append([]IndexOption{IndexField(fname)}, opts...)
-	return b.AddIndex(fname+"_index", IT_INT, opts...)
+func MapOf(keyT, valT FieldType, opts ...FieldOption) *Field {
+	dummy := NewField(String, opts...)
+	if dummy.Name == "" {
+		dummy.Name = EntriesName
+	}
+	fKey := FieldOf(keyT, WithName(dummy.Name+"."+KeyName))
+	fVal := FieldOf(valT, WithName(dummy.Name+"."+ValueName), WithNullable(valT == Bytes || valT == Binary))
+
+	s := &Schema{
+		Name:    dummy.Name,
+		Fields:  []*Field{fKey, fVal},
+		Version: 1,
+	}
+	return NewField(Map, append([]FieldOption{
+		WithChildSchema(s),
+		WithNullable(),
+		WithName(EntriesName),
+	},
+		opts...)...,
+	)
 }
 
-func (b *Builder) CompositeIndex(name string, opts ...IndexOption) *Builder {
-	return b.AddIndex(name, IT_COMPOSITE, opts...)
+// TODO: Uups, no struct in struct
+func MapFor(keyT, valT *Schema, opts ...FieldOption) *Field {
+	fKey := FieldOf(0, WithName(KeyName), WithChildSchema(keyT))
+	fVal := FieldOf(0, WithName(ValueName), WithChildSchema(valT), WithNullable())
+
+	dummy := NewField(String, opts...)
+	if dummy.Name == "" {
+		dummy.Name = EntriesName
+	}
+	s := &Schema{
+		Name:    dummy.Name,
+		Fields:  []*Field{fKey, fVal},
+		Version: 1,
+	}
+	return NewField(Map, append([]FieldOption{
+		WithChildSchema(s),
+		WithNullable(),
+		WithName(EntriesName),
+	},
+		opts...)...,
+	)
 }

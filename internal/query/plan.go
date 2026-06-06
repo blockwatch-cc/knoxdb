@@ -225,11 +225,10 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 
 	// use tx snapshot if exists
 	p.Snap = engine.GetSnapshot(ctx)
-	hasMeta := p.Table.Schema().HasMeta()
 
 	// extend filter from snapshot if table supports metadata
 	// allow user override by setting an explicit request schema
-	if p.RequestSchema == nil && p.Snap != nil && hasMeta {
+	if p.RequestSchema == nil && p.Snap != nil {
 		mc, err := And(
 			// NEW records are visible when their xid committed before the
 			// snapshot, i.e. either `xid < snap.xmin` or `xid !E snap.xact`.
@@ -246,7 +245,7 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 			//
 			// $xmax == 0 || $xmax >= snap.xmax
 			Or(Equal("$xmax", 0), Ge("$xmax", p.Snap.Xmax)),
-		).Compile(p.Table.Schema())
+		).Compile(p.Table.Schema().Base())
 		if err != nil {
 			return p.Errorf("extend request filter: %v", err)
 		}
@@ -257,11 +256,7 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 	}
 
 	// request at least the row_id field
-	filterFieldIds := p.Filters.FieldIds()
-	if hasMeta {
-		filterFieldIds = append(filterFieldIds, schema.MetaRid)
-	}
-	filterFieldIds = slicex.Unique(filterFieldIds)
+	filterFieldIds := slicex.Unique(append(p.Filters.FieldIds(), types.MetaRid))
 
 	// construct request schema
 	if p.RequestSchema == nil {
@@ -269,7 +264,7 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 		if err != nil {
 			return p.Errorf("make request schema: %v", err)
 		}
-		p.RequestSchema = s.Sort().WithName(p.Tag)
+		p.RequestSchema = s.Sort().As(p.Tag)
 	}
 
 	// p.Log.Debugf("request schema %s", p.RequestSchema)
@@ -288,7 +283,7 @@ func (p *QueryPlan) Compile(ctx context.Context) error {
 
 	// ensure result schema exists
 	if p.ResultSchema == nil {
-		p.ResultSchema = p.Table.Schema()
+		p.ResultSchema = p.Table.Schema().Base()
 	}
 	// p.Log.Debugf("result schema %s", p.ResultSchema)
 
@@ -328,7 +323,7 @@ func (p *QueryPlan) QueryIndexes(ctx context.Context) error {
 		Name:  "$rid",
 		Type:  filter.ValueType(types.BlockUint64),
 		Index: ts.RowIdIndex(),
-		Id:    schema.MetaRid,
+		Id:    types.MetaRid,
 	}
 
 	// Step 2: add IN conditions from aggregate bits at each tree level
@@ -344,7 +339,7 @@ func (p *QueryPlan) QueryIndexes(ctx context.Context) error {
 	// but keep all meta fields), collect list of fields to drop (lists are sorted)
 	drop := slicex.RemoveSorted(
 		origFieldIds,
-		slicex.Unique(append(p.Filters.FieldIds(), schema.MetaFieldIds...))...,
+		slicex.Unique(append(p.Filters.FieldIds(), types.MetaFieldIds...))...,
 	)
 	if len(drop) > 0 {
 		keep := slicex.Remove(p.RequestSchema.Ids(), drop...)

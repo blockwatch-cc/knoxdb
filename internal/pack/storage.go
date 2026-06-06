@@ -9,6 +9,7 @@ import (
 	"slices"
 
 	"blockwatch.cc/knoxdb/internal/block"
+	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/store"
 )
 
@@ -157,7 +158,7 @@ func (p *Package) LoadFromDisk(ctx context.Context, bucket store.Bucket, fids []
 		n += len(buf)
 
 		// decode block from buffer page
-		b, err := block.Decode(f.Type.BlockType(), buf)
+		b, err := block.Decode(types.ToBlockType(f.Type), buf)
 		if err != nil {
 			return n, fmt.Errorf("loading block 0x%08x:%02d: %v", p.key, f.Id, err)
 		}

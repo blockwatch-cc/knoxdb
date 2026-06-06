@@ -265,7 +265,7 @@ func (c *Catalog) PutCheckpoint(ctx context.Context, lsn wal.LSN) error {
 	}
 }
 
-func (c *Catalog) GetSchema(ctx context.Context, key uint64) (*schema.Schema, error) {
+func (c *Catalog) GetSchema(ctx context.Context, key uint64) (*TableSchema, error) {
 	tx, err := GetTx(ctx).CatalogTx(c.db, false)
 	if err != nil {
 		return nil, err
@@ -274,14 +274,14 @@ func (c *Catalog) GetSchema(ctx context.Context, key uint64) (*schema.Schema, er
 	if err != nil {
 		return nil, ErrNoKey
 	}
-	s := schema.NewSchema()
+	s := types.NewTableSchema()
 	if err := s.UnmarshalBinary(buf); err != nil {
 		return nil, err
 	}
 	return s, nil
 }
 
-func (c *Catalog) PutSchema(ctx context.Context, s *schema.Schema) error {
+func (c *Catalog) PutSchema(ctx context.Context, s *TableSchema) error {
 	tx, err := GetTx(ctx).CatalogTx(c.db, true)
 	if err != nil {
 		return err
@@ -297,7 +297,7 @@ func (c *Catalog) PutSchema(ctx context.Context, s *schema.Schema) error {
 	return bucket.Put(encodeKey(s.Hash), buf)
 }
 
-func (c *Catalog) GetIndexSchema(ctx context.Context, key uint64) (*schema.IndexSchema, error) {
+func (c *Catalog) GetIndexSchema(ctx context.Context, key uint64) (*IndexSchema, error) {
 	tx, err := GetTx(ctx).CatalogTx(c.db, false)
 	if err != nil {
 		return nil, err
@@ -306,18 +306,19 @@ func (c *Catalog) GetIndexSchema(ctx context.Context, key uint64) (*schema.Index
 	if err != nil {
 		return nil, ErrNoKey
 	}
-	s := &schema.IndexSchema{}
+	s := &IndexSchema{}
 	if err := s.UnmarshalBinary(buf); err != nil {
 		return nil, err
 	}
-	s.Base, err = c.GetSchema(ctx, s.Base.Hash)
+	ts, err := c.GetSchema(ctx, s.Base.Hash)
 	if err != nil {
 		return nil, err
 	}
+	s.Base = ts.Schema
 	return s, nil
 }
 
-func (c *Catalog) PutIndexSchema(ctx context.Context, s *schema.IndexSchema) error {
+func (c *Catalog) PutIndexSchema(ctx context.Context, s *IndexSchema) error {
 	tx, err := GetTx(ctx).CatalogTx(c.db, true)
 	if err != nil {
 		return err
@@ -392,7 +393,7 @@ func (c *Catalog) ListTables(ctx context.Context) ([]uint64, error) {
 	return c.listObjectKeys(ctx, tablesKey)
 }
 
-func (c *Catalog) GetTable(ctx context.Context, key uint64) (s *schema.Schema, o Options, err error) {
+func (c *Catalog) GetTable(ctx context.Context, key uint64) (s *types.TableSchema, o Options, err error) {
 	var tx store.Tx
 	tx, err = GetTx(ctx).CatalogTx(c.db, false)
 	if err != nil {
@@ -411,7 +412,7 @@ func (c *Catalog) GetTable(ctx context.Context, key uint64) (s *schema.Schema, o
 	return
 }
 
-func (c *Catalog) AddTable(ctx context.Context, key uint64, s *schema.Schema, o Options) error {
+func (c *Catalog) AddTable(ctx context.Context, key uint64, s *types.TableSchema, o Options) error {
 	if err := c.PutSchema(ctx, s); err != nil {
 		return err
 	}

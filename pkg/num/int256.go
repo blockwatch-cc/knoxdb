@@ -55,22 +55,21 @@ func Int256FromInt128(in Int128) Int256 {
 }
 
 func Int256FromBytes(in []byte) Int256 {
-	_ = in[31] // bounds check hint to compiler; see golang.org/issue/14808
 	var x Int256
-	x[0] = binary.BigEndian.Uint64(in[0:8])
-	x[1] = binary.BigEndian.Uint64(in[8:16])
-	x[2] = binary.BigEndian.Uint64(in[16:24])
-	x[3] = binary.BigEndian.Uint64(in[24:32])
+	// _ = in[31] // bounds check hint to compiler; see golang.org/issue/14808
+	x[0] = binary.LittleEndian.Uint64(in[0:8])
+	x[1] = binary.LittleEndian.Uint64(in[8:16])
+	x[2] = binary.LittleEndian.Uint64(in[16:24])
+	x[3] = binary.LittleEndian.Uint64(in[24:32])
 	return x
 }
 
 func (x Int256) Bytes32() [32]byte {
-	// The PutUint64()s are inlined and we get 4x (load, bswap, store) instructions.
 	var b [32]byte
-	binary.BigEndian.PutUint64(b[0:8], x[0])
-	binary.BigEndian.PutUint64(b[8:16], x[1])
-	binary.BigEndian.PutUint64(b[16:24], x[2])
-	binary.BigEndian.PutUint64(b[24:32], x[3])
+	binary.LittleEndian.PutUint64(b[0:8], x[0])
+	binary.LittleEndian.PutUint64(b[8:16], x[1])
+	binary.LittleEndian.PutUint64(b[16:24], x[2])
+	binary.LittleEndian.PutUint64(b[24:32], x[3])
 	return b
 }
 

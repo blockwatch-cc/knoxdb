@@ -43,18 +43,17 @@ func Int128From2Int64(in0, in1 int64) Int128 {
 }
 
 func Int128FromBytes(in []byte) Int128 {
-	_ = in[15] // bounds check hint to compiler; see golang.org/issue/14808
 	var x Int128
-	x[0] = binary.BigEndian.Uint64(in[0:8])
-	x[1] = binary.BigEndian.Uint64(in[8:16])
+	// _ = in[15] // bounds check hint to compiler; see golang.org/issue/14808
+	x[0] = binary.LittleEndian.Uint64(in[0:8])
+	x[1] = binary.LittleEndian.Uint64(in[8:16])
 	return x
 }
 
 func (x Int128) Bytes16() [16]byte {
-	// The PutUint64()s are inlined and we get 4x (load, bswap, store) instructions.
 	var b [16]byte
-	binary.BigEndian.PutUint64(b[0:8], x[0])
-	binary.BigEndian.PutUint64(b[8:16], x[1])
+	binary.LittleEndian.PutUint64(b[0:8], x[0])
+	binary.LittleEndian.PutUint64(b[8:16], x[1])
 	return b
 }
 

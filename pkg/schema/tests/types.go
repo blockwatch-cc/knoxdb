@@ -9,87 +9,7 @@ import (
 	"time"
 
 	"blockwatch.cc/knoxdb/pkg/num"
-	"blockwatch.cc/knoxdb/pkg/schema"
-	"blockwatch.cc/knoxdb/pkg/schema/encode"
 	"blockwatch.cc/knoxdb/pkg/schema/enum"
-	"blockwatch.cc/knoxdb/pkg/schema/reflect"
-	"blockwatch.cc/knoxdb/pkg/schema/types"
-)
-
-type (
-	FieldType        = types.FieldType
-	FieldFlags       = types.FieldFlags
-	IndexType        = types.IndexType
-	FilterType       = types.FilterType
-	BlockCompression = types.BlockCompression
-
-	Schema      = schema.Schema
-	Field       = schema.Field
-	IndexSchema = schema.IndexSchema
-	Builder     = schema.Builder
-	View        = schema.View
-
-	Model     = reflect.Model
-	BaseModel = reflect.BaseModel
-)
-
-var (
-	NewSchema  = schema.NewSchema
-	NewField   = schema.NewField
-	NewBuilder = schema.NewBuilder
-	NewView    = schema.NewView
-
-	NewEncoder = encode.NewEncoder
-)
-
-const (
-	FT_TIMESTAMP = types.FieldTypeTimestamp
-	FT_I8        = types.FieldTypeInt8
-	FT_I16       = types.FieldTypeInt16
-	FT_I32       = types.FieldTypeInt32
-	FT_I64       = types.FieldTypeInt64
-	FT_I128      = types.FieldTypeInt128
-	FT_I256      = types.FieldTypeInt256
-	FT_U8        = types.FieldTypeUint8
-	FT_U16       = types.FieldTypeUint16
-	FT_U32       = types.FieldTypeUint32
-	FT_U64       = types.FieldTypeUint64
-	FT_F32       = types.FieldTypeFloat32
-	FT_F64       = types.FieldTypeFloat64
-	FT_D32       = types.FieldTypeDecimal32
-	FT_D64       = types.FieldTypeDecimal64
-	FT_D128      = types.FieldTypeDecimal128
-	FT_D256      = types.FieldTypeDecimal256
-	FT_BOOL      = types.FieldTypeBoolean
-	FT_STRING    = types.FieldTypeString
-	FT_BYTES     = types.FieldTypeBytes
-	FT_BIGINT    = types.FieldTypeBigint
-	FT_TIME      = types.FieldTypeTime
-	FT_DATE      = types.FieldTypeDate
-	FT_TEXT      = types.FieldTypeText
-	FT_BLOB      = types.FieldTypeBlob
-
-	F_PRIMARY  = types.FieldFlagPrimary
-	F_ARRAY    = types.FieldFlagArray
-	F_ENUM     = types.FieldFlagEnum
-	F_DELETED  = types.FieldFlagDeleted
-	F_METADATA = types.FieldFlagMetadata
-	F_NULLABLE = types.FieldFlagNullable
-	F_TIMEBASE = types.FieldFlagTimebase
-	F_ACTION   = types.FieldFlagAction
-
-	I_HASH      = types.IndexTypeHash
-	I_INT       = types.IndexTypeInt
-	I_PK        = types.IndexTypePk
-	I_COMPOSITE = types.IndexTypeComposite
-
-	FL_BITS    = types.FilterTypeBits
-	FL_BLOOM2B = types.FilterTypeBloom2b
-	FL_BLOOM3B = types.FilterTypeBloom3b
-	FL_BLOOM4B = types.FilterTypeBloom4b
-	FL_BLOOM5B = types.FilterTypeBloom5b
-	FL_BFUSE8  = types.FilterTypeBfuse8
-	FL_BFUSE16 = types.FilterTypeBfuse16
 )
 
 // not supported, used for error checks only
@@ -165,23 +85,6 @@ type InvalidPkType struct {
 	Id int64 `knox:",pk"`
 }
 
-type NoModelTagName struct {
-	Id uint64 `knox:"tagid,pk"`
-}
-
-type ModelName struct {
-	BaseModel // defines id as pk
-}
-
-func (ModelName) Key() string { return "model_name" }
-
-type NoModelPrivate struct {
-	NoModelTagName         // anon embed will promote fields
-	_              string  // non exported
-	B              string  `knox:"-"` // exported but skipped
-	_              [2]byte // padding
-}
-
 // Register a global enum and dictionary for all schema tests
 type MyEnum string
 
@@ -191,37 +94,35 @@ var (
 )
 
 type AllTypes struct {
-	BaseModel
-	Int64   int64          `knox:"i64"`
-	Int32   int32          `knox:"i32"`
-	Int16   int16          `knox:"i16"`
-	Int8    int8           `knox:"i8"`
-	Uint64  uint64         `knox:"u64"`
-	Uint32  uint32         `knox:"u32"`
-	Uint16  uint16         `knox:"u16"`
-	Uint8   uint8          `knox:"u8"`
-	Float64 float64        `knox:"f64"`
-	Float32 float32        `knox:"f32"`
-	D32     num.Decimal32  `knox:"d32,scale=5"`
-	D64     num.Decimal64  `knox:"d64,scale=15"`
-	D128    num.Decimal128 `knox:"d128,scale=18"`
-	D256    num.Decimal256 `knox:"d256,scale=24"`
-	I128    num.Int128     `knox:"i128"`
-	I256    num.Int256     `knox:"i256"`
-	Bool    bool           `knox:"bool"`
-	Time    time.Time      `knox:"time"`
-	Hash    []byte         `knox:"bytes"`
-	Array   [2]byte        `knox:"array[2]"`
-	String  string         `knox:"string"`
-	MyEnum  MyEnum         `knox:"my_enum,enum"`
-	Big     num.Big        `knox:"big"`
+	Id      uint64         `knox:"id,pk"`         // 0
+	Int64   int64          `knox:"i64"`           // 1
+	Int32   int32          `knox:"i32"`           // 2
+	Int16   int16          `knox:"i16"`           // 3
+	Int8    int8           `knox:"i8"`            // 4
+	Uint64  uint64         `knox:"u64"`           // 5
+	Uint32  uint32         `knox:"u32"`           // 6
+	Uint16  uint16         `knox:"u16"`           // 7
+	Uint8   uint8          `knox:"u8"`            // 8
+	Float64 float64        `knox:"f64"`           // 9
+	Float32 float32        `knox:"f32"`           // 10
+	D32     num.Decimal32  `knox:"d32,scale=5"`   // 11
+	D64     num.Decimal64  `knox:"d64,scale=15"`  // 12
+	D128    num.Decimal128 `knox:"d128,scale=18"` // 13
+	D256    num.Decimal256 `knox:"d256,scale=24"` // 14
+	I128    num.Int128     `knox:"i128"`          // 15
+	I256    num.Int256     `knox:"i256"`          // 16
+	Bool    bool           `knox:"bool"`          // 17
+	Time    time.Time      `knox:"time"`          // 18
+	Hash    []byte         `knox:"bytes"`         // 19
+	Array   [2]byte        `knox:"array[2]"`      // 20
+	String  string         `knox:"string"`        // 21
+	MyEnum  MyEnum         `knox:"my_enum,enum"`  // 22
+	Big     num.Big        `knox:"big"`           // 23
 }
 
 func NewAllTypes(i int64) AllTypes {
 	return AllTypes{
-		BaseModel: BaseModel{
-			Id: uint64(i),
-		},
+		Id:      uint64(i),
 		Int64:   i,
 		Int32:   int32(i),
 		Int16:   int16(i),
@@ -249,13 +150,12 @@ func NewAllTypes(i int64) AllTypes {
 }
 
 type NativeTypes struct {
-	BaseModel
 	Int  int  `knox:"int"`
 	Uint uint `knox:"uint"`
 }
 
 type ArrayTypes struct {
-	BaseModel
+	Id          uint64   `knox:"id,pk"`
 	ByteArray   [20]byte `knox:"byte_array"`
 	StringArray string   `knox:"string_array,array=20"`
 }
@@ -264,9 +164,7 @@ func NewArrayTypes(i int64) ArrayTypes {
 	b := binary.LittleEndian.AppendUint64(nil, uint64(i))
 	buf := bytes.Repeat(b, 3)[:20]
 	return ArrayTypes{
-		BaseModel: BaseModel{
-			Id: uint64(i),
-		},
+		Id:          uint64(i),
 		ByteArray:   [20]byte(buf),
 		StringArray: hex.EncodeToString(buf[:10]),
 	}
@@ -285,174 +183,207 @@ type TimeTypes struct {
 }
 
 type LargeArrayToBlob struct {
-	BaseModel
-	F [256]byte
+	Id uint64 `knox:"id,pk"`
+	F  [256]byte
 }
 
 type MarshalerTypes struct {
-	BaseModel
 	Stringer Stringer `knox:"stringer"`
 	Byter    Byter    `knox:"byter"`
 }
 
 type MarshalerStructTypes struct {
-	BaseModel
 	Stringer StringerStruct `knox:"stringer"`
 	Byter    ByterStruct    `knox:"byter"`
 }
 
 type MarshalerMapTypes struct {
-	BaseModel
 	Map MapType `knox:"map"`
 }
 
 type NoMarshalerTypes struct {
-	BaseModel
 	Embed MarshalerStructTypes `knox:"no_marshalers"`
 }
 
 type NoMarshalerSliceTypes struct {
-	BaseModel
 	Slice []int64 `knox:"no_marshalers"`
 }
 
-type OtherStruct struct {
-	Other uint64
-}
-
-type MultipleAnonStructs struct {
-	NoModelTagName // Id, tag: tagid,pk
-	OtherStruct    // Other
-}
-
-// Fields with the same name at the same depth
-// cancel one another out. reflect.VisibleFields()
-// will not return such fields and we cannot use them.
-type MultipleAnonStructsWithCanceledNames struct {
-	NoModelTagName // Id
-	NoModelNoTag   // Id
-}
-
 type NoMarshalerMapTypes struct {
-	BaseModel
 	Map map[int]int `knox:"no_map"`
 }
 
-type PointerTypes struct {
-	BaseModel
+type InvalidPointerType struct {
 	Ptr *int `knox:"ptr"`
 }
 
-type DuplicatePkType struct {
-	BaseModel
+type InvalidDuplicateName struct {
+	Id  uint64 `knox:"id"`
+	Val uint64 `knox:"id"`
+}
+
+type InvalidDuplicatePkType struct {
+	Id  uint64 `knox:"id,pk"`
 	Val uint64 `knox:"val,pk"`
 }
 
-type DuplicateAnonPkType struct {
-	BaseModel
-	NoModelTag
-	NoModelNoTag
-}
-
-type DuplicateField struct {
-	BaseModel
-	A int64 `knox:"x"`
-	B int64 `knox:"x"`
-}
-
 type InvalidNativeTypes struct {
-	BaseModel
 	Int  int  `knox:"int"`
 	Uint uint `knox:"uint"`
 }
 
 type InvalidArrayType struct {
-	BaseModel
 	F int64 `knox:",array=1"`
 }
 
 type InvalidArrayMissing struct {
-	BaseModel
 	F []byte `knox:",array"`
 }
 
 type InvalidArrayNaN struct {
-	BaseModel
 	F []byte `knox:",array=x"`
 }
 
 type InvalidArrayZero struct {
-	BaseModel
 	F []byte `knox:",array=0"`
 }
 
 type InvalidArrayNeg struct {
-	BaseModel
 	F []byte `knox:",array=-1"`
 }
 
 type InvalidArraySizeMismatch struct {
-	BaseModel
 	F [20]byte `knox:",array=21"`
 }
 
 type InvalidScaleType struct {
-	BaseModel
 	F int64 `knox:",scale=1"`
 }
 
 type InvalidScaleMissing struct {
-	BaseModel
 	D num.Decimal32 `knox:",scale"`
 }
 
 type InvalidScaleNaN struct {
-	BaseModel
 	D num.Decimal32 `knox:",scale=x"`
 }
 
 type InvalidScaleNeg struct {
-	BaseModel
 	D num.Decimal32 `knox:",scale=-1"`
 }
 
 type InvalidScaleTooLarge struct {
-	BaseModel
 	D num.Decimal32 `knox:",scale=36"`
 }
 
-type HashIndex struct {
-	BaseModel
-	Hash [32]byte `knox:"hash,index=hash"`
-}
-
-type IntegerIndex struct {
-	BaseModel
-	Int int64 `knox:"i64,index=int"`
-}
-
 type BloomFilter struct {
-	BaseModel
-	Int int64 `knox:"i64,filter=bloom3b"`
-}
-
-type InvalidIndexType struct {
-	BaseModel
-	Int int64 `knox:",index=undefined"`
-}
-
-type InvalidIndexFieldType struct {
-	BaseModel
-	B []byte `knox:",index=int"`
-}
-
-type InvalidBloomFilter struct {
-	BaseModel
-	B []byte `knox:",index=bloomx"`
+	Id  uint64 `knox:"id,pk"`
+	Int int64  `knox:"i64,filter=bloom3b"`
 }
 
 type MetaFields struct {
-	BaseModel
+	Id  uint64 `knox:"id,pk"`
 	I64 int64  `knox:"i64,metadata"`
 	U64 uint64 `knox:"u64"`
+}
+
+type ListFields struct {
+	Int64a      int64
+	U64List     []uint64        `knox:"u64_list"`
+	TimeList    []time.Time     `knox:"time_list,element=date"`
+	PairList    []Pair          `knox:"pair_list"`
+	ByteList    [][]byte        `knox:"byte_list,notnull"`
+	ArrList     [][2]byte       `knox:"arr_list,notnull"`
+	DecimalList []num.Decimal32 `knox:"dec_list,notnull,element=scale=4"`
+	Int64b      int64
+}
+
+func NewListFields() ListFields {
+	return ListFields{
+		Int64a:  1,
+		U64List: []uint64{2, 3},
+		TimeList: []time.Time{
+			time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+			time.Date(2026, 4, 4, 0, 0, 0, 0, time.UTC),
+		},
+		PairList: []Pair{
+			{Key: 1, Val: 2},
+			{Key: 3, Val: 4},
+		},
+		ByteList: [][]byte{
+			binary.BigEndian.AppendUint64(nil, 23),
+			binary.BigEndian.AppendUint64(nil, 42),
+		},
+		ArrList: [][2]byte{
+			{1, 2},
+			{3, 4},
+		},
+		DecimalList: []num.Decimal32{
+			num.NewDecimal32(1000, 4),
+			num.NewDecimal32(2000, 4),
+			num.NewDecimal32(3000, 4),
+		},
+		Int64b: 42,
+	}
+}
+
+type Pair struct {
+	Key int64 `knox:"k64"`
+	Val int64 `knox:"v64"`
+}
+
+type ListInListFields struct {
+	Int64a      int64
+	NestedUints [][]uint64
+	NestedPairs [][]Pair
+	Int64b      int64
+}
+
+func NewListInListFields() ListInListFields {
+	return ListInListFields{
+		Int64a: 1,
+		NestedUints: [][]uint64{
+			{2, 3},
+			{4, 5},
+		},
+		NestedPairs: [][]Pair{
+			{
+				{Key: 1, Val: 2},
+				{Key: 3, Val: 4},
+			},
+			{
+				{Key: 5, Val: 6},
+				{Key: 7, Val: 8},
+			},
+		},
+		Int64b: 42,
+	}
+}
+
+type OuterPairStruct struct {
+	Val    uint32
+	Pairs2 []Pair
+}
+
+type ListInStructInListFields struct {
+	Int64a int64
+	Pairs1 []OuterPairStruct
+	Int64b int64
+}
+
+func NewListInStructInListFields() ListInStructInListFields {
+	return ListInStructInListFields{
+		Int64a: 1,
+		Pairs1: []OuterPairStruct{
+			{Val: 2, Pairs2: []Pair{
+				{Key: 1, Val: 2},
+				{Key: 3, Val: 4},
+			}},
+			{Val: 4, Pairs2: []Pair{
+				{Key: 5, Val: 6},
+				{Key: 7, Val: 8},
+			}},
+		},
+		Int64b: 42,
+	}
 }

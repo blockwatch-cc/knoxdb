@@ -124,9 +124,9 @@ func NewDatabase(t testing.TB, typs ...any) (*engine.Engine, func()) {
 
 	// Create tables and indexes for given types
 	for _, typ := range typs {
-		s, err := reflect.SchemaOf(typ, schema.WithEnums(enums))
+		s, err := reflect.SchemaOf(typ, schema.Enums(enums))
 		require.NoError(t, err, "Failed to generate schema for type %T", typ)
-		s = s.WithMeta()
+		t.Log("Using schema", s)
 		opts := NewTestTableOptions(t, "", "")
 		if testing.Verbose() {
 			t.Logf("NEW table=%s driver=%s engine=%s", s.Name, opts.Driver, opts.Engine)
@@ -134,8 +134,11 @@ func NewDatabase(t testing.TB, typs ...any) (*engine.Engine, func()) {
 		_, err = db.CreateTable(ctx, s, opts.TableOptions()...)
 		require.NoError(t, err, "Failed to create table for type %T", typ)
 
+		indexes, err := reflect.IndexesOf(typ)
+		require.NoError(t, err, "Failed to generate index schemas for type %T", typ)
+
 		// create indexes for type
-		for _, is := range s.Indexes {
+		for _, is := range indexes {
 			iopts := NewTestIndexOptions(t, "", "")
 			_, err = db.CreateIndex(ctx, is, iopts.IndexOptions()...)
 			require.NoError(t, err, "create pk index")
@@ -148,7 +151,8 @@ func NewDatabase(t testing.TB, typs ...any) (*engine.Engine, func()) {
 		}
 		for _, typ := range typs {
 			s, _ := reflect.SchemaOf(typ)
-			for _, is := range s.Indexes {
+			idxs, _ := reflect.IndexesOf(typ)
+			for _, is := range idxs {
 				require.NoError(t, db.DropIndex(ctx, is.Name))
 			}
 			require.NoError(t, db.DropTable(ctx, s.Name))

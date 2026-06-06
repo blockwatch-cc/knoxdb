@@ -20,7 +20,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/tests/testutil"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema/encode"
-	"blockwatch.cc/knoxdb/pkg/schema/reflect"
 	"blockwatch.cc/knoxdb/pkg/slicex"
 	"github.com/echa/log"
 	"github.com/stretchr/testify/assert"
@@ -623,7 +622,7 @@ func setupJournalTest(t *testing.T) (context.Context, *Journal, func(int) []byte
 	e := etests.NewTestEngine(t, etests.NewTestDatabaseOptions(t, "mem"))
 
 	// create test journal
-	j := NewJournal(testSchema.WithMeta(), 128, 64).
+	j := NewJournal(testSchema.Schema, 128, 64).
 		WithLogger(log.Log).
 		WithState(engine.NewObjectState("tst"))
 
@@ -632,9 +631,9 @@ func setupJournalTest(t *testing.T) (context.Context, *Journal, func(int) []byte
 	require.NoError(t, err)
 
 	// create record producer helper
-	enc := encode.NewEncoderFor[reflect.BaseModel]()
+	enc := encode.NewEncoderFor[BaseModel]()
 	makeRecord := func(i int) []byte {
-		buf, err := enc.Encode(reflect.BaseModel{Id: uint64(i)}, nil)
+		buf, err := enc.Encode(BaseModel{Id: uint64(i)}, nil)
 		require.NoError(t, err)
 		return buf
 	}

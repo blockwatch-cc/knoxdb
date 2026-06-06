@@ -1,21 +1,19 @@
-// Copyright (c) 2024 Blockwatch Data Inc.
+// Copyright (c) 2024-2026 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package encode
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
-	"io"
 	"reflect"
+	"sync"
 	"time"
 	"unsafe"
 
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	sreflect "blockwatch.cc/knoxdb/pkg/schema/reflect"
-	"blockwatch.cc/knoxdb/pkg/schema/types"
 )
 
 type DecoderT[T any] struct {
@@ -27,253 +25,141 @@ func NewDecoderFor[T any](opts ...schema.Option) *DecoderT[T] {
 	if err != nil {
 		panic(err)
 	}
+	l, err := sreflect.LayoutFor[T]()
+	if err != nil {
+		panic(err)
+	}
 	return &DecoderT[T]{
-		dec: NewDecoder(s),
+		dec: NewDecoderWithLayout(s, l),
 	}
 }
 
-func (d *DecoderT[T]) Schema() *Schema {
+func (d *DecoderT[T]) Schema() *schema.Schema {
 	return d.dec.schema
-}
-
-func (d *DecoderT[T]) Read(r io.Reader) (val *T, err error) {
-	val = new(T)
-	err = d.dec.Read(r, val)
-	return
 }
 
 func (d *DecoderT[T]) Decode(buf []byte, val *T) (*T, error) {
 	if val == nil {
 		val = new(T)
 	}
-	d.dec.DecodePtr(buf, unsafe.Pointer(val))
+	d.dec.decodePtr(buf, unsafe.Pointer(val))
 	return val, nil
 }
 
 func (d *DecoderT[T]) DecodeSlice(buf []byte, res []T) ([]T, error) {
 	if res == nil {
-		// We slightly over-allocate the result slice when data contains
-		// long strings/bytes, however this single allocation is still
-		// much more performant than growing the slice multiple times.
-		// For fixed-size schemas, a single allocation is all we need.
-		res = make([]T, len(buf)/max(d.dec.schema.MinWireSize, 1))
+		// pre-allocate space for the number of encoded elements
+		var n int
+		if d.dec.schema.IsFixedSize {
+			n = len(buf) / d.dec.schema.MinWireSize
+		} else {
+			if d.dec.view == nil {
+				d.dec.view = schema.NewView(d.dec.schema)
+			}
+			n = d.dec.view.Count(buf)
+		}
+		res = make([]T, n)
 	}
 	var n int
 	for n = range res {
 		if len(buf) == 0 {
 			break
 		}
-		buf = d.dec.DecodePtr(buf, unsafe.Pointer(&res[n]))
+		buf = d.dec.decodePtr(buf, unsafe.Pointer(&res[n]))
 	}
 	return res[:n], nil
 }
 
+var decoderPool = sync.Pool{}
+
 type Decoder struct {
-	schema  *Schema
+	schema  *schema.Schema
+	view    *schema.View
+	layout  *sreflect.Layout
 	buf     *bytes.Buffer
-	layout  binary.ByteOrder
 	opcodes []OpCode
+	nested  map[uint32]*Decoder
 }
 
-func NewDecoder(s *Schema) *Decoder {
-	// ensure we know the memory layout
-	sreflect.AppendFieldLayout(s)
-	return &Decoder{
-		schema:  s,
-		buf:     bytes.NewBuffer(make([]byte, 0, s.MaxWireSize)),
-		layout:  binary.LittleEndian,
-		opcodes: CompileCodecs(s),
+func NewDecoder(s *schema.Schema) *Decoder {
+	return NewDecoderWithLayout(s, nil)
+}
+
+func NewDecoderWithLayout(s *schema.Schema, l *sreflect.Layout) *Decoder {
+	var dec *Decoder
+	if dif := decoderPool.Get(); dif != nil {
+		dec = dif.(*Decoder)
+	} else {
+		dec = &Decoder{}
 	}
+	dec.schema = s
+	dec.layout = l
+	dec.opcodes = CompileCodecs(s)
+	if l != nil && len(l.Children) > 0 && dec.nested == nil {
+		dec.nested = make(map[uint32]*Decoder)
+	}
+	return dec
 }
 
-func (d *Decoder) Schema() *Schema {
-	return d.schema
-}
-
-// Read reads wire encoded data from r and decodes into a
-// new heap allocated elemen of type T.
-//
-// When wire size is fixed we can read and decode in one step.
-// Otherwise we take a slow path that reads variable length data
-// as length fields are encountered. This requires multiple calls
-// to the underlying reader.
-//
-// Reading is staged through an internal decoder buffer
-// with an inital size of minWireSize bytes. This buffer gets
-// extended whenever a dynamic data type length is found so
-// that it contains at least the bytes for the dynamic data
-// plus all fixed bytes for following fields a that time.
-// Because the buffer may grow and reallocate it is NOT SAFE
-// to reference memory for strings and byte slices and hence
-// we make explicit copies. Moreover, a copy is necessary to
-// safely retain returned objects since the internal buffer is
-// re-used between calls.
-func (d *Decoder) Read(r io.Reader, val any) error {
-	// reset decoder buffer
-	d.buf.Reset()
-
-	// read first chunk of data (this is sufficient when schema is fixed size)
-	n, err := io.CopyN(d.buf, r, int64(d.schema.MinWireSize))
+func (d *Decoder) initLayout(val any) error {
+	if d.layout != nil {
+		return nil
+	}
+	l, err := sreflect.LayoutOf(val, d.schema)
 	if err != nil {
 		return err
 	}
-	if n != int64(d.schema.MinWireSize) {
-		return ErrShortBuffer
-	}
-
-	// fast path decode fixed size data
-	if d.schema.IsFixedSize {
-		return d.Decode(d.buf.Bytes(), val)
-	}
-
-	// slow path decode with additional read calls (may reallocate buffer!)
-	if val == nil {
-		return ErrNilValue
-	}
-	rval := reflect.Indirect(reflect.ValueOf(val))
-	base := rval.Addr().UnsafePointer()
-
-	for op, code := range d.opcodes {
-		field := d.schema.Fields[op]
-		ptr := unsafe.Add(base, field.Offset)
-		switch code {
-		default:
-			// int, uint, float, bool
-			_, err = d.buf.Read(unsafe.Slice((*byte)(ptr), field.Type.Size()))
-
-		case OC_SKIP:
-			// noop
-
-		case OC_FIXBYTES:
-			// explicit copy
-			_, err = d.buf.Read(unsafe.Slice((*byte)(ptr), field.Scale))
-
-		case OC_FIXSTRING:
-			// explicit copy
-			*(*string)(ptr) = string(d.buf.Next(int(field.Scale)))
-
-		case OC_STRING:
-			l := int(d.buf.Next(1)[0])
-			n, err = io.CopyN(d.buf, r, int64(l)) // may realloc!
-			if err != nil {
-				return err
-			}
-			if n != int64(l) {
-				return ErrShortBuffer
-			}
-			// explicit copy
-			*(*string)(ptr) = string(d.buf.Next(l))
-
-		case OC_BYTES:
-			l := int(d.buf.Next(1)[0])
-			n, err = io.CopyN(d.buf, r, int64(l)) // may realloc!
-			if err != nil {
-				return err
-			}
-			if n != int64(l) {
-				return ErrShortBuffer
-			}
-			// explicit copy
-			*(*[]byte)(ptr) = bytes.Clone(d.buf.Next(l))
-
-		case OC_TEXT:
-			l := int(d.layout.Uint32(d.buf.Next(4)))
-			n, err = io.CopyN(d.buf, r, int64(l)) // may realloc!
-			if err != nil {
-				return err
-			}
-			if n != int64(l) {
-				return ErrShortBuffer
-			}
-			// explicit copy
-			*(*string)(ptr) = string(d.buf.Next(l))
-
-		case OC_BLOB:
-			l := int(d.layout.Uint32(d.buf.Next(4)))
-			n, err = io.CopyN(d.buf, r, int64(l)) // may realloc!
-			if err != nil {
-				return err
-			}
-			if n != int64(l) {
-				return ErrShortBuffer
-			}
-			// explicit copy
-			*(*[]byte)(ptr) = bytes.Clone(d.buf.Next(l))
-
-		case OC_TIMESTAMP, OC_TIME, OC_DATE:
-			ts := int64(d.layout.Uint64(d.buf.Next(8)))
-			*(*time.Time)(ptr) = types.TimeScale(field.Scale).FromUnix(ts)
-
-		case OC_I128:
-			*(*num.Int128)(ptr) = num.Int128FromBytes(d.buf.Next(16))
-
-		case OC_I256:
-			*(*num.Int256)(ptr) = num.Int256FromBytes(d.buf.Next(32))
-
-		case OC_D32:
-			(*(*num.Decimal32)(ptr)).Set(int32(d.layout.Uint32(d.buf.Next(4))))
-			(*(*num.Decimal32)(ptr)).SetScale(field.Scale)
-
-		case OC_D64:
-			(*(*num.Decimal64)(ptr)).Set(int64(d.layout.Uint64(d.buf.Next(8))))
-			(*(*num.Decimal64)(ptr)).SetScale(field.Scale)
-
-		case OC_D128:
-			(*(*num.Decimal128)(ptr)).Set(num.Int128FromBytes(d.buf.Next(16)))
-			(*(*num.Decimal128)(ptr)).SetScale(field.Scale)
-
-		case OC_D256:
-			(*(*num.Decimal256)(ptr)).Set(num.Int256FromBytes(d.buf.Next(32)))
-			(*(*num.Decimal256)(ptr)).SetScale(field.Scale)
-
-		case OC_ENUM:
-			u16 := d.layout.Uint16(d.buf.Next(2))
-			if enum := field.Enum; enum != nil {
-				val, ok := enum.Value(u16)
-				if !ok {
-					err = fmt.Errorf("%s: invalid enum value %d", field.Name, u16)
-				}
-				*(*string)(ptr) = val
-			} else {
-				err = fmt.Errorf("translation for enum %q not registered", field.Name)
-			}
-		case OC_BIGINT:
-			// read as raw bytes and create num.Big
-			l := int(d.buf.Next(1)[0])
-			n, err = io.CopyN(d.buf, r, int64(l)) // may realloc!
-			if err != nil {
-				return err
-			}
-			if n != int64(l) {
-				return ErrShortBuffer
-			}
-			err = (*num.Big)(ptr).UnmarshalBinary(d.buf.Next(l))
-		}
-
-		if err != nil {
-			return err
-		}
+	d.layout = l
+	if len(l.Children) > 0 && d.nested == nil {
+		d.nested = make(map[uint32]*Decoder)
 	}
 	return nil
+}
+
+func (d *Decoder) Close() {
+	d.schema = nil
+	d.view = nil
+	d.layout = nil
+	d.buf = nil
+	d.opcodes = nil
+	for _, v := range d.nested {
+		v.Close()
+	}
+	clear(d.nested)
+	decoderPool.Put(d)
+}
+
+func (d *Decoder) Schema() *schema.Schema {
+	return d.schema
 }
 
 func (d *Decoder) Decode(buf []byte, val any) error {
 	if val == nil {
-		return ErrNilValue
+		return schema.ErrNilValue
 	}
+	// ensure Go type layout is resolved
+	if err := d.initLayout(val); err != nil {
+		return err
+	}
+
 	rval := reflect.Indirect(reflect.ValueOf(val))
-	base := rval.Addr().UnsafePointer()
-	d.DecodePtr(buf, base)
+
+	// ensure the type actually matches our layout
+	if rval.Type() != d.layout.Type {
+		return fmt.Errorf("decode: type mismatch: expected %s, have %s", d.layout.Type, rval.Type())
+	}
+
+	d.decodePtr(buf, rval.Addr().UnsafePointer())
 	return nil
 }
 
-func (d *Decoder) DecodePtr(buf []byte, base unsafe.Pointer) []byte {
+func (d *Decoder) decodePtr(buf []byte, base unsafe.Pointer) []byte {
 	for op, code := range d.opcodes {
 		if code == OC_SKIP {
 			continue
 		}
 		field := d.schema.Fields[op]
-		ptr := unsafe.Add(base, field.Offset)
+		ptr := unsafe.Add(base, d.layout.Offsets[op])
 		buf = d.readField(code, field, ptr, buf)
 	}
 	return buf
@@ -281,30 +167,55 @@ func (d *Decoder) DecodePtr(buf []byte, base unsafe.Pointer) []byte {
 
 func (d *Decoder) DecodeSlice(buf []byte, slice any) (int, error) {
 	if slice == nil {
-		return 0, ErrNilValue
+		return 0, schema.ErrNilValue
 	}
 	rslice := reflect.Indirect(reflect.ValueOf(slice))
-	base := rslice.UnsafePointer()
-	sz := rslice.Type().Elem().Size()
-	num := rslice.Len()
 
-	var i int
-	for i = 0; i < num && len(buf) > 0; i++ {
+	// ensure Go type layout is resolved
+	if err := d.initLayout(slice); err != nil {
+		return 0, err
+	}
+
+	// ensure the type actually matches our layout
+	etyp := rslice.Type().Elem()
+	if etyp != d.layout.Type {
+		return 0, fmt.Errorf("decode: type mismatch: expected %s, have %s", d.layout.Type, etyp)
+	}
+
+	base := rslice.UnsafePointer()
+	var n int
+	for range rslice.Len() {
 		for op, code := range d.opcodes {
 			if code == OC_SKIP {
 				continue
 			}
-			field := d.schema.Fields[op]
-			ptr := unsafe.Add(base, field.Offset)
-			buf = d.readField(code, field, ptr, buf)
+			ptr := unsafe.Add(base, d.layout.Offsets[op])
+			buf = d.readField(code, d.schema.Fields[op], ptr, buf)
 		}
-		base = unsafe.Add(base, sz)
+		base = unsafe.Add(base, d.layout.Size)
+		n++
+		if len(buf) == 0 {
+			break
+		}
 	}
-	return i, nil
+	return n, nil
+}
+
+func (d *Decoder) decodeNestedSlice(base unsafe.Pointer, baseLen int, buf []byte) {
+	for range baseLen {
+		for op, code := range d.opcodes {
+			if code == OC_SKIP {
+				continue
+			}
+			ptr := unsafe.Add(base, d.layout.Offsets[op])
+			buf = d.readField(code, d.schema.Fields[op], ptr, buf)
+		}
+		base = unsafe.Add(base, d.layout.Size)
+	}
 }
 
 // reads data for a field in native machine byte order layout
-func (d *Decoder) readField(code OpCode, field *Field, ptr unsafe.Pointer, buf []byte) []byte {
+func (d *Decoder) readField(code OpCode, field *schema.Field, ptr unsafe.Pointer, buf []byte) []byte {
 	switch code {
 
 	case OC_I64, OC_U64, OC_F64:
@@ -356,7 +267,7 @@ func (d *Decoder) readField(code OpCode, field *Field, ptr unsafe.Pointer, buf [
 		}
 
 	case OC_TEXT:
-		l := d.layout.Uint32(buf)
+		l := *(*uint32)(unsafe.Pointer(&buf[0]))
 		buf = buf[4:]
 		if l > 0 {
 			_ = buf[l-1]
@@ -365,7 +276,7 @@ func (d *Decoder) readField(code OpCode, field *Field, ptr unsafe.Pointer, buf [
 		}
 
 	case OC_BLOB:
-		l := d.layout.Uint32(buf)
+		l := *(*uint32)(unsafe.Pointer(&buf[0]))
 		buf = buf[4:]
 		if l > 0 {
 			_ = buf[l-1]
@@ -374,44 +285,40 @@ func (d *Decoder) readField(code OpCode, field *Field, ptr unsafe.Pointer, buf [
 		}
 
 	case OC_TIMESTAMP, OC_TIME, OC_DATE:
-		ts := int64(d.layout.Uint64(buf))
-		*(*time.Time)(ptr) = types.TimeScale(field.Scale).FromUnix(ts)
+		*(*time.Time)(ptr) = schema.TimeScale(field.Scale).
+			FromUnix(*(*int64)(unsafe.Pointer(&buf[0])))
 		buf = buf[8:]
 
 	case OC_I128:
-		_ = buf[15]
 		*(*num.Int128)(ptr) = num.Int128FromBytes(buf[:16])
 		buf = buf[16:]
 
 	case OC_I256:
-		_ = buf[31]
 		*(*num.Int256)(ptr) = num.Int256FromBytes(buf[:32])
 		buf = buf[32:]
 
 	case OC_D32:
-		(*(*num.Decimal32)(ptr)).Set(int32(d.layout.Uint32(buf)))
+		(*(*num.Decimal32)(ptr)).Set(*(*int32)(unsafe.Pointer(&buf[0])))
 		(*(*num.Decimal32)(ptr)).SetScale(field.Scale)
 		buf = buf[4:]
 
 	case OC_D64:
-		(*(*num.Decimal64)(ptr)).Set(int64(d.layout.Uint64(buf)))
+		(*(*num.Decimal64)(ptr)).Set(*(*int64)(unsafe.Pointer(&buf[0])))
 		(*(*num.Decimal64)(ptr)).SetScale(field.Scale)
 		buf = buf[8:]
 
 	case OC_D128:
-		_ = buf[15]
 		(*(*num.Decimal128)(ptr)).Set(num.Int128FromBytes(buf[:16]))
 		(*(*num.Decimal128)(ptr)).SetScale(field.Scale)
 		buf = buf[16:]
 
 	case OC_D256:
-		_ = buf[31]
 		(*(*num.Decimal256)(ptr)).Set(num.Int256FromBytes(buf[:32]))
 		(*(*num.Decimal256)(ptr)).SetScale(field.Scale)
 		buf = buf[32:]
 
 	case OC_ENUM:
-		u16 := d.layout.Uint16(buf)
+		u16 := *(*uint16)(unsafe.Pointer(&buf[0]))
 		buf = buf[2:]
 		val, ok := field.Enum.Value(u16)
 		if !ok {
@@ -425,6 +332,49 @@ func (d *Decoder) readField(code OpCode, field *Field, ptr unsafe.Pointer, buf [
 		if l > 0 {
 			_ = buf[l-1]
 			_ = (*num.Big)(ptr).UnmarshalBinary(buf[:l])
+			buf = buf[l:]
+		}
+
+	case OC_LIST:
+		l := *(*uint32)(unsafe.Pointer(&buf[0]))
+		buf = buf[4:]
+		if l > 0 {
+			// use sub-encoder for schema
+			sub, ok := d.nested[uint32(field.Id)]
+			if !ok {
+				layout := d.layout.Children[uint32(field.Id)]
+				sub = NewDecoderWithLayout(field.Child, layout)
+				d.nested[uint32(field.Id)] = sub
+			}
+
+			// pre-allocate max elements
+			var n int
+			if field.Child.IsFixedSize {
+				n = int(l) / field.Child.MinWireSize
+			} else {
+				if sub.view == nil {
+					sub.view = schema.NewView(sub.schema)
+				}
+				n = sub.view.Count(buf[:l])
+			}
+
+			// map pointer back to slice type
+			slice := (*sliceType)(ptr)
+			if slice.Data == nil || slice.Cap < n {
+				// alloc space for new slice via reflect to avoid GC issues
+				layout := d.layout.Children[uint32(field.Id)]
+				rspace := reflect.MakeSlice(reflect.SliceOf(layout.Type), n, n)
+				slice.Data = rspace.UnsafePointer()
+				slice.Len = n
+				slice.Cap = n
+			} else {
+				// reuse existing slice
+				slice.Len = n
+			}
+
+			// call decoder
+			sub.decodeNestedSlice(slice.Data, n, buf[:l])
+
 			buf = buf[l:]
 		}
 	}

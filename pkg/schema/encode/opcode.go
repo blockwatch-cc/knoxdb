@@ -1,10 +1,13 @@
-// Copyright (c) 2024 Blockwatch Data Inc.
+// Copyright (c) 2024-2026 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package encode
 
 import (
 	"strconv"
+	"sync"
+
+	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
 type OpCode byte
@@ -40,11 +43,13 @@ const (
 	OC_SKIP                    // 0x1B 27
 	OC_TEXT                    // 0x1C 28
 	OC_BLOB                    // 0x1D 29
+	OC_LIST                    // 0x1E 30
+	OC_MAP                     // 0x1F 31
 )
 
 var (
-	opCodeStrings = "__i8_i16_i32_i64_u8_u16_u32_u64_f32_f64_bool_fixbyte_fixstr_str_byte_timestamp_time_date_i128_i256_d32_d64_d128_d256_bigint_enum_skip_text_blob"
-	opCodeIdx     = [...]int16{
+	opCodeStrings = "__i8_i16_i32_i64_u8_u16_u32_u64_f32_f64_bool_fixbyte_fixstr_str_byte_timestamp_time_date_i128_i256_d32_d64_d128_d256_bigint_enum_skip_text_blob_list_map"
+	opCodeIdx     = [...]uint8{
 		0,                           // invalid
 		2, 5, 9, 13, 17, 20, 24, 28, // int/uint
 		32, 36, // float
@@ -54,40 +59,43 @@ var (
 		69, 79, 84, // datetime
 		89, 94, // i128/256
 		99, 103, 107, 112, // decimals
-		117, // bigint
-		124, // enum
-		129, // skip
-		134, // text
-		139, // blob
-		144, // end-of-string
+		117,      // bigint
+		124,      // enum
+		129,      // skip
+		134,      // text
+		139,      // blob
+		144, 149, // list, map
+		153, // end-of-string
 	}
 
-	ft2oc = map[FieldType]OpCode{
-		FT_TIMESTAMP: OC_TIMESTAMP,
-		FT_DATE:      OC_DATE,
-		FT_TIME:      OC_TIME,
-		FT_I64:       OC_I64,
-		FT_I32:       OC_I32,
-		FT_I16:       OC_I16,
-		FT_I8:        OC_I8,
-		FT_U64:       OC_U64,
-		FT_U32:       OC_U32,
-		FT_U16:       OC_U16,
-		FT_U8:        OC_U8,
-		FT_F64:       OC_F64,
-		FT_F32:       OC_F32,
-		FT_BOOL:      OC_BOOL,
-		FT_STRING:    OC_STRING,
-		FT_BYTES:     OC_BYTES,
-		FT_I256:      OC_I256,
-		FT_I128:      OC_I128,
-		FT_D256:      OC_D256,
-		FT_D128:      OC_D128,
-		FT_D64:       OC_D64,
-		FT_D32:       OC_D32,
-		FT_BIGINT:    OC_BIGINT,
-		FT_TEXT:      OC_TEXT,
-		FT_BLOB:      OC_BLOB,
+	ft2oc = map[schema.FieldType]OpCode{
+		schema.Timestamp:  OC_TIMESTAMP,
+		schema.Date:       OC_DATE,
+		schema.Time:       OC_TIME,
+		schema.Int64:      OC_I64,
+		schema.Int32:      OC_I32,
+		schema.Int16:      OC_I16,
+		schema.Int8:       OC_I8,
+		schema.Uint64:     OC_U64,
+		schema.Uint32:     OC_U32,
+		schema.Uint16:     OC_U16,
+		schema.Uint8:      OC_U8,
+		schema.Float64:    OC_F64,
+		schema.Float32:    OC_F32,
+		schema.Boolean:    OC_BOOL,
+		schema.String:     OC_STRING,
+		schema.Bytes:      OC_BYTES,
+		schema.Int256:     OC_I256,
+		schema.Int128:     OC_I128,
+		schema.Decimal256: OC_D256,
+		schema.Decimal128: OC_D128,
+		schema.Decimal64:  OC_D64,
+		schema.Decimal32:  OC_D32,
+		schema.Bigint:     OC_BIGINT,
+		schema.Text:       OC_TEXT,
+		schema.Binary:     OC_BLOB,
+		schema.List:       OC_LIST,
+		schema.Map:        OC_MAP,
 	}
 )
 
@@ -98,15 +106,41 @@ func (c OpCode) String() string {
 	return opCodeStrings[opCodeIdx[c] : opCodeIdx[c+1]-1]
 }
 
-func CompileCodecs(s *Schema) (enc []OpCode) {
-	enc = make([]OpCode, len(s.Fields))
-	for i, f := range s.Fields {
-		enc[i] = CodecFor(f)
+var (
+	ocRegistryLock sync.RWMutex
+	ocRegistry     = map[uint64][]OpCode{}
+)
+
+func CompileCodecs(s *schema.Schema) (enc []OpCode) {
+	// lookup in global type registry first
+	ocRegistryLock.RLock()
+	enc, ok := ocRegistry[s.Hash]
+	ocRegistryLock.RUnlock()
+	if ok {
+		return enc
 	}
+
+	// if not found, create
+	enc = make([]OpCode, len(s.Fields))
+	// skip every field not on teh first field's level
+	lvl := s.Fields[0].Level
+	for i, f := range s.Fields {
+		if f.Level != lvl {
+			enc[i] = OC_SKIP
+		} else {
+			enc[i] = CodecFor(f)
+		}
+	}
+
+	// register
+	ocRegistryLock.Lock()
+	ocRegistry[s.Hash] = enc
+	ocRegistryLock.Unlock()
+
 	return
 }
 
-func CodecFor(f *Field) OpCode {
+func CodecFor(f *schema.Field) OpCode {
 	if !f.IsVisible() {
 		return OC_SKIP
 	}
@@ -117,10 +151,10 @@ func CodecFor(f *Field) OpCode {
 	}
 
 	if f.IsArray() {
-		if f.Type == FT_STRING {
+		if f.Type == schema.String {
 			return OC_FIXSTRING
 		}
-		if f.Type == FT_BYTES {
+		if f.Type == schema.Bytes {
 			return OC_FIXBYTES
 		}
 	}

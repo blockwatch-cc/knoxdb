@@ -67,7 +67,7 @@ func (p *Package) WithSchema(s *schema.Schema) *Package {
 		p.blocks = make([]*block.Block, s.NumFields())
 	}
 	p.px = s.PkIndex()
-	p.rx = s.RowIdIndex()
+	p.rx, _ = s.IndexId(types.MetaRid)
 	p.schema = s
 	return p
 }
@@ -160,7 +160,7 @@ func (p *Package) Alloc() *Package {
 		}
 
 		// allocate block
-		p.blocks[i] = block.New(field.Type.BlockType(), p.maxRows)
+		p.blocks[i] = block.New(types.ToBlockType(field.Type), p.maxRows)
 	}
 
 	return p

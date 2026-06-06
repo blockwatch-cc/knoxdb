@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"blockwatch.cc/knoxdb/pkg/schema/types"
+	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
 // Accepts time ranges of form
@@ -63,7 +63,7 @@ func MustParseTimeRange(s string) TimeRange {
 func ParseTimeRange(s string) (TimeRange, error) {
 	var r TimeRange
 	if a, b, ok := strings.Cut(s, ","); ok {
-		_, scale, timeOnly, ok := types.DetectTimeFormat(a)
+		_, scale, timeOnly, ok := schema.DetectTimeFormat(a)
 		if !ok {
 			return r, fmt.Errorf("time value %q: %w", a, ErrInvalidFormat)
 		}
@@ -71,7 +71,7 @@ func ParseTimeRange(s string) (TimeRange, error) {
 		if err != nil {
 			return r, err
 		}
-		_, scale, timeOnly, ok = types.DetectTimeFormat(b)
+		_, scale, timeOnly, ok = schema.DetectTimeFormat(b)
 		if !ok {
 			return r, fmt.Errorf("time value %q: %w", b, ErrInvalidFormat)
 		}
@@ -125,7 +125,7 @@ func ParseTimeRange(s string) (TimeRange, error) {
 			r.IsRelative = true
 		} else {
 			// try parse as time
-			_, scale, timeOnly, ok := types.DetectTimeFormat(s)
+			_, scale, timeOnly, ok := schema.DetectTimeFormat(s)
 			if !ok {
 				return r, fmt.Errorf("time value %q: %w", s, ErrInvalidFormat)
 			}

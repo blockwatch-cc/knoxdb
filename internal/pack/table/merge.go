@@ -14,7 +14,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/pack/journal"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
@@ -225,8 +224,8 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 				// TODO: patch xmax in history pack (which is writable)
 
 				// set xmax for deleted/replaced rows, set del flag for deleted rows
-				xmaxId, ok := pkg.Schema().IndexId(schema.MetaXmax)
-				delId, ok2 := pkg.Schema().IndexId(schema.MetaDel)
+				xmaxId, ok := pkg.Schema().IndexId(types.MetaXmax)
+				delId, ok2 := pkg.Schema().IndexId(types.MetaDel)
 				if ok && ok2 {
 					pkg.MaterializeBlock(xmaxId)
 					pkg.MaterializeBlock(delId)

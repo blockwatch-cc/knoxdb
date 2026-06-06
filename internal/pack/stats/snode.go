@@ -15,7 +15,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/pkg/assert"
 	"blockwatch.cc/knoxdb/pkg/schema"
-	"blockwatch.cc/knoxdb/pkg/schema/encode"
 	"blockwatch.cc/knoxdb/pkg/store"
 )
 
@@ -36,7 +35,7 @@ func NewSNode(key uint32, s *schema.Schema, alloc bool) *SNode {
 		pkg.Alloc()
 	}
 	node := &SNode{
-		meta: make([]byte, s.WireSize()),
+		meta: make([]byte, s.MinWireSize),
 	}
 	node.spack.Store(pkg)
 	return node
@@ -59,9 +58,9 @@ func (n *SNode) Version() uint32 {
 }
 
 func (n *SNode) LoadVersion(view *schema.View) {
-	v, ok := view.Reset(n.meta).GetPhy(STATS_ROW_VERSION)
+	v := view.Reset(n.meta).GetPhy(STATS_ROW_VERSION)
 	view.Reset(nil)
-	if ok {
+	if v != nil {
 		n.spack.Load().WithVersion(v.(uint32))
 	}
 }
@@ -306,8 +305,9 @@ func (n *SNode) PrepareWrite(ctx context.Context, b store.Bucket) (*SNode, error
 
 func (n *SNode) Match(flt *filter.Node, view *schema.View) bool {
 	view.Reset(n.meta)
-	defer view.Reset(nil)
-	return Match(flt, &ViewReader{view})
+	ok := Match(flt, ViewReader{view})
+	view.Reset(nil)
+	return ok
 }
 
 func (n *SNode) Query(it *Iterator) error {
@@ -426,15 +426,18 @@ func (n *SNode) Query(it *Iterator) error {
 	})
 }
 
-func (n *SNode) BuildMetaStats(view *schema.View, wr *encode.Writer) bool {
+func (n *SNode) BuildMetaStats(view *schema.View) bool {
+	// use metadata index schema
+	s := view.Schema()
+	wr := s.NewBuffer(1)
+
 	// allocate meta buffer when nil
 	if n.meta == nil {
-		n.meta = make([]byte, wr.Len())
+		n.meta = make([]byte, s.MinWireSize)
 	}
 
 	// use current statistics as baseline
 	view.Reset(n.meta)
-	wr.Reset()
 
 	// aggregate across all statistics columns
 	var (
@@ -443,7 +446,7 @@ func (n *SNode) BuildMetaStats(view *schema.View, wr *encode.Writer) bool {
 	)
 	for i, b := range pkg.Blocks() {
 		// load current value
-		curr, _ := view.GetPhy(i)
+		curr := view.GetPhy(i)
 
 		// find new value
 		var val any
@@ -491,7 +494,7 @@ func (n *SNode) BuildMetaStats(view *schema.View, wr *encode.Writer) bool {
 		dirty = dirty || !filter.ValueType(b.Type()).EQ(curr, val)
 
 		// write val to builder (even if not changed)
-		wr.Write(i, val)
+		s.Fields[i].WriteValue(wr, val, LE)
 	}
 
 	// reset view to release buffer reference
@@ -501,7 +504,6 @@ func (n *SNode) BuildMetaStats(view *schema.View, wr *encode.Writer) bool {
 	if dirty {
 		n.meta = wr.Bytes()
 	}
-	wr.Reset()
 
 	return dirty
 }

@@ -52,7 +52,7 @@ func (t *Tomb) WithSchema(tableSchema, metaSchema *schema.Schema, use Features) 
 				t.filteredFields = append(t.filteredFields, f.Id)
 			}
 		}
-		if use.Is(FeatRangeFilter) && filter.ValueType(f.Type.BlockType()).IsInt() {
+		if use.Is(FeatRangeFilter) && filter.ToValueType(f.Type).IsInt() {
 			t.rangeFields = append(t.rangeFields, f.Id)
 		}
 	}

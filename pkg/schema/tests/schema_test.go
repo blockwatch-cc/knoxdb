@@ -11,7 +11,6 @@ import (
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/schema/enum"
 	"blockwatch.cc/knoxdb/pkg/schema/reflect"
-	"blockwatch.cc/knoxdb/pkg/schema/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -26,30 +25,28 @@ func TestMain(m *testing.M) {
 	enums.Register(0, myEnum)
 
 	// init schema and link enums (will lookup myEnum and link to field)
-	reflect.MustSchemaFor[AllTypes](schema.WithEnums(enums))
+	reflect.MustSchemaFor[AllTypes](schema.Enums(enums))
 
 	m.Run()
 }
 
 type schemaTest struct {
-	name      string
-	build     func(...schema.Option) (*Schema, error)
-	fields    string
-	idxfields string
-	idxtyps   []IndexType
-	typs      []FieldType
-	flags     []FieldFlags
-	filters   []FilterType
-	scales    []uint8
-	fixed     []uint8
-	isFixed   bool
-	iserr     bool
+	name    string
+	build   func(...schema.Option) (*schema.Schema, error)
+	fields  string
+	typs    []schema.FieldType
+	flags   []schema.FieldFlags
+	filters []schema.FilterType
+	scales  []uint8
+	fixed   []uint8
+	isFixed bool
+	iserr   bool
 }
 
 var (
 	// arch dependent, only used for tests
-	FT_INT  = [2]FieldType{FT_I32, FT_I64}[bits.UintSize/32-1]
-	FT_UINT = [2]FieldType{FT_U32, FT_U64}[bits.UintSize/32-1]
+	FT_INT  = [2]schema.FieldType{schema.Int32, schema.Int64}[bits.UintSize/32-1]
+	FT_UINT = [2]schema.FieldType{schema.Uint32, schema.Uint64}[bits.UintSize/32-1]
 )
 
 // Testcase Definition
@@ -57,8 +54,8 @@ var (
 //
 //	{
 //	    name:    "",
+//	    build:   reflect.SchemaFor[T],
 //	    fields:  "",
-//	    indexes: "",
 //	    typs:    []FieldType{},
 //	    flags:   []FieldFlags{},
 //	    scales:  []uint8{},
@@ -76,93 +73,23 @@ var schemaTestCases = []schemaTest{
 		name:    "no_model_tag",
 		build:   reflect.SchemaFor[NoModelTag],
 		fields:  "id",
-		typs:    []FieldType{FT_U64},
-		flags:   []FieldFlags{F_PRIMARY},
+		typs:    []schema.FieldType{schema.Uint64},
+		flags:   []schema.FieldFlags{schema.FlagPrimary},
 		scales:  []uint8{0},
 		fixed:   []uint8{0},
 		isFixed: true,
 		// encode:  []OpCode{OC_U64},
 		// decode:  []OpCode{OC_U64},
-	},
-
-	// schema name from Model type
-	{
-		name:    "model_name",
-		build:   reflect.SchemaFor[ModelName],
-		fields:  "id",
-		typs:    []FieldType{FT_U64},
-		flags:   []FieldFlags{F_PRIMARY},
-		scales:  []uint8{0},
-		fixed:   []uint8{0},
-		isFixed: true,
-		// encode:  []OpCode{OC_U64},
-		// decode:  []OpCode{OC_U64},
-	},
-
-	// error: invalid generic type
-	{
-		name:  "invalid_T",
-		build: reflect.SchemaFor[Model],
-		iserr: true,
 	},
 
 	//
 	// Field name tests
 	// -----------------
 
-	// struct names only, private and anon fields
-	{
-		name:    "no_model_private",
-		build:   reflect.SchemaFor[NoModelPrivate],
-		fields:  "tagid",
-		typs:    []FieldType{FT_U64},
-		flags:   []FieldFlags{F_PRIMARY},
-		scales:  []uint8{0},
-		fixed:   []uint8{0},
-		isFixed: true,
-		// encode:  []OpCode{OC_U64},
-		// decode:  []OpCode{OC_U64},
-	},
-
-	// struct tag names replace struct names
-	{
-		name:    "no_model_tag_name",
-		build:   reflect.SchemaFor[NoModelTagName],
-		fields:  "tagid",
-		typs:    []FieldType{FT_U64},
-		flags:   []FieldFlags{F_PRIMARY},
-		scales:  []uint8{0},
-		fixed:   []uint8{0},
-		isFixed: true,
-		// encode:  []OpCode{OC_U64},
-		// decode:  []OpCode{OC_U64},
-	},
-
-	// multiple anon (embedded) structs
-	{
-		name:    "multiple_anon_structs",
-		build:   reflect.SchemaFor[MultipleAnonStructs],
-		fields:  "tagid,other",
-		typs:    []FieldType{FT_U64, FT_U64},
-		flags:   []FieldFlags{F_PRIMARY, 0},
-		scales:  []uint8{0, 0},
-		fixed:   []uint8{0, 0},
-		isFixed: true,
-		// encode:  []OpCode{OC_U64, OC_U64},
-		// decode:  []OpCode{OC_U64, OC_U64},
-	},
-
 	// error: non-struct type
 	{
 		name:  "no struct type",
 		build: reflect.SchemaFor[[]string],
-		iserr: true,
-	},
-
-	// error: canceled field names (empty list)
-	{
-		name:  "all names canceled",
-		build: reflect.SchemaFor[MultipleAnonStructsWithCanceledNames],
 		iserr: true,
 	},
 
@@ -175,8 +102,8 @@ var schemaTestCases = []schemaTest{
 		name:    "all_types",
 		build:   reflect.SchemaFor[AllTypes],
 		fields:  "id,i64,i32,i16,i8,u64,u32,u16,u8,f64,f32,d32,d64,d128,d256,i128,i256,bool,time,bytes,array[2],string,my_enum,big",
-		typs:    []FieldType{FT_U64, FT_I64, FT_I32, FT_I16, FT_I8, FT_U64, FT_U32, FT_U16, FT_U8, FT_F64, FT_F32, FT_D32, FT_D64, FT_D128, FT_D256, FT_I128, FT_I256, FT_BOOL, FT_TIMESTAMP, FT_BYTES, FT_BYTES, FT_STRING, FT_U16, FT_BIGINT},
-		flags:   []FieldFlags{F_PRIMARY, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, F_ARRAY, 0, F_ENUM, 0},
+		typs:    []schema.FieldType{schema.Uint64, schema.Int64, schema.Int32, schema.Int16, schema.Int8, schema.Uint64, schema.Uint32, schema.Uint16, schema.Uint8, schema.Float64, schema.Float32, schema.Decimal32, schema.Decimal64, schema.Decimal128, schema.Decimal256, schema.Int128, schema.Int256, schema.Boolean, schema.Timestamp, schema.Bytes, schema.Bytes, schema.String, schema.Uint16, schema.Bigint},
+		flags:   []schema.FieldFlags{schema.FlagPrimary, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, schema.FlagNullable, schema.FlagArray, 0, schema.FlagEnum, 0},
 		scales:  []uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 15, 18, 24, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 		fixed:   []uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0},
 		isFixed: false,
@@ -189,8 +116,8 @@ var schemaTestCases = []schemaTest{
 		name:    "array_types",
 		build:   reflect.SchemaFor[ArrayTypes],
 		fields:  "id,byte_array,string_array",
-		typs:    []FieldType{FT_U64, FT_BYTES, FT_STRING},
-		flags:   []FieldFlags{F_PRIMARY, F_ARRAY, F_ARRAY},
+		typs:    []schema.FieldType{schema.Uint64, schema.Bytes, schema.String},
+		flags:   []schema.FieldFlags{schema.FlagPrimary, schema.FlagArray, schema.FlagArray},
 		scales:  []uint8{0, 0, 0},
 		fixed:   []uint8{0, 20, 20},
 		isFixed: true,
@@ -198,71 +125,13 @@ var schemaTestCases = []schemaTest{
 		// decode:  []OpCode{OC_U64, OC_FIXBYTES, OC_FIXSTRING},
 	},
 
-	// DEPRECATED: native types are disabled due to size ambiguity
-	// // native int/uint
-	// {
-	// 	name:    "native_types",
-	// 	build:   reflect.SchemaFor[NativeTypes],
-	// 	fields:  "id,int,uint",
-	// 	typs:    []FieldType{FT_U64, FT_INT, FT_UINT},
-	// 	flags:   []FieldFlags{F_PRIMARY, 0, 0},
-	// 	scales:  []uint8{0, 0, 0},
-	// 	fixed:   []uint8{0, 0, 0},
-	// 	isFixed: true,
-	// 	// encode:  []OpCode{OC_U64, OC_INT, OC_UINT},
-	// 	// decode:  []OpCode{OC_U64, OC_INT, OC_UINT},
-	// },
-
-	// DEPRECATED: Marshalers are too expensive to test for during encoding
-	// // struct with binary & text (un)marshaler
-	// {
-	// 	name:    "marshaler_struct_types",
-	// 	build:   reflect.SchemaFor[MarshalerStructTypes],
-	// 	fields:  "id,stringer,byter",
-	// 	typs:    []FieldType{FT_U64, FT_STRING, FT_BYTES},
-	// 	flags:   []FieldFlags{F_PRIMARY, 0, 0},
-	// 	scales:  []uint8{0, 0, 0},
-	// 	fixed:   []uint8{0, 0, 0},
-	// 	isFixed: false,
-	// 	encode:  []OpCode{OC_U64, OC_MSHTXT, OC_MSHBIN},
-	// 	decode:  []OpCode{OC_U64, OC_USHTXT, OC_USHBIN},
-	// },
-
-	// // map with binary & text (un)marshaler
-	// {
-	// 	name:    "marshaler_map_types",
-	// 	build:   reflect.SchemaFor[MarshalerMapTypes],
-	// 	fields:  "id,map",
-	// 	typs:    []FieldType{FT_U64, FT_BYTES},
-	// 	flags:   []FieldFlags{F_PRIMARY, 0},
-	// 	scales:  []uint8{0, 0},
-	// 	fixed:   []uint8{0, 0},
-	// 	isFixed: false,
-	// 	encode:  []OpCode{OC_U64, OC_MSHBIN},
-	// 	decode:  []OpCode{OC_U64, OC_USHBIN},
-	// },
-
-	// // slice with binary & text (un)marshaler
-	// {
-	// 	name:    "marshaler_types",
-	// 	build:   reflect.SchemaFor[MarshalerTypes],
-	// 	fields:  "id,stringer,byter",
-	// 	typs:    []FieldType{FT_U64, FT_STRING, FT_BYTES},
-	// 	flags:   []FieldFlags{F_PRIMARY | F_INDEXED, 0, 0},
-	// 	scales:  []uint8{0, 0, 0},
-	// 	fixed:   []uint8{0, 0, 0},
-	// 	isFixed: false,
-	// 	encode:  []OpCode{OC_U64, OC_MSHTXT, OC_MSHBIN},
-	// 	decode:  []OpCode{OC_U64, OC_USHTXT, OC_USHBIN},
-	// },
-
 	// date/time/timestamp
 	{
 		name:    "time_types",
 		build:   reflect.SchemaFor[TimeTypes],
 		fields:  "tsn,tsu,tsm,tss,tmn,tmu,tmm,tms,dt",
-		typs:    []FieldType{FT_TIMESTAMP, FT_TIMESTAMP, FT_TIMESTAMP, FT_TIMESTAMP, FT_TIME, FT_TIME, FT_TIME, FT_TIME, FT_DATE},
-		flags:   []FieldFlags{0, 0, 0, 0, 0, 0, 0, 0, 0},
+		typs:    []schema.FieldType{schema.Timestamp, schema.Timestamp, schema.Timestamp, schema.Timestamp, schema.Time, schema.Time, schema.Time, schema.Time, schema.Date},
+		flags:   []schema.FieldFlags{0, 0, 0, 0, 0, 0, 0, 0, 0},
 		scales:  []uint8{0, 1, 2, 3, 0, 1, 2, 3, 4},
 		fixed:   []uint8{0, 0, 0, 0, 0, 0, 0, 0, 0},
 		isFixed: true,
@@ -275,17 +144,13 @@ var schemaTestCases = []schemaTest{
 		name:    "large_array_to_blob",
 		build:   reflect.SchemaFor[LargeArrayToBlob],
 		fields:  "id,f",
-		typs:    []FieldType{FT_U64, FT_BLOB},
-		flags:   []FieldFlags{F_PRIMARY, 0},
+		typs:    []schema.FieldType{schema.Uint64, schema.Binary},
+		flags:   []schema.FieldFlags{schema.FlagPrimary, 0},
 		scales:  []uint8{0, 0},
 		fixed:   []uint8{0, 0},
 		isFixed: false,
 	},
 
-	// Note: we accept native int/uint types but translate them into the
-	// current architecture size (64 or 32 bit) explicit field types. If
-	// this ever changes, disable the acceptance case above and enable
-	// this rejection case.
 	// error: native int/uint
 	{
 		name:  "invalid_native_types",
@@ -307,27 +172,6 @@ var schemaTestCases = []schemaTest{
 		iserr: true,
 	},
 
-	// error: unsupported slice binary & text (un)marshaler
-	{
-		name:  "slice (un)marshaler",
-		build: reflect.SchemaFor[MarshalerTypes],
-		iserr: true,
-	},
-
-	// error: unsupported struct type without marshaler
-	{
-		name:  "no struct marshaler",
-		build: reflect.SchemaFor[NoMarshalerTypes],
-		iserr: true,
-	},
-
-	// error: unsupported slice type without marshaler
-	{
-		name:  "no slice marshaler",
-		build: reflect.SchemaFor[NoMarshalerSliceTypes],
-		iserr: true,
-	},
-
 	// error: unsupported slice type without marshaler
 	{
 		name:  "no map marshaler",
@@ -335,10 +179,10 @@ var schemaTestCases = []schemaTest{
 		iserr: true,
 	},
 
-	// error: unsupported ptr type
+	// error: unsupported ptr type (TODO: may use for null)
 	{
 		name:  "invalid pointer",
-		build: reflect.SchemaFor[PointerTypes],
+		build: reflect.SchemaFor[InvalidPointerType],
 		iserr: true,
 	},
 
@@ -423,15 +267,6 @@ var schemaTestCases = []schemaTest{
 	// Primary key tests
 	// -----------------
 
-	// DEPRECATED: pk field is optional so that schema can be used
-	// for other use cases than database tables
-	// // error: missing pk field
-	// {
-	// 	name:  "no_model_no_tag",
-	// 	build: reflect.SchemaFor[NoModelNoTag],
-	// 	iserr: true,
-	// },
-
 	// error: pk type != uint64
 	{
 		name:  "no_uint64_pk",
@@ -442,96 +277,34 @@ var schemaTestCases = []schemaTest{
 	// error: duplicate pk field
 	{
 		name:  "duplicate_pk",
-		build: reflect.SchemaFor[DuplicatePkType],
-		iserr: true,
-	},
-
-	// error: duplicate pk field in anon struct
-	{
-		name:  "duplicate_anon_pk",
-		build: reflect.SchemaFor[DuplicateAnonPkType],
+		build: reflect.SchemaFor[InvalidDuplicatePkType],
 		iserr: true,
 	},
 
 	// error: duplicate field name
 	{
-		name:  "duplicate_field",
-		build: reflect.SchemaFor[DuplicateField],
+		name:  "duplicate_name",
+		build: reflect.SchemaFor[InvalidDuplicateName],
 		iserr: true,
 	},
 
 	//
-	// Index tests
+	// Other tests
 	// -----------------
-
-	// hash index
-	{
-		name:      "hash_index",
-		build:     reflect.SchemaFor[HashIndex],
-		fields:    "id,hash",
-		typs:      []FieldType{FT_U64, FT_BYTES},
-		flags:     []FieldFlags{F_PRIMARY, F_ARRAY},
-		idxfields: "id,hash",
-		idxtyps:   []types.IndexType{I_PK, I_HASH},
-		scales:    []uint8{0, 0},
-		fixed:     []uint8{0, 32},
-		isFixed:   true,
-		// encode:    []OpCode{OC_U64, OC_FIXBYTES},
-		// decode:    []OpCode{OC_U64, OC_FIXBYTES},
-	},
-
-	// integer index
-	{
-		name:      "integer_index",
-		build:     reflect.SchemaFor[IntegerIndex],
-		fields:    "id,i64",
-		typs:      []FieldType{FT_U64, FT_I64},
-		flags:     []FieldFlags{F_PRIMARY, 0},
-		idxfields: "id,i64",
-		idxtyps:   []types.IndexType{I_PK, I_INT},
-		scales:    []uint8{0, 0},
-		fixed:     []uint8{0, 0},
-		isFixed:   true,
-		// encode:    []OpCode{OC_U64, OC_I64},
-		// decode:    []OpCode{OC_U64, OC_I64},
-	},
 
 	// bloom filter
 	{
-		name:      "bloom_filter",
-		build:     reflect.SchemaFor[BloomFilter],
-		fields:    "id,i64",
-		typs:      []FieldType{FT_U64, FT_I64},
-		flags:     []FieldFlags{F_PRIMARY, 0},
-		filters:   []FilterType{0, FL_BLOOM3B},
-		idxfields: "id,i64",
-		idxtyps:   []types.IndexType{I_PK, 0},
-		scales:    []uint8{0, 0},
-		fixed:     []uint8{0, 0},
-		isFixed:   true,
+		name:    "bloom_filter",
+		build:   reflect.SchemaFor[BloomFilter],
+		fields:  "id,i64",
+		typs:    []schema.FieldType{schema.Uint64, schema.Int64},
+		flags:   []schema.FieldFlags{schema.FlagPrimary, 0},
+		filters: []schema.FilterType{0, schema.BloomFilter3b},
+		scales:  []uint8{0, 0},
+		fixed:   []uint8{0, 0},
+		isFixed: true,
 		// encode:    []OpCode{OC_U64, OC_I64},
 		// decode:    []OpCode{OC_U64, OC_I64},
-	},
-
-	// error: invalid index type
-	{
-		name:  "invalid index type",
-		build: reflect.SchemaFor[InvalidIndexType],
-		iserr: true,
-	},
-
-	// error: invalid field type for index (int: only (u)int fields)
-	{
-		name:  "invalid index field type",
-		build: reflect.SchemaFor[InvalidIndexFieldType],
-		iserr: true,
-	},
-
-	// error: invalid bloom filter
-	{
-		name:  "invalid bloom filter name",
-		build: reflect.SchemaFor[InvalidBloomFilter],
-		iserr: true,
 	},
 
 	//
@@ -541,8 +314,8 @@ var schemaTestCases = []schemaTest{
 		name:    "meta_fields",
 		build:   reflect.SchemaFor[MetaFields],
 		fields:  "id,i64,u64",
-		typs:    []FieldType{FT_U64, FT_I64, FT_U64},
-		flags:   []FieldFlags{F_PRIMARY, F_METADATA, 0},
+		typs:    []schema.FieldType{schema.Uint64, schema.Int64, schema.Uint64},
+		flags:   []schema.FieldFlags{schema.FlagPrimary, schema.FlagMetadata, 0},
 		scales:  []uint8{0, 0, 0},
 		fixed:   []uint8{0, 0, 0},
 		isFixed: true,
@@ -562,9 +335,9 @@ func TestSchemaDetect(t *testing.T) {
 			}
 			require.Len(t, c.typs, numFields)
 			require.Len(t, c.flags, numFields)
-			if len(c.idxfields) > 0 {
-				require.Len(t, c.idxtyps, len(strings.Split(c.idxfields, ",")))
-			}
+			// if len(c.idxfields) > 0 {
+			// 	require.Len(t, c.idxtyps, len(strings.Split(c.idxfields, ",")))
+			// }
 			require.Len(t, c.scales, numFields)
 			require.Len(t, c.fixed, numFields)
 
@@ -577,42 +350,31 @@ func TestSchemaDetect(t *testing.T) {
 				require.NoError(t, err)
 				require.NoError(t, s.Validate())
 			}
+			t.Log(s.String())
+
 			// schema name
 			require.Equal(t, c.name, s.Name, "schema name")
+
 			// field names
 			require.ElementsMatch(t, strings.Split(c.fields, ","), s.Names(), "field names")
+
 			// field types
 			for i, f := range s.Fields {
 				require.Equal(t, c.typs[i], f.Type, "field types for "+f.Name)
 			}
+
 			// field flags
 			for i, f := range s.Fields {
 				require.Equal(t, c.flags[i], f.Flags, "field flags for "+f.Name)
 			}
+
 			// filters
 			if len(c.filters) > 0 {
 				for i, f := range s.Fields {
 					require.Equal(t, c.filters[i], f.Filter, "field filter for "+f.Name)
 				}
 			}
-			if len(c.idxfields) > 0 {
-				allIndexNames := strings.Split(c.idxfields, ",")
-				// every index is detected
-				// for _, v := range allIndexNames {
-				// 	f, ok := s.Find(v)
-				// 	require.True(t, ok)
-				// 	require.NotNil(t, f.Index)
-				// 	require.NotZero(t, f.Index.Type)
-				// }
 
-				// every detected index is expected and has correct type
-				for i, idx := range s.Indexes {
-					// index name is expected
-					require.Contains(t, allIndexNames, idx.Fields[0].Name, "unexpected index %s on field %s", idx.Name, idx.Fields[0].Name)
-					// index types
-					require.Equal(t, c.idxtyps[i], idx.Type, "wrong index type for "+idx.Name)
-				}
-			}
 			// scale values
 			for i, f := range s.Fields {
 				if !f.IsArray() {
@@ -626,6 +388,7 @@ func TestSchemaDetect(t *testing.T) {
 					require.Equal(t, c.fixed[i], f.Scale, "fixed for "+f.Name)
 				}
 			}
+
 			// is fixed
 			require.Equal(t, c.isFixed, s.IsFixedSize, "is_fixed")
 		})
@@ -639,7 +402,7 @@ func TestSchemaMarshal(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, buf)
 
-	r := &Schema{}
+	r := &schema.Schema{}
 	err = r.UnmarshalBinary(buf)
 	require.NoError(t, err)
 
@@ -648,15 +411,13 @@ func TestSchemaMarshal(t *testing.T) {
 	assert.Equal(t, s.Version, r.Version)
 	assert.Equal(t, s.Name, r.Name)
 	assert.Equal(t, s.IsFixedSize, r.IsFixedSize)
-	assert.Equal(t, s.WireSize(), r.WireSize())
+	assert.Equal(t, s.MinWireSize, r.MinWireSize)
 	assert.Equal(t, s.NumFields(), r.NumFields())
 	assert.Equal(t, s.NumActive(), r.NumActive())
 	assert.Equal(t, s.NumVisible(), r.NumVisible())
-	assert.Equal(t, s.NumMeta(), r.NumMeta())
 	assert.Equal(t, s.Names(), r.Names())
 	assert.Equal(t, s.Ids(), r.Ids())
 	assert.Equal(t, s.VisibleIds(), r.VisibleIds())
-	assert.Equal(t, s.MetaIds(), r.MetaIds())
 	assert.Equal(t, s.PkId(), r.PkId())
 	assert.Equal(t, s.PkIndex(), r.PkIndex())
 }
@@ -664,66 +425,64 @@ func TestSchemaMarshal(t *testing.T) {
 // TestSchemaIsValid checks if the Schema.IsValid() method correctly identifies
 // valid and invalid schema configurations.
 func TestSchemaIsValid(t *testing.T) {
-	s := NewSchema()
+	s := schema.SchemaOf(nil)
 	require.False(t, s.IsValid())
 
-	s.WithName("test")
+	s = schema.SchemaOf(nil, schema.Name("test"))
 	require.False(t, s.IsValid())
 
-	s.WithField(&Field{Name: "field1", Type: FT_I64})
-	require.False(t, s.IsValid())
-
-	s.Finalize()
+	s = schema.SchemaOf([]*schema.Field{
+		schema.FieldOf(schema.Int64, schema.WithName("field1")),
+	})
 	require.True(t, s.IsValid())
 }
 
 // TestSchemaNewBuffer verifies that Schema.NewBuffer() creates a buffer with
 // the correct capacity based on the schema's maxWireSize.
 func TestSchemaNewBuffer(t *testing.T) {
-	s := NewSchema().WithName("test").
-		WithField(&Field{Name: "field1", Type: FT_I64}).
-		Finalize()
+	s := schema.SchemaOf(
+		[]*schema.Field{schema.FieldOf(schema.Int64, schema.WithName("field1"))},
+		schema.Name("test"),
+	)
 
 	buf := s.NewBuffer(10)
 	require.NotNil(t, buf)
-	require.Equal(t, 10*s.MaxWireSize, buf.Cap())
+	require.Equal(t, 10*s.EstWireSize, buf.Cap())
 }
 
 // TestSchemaNumFields ensures that Schema.NumFields() returns the correct
 // number of fields in the schema.
 func TestSchemaNumFields(t *testing.T) {
-	s := NewSchema().WithName("test").
-		WithField(&Field{Name: "field1", Type: FT_I64}).
-		WithField(&Field{Name: "field2", Type: FT_STRING}).
-		Finalize()
+	s := schema.SchemaOf(
+		[]*schema.Field{
+			schema.FieldOf(schema.Int64, schema.WithName("field1")),
+			schema.FieldOf(schema.String, schema.WithName("field2")),
+			schema.ListFor(
+				schema.SchemaOf([]*schema.Field{
+					schema.FieldOf(schema.Int64, schema.WithName("field3")),
+					schema.FieldOf(schema.Int64, schema.WithName("field4")),
+				}),
+			),
+		},
+		schema.Name("test"),
+	)
 
-	require.Equal(t, 2, s.NumFields())
+	require.Equal(t, 3, s.NumFields())
+	require.Equal(t, 2, s.Fields[2].Child.NumFields())
 }
 
 // TestSchemaFieldVisibility tests correct handling of internal/deleted
 // flags and whether returned field info is in correct order.
 func TestSchemaFieldVisibility(t *testing.T) {
-	s := NewSchema().WithName("test").
-		WithField(&Field{
-			Name: "field1",
-			Type: FT_I64,
-		}).
-		WithField(&Field{
-			Name:  "field2",
-			Type:  FT_STRING,
-			Flags: types.FieldFlagMetadata,
-		}).
-		WithField(&Field{
-			Name:  "field3",
-			Type:  FT_U64,
-			Flags: types.FieldFlagDeleted,
-		}).
-		WithField(&Field{
-			Name:  "field4",
-			Type:  FT_U64,
-			Flags: types.FieldFlagMetadata | types.FieldFlagDeleted,
-		}).
-		Finalize()
+	s := schema.SchemaOf(
+		[]*schema.Field{
+			schema.FieldOf(schema.Int64, schema.WithName("field1")),
+			schema.FieldOf(schema.String, schema.WithName("field2"), schema.WithFlags(schema.FlagMetadata)),
+			schema.FieldOf(schema.Uint64, schema.WithName("field3"), schema.WithFlags(schema.FlagDeleted)),
+			schema.FieldOf(schema.Uint64, schema.WithName("field4"), schema.WithFlags(schema.FlagDeleted|schema.FlagMetadata)),
+		},
+		schema.Name("test"),
+	)
 
 	// counts
 	require.Equal(t, 4, s.NumFields())
@@ -777,27 +536,15 @@ func TestSchemaFieldVisibility(t *testing.T) {
 // TestSchemaCanMatch checks if Schema.CanMatch() correctly
 // identifies when a set of field names matches the schema.
 func TestSchemaCanMatch(t *testing.T) {
-	s := NewSchema().WithName("test").
-		WithField(&Field{
-			Name: "field1",
-			Type: FT_I64,
-		}).
-		WithField(&Field{
-			Name:  "field2",
-			Type:  FT_STRING,
-			Flags: types.FieldFlagMetadata,
-		}).
-		WithField(&Field{
-			Name:  "field3",
-			Type:  FT_U64,
-			Flags: types.FieldFlagDeleted,
-		}).
-		WithField(&Field{
-			Name:  "field4",
-			Type:  FT_U64,
-			Flags: types.FieldFlagMetadata | types.FieldFlagDeleted,
-		}).
-		Finalize()
+	s := schema.SchemaOf(
+		[]*schema.Field{
+			schema.FieldOf(schema.Int64, schema.WithName("field1")),
+			schema.FieldOf(schema.String, schema.WithName("field2"), schema.WithFlags(schema.FlagMetadata)),
+			schema.FieldOf(schema.Uint64, schema.WithName("field3"), schema.WithFlags(schema.FlagDeleted)),
+			schema.FieldOf(schema.Uint64, schema.WithName("field4"), schema.WithFlags(schema.FlagDeleted|schema.FlagMetadata)),
+		},
+		schema.Name("test"),
+	)
 
 	require.True(t, s.CanMatch("field1", "field2"))
 	require.False(t, s.CanMatch("field3"))
@@ -807,71 +554,62 @@ func TestSchemaCanMatch(t *testing.T) {
 // TestSchemaCanSelect verifies that Schema.CanSelect() correctly determines
 // if one schema can be selected from another.
 func TestSchemaContainsSchema(t *testing.T) {
-	s := NewSchema().WithName("test").
-		WithField(&Field{
-			Name: "field1",
-			Type: FT_I64,
-		}).
-		WithField(&Field{
-			Name:  "field2",
-			Type:  FT_STRING,
-			Flags: types.FieldFlagMetadata,
-		}).
-		WithField(&Field{
-			Name:  "field3",
-			Type:  FT_U64,
-			Flags: types.FieldFlagDeleted,
-		}).
-		WithField(&Field{
-			Name:  "field4",
-			Type:  FT_U64,
-			Flags: types.FieldFlagMetadata | types.FieldFlagDeleted,
-		}).
-		Finalize()
+	s := schema.SchemaOf(
+		[]*schema.Field{
+			schema.FieldOf(schema.Int64, schema.WithName("field1")),
+			schema.FieldOf(schema.String, schema.WithName("field2"), schema.WithFlags(schema.FlagMetadata)),
+			schema.FieldOf(schema.Uint64, schema.WithName("field3"), schema.WithFlags(schema.FlagDeleted)),
+			schema.FieldOf(schema.Uint64, schema.WithName("field4"), schema.WithFlags(schema.FlagDeleted|schema.FlagMetadata)),
+		},
+		schema.Name("test"),
+	)
 
 	// active field
-	s1 := NewSchema().WithName("test1").
-		WithField(&Field{Name: "field1", Type: FT_I64}).
-		Finalize()
-
+	s1 := schema.SchemaOf(
+		[]*schema.Field{schema.FieldOf(schema.Int64, schema.WithName("field1"))},
+		schema.Name("test1"),
+	)
 	require.True(t, s.ContainsSchema(s1))
 
 	// active internal field
-	s2 := NewSchema().WithName("test2").
-		WithField(&Field{Name: "field2", Type: FT_STRING}).
-		Finalize()
-
+	s2 := schema.SchemaOf(
+		[]*schema.Field{schema.FieldOf(schema.String, schema.WithName("field2"))},
+		schema.Name("test2"),
+	)
 	require.True(t, s.ContainsSchema(s2))
 
 	// deleted field
-	s3 := NewSchema().WithName("test3").
-		WithField(&Field{Name: "field3", Type: FT_U64}).
-		Finalize()
-
+	s3 := schema.SchemaOf(
+		[]*schema.Field{schema.FieldOf(schema.Uint64, schema.WithName("field3"))},
+		schema.Name("test3"),
+	)
 	require.False(t, s.ContainsSchema(s3))
 
 	// deleted internal field
-	s4 := NewSchema().WithName("test4").
-		WithField(&Field{Name: "field4", Type: FT_U64}).
-		Finalize()
-
+	s4 := schema.SchemaOf(
+		[]*schema.Field{schema.FieldOf(schema.Uint64, schema.WithName("field4"))},
+		schema.Name("test4"),
+	)
 	require.False(t, s.ContainsSchema(s4))
 
 	// non existing field
-	s5 := NewSchema().WithName("test5").
-		WithField(&Field{Name: "field5", Type: FT_U64}).
-		Finalize()
-
+	s5 := schema.SchemaOf(
+		[]*schema.Field{schema.FieldOf(schema.Uint64, schema.WithName("field5"))},
+		schema.Name("test5"),
+	)
 	require.False(t, s.ContainsSchema(s5))
 }
 
 // TestSchemaSort checks if Schema.Sort() correctly sorts the fields
-// of the schema alphabetically by name.
+// of the schema by id
 func TestSchemaSort(t *testing.T) {
-	s := NewSchema().WithName("test").
-		WithField(&Field{Name: "field2", Type: FT_STRING}).
-		WithField(&Field{Name: "field1", Type: FT_I64}).
-		Finalize()
+	s := schema.SchemaOf(
+		[]*schema.Field{
+			schema.FieldOf(schema.String, schema.WithName("field2")),
+			schema.FieldOf(schema.Int64, schema.WithName("field1")),
+		},
+		schema.Name("test"),
+	)
 
 	// The fields should already be sorted by ID after Finalize()
 	require.Equal(t, "field2", s.Fields[0].Name, "First field should be 'field2' (id=1)")
@@ -887,33 +625,24 @@ func TestSchemaSort(t *testing.T) {
 // TestSchemaMapSchema verifies that Schema.MapSchema() correctly maps fields
 // from one schema to another, even if the field order is different.
 func TestSchemaMapSchema(t *testing.T) {
-	s := NewSchema().WithName("test").
-		WithField(&Field{
-			Name: "field1",
-			Type: FT_I64,
-		}).
-		WithField(&Field{
-			Name:  "field2",
-			Type:  FT_STRING,
-			Flags: types.FieldFlagMetadata,
-		}).
-		WithField(&Field{
-			Name:  "field3",
-			Type:  FT_U64,
-			Flags: types.FieldFlagDeleted,
-		}).
-		WithField(&Field{
-			Name:  "field4",
-			Type:  FT_U64,
-			Flags: types.FieldFlagMetadata | types.FieldFlagDeleted,
-		}).
-		Finalize()
+	s := schema.SchemaOf(
+		[]*schema.Field{
+			schema.FieldOf(schema.Int64, schema.WithName("field1")),
+			schema.FieldOf(schema.String, schema.WithName("field2"), schema.WithFlags(schema.FlagMetadata)),
+			schema.FieldOf(schema.Uint64, schema.WithName("field3"), schema.WithFlags(schema.FlagDeleted)),
+			schema.FieldOf(schema.Uint64, schema.WithName("field4"), schema.WithFlags(schema.FlagDeleted|schema.FlagMetadata)),
+		},
+		schema.Name("test"),
+	)
 
 	// active fields
-	s1 := NewSchema().WithName("test1").
-		WithField(&Field{Name: "field3", Type: FT_U64}).
-		WithField(&Field{Name: "field1", Type: FT_I64}).
-		Finalize()
+	s1 := schema.SchemaOf(
+		[]*schema.Field{
+			schema.FieldOf(schema.Uint64, schema.WithName("field3")),
+			schema.FieldOf(schema.Int64, schema.WithName("field1")),
+		},
+		schema.Name("test1"),
+	)
 
 	// inactive fields are hidden
 	mapping, err := s.MapSchema(s1)
@@ -921,22 +650,25 @@ func TestSchemaMapSchema(t *testing.T) {
 	require.Equal(t, []int{-1, 0}, mapping)
 
 	// deleted fields are ignored
-	s2 := NewSchema().WithName("test2").
-		WithField(&Field{Name: "field2", Type: FT_STRING}).
-		WithField(&Field{Name: "field4", Type: FT_U64}).
-		WithField(&Field{Name: "field3", Type: FT_U64}).
-		WithField(&Field{Name: "field1", Type: FT_I64}).
-		Finalize()
+	s2 := schema.SchemaOf(
+		[]*schema.Field{
+			schema.FieldOf(schema.String, schema.WithName("field2")),
+			schema.FieldOf(schema.Uint64, schema.WithName("field4")),
+			schema.FieldOf(schema.Uint64, schema.WithName("field3")),
+			schema.FieldOf(schema.Int64, schema.WithName("field1")),
+		},
+		schema.Name("test2"),
+	)
 
 	mapping, err = s.MapSchema(s2)
 	require.NoError(t, err)
-	require.Equal(t, []int{1, -1, -1, 0}, mapping)
+	require.Equal(t, []int{-1, -1, -1, 0}, mapping)
 }
 
 func TestSchemaDeleteField(t *testing.T) {
 	s, err := reflect.SchemaFor[AllTypes]()
 	require.NoError(t, err)
-	beforeSz := s.WireSize()
+	beforeSz := s.MinWireSize
 	beforeLen := s.NumFields()
 	beforeHash := s.Hash
 	beforeVersion := s.Version
@@ -956,7 +688,7 @@ func TestSchemaDeleteField(t *testing.T) {
 
 	require.Equal(t, s.NumFields()-1, s.NumVisible(), "num visible fields must change")
 	require.Equal(t, s.NumFields()-1, s.NumActive(), "num active fields must change")
-	require.Less(t, s.WireSize(), beforeSz, "wire size must change")
+	require.Less(t, s.MinWireSize, beforeSz, "wire size must change")
 	require.NotEqual(t, beforeHash, s.Hash, "hash must change")
 	require.Less(t, beforeVersion, s.Version, "version must increase")
 
@@ -968,4 +700,152 @@ func TestSchemaDeleteField(t *testing.T) {
 	require.False(t, s.CanMatch("id", "i64"), "cannot match deleted field")
 	_, err = s.SelectIds(1, 2)
 	require.Error(t, err, "cannot select deleted field")
+}
+
+func TestNestedMarshalFromInference(t *testing.T) {
+	for _, v := range []any{
+		ListFields{},
+		ListInListFields{},
+		ListInStructInListFields{},
+	} {
+		s, err := reflect.SchemaOf(v)
+		require.NoError(t, err)
+		t.Log(s)
+		require.NoError(t, s.Validate())
+		buf, err := s.MarshalBinary()
+		require.NoError(t, err)
+		require.NotNil(t, buf)
+
+		r := &schema.Schema{}
+		err = r.UnmarshalBinary(buf)
+		require.NoError(t, err)
+
+		assert.True(t, s.Equal(r))
+		assert.Equal(t, s.Hash, r.Hash)
+		assert.Equal(t, s.Version, r.Version)
+		assert.Equal(t, s.Name, r.Name)
+		assert.Equal(t, s.IsFixedSize, r.IsFixedSize)
+		assert.Equal(t, s.MinWireSize, r.MinWireSize)
+		assert.Equal(t, s.NumFields(), r.NumFields(), "s=%s\nr=%s", s, r)
+		assert.Equal(t, s.NumActive(), r.NumActive())
+		assert.Equal(t, s.NumVisible(), r.NumVisible())
+		assert.Equal(t, s.Names(), r.Names())
+		assert.Equal(t, s.Ids(), r.Ids())
+		assert.Equal(t, s.VisibleIds(), r.VisibleIds())
+		assert.Equal(t, s.PkId(), r.PkId())
+		assert.Equal(t, s.PkIndex(), r.PkIndex())
+		t.Log(r)
+	}
+}
+
+func TestNestedMarshalFromBuilder(t *testing.T) {
+	pair := schema.SchemaOf([]*schema.Field{
+		schema.FieldOf(schema.Int64, schema.WithName("k64")),
+		schema.FieldOf(schema.Int64, schema.WithName("v64")),
+	},
+		schema.Name("pair"),
+	)
+
+	// different single nested list types with or without
+	// special settings on the content type
+	// - u64list []uint64
+	// - time_list []Date
+	// - pair_list []Pair
+	// - byte_list [][]byte
+	// - arr_list [][2]byte
+	// - dec_list []Decimal32(4)
+	listFields := schema.SchemaOf([]*schema.Field{
+		schema.FieldOf(schema.Int64, schema.WithName("int64a")),
+		schema.ListOf(schema.Uint64, schema.WithName("u64_list")),
+		schema.ListOf(schema.Date, schema.WithName("time_list")),
+		schema.ListFor(pair, schema.WithName("pair_list")),
+		schema.ListOf(schema.Bytes, schema.WithName("byte_list"), schema.WithNullable(false)),
+		schema.ListFor(
+			schema.SchemaOf([]*schema.Field{
+				schema.FieldOf(schema.Bytes, schema.WithArray(2)),
+			}),
+			schema.WithName("arr_list"),
+			schema.WithNullable(false),
+		),
+		schema.ListFor(
+			schema.SchemaOf([]*schema.Field{
+				schema.FieldOf(schema.Decimal32, schema.WithScale(4)),
+			}),
+			schema.WithName("dec_list"),
+			schema.WithNullable(false),
+		),
+		schema.FieldOf(schema.Int64, schema.WithName("int64b")),
+	},
+		schema.Name("list_fields"),
+	)
+
+	// double nested lists
+	// - nested_uints [][]uint64
+	// - nested_pairs [][]Pair
+	listInList := schema.SchemaOf([]*schema.Field{
+		schema.FieldOf(schema.Int64, schema.WithName("int64a")),
+		schema.ListFor(
+			schema.SchemaOf([]*schema.Field{
+				schema.ListOf(schema.Uint64),
+			}),
+			schema.WithName("nested_uints"),
+		),
+		schema.ListFor(
+			schema.SchemaOf([]*schema.Field{
+				schema.ListFor(pair),
+			}),
+			schema.WithName("nested_pairs"),
+		),
+		schema.FieldOf(schema.Int64, schema.WithName("int64b")),
+	},
+		schema.Name("list_in_list_fields"),
+	)
+
+	// a list-in-struct-in-list-in-struct type
+	//
+	outerPairStruct := schema.SchemaOf([]*schema.Field{
+		schema.FieldOf(schema.Uint32, schema.WithName("val")),
+		schema.ListFor(pair, schema.WithName("pairs2")),
+	},
+		schema.Name("outer_pair_struct"),
+	)
+	listInStructInList := schema.SchemaOf([]*schema.Field{
+		schema.FieldOf(schema.Int64, schema.WithName("int64a")),
+		schema.ListFor(outerPairStruct, schema.WithName("pairs1")),
+		schema.FieldOf(schema.Int64, schema.WithName("int64b")),
+	},
+		schema.Name("list_in_struct_in_list_fields"),
+	)
+
+	for _, s := range []*schema.Schema{
+		listFields,
+		listInList,
+		listInStructInList,
+	} {
+		t.Log(s)
+		require.NoError(t, s.Validate())
+		buf, err := s.MarshalBinary()
+		require.NoError(t, err)
+		require.NotNil(t, buf)
+
+		r := &schema.Schema{}
+		err = r.UnmarshalBinary(buf)
+		require.NoError(t, err)
+
+		assert.True(t, s.Equal(r))
+		assert.Equal(t, s.Hash, r.Hash)
+		assert.Equal(t, s.Version, r.Version)
+		assert.Equal(t, s.Name, r.Name)
+		assert.Equal(t, s.IsFixedSize, r.IsFixedSize)
+		assert.Equal(t, s.MinWireSize, r.MinWireSize)
+		assert.Equal(t, s.NumFields(), r.NumFields(), "s=%s\nr=%s", s, r)
+		assert.Equal(t, s.NumActive(), r.NumActive())
+		assert.Equal(t, s.NumVisible(), r.NumVisible())
+		assert.Equal(t, s.Names(), r.Names())
+		assert.Equal(t, s.Ids(), r.Ids())
+		assert.Equal(t, s.VisibleIds(), r.VisibleIds())
+		assert.Equal(t, s.PkId(), r.PkId())
+		assert.Equal(t, s.PkIndex(), r.PkIndex())
+		t.Log(r)
+	}
 }

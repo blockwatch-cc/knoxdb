@@ -169,7 +169,7 @@ func (idx *Index) queryKeys(ctx context.Context, node *filter.Node) (*xroar.Bitm
 		}
 
 		for _, i := range hits {
-			// read pk from index row
+			// read row id from index row
 			rid := pkg.Uint64(1, int(i))
 
 			// skip broken records (invalid rid)

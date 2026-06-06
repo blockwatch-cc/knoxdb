@@ -727,8 +727,7 @@ func (j *Journal) ReplayWalRecord(ctx context.Context, rec *wal.Record, rd engin
 					// set values
 					view.Reset(buf[ofs:])
 					for i, col := range cols {
-						val, _ := view.Get(i)
-						pkg.Block(col).Set(int(row), val)
+						pkg.Block(col).Set(int(row), view.Get(i))
 					}
 
 					// remove patched update

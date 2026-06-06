@@ -17,7 +17,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/pack/stats"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/wal"
-	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/store"
 	"github.com/echa/log"
 )
@@ -58,7 +57,7 @@ var (
 type Table struct {
 	mu      sync.RWMutex                // global table lock (syncs r/w access, single writer)
 	engine  *engine.Engine              // engine access
-	schema  *schema.Schema              // ordered list of table fields as central type info
+	schema  *types.TableSchema          // ordered list of table fields as central type info
 	opts    engine.Options              // copy of config options
 	id      uint64                      // unique table id (tagged name hash)
 	px      int                         // field index for primary key (required)
@@ -76,7 +75,7 @@ func NewTable() engine.TableEngine {
 	return &Table{}
 }
 
-func (t *Table) Schema() *schema.Schema {
+func (t *Table) Schema() *types.TableSchema {
 	return t.schema
 }
 
@@ -116,9 +115,9 @@ func (t *Table) ConnectIndex(idx engine.QueryableIndex) {
 func (t *Table) DisconnectIndex(idx engine.QueryableIndex) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	idxId := types.TaggedHash(types.ObjectTagIndex, idx.Schema().Name)
+	idxId := types.TaggedHash(types.ObjectTagIndex, idx.IndexSchema().Name)
 	t.indexes = slices.DeleteFunc(t.indexes, func(v engine.QueryableIndex) bool {
-		return types.TaggedHash(types.ObjectTagIndex, v.Schema().Name) == idxId
+		return types.TaggedHash(types.ObjectTagIndex, v.IndexSchema().Name) == idxId
 	})
 }
 
@@ -131,7 +130,7 @@ func mergeDefaultOptions(options ...engine.Option) engine.Options {
 	return opts
 }
 
-func (t *Table) Create(ctx context.Context, s *schema.Schema, options ...engine.Option) error {
+func (t *Table) Create(ctx context.Context, s *types.TableSchema, options ...engine.Option) error {
 	// setup table
 	t.engine = engine.GetEngine(ctx)
 	t.schema = s
@@ -224,7 +223,7 @@ func (t *Table) createBackend(ctx context.Context) error {
 
 	// setup journal (note: history tables have no journal)
 	if t.opts.JournalSize > 0 {
-		t.journal = journal.NewJournal(t.schema, t.opts.JournalSize, t.opts.JournalSegments).
+		t.journal = journal.NewJournal(t.schema.Schema, t.opts.JournalSize, t.opts.JournalSegments).
 			WithState(t.state).
 			WithWal(t.engine.Wal()).
 			WithLogger(t.log)
@@ -234,7 +233,7 @@ func (t *Table) createBackend(ctx context.Context) error {
 	return tx.Commit()
 }
 
-func (t *Table) Open(ctx context.Context, s *schema.Schema, options ...engine.Option) error {
+func (t *Table) Open(ctx context.Context, s *types.TableSchema, options ...engine.Option) error {
 	// setup table
 	t.engine = engine.GetEngine(ctx)
 	t.schema = s
@@ -261,7 +260,7 @@ func (t *Table) Open(ctx context.Context, s *schema.Schema, options ...engine.Op
 
 	// setup journal and replay wal, no journal on history tables
 	if t.opts.JournalSize > 0 {
-		t.journal = journal.NewJournal(s, t.opts.JournalSize, t.opts.JournalSegments).
+		t.journal = journal.NewJournal(s.Schema, t.opts.JournalSize, t.opts.JournalSegments).
 			WithWal(t.engine.Wal()).
 			WithState(t.state).
 			WithLogger(t.log)

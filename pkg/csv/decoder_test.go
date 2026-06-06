@@ -4,6 +4,7 @@
 package csv
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 	"testing"
@@ -159,11 +160,16 @@ func TestDecodeSimple(t *testing.T) {
 }
 
 func TestDecodeWithSchema(t *testing.T) {
-	b := schema.NewBuilder().String("s").Int64("i").Float64("f").Bool("b").Finalize()
-	require.NoError(t, b.Validate())
+	s := schema.SchemaOf([]*schema.Field{
+		schema.FieldOf(schema.String, schema.WithName("s")),
+		schema.FieldOf(schema.Int64, schema.WithName("i")),
+		schema.FieldOf(schema.Float64, schema.WithName("f")),
+		schema.FieldOf(schema.Boolean, schema.WithName("b")),
+	})
+	require.NoError(t, s.Validate())
 	for _, c := range DecoderCases {
 		t.Run(c.Name, func(t *testing.T) {
-			dec := NewDecoder(b.Schema(), strings.NewReader(c.Csv)).WithTrim(c.Trim).WithHeader(c.Header)
+			dec := NewDecoder(s, strings.NewReader(c.Csv)).WithTrim(c.Trim).WithHeader(c.Header)
 			switch v := c.Res.(type) {
 			case *A:
 				val, err := dec.Decode()
@@ -190,14 +196,14 @@ func TestDecodeWithType(t *testing.T) {
 }
 
 func BenchmarkDecoder(b *testing.B) {
-	s := NewSniffer(strings.NewReader(netBench), 0)
+	s := NewSniffer(bytes.NewReader(netBench), 0)
 	require.NoError(b, s.Sniff())
-	dec := s.NewDecoder(strings.NewReader(netBench))
+	dec := s.NewDecoder(bytes.NewReader(netBench))
 	dst := dec.MakeSlice(1024)
 	var N int
 	for b.Loop() {
 		N = 0
-		dec.Reset(strings.NewReader(netBench))
+		dec.Reset(bytes.NewReader(netBench))
 		for {
 			n, err := dec.DecodeSlice(dst)
 			require.NoError(b, err)

@@ -5,7 +5,6 @@ package stats
 
 import (
 	"context"
-	"encoding/binary"
 	"fmt"
 	"slices"
 	"sort"
@@ -20,7 +19,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/assert"
 	"blockwatch.cc/knoxdb/pkg/schema"
-	"blockwatch.cc/knoxdb/pkg/schema/encode"
 	"blockwatch.cc/knoxdb/pkg/slicex"
 	"blockwatch.cc/knoxdb/pkg/store"
 	"blockwatch.cc/knoxdb/pkg/util"
@@ -204,7 +202,6 @@ type Index struct {
 	epoch        uint32                // epoch sequence number
 	schema       *schema.Schema        // statistics schema (meta + min + max)
 	view         *schema.View          // helper to extract tree node data from wire format
-	wr           *encode.Writer        // wire format builder (writer only)
 	table        engine.TableEngine    // table back-reference used for index GC
 	rx           int                   // index of the data pack's rowid column
 	px           int                   // index of the data pack's primary key column
@@ -244,7 +241,6 @@ func (idx *Index) Clone() *Index {
 		schema:       idx.schema,                 // schema is read-only
 		view:         schema.NewView(idx.schema), // need private view state
 		table:        idx.table,                  // table back-reference
-		wr:           idx.wr,                     // writer is stateful, only used during merge
 		rx:           idx.rx,                     // config is read-only
 		px:           idx.px,                     // config is read-only
 		nmax:         idx.nmax,                   // config is read-only
@@ -267,16 +263,15 @@ func (idx *Index) WithDB(db store.DB) *Index {
 	return idx
 }
 
-func (idx *Index) WithSchema(s *schema.Schema) *Index {
-	idx.schema = MakeSchema(s)
+func (idx *Index) WithSchema(s *types.TableSchema) *Index {
+	idx.schema = MakeSchema(s.Schema)
 	idx.keys = makeStorageKeys([]byte(idx.schema.Name))
 	idx.rx, idx.px = s.RowIdIndex(), s.PkIndex()
 	if idx.rx < 0 {
 		idx.rx = idx.px
 	}
 	idx.view = schema.NewView(idx.schema)
-	idx.wr = encode.NewWriter(idx.schema, binary.LittleEndian)
-	idx.tomb.WithSchema(s, idx.schema, idx.use).WithBucketKey(idx.keys[STATS_TOMB_KEY])
+	idx.tomb.WithSchema(s.Schema, idx.schema, idx.use).WithBucketKey(idx.keys[STATS_TOMB_KEY])
 	return idx
 }
 
@@ -380,7 +375,6 @@ func (idx *Index) Free() {
 	idx.inodes = nil
 	idx.snodes = nil
 	idx.view = nil
-	idx.wr = nil
 	idx.rx = 0
 	idx.px = 0
 	idx.nmax = 0
@@ -420,7 +414,6 @@ func (idx *Index) Close() {
 	idx.inodes = nil
 	idx.snodes = nil
 	idx.view = nil
-	idx.wr = nil
 	idx.rx = 0
 	idx.px = 0
 	idx.nmax = 0
@@ -522,7 +515,7 @@ func (idx *Index) AddPack(ctx context.Context, pkg *pack.Package) error {
 	// add data pack statistics to node
 	if node.AppendPack(pkg) {
 		// update spack meta statistics on change
-		if node.BuildMetaStats(idx.view, idx.wr) {
+		if node.BuildMetaStats(idx.view) {
 			// update meta statistics towards the root on change
 			idx.updatePathToRoot(i)
 		}
@@ -549,7 +542,7 @@ func (idx *Index) UpdatePack(ctx context.Context, pkg *pack.Package) error {
 	// update data pack statistics record
 	if node.UpdatePack(pkg) {
 		// update spack meta statistics on change
-		if node.BuildMetaStats(idx.view, idx.wr) {
+		if node.BuildMetaStats(idx.view) {
 			// update meta statistics towards the root on change
 			idx.updatePathToRoot(i)
 		}
@@ -581,7 +574,7 @@ func (idx *Index) DeletePack(ctx context.Context, pkg *pack.Package) error {
 	// handle tree change
 	if ok && !node.IsEmpty() {
 		// update spack meta statistics on change
-		if node.BuildMetaStats(idx.view, idx.wr) {
+		if node.BuildMetaStats(idx.view) {
 			// update inodes all the way to root when meta stats have changed
 			idx.updatePathToRoot(i)
 		}
@@ -1037,15 +1030,15 @@ func (idx *Index) updatePathToRoot(i int) {
 		// we are the left child
 		if i == slen-1 {
 			// we are the last child
-			ok = parent.Update(idx.view, idx.wr, node, nil)
+			ok = parent.Update(idx.view, node, nil)
 		} else {
 			// there is a right child behind us
-			ok = parent.Update(idx.view, idx.wr, node, idx.snodes[i+1])
+			ok = parent.Update(idx.view, node, idx.snodes[i+1])
 		}
 	} else {
 		// we are the right child, so pick the left which is guaranteed to
 		// exist in front of us
-		ok = parent.Update(idx.view, idx.wr, idx.snodes[i-1], node)
+		ok = parent.Update(idx.view, idx.snodes[i-1], node)
 	}
 
 	// stop when we're already at root or nothing changed
@@ -1063,9 +1056,9 @@ func (idx *Index) updatePathToRoot(i int) {
 		// does not compare with nil because its type is non nil. See
 		// https://go.dev/doc/faq#nil_error
 		if right == nil {
-			ok = idx.inodes[p].Update(idx.view, idx.wr, left, nil)
+			ok = idx.inodes[p].Update(idx.view, left, nil)
 		} else {
-			ok = idx.inodes[p].Update(idx.view, idx.wr, left, right)
+			ok = idx.inodes[p].Update(idx.view, left, right)
 		}
 	}
 }
@@ -1104,7 +1097,7 @@ func (idx *Index) rebuildInodeTree(ver uint32) {
 
 		// create new inode and build merged meta statistics
 		idx.inodes[n] = NewINode()
-		idx.inodes[n].Update(idx.view, idx.wr, left, right)
+		idx.inodes[n].Update(idx.view, left, right)
 		idx.inodes[n].SetVersion(idx.view, ver)
 	}
 
@@ -1126,7 +1119,7 @@ func (idx *Index) rebuildInodeTree(ver uint32) {
 
 		// create new inode and build merged meta statistics
 		idx.inodes[n] = NewINode()
-		idx.inodes[n].Update(idx.view, idx.wr, left, right)
+		idx.inodes[n].Update(idx.view, left, right)
 		idx.inodes[n].SetVersion(idx.view, ver)
 	}
 }
@@ -1136,7 +1129,7 @@ func (idx *Index) makeRidFilter(mode types.FilterMode, rid uint64) *filter.Node 
 	field := idx.schema.Fields[minColIndex(idx.rx)]
 	m := filter.NewFactory(types.FT_U64).New(mode)
 	m.WithValue(rid)
-	id := schema.MetaRid
+	id := types.MetaRid
 	if idx.rx == idx.px {
 		id = uint16(idx.px + 1)
 	}

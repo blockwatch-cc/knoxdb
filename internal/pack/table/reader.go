@@ -19,7 +19,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
-	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/store"
 	"github.com/echa/log"
 )
@@ -88,7 +87,7 @@ func (t *Table) NewReader() engine.TableReader {
 			Filters: makeRxFilter(rx),
 			Log:     t.log,
 		},
-		reqFields: []uint16{schema.MetaRid, schema.MetaXmin, schema.MetaXmax},
+		reqFields: []uint16{types.MetaRid, types.MetaXmin, types.MetaXmax},
 		hits:      arena.AllocUint32(t.opts.PackSize),
 		bits:      bitset.New(t.opts.PackSize),
 		log:       t.log,
@@ -109,7 +108,10 @@ func (r *Reader) WithQuery(p engine.QueryPlan) engine.TableReader {
 }
 
 func (r *Reader) WithFields(fids []uint16) engine.TableReader {
-	r.resFields = fids
+	// ensure we return rid, but make field ids unique
+	fids = append(fids, types.MetaRid)
+	slices.Sort(fids)
+	r.resFields = slices.Compact(fids)
 	return r
 }
 
@@ -120,7 +122,7 @@ func (r *Reader) WithMask(mask *xroar.Bitmap, mode engine.ReadMode) engine.Table
 	return r
 }
 
-func (r *Reader) Schema() *schema.Schema {
+func (r *Reader) Schema() *types.TableSchema {
 	return r.table.schema
 }
 
@@ -145,7 +147,7 @@ func (r *Reader) Reset() {
 		Filters: makeRxFilter(r.rx),
 		Log:     r.table.log,
 	}
-	r.reqFields = []uint16{schema.MetaRid, schema.MetaXmin, schema.MetaXmax}
+	r.reqFields = []uint16{types.MetaRid, types.MetaXmin, types.MetaXmax}
 	r.resFields = nil
 	r.mask = nil
 	r.bcache = nil
@@ -454,7 +456,7 @@ func makeRxFilter(rx int) *filter.Node {
 		Type:    filter.ValueType(types.BlockUint64),
 		Mode:    types.FilterModeTrue,
 		Index:   rx,
-		Id:      schema.MetaRid,
+		Id:      types.MetaRid,
 		Value:   nil,
 		Matcher: filter.NoopMatcher,
 	})
@@ -491,7 +493,7 @@ func (r *Reader) loadPack(ctx context.Context, key, ver uint32, nval int, fids [
 		r.pack = pack.New().
 			WithKey(key).
 			WithVersion(ver).
-			WithSchema(r.table.schema).
+			WithSchema(r.table.schema.Schema).
 			WithMaxRows(nval)
 	}
 

@@ -6,16 +6,19 @@ package engine
 import (
 	"context"
 	"iter"
+	"time"
 
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
+	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
 type (
 	Context     = context.Context
 	Schema      = schema.Schema
+	TableSchema = types.TableSchema
 	IndexSchema = schema.IndexSchema
 	View        = schema.View
 	Bitmap      = xroar.Bitmap
@@ -41,10 +44,10 @@ type WaitCh <-chan struct{}
 
 // internal interface required for all table engines
 type TableEngine interface {
-	Create(Context, *Schema, ...Option) error
-	Open(Context, *Schema, ...Option) error
+	Create(Context, *TableSchema, ...Option) error
+	Open(Context, *TableSchema, ...Option) error
 	Close(Context) error
-	Schema() *Schema
+	Schema() *TableSchema
 	State() ObjectState
 	Metrics() TableMetrics
 	Drop(Context) error
@@ -101,7 +104,7 @@ type TableReader interface {
 	Read(Context, uint32) (*Package, error)
 	Reset()
 	Close()
-	Schema() *Schema
+	Schema() *TableSchema
 	Epoch() uint32
 }
 
@@ -145,7 +148,7 @@ type QueryableIndex interface {
 }
 
 type QueryableTable interface {
-	Schema() *Schema
+	Schema() *TableSchema
 	Indexes() []QueryableIndex
 	Query(Context, QueryPlan) (QueryResult, error)
 	Stream(Context, QueryPlan, func(QueryRow) error) error
@@ -175,9 +178,31 @@ type QueryRow interface {
 	Schema() *Schema
 	Record() []byte
 	Decode(any) error
+	Reset()
+
 	Get(int) any
-	// Field(string) (any, error)
-	// Index(int) (any, error)
+	Uint64(col int) uint64
+	Uint32(col int) uint32
+	Uint16(col int) uint16
+	Uint8(col int) uint8
+	Int256(col int) num.Int256
+	Int128(col int) num.Int128
+	Int64(col int) int64
+	Int32(col int) int32
+	Int16(col int) int16
+	Int8(col int) int8
+	Decimal256(col int) num.Decimal256
+	Decimal128(col int) num.Decimal128
+	Decimal64(col int) num.Decimal64
+	Decimal32(col int) num.Decimal32
+	Float64(col int) float64
+	Float32(col int) float32
+	String(col int) string
+	Bytes(col int) []byte
+	Bool(col int) bool
+	Time(col int) time.Time
+	Big(col int) num.Big
+	Enum(col int) string
 }
 
 type IndexKind string

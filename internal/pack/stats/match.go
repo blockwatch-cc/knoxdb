@@ -17,21 +17,16 @@ import (
 	"blockwatch.cc/knoxdb/pkg/store"
 )
 
-var _ engine.StatsReader = (*ViewReader)(nil)
+var _ engine.StatsReader = ViewReader{}
 
 type ViewReader struct {
 	*schema.View
 }
 
 func (v ViewReader) MinMax(col int) (any, any) {
-	// calculate data column positions inside statistics schema
-	minx, maxx := minColIndex(col), maxColIndex(col)
-
+	// calculate data column positions inside statistics schema and
 	// load min/max values
-	minv, _ := v.GetPhy(minx)
-	maxv, _ := v.GetPhy(maxx)
-
-	return minv, maxv
+	return v.GetPhy(minColIndex(col)), v.GetPhy(maxColIndex(col))
 }
 
 // Match matches a query condition tree against meta statistics.

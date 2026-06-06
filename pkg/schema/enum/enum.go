@@ -10,8 +10,6 @@ import (
 	"strings"
 
 	"blockwatch.cc/knoxdb/internal/hash"
-	"blockwatch.cc/knoxdb/pkg/schema/cast"
-	"blockwatch.cc/knoxdb/pkg/schema/parse"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
@@ -176,10 +174,10 @@ func (e *EnumDictionary) value(i int) string {
 	return util.UnsafeGetString(e.values[start:end])
 }
 
-var (
-	_ parse.ValueParser = (*EnumDictionary)(nil)
-	_ cast.ValueCaster  = (*EnumDictionary)(nil)
-)
+// var (
+// 	_ parse.ValueParser = (*EnumDictionary)(nil)
+// 	_ cast.ValueCaster  = (*EnumDictionary)(nil)
+// )
 
 // ValueParser interface
 func (e *EnumDictionary) ParseValue(s string) (any, error) {
@@ -224,7 +222,7 @@ func (e *EnumDictionary) CastValue(val any) (any, error) {
 		}
 		return v, nil
 	default:
-		return nil, cast.CastError(val, "enum")
+		return nil, fmt.Errorf("cast: unexpected value type %T for enum condition", val)
 	}
 }
 
@@ -258,6 +256,6 @@ func (e *EnumDictionary) CastSlice(val any) (any, error) {
 		}
 		return v, nil
 	default:
-		return nil, cast.CastError(val, "enum")
+		return nil, fmt.Errorf("cast: unexpected value type %T for enum condition", val)
 	}
 }

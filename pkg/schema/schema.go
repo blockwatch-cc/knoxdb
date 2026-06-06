@@ -1,13 +1,11 @@
-// Copyright (c) 2024 Blockwatch Data Inc.
+// Copyright (c) 2024-2026 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package schema
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
-	"io"
 	"slices"
 	"sort"
 	"strconv"
@@ -16,52 +14,27 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/hash"
 	"blockwatch.cc/knoxdb/pkg/schema/enum"
-	"blockwatch.cc/knoxdb/pkg/schema/types"
 )
-
-const (
-	// defaultVarFieldSize is an estimation for variable sized
-	// bytes slices and strings used as hint for buffer allocs
-	defaultVarFieldSize = 32
-)
-
-// schema is serialized in LE
-var LE = binary.LittleEndian
-
-// Option defines a function type for schema options.
-type Option func(*Schema)
-
-// WithEnums adds enums from the provided registry to a schema's
-// enum fields. Us this option with reflect.SchemaOf and SchemaFor[T]
-// to initialize the schema with enums.
-func WithEnums(r *enum.EnumRegistry) Option {
-	return func(s *Schema) {
-		s.WithEnums(r)
-	}
-}
 
 type Schema struct {
 	Fields      []*Field
-	Indexes     []*IndexSchema
 	Enums       atomic.Pointer[enum.EnumRegistry]
 	Name        string
 	Hash        uint64
 	MinWireSize int
-	MaxWireSize int
+	EstWireSize int
 	Version     uint32
 	IsFixedSize bool
 }
 
-func NewSchema() *Schema {
-	return &Schema{
+func NewSchema(opts ...Option) *Schema {
+	s := &Schema{
 		Fields:      make([]*Field, 0),
+		Version:     1,
 		IsFixedSize: true,
 	}
-}
-
-func (s *Schema) WithName(n string) *Schema {
-	if len(n) > 0 {
-		s.Name = n
+	for _, o := range opts {
+		o(s)
 	}
 	return s
 }
@@ -71,18 +44,11 @@ func (s *Schema) As(alias string) *Schema {
 	return s
 }
 
-func (s *Schema) WithVersion(v uint32) *Schema {
-	if s.Version < v {
-		s.Version = v
-	}
-	return s
-}
-
-func (s *Schema) WithEnums(r *enum.EnumRegistry) *Schema {
+func (s *Schema) UseEnums(r *enum.EnumRegistry) *Schema {
 	s.Enums.Store(r)
 	for _, f := range s.Fields {
 		if f.IsEnum() {
-			if e, ok := r.Find(f.Name); ok {
+			if e, ok := r.Find(basename(f.Name)); ok {
 				f.Enum = e
 			}
 		}
@@ -90,26 +56,12 @@ func (s *Schema) WithEnums(r *enum.EnumRegistry) *Schema {
 	return s
 }
 
-func (s *Schema) nextFieldId() uint16 {
-	id := uint16(len(s.Fields) + 1)
-	if id == 1<<16-1 {
-		return 0
-	}
-	for {
-		_, ok := s.FindId(id)
-		if !ok {
-			return id
-		}
-		id++
-	}
-}
-
 func (s *Schema) HasEnums() bool {
 	return s.Enums.Load() != nil
 }
 
 func (s *Schema) NewBuffer(sz int) *bytes.Buffer {
-	return bytes.NewBuffer(make([]byte, 0, sz*s.MaxWireSize))
+	return bytes.NewBuffer(make([]byte, 0, sz*s.EstWireSize))
 }
 
 func (s *Schema) IsValid() bool {
@@ -128,16 +80,19 @@ func (s *Schema) Equal(x *Schema) bool {
 	return s != nil && x != nil && s.Hash == x.Hash
 }
 
-func (s *Schema) WireSize() int {
-	return s.MinWireSize
-}
-
-func (s *Schema) AverageSize() int {
-	return s.MaxWireSize
+func (s *Schema) Len() int {
+	return len(s.Fields)
 }
 
 func (s *Schema) NumFields() int {
-	return len(s.Fields)
+	lvl := s.Fields[0].Level
+	n := 1
+	for _, f := range s.Fields[1:] {
+		if f.Level == lvl {
+			n++
+		}
+	}
+	return n
 }
 
 func (s *Schema) NumActive() int {
@@ -150,10 +105,30 @@ func (s *Schema) NumActive() int {
 	return n
 }
 
+func (s *Schema) NumEnums() int {
+	var n int
+	for _, f := range s.Fields {
+		if f.IsEnum() {
+			n++
+		}
+	}
+	return n
+}
+
 func (s *Schema) NumVisible() int {
 	var n int
 	for _, f := range s.Fields {
 		if f.IsVisible() {
+			n++
+		}
+	}
+	return n
+}
+
+func (s *Schema) NumMeta() int {
+	var n int
+	for _, f := range s.Fields {
+		if f.IsMeta() && f.IsActive() {
 			n++
 		}
 	}
@@ -182,6 +157,16 @@ func (s *Schema) VisibleNames() []string {
 	list := make([]string, 0, len(s.Fields))
 	for _, f := range s.Fields {
 		if f.IsVisible() {
+			list = append(list, f.Name)
+		}
+	}
+	return list
+}
+
+func (s *Schema) MetaNames() []string {
+	list := make([]string, 0, len(s.Fields))
+	for _, f := range s.Fields {
+		if f.IsMeta() && f.IsActive() {
 			list = append(list, f.Name)
 		}
 	}
@@ -220,6 +205,16 @@ func (s *Schema) VisibleIds() []uint16 {
 	list := make([]uint16, 0, len(s.Fields))
 	for _, f := range s.Fields {
 		if f.IsVisible() {
+			list = append(list, f.Id)
+		}
+	}
+	return list
+}
+
+func (s *Schema) MetaIds() []uint16 {
+	list := make([]uint16, 0, len(s.Fields))
+	for _, f := range s.Fields {
+		if f.IsMeta() && f.IsActive() {
 			list = append(list, f.Id)
 		}
 	}
@@ -301,115 +296,306 @@ func (s *Schema) Clone() *Schema {
 	clone := &Schema{
 		Name:    s.Name,
 		Fields:  slices.Clone(s.Fields),
-		Indexes: slices.Clone(s.Indexes),
 		Version: s.Version,
 	}
 	clone.Enums.Store(s.Enums.Load())
-	for i := range clone.Fields {
-		clone.Fields[i] = clone.Fields[i].Clone()
+
+	// clone all fields
+	for i, f := range clone.Fields {
+		clone.Fields[i] = f.Clone()
 	}
-	for i := range clone.Indexes {
-		clone.Indexes[i].Base = clone
-		for k, v := range clone.Indexes[i].Fields {
-			clone.Indexes[i].Fields[k], _ = clone.FindId(v.Id)
+
+	// all nested child fields are known top-level, but field clone
+	// does not relink them to the new pointers or create child schema
+	// clones; we do that now and reassign field pointers
+
+	// relink child schemas (assumes child fields have unique ids)
+	// we only walk the list of fields once (not recursive) since
+	// all nested fields are linearized
+	for _, f := range clone.Fields {
+		// skip when not a nested field
+		if f.Child == nil {
+			continue
 		}
-		for k, v := range clone.Indexes[i].Extra {
-			clone.Indexes[i].Extra[k], _ = clone.FindId(v.Id)
+
+		// clone schema
+		newChild := &Schema{
+			Name:    f.Child.Name,
+			Version: f.Child.Version,
+			Fields:  slices.Clone(f.Child.Fields),
+		}
+
+		// relink fields
+		if ok := newChild.relink(clone); ok {
+			f.Child = newChild
+		} else {
+			panic(fmt.Errorf("schema %s: failed to relink nested field %q", s.Name, f.Name))
 		}
 	}
-	return clone
+
+	// finalize children in reverse order to roll up hashes correctly
+	// across nested children
+	for _, f := range slices.Backward(clone.Fields) {
+		if f.Child == nil {
+			continue
+		}
+		f.Child.Finalize()
+	}
+
+	// finalize the outer schema
+	return clone.Finalize()
 }
 
-func (s *Schema) WithField(f *Field) *Schema {
-	if f.IsValid() {
-		f.Id = s.nextFieldId()
-		s.Fields = append(s.Fields, f)
-		s.Hash = 0
+func (s *Schema) nextFieldId() uint16 {
+	id := uint16(len(s.Fields) + 1)
+	if id == 1<<16-1 {
+		return 0
 	}
-	return s
+	for {
+		_, ok := s.FindId(id)
+		if !ok {
+			return id
+		}
+		id++
+	}
 }
 
+// relinks schema ids to field pointers found in dst schema.
+// used on clone to rebuild the tree of nested fields.
+func (s *Schema) relink(dst *Schema) bool {
+	var (
+		ok     bool
+		fields = make([]*Field, len(s.Fields))
+	)
+	for i, f := range s.Fields {
+		fields[i], ok = dst.FindId(f.Id)
+		if !ok || fields[i].Type != f.Type {
+			return false
+		}
+	}
+	s.Fields = fields
+	return true
+}
+
+// Relevel resets nesting levels and assigns parent field ids
+// to all nested type fields. This method is recursive.
+func (s *Schema) Relevel(lvl uint8, parent uint16) {
+	// safeguard against circular dependencies and errors
+	if lvl == 255 {
+		panic(fmt.Errorf("schema: max nesting level reached"))
+	}
+	// reset level for all nested fields
+	for _, f := range s.Fields {
+		f.Level = lvl
+		f.ParentId = parent
+	}
+	// assign new levels to nested children; since the type tree
+	// is stored in pre-order and children are linked by pointers
+	// we first assign new levels to upper layer nodes and then
+	// trickle down towards leafs as we progress through the list.
+	for _, f := range s.Fields {
+		if f.Child == nil {
+			continue
+		}
+		f.Child.Relevel(f.Level+1, f.Id)
+	}
+}
+
+// AddField adds a new field to the schema. It creates a new field id
+// and links the field to : support nested fields
 func (s *Schema) AddField(f *Field) (*Schema, error) {
+	// require name and structure to be ok
 	if err := f.Validate(); err != nil {
 		return nil, err
 	}
-	// ensure field is unique
-	if _, ok := s.Find(f.Name); ok {
-		return nil, ErrDuplicateName
+
+	// clone the incoming field
+	f = f.Clone()
+
+	// ensure field is unique, if nested check if it is unique
+	// withing the nested type
+	if f.ParentId == 0 {
+		if _, ok := s.Find(f.Name); ok {
+			return nil, ErrDuplicateName
+		}
+	} else {
+		// parent must exist
+		p, ok := s.FindId(f.ParentId)
+		if !ok {
+			return nil, ErrInvalidParent
+		}
+
+		// check if the type can hold more fields
+		// TODO: better way to detect a nested struct type
+		if p.Type != List || p.Child.NumFields() == 1 {
+			return nil, ErrInvalidParent
+		}
+
+		// prefix field name with parent path and
+		// check the extended name is unique within the parent
+		f.Name = p.Name + "." + f.Name
+		if _, ok := p.Child.Find(f.Name); ok {
+			return nil, ErrDuplicateName
+		}
 	}
+
+	// clone the schema and up version number
 	clone := s.Clone()
+	clone.Version++
+
+	//  assign unique field id
 	f.Id = clone.nextFieldId()
 	clone.Fields = append(clone.Fields, f)
-	clone.Version++
-	return clone.Finalize(), nil
+
+	// clone potential children
+	if f.Child != nil {
+		// clone child schema including all nested fields
+		newChild := f.Child.Clone()
+
+		// enforce all child schema versions are equal
+		newChild.Version = s.Version
+
+		// add child fields to main schema
+		for _, c := range newChild.Fields {
+			// always create new ids
+			c.Id = clone.nextFieldId()
+			clone.Fields = append(clone.Fields, c)
+		}
+
+		// replace child pointer
+		f.Child = newChild
+	}
+
+	// if the new field has a parent link the field
+	// ignore error because we have already checked above
+	if f.ParentId > 0 {
+		_ = clone.linkParent(f.ParentId, f)
+	}
+
+	// relevel the type tree in case the added field is
+	// nested or changed a nested type
+	clone.Relevel(0, 0)
+
+	// finalize nested fields in reverse order to rollup leaf
+	// child schema hashes first and update nested sizes
+	for _, f := range slices.Backward(clone.Fields) {
+		if f.Child != nil {
+			f.Child.Finalize()
+		}
+	}
+
+	// finalize the top-level schema and validate
+	clone.Finalize()
+	if err := clone.Validate(); err != nil {
+		return nil, err
+	}
+	return clone, nil
 }
 
 func (s *Schema) DeleteId(id uint16) (*Schema, error) {
-	for i, v := range s.Fields {
-		if v.Id != id {
-			continue
-		}
-		if !v.IsActive() {
-			return nil, ErrInvalidField
-		}
-		if v.IsPrimary() {
-			return nil, ErrDeletePrimary
-		}
-		// delete changes schema version
-		clone := s.Clone()
-		clone.Fields[i] = clone.Fields[i].Clone()
-		clone.Fields[i].Flags |= types.FieldFlagDeleted
-		clone.Version++
-		return clone.Finalize(), nil
+	// perform checks
+	f, ok := s.FindId(id)
+	if !ok {
+		return nil, ErrInvalidField
 	}
-	return nil, ErrInvalidField
+	if !f.IsActive() {
+		return nil, ErrInvalidField
+	}
+	if f.IsPrimary() {
+		return nil, ErrDeletePrimary
+	}
+
+	// delete changes schema version
+	clone := s.Clone()
+	clone.Version++
+	f, _ = clone.FindId(id)
+	f.Flags |= FlagDeleted
+
+	// delete nested fields too and update versions
+	if f.Child != nil {
+		f.Child.Version = clone.Version
+		for _, cf := range f.Child.Fields {
+			cf.Flags |= FlagDeleted
+			if cf.Child != nil {
+				cf.Child.Version = clone.Version
+			}
+		}
+	}
+
+	// finalize nested types in reverse order to rollup
+	// leaf child schema hashes first and update sizes
+	if f.ParentId > 0 || f.Child != nil {
+		for _, f := range slices.Backward(clone.Fields) {
+			if f.Child != nil {
+				f.Child.Finalize()
+			}
+		}
+	}
+
+	// fill in computed fields
+	clone.Finalize()
+
+	if err := clone.Validate(); err != nil {
+		return nil, err
+	}
+
+	return clone, nil
 }
 
 func (s *Schema) RenameId(id uint16, name string) (*Schema, error) {
 	// check pre-conditions
-	var pos = -1
-	for i, v := range s.Fields {
-		// ensure name is unique
-		if v.Name == name {
-			return nil, ErrDuplicateName
-		}
-		if v.Id == id {
-			// cannot rename deleted fields
-			if !v.IsActive() {
-				return nil, ErrInvalidField
-			}
-			// enums are connected to named dictionaries and cannot be changed
-			if v.IsEnum() {
-				return nil, ErrRenameEnum
-			}
-			pos = i
-		}
-	}
-	if pos < 0 {
+	f, ok := s.FindId(id)
+	if !ok {
 		return nil, ErrInvalidField
 	}
-
-	// clone but don't update version & hash
-	clone := s.Clone()
-	clone.Fields[pos] = clone.Fields[pos].Clone()
-	clone.Fields[pos].Name = name
-	return clone.Finalize(), nil
-}
-
-// switch primary key field to id if exists
-func (s *Schema) ResetPk(id uint16) (*Schema, bool) {
-	fnew, ok := s.FindId(id)
-	if !ok || fnew.Type != FT_U64 {
-		return s, false
+	// cannot rename deleted fields
+	if !f.IsActive() {
+		return nil, ErrInvalidField
 	}
+	// enums are connected to named dictionaries and cannot be changed
+	if f.IsEnum() {
+		return nil, ErrRenameEnum
+	}
+
+	// ensure new name is unique
+	if f.Level == 0 {
+		if _, ok := s.Find(name); ok {
+			return nil, ErrDuplicateName
+		}
+	} else {
+		// new name must be unique at parent level
+		if p, ok := s.FindId(f.ParentId); !ok {
+			return nil, ErrInvalidParent
+		} else {
+			name = p.Name + "." + name
+			if _, ok = s.Find(name); ok {
+				return nil, ErrDuplicateName
+			}
+		}
+	}
+
+	// simple or nested name must be no longer than max
+	if len(name) > MAX_NAME {
+		return nil, ErrLongValue
+	}
+
+	// clone but don't update version
+	// name change does not alter schema hash
 	clone := s.Clone()
-	fold := clone.Pk()
-	fnew, _ = clone.FindId(id)
-	// flip primary key flag
-	// FIXME: changes schema hash (effect on catalog?)
-	fold.Flags &^= types.FieldFlagPrimary
-	fnew.Flags |= types.FieldFlagPrimary
-	return clone, true
+	f, _ = clone.FindId(id)
+
+	// rename child fields by replacing the parent name prefix
+	if f.Child != nil {
+		for _, cf := range f.Child.Fields {
+			cf.Name = name + strings.TrimPrefix(cf.Name, f.Name)
+		}
+	}
+
+	// update field name
+	f.Name = name
+
+	// finalize the clone
+	return clone.Finalize(), nil
 }
 
 func (s *Schema) CanMatch(names ...string) bool {
@@ -506,8 +692,7 @@ func (s *Schema) Sort() *Schema {
 		return s.Fields[i].Id < s.Fields[j].Id
 	})
 	s.Hash = 0
-	s.Finalize()
-	return s
+	return s.Finalize()
 }
 
 // Returns a field position mapping for child schema dst that maps child
@@ -524,14 +709,15 @@ func (s *Schema) MapSchema(dst *Schema) ([]int, error) {
 		for i, f := range s.Fields {
 			if dstField.Name == f.Name {
 				srcField = f
-				// hide inactive source fields
-				if f.IsActive() {
+				// hide deleted source fields and metadata fields
+				if f.IsVisible() {
 					pos = i
 				}
 				break
 			}
 		}
 
+		// assert mapping matches type conventions
 		if pos > -1 {
 			if srcField.Type != dstField.Type {
 				return nil, fmt.Errorf("%w: map [%s/%s] => [%s/%s]: type mismatch %s/%s",
@@ -564,15 +750,20 @@ func (s *Schema) MapSchema(dst *Schema) ([]int, error) {
 }
 
 func (s *Schema) Validate() error {
-	// require name
-	if s.Name == "" {
+	// require name between 1..255 bytes length
+	if l := len(s.Name); l > 255 {
+		return fmt.Errorf("schema name too long, max 255 chars")
+	} else if l < 1 {
 		return fmt.Errorf("missing schema name")
 	}
 
 	// require fields
 	if len(s.Fields) == 0 {
-		return fmt.Errorf("empty schema, no supported fields found")
+		return fmt.Errorf("schema %s: no supported fields found", s.Name)
 	}
+
+	// TODO
+	// - we could require strictly sorted fields by id
 
 	// require no duplicate names, ids, pk or timebase fields
 	uniqueNames := make(map[string]struct{})
@@ -580,9 +771,9 @@ func (s *Schema) Validate() error {
 	var firstTimebase, firstPkField *Field
 
 	for _, f := range s.Fields {
-		// fields must validate
-		if err := f.Validate(); err != nil {
-			return fmt.Errorf("schema %s: field %s: %v", s.Name, f.Name, err)
+		// fields must validate including nested fields
+		if err := f.Validate(true); err != nil {
+			return fmt.Errorf("schema %s: %v", s.Name, err)
 		}
 
 		// check name uniqueness
@@ -620,112 +811,64 @@ func (s *Schema) Validate() error {
 		}
 	}
 
-	// validate indexes if defined
-	clear(uniqueNames)
-	for _, v := range s.Indexes {
-		if _, ok := uniqueNames[v.Name]; ok {
-			return fmt.Errorf("schema %s: duplicate index %s", s.Name, v.Name)
-		}
-		uniqueNames[v.Name] = struct{}{}
-		if err := v.Validate(); err != nil {
-			return fmt.Errorf("schema %s: %v", s.Name, err)
-		}
-	}
-
 	return nil
 }
 
-func (s *Schema) MarshalBinary() ([]byte, error) {
-	buf := bytes.NewBuffer(make([]byte, 0, 32*len(s.Fields)+12+len(s.Name)))
-
-	// version: u32
-	binary.Write(buf, LE, s.Version)
-
-	// name: string
-	binary.Write(buf, LE, uint32(len(s.Name)))
-	buf.WriteString(s.Name)
-
-	// fields
-	binary.Write(buf, LE, uint32(len(s.Fields)))
-	for _, f := range s.Fields {
-		f.WriteTo(buf)
-	}
-
-	return buf.Bytes(), nil
-}
-
-func (s *Schema) UnmarshalBinary(b []byte) (err error) {
-	if len(b) < 12 {
-		return io.ErrShortBuffer
-	}
-	buf := bytes.NewBuffer(b)
-
-	// version: u32
-	err = binary.Read(buf, LE, &s.Version)
-	if err != nil {
-		return
-	}
-
-	// name: string
-	var l uint32
-	err = binary.Read(buf, LE, &l)
-	if err != nil {
-		return
-	}
-	s.Name = string(buf.Next(int(l)))
-	if len(s.Name) != int(l) {
-		return io.ErrShortBuffer
-	}
-
-	// fields
-	err = binary.Read(buf, LE, &l)
-	if err != nil {
-		return
-	}
-	s.Fields = make([]*Field, l)
-	for i := range s.Fields {
-		f := &Field{}
-		if err = f.ReadFrom(buf); err != nil {
-			return
-		}
-		s.Fields[i] = f
-	}
-
-	// fill in computed fields
-	s.Finalize()
-	return nil
-}
-
-func (s *Schema) Finalize() *Schema {
+func (s *Schema) Finalize(opts ...Option) *Schema {
 	s.MinWireSize = 0
-	s.MaxWireSize = 0
+	s.EstWireSize = 0
 	s.IsFixedSize = true
 	s.Hash = 0
 
+	// apply schema options
+	for _, o := range opts {
+		o(s)
+	}
+
+	// collect enums when used but no registry exists yet
+	if s.NumEnums() > 0 && !s.HasEnums() {
+		reg := enum.NewEnumRegistry()
+		for _, f := range s.Fields {
+			if f.IsEnum() && f.Enum != nil {
+				reg.Put(uint64(f.Id), f.Enum)
+			}
+		}
+		s.Enums.Store(reg)
+	}
+
 	// generate schema hash from visible fields
-	var b [4]byte
+	var b [8]byte
 	h := hash.New()
 	LE.PutUint32(b[:], s.Version)
-	h.Write(b[:])
+	h.Write(b[:4])
 
 	for _, f := range s.Fields {
-		// collect sizes from visible fields
-		if f.IsVisible() {
+		// collect sizes from visible fields only
+		if !f.IsVisible() {
+			continue
+		}
+
+		// skip sizes from nested fields inside LIST/MAP
+		// but count the top-level LIST/MAP header size
+		if f.Level == 0 {
 			sz := f.WireSize()
 			s.MinWireSize += sz
-			s.MaxWireSize += sz
+			s.EstWireSize += sz
 			if !f.IsFixedSize() {
 				s.IsFixedSize = false
-				s.MaxWireSize += defaultVarFieldSize
+				s.EstWireSize += f.VarSizeEstimate()
 			}
-
-			// hash: id, type, flags, scale (not: filter, compress, name)
-			LE.PutUint16(b[:], f.Id)
-			h.Write(b[:2])
-			h.Write([]byte{byte(f.Type)})
-			h.Write([]byte{byte(f.Flags)})
-			h.Write([]byte{f.Scale})
 		}
+
+		// hash: id, type, flags, scale, level (not: filter, compress, name)
+		LE.PutUint16(b[:], f.Id)
+		h.Write(b[:2])
+		h.Write([]byte{
+			byte(f.Type),
+			byte(f.Flags),
+			f.Scale,
+			f.Level,
+		})
 	}
 
 	s.Hash = h.Sum64()
@@ -739,37 +882,58 @@ func (s *Schema) Finalize() *Schema {
 func (s *Schema) String() string {
 	var b strings.Builder
 	if s.IsFixedSize {
-		fmt.Fprintf(&b, "%q fields=%d sz=%d (fixed)", s.Name, len(s.Fields), s.MinWireSize)
+		fmt.Fprintf(&b, "%q 0x%016x fields=%d/%d sz=%d (fixed)",
+			s.Name, s.Hash, s.NumFields(), len(s.Fields), s.MinWireSize)
 	} else {
-		fmt.Fprintf(&b, "%q fields=%d sz_min=%d sz_max=%d",
+		fmt.Fprintf(&b, "%q 0x%016x fields=%d/%d sz_min=%d sz_max=%d",
 			s.Name,
+			s.Hash,
+			s.NumFields(),
 			len(s.Fields),
 			s.MinWireSize,
-			s.MaxWireSize,
+			s.EstWireSize,
 		)
 	}
-	var maxNameLen int
+	var (
+		maxNameLen, maxTypeLen, maxFlagLen, maxFilterLen = 4, 4, 5, 0
+		isNested                                         bool
+	)
 	for _, f := range s.Fields {
 		maxNameLen = max(maxNameLen, len(f.Name))
+		maxTypeLen = max(maxTypeLen, len(f.TypeName()))
+		maxFlagLen = max(maxFlagLen, len(f.Flags.String()))
+		maxFilterLen = max(maxFilterLen, len(f.Filter.String()))
+		isNested = isNested || f.Child != nil
 	}
-	fmt.Fprintf(&b, "\n#  ID   %[1]*[2]s %-15s Flags", -maxNameLen-1, "Name", "Type")
+	fmt.Fprintf(&b, "\n#  ID   %[1]*[2]s %[3]*[4]s %[5]*[6]s %[7]*[8]s ",
+		-maxNameLen, "Name",
+		-maxTypeLen, "Type",
+		-maxFlagLen, "Flags",
+		-5, "Level",
+	)
+	if maxFilterLen > 0 {
+		fmt.Fprintf(&b, "%[1]*[2]s ", -maxFilterLen, "Filter")
+	}
+	if isNested {
+		fmt.Fprintf(&b, "%-18s %s", "Child", "Links")
+	}
 	for i, f := range s.Fields {
-		typ := f.TypeName()
-		flags := f.Flags.String()
-		if f.Filter > 0 {
-			if flags != "" {
-				flags += ","
-			}
-			flags += f.Filter.String()
-		}
-		fmt.Fprintf(&b, "\n%02d F#%02d %[3]*[4]s %-15s %s",
-			i,
-			f.Id,
-			-maxNameLen-1,
-			f.Name,
-			typ,
-			flags,
+		fmt.Fprintf(&b, "\n%02d F#%02d %[3]*[4]s %[5]*[6]s %[7]*[8]s %[9]*[10]d ",
+			i, f.Id,
+			-maxNameLen, f.Name,
+			-maxTypeLen, f.TypeName(),
+			-maxFlagLen, f.Flags.String(),
+			-5, f.Level,
 		)
+		if maxFilterLen > 0 {
+			fmt.Fprintf(&b, "%[1]*[2]s ", -maxFilterLen, f.Filter.String())
+		}
+		if f.Child != nil {
+			fmt.Fprintf(&b, "0x%016x ", f.Child.Hash)
+			for _, cf := range f.Child.Fields {
+				fmt.Fprintf(&b, "%s ", cf.Name)
+			}
+		}
 	}
 	return b.String()
 }

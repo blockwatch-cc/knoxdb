@@ -17,7 +17,6 @@ import (
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	sreflect "blockwatch.cc/knoxdb/pkg/schema/reflect"
-	"blockwatch.cc/knoxdb/pkg/schema/types"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
@@ -52,8 +51,8 @@ func NewEncoder(s *schema.Schema, w io.Writer) *Encoder {
 		flags:  EncoderFlagWriteHeader,
 		typ:    typ,
 		ofs:    structFieldOffsets(typ),
-		timeAs: time.RFC3339Nano,              // 2006-01-02T15:04:05.999999999Z07:00
-		buf:    make([]byte, 0, s.WireSize()), // good approximation
+		timeAs: time.RFC3339Nano,               // 2006-01-02T15:04:05.999999999Z07:00
+		buf:    make([]byte, 0, s.MinWireSize), // good approximation
 	}
 }
 
@@ -196,8 +195,8 @@ func (e *Encoder) encode(base unsafe.Pointer) error {
 		}
 		ptr := unsafe.Add(base, e.ofs[i])
 		switch f.Type {
-		case types.FT_TIMESTAMP:
-			s := types.TimeScale(f.Scale)
+		case schema.Timestamp:
+			s := schema.TimeScale(f.Scale)
 			tm := s.FromUnix(*(*int64)(ptr))
 			if e.timeAs == "" {
 				e.buf = tm.AppendFormat(e.buf, s.DateTimeFormat())
@@ -205,8 +204,8 @@ func (e *Encoder) encode(base unsafe.Pointer) error {
 				e.buf = tm.AppendFormat(e.buf, e.timeAs)
 			}
 
-		case types.FT_DATE:
-			s := types.TimeScale(f.Scale)
+		case schema.Date:
+			s := schema.TimeScale(f.Scale)
 			tm := s.FromUnix(*(*int64)(ptr))
 			if e.dateAs == "" {
 				e.buf = tm.AppendFormat(e.buf, s.DateTimeFormat())
@@ -214,8 +213,8 @@ func (e *Encoder) encode(base unsafe.Pointer) error {
 				e.buf = tm.AppendFormat(e.buf, e.dateAs)
 			}
 
-		case types.FT_TIME:
-			s := types.TimeScale(f.Scale)
+		case schema.Time:
+			s := schema.TimeScale(f.Scale)
 			tm := s.FromUnix(*(*int64)(ptr))
 			if e.timeAs == "" {
 				e.buf = tm.AppendFormat(e.buf, s.TimeOnlyFormat())
@@ -223,40 +222,40 @@ func (e *Encoder) encode(base unsafe.Pointer) error {
 				e.buf = tm.AppendFormat(e.buf, e.timeAs)
 			}
 
-		case types.FT_I64:
+		case schema.Int64:
 			e.buf = strconv.AppendInt(e.buf, *(*int64)(ptr), 10)
 
-		case types.FT_I32:
+		case schema.Int32:
 			e.buf = strconv.AppendInt(e.buf, int64(*(*int32)(ptr)), 10)
 
-		case types.FT_I16:
+		case schema.Int16:
 			e.buf = strconv.AppendInt(e.buf, int64(*(*int16)(ptr)), 10)
 
-		case types.FT_I8:
+		case schema.Int8:
 			e.buf = strconv.AppendInt(e.buf, int64(*(*int8)(ptr)), 10)
 
-		case types.FT_U64:
+		case schema.Uint64:
 			e.buf = strconv.AppendUint(e.buf, *(*uint64)(ptr), 10)
 
-		case types.FT_U32:
+		case schema.Uint32:
 			e.buf = strconv.AppendUint(e.buf, uint64(*(*uint32)(ptr)), 10)
 
-		case types.FT_U16:
+		case schema.Uint16:
 			e.buf = strconv.AppendUint(e.buf, uint64(*(*uint16)(ptr)), 10)
 
-		case types.FT_U8:
+		case schema.Uint8:
 			e.buf = strconv.AppendUint(e.buf, uint64(*(*uint8)(ptr)), 10)
 
-		case types.FT_F64:
+		case schema.Float64:
 			e.buf = strconv.AppendFloat(e.buf, *(*float64)(ptr), 'f', -1, 64)
 
-		case types.FT_F32:
+		case schema.Float32:
 			e.buf = strconv.AppendFloat(e.buf, float64(*(*float32)(ptr)), 'f', -1, 32)
 
-		case types.FT_BOOL:
+		case schema.Boolean:
 			e.buf = strconv.AppendBool(e.buf, *(*bool)(ptr))
 
-		case types.FT_STRING, types.FT_TEXT:
+		case schema.String, schema.Text:
 			// quote strings that contain (a) a separator character or (b)
 			// start with a quote character. Escape quotes inside quoted strings.
 			s := *(*string)(ptr)
@@ -269,7 +268,7 @@ func (e *Encoder) encode(base unsafe.Pointer) error {
 				e.buf = append(e.buf, util.UnsafeGetBytes(s)...)
 			}
 
-		case types.FT_BYTES, types.FT_BLOB:
+		case schema.Bytes, schema.Binary:
 			// encode hex
 			if f.IsArray() {
 				e.buf = hex.AppendEncode(e.buf, unsafe.Slice((*byte)(ptr), f.Scale))
@@ -277,29 +276,29 @@ func (e *Encoder) encode(base unsafe.Pointer) error {
 				e.buf = hex.AppendEncode(e.buf, *(*[]byte)(ptr))
 			}
 
-		case types.FT_I256:
+		case schema.Int256:
 			e.buf = num.Int256FromBytes(unsafe.Slice((*byte)(ptr), 32)).Append(e.buf)
 
-		case types.FT_I128:
+		case schema.Int128:
 			e.buf = num.Int128FromBytes(unsafe.Slice((*byte)(ptr), 16)).Append(e.buf)
 
-		case types.FT_D256:
+		case schema.Decimal256:
 			s := num.NewDecimal256(num.Int256FromBytes(unsafe.Slice((*byte)(ptr), 32)), f.Scale).String()
 			e.buf = append(e.buf, util.UnsafeGetBytes(s)...)
 
-		case types.FT_D128:
+		case schema.Decimal128:
 			s := num.NewDecimal128(num.Int128FromBytes(unsafe.Slice((*byte)(ptr), 16)), f.Scale).String()
 			e.buf = append(e.buf, util.UnsafeGetBytes(s)...)
 
-		case types.FT_D64:
+		case schema.Decimal64:
 			s := num.NewDecimal64(*(*int64)(ptr), f.Scale).String()
 			e.buf = append(e.buf, util.UnsafeGetBytes(s)...)
 
-		case types.FT_D32:
+		case schema.Decimal32:
 			s := num.NewDecimal32(*(*int32)(ptr), f.Scale).String()
 			e.buf = append(e.buf, util.UnsafeGetBytes(s)...)
 
-		case types.FT_BIGINT:
+		case schema.Bigint:
 			e.buf = num.NewBigFromBytes(*(*[]byte)(ptr)).Big().Append(e.buf, 10)
 
 		default:

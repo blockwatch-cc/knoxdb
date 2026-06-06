@@ -53,8 +53,8 @@ func RegisterEnum() {
 	enums.Register(0, myEnum)
 
 	// init schema and link enums (will lookup myEnum and link to field)
-	allTypesSchema = reflect.MustSchemaFor[AllTypes](schema.WithEnums(enums))
-	securitySchema = reflect.MustSchemaFor[Security](schema.WithEnums(enums))
+	allTypesSchema = reflect.MustSchemaFor[AllTypes](schema.Enums(enums))
+	securitySchema = reflect.MustSchemaFor[Security](schema.Enums(enums))
 }
 
 // Types defines the schema for Workload1 and Workload2.
@@ -177,7 +177,7 @@ func makeFilter(s *schema.Schema, name string, mode types.FilterMode, val, val2 
 	m.WithValue(val)
 	return filter.NewNode().SetFilter(&filter.Filter{
 		Name:    field.Name,
-		Type:    filter.ValueType(field.Type.BlockType()),
+		Type:    filter.ToValueType(field.Type),
 		Mode:    mode,
 		Index:   idx,
 		Id:      field.Id,

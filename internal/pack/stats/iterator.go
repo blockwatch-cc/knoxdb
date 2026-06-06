@@ -121,11 +121,7 @@ func (it *Iterator) ReadWire() []byte {
 	if it.snode == nil {
 		return nil
 	}
-	buf, err := it.snode.spack.Load().ReadWire(int(it.match[it.n]))
-	if err != nil {
-		assert.Unreachable("invalid snode wire layout", err)
-	}
-	return buf
+	return it.snode.spack.Load().ReadWire(int(it.match[it.n]))
 }
 
 // merge, query

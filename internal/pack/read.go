@@ -19,78 +19,74 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
-func (p *Package) ReadWire(row int) ([]byte, error) {
-	buf := bytes.NewBuffer(make([]byte, 0, p.schema.WireSize()+128))
-	err := p.ReadWireBuffer(buf, row)
-	if err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+func (p *Package) ReadWire(row int) []byte {
+	buf := bytes.NewBuffer(make([]byte, 0, p.schema.EstWireSize))
+	p.ReadWireBuffer(buf, row)
+	return buf.Bytes()
 }
 
 // Extract a change set from selected columns, used in WAL update mode.
-func (p *Package) ReadWireFields(buf *bytes.Buffer, row int, cols []int) error {
+func (p *Package) ReadWireFields(buf *bytes.Buffer, row int, cols []int) {
 	for _, v := range cols {
 		var (
 			b     = p.blocks[v]
 			field = p.schema.Fields[v]
 			x     [8]byte
-			err   error
 		)
 		switch b.Type() {
 		case types.BlockUint64:
 			LE.PutUint64(x[:], b.Uint64().Get(row))
-			_, err = buf.Write(x[:])
+			buf.Write(x[:])
 		case types.BlockInt64:
 			LE.PutUint64(x[:], uint64(b.Int64().Get(row)))
-			_, err = buf.Write(x[:])
+			buf.Write(x[:])
 		case types.BlockFloat64:
 			LE.PutUint64(x[:], math.Float64bits(b.Float64().Get(row)))
-			_, err = buf.Write(x[:])
+			buf.Write(x[:])
 		case types.BlockUint32:
 			LE.PutUint32(x[:], b.Uint32().Get(row))
-			_, err = buf.Write(x[:4])
+			buf.Write(x[:4])
 		case types.BlockInt32:
 			LE.PutUint32(x[:], uint32(b.Int32().Get(row)))
-			_, err = buf.Write(x[:4])
+			buf.Write(x[:4])
 		case types.BlockFloat32:
 			LE.PutUint32(x[:], math.Float32bits(b.Float32().Get(row)))
-			_, err = buf.Write(x[:4])
+			buf.Write(x[:4])
 		case types.BlockUint16:
 			LE.PutUint16(x[:], b.Uint16().Get(row))
-			_, err = buf.Write(x[:2])
+			buf.Write(x[:2])
 		case types.BlockInt16:
 			LE.PutUint16(x[:], uint16(b.Int16().Get(row)))
-			_, err = buf.Write(x[:2])
+			buf.Write(x[:2])
 		case types.BlockUint8:
-			_, err = buf.Write([]byte{b.Uint8().Get(row)})
+			buf.WriteByte(b.Uint8().Get(row))
 		case types.BlockInt8:
-			_, err = buf.Write([]byte{uint8(b.Int8().Get(row))})
+			buf.WriteByte(uint8(b.Int8().Get(row)))
 		case types.BlockBool:
 			v := b.Bool().Get(row)
-			err = buf.WriteByte(*(*byte)(unsafe.Pointer(&v)))
+			buf.WriteByte(*(*byte)(unsafe.Pointer(&v)))
 		case types.BlockBytes:
 			v := b.Bytes().Get(row)
-			if field.IsArray() {
-				_, err = buf.Write(v[:field.Scale])
-			} else {
-				switch field.Type {
-				case types.FT_BYTES, types.FT_STRING, types.FT_BIGINT:
+			switch field.Type {
+			case types.FT_BYTES, types.FT_STRING, types.FT_BIGINT:
+				if field.IsArray() {
+					// length in schema
+					buf.Write(v[:field.Scale])
+				} else {
 					// 1 byte length
-					_, err = buf.Write([]byte{byte(len(v))})
-				default:
-					// 4 byte length
-					LE.PutUint32(x[:], uint32(len(v)))
-					_, err = buf.Write(x[:4])
+					buf.WriteByte(byte(len(v)))
+					buf.Write(v)
 				}
-				if err == nil {
-					_, err = buf.Write(v)
-				}
+			default:
+				// 4 byte length
+				LE.PutUint32(x[:], uint32(len(v)))
+				buf.Write(x[:4])
 			}
+
 		case types.BlockInt256:
-			_, err = buf.Write(b.Int256().Get(row).Bytes())
+			buf.Write(b.Int256().Get(row).Bytes())
 		case types.BlockInt128:
-			_, err = buf.Write(b.Int128().Get(row).Bytes())
+			buf.Write(b.Int128().Get(row).Bytes())
 		default:
 			// oh, its a type we don't support yet
 			assert.Unreachable("unhandled field type",
@@ -102,11 +98,7 @@ func (p *Package) ReadWireFields(buf *bytes.Buffer, row int, cols []int) error {
 				"version", p.schema.Version,
 			)
 		}
-		if err != nil {
-			return err
-		}
 	}
-	return nil
 }
 
 var (
@@ -114,7 +106,7 @@ var (
 	LE    = binary.LittleEndian // values
 )
 
-func (p *Package) ReadWireBuffer(buf *bytes.Buffer, row int) error {
+func (p *Package) ReadWireBuffer(buf *bytes.Buffer, row int) {
 	assert.Always(row >= 0 && row < p.nRows, "invalid row",
 		"row", row,
 		"pack", p.key,
@@ -129,14 +121,10 @@ func (p *Package) ReadWireBuffer(buf *bytes.Buffer, row int) error {
 		}
 
 		// insert zero value when block is not available (e.g. after schema change)
-		var err error
 		b := p.blocks[i]
 		if b == nil {
-			for sz := field.WireSize(); sz > 0 && err == nil; sz -= 32 {
-				_, err = buf.Write(zeros[:min(sz, 32)])
-			}
-			if err != nil {
-				return err
+			for sz := field.WireSize(); sz > 0; sz -= 32 {
+				buf.Write(zeros[:min(sz, 32)])
 			}
 			continue
 		}
@@ -146,57 +134,56 @@ func (p *Package) ReadWireBuffer(buf *bytes.Buffer, row int) error {
 		switch b.Type() {
 		case types.BlockUint64:
 			LE.PutUint64(x[:], b.Uint64().Get(row))
-			_, err = buf.Write(x[:])
+			buf.Write(x[:])
 		case types.BlockInt64:
 			LE.PutUint64(x[:], uint64(b.Int64().Get(row)))
-			_, err = buf.Write(x[:])
+			buf.Write(x[:])
 		case types.BlockFloat64:
 			LE.PutUint64(x[:], math.Float64bits(b.Float64().Get(row)))
-			_, err = buf.Write(x[:])
+			buf.Write(x[:])
 		case types.BlockUint32:
 			LE.PutUint32(x[:], b.Uint32().Get(row))
-			_, err = buf.Write(x[:4])
+			buf.Write(x[:4])
 		case types.BlockInt32:
 			LE.PutUint32(x[:], uint32(b.Int32().Get(row)))
-			_, err = buf.Write(x[:4])
+			buf.Write(x[:4])
 		case types.BlockFloat32:
 			LE.PutUint32(x[:], math.Float32bits(b.Float32().Get(row)))
-			_, err = buf.Write(x[:4])
+			buf.Write(x[:4])
 		case types.BlockUint16:
 			LE.PutUint16(x[:], b.Uint16().Get(row))
-			_, err = buf.Write(x[:2])
+			buf.Write(x[:2])
 		case types.BlockInt16:
 			LE.PutUint16(x[:], uint16(b.Int16().Get(row)))
-			_, err = buf.Write(x[:2])
+			buf.Write(x[:2])
 		case types.BlockUint8:
-			_, err = buf.Write([]byte{b.Uint8().Get(row)})
+			buf.WriteByte(b.Uint8().Get(row))
 		case types.BlockInt8:
-			_, err = buf.Write([]byte{uint8(b.Int8().Get(row))})
+			buf.WriteByte(uint8(b.Int8().Get(row)))
 		case types.BlockBool:
 			v := b.Bool().Get(row)
-			err = buf.WriteByte(*(*byte)(unsafe.Pointer(&v)))
+			buf.WriteByte(*(*byte)(unsafe.Pointer(&v)))
 		case types.BlockBytes:
 			v := b.Bytes().Get(row)
-			if field.IsArray() {
-				_, err = buf.Write(v[:field.Scale])
-			} else {
-				switch field.Type {
-				case types.FT_BYTES, types.FT_STRING, types.FT_BIGINT:
+			switch field.Type {
+			case types.FT_BYTES, types.FT_STRING, types.FT_BIGINT:
+				if field.IsArray() {
+					buf.Write(v[:field.Scale])
+				} else {
 					// 1 byte length
-					_, err = buf.Write([]byte{byte(len(v))})
-				default:
-					// 4 byte length
-					LE.PutUint32(x[:], uint32(len(v)))
-					_, err = buf.Write(x[:4])
+					buf.WriteByte(byte(len(v)))
+					buf.Write(v)
 				}
-				if err == nil {
-					_, err = buf.Write(v)
-				}
+			default:
+				// 4 byte length
+				LE.PutUint32(x[:], uint32(len(v)))
+				buf.Write(x[:4])
+				buf.Write(v)
 			}
 		case types.BlockInt256:
-			_, err = buf.Write(b.Int256().Get(row).Bytes())
+			buf.Write(b.Int256().Get(row).Bytes())
 		case types.BlockInt128:
-			_, err = buf.Write(b.Int128().Get(row).Bytes())
+			buf.Write(b.Int128().Get(row).Bytes())
 		default:
 			// oh, its a type we don't support yet
 			assert.Unreachable("unhandled field type",
@@ -208,21 +195,16 @@ func (p *Package) ReadWireBuffer(buf *bytes.Buffer, row int) error {
 				"version", p.schema.Version,
 			)
 		}
-		if err != nil {
-			return err
-		}
 	}
-	return nil
 }
 
 // Reads package column data at row into custom struct dst. Target schema must be
 // compatible to package schema (types must match), but may contain less fields.
 // Maps defines the mapping of dst fields to source package columns.
-func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, maps []int) error {
+func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, dstLayout *reflect.Layout, maps []int) error {
 	assert.Always(dstSchema != nil, "nil target schema")
 	assert.Always(maps != nil, "nil target mapping")
 	assert.Always(row >= 0, "negative row index")
-	// base := reflect.StructPointer(dst)
 
 	// extract the pointer inside the dst interface
 	base := util.UnboxAny(dst)
@@ -237,7 +219,7 @@ func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, maps []
 		}
 
 		// use unsafe.Add instead of reflect
-		fptr := unsafe.Add(base, field.Offset)
+		fptr := unsafe.Add(base, dstLayout.Offsets[i])
 
 		// insert zero value when block is not available (e.g. after schema change)
 		b := p.blocks[srcId]
@@ -371,6 +353,10 @@ func ForEach[T any](pkg *Package, fn func(i int, v *T) error) error {
 	if err != nil {
 		return err
 	}
+	layout, err := reflect.LayoutFor[T]()
+	if err != nil {
+		return err
+	}
 	if !pkg.schema.ContainsSchema(dst) {
 		return schema.ErrSchemaMismatch
 	}
@@ -380,7 +366,7 @@ func ForEach[T any](pkg *Package, fn func(i int, v *T) error) error {
 	}
 	var t T
 	for i := range pkg.nRows {
-		if err := pkg.ReadStruct(i, &t, dst, maps); err != nil {
+		if err := pkg.ReadStruct(i, &t, dst, layout, maps); err != nil {
 			return err
 		}
 		if err := fn(i, &t); err != nil {

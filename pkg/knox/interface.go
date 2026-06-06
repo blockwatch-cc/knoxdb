@@ -9,7 +9,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/schema/enum"
-	"blockwatch.cc/knoxdb/pkg/schema/types"
 )
 
 // EXTERNAL user interface implemented by local and remote clients
@@ -19,7 +18,6 @@ type (
 
 	TableKind = engine.TableKind
 	IndexKind = engine.IndexKind
-	IndexType = types.IndexType
 
 	TableMetrics = engine.TableMetrics
 	IndexMetrics = engine.IndexMetrics
@@ -54,21 +52,6 @@ var (
 const (
 	TableKindPack = engine.TableKindPack
 	IndexKindPack = engine.IndexKindPack
-)
-
-const (
-	IndexTypeNone      = types.IndexTypeNone
-	IndexTypeHash      = types.IndexTypeHash
-	IndexTypeInt       = types.IndexTypeInt
-	IndexTypeComposite = types.IndexTypeComposite
-
-	FilterTypeBloom2b = types.FilterTypeBloom2b
-	FilterTypeBloom3b = types.FilterTypeBloom3b
-	FilterTypeBloom4b = types.FilterTypeBloom4b
-	FilterTypeBloom5b = types.FilterTypeBloom5b
-	FilterTypeBfuse8  = types.FilterTypeBfuse8
-	FilterTypeBfuse16 = types.FilterTypeBfuse16
-	FilterTypeBits    = types.FilterTypeBits
 )
 
 // type QueryResult interface {

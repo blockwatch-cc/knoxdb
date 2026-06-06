@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Blockwatch Data Inc.
+// Copyright (c) 2024-2026 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package schema
@@ -14,24 +14,37 @@ package schema
 // The following struct tag features are available
 //
 // ```
-// pk            mark this field as primary key (also generates primary key index)
-// index={type}  generate index over this field (hash, int, composite)
-// fields={a+b}  list of composite index fields
-// extra={a+b}   list of extra include fields for index
-// filter={type} use db column filter (bits, bloom, bfuse)
-// zip={type}    use extra compression (snappy, lz4, zstd, none, (empty))
-// array={num}   treat as fixed length array (string only)
-// scale={num}   scale factor (for decimal and time types only)
-// id={num}      override id value
+// Flags
+// ------
+// primary       mark this field as primary key (also generates primary key index)
 // enum          mark as enum
 // metadata      mark as metadata
 // null          mark as nullable
 // timebase      mark as event time source
-// timestamp     type timestamp in nanoseconds
-// date          type date in unix days
-// time          type time in seconds
-// text          type text for UTF8 text up to 2^32-1 bytes
-// blob          type blob for binary data up to 2^32-1 bytes
+//
+// Types
+// ------
+// array={num}   fixed length string (use type [n]byte for byte array)
+// timestamp     timestamp in nanoseconds
+// date          date in unix days
+// time          time in seconds
+// text          UTF8 text up to 2^32-1 bytes
+// blob          binary data up to 2^32-1 bytes
+// element       tags for list items (e.g. name,notnull,element=date)
+// key,value     tags for map items (e.g. name,notnull,key=date,value=scale=4)
+//
+// Options
+// --------
+// filter={type} use db column filter (bits, bloom2..5b, bfuse8/16)
+// zip={type}    use extra compression (snappy, lz4, zstd, none, (empty))
+// scale={num}   scale factor for decimal [0..9,18,38,76] and time [ns,us,ms,s,d]
+// id={num}      override id value
+//
+// Indexes
+// --------
+// index={type}  generate index over this field (hash, int, composite)
+// fields={a+b}  list of composite index fields
+// extra={a+b}   list of extra include fields for index
 // ```
 //
 // A schema is a list of immutable fields with properties like name, data type,

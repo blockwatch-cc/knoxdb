@@ -4,300 +4,148 @@
 package schema_tests
 
 import (
-	"strings"
 	"testing"
 
 	"blockwatch.cc/knoxdb/pkg/schema"
-	"blockwatch.cc/knoxdb/pkg/schema/reflect"
-	"blockwatch.cc/knoxdb/pkg/schema/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-type indexTest struct {
-	name      string
-	build     func(...schema.Option) (*Schema, error)
-	idxnames  []string
-	idxfields []string
-	idxextra  []string
-	idxtyps   []IndexType
-	iserr     bool
-}
-
-type IntegerIndexWithExtra struct {
-	BaseModel
-	Int1 int64 `knox:"i62"`
-	Int2 int64 `knox:"i64,index=int,extra=i62"`
-}
-
-type BadIntegerIndexWithFields struct {
-	BaseModel
-	Int1 int64 `knox:"i62"`
-	Int2 int64 `knox:"i64,index=int,fields=i62"` // illegal
-}
-
-type CompositeIndex struct {
-	BaseModel
-	Int1 int64    `knox:"i64"`
-	Int2 int64    `knox:"i66"`
-	_    struct{} `knox:"c1,index=composite,fields=i64+i66"`
-}
-
-type DoubleCompositeIndex struct {
-	BaseModel
-	Int1 int64    `knox:"i64"`
-	Int2 int64    `knox:"i65"`
-	Int3 int64    `knox:"i66"`
-	_    struct{} `knox:"c1,index=composite,fields=i64+i65"`
-	_    struct{} `knox:"c2,index=composite,fields=i65+i66,extra=i64+i66"`
-}
-
-type BadCompositeIndexMissingField struct {
-	BaseModel
-	Int1 int64    `knox:"i64"`
-	Int2 int64    `knox:"i66"`
-	_    struct{} `knox:"c1,index=composite,fields=i62+i66"` // illegal
-}
-
-type BadCompositeIndexDuplicateField struct {
-	BaseModel
-	Int1 int64    `knox:"i64"`
-	Int2 int64    `knox:"i66"`
-	_    struct{} `knox:"c1,index=composite,fields=i64+i64+i66"` // illegal
-}
-
-type BadCompositeIndexDuplicateExtraField struct {
-	BaseModel
-	Int1 int64    `knox:"i64"`
-	Int2 int64    `knox:"i66"`
-	_    struct{} `knox:"c1,index=composite,fields=i64+i66,extra=i64+i64+i66"` // illegal
-}
-
-var indexTestCases = []indexTest{
-	//
-	// Index tests
-	// -----------------
-
-	// allowed index compisitions
-	{
-		name:      "hash index",
-		build:     reflect.SchemaFor[HashIndex],
-		idxnames:  []string{"hash_index_id_index", "hash_index_hash_index"},
-		idxfields: []string{"id", "hash"},
-		idxextra:  []string{"", ""},
-		idxtyps:   []IndexType{I_PK, I_HASH},
-	},
-	{
-		name:      "integer index",
-		build:     reflect.SchemaFor[IntegerIndex],
-		idxnames:  []string{"integer_index_id_index", "integer_index_i64_index"},
-		idxfields: []string{"id", "i64"},
-		idxextra:  []string{"", ""},
-		idxtyps:   []IndexType{I_PK, I_INT},
-	},
-	{
-		name:      "integer index with extra",
-		build:     reflect.SchemaFor[IntegerIndexWithExtra],
-		idxnames:  []string{"integer_index_with_extra_id_index", "integer_index_with_extra_i64_index"},
-		idxfields: []string{"id", "i64"},
-		idxextra:  []string{"", "i62"},
-		idxtyps:   []IndexType{I_PK, I_INT},
-	},
-	{
-		name:      "composite index",
-		build:     reflect.SchemaFor[CompositeIndex],
-		idxnames:  []string{"composite_index_id_index", "composite_index_c1"},
-		idxfields: []string{"id", "i64,i66"},
-		idxextra:  []string{"", ""},
-		idxtyps:   []IndexType{I_PK, I_COMPOSITE},
-	},
-	{
-		name:      "double composite index",
-		build:     reflect.SchemaFor[DoubleCompositeIndex],
-		idxnames:  []string{"double_composite_index_id_index", "double_composite_index_c1", "double_composite_index_c2"},
-		idxfields: []string{"id", "i64,i65", "i65,i66"},
-		idxextra:  []string{"", "", "i64,i66"},
-		idxtyps:   []IndexType{I_PK, I_COMPOSITE, I_COMPOSITE},
-	},
-
-	// errors
-	{
-		name:  "invalid integer index with fields",
-		build: reflect.SchemaFor[BadIntegerIndexWithFields],
-		iserr: true,
-	},
-	{
-		name:  "invalid index type",
-		build: reflect.SchemaFor[InvalidIndexType],
-		iserr: true,
-	},
-	{
-		name:  "invalid index field type",
-		build: reflect.SchemaFor[InvalidIndexFieldType],
-		iserr: true,
-	},
-	{
-		name:  "invalid composite index with missing field",
-		build: reflect.SchemaFor[BadCompositeIndexMissingField],
-		iserr: true,
-	},
-	{
-		name:  "invalid composite index with duplicate field",
-		build: reflect.SchemaFor[BadCompositeIndexDuplicateField],
-		iserr: true,
-	},
-	{
-		name:  "invalid composite index with duplicate extra field",
-		build: reflect.SchemaFor[BadCompositeIndexDuplicateExtraField],
-		iserr: true,
-	},
-}
-
-func TestIndexParsing(t *testing.T) {
-	for _, c := range indexTestCases {
-		t.Run(c.name, func(t *testing.T) {
-			// check test data consistency
-			require.NotNil(t, c.build, "must define reflect.SchemaFor[T] function in testcase")
-			require.Equal(t, len(c.idxfields), len(c.idxextra), "must have equal number of idx and extra field definitions")
-			require.Equal(t, len(c.idxfields), len(c.idxtyps), "must have equal number of idx and type definitions")
-			require.Equal(t, len(c.idxfields), len(c.idxnames), "must have equal number of idx and name definitions")
-			// build the schema
-			s, err := c.build()
-			if c.iserr {
-				require.Error(t, err)
-				t.Log(err)
-				return
-			} else {
-				require.NoError(t, err)
-				require.NoError(t, s.Validate())
-			}
-
-			// check index detection
-			// for _, v := range s.Indexes {
-			// 	t.Logf("%s: %s %#v, %#v", v.Name, v.Type, v.Fields, v.Extra)
-			// }
-
-			require.Equal(t, len(s.Indexes), len(c.idxfields), "bad index count")
-			for i, ifx := range c.idxfields {
-				iex := c.idxextra[i]
-				var idxfields, extrafields []string
-				if len(ifx) > 0 {
-					idxfields = strings.Split(ifx, ",")
-				}
-				if len(iex) > 0 {
-					extrafields = strings.Split(iex, ",")
-				}
-				idx := s.Indexes[i]
-				require.NotNil(t, idx.Base)
-				require.Equal(t, c.idxtyps[i], idx.Type, "type mismatch")
-				require.Equal(t, c.idxnames[i], idx.Name, "name mismatch")
-				require.Equal(t, len(idxfields), len(idx.Fields), "index fields")
-				require.Equal(t, len(extrafields), len(idx.Extra), "extra fields")
-				for k, n := range idxfields {
-					require.Equal(t, n, idx.Fields[k].Name, "idx field name %d", k)
-				}
-				for k, n := range extrafields {
-					require.Equal(t, n, idx.Extra[k].Name, "extra field name %d", k)
-				}
-			}
-		})
-	}
-}
-
 func TestIndexValidation(t *testing.T) {
 	testCases := []struct {
 		name      string
-		build     *Builder
+		index     *schema.IndexSchema
 		expectErr bool
 	}{
 		{
-			name:      "Valid integer index",
-			build:     NewBuilder().Int64("test_field").IntIndex("test_field"),
+			name: "Valid integer index",
+			index: schema.IndexOf(
+				schema.SchemaOf([]*schema.Field{
+					schema.FieldOf(schema.Int64, schema.WithName("test_field")),
+				}),
+				schema.IntegerIndex,
+				schema.WithIndexField("test_field"),
+			),
 			expectErr: false,
 		},
 		{
-			name:      "Valid PK index",
-			build:     NewBuilder().Uint64("pk", schema.Primary()).PkIndex(),
+			name: "Valid PK index",
+			index: schema.IndexOf(
+				schema.SchemaOf([]*schema.Field{
+					schema.FieldOf(schema.Uint64, schema.WithName("pk"), schema.WithFlags(schema.FlagPrimary)),
+				}),
+				schema.PrimaryKeyIndex,
+			),
 			expectErr: false,
 		},
 		{
-			name:      "Valid hash index",
-			build:     NewBuilder().String("hello").HashIndex("hello"),
+			name: "Valid hash index",
+			index: schema.IndexOf(
+				schema.SchemaOf([]*schema.Field{
+					schema.FieldOf(schema.String, schema.WithName("hello")),
+				}),
+				schema.HashIndex,
+				schema.WithIndexField("hello"),
+			),
 			expectErr: false,
 		},
 		{
 			name: "Valid composite index",
-			build: NewBuilder().
-				String("hello").
-				String("world").
-				CompositeIndex("hello_index",
-					schema.IndexField("hello"),
-					schema.IndexField("world"),
-					schema.ExtraField("hello"),
-				),
+			index: schema.IndexOf(
+				schema.SchemaOf([]*schema.Field{
+					schema.FieldOf(schema.String, schema.WithName("hello")),
+					schema.FieldOf(schema.String, schema.WithName("world")),
+				}),
+				schema.CompositeIndex,
+				schema.WithIndexField("hello"),
+				schema.WithIndexField("world"),
+				schema.WithExtraField("hello"),
+			),
 			expectErr: false,
 		},
 		{
 			name: "Invalid index type",
-			build: NewBuilder().
-				Int32("i32").
-				AddIndex("i", types.IndexType(100), schema.IndexField("i32")),
+			index: schema.IndexOf(
+				schema.SchemaOf([]*schema.Field{
+					schema.FieldOf(schema.Int32, schema.WithName("i32")),
+				}),
+				schema.IndexType(100),
+				schema.WithIndexField("i32"),
+			),
 			expectErr: true,
 		},
 		{
-			name:      "Invalid int index on non int field",
-			build:     NewBuilder().String("s").IntIndex("s"),
+			name: "Invalid int index on non int field",
+			index: schema.IndexOf(
+				schema.SchemaOf([]*schema.Field{
+					schema.FieldOf(schema.String, schema.WithName("s")),
+				}),
+				schema.IntegerIndex,
+				schema.WithIndexField("s"),
+			),
 			expectErr: true,
 		},
 		{
 			name: "Pk index on non-pk field",
-			build: NewBuilder().
-				String("hello").
-				AddIndex("", types.IndexTypePk, schema.IndexField("hello")),
+			index: schema.IndexOf(
+				schema.SchemaOf([]*schema.Field{
+					schema.FieldOf(schema.String, schema.WithName("hello")),
+				}),
+				schema.PrimaryKeyIndex,
+				schema.WithIndexField("hello"),
+			),
 			expectErr: true,
 		},
 		{
-			name:      "Index field does not exist",
-			build:     NewBuilder().String("hello").HashIndex("notthere"),
+			name: "Index field does not exist",
+			index: schema.IndexOf(
+				schema.SchemaOf([]*schema.Field{
+					schema.FieldOf(schema.String, schema.WithName("hello")),
+				}),
+				schema.HashIndex,
+				schema.WithIndexField("notthere"),
+			),
 			expectErr: true,
 		},
 		{
 			name: "Composite index on one field only",
-			build: NewBuilder().
-				String("hello").
-				CompositeIndex("", schema.IndexField("hello")),
+			index: schema.IndexOf(
+				schema.SchemaOf([]*schema.Field{
+					schema.FieldOf(schema.String, schema.WithName("hello")),
+				}),
+				schema.CompositeIndex,
+				schema.WithIndexField("hello"),
+			),
 			expectErr: true,
 		},
 		{
 			name: "Composite with duplicate fields",
-			build: NewBuilder().
-				String("s1").
-				String("s2").
-				CompositeIndex("", schema.IndexField("s1"), schema.IndexField("s1")),
+			index: schema.IndexOf(
+				schema.SchemaOf([]*schema.Field{
+					schema.FieldOf(schema.String, schema.WithName("s1")),
+					schema.FieldOf(schema.String, schema.WithName("s2")),
+				}),
+				schema.CompositeIndex,
+				schema.WithIndexField("s1"),
+				schema.WithIndexField("s1"),
+			),
 			expectErr: true,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := tc.build.WithMeta(true).Finalize().Validate()
 			if tc.expectErr {
-				assert.Error(t, err)
+				assert.Error(t, tc.index.Validate())
 				return
 			} else {
-				assert.NoError(t, err)
+				assert.NoError(t, tc.index.Validate())
 			}
 
 			// check generated index schemas
-			for _, ixs := range tc.build.Schema().Indexes {
-				s, err := ixs.IndexSchema()
-				require.NoError(t, err)
-				require.NoError(t, s.Validate())
-
-				s, err = ixs.StorageSchema()
-				require.NoError(t, err)
-				require.NoError(t, s.Validate())
-			}
+			s, err := tc.index.IndexSchema()
+			require.NoError(t, err)
+			require.NoError(t, s.Validate())
 		})
 	}
 }

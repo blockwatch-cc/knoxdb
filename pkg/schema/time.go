@@ -1,7 +1,7 @@
-// Copyright (c) 2025 Blockwatch Data Inc.
+// Copyright (c) 2025-2026 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package types
+package schema
 
 import (
 	"time"

@@ -8,12 +8,12 @@ import (
 	"strconv"
 
 	"blockwatch.cc/knoxdb/pkg/num"
-	"blockwatch.cc/knoxdb/pkg/schema/types"
+	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 // float caster
-type FloatCaster[T types.Float] struct{}
+type FloatCaster[T schema.Float] struct{}
 
 func (c FloatCaster[T]) CastValue(val any) (res any, err error) {
 	var ok bool

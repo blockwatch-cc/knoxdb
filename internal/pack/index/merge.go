@@ -91,8 +91,8 @@ func NewMergeIterator(idx *Index) *MergeIterator {
 		idx:     idx,
 		halfSel: types.NewRange(idx.opts.PackSize/2, idx.opts.PackSize).AsSelection(),
 		btypes: [2]types.BlockType{
-			idx.sstore.Fields[0].Type.BlockType(),
-			idx.sstore.Fields[1].Type.BlockType(),
+			types.ToBlockType(idx.sstore.Fields[0].Type),
+			types.ToBlockType(idx.sstore.Fields[1].Type),
 		},
 	}
 }
@@ -215,7 +215,7 @@ func (it *MergeIterator) Store(pkg *pack.Package) error {
 				buf   []byte
 				stats encode.ContextExporter
 			)
-			buf, stats, err = pkg.Block(i).Encode(types.BlockCompressNone)
+			buf, stats, err = pkg.Block(i).Encode(types.CompressNone)
 			if err == nil {
 				err = it.bucket.Put(key, buf)
 				// it.idx.log.Tracef("merge storing block 0x%016x:%016x:%d len=%d size=%d",

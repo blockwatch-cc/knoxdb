@@ -6,7 +6,6 @@ package stats
 import (
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
-	"blockwatch.cc/knoxdb/pkg/schema/reflect"
 )
 
 // Construct a union schema over pack stats and table min/max.
@@ -24,39 +23,33 @@ import (
 // from the original table schema except FieldFlagDeleted which may be
 // used to skip/remove statistics when columns are marked as deleted.
 func MakeSchema(s *schema.Schema) *schema.Schema {
-	statsSchema := schema.NewSchema().
-		WithName(s.Name).
-		WithVersion(s.Version)
-
 	// add pack stats fields
-	for _, f := range reflect.MustSchemaFor[Record]().Fields {
-		statsSchema.WithField(f)
-	}
+	fields := RecordSchema.Fields
 
 	// TODO:
 	// - convert string/byte to [n]byte type (n = min(f.fixed||8, 8))
 	// - exclude text/blob fields or limit to first 8 bytes as well
-	// - use schema builder
 
 	// add min/max fields interleaved
 	for _, src := range s.Fields {
 		// generate clean field from source
-		f := schema.NewField(src.Type).
-			WithName("min_" + src.Name).
+		minField := schema.FieldOf(src.Type,
+			schema.WithName("min_"+src.Name),
 			// add scale or fixed array len
-			WithScale(src.Scale).
+			schema.WithScale(src.Scale),
 			// only keep array and deleted flags
-			WithFlags(src.Flags & (types.F_DELETED | types.F_ARRAY)).
+			schema.WithFlags(src.Flags&(types.F_DELETED|types.F_ARRAY)),
 			// keep filter (in case its bloom)
-			WithFilter(src.Filter).
+			schema.WithFilter(src.Filter),
 			// keep enum for validation
-			WithEnum(src.Enum)
-
-		statsSchema.WithField(f)
-		statsSchema.WithField(f.Clone().WithName("max_" + src.Name))
+			schema.WithEnum(src.Enum),
+		)
+		maxField := minField.Clone()
+		maxField.Name = "max_" + src.Name
+		fields = append(fields, minField, maxField)
 	}
 
-	return statsSchema.Finalize()
+	return schema.SchemaOf(fields, schema.Name(s.Name), schema.Version(s.Version))
 }
 
 func minColIndex(i int) int {

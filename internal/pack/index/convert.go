@@ -16,14 +16,16 @@ import (
 	"blockwatch.cc/knoxdb/pkg/assert"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/schema/cast"
-	"blockwatch.cc/knoxdb/pkg/schema/encode"
 )
 
 func convertSchema(is *schema.IndexSchema) (*schema.Schema, Converter, error) {
-	s, err := is.StorageSchema()
+	s, err := makeStorageSchema(is)
 	if err != nil {
 		return nil, nil, err
 	}
+
+	// lookup row id position in schema
+	rx, _ := is.Base.IndexId(types.MetaRid)
 
 	switch is.Type {
 	case types.IT_HASH:
@@ -31,7 +33,7 @@ func convertSchema(is *schema.IndexSchema) (*schema.Schema, Converter, error) {
 		c := &SimpleHashConverter{
 			sout: s,
 			hash: hx,
-			link: append([]int{is.Base.RowIdIndex()}, is.ExtraIndices()...),
+			link: append([]int{rx}, is.ExtraIndices()...),
 		}
 		return s, c, nil
 	case types.IT_INT, types.IT_PK:
@@ -39,7 +41,7 @@ func convertSchema(is *schema.IndexSchema) (*schema.Schema, Converter, error) {
 		c := &RelinkConverter{
 			sout: s,
 			use:  ix,
-			link: append([]int{is.Base.RowIdIndex()}, is.ExtraIndices()...),
+			link: append([]int{rx}, is.ExtraIndices()...),
 		}
 		return s, c, nil
 
@@ -47,8 +49,8 @@ func convertSchema(is *schema.IndexSchema) (*schema.Schema, Converter, error) {
 		c := &CompositeHashConverter{
 			sout: s,
 			sidx: is,
-			hash: is.Indices(),
-			link: append([]int{is.Base.RowIdIndex()}, is.ExtraIndices()...),
+			hash: is.FieldIndices(),
+			link: append([]int{rx}, is.ExtraIndices()...),
 		}
 		return s, c, nil
 
@@ -56,6 +58,63 @@ func convertSchema(is *schema.IndexSchema) (*schema.Schema, Converter, error) {
 		// unsupported
 		return nil, nil, fmt.Errorf("unsupported index type %q", is.Type)
 	}
+}
+
+// makeStorageSchema returns a sub-schema usable for storing index records.
+// Hash and composite hash indexes will contain a synthetic hash field
+// as the first element.
+func makeStorageSchema(s *schema.IndexSchema) (*schema.Schema, error) {
+	// validate again just to be sure
+	if err := s.Validate(); err != nil {
+		return nil, err
+	}
+
+	// we need table metadata to be present
+	if _, ok := s.Base.FindId(types.MetaRid); !ok {
+		return nil, types.ErrNoMeta
+	}
+
+	// build storage schema (without flags to make all fields visible)
+	fields := make([]*schema.Field, 0, 2+len(s.Extra))
+
+	switch s.Type {
+	case types.IT_PK, types.IT_INT:
+		// pk -> rid, int -> rid
+		fields = append(fields,
+			schema.FieldOf(types.FT_U64, schema.WithName(s.Fields[0].Name)),
+			schema.FieldOf(types.FT_U64, schema.WithName("rid")),
+		)
+
+	case types.IT_HASH, types.IT_COMPOSITE:
+		// hash(any) -> rid
+		fields = append(fields,
+			schema.FieldOf(types.FT_U64, schema.WithName("hash")),
+			schema.FieldOf(types.FT_U64, schema.WithName("rid")),
+		)
+	}
+
+	// add extra fields (assign new ids because existing ids may collide
+	// with the new hash field id; drop flags except ARRAY|NULLABLE)
+	for _, ex := range s.Extra {
+		fields = append(fields,
+			schema.FieldOf(ex.Type,
+				schema.WithName(ex.Name),
+				schema.WithFlags(ex.Flags&(types.F_ARRAY|types.F_NULLABLE)),
+			),
+		)
+	}
+
+	// finalize and validate our new schema
+	final := schema.SchemaOf(fields,
+		schema.Name(s.Name),
+		schema.Version(s.Base.Version),
+	)
+
+	if err := final.Validate(); err != nil {
+		return nil, err
+	}
+
+	return final, nil
 }
 
 type Converter interface {
@@ -66,7 +125,7 @@ type Converter interface {
 
 type RelinkConverter struct {
 	sout *schema.Schema // output schema
-	use  int            // position oif block to use or convert
+	use  int            // position of block to use or convert
 	link []int          // ordered list of extra blocks to link
 }
 
@@ -195,7 +254,7 @@ func (c *SimpleHashConverter) QueryKeys(node *filter.Node) []uint64 {
 	switch flt.Mode {
 	case types.FilterModeEqual:
 		// single
-		_ = encode.EncodeField(buf, f0, flt.Value, LE)
+		_ = f0.WriteValue(buf, flt.Value, LE)
 		return []uint64{hash.Hash(buf.Bytes())}
 
 	case types.FilterModeIn, types.FilterModeNotIn:
@@ -207,7 +266,7 @@ func (c *SimpleHashConverter) QueryKeys(node *filter.Node) []uint64 {
 		res := make([]uint64, rval.Len())
 		for i := range res {
 			buf.Reset()
-			_ = encode.EncodeField(buf, f0, rval.Index(i).Interface(), LE)
+			_ = f0.WriteValue(buf, rval.Index(i).Interface(), LE)
 			res[i] = hash.Hash(buf.Bytes())
 		}
 		return res
@@ -326,7 +385,7 @@ func (c *CompositeHashConverter) QueryKeys(node *filter.Node) []uint64 {
 			// empty result if we cannot build a hash from all index fields
 			return nil
 		}
-		encode.EncodeField(buf, field, node.Filter.Value, LE)
+		field.WriteValue(buf, node.Filter.Value, LE)
 		// set skip flags signalling this condition has been processed
 		node.Skip = true
 		delete(eq, field.Name)

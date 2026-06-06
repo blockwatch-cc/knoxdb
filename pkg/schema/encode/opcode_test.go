@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 Blockwatch Data Inc.
+// Author: alex@blockwatch.cc
+
 package encode
 
 import (
@@ -5,6 +8,7 @@ import (
 	"time"
 
 	"blockwatch.cc/knoxdb/pkg/num"
+	"blockwatch.cc/knoxdb/pkg/schema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -13,36 +17,36 @@ import (
 func TestFieldCodecMapping(t *testing.T) {
 	testCases := []struct {
 		name     string
-		field    *Field
+		field    *schema.Field
 		expected OpCode
 	}{
-		{"Datetime", NewField(FT_TIMESTAMP), OC_TIMESTAMP},
-		{"Date", NewField(FT_DATE), OC_DATE},
-		{"Time", NewField(FT_TIME), OC_TIME},
-		{"Int64", NewField(FT_I64), OC_I64},
-		{"Int32", NewField(FT_I32), OC_I32},
-		{"Int16", NewField(FT_I16), OC_I16},
-		{"Int8", NewField(FT_I8), OC_I8},
-		{"Uint64", NewField(FT_U64), OC_U64},
-		{"Uint32", NewField(FT_U32), OC_U32},
-		{"Uint16", NewField(FT_U16), OC_U16},
-		{"Uint8", NewField(FT_U8), OC_U8},
-		{"Float64", NewField(FT_F64), OC_F64},
-		{"Float32", NewField(FT_F32), OC_F32},
-		{"Boolean", NewField(FT_BOOL), OC_BOOL},
-		{"String", NewField(FT_STRING), OC_STRING},
-		{"ArrayString", NewField(FT_STRING).WithArray(2), OC_FIXSTRING},
-		{"Bytes", NewField(FT_BYTES), OC_BYTES},
-		{"ArrayBytes", NewField(FT_BYTES).WithArray(2), OC_FIXBYTES},
-		{"Int256", NewField(FT_I256), OC_I256},
-		{"Int128", NewField(FT_I128), OC_I128},
-		{"Decimal256", NewField(FT_D256), OC_D256},
-		{"Decimal128", NewField(FT_D128), OC_D128},
-		{"Decimal64", NewField(FT_D64), OC_D64},
-		{"Decimal32", NewField(FT_D32), OC_D32},
-		{"Bigint", NewField(FT_BIGINT), OC_BIGINT},
-		{"Text", NewField(FT_TEXT), OC_TEXT},
-		{"Blob", NewField(FT_BLOB), OC_BLOB},
+		{"Datetime", schema.FieldOf(schema.Timestamp), OC_TIMESTAMP},
+		{"Date", schema.FieldOf(schema.Date), OC_DATE},
+		{"Time", schema.FieldOf(schema.Time), OC_TIME},
+		{"Int64", schema.FieldOf(schema.Int64), OC_I64},
+		{"Int32", schema.FieldOf(schema.Int32), OC_I32},
+		{"Int16", schema.FieldOf(schema.Int16), OC_I16},
+		{"Int8", schema.FieldOf(schema.Int8), OC_I8},
+		{"Uint64", schema.FieldOf(schema.Uint64), OC_U64},
+		{"Uint32", schema.FieldOf(schema.Uint32), OC_U32},
+		{"Uint16", schema.FieldOf(schema.Uint16), OC_U16},
+		{"Uint8", schema.FieldOf(schema.Uint8), OC_U8},
+		{"Float64", schema.FieldOf(schema.Float64), OC_F64},
+		{"Float32", schema.FieldOf(schema.Float32), OC_F32},
+		{"Boolean", schema.FieldOf(schema.Boolean), OC_BOOL},
+		{"String", schema.FieldOf(schema.String), OC_STRING},
+		{"ArrayString", schema.FieldOf(schema.String, schema.WithArray(2)), OC_FIXSTRING},
+		{"Bytes", schema.FieldOf(schema.Bytes), OC_BYTES},
+		{"ArrayBytes", schema.FieldOf(schema.Bytes, schema.WithArray(2)), OC_FIXBYTES},
+		{"Int256", schema.FieldOf(schema.Int256), OC_I256},
+		{"Int128", schema.FieldOf(schema.Int128), OC_I128},
+		{"Decimal256", schema.FieldOf(schema.Decimal256), OC_D256},
+		{"Decimal128", schema.FieldOf(schema.Decimal128), OC_D128},
+		{"Decimal64", schema.FieldOf(schema.Decimal64), OC_D64},
+		{"Decimal32", schema.FieldOf(schema.Decimal32), OC_D32},
+		{"Bigint", schema.FieldOf(schema.Bigint), OC_BIGINT},
+		{"Text", schema.FieldOf(schema.Text), OC_TEXT},
+		{"Blob", schema.FieldOf(schema.Binary), OC_BLOB},
 	}
 
 	for _, tc := range testCases {

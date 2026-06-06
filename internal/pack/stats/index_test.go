@@ -43,7 +43,7 @@ const (
 )
 
 var (
-	TestSchema = reflect.MustSchemaFor[TestStruct]().WithMeta()
+	TestSchema, _ = types.MakeTableSchema(reflect.MustSchemaFor[TestStruct]())
 )
 
 func makeTestData(sz int, pk uint64) (res []TestStruct) {
@@ -65,7 +65,7 @@ func makeTestPackage(t testing.TB, key int, pk uint64) *pack.Package {
 	pkg := pack.New().
 		WithKey(uint32(key)).
 		WithVersion(1).
-		WithSchema(TestSchema).
+		WithSchema(TestSchema.Schema).
 		WithMaxRows(TEST_PKG_SIZE).
 		WithStats().
 		Alloc()
@@ -114,7 +114,7 @@ func makeFilter(name string, mode types.FilterMode, val, val2 any) *filter.Node 
 	return &filter.Node{
 		Filter: &filter.Filter{
 			Name:    field.Name,
-			Type:    filter.ValueType(field.Type.BlockType()),
+			Type:    filter.ToValueType(field.Type),
 			Mode:    mode,
 			Index:   int(field.Id - 1), // valid for test schema without metadata
 			Id:      field.Id,
@@ -223,7 +223,7 @@ func TestIndexAddSingle(t *testing.T) {
 
 	// snode api
 	assert.Equal(t, uint32(0), snode.Key(), "snode key")
-	assert.LessOrEqual(t, idx.wr.Len(), len(snode.Bytes()), "snode bytes")
+	assert.LessOrEqual(t, idx.schema.MinWireSize, len(snode.Bytes()), "snode bytes")
 	assert.False(t, snode.IsEmpty(), "snode empty")
 	assert.True(t, snode.IsWritable(), "snode writable")
 	assert.Equal(t, 1, snode.NPacks(), "snode num data packs")
@@ -329,7 +329,7 @@ func TestIndexUpdate(t *testing.T) {
 
 	// snode api
 	assert.Equal(t, uint32(0), snode.Key(), "snode key")
-	assert.LessOrEqual(t, idx.wr.Len(), len(snode.Bytes()), "snode bytes")
+	assert.LessOrEqual(t, idx.schema.MinWireSize, len(snode.Bytes()), "snode bytes")
 	assert.False(t, snode.IsEmpty(), "snode empty")
 	assert.True(t, snode.IsWritable(), "snode writable")
 	assert.Equal(t, 1, snode.NPacks(), "snode num data packs")
@@ -413,7 +413,7 @@ func TestIndexDeleteMany(t *testing.T) {
 
 	// delete the first spack worth of data packs
 	for i := range STATS_PACK_SIZE {
-		pkg := pack.New().WithKey(uint32(i)).WithSchema(TestSchema)
+		pkg := pack.New().WithKey(uint32(i)).WithSchema(TestSchema.Schema)
 		require.NoError(t, idx.DeletePack(ctx, pkg))
 	}
 

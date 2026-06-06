@@ -74,8 +74,8 @@ func (idx *Index) IsReadOnly() bool {
 }
 
 func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.IndexSchema, options ...engine.Option) error {
-	// require primary key
-	if !s.Base.HasMeta() {
+	// require rid metadata
+	if _, ok := s.Base.FindId(types.MetaRid); !ok {
 		return engine.ErrNoMeta
 	}
 
@@ -363,7 +363,7 @@ func (idx *Index) Truncate(ctx context.Context) error {
 
 func (idx *Index) Rebuild(ctx context.Context) error {
 	// walk all table packs
-	rd := idx.table.NewReader().WithFields(idx.sindex.Ids())
+	rd := idx.table.NewReader().WithFields(idx.sindex.AllIds())
 	defer rd.Close()
 
 	for {

@@ -6,12 +6,12 @@ package cast
 import (
 	"time"
 
-	"blockwatch.cc/knoxdb/pkg/schema/types"
+	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
 // time caster
 type TimeCaster struct {
-	scale types.TimeScale
+	scale schema.TimeScale
 }
 
 func (c TimeCaster) CastValue(val any) (res any, err error) {
@@ -46,7 +46,7 @@ func (c DateCaster) CastValue(val any) (res any, err error) {
 	if !ok {
 		err = CastError(val, "date")
 	} else {
-		res = types.UnixDays(v)
+		res = schema.UnixDays(v)
 	}
 	return
 }
@@ -58,7 +58,7 @@ func (c DateCaster) CastSlice(val any) (res any, err error) {
 	} else {
 		r := make([]int64, len(v))
 		for i := range v {
-			r[i] = types.UnixDays(v[i])
+			r[i] = schema.UnixDays(v[i])
 		}
 		res = r
 	}

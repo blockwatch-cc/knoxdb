@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/tests"
+	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/schema/cast"
 	"blockwatch.cc/knoxdb/pkg/slicex"
@@ -28,9 +29,10 @@ func TestOptimize(t *testing.T) {
 		typ := gen.Type()
 		v := gen.MakeValue
 		s := gen.MakeSlice
-		sm := schema.NewSchema().
-			WithField(schema.NewField(tests.FieldTypes[gen.Type()]).WithName("f1")).
-			WithField(schema.NewField(tests.FieldTypes[gen.Type()]).WithName("f2"))
+		sm := schema.SchemaOf([]*schema.Field{
+			schema.FieldOf(tests.FieldTypes[gen.Type()], schema.WithName("f1")),
+			schema.FieldOf(tests.FieldTypes[gen.Type()], schema.WithName("f2")),
+		})
 		f1, _ := sm.Find("f1")
 		f2, _ := sm.Find("f2")
 		type TestStruct struct {
@@ -310,7 +312,7 @@ func TestOptimizeExtended(t *testing.T) {
 		for _, cond := range queryConditions {
 			t.Run(fmt.Sprintf("%s_%s", gen.Name(), cond), func(t *testing.T) {
 				// Create a filter node for the current type and condition
-				field := schema.NewField(tests.FieldTypes[gen.Type()]).WithName("f1")
+				field := schema.NewField(tests.FieldTypes[gen.Type()], schema.WithName("f1"))
 				var node *Node
 				if cond == FilterModeRegexp {
 					node = makeNode(field, cond, ".*")
@@ -359,7 +361,7 @@ func makeNode(field *schema.Field, mode FilterMode, value any) *Node {
 	// Log the initial value and its type
 	// log.Printf("makeNode called with mode: %v, fieldIndex: %d, value: %v (type: %T)", mode, fieldIndex, value, value)
 
-	blockType := field.Type.BlockType()
+	blockType := types.ToBlockType(field.Type)
 	f := &Filter{
 		Name:    field.Name,
 		Mode:    mode,

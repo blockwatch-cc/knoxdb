@@ -22,6 +22,7 @@ func BenchmarkAppendWire(b *testing.B) {
 				pkg.Clear()
 			}
 			b.ReportMetric(float64(PACK_SIZE*b.N)/float64(b.Elapsed().Nanoseconds()), "rec/ns")
+			b.ReportMetric(float64(b.Elapsed().Nanoseconds())/float64(PACK_SIZE*b.N), "ns/rec")
 		})
 	}
 }
@@ -39,7 +40,7 @@ func BenchmarkAppendWireE2E(b *testing.B) {
 				pkg.Clear()
 			}
 			b.ReportMetric(float64(PACK_SIZE*b.N)/float64(b.Elapsed().Nanoseconds()), "rec/ns")
-
+			b.ReportMetric(float64(b.Elapsed().Nanoseconds())/float64(PACK_SIZE*b.N), "ns/rec")
 		})
 	}
 }

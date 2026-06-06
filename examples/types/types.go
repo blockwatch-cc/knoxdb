@@ -285,7 +285,7 @@ func Create(ctx context.Context) (db knox.Database, table knox.Table, err error)
 
 	enums := enum.NewEnumRegistry()
 	enums.Register(0, e)
-	s, err := reflect.SchemaFor[Types](schema.WithEnums(enums))
+	s, err := reflect.SchemaFor[Types](schema.Enums(enums))
 	if err != nil {
 		return
 	}
@@ -307,7 +307,12 @@ func Create(ctx context.Context) (db knox.Database, table knox.Table, err error)
 	ts := table.Schema()
 	log.Tracef("Table Schema %s", ts)
 
-	for _, s := range ts.Indexes {
+	indexes, err := reflect.IndexesFor[Types](schema.Enums(enums))
+	if err != nil {
+		return
+	}
+
+	for _, s := range indexes {
 		log.Infof("Creating Index %s", s.Name)
 		err = db.CreateIndex(ctx, s, append(
 			knox.NewIndexOptions(),

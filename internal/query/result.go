@@ -13,7 +13,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/assert"
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/schema/reflect"
@@ -294,9 +293,7 @@ func (r *Result) Row(row int) engine.QueryRow {
 }
 
 func (r *Result) Record(row int) []byte {
-	buf, err := r.pkg.ReadWire(row)
-	assert.Always(err == nil, "pack wire encode failed", "err", err)
-	return buf
+	return r.pkg.ReadWire(row)
 }
 
 func (r *Result) Close() {
@@ -318,10 +315,10 @@ func (r *Result) Err() error {
 }
 
 func (r *Result) Encode() []byte {
-	sz := r.pkg.Len() * r.pkg.Schema().WireSize()
+	sz := r.pkg.Len() * r.pkg.Schema().MinWireSize
 	buf := bytes.NewBuffer(make([]byte, 0, sz))
 	for i := range r.pkg.Len() {
-		_ = r.pkg.ReadWireBuffer(buf, i)
+		r.pkg.ReadWireBuffer(buf, i)
 	}
 	return buf.Bytes()
 }
@@ -356,14 +353,21 @@ func (r *Result) Value(row, col int) any {
 
 // Pack row
 type Row struct {
-	res    *Result        // result including query result schema
-	row    int            // row offset in result package
-	schema *schema.Schema // decode target struct schema (i.e. with Go interfaces)
-	maps   []int          // field mapping from result schema to struct schema
+	res    *Result         // result including query result schema
+	row    int             // row offset in result package
+	schema *schema.Schema  // decode target struct schema (i.e. with Go interfaces)
+	layout *reflect.Layout // target struct layout
+	maps   []int           // field mapping from result schema to struct schema
 }
 
 func (r *Row) Schema() *schema.Schema {
 	return r.res.pkg.Schema()
+}
+
+func (r *Row) Reset() {
+	r.schema = nil
+	r.layout = nil
+	r.maps = nil
 }
 
 func (r *Row) Record() []byte {
@@ -376,32 +380,25 @@ func (r *Row) Decode(val any) error {
 	}
 
 	// detect and cache struct schema
-	s, err := reflect.SchemaOf(val, schema.WithEnums(r.res.Schema().Enums.Load()))
-	if err != nil {
-		return err
-	}
-	if r.schema == nil || r.schema != s {
+	if r.schema == nil {
+		s, err := reflect.SchemaOf(val, schema.Enums(r.res.Schema().Enums.Load()))
+		if err != nil {
+			return err
+		}
+		l, err := reflect.LayoutOf(val, s)
+		if err != nil {
+			return err
+		}
 		maps, err := r.res.Schema().MapSchema(s)
 		if err != nil {
 			return err
 		}
 		r.maps = maps
 		r.schema = s
+		r.layout = l
 	}
-	return r.res.pkg.ReadStruct(r.row, val, r.schema, r.maps)
+	return r.res.pkg.ReadStruct(r.row, val, r.schema, r.layout, r.maps)
 }
-
-// debug only
-// func (r *Row) Field(name string) (any, error) {
-//  if !r.res.IsValid() {
-//      return nil, ErrResultClosed
-//  }
-//  f, ok := r.res.Schema().FieldByName(name)
-//  if !ok {
-//      return nil, schema.ErrInvalidField
-//  }
-//  return r.res.pkg.ReadValue(int(f.Id()), r.row, f.Type(), f.Scale()), nil
-// }
 
 func (r *Row) Get(i int) any {
 	return r.res.pkg.Block(i).Get(r.row)

@@ -112,12 +112,12 @@ func TestIndexEngine[T any, F IF[T]](t *testing.T, driver, eng string, table eng
 				indexSchema := &schema.IndexSchema{
 					Name:   "test_index",
 					Type:   indexType,
-					Base:   ts,
+					Base:   ts.Base(),
 					Fields: ss.Fields,
 				}
 
 				var indexEngine F = new(T)
-				c.Run(t, e, table, ts, topts, indexEngine, indexSchema, iopts)
+				c.Run(t, e, table, ts.Base(), topts, indexEngine, indexSchema, iopts)
 			})
 		}
 	}
@@ -133,8 +133,8 @@ func CreateIndex(t *testing.T, e *engine.Engine, te engine.TableEngine, ie engin
 func FillIndex(t *testing.T, e *engine.Engine, ie engine.IndexEngine) *pack.Package {
 	t.Helper()
 	ctx := engine.WithEngine(context.Background(), e)
-	enc := encode.NewEncoder(ie.Table().Schema())
-	pkg := pack.New().WithSchema(ie.Table().Schema()).WithMaxRows(1 << 11).Alloc()
+	enc := encode.NewEncoder(ie.Table().Schema().Base())
+	pkg := pack.New().WithSchema(ie.Table().Schema().Base()).WithMaxRows(1 << 11).Alloc()
 	meta := &types.Meta{}
 	for i := range 6 {
 		allType := NewAllTypes(i)

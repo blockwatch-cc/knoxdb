@@ -23,7 +23,7 @@ type TableImpl struct {
 }
 
 func (t TableImpl) Schema() *schema.Schema {
-	return t.table.Schema()
+	return t.table.Schema().Base()
 }
 
 func (t TableImpl) Metrics() TableMetrics {
@@ -40,7 +40,7 @@ func (t TableImpl) DB() Database {
 
 func (t TableImpl) Insert(ctx context.Context, val any) (uint64, int, error) {
 	// analyze reflect
-	s, err := reflect.SchemaOf(val, schema.WithEnums(t.table.Schema().Enums.Load()))
+	s, err := reflect.SchemaOf(val, schema.Enums(t.table.Schema().Enums.Load()))
 	if err != nil {
 		return 0, 0, err
 	}
@@ -52,7 +52,12 @@ func (t TableImpl) Insert(ctx context.Context, val any) (uint64, int, error) {
 	// encode wire (single or slice) - schema is guaranteed the same
 	// but we must use the one derived from Go type for struct read
 	if t.enc == nil {
-		t.enc = encode.NewEncoder(s)
+		// analyze struct layout
+		l, err := reflect.LayoutOf(val, s)
+		if err != nil {
+			return 0, 0, err
+		}
+		t.enc = encode.NewEncoderWithLayout(s, l)
 	}
 	buf, err := t.enc.Encode(val, nil)
 	if err != nil {
@@ -82,7 +87,7 @@ func (t TableImpl) Insert(ctx context.Context, val any) (uint64, int, error) {
 
 func (t TableImpl) Update(ctx context.Context, val any) (int, error) {
 	// analyze reflect
-	s, err := reflect.SchemaOf(val, schema.WithEnums(t.table.Schema().Enums.Load()))
+	s, err := reflect.SchemaOf(val, schema.Enums(t.table.Schema().Enums.Load()))
 	if err != nil {
 		return 0, err
 	}
@@ -94,7 +99,12 @@ func (t TableImpl) Update(ctx context.Context, val any) (int, error) {
 	// encode wire (single or slice) - schema is guaranteed the same
 	// but we must use the one derived from Go type for struct read
 	if t.enc == nil {
-		t.enc = encode.NewEncoder(s)
+		// analyze struct layout
+		l, err := reflect.LayoutOf(val, s)
+		if err != nil {
+			return 0, err
+		}
+		t.enc = encode.NewEncoderWithLayout(s, l)
 	}
 	buf, err := t.enc.Encode(val, nil)
 	if err != nil {
@@ -251,7 +261,7 @@ func FindTableFor[T any](db Database, name string) (*TableT[T], error) {
 		return nil, err
 	}
 	var t T
-	s, err := reflect.SchemaOf(t, schema.WithEnums(table.Schema().Enums.Load()))
+	s, err := reflect.SchemaOf(t, schema.Enums(table.Schema().Enums.Load()))
 	if err != nil {
 		return nil, err
 	}
@@ -299,7 +309,7 @@ func (t *TableT[T]) Insert(ctx context.Context, val any) (uint64, int, error) {
 		err error
 	)
 	if t.enc == nil {
-		t.enc = encode.NewEncoderFor[T](schema.WithEnums(t.Schema().Enums.Load()))
+		t.enc = encode.NewEncoderFor[T](schema.Enums(t.Schema().Enums.Load()))
 	}
 	switch v := val.(type) {
 	case *T:
@@ -309,7 +319,7 @@ func (t *TableT[T]) Insert(ctx context.Context, val any) (uint64, int, error) {
 	case []*T:
 		buf, err = t.enc.EncodePtrSlice(v, nil)
 	default:
-		return 0, 0, fmt.Errorf("insert: %T %w", val, schema.ErrInvalidValue)
+		return 0, 0, fmt.Errorf("insert: %T %w", val, err)
 	}
 	if err != nil {
 		return 0, 0, err
@@ -322,7 +332,7 @@ func (t *TableT[T]) Insert(ctx context.Context, val any) (uint64, int, error) {
 	}
 	defer abort()
 
-	// call backend
+	// call backend, returns first sequential pk assigned
 	pk, n, err := t.table.InsertRows(ctx, buf)
 	if err != nil {
 		return 0, 0, err
@@ -332,8 +342,8 @@ func (t *TableT[T]) Insert(ctx context.Context, val any) (uint64, int, error) {
 		return 0, 0, err
 	}
 
-	// assign primary keys to all values, return above is first sequential pk assigned
-	pkOffset := t.schema.Pk().Offset
+	// assign primary keys to all values
+	pkOffset := t.enc.Offset(t.schema.PkIndex())
 	switch v := val.(type) {
 	case *T:
 		*(*uint64)(unsafe.Add(unsafe.Pointer(v), pkOffset)) = pk
@@ -356,7 +366,7 @@ func (t *TableT[T]) Update(ctx context.Context, val any) (int, error) {
 		err error
 	)
 	if t.enc == nil {
-		t.enc = encode.NewEncoderFor[T](schema.WithEnums(t.Schema().Enums.Load()))
+		t.enc = encode.NewEncoderFor[T](schema.Enums(t.Schema().Enums.Load()))
 	}
 	switch v := val.(type) {
 	case *T:
@@ -366,7 +376,7 @@ func (t *TableT[T]) Update(ctx context.Context, val any) (int, error) {
 	case []*T:
 		buf, err = t.enc.EncodePtrSlice(v, nil)
 	default:
-		return 0, fmt.Errorf("update: %T %w", val, schema.ErrInvalidValue)
+		return 0, fmt.Errorf("update: %T %w", val, err)
 	}
 	if err != nil {
 		return 0, err

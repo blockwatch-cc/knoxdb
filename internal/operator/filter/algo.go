@@ -16,6 +16,10 @@ import (
 
 type ValueType BlockType
 
+func ToValueType(ft types.FieldType) ValueType {
+	return ValueType(types.ToBlockType(ft))
+}
+
 func (v ValueType) String() string {
 	return BlockType(v).String()
 }

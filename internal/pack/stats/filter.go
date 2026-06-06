@@ -40,12 +40,13 @@ func (idx *Index) buildFilters(pkg *pack.Package, node *SNode) error {
 	}
 
 	// build filters in mem and save later
-	blooms := make(map[uint16][]byte)
-	bits := make(map[uint16][]byte)
-	fuses := make(map[uint16][]byte)
-	ranges := make(map[uint16][]byte)
-	pstats := pkg.Stats()
-	for i, f := range pkg.Schema().Fields {
+	var (
+		filters      [][]byte
+		rangeFilters [][]byte
+		pstats       = pkg.Stats()
+		schema       = pkg.Schema()
+	)
+	for i, f := range schema.Fields {
 		b := pkg.Block(i)
 		if b == nil || !pstats.WasDirty[i] {
 			continue
@@ -63,7 +64,10 @@ func (idx *Index) buildFilters(pkg *pack.Package, node *SNode) error {
 					card, hashes = EstimateCardinality(b, 8)
 				}
 				if flt := BuildBloomFilter(b, card, f.Filter.Factor(), hashes); flt != nil {
-					blooms[f.Id] = flt.Bytes()
+					if filters == nil {
+						filters = make([][]byte, pkg.Cols())
+					}
+					filters[i] = flt.Bytes()
 				}
 			}
 		case types.FL_BFUSE8:
@@ -73,7 +77,10 @@ func (idx *Index) buildFilters(pkg *pack.Package, node *SNode) error {
 				if err != nil {
 					return err
 				}
-				fuses[f.Id], _ = flt.MarshalBinary()
+				if filters == nil {
+					filters = make([][]byte, pkg.Cols())
+				}
+				filters[i], _ = flt.MarshalBinary()
 			}
 		case types.FL_BFUSE16:
 			if idx.use.Is(FeatFuseFilter) {
@@ -82,7 +89,10 @@ func (idx *Index) buildFilters(pkg *pack.Package, node *SNode) error {
 				if err != nil {
 					return err
 				}
-				fuses[f.Id], _ = flt.MarshalBinary()
+				if filters == nil {
+					filters = make([][]byte, pkg.Cols())
+				}
+				filters[i], _ = flt.MarshalBinary()
 			}
 		case types.FL_BITS:
 			if idx.use.Is(FeatBitsFilter) {
@@ -93,7 +103,10 @@ func (idx *Index) buildFilters(pkg *pack.Package, node *SNode) error {
 					card, _ = EstimateCardinality(b, 8)
 				}
 				if flt := BuildBitsFilter(b, card); flt != nil {
-					bits[f.Id] = flt.Bytes()
+					if filters == nil {
+						filters = make([][]byte, pkg.Cols())
+					}
+					filters[i] = flt.Bytes()
 				}
 			}
 		}
@@ -107,80 +120,54 @@ func (idx *Index) buildFilters(pkg *pack.Package, node *SNode) error {
 			if err != nil {
 				return err
 			}
-			ranges[f.Id] = rg.Bytes()
+			if rangeFilters == nil {
+				rangeFilters = make([][]byte, pkg.Cols())
+			}
+			rangeFilters[i] = rg.Bytes()
 		}
 	}
 
 	// early exit
-	if len(blooms)+len(ranges)+len(bits)+len(fuses) == 0 {
+	if filters == nil && rangeFilters == nil {
 		return nil
 	}
 
 	// store filters
 	return idx.db.Update(func(tx store.Tx) error {
-		if len(blooms) > 0 {
-			b := idx.filterBucket(tx)
-			if b == nil {
-				return store.ErrBucketNotFound
-			}
-			for k, buf := range blooms {
-				key := encodeFilterKey(pkg.Key(), pkg.Version(), k)
-				err := b.Put(key, buf)
-				if err != nil {
-					return err
-				}
-				idx.bytesWritten += int64(len(buf))
-			}
+		b := idx.filterBucket(tx)
+		if b == nil {
+			return store.ErrBucketNotFound
 		}
-		clear(blooms)
+		for i, buf := range filters {
+			if buf == nil {
+				continue
+			}
+			key := encodeFilterKey(pkg.Key(), pkg.Version(), schema.Fields[i].Id)
+			err := b.Put(key, buf)
+			if err != nil {
+				return err
+			}
+			idx.bytesWritten += int64(len(buf))
+		}
+		clear(filters)
 
-		if len(ranges) > 0 {
-			b := idx.rangeBucket(tx)
-			if b == nil {
-				return store.ErrBucketNotFound
-			}
-			for k, buf := range ranges {
-				key := encodeFilterKey(pkg.Key(), pkg.Version(), k)
-				err := b.Put(key, buf)
-				if err != nil {
-					return err
-				}
-				idx.bytesWritten += int64(len(buf))
-			}
+		// put range filters
+		b = idx.rangeBucket(tx)
+		if b == nil {
+			return store.ErrBucketNotFound
 		}
-		clear(ranges)
-
-		if len(bits) > 0 {
-			b := idx.filterBucket(tx)
-			if b == nil {
-				return store.ErrBucketNotFound
+		for i, buf := range rangeFilters {
+			if buf == nil {
+				continue
 			}
-			for k, buf := range bits {
-				key := encodeFilterKey(pkg.Key(), pkg.Version(), k)
-				err := b.Put(key, buf)
-				if err != nil {
-					return err
-				}
-				idx.bytesWritten += int64(len(buf))
+			key := encodeFilterKey(pkg.Key(), pkg.Version(), schema.Fields[i].Id)
+			err := b.Put(key, buf)
+			if err != nil {
+				return err
 			}
+			idx.bytesWritten += int64(len(buf))
 		}
-		clear(bits)
-
-		if len(fuses) > 0 {
-			b := idx.filterBucket(tx)
-			if b == nil {
-				return store.ErrBucketNotFound
-			}
-			for k, buf := range fuses {
-				key := encodeFilterKey(pkg.Key(), pkg.Version(), k)
-				err := b.Put(key, buf)
-				if err != nil {
-					return err
-				}
-				idx.bytesWritten += int64(len(buf))
-			}
-		}
-		clear(fuses)
+		clear(rangeFilters)
 
 		return nil
 	})

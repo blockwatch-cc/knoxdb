@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"blockwatch.cc/knoxdb/pkg/num"
-	"blockwatch.cc/knoxdb/pkg/schema/types"
+	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -202,30 +202,30 @@ func IsInt128(v any) bool {
 func TestCastNewCaster(t *testing.T) {
 	tests := []struct {
 		name      string
-		fieldType types.FieldType
+		fieldType schema.FieldType
 		expected  any
 	}{
-		{"Datetime", types.FT_TIMESTAMP, TimeCaster{}},
-		{"Boolean", types.FT_BOOL, BoolCaster{}},
-		{"String", types.FT_STRING, StringCaster{}},
-		{"Bytes", types.FT_BYTES, BytesCaster{}},
-		{"Int8", types.FT_I8, IntCaster[int8]{}},
-		{"Int16", types.FT_I16, IntCaster[int16]{}},
-		{"Int32", types.FT_I32, IntCaster[int32]{}},
-		{"Int64", types.FT_I64, IntCaster[int64]{}},
-		{"Uint8", types.FT_U8, UintCaster[uint8]{}},
-		{"Uint16", types.FT_U16, UintCaster[uint16]{}},
-		{"Uint32", types.FT_U32, UintCaster[uint32]{}},
-		{"Uint64", types.FT_U64, UintCaster[uint64]{}},
-		{"Float32", types.FT_F32, FloatCaster[float32]{}},
-		{"Float64", types.FT_F64, FloatCaster[float64]{}},
-		{"Int128", types.FT_I128, I128Caster{}},
-		{"Int256", types.FT_I256, I256Caster{}},
-		{"Decimal32", types.FT_D32, IntCaster[int32]{}},
-		{"Decimal64", types.FT_D64, IntCaster[int64]{}},
-		{"Decimal128", types.FT_D128, I128Caster{}},
-		{"Decimal256", types.FT_D256, I256Caster{}},
-		{"BigInt", types.FieldTypeBigint, BigIntCaster{}},
+		{"Datetime", schema.Timestamp, TimeCaster{}},
+		{"Boolean", schema.Boolean, BoolCaster{}},
+		{"String", schema.String, StringCaster{}},
+		{"Bytes", schema.Bytes, BytesCaster{}},
+		{"Int8", schema.Int8, IntCaster[int8]{}},
+		{"Int16", schema.Int16, IntCaster[int16]{}},
+		{"Int32", schema.Int32, IntCaster[int32]{}},
+		{"Int64", schema.Int64, IntCaster[int64]{}},
+		{"Uint8", schema.Uint8, UintCaster[uint8]{}},
+		{"Uint16", schema.Uint16, UintCaster[uint16]{}},
+		{"Uint32", schema.Uint32, UintCaster[uint32]{}},
+		{"Uint64", schema.Uint64, UintCaster[uint64]{}},
+		{"Float32", schema.Float32, FloatCaster[float32]{}},
+		{"Float64", schema.Float64, FloatCaster[float64]{}},
+		{"Int128", schema.Int128, I128Caster{}},
+		{"Int256", schema.Int256, I256Caster{}},
+		{"Decimal32", schema.Decimal32, IntCaster[int32]{}},
+		{"Decimal64", schema.Decimal64, IntCaster[int64]{}},
+		{"Decimal128", schema.Decimal128, I128Caster{}},
+		{"Decimal256", schema.Decimal256, I256Caster{}},
+		{"BigInt", schema.Bigint, BigIntCaster{}},
 	}
 
 	for _, tt := range tests {
@@ -534,7 +534,7 @@ func (c CustomBinaryMarshaler) MarshalBinary() ([]byte, error) {
 // TestCastBytesCaster tests the BytesCaster to ensure it correctly casts various
 // input types to []byte and handles edge cases and errors appropriately.
 func TestCastBytesCaster(t *testing.T) {
-	caster := NewCaster(types.FT_BYTES, 0, nil)
+	caster := NewCaster(schema.Bytes, 0, nil)
 
 	t.Run("CastValue", func(t *testing.T) {
 		tests := []struct {
@@ -589,7 +589,7 @@ func TestCastBytesCaster(t *testing.T) {
 // TestCastI128Caster tests the I128Caster to ensure it correctly casts various
 // input types to num.Int128 and handles edge cases and errors appropriately.
 func TestCastI128Caster(t *testing.T) {
-	caster := I128Caster{}
+	caster := NewCaster(schema.Int128, 0, nil)
 
 	t.Run("CastValue", func(t *testing.T) {
 		tests := []struct {
@@ -661,7 +661,7 @@ func TestCastI128Caster(t *testing.T) {
 // TestCastI256Caster tests the I256Caster to ensure it correctly casts various
 // input types to num.Int256 and handles edge cases and errors appropriately.
 func TestCastI256Caster(t *testing.T) {
-	caster := NewCaster(types.FT_I256, 0, nil)
+	caster := NewCaster(schema.Int256, 0, nil)
 
 	t.Run("CastValue", func(t *testing.T) {
 		tests := []struct {

@@ -41,11 +41,11 @@ type TableObject struct {
 	id     uint64
 	action wal.RecordType
 	cat    *Catalog
-	schema *schema.Schema
+	schema *TableSchema
 	opts   Options
 }
 
-func (c *Catalog) AppendTableCmd(ctx context.Context, act ActionType, s *schema.Schema, opts Options) error {
+func (c *Catalog) AppendTableCmd(ctx context.Context, act ActionType, s *TableSchema, opts Options) error {
 	obj := &TableObject{
 		cat:    c,
 		id:     types.TaggedHash(types.ObjectTagTable, s.Name),
@@ -137,7 +137,7 @@ func (o *TableObject) Decode(ctx context.Context, rec *wal.Record) error {
 
 	// read schema
 	n := int(LE.Uint32(buf.Next(4)))
-	o.schema = schema.NewSchema()
+	o.schema = types.NewTableSchema()
 	if err := o.schema.UnmarshalBinary(buf.Next(n)); err != nil {
 		return err
 	}

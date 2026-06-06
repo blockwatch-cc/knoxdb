@@ -7,6 +7,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/filter"
+	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
 )
 
@@ -78,10 +79,8 @@ type MatcherFactory interface {
 	New(FilterMode) Matcher
 }
 
-// Need custom matchers for
-// Time (maybe, currently int64 internally; if we were to introduce time-zones, then yes)
 func NewFactory(ftyp FieldType) MatcherFactory {
-	return newFactory(ftyp.BlockType())
+	return newFactory(types.ToBlockType(ftyp))
 }
 
 func newFactory(typ BlockType) MatcherFactory {

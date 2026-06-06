@@ -28,7 +28,7 @@ import (
 )
 
 var (
-	testSchema      *schema.Schema
+	testSchema      *types.TableSchema
 	testIndexSchema *schema.IndexSchema
 	testEnums       *enum.EnumRegistry
 )
@@ -41,9 +41,11 @@ func init() {
 	testEnums = enum.NewEnumRegistry()
 	testEnums.Register(statusTag, statusEnum)
 
-	testSchema = sreflect.MustSchemaFor[testStruct](schema.WithEnums(testEnums))
-	testSchema = testSchema.WithMeta()
-	testIndexSchema = testSchema.Indexes[1] // hash index on name
+	baseSchema := sreflect.MustSchemaFor[testStruct](schema.Enums(testEnums))
+	testSchema, _ = types.MakeTableSchema(baseSchema)
+
+	indexSchemas := sreflect.MustIndexesFor[testStruct]()
+	testIndexSchema = indexSchemas[1] // hash index on name
 }
 
 type testStruct struct {
@@ -57,7 +59,7 @@ type testStruct struct {
 }
 
 func (t *testStruct) Encode() []byte {
-	enc := encode.NewEncoder(testSchema)
+	enc := encode.NewEncoder(testSchema.Schema)
 	buf, err := enc.Encode(t, nil)
 	if err != nil {
 		panic(err)
@@ -430,7 +432,7 @@ func TestPlanCompile(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
 			// compile test filter conditions
-			flt, err := tc.Condition.Compile(testSchema)
+			flt, err := tc.Condition.Compile(testSchema.Schema)
 			require.NoError(t, err)
 
 			// construct mock table from schema without index and result
@@ -441,7 +443,7 @@ func TestPlanCompile(t *testing.T) {
 				WithTag(tc.Name).
 				WithTable(mockTable).
 				WithFilters(flt).
-				WithSchema(testSchema)
+				WithSchema(testSchema.Schema)
 			defer plan.Close()
 
 			if testing.Verbose() {
@@ -523,7 +525,7 @@ func TestPlanQueryIndexes(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
 			// compile test filter conditions
-			flt, err := tc.Condition.Compile(testSchema)
+			flt, err := tc.Condition.Compile(testSchema.Schema)
 			require.NoError(t, err)
 
 			// construct mock table from schema, mock index and mock result
@@ -538,7 +540,7 @@ func TestPlanQueryIndexes(t *testing.T) {
 				WithTag(tc.Name).
 				WithTable(mockTable).
 				WithFilters(flt).
-				WithSchema(testSchema)
+				WithSchema(testSchema.Schema)
 			defer plan.Close()
 
 			if testing.Verbose() {
@@ -571,7 +573,7 @@ func makeNode(field *schema.Field, idx int, mode types.FilterMode, value any) *f
 	// Log the initial value and its type
 	// log.Printf("makeNode called with mode: %v, fieldIndex: %d, value: %v (type: %T)", mode, fieldIndex, value, value)
 
-	blockType := field.Type.BlockType()
+	blockType := types.ToBlockType(field.Type)
 	f := &filter.Filter{
 		Name:    field.Name,
 		Mode:    mode,

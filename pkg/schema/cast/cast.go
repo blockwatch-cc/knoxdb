@@ -6,11 +6,11 @@ package cast
 import (
 	"fmt"
 
-	"blockwatch.cc/knoxdb/pkg/schema/types"
+	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
 // ValueCasters have the purpose of converting Go types used in programmatic
-// queries (written in Go) to block types. This is required since inputs for
+// queries (written in Go) to block schema. This is required since inputs for
 // comparison functions accept interfaces and will perform unchecked type
 // conversions. We use ValueCaster during query compilation to ensure these
 // interface to type conversions don't panic.
@@ -27,55 +27,55 @@ func CastError(val any, kind string) error {
 	return fmt.Errorf("cast: unexpected value type %T for %s condition", val, kind)
 }
 
-func NewCaster(typ types.FieldType, scale uint8, enum ValueCaster) ValueCaster {
+func NewCaster(typ schema.FieldType, scale uint8, enum ValueCaster) ValueCaster {
 	switch typ {
-	case types.FT_TIMESTAMP, types.FT_TIME:
-		return TimeCaster{scale: types.TimeScale(scale)}
-	case types.FT_DATE:
+	case schema.Timestamp, schema.Time:
+		return TimeCaster{scale: schema.TimeScale(scale)}
+	case schema.Date:
 		return DateCaster{}
-	case types.FT_BOOL:
+	case schema.Boolean:
 		return BoolCaster{}
-	case types.FT_STRING:
+	case schema.String:
 		return StringCaster{} // MarshalText, stringer, ToString
-	case types.FT_BYTES:
+	case schema.Bytes:
 		return BytesCaster{} // MarshalBinary
-	case types.FT_I8:
+	case schema.Int8:
 		return IntCaster[int8]{}
-	case types.FT_I16:
+	case schema.Int16:
 		return IntCaster[int16]{}
-	case types.FT_I32:
+	case schema.Int32:
 		return IntCaster[int32]{}
-	case types.FT_I64:
+	case schema.Int64:
 		return IntCaster[int64]{}
-	case types.FT_U8:
+	case schema.Uint8:
 		return UintCaster[uint8]{}
-	case types.FT_U16:
+	case schema.Uint16:
 		if enum == nil {
 			return UintCaster[uint16]{}
 		} else {
 			return enum
 		}
-	case types.FT_U32:
+	case schema.Uint32:
 		return UintCaster[uint32]{}
-	case types.FT_U64:
+	case schema.Uint64:
 		return UintCaster[uint64]{}
-	case types.FT_F32:
+	case schema.Float32:
 		return FloatCaster[float32]{}
-	case types.FT_F64:
+	case schema.Float64:
 		return FloatCaster[float64]{}
-	case types.FT_I128:
+	case schema.Int128:
 		return I128Caster{}
-	case types.FT_I256:
+	case schema.Int256:
 		return I256Caster{}
-	case types.FT_D32:
+	case schema.Decimal32:
 		return IntCaster[int32]{}
-	case types.FT_D64:
+	case schema.Decimal64:
 		return IntCaster[int64]{}
-	case types.FT_D128:
+	case schema.Decimal128:
 		return I128Caster{}
-	case types.FT_D256:
+	case schema.Decimal256:
 		return I256Caster{}
-	case types.FT_BIGINT:
+	case schema.Bigint:
 		return BigIntCaster{}
 	default:
 		panic(fmt.Errorf("caster: unsupported field type %s %d", typ, typ))

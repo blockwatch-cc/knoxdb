@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"blockwatch.cc/knoxdb/pkg/num"
-	"blockwatch.cc/knoxdb/pkg/schema/types"
+	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
@@ -20,67 +20,67 @@ type ValueParser interface {
 	ParseSlice(string) (any, error)
 }
 
-func NewParser(typ types.FieldType, scale uint8, enum ValueParser) ValueParser {
+func NewParser(typ schema.FieldType, scale uint8, enum ValueParser) ValueParser {
 	switch typ {
-	case types.FT_TIMESTAMP:
-		return TimeParser{scale: types.TimeScale(scale), isTimeOnly: false}
-	case types.FT_TIME:
-		return TimeParser{scale: types.TimeScale(scale), isTimeOnly: true}
-	case types.FT_DATE:
-		return TimeParser{scale: types.TIME_SCALE_DAY, isTimeOnly: false}
-	case types.FT_BOOL:
+	case schema.Timestamp:
+		return TimeParser{scale: schema.TimeScale(scale), isTimeOnly: false}
+	case schema.Time:
+		return TimeParser{scale: schema.TimeScale(scale), isTimeOnly: true}
+	case schema.Date:
+		return TimeParser{scale: schema.TIME_SCALE_DAY, isTimeOnly: false}
+	case schema.Boolean:
 		return BoolParser{}
-	case types.FT_STRING:
+	case schema.String:
 		if scale > 0 {
 			return StringParser{int(scale), int(scale)}
 		}
 		return StringParser{0, 255}
-	case types.FT_BYTES:
+	case schema.Bytes:
 		if scale > 0 {
 			return BytesParser{int(scale), int(scale)}
 		}
 		return BytesParser{0, 255}
-	case types.FT_TEXT:
+	case schema.Text:
 		return StringParser{}
-	case types.FT_BLOB:
+	case schema.Binary:
 		return BytesParser{}
-	case types.FT_I8:
+	case schema.Int8:
 		return IntParser[int8]{8}
-	case types.FT_I16:
+	case schema.Int16:
 		return IntParser[int16]{16}
-	case types.FT_I32:
+	case schema.Int32:
 		return IntParser[int32]{32}
-	case types.FT_I64:
+	case schema.Int64:
 		return IntParser[int64]{64}
-	case types.FT_U8:
+	case schema.Uint8:
 		return UintParser[uint8]{8}
-	case types.FT_U16:
+	case schema.Uint16:
 		if enum == nil {
 			return UintParser[uint16]{16}
 		} else {
 			return enum
 		}
-	case types.FT_U32:
+	case schema.Uint32:
 		return UintParser[uint32]{32}
-	case types.FT_U64:
+	case schema.Uint64:
 		return UintParser[uint64]{64}
-	case types.FT_F32:
+	case schema.Float32:
 		return FloatParser[float32]{32}
-	case types.FT_F64:
+	case schema.Float64:
 		return FloatParser[float64]{64}
-	case types.FT_I128:
+	case schema.Int128:
 		return I128Parser{}
-	case types.FT_I256:
+	case schema.Int256:
 		return I256Parser{}
-	case types.FT_D32:
+	case schema.Decimal32:
 		return D32Parser{scale}
-	case types.FT_D64:
+	case schema.Decimal64:
 		return D64Parser{scale}
-	case types.FT_D128:
+	case schema.Decimal128:
 		return D128Parser{scale}
-	case types.FT_D256:
+	case schema.Decimal256:
 		return D256Parser{scale}
-	case types.FT_BIGINT:
+	case schema.Bigint:
 		return BigIntParser{}
 	default:
 		panic(fmt.Errorf("parser: unsupported field type %s %d", typ, typ))
@@ -88,7 +88,7 @@ func NewParser(typ types.FieldType, scale uint8, enum ValueParser) ValueParser {
 }
 
 // int parser
-type IntParser[T types.Signed] struct {
+type IntParser[T schema.Signed] struct {
 	bitsize int
 }
 
@@ -111,7 +111,7 @@ func (p IntParser[T]) ParseSlice(s string) (any, error) {
 }
 
 // uint parser
-type UintParser[T types.Unsigned] struct {
+type UintParser[T schema.Unsigned] struct {
 	bitsize int
 }
 
@@ -134,7 +134,7 @@ func (p UintParser[T]) ParseSlice(s string) (any, error) {
 }
 
 // float parser
-type FloatParser[T types.Float] struct {
+type FloatParser[T schema.Float] struct {
 	bitsize int
 }
 
@@ -383,7 +383,7 @@ func (p BytesParser) ParseSlice(s string) (any, error) {
 
 // time parser
 type TimeParser struct {
-	scale      types.TimeScale
+	scale      schema.TimeScale
 	isTimeOnly bool
 }
 

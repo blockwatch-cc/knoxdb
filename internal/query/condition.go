@@ -155,7 +155,7 @@ func (c Condition) Compile(s *schema.Schema) (*filter.Node, error) {
 		node := filter.NewNode().AddLeaf(
 			&filter.Filter{
 				Name:    s.Pk().Name,
-				Type:    filter.ValueType(s.Pk().Type.BlockType()),
+				Type:    filter.ToValueType(s.Pk().Type),
 				Mode:    types.FilterModeTrue,
 				Index:   s.PkIndex(),
 				Id:      s.PkId(),
@@ -224,7 +224,7 @@ func (c Condition) Compile(s *schema.Schema) (*filter.Node, error) {
 		// node from matcher
 		node := filter.NewNode().AddLeaf(&filter.Filter{
 			Name:    c.Name,
-			Type:    filter.ValueType(field.Type.BlockType()),
+			Type:    filter.ToValueType(field.Type),
 			Mode:    c.Mode,
 			Index:   fx,
 			Id:      field.Id,

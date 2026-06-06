@@ -11,6 +11,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/pack/stats"
+	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/store"
 )
@@ -87,7 +88,7 @@ func (idx *Index) loadPack(i int) (*pack.Package, int, error) {
 			ik, pk, _ := idx.decodePackKey(key)
 			if blk1 == nil {
 				f1 := idx.sstore.Fields[0]
-				blk1, err = block.Decode(f1.Type.BlockType(), val)
+				blk1, err = block.Decode(types.ToBlockType(f1.Type), val)
 				if err != nil {
 					return fmt.Errorf("loading block 0x%08x:%08x:%d: %v", ik, pk, 0, err)
 				}
@@ -96,7 +97,7 @@ func (idx *Index) loadPack(i int) (*pack.Package, int, error) {
 			}
 			if blk2 == nil {
 				f2 := idx.sstore.Fields[1]
-				blk2, err = block.Decode(f2.Type.BlockType(), val)
+				blk2, err = block.Decode(types.ToBlockType(f2.Type), val)
 				if err != nil {
 					return fmt.Errorf("loading block 0x%08x:%08x:%d: %v", ik, pk, 1, err)
 				}

@@ -30,8 +30,8 @@ var (
 type page *byte
 
 type (
-	BlockType        = types.BlockType
-	BlockCompression = types.BlockCompression
+	BlockType   = types.BlockType
+	Compression = types.Compression
 )
 
 const (
@@ -50,10 +50,10 @@ const (
 	BlockInt128  = types.BlockInt128
 	BlockInt256  = types.BlockInt256
 
-	BlockCompressNone   = types.BlockCompressNone
-	BlockCompressSnappy = types.BlockCompressSnappy
-	BlockCompressLZ4    = types.BlockCompressLZ4
-	BlockCompressZstd   = types.BlockCompressZstd
+	CompressNone   = types.CompressNone
+	CompressSnappy = types.CompressSnappy
+	CompressLZ4    = types.CompressLZ4
+	CompressZstd   = types.CompressZstd
 )
 
 // Challenge
@@ -99,7 +99,7 @@ type Block struct {
 	typ      BlockType    // type
 	dirty    bool         // flags
 	writable bool         // flags
-	// _     [21]byte     // pad to 64 bytes
+	_        [8]byte      // pad to 64 bytes
 }
 
 func New(typ BlockType, sz int) *Block {

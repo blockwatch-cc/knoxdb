@@ -15,7 +15,6 @@ import (
 
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/schema"
-	"blockwatch.cc/knoxdb/pkg/schema/types"
 	"blockwatch.cc/knoxdb/pkg/stringx"
 )
 
@@ -58,7 +57,7 @@ type Sniffer struct {
 	n        int                 // max samples (-1: read entire file)
 	res      SnifferResult       // result
 	buf      []byte              // reusable scan buffer
-	cnt      map[rune][2]int     // separator min/max counts
+	cnt      map[uint32][2]int   // separator min/max counts
 	head     []string            // header/field names (if present)
 	fields   []field             // detected field properties
 	userTime string              // user-defined time format (optional)
@@ -77,14 +76,14 @@ func NewSniffer(r io.Reader, n int) *Sniffer {
 	}
 
 	// init separator counting
-	counts := make(map[rune][2]int)
+	counts := make(map[uint32][2]int)
 	for _, v := range delims {
-		counts[v] = [2]int{1<<32 - 1, 0}
+		counts[uint32(v)] = [2]int{1<<32 - 1, 0}
 	}
 
 	return &Sniffer{
 		rd:     r,
-		sample: stringx.NewStringPool(max(n, DefaultSampleSize)), // n may be -1
+		sample: stringx.NewStringPoolSize(max(n, DefaultSampleSize), 4096), // n may be -1
 		n:      n,
 		buf:    make([]byte, 0, DefaultSampleBuffer),
 		cnt:    counts,
@@ -115,34 +114,35 @@ func (s *Sniffer) Result() SnifferResult {
 
 func (s *Sniffer) Schema() *schema.Schema {
 	// construct a schema from discovered fields
-	b := schema.NewBuilder()
-	fopts := make([]schema.BuilderOption, 0, 4)
+	fields := make([]*schema.Field, 0, len(s.fields))
+	fopts := make([]schema.FieldOption, 0, 4)
 	for i, f := range s.fields {
 		fopts = fopts[:0]
 		ty := f.Type()
-		if ty == types.FT_BYTES || ty == types.FT_STRING {
+		if ty == schema.Bytes || ty == schema.String {
 			switch {
-			case f.is(fFixed) && f.len <= types.MAX_ARRAY:
+			case f.is(fFixed) && f.len <= schema.MAX_ARRAY:
 				l := f.len
 				if f.is(fHex) {
 					l /= 2
 				}
-				fopts = append(fopts, schema.Array(l))
-			case ty == types.FT_BYTES && f.len > types.MAX_BYTES:
-				ty = types.FT_BLOB
-			case ty == types.FT_STRING && f.len > types.MAX_BYTES:
-				ty = types.FT_TEXT
+				fopts = append(fopts, schema.WithArray(l))
+			case ty == schema.Bytes && f.len > schema.MAX_BYTES:
+				ty = schema.Binary
+			case ty == schema.String && f.len > schema.MAX_BYTES:
+				ty = schema.Text
 			}
 		}
 		if f.isDateTime() {
-			fopts = append(fopts, schema.Scale(f.scale))
+			fopts = append(fopts, schema.WithScale(f.scale))
 		}
 		if f.isDecimal() {
-			fopts = append(fopts, schema.Scale(f.dot-1))
+			fopts = append(fopts, schema.WithScale(f.dot-1))
 		}
-		b.Add(s.head[i], ty, fopts...)
+		fopts = append(fopts, schema.WithName(s.head[i]))
+		fields = append(fields, schema.FieldOf(ty, fopts...))
 	}
-	return b.Finalize().Schema()
+	return schema.SchemaOf(fields).Finalize()
 }
 
 func (s *Sniffer) NewDecoder(r io.Reader) *Decoder {
@@ -325,73 +325,73 @@ func newField(buf []byte, tfm, dfm string) field {
 	return f
 }
 
-func (f field) Type() types.FieldType {
+func (f field) Type() schema.FieldType {
 	switch {
 	case f.isBool():
-		return types.FT_BOOL
+		return schema.Boolean
 	case f.isSignedInt():
 		// i256..i8, big
 		switch {
 		case f.len > num.MaxInt256Precision:
-			return types.FT_BIGINT // fallback to bigint
+			return schema.Bigint // fallback to bigint
 		case f.len > num.MaxInt128Precision:
-			return types.FT_I256
+			return schema.Int256
 		case f.len > num.MaxInt64Precision:
-			return types.FT_I128
+			return schema.Int128
 		case f.len > num.MaxInt32Precision:
-			return types.FT_I64
+			return schema.Int64
 		case f.len > num.MaxInt16Precision:
-			return types.FT_I32
+			return schema.Int32
 		case f.len > num.MaxInt8Precision:
-			return types.FT_I16
+			return schema.Int16
 		default:
-			return types.FT_I8
+			return schema.Int8
 		}
 	case f.isUnsignedInt():
 		// u256..u8
 		switch {
 		case f.len > num.MaxInt256Precision:
-			return types.FT_BIGINT // fallback to bigint
+			return schema.Bigint // fallback to bigint
 		case f.len > num.MaxInt128Precision:
-			return types.FT_I256
+			return schema.Int256
 		case f.len > num.MaxInt64Precision:
-			return types.FT_I128
+			return schema.Int128
 		case f.len > num.MaxInt32Precision:
-			return types.FT_U64
+			return schema.Uint64
 		case f.len > num.MaxInt16Precision:
-			return types.FT_U32
+			return schema.Uint32
 		case f.len > num.MaxInt8Precision:
-			return types.FT_U16
+			return schema.Uint16
 		default:
-			return types.FT_U8
+			return schema.Uint8
 		}
 	case f.isDecimal():
 		// d256..d64
 		switch {
 		case f.len-1 > num.MaxInt256Precision:
-			return types.FT_F64 // fallback to float
+			return schema.Float64 // fallback to float
 		case f.len-1 > num.MaxInt128Precision:
-			return types.FT_D256
+			return schema.Decimal256
 		case f.len-1 > num.MaxInt64Precision:
-			return types.FT_D128
+			return schema.Decimal128
 		case f.len-1 > num.MaxInt32Precision:
-			return types.FT_D64
+			return schema.Decimal64
 		default:
-			return types.FT_D32
+			return schema.Decimal32
 		}
 	case f.isFloat():
-		return types.FT_F64
+		return schema.Float64
 	case f.is(fDate):
-		return types.FT_DATE
+		return schema.Date
 	case f.is(fTime):
-		return types.FT_TIME
+		return schema.Time
 	case f.is(fTimestamp):
-		return types.FT_TIMESTAMP
+		return schema.Timestamp
 	case f.isBytes():
-		return types.FT_BYTES
+		return schema.Bytes
 	default:
 		// use string as fallback
-		return types.FT_STRING
+		return schema.String
 	}
 }
 
@@ -620,17 +620,17 @@ func tryTime(buf []byte, tfm, dfm string) (fieldFlag, string, int) {
 	}
 	if dfm != "" {
 		if _, err := time.Parse(dfm, s); err == nil {
-			return fDate, dfm, int(types.TIME_SCALE_DAY)
+			return fDate, dfm, int(schema.TIME_SCALE_DAY)
 		}
 	}
 
 	// try knoxdb standard formats
-	f, scale, timeOnly, ok := types.DetectTimeFormat(s)
+	f, scale, timeOnly, ok := schema.DetectTimeFormat(s)
 	if ok {
 		if timeOnly {
 			return fTime, f, int(scale)
 		}
-		if scale == types.TIME_SCALE_DAY {
+		if scale == schema.TIME_SCALE_DAY {
 			return fDate, f, int(scale)
 		}
 		return fTimestamp, f, int(scale)
@@ -748,12 +748,12 @@ func (s *Sniffer) analyzeSeparator() {
 			continue
 		}
 		if bestSep == 0 {
-			bestSep = d
+			bestSep = rune(d)
 			bestNumFields = c[1] + 1
 			continue
 		}
 		if c[0] == c[1] {
-			bestSep = d
+			bestSep = rune(d)
 			bestNumFields = c[1] + 1
 		}
 	}
@@ -810,12 +810,12 @@ func (s *Sniffer) sampleRandom(rs io.ReadSeeker) error {
 
 		// count occurences of each delimiter in non-comment lines
 		if line[0] != byte(Comment) {
-			for _, v := range delims {
-				n := bytes.Count(line, []byte{byte(v)})
-				cnt := s.cnt[v]
+			for _, r := range delims {
+				n := bytes.Count(line, []byte{byte(r)})
+				cnt := s.cnt[uint32(r)]
 				cnt[0] = min(cnt[0], n)
 				cnt[1] = max(cnt[1], n)
-				s.cnt[v] = cnt
+				s.cnt[uint32(r)] = cnt
 			}
 		}
 
@@ -856,12 +856,12 @@ func (s *Sniffer) sampleRandom(rs io.ReadSeeker) error {
 
 			// count occurences of each delimiter in non-comment lines
 			if line[0] != byte(Comment) {
-				for _, v := range delims {
-					n := bytes.Count(line, []byte{byte(v)})
-					cnt := s.cnt[v]
+				for _, r := range delims {
+					n := bytes.Count(line, []byte{byte(r)})
+					cnt := s.cnt[uint32(r)]
 					cnt[0] = min(cnt[0], n)
 					cnt[1] = max(cnt[1], n)
-					s.cnt[v] = cnt
+					s.cnt[uint32(r)] = cnt
 				}
 			}
 		}
@@ -881,12 +881,12 @@ func (s *Sniffer) sampleLinear() error {
 			s.sample.Append(line)
 			// count occurences of each delimiter in non-comment lines
 			if line[0] != byte(Comment) {
-				for _, v := range delims {
-					n := bytes.Count(line, []byte{byte(v)})
-					cnt := s.cnt[v]
+				for _, r := range delims {
+					n := bytes.Count(line, []byte{byte(r)})
+					cnt := s.cnt[uint32(r)]
 					cnt[0] = min(cnt[0], n)
 					cnt[1] = max(cnt[1], n)
-					s.cnt[v] = cnt
+					s.cnt[uint32(r)] = cnt
 				}
 			}
 		}
