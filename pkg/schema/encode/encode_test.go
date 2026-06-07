@@ -5,6 +5,7 @@ package encode
 
 import (
 	"encoding/hex"
+	"fmt"
 	"strconv"
 	"testing"
 	"time"
@@ -141,11 +142,57 @@ func makeVisibilityTestData(sz int) (res []visibilityTestStruct) {
 	return
 }
 
+func makeAttrData(sz int) []schema.Attr {
+	res := make([]schema.Attr, sz)
+	for i := range res {
+		switch i % 5 {
+		case 0:
+			res[i] = schema.Int64Attr("i64", int64(i))
+		case 1:
+			res[i] = schema.Int32Attr("i32", int32(i))
+		case 2:
+			res[i] = schema.BoolAttr("bool", i%2 == 1)
+		case 3:
+			res[i] = schema.TimestampAttr("ts", time.Now())
+		case 4:
+			res[i] = schema.Uint16Attr("u16", uint16(i))
+		}
+	}
+	return res
+}
+
+type LogRecord struct {
+	Timestamp time.Time
+	Message   string
+	Attrs     []schema.Attr
+}
+
+var LogRecordSchema = schema.SchemaOf([]*schema.Field{
+	schema.FieldOf(schema.Timestamp, schema.WithName("timestamp")),
+	schema.FieldOf(schema.String, schema.WithName("message")),
+	schema.ListFor(schema.AttrSchema, schema.WithName("attrs")),
+})
+
+func makeNestedAttrData(sz int) []LogRecord {
+	res := make([]LogRecord, sz)
+	for i := range res {
+		res[i].Timestamp = time.Now().UTC()
+		res[i].Message = fmt.Sprintf("Hello-%d", i+1)
+		res[i].Attrs = []schema.Attr{
+			schema.Int64Attr("i64", int64(i)),
+			schema.Int32Attr("i32", int32(i)),
+			schema.BoolAttr("bool", i%2 == 1),
+			schema.TimestampAttr("ts", time.Now().UTC()),
+			schema.Uint16Attr("u16", uint16(i)),
+		}
+	}
+	return res
+}
+
 func TestEncodeVal(t *testing.T) {
 	vals := makeTestData(1)
-	val := vals[0]
 	enc := NewEncoderFor[encodeTestStruct]()
-	buf, err := enc.Encode(val, nil)
+	buf, err := enc.Encode(vals[0], nil)
 	require.NoError(t, err)
 	require.NotNil(t, buf)
 	require.NotEmpty(t, buf)
@@ -219,7 +266,7 @@ func TestEncodeRoundtripWithVisibility(t *testing.T) {
 func TestEncodeSlice(t *testing.T) {
 	vals := makeTestData(2)
 	enc := NewEncoderFor[encodeTestStruct]()
-	buf, err := enc.EncodeSlice(vals, nil)
+	buf, err := enc.Encode(vals, nil)
 	require.NoError(t, err)
 	require.NotNil(t, buf)
 	require.NotEmpty(t, buf)
@@ -227,9 +274,8 @@ func TestEncodeSlice(t *testing.T) {
 
 func TestEncodeValPtr(t *testing.T) {
 	vals := makeTestData(1)
-	val := &vals[0]
 	enc := NewEncoderFor[encodeTestStruct]()
-	buf, err := enc.EncodePtr(val, nil)
+	buf, err := enc.Encode(&vals[0], nil)
 	require.NoError(t, err)
 	require.NotNil(t, buf)
 	require.NotEmpty(t, buf)
@@ -242,8 +288,64 @@ func TestEncodePtrSlice(t *testing.T) {
 		ptrs[i] = &vals[i]
 	}
 	enc := NewEncoderFor[encodeTestStruct]()
-	buf, err := enc.EncodePtrSlice(ptrs, nil)
+	buf, err := enc.Encode(ptrs, nil)
 	require.NoError(t, err)
 	require.NotNil(t, buf)
 	require.NotEmpty(t, buf)
+}
+
+func TestMarshal(t *testing.T) {
+	l, err := reflect.LayoutOf(schema.Attr{}, schema.AttrSchema)
+	require.NoError(t, err)
+	enc := NewEncoderWithLayout(schema.AttrSchema, l)
+	vals := makeAttrData(2)
+	buf, err := enc.Encode(vals, nil)
+	require.NoError(t, err)
+	require.NotNil(t, buf)
+	require.NotEmpty(t, buf)
+}
+
+func TestUnmarshal(t *testing.T) {
+	l, err := reflect.LayoutOf(schema.Attr{}, schema.AttrSchema)
+	require.NoError(t, err)
+	enc := NewEncoderWithLayout(schema.AttrSchema, l)
+	dec := NewDecoderWithLayout(schema.AttrSchema, l)
+	vals := makeAttrData(2)
+	buf, err := enc.Encode(vals, nil)
+	require.NoError(t, err)
+	require.NotNil(t, buf)
+	require.NotEmpty(t, buf)
+	res := make([]schema.Attr, 2)
+	n, err := dec.DecodeBatch(buf, res)
+	require.NoError(t, err)
+	require.Equal(t, 2, n)
+	require.Equal(t, vals, res)
+}
+
+func TestMarshalNested(t *testing.T) {
+	l, err := reflect.LayoutOf(LogRecord{}, LogRecordSchema)
+	require.NoError(t, err)
+	enc := NewEncoderWithLayout(LogRecordSchema, l)
+	vals := makeNestedAttrData(2)
+	buf, err := enc.Encode(vals, nil)
+	require.NoError(t, err)
+	require.NotNil(t, buf)
+	require.NotEmpty(t, buf)
+}
+
+func TestUnmarshalNested(t *testing.T) {
+	l, err := reflect.LayoutOf(LogRecord{}, LogRecordSchema)
+	require.NoError(t, err)
+	enc := NewEncoderWithLayout(LogRecordSchema, l)
+	dec := NewDecoderWithLayout(LogRecordSchema, l)
+	vals := makeNestedAttrData(2)
+	buf, err := enc.Encode(vals, nil)
+	require.NoError(t, err)
+	require.NotNil(t, buf)
+	require.NotEmpty(t, buf)
+	res := make([]LogRecord, 2)
+	n, err := dec.DecodeBatch(buf, res)
+	require.NoError(t, err)
+	require.Equal(t, 2, n)
+	require.Equal(t, vals, res)
 }

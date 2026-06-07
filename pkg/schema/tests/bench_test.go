@@ -235,3 +235,65 @@ func BenchmarkView(b *testing.B) {
 		}
 	})
 }
+
+func BenchmarkWriterList(b *testing.B) {
+	b.Run("lists_l1", func(b *testing.B) {
+		// one level nested
+		baseSchema := reflect.MustSchemaFor[ListFields]()
+		w := schema.NewWriter(baseSchema, baseSchema.NewBuffer(1))
+		base := NewListFields()
+
+		b.ReportAllocs()
+		for b.Loop() {
+			w.Reset()
+			w.WriteInt64(base.Int64a)
+			// []uint64
+			lw, _ := w.WriteList()
+			lw.WriteUint64(base.U64List[0])
+			lw.Next()
+			lw.WriteUint64(base.U64List[1])
+			lw.Close()
+
+			// []time
+			lw, _ = w.WriteList()
+			lw.WriteDate(base.TimeList[0])
+			lw.Next()
+			lw.WriteDate(base.TimeList[1])
+			lw.Close()
+
+			// []Pair
+			lw, _ = w.WriteList()
+			lw.WriteInt64(base.PairList[0].Key)
+			lw.WriteInt64(base.PairList[0].Val)
+			lw.Next()
+			lw.WriteInt64(base.PairList[1].Key)
+			lw.WriteInt64(base.PairList[1].Val)
+			lw.Close()
+
+			// [][]byte
+			lw, _ = w.WriteList()
+			lw.WriteBytes(base.ByteList[0])
+			lw.Next()
+			lw.WriteBytes(base.ByteList[1])
+			lw.Close()
+
+			// [][2]byte
+			lw, _ = w.WriteList()
+			lw.WriteBytes(base.ArrList[0][:])
+			lw.Next()
+			lw.WriteBytes(base.ArrList[1][:])
+			lw.Close()
+
+			// []Decimal32
+			lw, _ = w.WriteList()
+			lw.WriteDecimal32(base.DecimalList[0])
+			lw.Next()
+			lw.WriteDecimal32(base.DecimalList[1])
+			lw.Next()
+			lw.WriteDecimal32(base.DecimalList[2])
+			lw.Close()
+
+			w.WriteInt64(base.Int64b)
+		}
+	})
+}

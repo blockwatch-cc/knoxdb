@@ -304,25 +304,12 @@ func (t *TableT[T]) DB() Database {
 }
 
 func (t *TableT[T]) Insert(ctx context.Context, val any) (uint64, int, error) {
-	var (
-		buf []byte
-		err error
-	)
 	if t.enc == nil {
 		t.enc = encode.NewEncoderFor[T](schema.Enums(t.Schema().Enums.Load()))
 	}
-	switch v := val.(type) {
-	case *T:
-		buf, err = t.enc.EncodePtr(v, nil)
-	case []T:
-		buf, err = t.enc.EncodeSlice(v, nil)
-	case []*T:
-		buf, err = t.enc.EncodePtrSlice(v, nil)
-	default:
-		return 0, 0, fmt.Errorf("insert: %T %w", val, err)
-	}
+	buf, err := t.enc.Encode(val, nil)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, fmt.Errorf("insert: %T %w", val, err)
 	}
 
 	// use or open tx
@@ -361,25 +348,12 @@ func (t *TableT[T]) Insert(ctx context.Context, val any) (uint64, int, error) {
 }
 
 func (t *TableT[T]) Update(ctx context.Context, val any) (int, error) {
-	var (
-		buf []byte
-		err error
-	)
 	if t.enc == nil {
 		t.enc = encode.NewEncoderFor[T](schema.Enums(t.Schema().Enums.Load()))
 	}
-	switch v := val.(type) {
-	case *T:
-		buf, err = t.enc.EncodePtr(v, nil)
-	case []T:
-		buf, err = t.enc.EncodeSlice(v, nil)
-	case []*T:
-		buf, err = t.enc.EncodePtrSlice(v, nil)
-	default:
-		return 0, fmt.Errorf("update: %T %w", val, err)
-	}
+	buf, err := t.enc.Encode(val, nil)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("update: %T %w", val, err)
 	}
 
 	// use or open tx

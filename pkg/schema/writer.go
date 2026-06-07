@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"io"
 	"math"
+	"sync"
 	"time"
 
 	"blockwatch.cc/knoxdb/pkg/num"
@@ -41,14 +42,17 @@ type Unmarshaler interface {
 	UnmarshalSchema(*View) error
 }
 
+var writerPool = sync.Pool{}
+
 // Writer constructs wire encoded messages from typed values.
 // Callers must follow strict sequential field order and nesting
 // as defined by the type schema.
 type Writer struct {
-	schema *Schema          // target schema
-	layout binary.ByteOrder // int byte order (little endian)
-	buf    *bytes.Buffer    // backing buffer
-	n      int              // current field offset
+	schema  *Schema          // target schema
+	layout  binary.ByteOrder // int byte order (little endian)
+	buf     *bytes.Buffer    // backing buffer
+	n       int              // current field offset
+	scratch [8]byte          // scratch buffer
 }
 
 func NewWriter(s *Schema, buf *bytes.Buffer) *Writer {
@@ -59,11 +63,21 @@ func NewWriterLayout(s *Schema, layout binary.ByteOrder, buf *bytes.Buffer) *Wri
 	if buf == nil {
 		buf = s.NewBuffer(1)
 	}
-	return &Writer{
-		schema: s,
-		layout: layout,
-		buf:    buf,
+	var w *Writer
+	if iw := writerPool.Get(); iw != nil {
+		w = iw.(*Writer)
+	} else {
+		w = &Writer{}
 	}
+	w.schema = s
+	w.layout = layout
+	w.buf = buf
+	return w
+}
+
+func (w *Writer) Close() {
+	*w = Writer{}
+	writerPool.Put(w)
 }
 
 // Schema returns the writer schema at the current level
@@ -80,6 +94,25 @@ func (w *Writer) Done() bool {
 func (w *Writer) Reset() {
 	w.buf.Reset()
 	w.n = 0
+}
+
+// Next prepares the writer to append another record to the same buffer.
+// When Next is called early, before all fields were written, it skips
+// the remaining fields writing zeros.
+func (w *Writer) Next() {
+	// noop if we expect the first field
+	if w.n == 0 {
+		return
+	}
+	// fill remaining fields with zeros
+	for !w.Done() {
+		w.Skip()
+	}
+	w.n = 0
+}
+
+func (w *Writer) next() {
+	w.n++
 }
 
 // Bytes returns written bytes. Use in combination with Done
@@ -213,7 +246,7 @@ func (w *Writer) WriteInt8(v int8) error {
 	if err != nil {
 		return err
 	}
-	w.writeByte(uint8(v))
+	w.buf.WriteByte(uint8(v))
 	w.n++
 	return nil
 }
@@ -253,7 +286,7 @@ func (w *Writer) WriteUint8(v uint8) error {
 	if err != nil {
 		return err
 	}
-	w.writeByte(v)
+	w.buf.WriteByte(v)
 	w.n++
 	return nil
 }
@@ -284,9 +317,9 @@ func (w *Writer) WriteBool(v bool) error {
 		return err
 	}
 	if v {
-		w.writeByte(1)
+		w.buf.WriteByte(1)
 	} else {
-		w.writeByte(0)
+		w.buf.WriteByte(0)
 	}
 	w.n++
 	return nil
@@ -476,32 +509,26 @@ func (w *Writer) getFieldChecked(n int, ty FieldType) (*Field, error) {
 }
 
 func (w *Writer) writeLen(v int) {
-	var buf [4]byte
-	w.layout.PutUint32(buf[:], uint32(v))
-	w.buf.Write(buf[:])
+	w.layout.PutUint32(w.scratch[:4], uint32(v))
+	w.buf.Write(w.scratch[:4])
 }
 
 func (w *Writer) writeU64(v uint64) {
-	var buf [8]byte
-	w.layout.PutUint64(buf[:], v)
-	w.buf.Write(buf[:])
+	w.layout.PutUint64(w.scratch[:8], v)
+	w.buf.Write(w.scratch[:8])
 }
 
 func (w *Writer) writeU32(v uint32) {
-	var buf [4]byte
-	w.layout.PutUint32(buf[:], v)
-	w.buf.Write(buf[:])
+	w.layout.PutUint32(w.scratch[:4], v)
+	w.buf.Write(w.scratch[:4])
 }
 
 func (w *Writer) writeU16(v uint16) {
-	var buf [2]byte
-	w.layout.PutUint16(buf[:], v)
-	w.buf.Write(buf[:])
+	w.layout.PutUint16(w.scratch[:2], v)
+	w.buf.Write(w.scratch[:2])
 }
 
-func (w *Writer) writeByte(b uint8) {
-	w.buf.Write([]byte{b})
-}
+var listWriterPool = sync.Pool{}
 
 // ListWriter appends elements to a nested list. It is created
 // with Writer.WriteList and must be released with Close.
@@ -513,17 +540,23 @@ type ListWriter struct {
 }
 
 func newListWriter(w *Writer, s *Schema) *ListWriter {
+	var lw *ListWriter
+	if iw := listWriterPool.Get(); iw != nil {
+		lw = iw.(*ListWriter)
+	} else {
+		lw = &ListWriter{}
+	}
+
 	// write list size, will patch correct size on close
 	ofs := w.buf.Len()
-	var u32 [4]byte
-	w.buf.Write(u32[:])
+	w.writeLen(0)
 
-	return &ListWriter{
-		Writer: w,
-		elem:   s,
-		ofs:    ofs,
-		align:  w.n,
-	}
+	lw.Writer = w
+	lw.elem = s
+	lw.ofs = ofs
+	lw.align = w.n
+
+	return lw
 }
 
 func (w *ListWriter) Schema() *Schema {
@@ -566,22 +599,28 @@ func (w *ListWriter) Reset() {
 // even on empty lists when no data has been written.
 func (w *ListWriter) Close() {
 	// noop when there were no writes (empty list)
-	if w.buf.Len() == w.ofs+4 {
-		return
+	if w.buf.Len() > w.ofs+4 {
+
+		// fill remaining fields if writing stopped early but do not
+		// append another list element if we're at the start (right
+		// after a call to Next)
+		if w.n > w.align && !w.Done() {
+			w.Next()
+		}
+
+		// patch list data length in bytes
+		buf := w.buf
+		n := buf.Len()
+		w.layout.PutUint32(buf.Bytes()[w.ofs:], uint32(n-w.ofs-4))
+
+		// advance writer field offset past the nested type
+		w.n = w.align + len(w.elem.Fields)
 	}
 
-	// fill remaining fields if writing stopped early but do not
-	// append another list element if we're at the start (right
-	// after a call to Next)
-	if w.n > w.align && !w.Done() {
-		w.Next()
-	}
-
-	// patch list data length in bytes
-	buf := w.buf
-	n := buf.Len()
-	w.layout.PutUint32(buf.Bytes()[w.ofs:], uint32(n-w.ofs-4))
-
-	// advance writer field offset past the nested type
-	w.n = w.align + len(w.elem.Fields)
+	// clear and reuse
+	w.Writer = nil
+	w.elem = nil
+	w.ofs = 0
+	w.align = 0
+	listWriterPool.Put(w)
 }

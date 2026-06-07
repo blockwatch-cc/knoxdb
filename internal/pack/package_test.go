@@ -131,7 +131,7 @@ type scalarStruct struct {
 
 func (s *scalarStruct) Encode() []byte {
 	scalarStructBuf.Reset()
-	scalarStructEnc.EncodePtr(s, scalarStructBuf)
+	scalarStructEnc.Encode(s, scalarStructBuf)
 	return scalarStructBuf.Bytes()
 }
 
@@ -147,7 +147,7 @@ type byteStruct struct {
 
 func (s *byteStruct) Encode() []byte {
 	byteStructBuf.Reset()
-	byteStructEnc.EncodePtr(s, byteStructBuf)
+	byteStructEnc.Encode(s, byteStructBuf)
 	return byteStructBuf.Bytes()
 }
 
@@ -185,7 +185,7 @@ type smallStruct struct {
 
 func (s *smallStruct) Encode() []byte {
 	smallStructBuf.Reset()
-	smallStructEnc.EncodePtr(s, smallStructBuf)
+	smallStructEnc.Encode(s, smallStructBuf)
 	return smallStructBuf.Bytes()
 }
 
@@ -241,7 +241,7 @@ type largeStruct struct {
 
 func (s *largeStruct) Encode() []byte {
 	largeStructBuf.Reset()
-	largeStructEnc.EncodePtr(s, largeStructBuf)
+	largeStructEnc.Encode(s, largeStructBuf)
 	return largeStructBuf.Bytes()
 }
 
@@ -302,7 +302,7 @@ type tradeStruct struct {
 
 func (s *tradeStruct) Encode() []byte {
 	tradeStructBuf.Reset()
-	tradeStructEnc.EncodePtr(s, tradeStructBuf)
+	tradeStructEnc.Encode(s, tradeStructBuf)
 	return tradeStructBuf.Bytes()
 }
 
@@ -326,7 +326,7 @@ type specialStruct struct {
 func (s *specialStruct) Encode() []byte {
 	s.init()
 	specialStructBuf.Reset()
-	specialStructEnc.EncodePtr(s, specialStructBuf)
+	specialStructEnc.Encode(s, specialStructBuf)
 	return specialStructBuf.Bytes()
 }
 
@@ -373,7 +373,7 @@ type encodeTestStruct struct {
 func (s *encodeTestStruct) Encode() []byte {
 	s.init()
 	encodeTestStructBuf.Reset()
-	encodeTestStructEnc.EncodePtr(s, encodeTestStructBuf)
+	encodeTestStructEnc.Encode(s, encodeTestStructBuf)
 	return encodeTestStructBuf.Bytes()
 }
 

@@ -177,6 +177,10 @@ func (s TimeScale) Format(t time.Time) string {
 	return t.Format(timeScaleFormats[s])
 }
 
+func (s TimeScale) FormatTime(t time.Time) string {
+	return t.Format(timeOnlyFormats[s])
+}
+
 func (s TimeScale) Parse(v string, isTimeOnly bool) (int64, error) {
 	tm, err := s.ParseTime(v, isTimeOnly)
 	if err != nil {

@@ -18,7 +18,7 @@ import (
 )
 
 type EncoderT[T any] struct {
-	enc *Encoder
+	*Encoder
 }
 
 func NewEncoderFor[T any](opts ...schema.Option) *EncoderT[T] {
@@ -31,36 +31,31 @@ func NewEncoderFor[T any](opts ...schema.Option) *EncoderT[T] {
 		panic(err)
 	}
 	return &EncoderT[T]{
-		enc: NewEncoderWithLayout(s, l),
+		NewEncoderWithLayout(s, l),
 	}
 }
 
-func (e *EncoderT[T]) Schema() *schema.Schema {
-	return e.enc.schema
+func (e *EncoderT[T]) Encode(val any, buf *bytes.Buffer) ([]byte, error) {
+	if val == nil {
+		return nil, schema.ErrNilValue
+	}
+	switch v := val.(type) {
+	case *T:
+		return e.Encoder.Encode(val, buf)
+	case []*T:
+		return e.encodePtrBatch(val, buf)
+	case []T:
+		return e.EncodeBatch(val, buf)
+	case T:
+		return e.Encoder.Encode(&v, buf)
+	default:
+		return nil, schema.ErrInvalidValueType
+	}
 }
 
-func (e *EncoderT[T]) Offset(i int) uintptr {
-	return e.enc.Offset(i)
-}
-
-func (e *EncoderT[T]) NewBuffer(sz int) *bytes.Buffer {
-	return e.enc.schema.NewBuffer(sz)
-}
-
-func (e *EncoderT[T]) Encode(val T, buf *bytes.Buffer) ([]byte, error) {
-	return e.enc.Encode(&val, buf)
-}
-
-func (e *EncoderT[T]) EncodePtr(val *T, buf *bytes.Buffer) ([]byte, error) {
-	return e.enc.Encode(val, buf)
-}
-
-func (e *EncoderT[T]) EncodeSlice(slice []T, buf *bytes.Buffer) ([]byte, error) {
-	return e.enc.EncodeSlice(&slice, buf)
-}
-
-func (e *EncoderT[T]) EncodePtrSlice(slice []*T, buf *bytes.Buffer) ([]byte, error) {
-	return e.enc.EncodeSlice(&slice, buf)
+func (e *EncoderT[T]) Close() {
+	e.Encoder.Close()
+	e.Encoder = nil
 }
 
 var encoderPool = sync.Pool{}
@@ -68,6 +63,7 @@ var encoderPool = sync.Pool{}
 type Encoder struct {
 	schema  *schema.Schema
 	layout  *sreflect.Layout
+	buf     *bytes.Buffer
 	opcodes []OpCode
 	nested  map[uint32]*Encoder
 }
@@ -131,10 +127,27 @@ func (e *Encoder) NewBuffer(sz int) *bytes.Buffer {
 }
 
 func (e *Encoder) Encode(val any, buf *bytes.Buffer) ([]byte, error) {
+	// redirect to marshaler when implemented
+	if m, ok := val.(schema.Marshaler); ok {
+		// ensure we have a target buffer
+		if buf == nil {
+			buf = e.useBuffer(1)
+		}
+
+		// use temp writer
+		w := schema.NewWriter(e.schema, buf)
+		defer w.Close()
+		if err := m.MarshalSchema(w); err != nil {
+			return nil, err
+		}
+		w.Next()
+		return buf.Bytes(), nil
+	}
+
 	// validate
 	rval := reflect.Indirect(reflect.ValueOf(val))
 	if rval.Kind() == reflect.Slice {
-		return e.EncodeSlice(val, buf)
+		return e.EncodeBatch(val, buf)
 	}
 
 	// ensure Go type layout is resolved
@@ -149,30 +162,22 @@ func (e *Encoder) Encode(val any, buf *bytes.Buffer) ([]byte, error) {
 
 	// ensure we have a target buffer
 	if buf == nil {
-		buf = e.NewBuffer(1)
+		buf = e.useBuffer(1)
 	}
 
 	// process opcodes
-	base := rval.Addr().UnsafePointer()
-	for op, code := range e.opcodes {
-		if code == OC_SKIP {
-			continue
-		}
-		ptr := unsafe.Add(base, e.layout.Offsets[op])
-		err := e.writeField(buf, code, e.schema.Fields[op], ptr)
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", e.schema.Fields[op].Name, err)
-		}
+	if err := e.encodeSlice(rval.Addr().UnsafePointer(), 1, buf); err != nil {
+		return nil, err
 	}
 	return buf.Bytes(), nil
 }
 
-func (e *Encoder) EncodeSlice(slice any, buf *bytes.Buffer) ([]byte, error) {
+func (e *Encoder) EncodeBatch(src any, buf *bytes.Buffer) ([]byte, error) {
 	// validate value
-	if slice == nil {
+	if src == nil {
 		return nil, schema.ErrNilValue
 	}
-	rslice := reflect.Indirect(reflect.ValueOf(slice))
+	rslice := reflect.Indirect(reflect.ValueOf(src))
 	if !rslice.IsValid() || rslice.Kind() != reflect.Slice {
 		return nil, schema.ErrInvalidValueType
 	}
@@ -180,12 +185,31 @@ func (e *Encoder) EncodeSlice(slice any, buf *bytes.Buffer) ([]byte, error) {
 	// redirect
 	etyp := rslice.Type().Elem()
 	if etyp.Kind() == reflect.Pointer {
-		return e.EncodePtrSlice(slice, buf)
+		return e.encodePtrBatch(src, buf)
+	}
+
+	// return nil when slice is empty
+	if rslice.Len() == 0 {
+		return nil, nil
 	}
 
 	// ensure Go type layout is resolved
-	if err := e.initLayout(slice); err != nil {
+	if err := e.initLayout(src); err != nil {
 		return nil, err
+	}
+
+	// ensure target buffer is allocated
+	if buf == nil {
+		buf = e.useBuffer(rslice.Len())
+	}
+
+	// redirect to marshaler if implemented by elem type
+	if e.layout.Marshaler != nil {
+		err := e.marshalSlice(rslice.UnsafePointer(), rslice.Len(), buf)
+		if err != nil {
+			return nil, err
+		}
+		return buf.Bytes(), nil
 	}
 
 	// ensure the type actually matches our layout
@@ -193,43 +217,47 @@ func (e *Encoder) EncodeSlice(slice any, buf *bytes.Buffer) ([]byte, error) {
 		return nil, fmt.Errorf("encode: type mismatch: expected %s, have %s", e.layout.Type, etyp)
 	}
 
-	// ensure target buffer is allocated
-	if buf == nil {
-		buf = e.NewBuffer(rslice.Len())
-	}
-
-	base := rslice.UnsafePointer()
-	for range rslice.Len() {
-		for op, code := range e.opcodes {
-			if code == OC_SKIP {
-				continue
-			}
-			ptr := unsafe.Add(base, e.layout.Offsets[op])
-			err := e.writeField(buf, code, e.schema.Fields[op], ptr)
-			if err != nil {
-				return nil, fmt.Errorf("%s: %w", e.schema.Fields[op].Name, err)
-			}
-		}
-		base = unsafe.Add(base, e.layout.Size)
+	// process slice elements
+	if err := e.encodeSlice(rslice.UnsafePointer(), rslice.Len(), buf); err != nil {
+		return nil, err
 	}
 	return buf.Bytes(), nil
 }
 
-func (e *Encoder) EncodePtrSlice(slice any, buf *bytes.Buffer) ([]byte, error) {
+func (e *Encoder) encodePtrBatch(src any, buf *bytes.Buffer) ([]byte, error) {
 	// validate
-	if slice == nil {
+	if src == nil {
 		return nil, schema.ErrNilValue
 	}
-	rslice := reflect.Indirect(reflect.ValueOf(slice))
+	rslice := reflect.Indirect(reflect.ValueOf(src))
 	if !rslice.IsValid() ||
 		rslice.Kind() != reflect.Slice ||
 		rslice.Type().Elem().Kind() != reflect.Pointer {
 		return nil, schema.ErrInvalidValueType
 	}
 
+	// return nil when slice is empty
+	if rslice.Len() == 0 {
+		return nil, nil
+	}
+
 	// ensure Go type layout is resolved
-	if err := e.initLayout(slice); err != nil {
+	if err := e.initLayout(src); err != nil {
 		return nil, err
+	}
+
+	// ensure target buffer is allocated
+	if buf == nil {
+		buf = e.useBuffer(rslice.Len())
+	}
+
+	// redirect to marshaler if implemented by elem type
+	if e.layout.Marshaler != nil {
+		err := e.marshalPtrSlice(rslice.UnsafePointer(), rslice.Len(), buf)
+		if err != nil {
+			return nil, err
+		}
+		return buf.Bytes(), nil
 	}
 
 	// ensure the type actually matches our layout
@@ -237,29 +265,59 @@ func (e *Encoder) EncodePtrSlice(slice any, buf *bytes.Buffer) ([]byte, error) {
 		return nil, fmt.Errorf("encode: type mismatch: expected %s, have %s", e.layout.Type, etyp)
 	}
 
-	// ensure target buffer is allocated
-	if buf == nil {
-		buf = e.NewBuffer(rslice.Len())
-	}
-
-	// process slice elementys
-	for i := range rslice.Len() {
-		base := rslice.Index(i).UnsafePointer()
-		for op, code := range e.opcodes {
-			if code == OC_SKIP {
-				continue
-			}
-			ptr := unsafe.Add(base, e.layout.Offsets[op])
-			err := e.writeField(buf, code, e.schema.Fields[op], ptr)
-			if err != nil {
-				return nil, fmt.Errorf("%s: %w", e.schema.Fields[op].Name, err)
-			}
-		}
+	// process slice elements
+	if err := e.encodePtrSlice(rslice.UnsafePointer(), rslice.Len(), buf); err != nil {
+		return nil, err
 	}
 	return buf.Bytes(), nil
 }
 
-func (e *Encoder) encodeNestedSlice(base unsafe.Pointer, baseLen int, buf *bytes.Buffer) error {
+func (e *Encoder) useBuffer(n int) *bytes.Buffer {
+	if e.buf == nil {
+		e.buf = e.NewBuffer(n)
+	}
+	e.buf.Reset()
+	return e.buf
+}
+
+func (e *Encoder) marshalSlice(base unsafe.Pointer, l int, buf *bytes.Buffer) error {
+	var mtyp schema.Marshaler
+	w := schema.NewWriter(e.schema, buf)
+	for range l {
+		*(*iface)(unsafe.Pointer(&mtyp)) = iface{
+			itab: e.layout.Marshaler, // T's interface table
+			data: base,               // ptr to each []T elements
+		}
+		if err := mtyp.MarshalSchema(w); err != nil {
+			return fmt.Errorf("%s: %w", e.layout.Type.Name(), err)
+		}
+		base = unsafe.Add(base, e.layout.Size) // add struct size
+		w.Next()
+	}
+	w.Close()
+	return nil
+}
+
+func (e *Encoder) marshalPtrSlice(base unsafe.Pointer, l int, buf *bytes.Buffer) error {
+	var mtyp schema.Marshaler
+	w := schema.NewWriter(e.schema, buf)
+	for range l {
+		*(*iface)(unsafe.Pointer(&mtyp)) = iface{
+			itab: e.layout.Marshaler,       // T's interface table
+			data: *(*unsafe.Pointer)(base), // deref []*T elements
+		}
+		if err := mtyp.MarshalSchema(w); err != nil {
+			return fmt.Errorf("%s: %w", e.layout.Type.Name(), err)
+		}
+		base = unsafe.Add(base, ptrSize) // add ptr size
+		w.Next()
+	}
+	w.Close()
+	return nil
+}
+
+func (e *Encoder) encodeSlice(base unsafe.Pointer, baseLen int, buf *bytes.Buffer) error {
+	// use opcodes to encode fields
 	for range baseLen {
 		for op, code := range e.opcodes {
 			if code == OC_SKIP {
@@ -272,6 +330,24 @@ func (e *Encoder) encodeNestedSlice(base unsafe.Pointer, baseLen int, buf *bytes
 			}
 		}
 		base = unsafe.Add(base, e.layout.Size)
+	}
+	return nil
+}
+
+func (e *Encoder) encodePtrSlice(base unsafe.Pointer, baseLen int, buf *bytes.Buffer) error {
+	for range baseLen {
+		for op, code := range e.opcodes {
+			if code == OC_SKIP {
+				continue
+			}
+			// deref []*T elements
+			ptr := unsafe.Add(*(*unsafe.Pointer)(base), e.layout.Offsets[op])
+			err := e.writeField(buf, code, e.schema.Fields[op], ptr)
+			if err != nil {
+				return fmt.Errorf("%s: %w", e.schema.Fields[op].Name, err)
+			}
+		}
+		base = unsafe.Add(base, ptrSize) // add ptr size
 	}
 	return nil
 }
@@ -382,23 +458,15 @@ func (e *Encoder) writeField(buf *bytes.Buffer, code OpCode, field *schema.Field
 		// map pointer back to slice type
 		slice := (*sliceType)(ptr)
 
-		// call encoder
-		err = sub.encodeNestedSlice(slice.Data, slice.Len, buf)
+		// check if type implements marshaler
+		if sub.layout.Marshaler != nil {
+			err = sub.marshalSlice(slice.Data, slice.Len, buf)
+		} else {
+			err = sub.encodeSlice(slice.Data, slice.Len, buf)
+		}
 
 		// patch len in bytes
 		*(*uint32)(unsafe.Pointer(&buf.Bytes()[ofs])) = uint32(buf.Len() - ofs - 4)
 	}
 	return
-}
-
-// A Go slice header up until at least Go 1.26 assuming
-// Go's internal representation remains unchanged.
-//
-// This is currently the only way to cast an unsafe.Pointer
-// to a struct field offset back to the slice at this offset
-// because reflect.SliceAt requires data pointer and length.
-type sliceType struct {
-	Data unsafe.Pointer
-	Len  int
-	Cap  int
 }

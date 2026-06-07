@@ -196,7 +196,23 @@ func (v *View) Buffer() []byte {
 func (v *View) Cut(buf []byte) (*View, []byte, bool) {
 	v.Reset(buf)
 	buf = buf[v.Len():]
-	return v, buf, len(buf) > 0
+	return v, buf, v.IsValid()
+}
+
+// All returns a sequence that visits all records in a buffer. The sequence
+// yields the same view instance initialized to the next record in turn.
+func (v *View) All(buf []byte) iter.Seq2[int, *View] {
+	return func(yield func(int, *View) bool) {
+		var i int
+		for len(buf) > v.minsz {
+			v.Reset(buf)
+			buf = buf[v.Len():]
+			if !yield(i, v) {
+				return
+			}
+			i++
+		}
+	}
 }
 
 // Count returns the number of records encoded in a given buffer.

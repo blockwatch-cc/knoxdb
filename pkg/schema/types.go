@@ -44,7 +44,8 @@ const (
 	Map
 
 	// TODO: new types
-	Any
+	// Duration
+	// Union
 )
 
 const (
@@ -83,13 +84,13 @@ var (
 		Decimal128: 16,
 		Decimal64:  8,
 		Decimal32:  4,
-		Bigint:     1, // stored as var bytes with 1 byte size
+		Bigint:     1, // 1 byte size + var bytes
 		Date:       8, // i64
 		Time:       8, // i64
-		Text:       4, // minimum uint32 for size
-		Binary:     4, // minimum uint32 for size
-		List:       4, // minimum uint32 for size
-		Map:        4, // minimum uint32 for size
+		Text:       4, // 4 byte size
+		Binary:     4, // 4 byte size
+		List:       4, // 4 byte size
+		Map:        4, // 4 byte size
 	}
 )
 

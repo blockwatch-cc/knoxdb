@@ -57,7 +57,7 @@ type Sniffer struct {
 	n        int                 // max samples (-1: read entire file)
 	res      SnifferResult       // result
 	buf      []byte              // reusable scan buffer
-	cnt      map[uint32][2]int   // separator min/max counts
+	cnt      map[uint32]*[2]int  // separator min/max counts
 	head     []string            // header/field names (if present)
 	fields   []field             // detected field properties
 	userTime string              // user-defined time format (optional)
@@ -76,9 +76,9 @@ func NewSniffer(r io.Reader, n int) *Sniffer {
 	}
 
 	// init separator counting
-	counts := make(map[uint32][2]int)
+	counts := make(map[uint32]*[2]int)
 	for _, v := range delims {
-		counts[uint32(v)] = [2]int{1<<32 - 1, 0}
+		counts[uint32(v)] = &[2]int{1<<32 - 1, 0}
 	}
 
 	return &Sniffer{
@@ -815,7 +815,6 @@ func (s *Sniffer) sampleRandom(rs io.ReadSeeker) error {
 				cnt := s.cnt[uint32(r)]
 				cnt[0] = min(cnt[0], n)
 				cnt[1] = max(cnt[1], n)
-				s.cnt[uint32(r)] = cnt
 			}
 		}
 
@@ -861,7 +860,6 @@ func (s *Sniffer) sampleRandom(rs io.ReadSeeker) error {
 					cnt := s.cnt[uint32(r)]
 					cnt[0] = min(cnt[0], n)
 					cnt[1] = max(cnt[1], n)
-					s.cnt[uint32(r)] = cnt
 				}
 			}
 		}
@@ -886,7 +884,6 @@ func (s *Sniffer) sampleLinear() error {
 					cnt := s.cnt[uint32(r)]
 					cnt[0] = min(cnt[0], n)
 					cnt[1] = max(cnt[1], n)
-					s.cnt[uint32(r)] = cnt
 				}
 			}
 		}

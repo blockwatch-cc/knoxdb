@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
+	"unsafe"
 
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
@@ -26,10 +27,12 @@ func LookupLayout(typ reflect.Type) (*Layout, bool) {
 // with the structure of Schema/Fields and meant for use by
 // encoders and decoders.
 type Layout struct {
-	Type     reflect.Type       // reference to type for reflect.MakeSlice
-	Offsets  []uintptr          // struct field offsets
-	Size     uintptr            // in-memory size of this type with padding
-	Children map[uint32]*Layout // nested types by field id (uint32 is more efficient)
+	Type        reflect.Type       // reference to type for reflect.MakeSlice
+	Offsets     []uintptr          // struct field offsets
+	Size        uintptr            // in-memory size of this type with padding
+	Children    map[uint32]*Layout // nested types by field id (uint32 is more efficient)
+	Marshaler   unsafe.Pointer     // ptr to type itab
+	Unmarshaler unsafe.Pointer     // ptr to type itab
 }
 
 func LayoutOf(m any, s *schema.Schema) (*Layout, error) {
@@ -74,11 +77,23 @@ func inferStructLayout(typ reflect.Type, s *schema.Schema, tag string) (*Layout,
 		Offsets: make([]uintptr, len(s.Fields)),
 	}
 
+	// check if the type implements marshalers
+	if typ.Implements(marshalerType) || typ.Implements(unmarshalerType) {
+		val := reflect.New(typ)
+		if ival, ok := val.Elem().Interface().(schema.Marshaler); ok {
+			layout.Marshaler = (*iface)(unsafe.Pointer(&ival)).itab
+		}
+		if ival, ok := val.Interface().(schema.Unmarshaler); ok {
+			layout.Unmarshaler = (*iface)(unsafe.Pointer(&ival)).itab
+		}
+	}
+
 	var (
 		r   int
 		lvl = s.Fields[0].Level
 	)
 
+inferLoop:
 	for i, f := range s.Fields {
 		// next top-level schema field
 		if f.Level != lvl {
@@ -97,6 +112,9 @@ func inferStructLayout(typ reflect.Type, s *schema.Schema, tag string) (*Layout,
 		// skip private and empty reflect fields
 		for !sf.IsExported() || sf.Tag.Get(tag) == "-" || sf.Type == emptyType {
 			r++
+			if r == typ.NumField() {
+				break inferLoop
+			}
 			sf = typ.Field(r)
 		}
 
@@ -129,6 +147,16 @@ func inferStructLayout(typ reflect.Type, s *schema.Schema, tag string) (*Layout,
 	return layout, nil
 }
 
+var (
+	marshalerType   = reflect.TypeFor[schema.Marshaler]()
+	unmarshalerType = reflect.TypeFor[schema.Unmarshaler]()
+)
+
+type iface struct {
+	itab unsafe.Pointer // Pointer to interface table (type + method pointers)
+	data unsafe.Pointer // Pointer to the concrete value
+}
+
 func inferLayout(typ reflect.Type, s *schema.Schema, tag string) (*Layout, error) {
 	if typ.Kind() == reflect.Struct && len(s.Fields) > 1 {
 		return inferStructLayout(typ, s, tag)
@@ -145,6 +173,17 @@ func inferLayout(typ reflect.Type, s *schema.Schema, tag string) (*Layout, error
 
 	if typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
+	}
+
+	// check if the type implements marshalers
+	if typ.Implements(marshalerType) || typ.Implements(unmarshalerType) {
+		val := reflect.New(typ)
+		if ival, ok := val.Elem().Interface().(schema.Marshaler); ok {
+			layout.Marshaler = (*iface)(unsafe.Pointer(&ival)).itab
+		}
+		if ival, ok := val.Interface().(schema.Unmarshaler); ok {
+			layout.Unmarshaler = (*iface)(unsafe.Pointer(&ival)).itab
+		}
 	}
 
 	// recurse on slice and map types
