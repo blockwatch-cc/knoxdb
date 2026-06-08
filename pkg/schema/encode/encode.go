@@ -145,9 +145,12 @@ func (e *Encoder) Encode(val any, buf *bytes.Buffer) ([]byte, error) {
 	}
 
 	// validate
-	rval := reflect.Indirect(reflect.ValueOf(val))
+	rval := reflect.ValueOf(val)
 	if rval.Kind() == reflect.Slice {
 		return e.EncodeBatch(val, buf)
+	}
+	if rval.Kind() != reflect.Pointer {
+		return nil, fmt.Errorf("encode: expected pointer type, have %s", rval.Type())
 	}
 
 	// ensure Go type layout is resolved
@@ -156,7 +159,7 @@ func (e *Encoder) Encode(val any, buf *bytes.Buffer) ([]byte, error) {
 	}
 
 	// ensure the type actually matches our layout
-	if rval.Type() != e.layout.Type {
+	if rval.Elem().Type() != e.layout.Type {
 		return nil, fmt.Errorf("encode: type mismatch: expected %s, have %s", e.layout.Type, rval.Type())
 	}
 
@@ -166,7 +169,7 @@ func (e *Encoder) Encode(val any, buf *bytes.Buffer) ([]byte, error) {
 	}
 
 	// process opcodes
-	if err := e.encodeSlice(rval.Addr().UnsafePointer(), 1, buf); err != nil {
+	if err := e.encodeSlice(rval.UnsafePointer(), 1, buf); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil

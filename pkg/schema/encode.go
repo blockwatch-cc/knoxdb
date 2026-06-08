@@ -8,12 +8,21 @@ import (
 	"io"
 	"math"
 	"math/big"
+	"sync"
 	"time"
+	"unsafe"
 
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/schema/enum"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
+
+var scratchBufferPool = sync.Pool{
+	New: func() any {
+		var buf [32]byte
+		return &buf[0]
+	},
+}
 
 // WriteValue serializes the value of an individual field to wire format.
 // It is used in queries and for metadata index nodes. WriteValue accepts
@@ -30,34 +39,38 @@ func (f *Field) WriteValue(w io.Writer, val any, layout binary.ByteOrder) (err e
 	// init error, will be overwritten by write branches below
 	err = ErrInvalidValueType
 
-	var buf [32]byte
+	// get scratch buffer
+	buf := unsafe.Slice(scratchBufferPool.Get().(*byte), 32)[:32]
 
 	switch f.Type {
 	case Timestamp, Time, Date:
 		switch tv := val.(type) {
+		case *time.Time:
+			layout.PutUint64(buf, uint64(TimeScale(f.Scale).ToUnix(*tv)))
+			_, err = w.Write(buf[:8])
 		case time.Time:
-			layout.PutUint64(buf[:], uint64(TimeScale(f.Scale).ToUnix(tv)))
+			layout.PutUint64(buf, uint64(TimeScale(f.Scale).ToUnix(tv)))
 			_, err = w.Write(buf[:8])
 		case int64:
-			layout.PutUint64(buf[:], uint64(tv))
+			layout.PutUint64(buf, uint64(tv))
 			_, err = w.Write(buf[:8])
 		}
 
 	case Int64:
 		if v, ok := val.(int64); ok {
-			layout.PutUint64(buf[:], uint64(v))
+			layout.PutUint64(buf, uint64(v))
 			_, err = w.Write(buf[:8])
 		}
 
 	case Int32:
 		if v, ok := val.(int32); ok {
-			layout.PutUint32(buf[:], uint32(v))
+			layout.PutUint32(buf, uint32(v))
 			_, err = w.Write(buf[:4])
 		}
 
 	case Int16:
 		if v, ok := val.(int16); ok {
-			layout.PutUint16(buf[:], uint16(v))
+			layout.PutUint16(buf, uint16(v))
 			_, err = w.Write(buf[:2])
 		}
 
@@ -69,27 +82,27 @@ func (f *Field) WriteValue(w io.Writer, val any, layout binary.ByteOrder) (err e
 
 	case Uint64:
 		if v, ok := val.(uint64); ok {
-			layout.PutUint64(buf[:], v)
+			layout.PutUint64(buf, v)
 			_, err = w.Write(buf[:8])
 		}
 
 	case Uint32:
 		if v, ok := val.(uint32); ok {
-			layout.PutUint32(buf[:], v)
+			layout.PutUint32(buf, v)
 			_, err = w.Write(buf[:4])
 		}
 
 	case Uint16:
 		switch v := val.(type) {
 		case uint16:
-			layout.PutUint16(buf[:], v)
+			layout.PutUint16(buf, v)
 			_, err = w.Write(buf[:2])
 		case string:
 			if f.IsEnum() {
 				if f.Enum != nil {
 					val, ok := f.Enum.Code(v)
 					if ok {
-						layout.PutUint16(buf[:], val)
+						layout.PutUint16(buf, val)
 						_, err = w.Write(buf[:2])
 					} else {
 						err = enum.ErrEnumNoCode
@@ -108,13 +121,13 @@ func (f *Field) WriteValue(w io.Writer, val any, layout binary.ByteOrder) (err e
 
 	case Float64:
 		if v, ok := val.(float64); ok {
-			layout.PutUint64(buf[:], math.Float64bits(v))
+			layout.PutUint64(buf, math.Float64bits(v))
 			_, err = w.Write(buf[:8])
 		}
 
 	case Float32:
 		if v, ok := val.(float32); ok {
-			layout.PutUint32(buf[:], math.Float32bits(v))
+			layout.PutUint32(buf, math.Float32bits(v))
 			_, err = w.Write(buf[:4])
 		}
 
@@ -165,6 +178,7 @@ func (f *Field) WriteValue(w io.Writer, val any, layout binary.ByteOrder) (err e
 		}
 
 	case Text, Binary, List, Map:
+		// 4 byte len
 		var (
 			bval []byte
 			ok   = true
@@ -177,10 +191,9 @@ func (f *Field) WriteValue(w io.Writer, val any, layout binary.ByteOrder) (err e
 		default:
 			ok = false
 		}
-		// 4 byte len
 		if ok {
 			l := len(bval)
-			layout.PutUint32(buf[:], uint32(l))
+			layout.PutUint32(buf, uint32(l))
 			_, err = w.Write(buf[:4])
 			if err == nil {
 				_, err = w.Write(bval)
@@ -216,20 +229,20 @@ func (f *Field) WriteValue(w io.Writer, val any, layout binary.ByteOrder) (err e
 	case Decimal64:
 		switch v := val.(type) {
 		case num.Decimal64:
-			layout.PutUint64(buf[:], uint64(v.Int64()))
+			layout.PutUint64(buf, uint64(v.Int64()))
 			_, err = w.Write(buf[:8])
 		case int64:
-			layout.PutUint64(buf[:], uint64(v))
+			layout.PutUint64(buf, uint64(v))
 			_, err = w.Write(buf[:8])
 		}
 
 	case Decimal32:
 		switch v := val.(type) {
 		case num.Decimal32:
-			layout.PutUint32(buf[:], uint32(v.Int32()))
+			layout.PutUint32(buf, uint32(v.Int32()))
 			_, err = w.Write(buf[:4])
 		case int32:
-			layout.PutUint32(buf[:], uint32(v))
+			layout.PutUint32(buf, uint32(v))
 			_, err = w.Write(buf[:4])
 		}
 
@@ -264,8 +277,9 @@ func (f *Field) WriteValue(w io.Writer, val any, layout binary.ByteOrder) (err e
 	default:
 		err = ErrInvalidField
 	}
-	return
 
+	scratchBufferPool.Put(&buf[0])
+	return
 }
 
 // ReadValue reads and decodes an individual typed value from wire format.
@@ -274,17 +288,13 @@ func (f *Field) WriteValue(w io.Writer, val any, layout binary.ByteOrder) (err e
 // as byte slices []byte with the original array length to avoid reflect calls.
 func (f *Field) ReadValue(r io.Reader, layout binary.ByteOrder) (val any, err error) {
 	var (
-		buf [32]byte
+		buf = unsafe.Slice(scratchBufferPool.Get().(*byte), 32)[:32]
 		n   int
 	)
 	switch f.Type {
-	case Timestamp, Time:
+	case Timestamp, Time, Date:
 		_, err = r.Read(buf[:8])
-		val = time.Unix(0, int64(layout.Uint64(buf[:8]))).UTC()
-
-	case Date:
-		_, err = r.Read(buf[:8])
-		val = FromUnixDays(int64(layout.Uint64(buf[:8])))
+		val = TimeScale(f.Scale).FromUnix(int64(layout.Uint64(buf[:8])))
 
 	case Int64:
 		_, err = r.Read(buf[:8])
@@ -348,7 +358,7 @@ func (f *Field) ReadValue(r io.Reader, layout binary.ByteOrder) (val any, err er
 			if n < int(f.Scale) {
 				return nil, ErrShortBuffer
 			}
-			val = string(b[:n])
+			val = util.UnsafeGetString(b[:n])
 		} else {
 			_, err = r.Read(buf[:1])
 			if err != nil {
@@ -356,7 +366,7 @@ func (f *Field) ReadValue(r io.Reader, layout binary.ByteOrder) (val any, err er
 			}
 			b := make([]byte, int(buf[0]))
 			n, err = r.Read(b)
-			val = string(b[:n])
+			val = util.UnsafeGetString(b[:n])
 		}
 
 	case Text:
@@ -367,7 +377,7 @@ func (f *Field) ReadValue(r io.Reader, layout binary.ByteOrder) (val any, err er
 		u32 := layout.Uint32(buf[:4])
 		b := make([]byte, int(u32))
 		n, err = r.Read(b)
-		val = string(b[:n])
+		val = util.UnsafeGetString(b[:n])
 
 	case Bytes:
 		if f.IsArray() {
@@ -439,5 +449,7 @@ func (f *Field) ReadValue(r io.Reader, layout binary.ByteOrder) (val any, err er
 	default:
 		err = ErrInvalidField
 	}
+
+	scratchBufferPool.Put(&buf[0])
 	return
 }

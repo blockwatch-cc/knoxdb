@@ -19,41 +19,47 @@ import (
 type MyEnum string
 
 type AllTypes struct {
-	Id          uint64          `knox:"id,pk"`
-	Int64       int64           `knox:"i64,null"`
-	Int32       int32           `knox:"i32"`
-	Int16       int16           `knox:"i16"`
-	Int8        int8            `knox:"i8"`
-	Uint64      uint64          `knox:"u64"`
-	Uint32      uint32          `knox:"u32"`
-	Uint16      uint16          `knox:"u16"`
-	Uint8       uint8           `knox:"u8"`
-	Float64     float64         `knox:"f64"`
-	Float32     float32         `knox:"f32"`
-	D32         num.Decimal32   `knox:"d32,scale=5"`
-	D64         num.Decimal64   `knox:"d64,scale=15"`
-	D128        num.Decimal128  `knox:"d128,scale=18"`
-	D256        num.Decimal256  `knox:"d256,scale=24"`
-	I128        num.Int128      `knox:"i128"`
-	I256        num.Int256      `knox:"i256"`
-	Bool        bool            `knox:"bool"`
-	Timestamp   time.Time       `knox:"timestamp,timebase"`
-	Time        time.Time       `knox:"time,time"`
-	Date        time.Time       `knox:"date,date"`
-	Bytes       []byte          `knox:"bytes"`
-	BArray      [2]byte         `knox:"array[2]"`
-	String      string          `knox:"string"`
-	SArray      string          `knox:"s_array,array=3"`
-	MyEnum      MyEnum          `knox:"my_enum,enum"`
-	Big         num.Big         `knox:"big"`
-	Text        string          `knox:"text,text"`
-	Blob        []byte          `knox:"blob,blob"`
-	U64List     []uint64        `knox:"u64_list"`
-	TimeList    []time.Time     `knox:"time_list,element=date"`
-	PairList    []Pair          `knox:"pair_list"`
-	ByteList    [][]byte        `knox:"byte_list,notnull"`
-	ArrList     [][2]byte       `knox:"arr_list,notnull"`
-	DecimalList []num.Decimal32 `knox:"dec_list,notnull,element=scale=4"`
+	Id          uint64                   `knox:"id,pk"`
+	Int64       int64                    `knox:"i64,null"`
+	Int32       int32                    `knox:"i32"`
+	Int16       int16                    `knox:"i16"`
+	Int8        int8                     `knox:"i8"`
+	Uint64      uint64                   `knox:"u64"`
+	Uint32      uint32                   `knox:"u32"`
+	Uint16      uint16                   `knox:"u16"`
+	Uint8       uint8                    `knox:"u8"`
+	Float64     float64                  `knox:"f64"`
+	Float32     float32                  `knox:"f32"`
+	D32         num.Decimal32            `knox:"d32,scale=5"`
+	D64         num.Decimal64            `knox:"d64,scale=15"`
+	D128        num.Decimal128           `knox:"d128,scale=18"`
+	D256        num.Decimal256           `knox:"d256,scale=24"`
+	I128        num.Int128               `knox:"i128"`
+	I256        num.Int256               `knox:"i256"`
+	Bool        bool                     `knox:"bool"`
+	Timestamp   time.Time                `knox:"timestamp,timebase"`
+	Time        time.Time                `knox:"time,time"`
+	Date        time.Time                `knox:"date,date"`
+	Bytes       []byte                   `knox:"bytes"`
+	BArray      [2]byte                  `knox:"array[2]"`
+	String      string                   `knox:"string"`
+	SArray      string                   `knox:"s_array,array=3"`
+	MyEnum      MyEnum                   `knox:"my_enum,enum"`
+	Big         num.Big                  `knox:"big"`
+	Text        string                   `knox:"text,text"`
+	Blob        []byte                   `knox:"blob,blob"`
+	U64List     []uint64                 `knox:"u64_list"`
+	TimeList    []time.Time              `knox:"time_list,element=date"`
+	PairList    []Pair                   `knox:"pair_list"`
+	ByteList    [][]byte                 `knox:"byte_list,notnull"`
+	ArrList     [][2]byte                `knox:"arr_list,notnull"`
+	DecimalList []num.Decimal32          `knox:"dec_list,notnull,element=scale=4"`
+	U64Map      map[uint64]uint64        `knox:"u64_map"`
+	DateMap     map[uint32]time.Time     `knox:"date_map,value=date"`
+	PairMap     map[string]Pair          `knox:"pair_map"`
+	ByteMap     map[string][]byte        `knox:"byte_map,notnull,value=notnull"`
+	ArrMap      map[string][2]byte       `knox:"arr_map,notnull"`
+	DecimalMap  map[string]num.Decimal32 `knox:"dec_map,notnull,value=scale=4"`
 }
 
 type Pair struct {
@@ -105,6 +111,12 @@ func TestFieldStructReadBasic(t *testing.T) {
 		{"byte_list", schema.List, 0, 0},
 		{"arr_list", schema.List, 0, 0},
 		{"dec_list", schema.List, 0, 0},
+		{"u64_map", schema.Map, schema.FlagNullable, 0},
+		{"date_map", schema.Map, schema.FlagNullable, 0},
+		{"pair_map", schema.Map, schema.FlagNullable, 0},
+		{"byte_map", schema.Map, 0, 0},
+		{"arr_map", schema.Map, 0, 0},
+		{"dec_map", schema.Map, 0, 0},
 	}
 	for i, tt := range tests {
 		sf := allTypeOf.Field(i)
@@ -276,7 +288,7 @@ func (s *InvalidStringer) UnmarshalText(b []byte) error {
 	return nil
 }
 
-func TestFieldStructEmbedding(t *testing.T) {
+func TestBadStructEmbeds(t *testing.T) {
 	_, err := SchemaFor[BadEmbeddedStruct]()
 	assert.Error(t, err)
 	_, err = SchemaFor[BadEmbeddedStructPtr]()
@@ -287,4 +299,21 @@ func TestFieldStructEmbedding(t *testing.T) {
 	assert.Error(t, err)
 	_, err = SchemaFor[MarshalerTypes]()
 	assert.Error(t, err)
+}
+
+type MapFun struct {
+	MapInList []map[[2]byte]Pair          `knox:"map_in_list,notnull,element=notnull"`
+	ListInMap map[[2]byte][]Pair          `knox:"list_in_map,notnull,value=notnull"`
+	MapInMap  map[[2]byte]map[string]Pair `knox:"map_in_map,notnull,value=notnull"`
+	TimeMap   map[time.Time]uint64        `knox:"time_map,notnull,key=date"`
+}
+
+func TestFunnyEmbeds(t *testing.T) {
+	s, err := SchemaFor[MapFun]()
+	assert.NoError(t, err)
+	t.Log(s)
+	l, err := LayoutFor[MapFun]()
+	assert.NoError(t, err)
+	_ = l
+	// spew.Dump(l)
 }

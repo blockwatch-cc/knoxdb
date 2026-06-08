@@ -12,11 +12,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var enums *enum.EnumRegistry
+var (
+	enums  *enum.EnumRegistry
+	myEnum *enum.EnumDictionary
+)
 
 func TestMain(m *testing.M) {
 	// prepare enum
-	myEnum := enum.NewEnumDictionary("my_enum")
+	myEnum = enum.NewEnumDictionary("my_enum")
 	myEnum.Append("a", "b", "c", "d", "e")
 
 	// create test registry and add enum to registry

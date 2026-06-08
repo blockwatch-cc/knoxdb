@@ -248,21 +248,21 @@ func BenchmarkWriterList(b *testing.B) {
 			w.Reset()
 			w.WriteInt64(base.Int64a)
 			// []uint64
-			lw, _ := w.WriteList()
+			lw, _ := w.ListWriter()
 			lw.WriteUint64(base.U64List[0])
 			lw.Next()
 			lw.WriteUint64(base.U64List[1])
 			lw.Close()
 
 			// []time
-			lw, _ = w.WriteList()
+			lw, _ = w.ListWriter()
 			lw.WriteDate(base.TimeList[0])
 			lw.Next()
 			lw.WriteDate(base.TimeList[1])
 			lw.Close()
 
 			// []Pair
-			lw, _ = w.WriteList()
+			lw, _ = w.ListWriter()
 			lw.WriteInt64(base.PairList[0].Key)
 			lw.WriteInt64(base.PairList[0].Val)
 			lw.Next()
@@ -271,21 +271,21 @@ func BenchmarkWriterList(b *testing.B) {
 			lw.Close()
 
 			// [][]byte
-			lw, _ = w.WriteList()
+			lw, _ = w.ListWriter()
 			lw.WriteBytes(base.ByteList[0])
 			lw.Next()
 			lw.WriteBytes(base.ByteList[1])
 			lw.Close()
 
 			// [][2]byte
-			lw, _ = w.WriteList()
+			lw, _ = w.ListWriter()
 			lw.WriteBytes(base.ArrList[0][:])
 			lw.Next()
 			lw.WriteBytes(base.ArrList[1][:])
 			lw.Close()
 
 			// []Decimal32
-			lw, _ = w.WriteList()
+			lw, _ = w.ListWriter()
 			lw.WriteDecimal32(base.DecimalList[0])
 			lw.Next()
 			lw.WriteDecimal32(base.DecimalList[1])
@@ -294,6 +294,42 @@ func BenchmarkWriterList(b *testing.B) {
 			lw.Close()
 
 			w.WriteInt64(base.Int64b)
+		}
+	})
+}
+
+func BenchmarkWriterMap(b *testing.B) {
+	prim, err := reflect.SchemaFor[PrimMapRecord]()
+	require.NoError(b, err)
+
+	base := NewPrimMapRecord()
+	attr := NewAttrMapRecord()
+
+	b.Run("prim", func(b *testing.B) {
+		w := schema.NewWriter(prim, prim.NewBuffer(1))
+		b.ReportAllocs()
+		for b.Loop() {
+			w.Reset()
+			schema.WriteMap(w, base.U64)
+		}
+	})
+
+	b.Run("time", func(b *testing.B) {
+		w := schema.NewWriter(prim, prim.NewBuffer(1))
+		b.ReportAllocs()
+		for b.Loop() {
+			w.Reset()
+			w.Skip(5)
+			schema.WriteTimeMap(w, base.Times)
+		}
+	})
+
+	b.Run("attr", func(b *testing.B) {
+		w := schema.NewWriter(AttrMapRecordSchema, AttrMapRecordSchema.NewBuffer(1))
+		b.ReportAllocs()
+		for b.Loop() {
+			w.Reset()
+			schema.MarshalMap(w, attr.Attrs)
 		}
 	})
 }

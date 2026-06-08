@@ -444,7 +444,7 @@ func BenchmarkEncodeListMarshal(b *testing.B) {
 	enc := NewEncoderWithLayout(LogRecordSchema, l)
 	for _, n := range encodeBenchmarkSizes {
 		b.Run(n.name, func(b *testing.B) {
-			slice := makeNestedAttrData(n.num)
+			slice := makeLogRecords(n.num)
 			buf := enc.NewBuffer(n.num)
 			res, err := enc.EncodeBatch(slice, buf)
 			require.NoError(b, err)
@@ -488,7 +488,7 @@ func BenchmarkDecodeListMarshal(b *testing.B) {
 	enc := NewEncoderWithLayout(LogRecordSchema, l)
 	dec := NewDecoderWithLayout(LogRecordSchema, l)
 	for _, n := range encodeBenchmarkSizes {
-		slice := makeNestedAttrData(n.num)
+		slice := makeLogRecords(n.num)
 		buf, err := enc.EncodeBatch(slice, nil)
 		require.NoError(b, err)
 		dst := make([]LogRecord, n.num)

@@ -44,7 +44,7 @@ const (
 	OC_TEXT                    // 0x1C 28
 	OC_BLOB                    // 0x1D 29
 	OC_LIST                    // 0x1E 30
-	OC_MAP                     // 0x1F 31
+	OC_MAP                     // 0x1F 31 (unused)
 )
 
 var (
@@ -95,7 +95,7 @@ var (
 		schema.Text:       OC_TEXT,
 		schema.Binary:     OC_BLOB,
 		schema.List:       OC_LIST,
-		schema.Map:        OC_MAP,
+		schema.Map:        OC_MAP, // unsupported, throws error
 	}
 )
 

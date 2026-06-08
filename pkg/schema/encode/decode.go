@@ -172,15 +172,15 @@ func (d *Decoder) Decode(buf []byte, val any) error {
 		return err
 	}
 
-	rval := reflect.Indirect(reflect.ValueOf(val))
+	rval := reflect.ValueOf(val)
 
 	// ensure the type actually matches our layout
-	if rval.Type() != d.layout.Type {
+	if rval.Elem().Type() != d.layout.Type {
 		return fmt.Errorf("decode: type mismatch: expected %s, have %s", d.layout.Type, rval.Type())
 	}
 
 	// decode single object
-	_, err := d.decodePtr(buf, rval.Addr().UnsafePointer())
+	_, err := d.decodePtr(buf, rval.UnsafePointer())
 	return err
 }
 
@@ -233,15 +233,20 @@ func (d *Decoder) decodeSlice(base unsafe.Pointer, baseLen int, buf []byte) (int
 		n   int
 		err error
 	)
-	for range baseLen {
-		buf, err = d.decodePtr(buf, base)
-		if err != nil {
-			return n, err
+	for len(buf) > 0 && n < baseLen {
+		// decoePtr code intentionally duplicated because it does not
+		// get inlined
+		for op, code := range d.opcodes {
+			if code == OC_SKIP {
+				continue
+			}
+			ptr := unsafe.Add(base, d.layout.Offsets[op])
+			buf, err = d.readField(code, d.schema.Fields[op], ptr, buf)
+			if err != nil {
+				return n, fmt.Errorf("field[%s]: %w", d.schema.Fields[op].Name, err)
+			}
 		}
 		n++
-		if len(buf) == 0 {
-			break
-		}
 		base = unsafe.Add(base, d.layout.Size)
 	}
 	return n, nil
@@ -396,7 +401,7 @@ func (d *Decoder) readField(code OpCode, field *schema.Field, ptr unsafe.Pointer
 		l := *(*uint32)(unsafe.Pointer(&buf[0]))
 		buf = buf[4:]
 		if l > 0 {
-			// use sub-encoder for schema
+			// use sub-decoder for schema
 			sub, ok := d.nested[uint32(field.Id)]
 			if !ok {
 				layout := d.layout.Children[uint32(field.Id)]

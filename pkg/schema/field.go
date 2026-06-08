@@ -30,7 +30,6 @@ var (
 )
 
 type Field struct {
-	// core schema values
 	Name     string               // field name
 	Id       uint16               // unique lifetime id
 	ParentId uint16               // reference to parent field id (nested fields only)
@@ -167,12 +166,12 @@ func (f *Field) TypeName() (typ string) {
 			typ += f.Child.Fields[0].Child.Name
 		}
 		typ += ","
-		if f.Child.Fields[1].Child == nil {
+		if len(f.Child.Fields) == 2 {
 			// primitive value type
 			typ += f.Child.Fields[1].TypeName()
 		} else {
 			// complex value type
-			typ += f.Child.Fields[1].Child.Name
+			typ += ValueName
 		}
 		typ += "]"
 	}
@@ -210,17 +209,36 @@ func ParseFieldFromTypename(typ string) (*Field, error) {
 		typstr, subtypstr, ok := strings.Cut(typ, "[")
 		if ok {
 			ty := ParseFieldType(typstr)
-			if !ty.IsValid() {
+			if !ty.IsValid() || (ty != List && ty != Map) {
 				return nil, fmt.Errorf("invalid field type: %s", typ)
 			}
 			subtypstr = strings.TrimSuffix(subtypstr, "]")
-			sub, err := ParseFieldFromTypename(subtypstr)
-			if err != nil {
-				return nil, fmt.Errorf("invalid %s type: %s", ty, typ)
+			if ty == List {
+				sub, err := ParseFieldFromTypename(subtypstr)
+				if err != nil {
+					return nil, fmt.Errorf("invalid %s type: %s", ty, typ)
+				}
+				typ = typstr
+				sub.Name = ElementName
+				child = SchemaOf([]*Field{sub}).Finalize()
+			} else {
+				key, val, ok := strings.Cut(subtypstr, ",")
+				if !ok {
+					return nil, fmt.Errorf("invalid %s type: %s", ty, typ)
+				}
+				keyT, err := ParseFieldFromTypename(key)
+				if err != nil {
+					return nil, fmt.Errorf("invalid %s key type %s: %v", ty, key, err)
+				}
+				valT, err := ParseFieldFromTypename(val)
+				if err != nil {
+					return nil, fmt.Errorf("invalid %s value type %s: %v", ty, val, err)
+				}
+				typ = typstr
+				keyT.Name = KeyName
+				valT.Name = ValueName
+				child = SchemaOf([]*Field{keyT, valT}).Finalize()
 			}
-			typ = typstr
-			sub.Name = ElementName
-			child = SchemaOf([]*Field{sub}).Finalize()
 		}
 	default:
 		// primitive types only
@@ -345,10 +363,9 @@ func (f *Field) Validate(withNested ...bool) error {
 		return fmt.Errorf("field[%s]: invalid primary key type %s", f.Name, f.Type)
 	}
 
-	// require nested schema for LIST type
-	if f.Type == List && len(withNested) > 0 && withNested[0] {
-		// TODO: validate level
-
+	// check nested types only if requested
+	if len(withNested) > 0 && withNested[0] && (f.Type == List || f.Type == Map) {
+		// require nested schema for LIST and MAP type
 		if f.Child == nil {
 			return fmt.Errorf("field[%s]: missing %s child schema", f.Name, f.Type)
 		}
@@ -357,12 +374,42 @@ func (f *Field) Validate(withNested ...bool) error {
 		}
 		id := f.Id
 		for _, c := range f.Child.Fields {
+			// child field must have shared prefix
 			if !strings.HasPrefix(c.Name, f.Name) {
 				return fmt.Errorf("field[%s]: invalid child name %s", f.Name, c.Name)
 			}
+			// child field must have consecutive ids
 			id++
 			if c.Id != id {
 				return fmt.Errorf("field[%s]: invalid child %s id %d (want %d)", f.Name, c.Name, c.Id, id)
+			}
+			// child field must have higher level
+			if c.Level <= f.Level {
+				return fmt.Errorf("field[%s]: invalid child %s level %d (want > %d)", f.Name, c.Name, c.Level, f.Level)
+			}
+		}
+
+		// special checks for map fields
+		// - must contain at least two child fields (key + value)
+		// - first (key) field must short primitive
+		//   (not allowed: Bytes, Binary, Text, List, Map)
+		// - key type must not have nullable flag
+		// - may contain more than one value field of any type including List, Map
+		if f.Type == Map {
+			if len(f.Child.Fields) < 2 {
+				return fmt.Errorf("field[%s]: map needs at least two child fields", f.Name)
+			}
+			switch f.Child.Fields[0].Type {
+			case Binary, Text, List, Map:
+				return fmt.Errorf("field[%s]: invalid map key type %s", f.Name, f.Child.Fields[0].TypeName())
+			case Bytes:
+				// must be array
+				if !f.Child.Fields[0].IsArray() {
+					return fmt.Errorf("field[%s]: invalid map key type %s", f.Name, f.Child.Fields[0].TypeName())
+				}
+			}
+			if f.Child.Fields[0].IsNullable() {
+				return fmt.Errorf("field[%s]: map key must not be nullable", f.Name)
 			}
 		}
 	}

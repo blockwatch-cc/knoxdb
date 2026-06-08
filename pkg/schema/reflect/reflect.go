@@ -17,6 +17,8 @@ import (
 // - anon struct embedding is disabled for low relevance
 // - marshaler interfaces are too expensive for encoding (interface checks)
 // - keep Go type/reflect and memory layout info out of main schema
+// - Go hash maps are too expensive to walk (reflect and range make copies)
+//   and almost impossible to walk from unsafe.Pointer struct fields
 
 const TAG_NAME = "knox"
 
@@ -237,14 +239,22 @@ func StructTypeOf(s *schema.Schema, prefix ...string) reflect.Type {
 		if f.Type == schema.List {
 			if len(f.Child.Fields) == 1 {
 				if ctag := makeTag(f.Child.Fields[0]); ctag != "" {
-					tag += ",element=" + ctag
+					tag += "," + schema.ElementName + "=" + ctag
 				}
 			}
 		}
 
-		// TODO: recurse into maps and add key/val element tag info
-		// if f.Type == schema.Map {
-		// }
+		// recurse into maps and add key/val element tag info
+		if f.Type == schema.Map {
+			if ctag := makeTag(f.Child.Fields[0]); ctag != "" {
+				tag += "," + schema.KeyName + "=" + ctag
+			}
+			if len(f.Child.Fields) == 2 {
+				if ctag := makeTag(f.Child.Fields[1]); ctag != "" {
+					tag += "," + schema.ValueName + "=" + ctag
+				}
+			}
+		}
 
 		// close struct tag
 		tag += `"`
@@ -290,8 +300,11 @@ func makeTag(f *schema.Field) string {
 	}
 
 	// slices are nullable by default, so check for notnull
-	if f.Flags&schema.FlagNullable == 0 && f.Type == schema.List {
-		tag += ",notnull"
+	switch f.Type {
+	case schema.List, schema.Map, schema.Bytes, schema.Binary:
+		if f.Flags&schema.FlagNullable == 0 {
+			tag += ",notnull"
+		}
 	}
 
 	// compression
@@ -315,6 +328,21 @@ func TypeOf(f *schema.Field) reflect.Type {
 		} else {
 			return reflect.SliceOf(StructTypeOf(f.Child, f.Name+"."+schema.ElementName+"."))
 		}
+	}
+	if f.Type == schema.Map {
+		keyT := TypeOf(f.Child.Fields[0])
+		var valT reflect.Type
+		if len(f.Child.Fields) == 2 {
+			valT = TypeOf(f.Child.Fields[1])
+		} else {
+			valS := &schema.Schema{
+				Name:    f.Child.Name,
+				Version: f.Child.Version,
+				Fields:  f.Child.Fields[1:],
+			}
+			valT = StructTypeOf(valS, f.Name+"."+schema.ValueName+".")
+		}
+		return reflect.MapOf(keyT, valT)
 	}
 	return reflect.TypeOf(f.Type.Zero())
 }

@@ -50,6 +50,11 @@ func WithViewMeta(b ...bool) ViewOption {
 // each record before access. Deleted fields and metadata fields are not part
 // of encoded records, so View accessors return false.
 //
+// Generic accessors like Get(), GetPhy() and Set() perform type and bounds
+// checks and can convert byte order. On failure these accessors return nil.
+// Type-based accessors like Uint64() in contrast panic on failed type checks
+// and are not portable due to direct memory access in native byte order.
+//
 // Via options it is possible to change the default encoding layout (little
 // endian) and tell a view that data was encoded including metadata fields.
 // Use generic accessor methods Get/GetPhy or optimized typed accessirs
@@ -556,125 +561,185 @@ func (v *View) Set(i int, val any) bool {
 	return false
 }
 
-// Uint64 returns a native endian u64 at schema index i.
-// It panics if i is out of range, the type at position i
-// is not a uint64 or the field is hidden. This method is
-// fast due to direct memory access by is not portable.
+// Uint64 is a fast non-portable accessor to uint64 values.
+// It panics on type mismatch or out-of-bounds access.
 func (v *View) Uint64(i int) uint64 {
 	return *(*uint64)(v.getCheckedPtr(i, Uint64))
 }
 
+// Uint32 is a fast non-portable accessor to uint32 values.
+// It panics on type mismatch or out-of-bounds access.
 func (v *View) Uint32(i int) uint32 {
 	return *(*uint32)(v.getCheckedPtr(i, Uint32))
 }
 
+// Uint16 is a fast non-portable accessor to uint16 values.
+// It panics on type mismatch or out-of-bounds access.
 func (v *View) Uint16(i int) uint16 {
 	return *(*uint16)(v.getCheckedPtr(i, Uint16))
 }
 
+// Uint8 is a fast non-portable accessor to uint8 values.
+// It panics on type mismatch or out-of-bounds access.
 func (v *View) Uint8(i int) uint8 {
 	return *(*uint8)(v.getCheckedPtr(i, Uint8))
 }
 
+// Int64 is a fast non-portable accessor to int64 values.
+// It panics on type mismatch or out-of-bounds access.
 func (v *View) Int64(i int) int64 {
 	return *(*int64)(v.getCheckedPtr(i, Int64))
 }
 
+// Int32 is a fast non-portable accessor to int32 values.
+// It panics on type mismatch or out-of-bounds access.
 func (v *View) Int32(i int) int32 {
 	return *(*int32)(v.getCheckedPtr(i, Int32))
 }
 
+// Int16 is a fast non-portable accessor to int16 values.
+// It panics on type mismatch or out-of-bounds access.
 func (v *View) Int16(i int) int16 {
 	return *(*int16)(v.getCheckedPtr(i, Int16))
 }
 
+// Int8 is a fast non-portable accessor to int8 values.
+// It panics on type mismatch or out-of-bounds access.
 func (v *View) Int8(i int) int8 {
 	return *(*int8)(v.getCheckedPtr(i, Int8))
 }
 
+// Float64 is a fast non-portable accessor to float64 values.
+// It panics on type mismatch or out-of-bounds access.
 func (v *View) Float64(i int) float64 {
 	return *(*float64)(v.getCheckedPtr(i, Float64))
 }
 
+// Float32 is a fast non-portable accessor to float32 values.
+// It panics on type mismatch or out-of-bounds access.
 func (v *View) Float32(i int) float32 {
 	return *(*float32)(v.getCheckedPtr(i, Float32))
 }
 
+// Int256 is a fast non-portable accessor to int256 values.
+// It panics on type mismatch or out-of-bounds access.
 func (v *View) Int256(i int) num.Int256 {
 	return num.Int256(*(*[4]uint64)(v.getCheckedPtr(i, Int256)))
 }
 
+// Int128 is a fast non-portable accessor to int128 values.
+// It panics on type mismatch or out-of-bounds access.
 func (v *View) Int128(i int) num.Int128 {
 	return num.Int128(*(*[2]uint64)(v.getCheckedPtr(i, Int128)))
 }
 
+// Decimal256 is a fast non-portable accessor to decimal256 values.
+// It panics on type mismatch or out-of-bounds access.
 func (v *View) Decimal256(i int) num.Decimal256 {
 	return num.NewDecimal256(num.Int256(*(*[4]uint64)(
 		v.getCheckedPtr(i, Decimal256))), v.scales[i])
 }
 
+// Decimal128 is a fast non-portable accessor to decimal128 values.
+// It panics on type mismatch or out-of-bounds access.
 func (v *View) Decimal128(i int) num.Decimal128 {
 	return num.NewDecimal128(num.Int128(*(*[2]uint64)(
 		v.getCheckedPtr(i, Decimal128))), v.scales[i])
 }
 
+// Decimal64 is a fast non-portable accessor to decimal64 values.
+// It panics on type mismatch or out-of-bounds access.
 func (v *View) Decimal64(i int) num.Decimal64 {
 	return num.NewDecimal64(*(*int64)(v.getCheckedPtr(i, Decimal64)), v.scales[i])
 }
 
+// Decimal32 is a fast non-portable accessor to decimal32 values.
+// It panics on type mismatch or out-of-bounds access.
 func (v *View) Decimal32(i int) num.Decimal32 {
 	return num.NewDecimal32(*(*int32)(v.getCheckedPtr(i, Decimal32)), v.scales[i])
 }
 
+// Bool is a fast non-portable accessor to boolean values.
+// It panics on type mismatch or out-of-bounds access.
 func (v *View) Bool(i int) bool {
 	return *(*byte)(v.getCheckedPtr(i, Boolean)) == 1
 }
 
+// Enum is a fast non-portable accessor to enum values. It
+// decodes enums from uint16 and returns their string value.
+// It panics on type mismatch or out-of-bounds access.
 func (v *View) Enum(i int) string {
 	val, _ := v.schema.Fields[i].Enum.Value(*(*uint16)(v.getCheckedPtr(i, Uint16)))
 	return val
 }
 
+// Timestamp is a fast non-portable accessor to timestamp values.
+// It panics on type mismatch or out-of-bounds access.
 func (v *View) Timestamp(i int) time.Time {
 	p := v.getCheckedPtr(i, Timestamp)
 	return TimeScale(v.scales[i]).FromUnix(*(*int64)(p))
 }
 
+// Time is a fast non-portable accessor to time of day values.
+// It panics on type mismatch or out-of-bounds access.
 func (v *View) Time(i int) time.Time {
 	p := v.getCheckedPtr(i, Time)
 	return TimeScale(v.scales[i]).FromUnix(*(*int64)(p))
 }
 
+// Date is a fast non-portable accessor to date values.
+// It panics on type mismatch or out-of-bounds access.
 func (v *View) Date(i int) time.Time {
 	p := v.getCheckedPtr(i, Date)
 	return TimeScale(v.scales[i]).FromUnix(*(*int64)(p))
 }
 
+// String is a fast non-portable accessor to short string values and arrays.
+// It panics on type mismatch or out-of-bounds access.
 func (v *View) String(i int) string {
 	return unsafe.String((*byte)(v.getCheckedPtr(i, String)), v.len[i])
 }
 
+// Text is a fast non-portable accessor to long string values.
+// It panics on type mismatch or out-of-bounds access.
 func (v *View) Text(i int) string {
 	return unsafe.String((*byte)(v.getCheckedPtr(i, Text)), v.len[i])
 }
 
+// Bytes is a fast non-portable accessor to short byte values and arrays.
+// It panics on type mismatch or out-of-bounds access.
 func (v *View) Bytes(i int) []byte {
 	return unsafe.Slice((*byte)(v.getCheckedPtr(i, Bytes)), v.len[i])
 }
 
+// Binary is a fast non-portable accessor to long binary values.
+// It panics on type mismatch or out-of-bounds access.
 func (v *View) Binary(i int) []byte {
 	return unsafe.Slice((*byte)(v.getCheckedPtr(i, Bytes)), v.len[i])
 }
 
+// Bigint is a fast non-portable accessor to bigint values.
+// It panics on type mismatch or out-of-bounds access.
 func (v *View) Bigint(i int) num.Big {
 	return num.NewBigFromBytes(unsafe.Slice((*byte)(v.getCheckedPtr(i, Bigint)), v.len[i]))
 }
 
-// List returns an iterator for a list field at position i. Will
-// panic on type mismatch or when i is out of range.
+// List returns an iterator for a list field at position i.
+// It panics on type mismatch or when i is out of range.
 func (v *View) List(i int) iter.Seq2[int, *View] {
 	p := v.getCheckedPtr(i, List)
+	return v.makeIter(i, p)
+}
 
+// Map returns an iterator for a map field at position i.
+// It panics on type mismatch or when i is out of range. The first
+// index (0) on the returned view accesses the map's key.
+func (v *View) Map(i int) iter.Seq2[int, *View] {
+	p := v.getCheckedPtr(i, Map)
+	return v.makeIter(i, p)
+}
+
+func (v *View) makeIter(i int, p unsafe.Pointer) iter.Seq2[int, *View] {
 	// find the i-th field at the current nesting level; we don't store
 	// field pointers and skip nested fields, so we need this extra lookup
 	// to find the list field and access its child schema

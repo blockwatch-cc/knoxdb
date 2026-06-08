@@ -122,7 +122,7 @@ inferLoop:
 		layout.Offsets[i] = sf.Offset
 		r++
 
-		// recurse on slice and map types
+		// recurse on slice and map types (note map keys are primitive types only)
 		if f.Child != nil {
 			// unwrap pointer
 			t := sf.Type
@@ -130,7 +130,18 @@ inferLoop:
 				t = t.Elem()
 			}
 
-			child, err := inferLayout(t.Elem(), f.Child, tag)
+			// trim map key field from schema
+			childSchema := f.Child
+			if f.Type == schema.Map {
+				childSchema = &schema.Schema{
+					Name:    f.Child.Name,
+					Version: f.Child.Version,
+					Fields:  f.Child.Fields[1:],
+				}
+			}
+
+			// recurse into slice element or map value type
+			child, err := inferLayout(t.Elem(), childSchema, tag)
 			if err != nil {
 				return nil, err
 			}
@@ -187,8 +198,19 @@ func inferLayout(typ reflect.Type, s *schema.Schema, tag string) (*Layout, error
 	}
 
 	// recurse on slice and map types
-	if f.Type == schema.List && f.Child != nil {
-		child, err := inferLayout(typ.Elem(), f.Child, tag)
+	if f.Child != nil {
+		// trim map key field from schema
+		childSchema := f.Child
+		if f.Type == schema.Map {
+			childSchema = &schema.Schema{
+				Name:    f.Child.Name,
+				Version: f.Child.Version,
+				Fields:  f.Child.Fields[1:],
+			}
+		}
+
+		// recurse into slice element or map value type
+		child, err := inferLayout(typ.Elem(), childSchema, tag)
 		if err != nil {
 			return nil, err
 		}

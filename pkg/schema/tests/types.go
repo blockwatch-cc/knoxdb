@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"blockwatch.cc/knoxdb/pkg/num"
+	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/schema/enum"
 )
 
@@ -385,5 +386,113 @@ func NewListInStructInListFields() ListInStructInListFields {
 			}},
 		},
 		Int64b: 42,
+	}
+}
+
+type MapFields struct {
+	Int64a     int64
+	U64Map     map[uint64]uint64        `knox:"u64_map"`
+	DateMap    map[uint32]time.Time     `knox:"date_map,value=date"`
+	PairMap    map[string]Pair          `knox:"pair_map"`
+	ByteMap    map[string][]byte        `knox:"byte_map,notnull,value=notnull"`
+	ArrMap     map[string][2]byte       `knox:"arr_map,notnull"`
+	DecimalMap map[string]num.Decimal32 `knox:"dec_map,notnull,value=scale=4"`
+	Int64b     int64
+}
+
+func NewMapFields() MapFields {
+	return MapFields{
+		Int64a: 1,
+		U64Map: map[uint64]uint64{2: 2, 3: 3},
+		DateMap: map[uint32]time.Time{
+			1: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+			2: time.Date(2026, 4, 4, 0, 0, 0, 0, time.UTC),
+		},
+		PairMap: map[string]Pair{
+			"a": {Key: 1, Val: 2},
+			"b": {Key: 3, Val: 4},
+		},
+		ByteMap: map[string][]byte{
+			"one": binary.BigEndian.AppendUint64(nil, 23),
+			"two": binary.BigEndian.AppendUint64(nil, 42),
+		},
+		ArrMap: map[string][2]byte{
+			"one": {1, 2},
+			"two": {3, 4},
+		},
+		DecimalMap: map[string]num.Decimal32{
+			"usd": num.NewDecimal32(1000, 4),
+			"eur": num.NewDecimal32(2000, 4),
+			"jpy": num.NewDecimal32(3000, 4),
+		},
+		Int64b: 42,
+	}
+}
+
+type PrimMapRecord struct {
+	U64     map[uint64]uint64
+	Bools   map[uint64]bool
+	Strings map[string]string
+	Bigs    map[string]num.Big
+	Dates   map[string]time.Time
+	Times   map[time.Time]uint32
+}
+
+func (r PrimMapRecord) MarshalSchema(w *schema.Writer) error {
+	if err := schema.WriteMap(w, r.U64); err != nil {
+		return err
+	}
+	if err := schema.WriteMap(w, r.Bools); err != nil {
+		return err
+	}
+	if err := schema.WriteMap(w, r.Strings); err != nil {
+		return err
+	}
+	if err := schema.WriteMap(w, r.Bigs); err != nil {
+		return err
+	}
+	if err := schema.WriteMap(w, r.Dates); err != nil {
+		return err
+	}
+	if err := schema.WriteTimeMap(w, r.Times); err != nil {
+		return err
+	}
+	return nil
+}
+
+func NewPrimMapRecord() PrimMapRecord {
+	return PrimMapRecord{
+		U64:     map[uint64]uint64{1: 1, 2: 2},
+		Bools:   map[uint64]bool{1: true, 2: false},
+		Strings: map[string]string{"a": "b", "c": "d"},
+		Bigs:    map[string]num.Big{"a": num.NewBig(1), "b": num.NewBig(2)},
+		Dates:   map[string]time.Time{"now": time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)},
+		Times: map[time.Time]uint32{
+			time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC): 42,
+		},
+	}
+}
+
+type AttrMapRecord struct {
+	Attrs map[string]schema.Attr
+}
+
+func (r AttrMapRecord) MarshalSchema(w *schema.Writer) error {
+	return schema.MarshalMap(w, r.Attrs)
+}
+
+var AttrMapRecordSchema = schema.SchemaOf([]*schema.Field{
+	schema.MapFor(schema.String, schema.AttrSchema, schema.WithName("attrs")),
+})
+
+func NewAttrMapRecord() AttrMapRecord {
+	return AttrMapRecord{
+		Attrs: map[string]schema.Attr{
+			"a": schema.Int64Attr("i64", 1),
+			"b": schema.Int32Attr("i32", 2),
+			"c": schema.BoolAttr("bool", true),
+			"d": schema.TimestampAttr("ts", time.Now().UTC()),
+			"e": schema.Uint16Attr("u16", 3),
+		},
 	}
 }

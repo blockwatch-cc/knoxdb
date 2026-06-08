@@ -66,6 +66,12 @@ func SchemaOf(fields []*Field, opts ...Option) *Schema {
 // options will produce valid fields for schemas and indexes. See
 // options documentation for details.
 func FieldOf(typ FieldType, opts ...FieldOption) *Field {
+	switch typ {
+	case Date:
+		opts = append(opts, WithScale(TIME_SCALE_DAY))
+	case Bytes, Binary:
+		opts = append([]FieldOption{WithNullable()}, opts...)
+	}
 	return NewField(typ, opts...)
 }
 
@@ -79,7 +85,7 @@ func EnumOf(e *enum.EnumDictionary, opts ...FieldOption) *Field {
 
 // ArrayOf creates a new fixed length string or byte array.
 func ArrayOf(typ FieldType, n int, opts ...FieldOption) *Field {
-	return NewField(typ, append([]FieldOption{WithArray(n)}, opts...)...)
+	return FieldOf(typ, append([]FieldOption{WithArray(n), WithNullable(false)}, opts...)...)
 }
 
 // ListOf creates a new list (slice) of a primitive type. Options
@@ -87,13 +93,12 @@ func ArrayOf(typ FieldType, n int, opts ...FieldOption) *Field {
 // use ListFor with a pre-built schema.
 func ListOf(typ FieldType, opts ...FieldOption) *Field {
 	// prepare child type
-	child := NewField(typ, WithNullable(typ == Bytes || typ == Binary))
+	child := FieldOf(typ, WithNullable(typ == Bytes || typ == Binary))
 
 	// use dummy to extract field name from options
 	dummy := NewField(typ, opts...)
-	name := dummy.Name
-	if name != "" {
-		child.Name = name + "." + ElementName
+	if dummy.Name != "" {
+		child.Name = dummy.Name + "." + ElementName
 	} else {
 		child.Name = ElementName
 	}
@@ -145,18 +150,26 @@ func IndexOf(base *Schema, typ IndexType, opts ...IndexOption) *IndexSchema {
 }
 
 func MapOf(keyT, valT FieldType, opts ...FieldOption) *Field {
+	// peek field name
 	dummy := NewField(String, opts...)
 	if dummy.Name == "" {
 		dummy.Name = EntriesName
 	}
-	fKey := FieldOf(keyT, WithName(dummy.Name+"."+KeyName))
-	fVal := FieldOf(valT, WithName(dummy.Name+"."+ValueName), WithNullable(valT == Bytes || valT == Binary))
 
+	// create schema
 	s := &Schema{
-		Name:    dummy.Name,
-		Fields:  []*Field{fKey, fVal},
+		Name: dummy.Name,
+		Fields: []*Field{
+			FieldOf(keyT, WithName(dummy.Name+"."+KeyName)),
+			FieldOf(valT,
+				WithName(dummy.Name+"."+ValueName),
+				WithNullable(valT == Bytes || valT == Binary),
+			),
+		},
 		Version: 1,
 	}
+
+	// wrap into map field
 	return NewField(Map, append([]FieldOption{
 		WithChildSchema(s),
 		WithNullable(),
@@ -166,20 +179,41 @@ func MapOf(keyT, valT FieldType, opts ...FieldOption) *Field {
 	)
 }
 
-// TODO: Uups, no struct in struct
-func MapFor(keyT, valT *Schema, opts ...FieldOption) *Field {
-	fKey := FieldOf(0, WithName(KeyName), WithChildSchema(keyT))
-	fVal := FieldOf(0, WithName(ValueName), WithChildSchema(valT), WithNullable())
-
+func MapFor(keyT FieldType, valS *Schema, opts ...FieldOption) *Field {
+	// peek field name
 	dummy := NewField(String, opts...)
 	if dummy.Name == "" {
 		dummy.Name = EntriesName
 	}
-	s := &Schema{
-		Name:    dummy.Name,
-		Fields:  []*Field{fKey, fVal},
-		Version: 1,
+
+	// create map schema which is essentially a list of {key,value} pairs
+	// however, because there is no support for struct-in-struct (yet?),
+	// we allow only a single key field and merge value fields into the
+	// same struct and then use this struct as child schema on a Map field
+	s := SchemaOf(
+		append(
+			[]*Field{FieldOf(keyT, WithName(dummy.Name+"."+KeyName), WithEnum(dummy.Enum))},
+			valS.Fields..., // SchemaOf will clone those fields
+		),
+		Name(dummy.Name),
+		Version(1),
+	)
+
+	// prefix value fields
+	for _, f := range s.Fields[1:] {
+		if f.Name == "" {
+			f.Name = dummy.Name + "." + ValueName
+		} else {
+			f.Name = dummy.Name + "." + ValueName + "." + f.Name
+		}
+		if f.Child != nil {
+			for _, cf := range f.Child.Fields {
+				cf.Name = f.Name + "." + cf.Name
+			}
+		}
 	}
+
+	// wrap into map field
 	return NewField(Map, append([]FieldOption{
 		WithChildSchema(s),
 		WithNullable(),

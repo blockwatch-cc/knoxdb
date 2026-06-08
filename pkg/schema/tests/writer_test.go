@@ -4,6 +4,7 @@
 package schema_tests
 
 import (
+	"encoding/hex"
 	"testing"
 
 	"blockwatch.cc/knoxdb/pkg/schema"
@@ -105,7 +106,7 @@ func TestWriterListL1(t *testing.T) {
 	require.NoError(t, w.WriteInt64(base.Int64a))
 
 	// []uint64
-	lw, err := w.WriteList()
+	lw, err := w.ListWriter()
 	require.NoError(t, err)
 	require.NoError(t, lw.WriteUint64(base.U64List[0]))
 	lw.Next()
@@ -113,7 +114,7 @@ func TestWriterListL1(t *testing.T) {
 	lw.Close()
 
 	// []time
-	lw, err = w.WriteList()
+	lw, err = w.ListWriter()
 	require.NoError(t, err)
 	require.NoError(t, lw.WriteDate(base.TimeList[0]))
 	lw.Next()
@@ -121,7 +122,7 @@ func TestWriterListL1(t *testing.T) {
 	lw.Close()
 
 	// []Pair
-	lw, err = w.WriteList()
+	lw, err = w.ListWriter()
 	require.NoError(t, err)
 	require.NoError(t, lw.WriteInt64(base.PairList[0].Key))
 	require.NoError(t, lw.WriteInt64(base.PairList[0].Val))
@@ -131,7 +132,7 @@ func TestWriterListL1(t *testing.T) {
 	lw.Close()
 
 	// [][]byte
-	lw, err = w.WriteList()
+	lw, err = w.ListWriter()
 	require.NoError(t, err)
 	require.NoError(t, lw.WriteBytes(base.ByteList[0]))
 	lw.Next()
@@ -139,7 +140,7 @@ func TestWriterListL1(t *testing.T) {
 	lw.Close()
 
 	// [][2]byte
-	lw, err = w.WriteList()
+	lw, err = w.ListWriter()
 	require.NoError(t, err)
 	require.NoError(t, lw.WriteBytes(base.ArrList[0][:]))
 	lw.Next()
@@ -147,7 +148,7 @@ func TestWriterListL1(t *testing.T) {
 	lw.Close()
 
 	// []Decimal32
-	lw, err = w.WriteList()
+	lw, err = w.ListWriter()
 	require.NoError(t, err)
 	require.NoError(t, lw.WriteDecimal32(base.DecimalList[0]))
 	lw.Next()
@@ -188,16 +189,16 @@ func TestWriterListL2(t *testing.T) {
 	require.NoError(t, w.WriteInt64(base.Int64a))
 
 	// [][]uint64
-	lw, err := w.WriteList()
+	lw, err := w.ListWriter()
 	require.NoError(t, err)
-	lwi, err := w.WriteList()
+	lwi, err := w.ListWriter()
 	require.NoError(t, err)
 	require.NoError(t, lwi.WriteUint64(base.NestedUints[0][0]))
 	lwi.Next()
 	require.NoError(t, lwi.WriteUint64(base.NestedUints[0][1]))
 	lwi.Close()
 	lw.Next()
-	lwi, err = w.WriteList()
+	lwi, err = w.ListWriter()
 	require.NoError(t, err)
 	require.NoError(t, lwi.WriteUint64(base.NestedUints[1][0]))
 	lwi.Next()
@@ -206,9 +207,9 @@ func TestWriterListL2(t *testing.T) {
 	lw.Close()
 
 	// []Pair
-	lw, err = w.WriteList()
+	lw, err = w.ListWriter()
 	require.NoError(t, err)
-	lwi, err = w.WriteList()
+	lwi, err = w.ListWriter()
 	require.NoError(t, err)
 	require.NoError(t, lwi.WriteInt64(base.NestedPairs[0][0].Key))
 	require.NoError(t, lwi.WriteInt64(base.NestedPairs[0][0].Val))
@@ -217,7 +218,7 @@ func TestWriterListL2(t *testing.T) {
 	require.NoError(t, lw.WriteInt64(base.NestedPairs[0][1].Val))
 	lwi.Close()
 	lw.Next()
-	lwi, err = w.WriteList()
+	lwi, err = w.ListWriter()
 	require.NoError(t, err)
 	require.NoError(t, lwi.WriteInt64(base.NestedPairs[1][0].Key))
 	require.NoError(t, lwi.WriteInt64(base.NestedPairs[1][0].Val))
@@ -259,10 +260,10 @@ func TestWriterListL3(t *testing.T) {
 	require.NoError(t, w.WriteInt64(base.Int64a))
 
 	// []OuterPairStruct
-	lw, err := w.WriteList()
+	lw, err := w.ListWriter()
 	require.NoError(t, err)
 	require.NoError(t, lw.WriteUint32(base.Pairs1[0].Val))
-	lwi, err := w.WriteList()
+	lwi, err := w.ListWriter()
 	require.NoError(t, err)
 	require.NoError(t, lwi.WriteInt64(base.Pairs1[0].Pairs2[0].Key))
 	require.NoError(t, lwi.WriteInt64(base.Pairs1[0].Pairs2[0].Val))
@@ -272,7 +273,7 @@ func TestWriterListL3(t *testing.T) {
 	lwi.Close()
 	lw.Next()
 	require.NoError(t, lw.WriteUint32(base.Pairs1[1].Val))
-	lwi, err = w.WriteList()
+	lwi, err = w.ListWriter()
 	require.NoError(t, err)
 	require.NoError(t, lwi.WriteInt64(base.Pairs1[1].Pairs2[0].Key))
 	require.NoError(t, lwi.WriteInt64(base.Pairs1[1].Pairs2[0].Val))
@@ -347,4 +348,21 @@ func TestWriterSkip(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestWriterMap(t *testing.T) {
+	// primitives
+	s, err := reflect.SchemaFor[PrimMapRecord]()
+	require.NoError(t, err)
+	t.Log(s)
+	base := NewPrimMapRecord()
+	w := schema.NewWriter(s, nil)
+	require.NoError(t, w.Write(base))
+	t.Log(hex.Dump(w.Bytes()))
+
+	// marshaler only
+	attr := NewAttrMapRecord()
+	w = schema.NewWriter(AttrMapRecordSchema, nil)
+	require.NoError(t, w.Write(attr))
+	t.Log(hex.Dump(w.Bytes()))
 }

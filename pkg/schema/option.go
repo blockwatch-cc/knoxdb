@@ -57,7 +57,7 @@ func WithArray[T int | uint8](n T) FieldOption {
 	}
 }
 
-func WithScale[T int | uint8](n T) FieldOption {
+func WithScale[T int | ~uint8](n T) FieldOption {
 	return func(f *Field) {
 		f.Flags &^= FlagArray
 		f.Scale = uint8(n)

@@ -40,9 +40,11 @@ var (
 )
 
 type builder struct {
-	tag    string
-	schema *schema.Schema
-	prefix string
+	tag            string
+	schema         *schema.Schema
+	prefix         string
+	allowStruct    bool
+	disallowNested bool
 }
 
 func newBuilder(typ reflect.Type, tag string) *builder {
@@ -133,136 +135,37 @@ func (b *builder) inferStructField(structField reflect.StructField) (*schema.Fie
 }
 
 func (b *builder) inferFieldType(f *schema.Field, t reflect.Type) error {
+	// unwrap pointer and mark type nullable
 	if t.Kind() == reflect.Pointer {
 		f.Flags |= schema.FlagNullable
 		t = t.Elem()
 	}
 
+	// force check for []byte here to preempt misdetection as slice
 	if t == typeOfByteSlice {
 		f.Type = schema.Bytes
 		f.Flags = schema.FlagNullable
 		return nil
 	}
 
+	// handle different Go type kinds
 	switch t.Kind() {
 	case reflect.Array:
-		return inferArrayFieldType(f, t)
-
+		return b.inferArrayFieldType(f, t)
 	case reflect.Slice:
-		// parse as LIST type
-		// - if t.Elem is a supported primitive or array
-		// - if t.Elem is a nested list type (add intermediate list schema)
-		// - if t.Elem is a struct type (read full nested schema)
-		if f.Type == schema.List {
-			// when the incoming type is already a list, add nested list
-			child := &schema.Field{
-				Id:    b.nextId(),
-				Name:  f.Name,
-				Type:  schema.List,
-				Flags: schema.FlagNullable,
-			}
-			// fmt.Printf("List-in-List %s > id=%d\n", f.Name, child.Id)
-
-			// add simple schema for primitive type
-			f.Child = &schema.Schema{
-				Name:    f.Name,
-				Fields:  []*schema.Field{child},
-				Version: b.schema.Version,
-			}
-			f.Child.Finalize()
-
-			// add it to the schema list
-			b.schema.Fields = append(b.schema.Fields, child)
-
-			f = child
-		} else {
-			// set detected type
-			f.Type = schema.List
-			f.Flags = schema.FlagNullable
-		}
-
-		// fill a new field (use list type to detect recursive nested
-		// lists during downstream calls)
-		child := &schema.Field{
-			Id:   b.nextId(),
-			Name: f.Name + "." + schema.ElementName,
-			Type: schema.List,
-		}
-
-		// extend field name prefix for nesting and restore once we
-		// leave this recursion level
-		prefix := b.prefix
-		b.prefix = child.Name + "."
-		defer func() {
-			b.prefix = prefix
-		}()
-		// fmt.Printf("List %s > child=%s id=%d\n", f.Name, child.Name, child.Id)
-
-		// infer the lists element type (this may add more nested fields
-		// and assign proper ids through builder)
-		if err := b.inferFieldType(child, t.Elem()); err != nil {
-			return fmt.Errorf("go slice type %v: %w", t, err)
-		}
-
-		// when a nested child was added this means we either processed
-		// a nested list or a nested struct, in both cases lift the child
-		// and link all embedded fields as children even if they are not
-		// from the next nesting level but deeper
-		if child.Child != nil {
-			// use a nested schema produced by a struct; in this case
-			// all nested child fields have already been added to the
-			// top-level builder schema during nested inference and
-			// all fields have proper ids assigned
-			f.Child = child.Child
-
-			// link from the current list nesting level to all nested
-			// child fields (doing this recursively bubbles nested field
-			// references across all levels up to the top-most list type)
-			for _, cf := range f.Child.Fields {
-				if cf.Child == nil {
-					continue
-				}
-				f.Child.Fields = append(f.Child.Fields, cf.Child.Fields...)
-			}
-
-		} else {
-			// use a simple primitive type which the inference algo
-			// placed into the child field directly (without extra
-			// child.Child schema)
-
-			// add the nested type to the top-level builder schema;
-			// for primitive types this is not done recursively so
-			// we need to do this here
-			b.schema.Fields = append(b.schema.Fields, child)
-
-			// to capture the nesting relation add a simple one-field
-			// schema for the primitive type to the current field
-			f.Child = &schema.Schema{
-				Version: b.schema.Version,
-				Fields:  []*schema.Field{child},
-			}
-		}
-
-		// finalize to re-calculate nested schema hashes and sizes
-		f.Child.Finalize()
-		return nil
-
+		return b.inferListFieldType(f, t)
 	case reflect.Map:
-		// TODO: map type
-		return fmt.Errorf("go map type %v: %w", t, schema.ErrUnsupportedType)
-
+		return b.inferMapFieldType(f, t)
 	case reflect.Struct:
-		// accepts supported structs (time.Time, num.DecimalX, num.Big)
-		// but rejects struct field in struct fields unless a struct
-		// appears as child of a LIST or MAP type
 		return b.inferStructFieldType(f, t)
-
 	default:
-		return inferPrimitiveFieldType(f, t)
+		return b.inferPrimitiveFieldType(f, t)
 	}
 }
 
-func inferArrayFieldType(f *schema.Field, t reflect.Type) error {
+// inferArrayFieldType accepts supported arrays (Int128, Int256, [N]byte)
+// and rejects all other array types
+func (b *builder) inferArrayFieldType(f *schema.Field, t reflect.Type) error {
 	switch t {
 	case typeOfInt256:
 		f.Type = schema.Int256
@@ -283,6 +186,9 @@ func inferArrayFieldType(f *schema.Field, t reflect.Type) error {
 	return nil
 }
 
+// inferStructFieldType accepts supported structs (time.Time, num.DecimalX,
+// num.Big) but rejects struct field in struct fields unless a struct
+// appears as child of a LIST or MAP type
 func (b *builder) inferStructFieldType(f *schema.Field, t reflect.Type) error {
 	switch t {
 	case typeOfTime:
@@ -303,7 +209,7 @@ func (b *builder) inferStructFieldType(f *schema.Field, t reflect.Type) error {
 	case typeOfBigInt:
 		f.Type = schema.Bigint
 	default:
-		if f.Type == schema.List {
+		if b.allowStruct {
 			// allow nested struct in lists and maps
 			s, err := b.inferStruct(t)
 			if err != nil {
@@ -321,7 +227,245 @@ func (b *builder) inferStructFieldType(f *schema.Field, t reflect.Type) error {
 	return nil
 }
 
-func inferPrimitiveFieldType(f *schema.Field, t reflect.Type) error {
+func (b *builder) inferListFieldType(f *schema.Field, t reflect.Type) error {
+	// reject when the incoming type is a MAP key
+	if b.disallowNested {
+		return fmt.Errorf("invalid type %s", t)
+	}
+
+	// parse as LIST type
+	// - if t.Elem is a supported primitive or array
+	// - if t.Elem is a nested list type (add intermediate list schema)
+	// - if t.Elem is a struct type (read full nested schema)
+	if f.Type == schema.List || f.Type == schema.Map {
+		// when the incoming type is a list or map, add as nested list
+		child := &schema.Field{
+			Id:    b.nextId(),
+			Name:  f.Name,
+			Type:  schema.List,
+			Flags: schema.FlagNullable,
+		}
+		// fmt.Printf("List-in-List %s > id=%d\n", f.Name, child.Id)
+
+		// add simple schema for primitive type
+		f.Child = &schema.Schema{
+			Name:    f.Name,
+			Fields:  []*schema.Field{child},
+			Version: b.schema.Version,
+		}
+		f.Child.Finalize()
+
+		// add it to the schema list
+		b.schema.Fields = append(b.schema.Fields, child)
+
+		f = child
+	} else {
+		// set detected type
+		f.Type = schema.List
+		f.Flags = schema.FlagNullable
+	}
+
+	// fill a new field (use list type to detect recursive nested
+	// lists during downstream calls)
+	child := &schema.Field{
+		Id:   b.nextId(),
+		Name: f.Name + "." + schema.ElementName,
+		Type: schema.List,
+	}
+
+	// extend field name prefix for nesting and restore once we
+	// leave this recursion level
+	prefix := b.prefix
+	b.prefix = child.Name + "."
+	defer func() {
+		b.prefix = prefix
+	}()
+	// fmt.Printf("List %s > child=%s id=%d\n", f.Name, child.Name, child.Id)
+
+	// infer the lists element type (this may add more nested fields
+	// and assign proper ids through builder)
+	b.allowStruct = true
+	if err := b.inferFieldType(child, t.Elem()); err != nil {
+		return fmt.Errorf("go slice type %v: %w", t, err)
+	}
+	b.allowStruct = false
+
+	// when a nested child was added this means we either processed
+	// a nested list or a nested struct, in both cases lift the child
+	// and link all embedded fields as children even if they are not
+	// from the next nesting level but deeper
+	if child.Child != nil {
+		// if child.Type == schema.List || child.Type == schema.Map {
+		// 	fmt.Printf("List elem is nested %s %s\n", child.Type, child.Child)
+		// } else {
+		// 	fmt.Printf("List elem is %s %s\n", child.Type, child.Child)
+		// }
+
+		// use a nested schema produced by a struct; in this case
+		// all nested child fields have already been added to the
+		// top-level builder schema during nested inference and
+		// all fields have proper ids assigned
+		f.Child = child.Child
+
+		// link from the current list nesting level to all nested
+		// child fields (doing this recursively bubbles nested field
+		// references across all levels up to the top-most list type)
+		for _, cf := range f.Child.Fields {
+			if cf.Child == nil {
+				continue
+			}
+			f.Child.Fields = append(f.Child.Fields, cf.Child.Fields...)
+		}
+
+	} else {
+		// use a simple primitive type which the inference algo
+		// placed into the child field directly (without extra
+		// child.Child schema)
+
+		// add the nested type to the top-level builder schema;
+		// for primitive types this is not done recursively so
+		// we need to do this here
+		b.schema.Fields = append(b.schema.Fields, child)
+
+		// to capture the nesting relation add a simple one-field
+		// schema for the primitive type to the current field
+		f.Child = &schema.Schema{
+			Version: b.schema.Version,
+			Fields:  []*schema.Field{child},
+		}
+	}
+
+	// finalize to re-calculate nested schema hashes and sizes
+	f.Child.Finalize()
+	return nil
+}
+
+func (b *builder) inferMapFieldType(f *schema.Field, t reflect.Type) error {
+	// reject when the incoming type is a MAP key
+	if b.disallowNested {
+		return fmt.Errorf("invalid type %s", t)
+	}
+
+	if f.Type == schema.List || f.Type == schema.Map {
+		// when the incoming type is a list or map, add as nested map
+		child := &schema.Field{
+			Id:    b.nextId(),
+			Name:  f.Name,
+			Type:  schema.Map,
+			Flags: schema.FlagNullable,
+		}
+		// fmt.Printf("Map-in-Map %s > id=%d\n", f.Name, child.Id)
+
+		// add simple schema for primitive type
+		f.Child = &schema.Schema{
+			Name:    f.Name,
+			Fields:  []*schema.Field{child},
+			Version: b.schema.Version,
+		}
+		f.Child.Finalize()
+
+		// add it to the schema list
+		b.schema.Fields = append(b.schema.Fields, child)
+
+		f = child
+	} else {
+		// set detected type
+		f.Type = schema.Map
+		f.Flags = schema.FlagNullable
+	}
+
+	// infer map key type (must be primitive)
+
+	// prepare the key type field (use map type to reject nested types on key)
+	keyT := &schema.Field{
+		Id:   b.nextId(),
+		Name: f.Name + "." + schema.KeyName,
+		Type: schema.Map,
+	}
+	// fmt.Printf("Map key %s > child=%s id=%d\n", f.Name, keyT.Name, keyT.Id)
+
+	// infer the map key type (must be primitive)
+	b.disallowNested = true
+	if err := b.inferFieldType(keyT, t.Key()); err != nil {
+		return fmt.Errorf("go map type %v: %w", t, err)
+	}
+	b.disallowNested = false
+
+	// fmt.Printf("Map key is %s\n", keyT.TypeName())
+
+	// add the key type to the top-level builder schema
+	b.schema.Fields = append(b.schema.Fields, keyT)
+
+	// prepare the map type's child schema, start with adding key type
+	f.Child = &schema.Schema{
+		Name:    schema.EntriesName,
+		Version: b.schema.Version,
+		Fields:  []*schema.Field{keyT},
+	}
+
+	// infer map value type (may be primitive or nested)
+
+	// prepare the map value type field (leave type empty to allow any)
+	valT := &schema.Field{
+		Id:   b.nextId(),
+		Name: f.Name + "." + schema.ValueName,
+		Type: schema.Map,
+	}
+
+	// update field name prefix for nesting and restore on return
+	prefix := b.prefix
+	b.prefix = valT.Name + "."
+	defer func() {
+		b.prefix = prefix
+	}()
+
+	// infer the map value type
+	b.allowStruct = true
+	if err := b.inferFieldType(valT, t.Elem()); err != nil {
+		return fmt.Errorf("go map type %v: %w", t, err)
+	}
+	b.allowStruct = false
+
+	// merge value inference result into map child type
+	if valT.Child != nil {
+		// if valT.Type == schema.List || valT.Type == schema.Map {
+		// 	fmt.Printf("Map val is nested %s %s\n", valT.Type, valT.Child)
+		// } else {
+		// 	fmt.Printf("Map val is %s %s\n", valT.Type, valT.Child)
+		// }
+
+		// for struct or nested types extract the detected
+		// child schema fields from valT and append to map schema
+		f.Child.Fields = append(f.Child.Fields, valT.Child.Fields...)
+
+		// link from the current nesting level to all nested
+		// child fields (doing this recursively bubbles nested field
+		// references across all levels up to the top-most map type)
+		for _, cf := range f.Child.Fields {
+			if cf.Child == nil {
+				continue
+			}
+			f.Child.Fields = append(f.Child.Fields, cf.Child.Fields...)
+		}
+
+	} else {
+		// fmt.Printf("Map val is %s\n", valT.TypeName())
+
+		// for primitive types, use the valT field directly, note
+		// it has not been appended to the top-level builder schema
+		// yet, so let's do that first
+		b.schema.Fields = append(b.schema.Fields, valT)
+
+		// append to map child schema
+		f.Child.Fields = append(f.Child.Fields, valT)
+	}
+
+	// finalize map child
+	f.Child.Finalize()
+	return nil
+}
+
+func (b *builder) inferPrimitiveFieldType(f *schema.Field, t reflect.Type) error {
 	switch t {
 	case typeOfInt64:
 		f.Type = schema.Int64
@@ -348,12 +492,12 @@ func inferPrimitiveFieldType(f *schema.Field, t reflect.Type) error {
 	case typeOfBool:
 		f.Type = schema.Boolean
 	default:
-		return inferPrimitiveFieldTypeAlias(f, t)
+		return b.inferPrimitiveFieldTypeAlias(f, t)
 	}
 	return nil
 }
 
-func inferPrimitiveFieldTypeAlias(f *schema.Field, t reflect.Type) error {
+func (b *builder) inferPrimitiveFieldTypeAlias(f *schema.Field, t reflect.Type) error {
 	switch t.Kind() {
 	case reflect.Int64:
 		f.Type = schema.Int64

@@ -32,7 +32,8 @@ func TestMain(m *testing.M) {
 
 type schemaTest struct {
 	name    string
-	build   func(...schema.Option) (*schema.Schema, error)
+	infer   func(...schema.Option) (*schema.Schema, error)
+	build   func(...schema.Option) *schema.Schema
 	fields  string
 	typs    []schema.FieldType
 	flags   []schema.FieldFlags
@@ -70,8 +71,16 @@ var schemaTestCases = []schemaTest{
 
 	// schema name from Go type
 	{
-		name:    "no_model_tag",
-		build:   reflect.SchemaFor[NoModelTag],
+		name:  "no_model_tag",
+		infer: reflect.SchemaFor[NoModelTag],
+		build: func(opts ...schema.Option) *schema.Schema {
+			return schema.SchemaOf([]*schema.Field{
+				schema.FieldOf(schema.Uint64,
+					schema.WithName("id"),
+					schema.WithFlags(schema.FlagPrimary),
+				),
+			}, append(opts, schema.Name("no_model_tag"))...)
+		},
 		fields:  "id",
 		typs:    []schema.FieldType{schema.Uint64},
 		flags:   []schema.FieldFlags{schema.FlagPrimary},
@@ -89,7 +98,7 @@ var schemaTestCases = []schemaTest{
 	// error: non-struct type
 	{
 		name:  "no struct type",
-		build: reflect.SchemaFor[[]string],
+		infer: reflect.SchemaFor[[]string],
 		iserr: true,
 	},
 
@@ -99,8 +108,36 @@ var schemaTestCases = []schemaTest{
 
 	// all supported types
 	{
-		name:    "all_types",
-		build:   reflect.SchemaFor[AllTypes],
+		name:  "all_types",
+		infer: reflect.SchemaFor[AllTypes],
+		build: func(opts ...schema.Option) *schema.Schema {
+			return schema.SchemaOf([]*schema.Field{
+				schema.FieldOf(schema.Uint64, schema.WithName("id"), schema.WithFlags(schema.FlagPrimary)),
+				schema.FieldOf(schema.Int64, schema.WithName("i64")),
+				schema.FieldOf(schema.Int32, schema.WithName("i32")),
+				schema.FieldOf(schema.Int16, schema.WithName("i16")),
+				schema.FieldOf(schema.Int8, schema.WithName("i8")),
+				schema.FieldOf(schema.Uint64, schema.WithName("u64")),
+				schema.FieldOf(schema.Uint32, schema.WithName("u32")),
+				schema.FieldOf(schema.Uint16, schema.WithName("u16")),
+				schema.FieldOf(schema.Uint8, schema.WithName("u8")),
+				schema.FieldOf(schema.Float64, schema.WithName("f64")),
+				schema.FieldOf(schema.Float32, schema.WithName("f32")),
+				schema.FieldOf(schema.Decimal32, schema.WithName("d32"), schema.WithScale(5)),
+				schema.FieldOf(schema.Decimal64, schema.WithName("d64"), schema.WithScale(15)),
+				schema.FieldOf(schema.Decimal128, schema.WithName("d128"), schema.WithScale(18)),
+				schema.FieldOf(schema.Decimal256, schema.WithName("d256"), schema.WithScale(24)),
+				schema.FieldOf(schema.Int128, schema.WithName("i128")),
+				schema.FieldOf(schema.Int256, schema.WithName("i256")),
+				schema.FieldOf(schema.Boolean, schema.WithName("bool")),
+				schema.FieldOf(schema.Timestamp, schema.WithName("time")),
+				schema.FieldOf(schema.Bytes, schema.WithName("bytes")),
+				schema.ArrayOf(schema.Bytes, 2, schema.WithName("array[2]")),
+				schema.FieldOf(schema.String, schema.WithName("string")),
+				schema.FieldOf(schema.Uint16, schema.WithName("my_enum"), schema.WithEnum(myEnum)),
+				schema.FieldOf(schema.Bigint, schema.WithName("big")),
+			}, append(opts, schema.Name("all_types"))...)
+		},
 		fields:  "id,i64,i32,i16,i8,u64,u32,u16,u8,f64,f32,d32,d64,d128,d256,i128,i256,bool,time,bytes,array[2],string,my_enum,big",
 		typs:    []schema.FieldType{schema.Uint64, schema.Int64, schema.Int32, schema.Int16, schema.Int8, schema.Uint64, schema.Uint32, schema.Uint16, schema.Uint8, schema.Float64, schema.Float32, schema.Decimal32, schema.Decimal64, schema.Decimal128, schema.Decimal256, schema.Int128, schema.Int256, schema.Boolean, schema.Timestamp, schema.Bytes, schema.Bytes, schema.String, schema.Uint16, schema.Bigint},
 		flags:   []schema.FieldFlags{schema.FlagPrimary, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, schema.FlagNullable, schema.FlagArray, 0, schema.FlagEnum, 0},
@@ -113,8 +150,15 @@ var schemaTestCases = []schemaTest{
 
 	// fixed size array bytes and string
 	{
-		name:    "array_types",
-		build:   reflect.SchemaFor[ArrayTypes],
+		name:  "array_types",
+		infer: reflect.SchemaFor[ArrayTypes],
+		build: func(opts ...schema.Option) *schema.Schema {
+			return schema.SchemaOf([]*schema.Field{
+				schema.FieldOf(schema.Uint64, schema.WithName("id"), schema.WithFlags(schema.FlagPrimary)),
+				schema.ArrayOf(schema.Bytes, 20, schema.WithName("byte_array")),
+				schema.FieldOf(schema.String, schema.WithName("string_array"), schema.WithArray(20)),
+			}, append(opts, schema.Name("array_types"))...)
+		},
 		fields:  "id,byte_array,string_array",
 		typs:    []schema.FieldType{schema.Uint64, schema.Bytes, schema.String},
 		flags:   []schema.FieldFlags{schema.FlagPrimary, schema.FlagArray, schema.FlagArray},
@@ -127,8 +171,21 @@ var schemaTestCases = []schemaTest{
 
 	// date/time/timestamp
 	{
-		name:    "time_types",
-		build:   reflect.SchemaFor[TimeTypes],
+		name:  "time_types",
+		infer: reflect.SchemaFor[TimeTypes],
+		build: func(opts ...schema.Option) *schema.Schema {
+			return schema.SchemaOf([]*schema.Field{
+				schema.FieldOf(schema.Timestamp, schema.WithName("tsn"), schema.WithScale(schema.TIME_SCALE_NANO)),
+				schema.FieldOf(schema.Timestamp, schema.WithName("tsu"), schema.WithScale(schema.TIME_SCALE_MICRO)),
+				schema.FieldOf(schema.Timestamp, schema.WithName("tsm"), schema.WithScale(schema.TIME_SCALE_MILLI)),
+				schema.FieldOf(schema.Timestamp, schema.WithName("tss"), schema.WithScale(schema.TIME_SCALE_SECOND)),
+				schema.FieldOf(schema.Time, schema.WithName("tmn"), schema.WithScale(schema.TIME_SCALE_NANO)),
+				schema.FieldOf(schema.Time, schema.WithName("tmu"), schema.WithScale(schema.TIME_SCALE_MICRO)),
+				schema.FieldOf(schema.Time, schema.WithName("tmm"), schema.WithScale(schema.TIME_SCALE_MILLI)),
+				schema.FieldOf(schema.Time, schema.WithName("tms"), schema.WithScale(schema.TIME_SCALE_SECOND)),
+				schema.FieldOf(schema.Date, schema.WithName("dt")),
+			}, append(opts, schema.Name("time_types"))...)
+		},
 		fields:  "tsn,tsu,tsm,tss,tmn,tmu,tmm,tms,dt",
 		typs:    []schema.FieldType{schema.Timestamp, schema.Timestamp, schema.Timestamp, schema.Timestamp, schema.Time, schema.Time, schema.Time, schema.Time, schema.Date},
 		flags:   []schema.FieldFlags{0, 0, 0, 0, 0, 0, 0, 0, 0},
@@ -141,8 +198,14 @@ var schemaTestCases = []schemaTest{
 
 	// array > max array size
 	{
-		name:    "large_array_to_blob",
-		build:   reflect.SchemaFor[LargeArrayToBlob],
+		name:  "large_array_to_blob",
+		infer: reflect.SchemaFor[LargeArrayToBlob],
+		build: func(opts ...schema.Option) *schema.Schema {
+			return schema.SchemaOf([]*schema.Field{
+				schema.FieldOf(schema.Uint64, schema.WithName("id"), schema.WithFlags(schema.FlagPrimary)),
+				schema.FieldOf(schema.Binary, schema.WithName("f"), schema.WithNullable(false)),
+			}, append(opts, schema.Name("large_array_to_blob"))...)
+		},
 		fields:  "id,f",
 		typs:    []schema.FieldType{schema.Uint64, schema.Binary},
 		flags:   []schema.FieldFlags{schema.FlagPrimary, 0},
@@ -151,115 +214,212 @@ var schemaTestCases = []schemaTest{
 		isFixed: false,
 	},
 
+	// list fields
+	{
+		name:  "list_fields",
+		infer: reflect.SchemaFor[ListFields],
+		build: func(opts ...schema.Option) *schema.Schema {
+			return schema.SchemaOf([]*schema.Field{
+				schema.FieldOf(schema.Int64, schema.WithName("int64a")),
+				schema.ListOf(schema.Uint64, schema.WithName("u64_list")),
+				schema.ListOf(schema.Date, schema.WithName("time_list")),
+				schema.ListFor(
+					schema.SchemaOf([]*schema.Field{
+						schema.FieldOf(schema.Int64, schema.WithName("k64")),
+						schema.FieldOf(schema.Int64, schema.WithName("v64")),
+					}, schema.Name("pair")),
+					schema.WithName("pair_list"),
+				),
+				schema.ListOf(schema.Bytes, schema.WithName("byte_list"), schema.WithNullable(false)),
+				schema.ListFor(
+					schema.SchemaOf([]*schema.Field{
+						schema.ArrayOf(schema.Bytes, 2),
+					}),
+					schema.WithName("arr_list"),
+					schema.WithNullable(false),
+				),
+				schema.ListFor(
+					schema.SchemaOf([]*schema.Field{
+						schema.FieldOf(schema.Decimal32, schema.WithScale(4)),
+					}),
+					schema.WithName("dec_list"),
+					schema.WithNullable(false),
+				),
+				schema.FieldOf(schema.Int64, schema.WithName("int64b")),
+			}, append(opts, schema.Name("list_fields"))...)
+		},
+		fields:  "int64a,u64_list,u64_list.element,time_list,time_list.element,pair_list,pair_list.element.k64,pair_list.element.v64,byte_list,byte_list.element,arr_list,arr_list.element,dec_list,dec_list.element,int64b",
+		typs:    []schema.FieldType{schema.Int64, schema.List, schema.Uint64, schema.List, schema.Date, schema.List, schema.Int64, schema.Int64, schema.List, schema.Bytes, schema.List, schema.Bytes, schema.List, schema.Decimal32, schema.Int64},
+		flags:   []schema.FieldFlags{0, schema.FlagNullable, 0, schema.FlagNullable, 0, schema.FlagNullable, 0, 0, 0, schema.FlagNullable, 0, schema.FlagArray, 0, 0, 0},
+		scales:  []uint8{0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0},
+		fixed:   []uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0},
+		isFixed: false,
+		// encode:  []OpCode{},
+		// decode:  []OpCode{},
+	},
+
+	// map fields
+	{
+		name:  "map_fields",
+		infer: reflect.SchemaFor[MapFields],
+		build: func(opts ...schema.Option) *schema.Schema {
+			return schema.SchemaOf([]*schema.Field{
+				schema.FieldOf(schema.Int64, schema.WithName("int64a")),
+				schema.MapOf(schema.Uint64, schema.Uint64, schema.WithName("u64_map")),
+				schema.MapOf(schema.Uint32, schema.Date, schema.WithName("date_map")),
+				schema.MapFor(
+					schema.String,
+					schema.SchemaOf([]*schema.Field{
+						schema.FieldOf(schema.Int64, schema.WithName("k64")),
+						schema.FieldOf(schema.Int64, schema.WithName("v64")),
+					}, schema.Name("pair")),
+					schema.WithName("pair_map"),
+				),
+				schema.MapFor(
+					schema.String,
+					schema.SchemaOf([]*schema.Field{
+						schema.FieldOf(schema.Bytes, schema.WithNullable(false)),
+					}),
+					schema.WithName("byte_map"), schema.WithNullable(false),
+				),
+				schema.MapFor(
+					schema.String,
+					schema.SchemaOf([]*schema.Field{
+						schema.ArrayOf(schema.Bytes, 2),
+					}),
+					schema.WithName("arr_map"),
+					schema.WithNullable(false),
+				),
+				schema.MapFor(
+					schema.String,
+					schema.SchemaOf([]*schema.Field{
+						schema.FieldOf(schema.Decimal32, schema.WithScale(4)),
+					}),
+					schema.WithName("dec_map"),
+					schema.WithNullable(false),
+				),
+				schema.FieldOf(schema.Int64, schema.WithName("int64b")),
+			}, append(opts, schema.Name("map_fields"))...)
+		},
+		fields:  "int64a,u64_map,u64_map.key,u64_map.value,date_map,date_map.key,date_map.value,pair_map,pair_map.key,pair_map.value.k64,pair_map.value.v64,byte_map,byte_map.key,byte_map.value,arr_map,arr_map.key,arr_map.value,dec_map,dec_map.key,dec_map.value,int64b",
+		typs:    []schema.FieldType{schema.Int64, schema.Map, schema.Uint64, schema.Uint64, schema.Map, schema.Uint32, schema.Date, schema.Map, schema.String, schema.Int64, schema.Int64, schema.Map, schema.String, schema.Bytes, schema.Map, schema.String, schema.Bytes, schema.Map, schema.String, schema.Decimal32, schema.Int64},
+		flags:   []schema.FieldFlags{0, schema.FlagNullable, 0, 0, schema.FlagNullable, 0, 0, schema.FlagNullable, 0, 0, 0, 0, 0, 0, 0, 0, schema.FlagArray, 0, 0, 0, 0},
+		scales:  []uint8{0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0},
+		fixed:   []uint8{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0},
+		isFixed: false,
+		// encode:  []OpCode{},
+		// decode:  []OpCode{},
+	},
+
 	// error: native int/uint
 	{
 		name:  "invalid_native_types",
-		build: reflect.SchemaFor[InvalidNativeTypes],
+		infer: reflect.SchemaFor[InvalidNativeTypes],
 		iserr: true,
 	},
 
 	// error: unsupported struct binary & text (un)marshaler
 	{
 		name:  "struct (un)marshaler",
-		build: reflect.SchemaFor[MarshalerStructTypes],
+		infer: reflect.SchemaFor[MarshalerStructTypes],
 		iserr: true,
 	},
 
 	// error: unsupported map binary & text (un)marshaler
 	{
 		name:  "struct (un)marshaler",
-		build: reflect.SchemaFor[MarshalerMapTypes],
+		infer: reflect.SchemaFor[MarshalerMapTypes],
 		iserr: true,
 	},
 
 	// error: unsupported slice type without marshaler
 	{
 		name:  "no map marshaler",
-		build: reflect.SchemaFor[NoMarshalerMapTypes],
+		infer: reflect.SchemaFor[NoMarshalerMapTypes],
 		iserr: true,
 	},
 
 	// error: unsupported ptr type (TODO: may use for null)
 	{
 		name:  "invalid pointer",
-		build: reflect.SchemaFor[InvalidPointerType],
+		infer: reflect.SchemaFor[InvalidPointerType],
 		iserr: true,
 	},
 
 	// error: using array on illegal type
 	{
 		name:  "invalid array type",
-		build: reflect.SchemaFor[InvalidArrayType],
+		infer: reflect.SchemaFor[InvalidArrayType],
 		iserr: true,
 	},
 
 	// error: array value missing
 	{
 		name:  "invalid array missing",
-		build: reflect.SchemaFor[InvalidArrayMissing],
+		infer: reflect.SchemaFor[InvalidArrayMissing],
 		iserr: true,
 	},
 
 	// error: array NaN
 	{
 		name:  "invalid array NaN",
-		build: reflect.SchemaFor[InvalidArrayNaN],
+		infer: reflect.SchemaFor[InvalidArrayNaN],
 		iserr: true,
 	},
 
 	// error: array = 0
 	{
 		name:  "invalid array=0",
-		build: reflect.SchemaFor[InvalidArrayZero],
+		infer: reflect.SchemaFor[InvalidArrayZero],
 		iserr: true,
 	},
 
 	// error: array < 0
 	{
 		name:  "invalid array<0",
-		build: reflect.SchemaFor[InvalidArrayNeg],
+		infer: reflect.SchemaFor[InvalidArrayNeg],
 		iserr: true,
 	},
 
 	// error: array size mismatch
 	{
 		name:  "invalid array size mismatch",
-		build: reflect.SchemaFor[InvalidArraySizeMismatch],
+		infer: reflect.SchemaFor[InvalidArraySizeMismatch],
 		iserr: true,
 	},
 
 	// error: using scale on illegal type
 	{
 		name:  "invalid scale type",
-		build: reflect.SchemaFor[InvalidScaleType],
+		infer: reflect.SchemaFor[InvalidScaleType],
 		iserr: true,
 	},
 
 	// error: scale value missing
 	{
 		name:  "invalid scale missing",
-		build: reflect.SchemaFor[InvalidScaleMissing],
+		infer: reflect.SchemaFor[InvalidScaleMissing],
 		iserr: true,
 	},
 
 	// error: scale NaN
 	{
 		name:  "invalid scale NaN",
-		build: reflect.SchemaFor[InvalidScaleNaN],
+		infer: reflect.SchemaFor[InvalidScaleNaN],
 		iserr: true,
 	},
 
 	// error: scale < 0
 	{
 		name:  "invalid scale<0",
-		build: reflect.SchemaFor[InvalidScaleNeg],
+		infer: reflect.SchemaFor[InvalidScaleNeg],
 		iserr: true,
 	},
 
 	// error: decimal out of range
 	{
 		name:  "invalid scale too large",
-		build: reflect.SchemaFor[InvalidScaleTooLarge],
+		infer: reflect.SchemaFor[InvalidScaleTooLarge],
 		iserr: true,
 	},
 
@@ -270,21 +430,21 @@ var schemaTestCases = []schemaTest{
 	// error: pk type != uint64
 	{
 		name:  "no_uint64_pk",
-		build: reflect.SchemaFor[InvalidPkType],
+		infer: reflect.SchemaFor[InvalidPkType],
 		iserr: true,
 	},
 
 	// error: duplicate pk field
 	{
 		name:  "duplicate_pk",
-		build: reflect.SchemaFor[InvalidDuplicatePkType],
+		infer: reflect.SchemaFor[InvalidDuplicatePkType],
 		iserr: true,
 	},
 
 	// error: duplicate field name
 	{
 		name:  "duplicate_name",
-		build: reflect.SchemaFor[InvalidDuplicateName],
+		infer: reflect.SchemaFor[InvalidDuplicateName],
 		iserr: true,
 	},
 
@@ -294,8 +454,14 @@ var schemaTestCases = []schemaTest{
 
 	// bloom filter
 	{
-		name:    "bloom_filter",
-		build:   reflect.SchemaFor[BloomFilter],
+		name:  "bloom_filter",
+		infer: reflect.SchemaFor[BloomFilter],
+		build: func(opts ...schema.Option) *schema.Schema {
+			return schema.SchemaOf([]*schema.Field{
+				schema.FieldOf(schema.Uint64, schema.WithName("id"), schema.WithFlags(schema.FlagPrimary)),
+				schema.FieldOf(schema.Int64, schema.WithName("i64"), schema.WithFilter(schema.BloomFilter3b)),
+			}, append(opts, schema.Name("bloom_filter"))...)
+		},
 		fields:  "id,i64",
 		typs:    []schema.FieldType{schema.Uint64, schema.Int64},
 		flags:   []schema.FieldFlags{schema.FlagPrimary, 0},
@@ -311,8 +477,15 @@ var schemaTestCases = []schemaTest{
 	// Metadata tests
 	// -----------------
 	{
-		name:    "meta_fields",
-		build:   reflect.SchemaFor[MetaFields],
+		name:  "meta_fields",
+		infer: reflect.SchemaFor[MetaFields],
+		build: func(opts ...schema.Option) *schema.Schema {
+			return schema.SchemaOf([]*schema.Field{
+				schema.FieldOf(schema.Uint64, schema.WithName("id"), schema.WithFlags(schema.FlagPrimary)),
+				schema.FieldOf(schema.Int64, schema.WithName("i64"), schema.WithFlags(schema.FlagMetadata)),
+				schema.FieldOf(schema.Uint64, schema.WithName("u64")),
+			}, append(opts, schema.Name("meta_fields"))...)
+		},
 		fields:  "id,i64,u64",
 		typs:    []schema.FieldType{schema.Uint64, schema.Int64, schema.Uint64},
 		flags:   []schema.FieldFlags{schema.FlagPrimary, schema.FlagMetadata, 0},
@@ -328,69 +501,82 @@ func TestSchemaDetect(t *testing.T) {
 	for _, c := range schemaTestCases {
 		t.Run(c.name, func(t *testing.T) {
 			// check test data consistency
-			require.NotNil(t, c.build, "must define SchemaFor[T] function in testcase")
+			require.NotNil(t, c.infer, "must define SchemaFor[T] function in testcase")
 			numFields := len(strings.Split(c.fields, ","))
 			if len(c.fields) == 0 {
 				numFields = 0
 			}
-			require.Len(t, c.typs, numFields)
-			require.Len(t, c.flags, numFields)
-			// if len(c.idxfields) > 0 {
-			// 	require.Len(t, c.idxtyps, len(strings.Split(c.idxfields, ",")))
-			// }
-			require.Len(t, c.scales, numFields)
-			require.Len(t, c.fixed, numFields)
+			require.Len(t, c.typs, numFields, "types")
+			require.Len(t, c.flags, numFields, "flags")
+			require.Len(t, c.scales, numFields, "scales")
+			require.Len(t, c.fixed, numFields, "fixed")
 
-			s, err := c.build()
-			if c.iserr {
-				require.Error(t, err)
-				t.Log(err)
-				return
-			} else {
-				require.NoError(t, err)
-				require.NoError(t, s.Validate())
-			}
-			t.Log(s.String())
+			checkSchema := func(s *schema.Schema) {
+				// schema name
+				require.Equal(t, c.name, s.Name, "schema name")
 
-			// schema name
-			require.Equal(t, c.name, s.Name, "schema name")
+				// field names
+				require.ElementsMatch(t, strings.Split(c.fields, ","), s.Names(), "field names")
 
-			// field names
-			require.ElementsMatch(t, strings.Split(c.fields, ","), s.Names(), "field names")
-
-			// field types
-			for i, f := range s.Fields {
-				require.Equal(t, c.typs[i], f.Type, "field types for "+f.Name)
-			}
-
-			// field flags
-			for i, f := range s.Fields {
-				require.Equal(t, c.flags[i], f.Flags, "field flags for "+f.Name)
-			}
-
-			// filters
-			if len(c.filters) > 0 {
+				// field types
 				for i, f := range s.Fields {
-					require.Equal(t, c.filters[i], f.Filter, "field filter for "+f.Name)
+					require.Equal(t, c.typs[i], f.Type, "field types for "+f.Name)
 				}
+
+				// field flags
+				for i, f := range s.Fields {
+					require.Equal(t, c.flags[i], f.Flags, "field flags for "+f.Name)
+				}
+
+				// filters
+				if len(c.filters) > 0 {
+					for i, f := range s.Fields {
+						require.Equal(t, c.filters[i], f.Filter, "field filter for "+f.Name)
+					}
+				}
+
+				// scale values
+				for i, f := range s.Fields {
+					if !f.IsArray() {
+						require.Equal(t, c.scales[i], f.Scale, "scale for "+f.Name)
+					}
+				}
+
+				// fixed values
+				for i, f := range s.Fields {
+					if f.IsArray() {
+						require.Equal(t, c.fixed[i], f.Scale, "fixed for "+f.Name)
+					}
+				}
+
+				// is fixed
+				require.Equal(t, c.isFixed, s.IsFixedSize, "is_fixed")
 			}
 
-			// scale values
-			for i, f := range s.Fields {
-				if !f.IsArray() {
-					require.Equal(t, c.scales[i], f.Scale, "scale for "+f.Name)
+			t.Run("inference", func(t *testing.T) {
+				// schema inferance from Go type
+				s, err := c.infer()
+				if c.iserr {
+					require.Error(t, err)
+					t.Log(err)
+					return
+				} else {
+					require.NoError(t, err)
+					require.NoError(t, s.Validate())
 				}
-			}
+				t.Log(s.String())
+				checkSchema(s)
+			})
 
-			// fixed values
-			for i, f := range s.Fields {
-				if f.IsArray() {
-					require.Equal(t, c.fixed[i], f.Scale, "fixed for "+f.Name)
-				}
+			if c.build != nil {
+				t.Run("builder", func(t *testing.T) {
+					// schema inferance from Go type
+					s := c.build()
+					require.NoError(t, s.Validate())
+					t.Log(s.String())
+					checkSchema(s)
+				})
 			}
-
-			// is fixed
-			require.Equal(t, c.isFixed, s.IsFixedSize, "is_fixed")
 		})
 	}
 }
