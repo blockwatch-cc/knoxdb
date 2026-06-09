@@ -281,10 +281,13 @@ func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, dstLayo
 		case types.FT_TIMESTAMP, types.FT_DATE, types.FT_TIME:
 			(*(*time.Time)(fptr)) = types.TimeScale(field.Scale).FromUnix(b.Int64().Get(row))
 
+		case types.FT_DURATION:
+			(*(*time.Duration)(fptr)) = types.TimeScale(field.Scale).Duration(b.Int64().Get(row))
+
 		case types.FT_BOOL:
 			*(*bool)(fptr) = b.Bool().Get(row)
 
-		case types.FT_BYTES, types.FT_BLOB:
+		case types.FT_BYTES, types.FT_BINARY:
 			if field.IsArray() {
 				copy(unsafe.Slice((*byte)(fptr), field.Scale), b.Bytes().Get(row))
 			} else {

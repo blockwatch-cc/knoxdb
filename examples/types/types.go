@@ -58,6 +58,7 @@ type Types struct {
 	I128      num.Int128     `knox:"int128"`
 	I256      num.Int256     `knox:"int256"`
 	Big       num.Big        `knox:"big"`
+	Duration  time.Duration  `knox:"duration"`
 }
 
 const (
@@ -374,12 +375,13 @@ func NewRandomTypes(i int) *Types {
 		Float32: float32(i),
 		Float64: float64(i),
 		// decimals
-		D32:  num.NewDecimal32(int32(i)*100000, 5),
-		D64:  num.NewDecimal64(int64(i)*1000000000000, 15),
-		D128: num.NewDecimal128(num.MustParseInt128(strconv.Itoa(i)+"00000000000000000000"), 18),
-		D256: num.NewDecimal256(num.MustParseInt256(strconv.Itoa(i)+"0000000000000000000000000000000000000000"), 24),
-		I128: num.MustParseInt128(strconv.Itoa(i) + "000000000000000000000000000000"),
-		I256: num.MustParseInt256(strconv.Itoa(i) + "000000000000000000000000000000000000000000000000000000000000"),
-		Big:  num.NewBig(int64(i)),
+		D32:      num.NewDecimal32(int32(i)*100000, 5),
+		D64:      num.NewDecimal64(int64(i)*1000000000000, 15),
+		D128:     num.NewDecimal128(num.MustParseInt128(strconv.Itoa(i)+"00000000000000000000"), 18),
+		D256:     num.NewDecimal256(num.MustParseInt256(strconv.Itoa(i)+"0000000000000000000000000000000000000000"), 24),
+		I128:     num.MustParseInt128(strconv.Itoa(i) + "000000000000000000000000000000"),
+		I256:     num.MustParseInt256(strconv.Itoa(i) + "000000000000000000000000000000000000000000000000000000000000"),
+		Big:      num.NewBig(int64(i)),
+		Duration: time.Second * time.Duration(i),
 	}
 }

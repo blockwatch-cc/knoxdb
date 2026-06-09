@@ -25,13 +25,13 @@ const (
 var titles = []string{"Minute", "Hour", "Day", "Week", "Month", "Quarter", "Year"}
 
 var (
-	TimeUnitMinute  = MustParseTimeUnit("m")
-	TimeUnitHour    = MustParseTimeUnit("h")
-	TimeUnitDay     = MustParseTimeUnit("d")
-	TimeUnitWeek    = MustParseTimeUnit("w")
-	TimeUnitMonth   = MustParseTimeUnit("M")
-	TimeUnitQuarter = MustParseTimeUnit("q")
-	TimeUnitYear    = MustParseTimeUnit("y")
+	OneMinute  = TimeUnit{1, UnitMinute}
+	OneHour    = TimeUnit{1, UnitHour}
+	OneDay     = TimeUnit{1, UnitDay}
+	OneWeek    = TimeUnit{1, UnitWeek}
+	OneMonth   = TimeUnit{1, UnitMonth}
+	OneQuarter = TimeUnit{1, UnitQuarter}
+	OneYear    = TimeUnit{1, UnitYear}
 )
 
 type TimeUnit struct {
@@ -114,6 +114,10 @@ func (c *TimeUnit) UnmarshalText(data []byte) error {
 	}
 	*c = cc
 	return nil
+}
+
+func (c TimeUnit) Times(n int) TimeUnit {
+	return TimeUnit{c.Value + n, c.Unit}
 }
 
 func (c TimeUnit) Add(t time.Time) time.Time {

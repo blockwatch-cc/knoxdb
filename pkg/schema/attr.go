@@ -38,7 +38,7 @@ func (a Attr) MarshalSchema(w *Writer) error {
 	w.WriteUint8(uint8(a.typ))
 	w.WriteString(a.key)
 	switch a.typ {
-	case Uint64, Int64, Float64, Timestamp, Time, Date:
+	case Uint64, Int64, Float64, Timestamp, Time, Date, Duration:
 		w.buf.WriteByte(8)
 		w.writeU64(a.num)
 	case Uint32, Int32, Float32:
@@ -67,7 +67,7 @@ func (a *Attr) UnmarshalSchema(v *View) error {
 	a.key = v.String(1)
 	buf := v.Bytes(2)
 	switch a.typ {
-	case Uint64, Int64, Float64, Timestamp, Time, Date:
+	case Uint64, Int64, Float64, Timestamp, Time, Date, Duration:
 		a.num = v.layout.Uint64(buf[:8])
 	case Uint32, Int32, Float32:
 		a.num = uint64(v.layout.Uint32(buf[:4]))
@@ -128,6 +128,10 @@ func Float32Attr(key string, value float32) Attr {
 
 func TimestampAttr(key string, value time.Time) Attr {
 	return Attr{typ: Timestamp, key: key, num: uint64(TIME_SCALE_NANO.ToUnix(value))}
+}
+
+func DurationAttr(key string, value time.Duration) Attr {
+	return Attr{typ: Duration, key: key, num: uint64(TIME_SCALE_NANO.Int64(value))}
 }
 
 func TimeAttr(key string, value time.Time) Attr {
@@ -219,6 +223,11 @@ func (a Attr) Timestamp() time.Time {
 	return a.time()
 }
 
+func (a Attr) Duration() time.Duration {
+	a.ensureType(Duration)
+	return time.Duration(a.num)
+}
+
 func (a Attr) Time() time.Time {
 	a.ensureType(Time)
 	return a.time()
@@ -247,6 +256,8 @@ func (a Attr) Value() any {
 		return a.Float64()
 	case Timestamp:
 		return a.Timestamp()
+	case Duration:
+		return a.Duration()
 	case Time:
 		return a.Time()
 	case Date:
@@ -308,8 +319,8 @@ func (a Attr) append(dst []byte) []byte {
 		return append(dst, TIME_SCALE_SECOND.FormatTime(a.time())...)
 	case Date:
 		return append(dst, TIME_SCALE_DAY.Format(a.time())...)
-	// case Duration:
-	// 	return append(dst, v.duration().String()...)
+	case Duration:
+		return append(dst, a.Duration().String()...)
 	default:
 		panic(fmt.Sprintf("bad type: %s", a.typ))
 	}

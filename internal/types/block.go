@@ -49,32 +49,34 @@ var (
 	BlockTypes = [...]BlockType{
 		0:            BlockInvalid, // 0
 		FT_TIMESTAMP: BlockInt64,   // 1
-		FT_I64:       BlockInt64,   // 2
-		FT_U64:       BlockUint64,  // 3
-		FT_F64:       BlockFloat64, // 4
-		FT_BOOL:      BlockBool,    // 5
-		FT_STRING:    BlockBytes,   // 6
-		FT_BYTES:     BlockBytes,   // 7
-		FT_I32:       BlockInt32,   // 8
-		FT_I16:       BlockInt16,   // 9
-		FT_I8:        BlockInt8,    // 10
-		FT_U32:       BlockUint32,  // 11
-		FT_U16:       BlockUint16,  // 12
-		FT_U8:        BlockUint8,   // 13
-		FT_F32:       BlockFloat32, // 14
-		FT_I256:      BlockInt256,  // 15
-		FT_I128:      BlockInt128,  // 16
-		FT_D256:      BlockInt256,  // 17
-		FT_D128:      BlockInt128,  // 18
-		FT_D64:       BlockInt64,   // 19
-		FT_D32:       BlockInt32,   // 20
-		FT_BIGINT:    BlockBytes,   // 21
-		FT_DATE:      BlockInt64,   // 22
-		FT_TIME:      BlockInt64,   // 23
+		FT_DURATION:  BlockInt64,   // 2
+		FT_DATE:      BlockInt64,   // 3
+		FT_TIME:      BlockInt64,   // 4
+		FT_U64:       BlockUint64,  // 5
+		FT_U32:       BlockUint32,  // 6
+		FT_U16:       BlockUint16,  // 7
+		FT_U8:        BlockUint8,   // 8
+		FT_I64:       BlockInt64,   // 9
+		FT_I32:       BlockInt32,   // 10
+		FT_I16:       BlockInt16,   // 11
+		FT_I8:        BlockInt8,    // 12
+		FT_BOOL:      BlockBool,    // 13
+		FT_F64:       BlockFloat64, // 14
+		FT_F32:       BlockFloat32, // 15
+		FT_I256:      BlockInt256,  // 16
+		FT_I128:      BlockInt128,  // 17
+		FT_D256:      BlockInt256,  // 18
+		FT_D128:      BlockInt128,  // 19
+		FT_D64:       BlockInt64,   // 20
+		FT_D32:       BlockInt32,   // 21
+		FT_BIGINT:    BlockBytes,   // 22
+		FT_STRING:    BlockBytes,   // 23
 		FT_TEXT:      BlockBytes,   // 24
-		FT_BLOB:      BlockBytes,   // 25
-		FT_LIST:      BlockUint32,  // 26 offset map
-		FT_MAP:       BlockUint32,  // 27 offset map
+		FT_BYTES:     BlockBytes,   // 25
+		FT_BINARY:    BlockBytes,   // 26
+		FT_LIST:      BlockUint32,  // 27 offset map
+		FT_MAP:       BlockUint32,  // 28 offset map
+		FT_UNION:     BlockBytes,   // 29
 		31:           0,            // fill to 32 entries
 	}
 )
@@ -88,9 +90,6 @@ func (t BlockType) IsValid() bool {
 }
 
 func (t BlockType) String() string {
-	if !t.IsValid() {
-		return "invalid block type"
-	}
 	return blockTypeNames[blockTypeNamesOfs[t] : blockTypeNamesOfs[t+1]-1]
 }
 

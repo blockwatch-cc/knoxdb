@@ -39,3 +39,23 @@ func (b *TimeBucket) emitTime(t int64) string {
 	val := b.window.Truncate(time.Unix(0, t).UTC())
 	return strconv.Quote(val.Format(time.RFC3339))
 }
+
+type DurationBucket struct {
+	NativeBucket[int64]
+}
+
+func NewDurationBucket() *DurationBucket {
+	t := &DurationBucket{
+		*NewNativeBucket[int64](),
+	}
+	t.template = NewReducer[int64](ReducerFuncFirst)
+	t.fill = FillModeNow
+	t.locked = true
+	t.emit = t.emitDuration
+	return t
+}
+
+func (b *DurationBucket) emitDuration(t int64) string {
+	// TODO: need scale
+	return time.Duration(t).String()
+}

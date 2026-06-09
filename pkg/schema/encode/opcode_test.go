@@ -46,7 +46,11 @@ func TestFieldCodecMapping(t *testing.T) {
 		{"Decimal32", schema.FieldOf(schema.Decimal32), OC_D32},
 		{"Bigint", schema.FieldOf(schema.Bigint), OC_BIGINT},
 		{"Text", schema.FieldOf(schema.Text), OC_TEXT},
-		{"Blob", schema.FieldOf(schema.Binary), OC_BLOB},
+		{"Binary", schema.FieldOf(schema.Binary), OC_BLOB},
+		{"Duration", schema.FieldOf(schema.Duration), OC_DURATION},
+		{"List", schema.FieldOf(schema.List), OC_LIST},
+		{"Map", schema.FieldOf(schema.Map), OC_MAP},
+		{"Union", schema.FieldOf(schema.Union), OC_UNION},
 	}
 
 	for _, tc := range testCases {

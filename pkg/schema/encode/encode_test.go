@@ -77,7 +77,7 @@ type encodeTestStruct struct {
 	U64List     []uint64       `knox:"u64l"`
 	U64ListList [][]uint64     `knox:"u64ll"`
 	KVList      []KV           `knox:"kvl"`
-	KVMap       map[string]KV  `knox:"kvm"`
+	Duration    time.Duration  `knox:"dur"`
 }
 
 func makeTestData(sz int) (res []encodeTestStruct) {
@@ -117,10 +117,7 @@ func makeTestData(sz int) (res []encodeTestStruct) {
 				{Key: u64, Val: u64},
 				{Key: u64 + 1, Val: u64 + 1},
 			},
-			KVMap: map[string]KV{
-				"A": {Key: u64, Val: u64},
-				"B": {Key: u64 + 1, Val: u64 + 1},
-			},
+			Duration: time.Minute * time.Duration(i),
 		})
 	}
 	return
@@ -271,7 +268,7 @@ func TestEncodeRoundtrip(t *testing.T) {
 	val2, err := dec.Decode(buf, nil)
 	require.NoError(t, err)
 	require.IsType(t, val, *val2)
-	// require.Exactly(t, val, *val2)
+	require.Exactly(t, val, *val2)
 }
 
 func TestEncodeRoundtripWithVisibility(t *testing.T) {

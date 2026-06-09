@@ -354,6 +354,8 @@ func (v *View) Get(i int) (val any) {
 	switch v.typs[i] {
 	case Timestamp, Time, Date:
 		val = TimeScale(v.scales[i]).FromUnix(int64(v.layout.Uint64(v.buf[x:y])))
+	case Duration:
+		val = TimeScale(v.scales[i]).Duration(int64(v.layout.Uint64(v.buf[x:y])))
 	case Int64:
 		val = int64(v.layout.Uint64(v.buf[x:y]))
 	case Uint64:
@@ -411,7 +413,7 @@ func (v *View) GetPhy(i int) (val any) {
 	}
 	y := x + v.len[i]
 	switch v.typs[i] {
-	case Timestamp, Time, Date, Int64, Decimal64:
+	case Timestamp, Duration, Time, Date, Int64, Decimal64:
 		val = int64(v.layout.Uint64(v.buf[x:y]))
 	case Uint64:
 		val = v.layout.Uint64(v.buf[x:y])
@@ -469,6 +471,11 @@ func (v *View) Set(i int, val any) bool {
 	case Timestamp, Time, Date:
 		if tm, ok := val.(time.Time); ok {
 			v.layout.PutUint64(v.buf[x:y], uint64(TimeScale(v.scales[i]).ToUnix(tm)))
+			return true
+		}
+	case Duration:
+		if d, ok := val.(time.Duration); ok {
+			v.layout.PutUint64(v.buf[x:y], uint64(TimeScale(v.scales[i]).Int64(d)))
 			return true
 		}
 	case Int64:
@@ -678,6 +685,13 @@ func (v *View) Enum(i int) string {
 func (v *View) Timestamp(i int) time.Time {
 	p := v.getCheckedPtr(i, Timestamp)
 	return TimeScale(v.scales[i]).FromUnix(*(*int64)(p))
+}
+
+// Duration is a fast non-portable accessor to duration values.
+// It panics on type mismatch or out-of-bounds access.
+func (v *View) Duration(i int) time.Duration {
+	p := v.getCheckedPtr(i, Duration)
+	return TimeScale(v.scales[i]).Duration(*(*int64)(p))
 }
 
 // Time is a fast non-portable accessor to time of day values.

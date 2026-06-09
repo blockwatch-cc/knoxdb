@@ -395,6 +395,14 @@ func (d *Decoder) decodePhysical(base unsafe.Pointer, line []string) error {
 				}
 				*(*int64)(ptr) = schema.TimeScale(f.Scale).ToUnix(tm)
 			}
+
+		case schema.Duration:
+			dur, err := schema.TimeScale(f.Scale).ParseDuration(line[i])
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			*(*int64)(ptr) = schema.TimeScale(f.Scale).Int64(dur)
+
 		case schema.Date:
 			if d.dateAs == "" {
 				tm, err := schema.TimeScale(f.Scale).Parse(line[i], false)
@@ -409,6 +417,7 @@ func (d *Decoder) decodePhysical(base unsafe.Pointer, line []string) error {
 				}
 				*(*int64)(ptr) = schema.TimeScale(f.Scale).ToUnix(tm)
 			}
+
 		case schema.Time:
 			if d.timeAs == "" {
 				tm, err := schema.TimeScale(f.Scale).Parse(line[i], true)
@@ -423,6 +432,7 @@ func (d *Decoder) decodePhysical(base unsafe.Pointer, line []string) error {
 				}
 				*(*int64)(ptr) = schema.TimeScale(f.Scale).ToUnix(tm)
 			}
+
 		case schema.Int64:
 			val, err := strconv.ParseInt(line[i], 10, 64)
 			if err != nil {
@@ -609,6 +619,14 @@ func (d *Decoder) decodeLogical(base unsafe.Pointer, line []string) error {
 				}
 				*(*time.Time)(ptr) = tm
 			}
+
+		case schema.Duration:
+			dur, err := schema.TimeScale(f.Scale).ParseDuration(line[i])
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			*(*time.Duration)(ptr) = dur
+
 		case schema.Date:
 			if d.dateAs == "" {
 				tm, err := schema.TimeScale(f.Scale).ParseTime(line[i], false)
@@ -623,6 +641,7 @@ func (d *Decoder) decodeLogical(base unsafe.Pointer, line []string) error {
 				}
 				*(*time.Time)(ptr) = tm
 			}
+
 		case schema.Time:
 			if d.timeAs == "" {
 				tm, err := schema.TimeScale(f.Scale).ParseTime(line[i], true)
@@ -637,6 +656,7 @@ func (d *Decoder) decodeLogical(base unsafe.Pointer, line []string) error {
 				}
 				*(*time.Time)(ptr) = tm
 			}
+
 		case schema.Int64:
 			val, err := strconv.ParseInt(line[i], 10, 64)
 			if err != nil {
@@ -868,6 +888,13 @@ func (d *Decoder) decodePack(pkg *pack.Package, line []string) error {
 				}
 				b.Int64().Append(schema.TimeScale(f.Scale).ToUnix(tm))
 			}
+
+		case schema.Duration:
+			dur, err := schema.TimeScale(f.Scale).ParseDuration(line[i])
+			if err != nil {
+				return &DecodeError{d.r.lineNo, i, f.Name, line[i], err}
+			}
+			b.Int64().Append(schema.TimeScale(f.Scale).Int64(dur))
 
 		case schema.Date:
 			if d.dateAs == "" {

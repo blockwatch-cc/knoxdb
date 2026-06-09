@@ -88,6 +88,10 @@ var fieldTests = []fieldTest{
 	{"time_us", []string{"12:34:56.000001"}, fNum | fDecimal | fOther | fDot | fTime | fFixed, 15, schema.Time, 1},
 	{"time_ns", []string{"12:34:56.000000001"}, fNum | fDecimal | fOther | fDot | fTime | fFixed, 18, schema.Time, 0},
 	{"date", []string{"2023-05-17"}, fNum | fDecimal | fDash | fDate | fFixed, 10, schema.Date, 4},
+	{"dur_s", []string{"1h1s"}, fNum | fDecimal | fOther | fFixed | fDuration, 4, schema.Duration, 3},
+	{"dur_ms", []string{"1h10ms"}, fNum | fDecimal | fOther | fFixed | fDuration, 6, schema.Duration, 2},
+	{"dur_us", []string{"1h1us"}, fNum | fDecimal | fOther | fFixed | fDuration, 5, schema.Duration, 1},
+	{"dur_ns", []string{"1h123ns"}, fNum | fDecimal | fOther | fFixed | fDuration, 7, schema.Duration, 0},
 	// {"uuid", []string{"75fcf875-017d-4579-bfd9-791d3e6767f0"}, fNum | fDecimal | fHex | fDash, 36, schema.UintUID},
 }
 

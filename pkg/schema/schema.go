@@ -660,7 +660,7 @@ func (s *Schema) SelectIds(fieldIds ...uint16) (*Schema, error) {
 	for _, fid := range fieldIds {
 		f, ok := s.FindId(fid)
 		if !ok || !f.IsActive() {
-			return nil, fmt.Errorf("missing field id %d in schema %s", fid, s.Name)
+			return nil, fmt.Errorf("schema %s: missing field id %d", s.Name, fid)
 		}
 		ns.Fields = append(ns.Fields, f)
 	}
@@ -679,7 +679,7 @@ func (s *Schema) Select(fields ...string) (*Schema, error) {
 	for _, fname := range fields {
 		f, ok := s.Find(fname)
 		if !ok {
-			return nil, fmt.Errorf("%w: missing field name %s in schema %s", ErrInvalidField, fname, s.Name)
+			return nil, fmt.Errorf("schema %s: missing field name %s", s.Name, fname)
 		}
 		ns.Fields = append(ns.Fields, f)
 	}
@@ -720,24 +720,21 @@ func (s *Schema) MapSchema(dst *Schema) ([]int, error) {
 		// assert mapping matches type conventions
 		if pos > -1 {
 			if srcField.Type != dstField.Type {
-				return nil, fmt.Errorf("%w: map [%s/%s] => [%s/%s]: type mismatch %s/%s",
-					ErrSchemaMismatch,
+				return nil, fmt.Errorf("schema map [%s/%s] => [%s/%s]: type mismatch %s/%s",
 					s.Name, srcField.Name,
 					dst.Name, dstField.Name,
 					srcField.Type, dstField.Type,
 				)
 			}
 			if a, b := srcField.IsArray(), dstField.IsArray(); a != b {
-				return nil, fmt.Errorf("%w: map [%s/%s] => [%s/%s]: array mismatch %t/%t",
-					ErrSchemaMismatch,
+				return nil, fmt.Errorf("schema map [%s/%s] => [%s/%s]: array mismatch %t/%t",
 					s.Name, srcField.Name,
 					dst.Name, dstField.Name,
 					a, b,
 				)
 			}
 			if srcField.Scale != dstField.Scale {
-				return nil, fmt.Errorf("%w: map [%s/%s] => [%s/%s]: scale mismatch %d/%d",
-					ErrSchemaMismatch,
+				return nil, fmt.Errorf("schema map [%s/%s] => [%s/%s]: scale mismatch %d/%d",
 					s.Name, srcField.Name,
 					dst.Name, dstField.Name,
 					srcField.Scale, dstField.Scale,
@@ -752,9 +749,9 @@ func (s *Schema) MapSchema(dst *Schema) ([]int, error) {
 func (s *Schema) Validate() error {
 	// require name between 1..255 bytes length
 	if l := len(s.Name); l > 255 {
-		return fmt.Errorf("schema name too long, max 255 chars")
+		return ErrLongName
 	} else if l < 1 {
-		return fmt.Errorf("missing schema name")
+		return ErrNoName
 	}
 
 	// require fields

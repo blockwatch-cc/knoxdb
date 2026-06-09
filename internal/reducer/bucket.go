@@ -35,6 +35,10 @@ func NewBucket(typ types.FieldType) Bucket {
 		// required for time column
 		return NewTimeBucket()
 
+	case types.FT_DURATION:
+		// TODO: must apply scale
+		return NewDurationBucket()
+
 	case types.FT_BYTES: // requires an aggregator type, use WithTypeOf(&MyType{})
 		return NewTypedBucket()
 

@@ -161,15 +161,6 @@ func BenchmarkView(b *testing.B) {
 		}
 	})
 
-	// b.Run("get_fixed_ptr", func(b *testing.B) {
-	// 	b.ReportAllocs()
-	// 	for b.Loop() {
-	// 		p, _, ok := view.GetPtr(0)
-	// 		_ = p
-	// 		_ = ok
-	// 	}
-	// })
-
 	b.Run("get_fixed_u64", func(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
@@ -193,15 +184,6 @@ func BenchmarkView(b *testing.B) {
 			_ = p
 		}
 	})
-
-	// b.Run("get_var_ptr", func(b *testing.B) {
-	// 	b.ReportAllocs()
-	// 	for b.Loop() {
-	// 		p, _, ok := view.GetPtr(21)
-	// 		_ = p
-	// 		_ = ok
-	// 	}
-	// })
 
 	b.Run("get_var_string", func(b *testing.B) {
 		b.ReportAllocs()

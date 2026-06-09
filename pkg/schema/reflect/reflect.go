@@ -151,7 +151,8 @@ func NativeStructType(s *schema.Schema) reflect.Type {
 		}
 		var rtyp reflect.Type
 		switch f.Type {
-		case schema.Timestamp, schema.Time, schema.Date, schema.Int64, schema.Decimal64:
+		case schema.Timestamp, schema.Duration, schema.Time, schema.Date,
+			schema.Int64, schema.Decimal64:
 			rtyp = typeOfInt64
 		case schema.Int32, schema.Decimal32:
 			rtyp = typeOfInt32
@@ -192,6 +193,9 @@ func NativeStructType(s *schema.Schema) reflect.Type {
 			} else {
 				rtyp = reflect.SliceOf(StructTypeOf(f.Child, f.Name+"."+schema.ElementName+"."))
 			}
+		case schema.Map:
+			// []{key,value}
+			rtyp = reflect.SliceOf(StructTypeOf(f.Child, f.Name+"."+schema.EntriesName+"."))
 		default:
 			continue
 		}
@@ -277,12 +281,13 @@ func makeTag(f *schema.Field) string {
 	switch f.Type {
 	case schema.Time:
 		tag += ",time"
+		tag += fmt.Sprintf(",scale=%d", f.Scale)
 	case schema.Date:
 		tag += ",date"
 	case schema.Text:
 		tag += ",text"
 	case schema.Binary:
-		tag += ",blob"
+		tag += ",binary"
 	case schema.String:
 		if f.IsArray() {
 			tag += fmt.Sprintf(",array=%d", f.Scale)

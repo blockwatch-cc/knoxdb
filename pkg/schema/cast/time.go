@@ -38,6 +38,35 @@ func (c TimeCaster) CastSlice(val any) (res any, err error) {
 	return
 }
 
+// duration caster
+type DurationCaster struct {
+	scale schema.TimeScale
+}
+
+func (c DurationCaster) CastValue(val any) (res any, err error) {
+	v, ok := val.(time.Duration)
+	if !ok {
+		err = CastError(val, "duration")
+	} else {
+		res = c.scale.Int64(v)
+	}
+	return
+}
+
+func (c DurationCaster) CastSlice(val any) (res any, err error) {
+	v, ok := val.([]time.Duration)
+	if !ok {
+		err = CastError(val, "duration")
+	} else {
+		r := make([]int64, len(v))
+		for i := range v {
+			r[i] = c.scale.Int64(v[i])
+		}
+		res = r
+	}
+	return
+}
+
 // date caster
 type DateCaster struct{}
 

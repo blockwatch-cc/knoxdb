@@ -141,7 +141,7 @@ func (f *Field) TimeFormat() string {
 func (f *Field) TypeName() (typ string) {
 	typ = f.Type.String()
 	switch f.Type {
-	case Time, Timestamp:
+	case Time, Timestamp, Duration:
 		typ += "(" + TimeScale(f.Scale).ShortName() + ")"
 	case Decimal32, Decimal64, Decimal128, Decimal256:
 		typ += "(" + strconv.Itoa(int(f.Scale)) + ")"
@@ -182,7 +182,7 @@ func (f *Field) TypeName() (typ string) {
 // - does not handle struct child schemas in list/map
 func ParseFieldFromTypename(typ string) (*Field, error) {
 	if len(typ) == 0 {
-		return nil, fmt.Errorf("empty type name")
+		return nil, ErrNoType
 	}
 	var (
 		f     *Field
@@ -195,7 +195,7 @@ func ParseFieldFromTypename(typ string) (*Field, error) {
 		// array
 		num, typstr, ok := strings.Cut(typ[1:], "]")
 		if !ok {
-			return nil, fmt.Errorf("invalid array type: %q", typ)
+			return nil, fmt.Errorf("invalid array type %q", typ)
 		}
 		n, err := strconv.Atoi(num)
 		if err != nil {
@@ -210,13 +210,13 @@ func ParseFieldFromTypename(typ string) (*Field, error) {
 		if ok {
 			ty := ParseFieldType(typstr)
 			if !ty.IsValid() || (ty != List && ty != Map) {
-				return nil, fmt.Errorf("invalid field type: %s", typ)
+				return nil, fmt.Errorf("invalid field type %q", typ)
 			}
 			subtypstr = strings.TrimSuffix(subtypstr, "]")
 			if ty == List {
 				sub, err := ParseFieldFromTypename(subtypstr)
 				if err != nil {
-					return nil, fmt.Errorf("invalid %s type: %s", ty, typ)
+					return nil, fmt.Errorf("invalid %s type %q", ty, typ)
 				}
 				typ = typstr
 				sub.Name = ElementName
@@ -224,15 +224,15 @@ func ParseFieldFromTypename(typ string) (*Field, error) {
 			} else {
 				key, val, ok := strings.Cut(subtypstr, ",")
 				if !ok {
-					return nil, fmt.Errorf("invalid %s type: %s", ty, typ)
+					return nil, fmt.Errorf("invalid %s type %q", ty, typ)
 				}
 				keyT, err := ParseFieldFromTypename(key)
 				if err != nil {
-					return nil, fmt.Errorf("invalid %s key type %s: %v", ty, key, err)
+					return nil, fmt.Errorf("invalid %s key type %q: %v", ty, key, err)
 				}
 				valT, err := ParseFieldFromTypename(val)
 				if err != nil {
-					return nil, fmt.Errorf("invalid %s value type %s: %v", ty, val, err)
+					return nil, fmt.Errorf("invalid %s value type %q: %v", ty, val, err)
 				}
 				typ = typstr
 				keyT.Name = KeyName
@@ -245,7 +245,7 @@ func ParseFieldFromTypename(typ string) (*Field, error) {
 		typstr, scalestr, ok := strings.Cut(typ, "(")
 		if ok {
 			if !strings.HasSuffix(scalestr, ")") {
-				return nil, fmt.Errorf("invalid scaled type: %s", typ)
+				return nil, fmt.Errorf("invalid scaled type %q", typ)
 			}
 			scalestr = strings.TrimSuffix(scalestr, ")")
 			n, err := strconv.Atoi(scalestr)
@@ -254,7 +254,7 @@ func ParseFieldFromTypename(typ string) (*Field, error) {
 			} else {
 				tscale, ok := ParseTimeScale(scalestr)
 				if !ok {
-					return nil, fmt.Errorf("invalid scale factor: %s", typ)
+					return nil, fmt.Errorf("invalid scale factor %q", typ)
 				}
 				scale = uint8(tscale)
 			}
@@ -263,7 +263,7 @@ func ParseFieldFromTypename(typ string) (*Field, error) {
 	}
 	ty := ParseFieldType(typ)
 	if !ty.IsValid() {
-		return nil, fmt.Errorf("invalid field type: %s", typ)
+		return nil, fmt.Errorf("invalid field type %q", typ)
 	}
 	f = &Field{
 		Type:  ty,
@@ -279,7 +279,7 @@ func ParseFieldFlags(s string) (FieldFlags, error) {
 	for f := range strings.SplitSeq(s, ",") {
 		ff := ParseFieldFlag(f)
 		if ff == 0 {
-			return 0, fmt.Errorf("invalid field flag: %s", f)
+			return 0, fmt.Errorf("invalid field flag %q", f)
 		}
 		flags |= ff
 	}
@@ -307,9 +307,7 @@ func (f *Field) Validate(withNested ...bool) error {
 			maxScale = num.MaxDecimal128Precision
 		case Decimal256:
 			maxScale = num.MaxDecimal256Precision
-		case Timestamp:
-			maxScale = uint8(TIME_SCALE_SECOND)
-		case Time:
+		case Timestamp, Time, Duration:
 			maxScale = uint8(TIME_SCALE_SECOND)
 		case Date:
 			minScale = uint8(TIME_SCALE_DAY)

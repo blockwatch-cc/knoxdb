@@ -351,6 +351,11 @@ func (d *Decoder) readField(code OpCode, field *schema.Field, ptr unsafe.Pointer
 			FromUnix(*(*int64)(unsafe.Pointer(&buf[0])))
 		buf = buf[8:]
 
+	case OC_DURATION:
+		*(*time.Duration)(ptr) = schema.TimeScale(field.Scale).
+			Duration(*(*int64)(unsafe.Pointer(&buf[0])))
+		buf = buf[8:]
+
 	case OC_I128:
 		*(*num.Int128)(ptr) = num.Int128FromBytes(buf[:16])
 		buf = buf[16:]
@@ -446,6 +451,8 @@ func (d *Decoder) readField(code OpCode, field *schema.Field, ptr unsafe.Pointer
 
 			buf = buf[l:]
 		}
+	case OC_MAP:
+		return nil, schema.ErrInvalidValueType
 	}
 	return buf, nil
 }

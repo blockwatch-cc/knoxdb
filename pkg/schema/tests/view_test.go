@@ -87,6 +87,7 @@ func TestViewGet(t *testing.T) {
 	testViewGetVal(t, view, 21, base.String)
 	testViewGetVal(t, view, 22, uint16(0))
 	testViewGetVal(t, view, 23, base.Big)
+	testViewGetVal(t, view, 24, base.Duration)
 }
 
 func TestViewGetWithVisibility(t *testing.T) {
@@ -128,6 +129,7 @@ func TestViewGetWithVisibility(t *testing.T) {
 	testViewGetVal(t, view, 21, base.String)
 	testViewGetVal(t, view, 22, uint16(0))
 	testViewGetVal(t, view, 23, base.Big)
+	testViewGetVal(t, view, 24, base.Duration)
 }
 
 // TestViewSet tests the Set method of the View struct

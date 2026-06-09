@@ -47,7 +47,7 @@ type AllTypes struct {
 	MyEnum      MyEnum                   `knox:"my_enum,enum"`
 	Big         num.Big                  `knox:"big"`
 	Text        string                   `knox:"text,text"`
-	Blob        []byte                   `knox:"blob,blob"`
+	Blob        []byte                   `knox:"blob,binary"`
 	U64List     []uint64                 `knox:"u64_list"`
 	TimeList    []time.Time              `knox:"time_list,element=date"`
 	PairList    []Pair                   `knox:"pair_list"`
@@ -60,6 +60,7 @@ type AllTypes struct {
 	ByteMap     map[string][]byte        `knox:"byte_map,notnull,value=notnull"`
 	ArrMap      map[string][2]byte       `knox:"arr_map,notnull"`
 	DecimalMap  map[string]num.Decimal32 `knox:"dec_map,notnull,value=scale=4"`
+	Duration    time.Duration            `knox:"duration,scale=s"`
 }
 
 type Pair struct {
@@ -117,6 +118,7 @@ func TestFieldStructReadBasic(t *testing.T) {
 		{"byte_map", schema.Map, 0, 0},
 		{"arr_map", schema.Map, 0, 0},
 		{"dec_map", schema.Map, 0, 0},
+		{"duration", schema.Duration, 0, schema.TIME_SCALE_SECOND.AsUint()},
 	}
 	for i, tt := range tests {
 		sf := allTypeOf.Field(i)

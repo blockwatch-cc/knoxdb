@@ -18,10 +18,9 @@ import (
 )
 
 // TODO
-// - support more generic io.Writer on Writer/ListWriter
+// - support generic io.Writer on Writer/ListWriter
 // - detect if underlying is *bytes.Buffer, if yes, optimize
 //   if not write to new buffer and move into io.Writer on close
-// - use sync.Pool for ListWriter
 
 // Marshaler is the interface implemented by an object that can
 // write itself to a schema Writer. MarshalSchema encodes the
@@ -195,6 +194,16 @@ func (w *Writer) WriteTimestamp(tv time.Time) error {
 		return err
 	}
 	w.writeU64(uint64(TimeScale(f.Scale).ToUnix(tv)))
+	w.n++
+	return nil
+}
+
+func (w *Writer) WriteDuration(d time.Duration) error {
+	f, err := w.getFieldChecked(w.n, Duration)
+	if err != nil {
+		return err
+	}
+	w.writeU64(uint64(TimeScale(f.Scale).Int64(d)))
 	w.n++
 	return nil
 }

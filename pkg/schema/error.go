@@ -9,6 +9,9 @@ import (
 
 var (
 	ErrNilValue         = errors.New("schema: nil value")
+	ErrNoName           = errors.New("schema: missing schema name")
+	ErrNoType           = errors.New("schema: empty type name")
+	ErrLongName         = errors.New("schema: name too long")
 	ErrLongValue        = errors.New("schema: value too long")
 	ErrShortValue       = errors.New("schema: value too short")
 	ErrUnsupportedType  = errors.New("schema: unsupported type")

@@ -24,6 +24,8 @@ func NewParser(typ schema.FieldType, scale uint8, enum ValueParser) ValueParser 
 	switch typ {
 	case schema.Timestamp:
 		return TimeParser{scale: schema.TimeScale(scale), isTimeOnly: false}
+	case schema.Duration:
+		return DurationParser{scale: schema.TimeScale(scale)}
 	case schema.Time:
 		return TimeParser{scale: schema.TimeScale(scale), isTimeOnly: true}
 	case schema.Date:
@@ -400,6 +402,32 @@ func (p TimeParser) ParseSlice(s string) (any, error) {
 			return nil, err
 		}
 		slice[i] = tm
+	}
+	return slice, nil
+}
+
+// duration parser
+type DurationParser struct {
+	scale schema.TimeScale
+}
+
+func (p DurationParser) ParseValue(s string) (any, error) {
+	d, err := p.scale.ParseDuration(s)
+	if err != nil {
+		return nil, err
+	}
+	return p.scale.Int64(d), nil
+}
+
+func (p DurationParser) ParseSlice(s string) (any, error) {
+	vv := strings.Split(s, ",")
+	slice := make([]int64, len(vv))
+	for i, v := range vv {
+		d, err := p.scale.ParseDuration(v)
+		if err != nil {
+			return nil, err
+		}
+		slice[i] = p.scale.Int64(d)
 	}
 	return slice, nil
 }

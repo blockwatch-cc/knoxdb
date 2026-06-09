@@ -13,15 +13,6 @@ import (
 
 type XID uint64
 
-// Internal schema for record metadata
-type Meta struct {
-	Rid   uint64 `knox:"$rid,metadata,id=0xffff"`  // unique row id
-	Ref   uint64 `knox:"$ref,metadata,id=0xfffe"`  // previous version, ref == rid on first insert
-	Xmin  XID    `knox:"$xmin,metadata,id=0xfffd"` // txid where this row was created
-	Xmax  XID    `knox:"$xmax,metadata,id=0xfffc"` // txid where this row was deleted
-	IsDel bool   `knox:"$del,metadata,id=0xfffb"`  // record was deleted (true) or updated (false)
-}
-
 const ReadTxOffset XID = 1 << 63
 
 func (x XID) String() string {

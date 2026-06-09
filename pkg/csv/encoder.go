@@ -204,6 +204,10 @@ func (e *Encoder) encode(base unsafe.Pointer) error {
 				e.buf = tm.AppendFormat(e.buf, e.timeAs)
 			}
 
+		case schema.Duration:
+			e.buf = append(e.buf, schema.TimeScale(f.Scale).
+				Duration(*(*int64)(ptr)).String()...)
+
 		case schema.Date:
 			s := schema.TimeScale(f.Scale)
 			tm := s.FromUnix(*(*int64)(ptr))

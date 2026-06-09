@@ -46,57 +46,59 @@ var encodeBenchmarkSizes = []struct {
 }
 
 type encodeBenchStruct struct {
-	Id      uint64         `knox:"id,pk"`
-	Time    time.Time      `knox:"time"`
-	Hash    [20]byte       `knox:"hash,filter=bloom3b"`
-	String  string         `knox:"str"`
-	Bool    bool           `knox:"bool"`
-	Enum    MyEnum         `knox:"my_enum,enum"`
-	Int64   int64          `knox:"i64"`
-	Int32   int32          `knox:"i32"`
-	Int16   int16          `knox:"i16"`
-	Int8    int8           `knox:"i8"`
-	Uint64  uint64         `knox:"u64,filter=bloom2b"`
-	Uint32  uint32         `knox:"u32"`
-	Uint16  uint16         `knox:"u16"`
-	Uint8   uint8          `knox:"u8"`
-	Float64 float64        `knox:"f64"`
-	Float32 float32        `knox:"f32"`
-	D32     num.Decimal32  `knox:"d32,scale=5"`
-	D64     num.Decimal64  `knox:"d64,scale=15"`
-	D128    num.Decimal128 `knox:"d128,scale=18"`
-	D256    num.Decimal256 `knox:"d256,scale=24"`
-	I128    num.Int128     `knox:"i128"`
-	I256    num.Int256     `knox:"i256"`
-	Big     num.Big        `knox:"big"`
+	Id       uint64         `knox:"id,pk"`
+	Time     time.Time      `knox:"time"`
+	Hash     [20]byte       `knox:"hash,filter=bloom3b"`
+	String   string         `knox:"str"`
+	Bool     bool           `knox:"bool"`
+	Enum     MyEnum         `knox:"my_enum,enum"`
+	Int64    int64          `knox:"i64"`
+	Int32    int32          `knox:"i32"`
+	Int16    int16          `knox:"i16"`
+	Int8     int8           `knox:"i8"`
+	Uint64   uint64         `knox:"u64,filter=bloom2b"`
+	Uint32   uint32         `knox:"u32"`
+	Uint16   uint16         `knox:"u16"`
+	Uint8    uint8          `knox:"u8"`
+	Float64  float64        `knox:"f64"`
+	Float32  float32        `knox:"f32"`
+	D32      num.Decimal32  `knox:"d32,scale=5"`
+	D64      num.Decimal64  `knox:"d64,scale=15"`
+	D128     num.Decimal128 `knox:"d128,scale=18"`
+	D256     num.Decimal256 `knox:"d256,scale=24"`
+	I128     num.Int128     `knox:"i128"`
+	I256     num.Int256     `knox:"i256"`
+	Big      num.Big        `knox:"big"`
+	Duration time.Duration  `knox:"dur"`
 }
 
 func makeBenchData(sz int) (res []encodeBenchStruct, size int64) {
 	for i := range sz {
 		res = append(res, encodeBenchStruct{
-			Id:      0,
-			Time:    time.Now().UTC(),
-			Hash:    [20]byte(testutil.RandBytes(20)),
-			String:  hex.EncodeToString(testutil.RandBytes(4)),
-			Bool:    true,
-			Enum:    MyEnum(myEnum.MustValue(uint16(i%4 + 1))),
-			Int64:   int64(i),
-			Int32:   int32(i),
-			Int16:   int16(i % (1<<16 - 1)),
-			Int8:    int8(i % (1<<8 - 1)),
-			Uint64:  uint64(i * 1000000),
-			Uint32:  uint32(i * 1000000),
-			Uint16:  uint16(i),
-			Uint8:   uint8(i),
-			Float32: float32(i / 1000000),
-			Float64: float64(i / 1000000),
-			D32:     num.NewDecimal32(int32(100123456789-i), 5),
-			D64:     num.NewDecimal64(1123456789123456789-int64(i), 15),
-			D128:    num.NewDecimal128(num.MustParseInt128(strconv.Itoa(i)+"00000000000000000000"), 18),
-			D256:    num.NewDecimal256(num.MustParseInt256(strconv.Itoa(i)+"0000000000000000000000000000000000000000"), 24),
-			I128:    num.MustParseInt128(strconv.Itoa(i) + "000000000000000000000000000000"),
-			I256:    num.MustParseInt256(strconv.Itoa(i) + "000000000000000000000000000000000000000000000000000000000000"),
-			Big:     num.NewBig(int64(i)),
+			Id:       0,
+			Time:     time.Now().UTC(),
+			Hash:     [20]byte(testutil.RandBytes(20)),
+			String:   hex.EncodeToString(testutil.RandBytes(4)),
+			Bool:     true,
+			Enum:     MyEnum(myEnum.MustValue(uint16(i%4 + 1))),
+			Int64:    int64(i),
+			Int32:    int32(i),
+			Int16:    int16(i % (1<<16 - 1)),
+			Int8:     int8(i % (1<<8 - 1)),
+			Uint64:   uint64(i * 1000000),
+			Uint32:   uint32(i * 1000000),
+			Uint16:   uint16(i),
+			Uint8:    uint8(i),
+			Float32:  float32(i / 1000000),
+			Float64:  float64(i / 1000000),
+			D32:      num.NewDecimal32(int32(100123456789-i), 5),
+			D64:      num.NewDecimal64(1123456789123456789-int64(i), 15),
+			D128:     num.NewDecimal128(num.MustParseInt128(strconv.Itoa(i)+"00000000000000000000"), 18),
+			D256:     num.NewDecimal256(num.MustParseInt256(strconv.Itoa(i)+"0000000000000000000000000000000000000000"), 24),
+			I128:     num.MustParseInt128(strconv.Itoa(i) + "000000000000000000000000000000"),
+			I256:     num.MustParseInt256(strconv.Itoa(i) + "000000000000000000000000000000000000000000000000000000000000"),
+			Big:      num.NewBig(int64(i)),
+			Duration: time.Minute * time.Duration(i),
 		})
 	}
 	enc := NewEncoderFor[encodeBenchStruct]()

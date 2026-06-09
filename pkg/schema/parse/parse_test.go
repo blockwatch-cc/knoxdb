@@ -43,6 +43,10 @@ func TestSingleValueParsing(t *testing.T) {
 		{"Time_ms", NewParser(schema.Time, 2, nil), "12:34:56.001", time.Date(1970, 1, 1, 12, 34, 56, 1000000, time.UTC).UnixMilli()},
 		{"Time_us", NewParser(schema.Time, 1, nil), "12:34:56.000001", time.Date(1970, 1, 1, 12, 34, 56, 1000, time.UTC).UnixMicro()},
 		{"Time_ns", NewParser(schema.Time, 0, nil), "12:34:56.000000001", time.Date(1970, 1, 1, 12, 34, 56, 1, time.UTC).UnixNano()},
+		{"Duration_s", NewParser(schema.Duration, 3, nil), "1s", int64(1)},
+		{"Duration_ms", NewParser(schema.Duration, 2, nil), "1s1ms", int64(1001)},
+		{"Duration_us", NewParser(schema.Duration, 1, nil), "1s1us", int64(1000001)},
+		{"Duration_ns", NewParser(schema.Duration, 0, nil), "1s1ns", int64(1000000001)},
 		{"Date", NewParser(schema.Date, 4, nil), "2023-05-17", schema.UnixDays(time.Date(2023, 5, 17, 0, 0, 0, 0, time.UTC))},
 		{"Int128", NewParser(schema.Int128, 0, nil), "170141183460469231731687303715884105727", func() num.Int128 { i, _ := num.ParseInt128("170141183460469231731687303715884105727"); return i }()},
 		{"Int256", NewParser(schema.Int256, 0, nil), "57896044618658097711785492504343953926634992332820282019728792003956564819967", func() num.Int256 {

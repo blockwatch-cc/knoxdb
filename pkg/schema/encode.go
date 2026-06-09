@@ -56,6 +56,16 @@ func (f *Field) WriteValue(w io.Writer, val any, layout binary.ByteOrder) (err e
 			_, err = w.Write(buf[:8])
 		}
 
+	case Duration:
+		switch d := val.(type) {
+		case time.Duration:
+			layout.PutUint64(buf, uint64(TimeScale(f.Scale).Int64(d)))
+			_, err = w.Write(buf[:8])
+		case int64:
+			layout.PutUint64(buf, uint64(d))
+			_, err = w.Write(buf[:8])
+		}
+
 	case Int64:
 		if v, ok := val.(int64); ok {
 			layout.PutUint64(buf, uint64(v))
@@ -295,6 +305,10 @@ func (f *Field) ReadValue(r io.Reader, layout binary.ByteOrder) (val any, err er
 	case Timestamp, Time, Date:
 		_, err = r.Read(buf[:8])
 		val = TimeScale(f.Scale).FromUnix(int64(layout.Uint64(buf[:8])))
+
+	case Duration:
+		_, err = r.Read(buf[:8])
+		val = TimeScale(f.Scale).Duration(int64(layout.Uint64(buf[:8])))
 
 	case Int64:
 		_, err = r.Read(buf[:8])

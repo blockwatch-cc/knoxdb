@@ -46,6 +46,7 @@ func TestWriterWrite(t *testing.T) {
 	require.NoError(t, w.Write(base.String))
 	require.NoError(t, w.Write(string(base.MyEnum)))
 	require.NoError(t, w.Write(base.Big))
+	require.NoError(t, w.Write(base.Duration))
 	require.True(t, w.Done())
 
 	require.Equal(t, buf, w.Bytes())
@@ -84,6 +85,7 @@ func TestWriterPrimitive(t *testing.T) {
 	require.NoError(t, w.WriteString(base.String))
 	require.NoError(t, w.WriteEnum(string(base.MyEnum)))
 	require.NoError(t, w.WriteBigint(base.Big))
+	require.NoError(t, w.WriteDuration(base.Duration))
 	require.True(t, w.Done())
 
 	require.Equal(t, buf, w.Bytes())

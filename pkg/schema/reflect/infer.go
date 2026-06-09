@@ -17,6 +17,7 @@ import (
 var (
 	emptyType       = reflect.TypeFor[struct{}]()
 	typeOfTime      = reflect.TypeFor[time.Time]()
+	typeOfDuration  = reflect.TypeFor[time.Duration]()
 	typeOfInt256    = reflect.TypeFor[num.Int256]()
 	typeOfInt128    = reflect.TypeFor[num.Int128]()
 	typeOfDec32     = reflect.TypeFor[num.Decimal32]()
@@ -467,6 +468,8 @@ func (b *builder) inferMapFieldType(f *schema.Field, t reflect.Type) error {
 
 func (b *builder) inferPrimitiveFieldType(f *schema.Field, t reflect.Type) error {
 	switch t {
+	case typeOfDuration:
+		f.Type = schema.Duration
 	case typeOfInt64:
 		f.Type = schema.Int64
 	case typeOfInt32:
@@ -643,7 +646,7 @@ func (b *builder) parseFieldTag(field *schema.Field, tag string) error {
 				} else {
 					return fmt.Errorf("missing value for scale tag")
 				}
-			case schema.Timestamp, schema.Time:
+			case schema.Timestamp, schema.Time, schema.Duration:
 				s, ok := schema.ParseTimeScale(val)
 				if !ok {
 					return fmt.Errorf("invalid time scale value %q", val)
@@ -692,9 +695,9 @@ func (b *builder) parseFieldTag(field *schema.Field, tag string) error {
 			f.Type = schema.Text
 			f.Flags &^= schema.FlagArray
 			f.Scale = 0
-		case "blob":
+		case "binary":
 			if f.Type != schema.Bytes {
-				return fmt.Errorf("blob tag unsupported on type %s", f.Type)
+				return fmt.Errorf("binary tag unsupported on type %s", f.Type)
 			}
 			f.Type = schema.Binary
 			f.Flags &^= schema.FlagArray

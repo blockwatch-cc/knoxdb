@@ -403,6 +403,10 @@ func (e *Encoder) writeField(buf *bytes.Buffer, code OpCode, field *schema.Field
 		tm := *(*time.Time)(ptr)
 		writeU64(buf, uint64(schema.TimeScale(field.Scale).ToUnix(tm)))
 
+	case OC_DURATION:
+		d := *(*time.Duration)(ptr)
+		writeU64(buf, uint64(schema.TimeScale(field.Scale).Int64(d)))
+
 	case OC_I256:
 		v := *(*num.Int256)(ptr)
 		buf.Write(v.Bytes())
@@ -470,6 +474,9 @@ func (e *Encoder) writeField(buf *bytes.Buffer, code OpCode, field *schema.Field
 
 		// patch len in bytes
 		*(*uint32)(unsafe.Pointer(&buf.Bytes()[ofs])) = uint32(buf.Len() - ofs - 4)
+
+	case OC_MAP:
+		err = schema.ErrInvalidValueType
 	}
 	return
 }

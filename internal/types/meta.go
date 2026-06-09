@@ -19,6 +19,15 @@ const (
 	MetaAction uint16 = 0xFFFA
 )
 
+// Internal schema for record metadata
+type Meta struct {
+	Rid   uint64 `knox:"$rid,metadata,id=0xffff"`  // unique row id
+	Ref   uint64 `knox:"$ref,metadata,id=0xfffe"`  // previous version, ref == rid on first insert
+	Xmin  XID    `knox:"$xmin,metadata,id=0xfffd"` // txid where this row was created
+	Xmax  XID    `knox:"$xmax,metadata,id=0xfffc"` // txid where this row was deleted
+	IsDel bool   `knox:"$del,metadata,id=0xfffb"`  // record was deleted (true) or updated (false)
+}
+
 var (
 	MetaFieldIds = []uint16{MetaRid, MetaRef, MetaXmin, MetaXmax, MetaDel}
 	MetaSchema   = &schema.Schema{

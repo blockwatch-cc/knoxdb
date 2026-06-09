@@ -45,10 +45,12 @@ const (
 	OC_BLOB                    // 0x1D 29
 	OC_LIST                    // 0x1E 30
 	OC_MAP                     // 0x1F 31 (unused)
+	OC_DURATION                // 0x20 32
+	OC_UNION                   // 0x21 33
 )
 
 var (
-	opCodeStrings = "__i8_i16_i32_i64_u8_u16_u32_u64_f32_f64_bool_fixbyte_fixstr_str_byte_timestamp_time_date_i128_i256_d32_d64_d128_d256_bigint_enum_skip_text_blob_list_map"
+	opCodeStrings = "__i8_i16_i32_i64_u8_u16_u32_u64_f32_f64_bool_fixbyte_fixstr_str_byte_timestamp_time_date_i128_i256_d32_d64_d128_d256_bigint_enum_skip_text_blob_list_map_duration_union"
 	opCodeIdx     = [...]uint8{
 		0,                           // invalid
 		2, 5, 9, 13, 17, 20, 24, 28, // int/uint
@@ -65,26 +67,27 @@ var (
 		134,      // text
 		139,      // blob
 		144, 149, // list, map
-		153, // end-of-string
+		153, // duration
+		162, // union
+		168, // end-of-string
 	}
 
 	ft2oc = map[schema.FieldType]OpCode{
 		schema.Timestamp:  OC_TIMESTAMP,
+		schema.Duration:   OC_DURATION,
 		schema.Date:       OC_DATE,
 		schema.Time:       OC_TIME,
-		schema.Int64:      OC_I64,
-		schema.Int32:      OC_I32,
-		schema.Int16:      OC_I16,
-		schema.Int8:       OC_I8,
 		schema.Uint64:     OC_U64,
 		schema.Uint32:     OC_U32,
 		schema.Uint16:     OC_U16,
 		schema.Uint8:      OC_U8,
+		schema.Int64:      OC_I64,
+		schema.Int32:      OC_I32,
+		schema.Int16:      OC_I16,
+		schema.Int8:       OC_I8,
+		schema.Boolean:    OC_BOOL,
 		schema.Float64:    OC_F64,
 		schema.Float32:    OC_F32,
-		schema.Boolean:    OC_BOOL,
-		schema.String:     OC_STRING,
-		schema.Bytes:      OC_BYTES,
 		schema.Int256:     OC_I256,
 		schema.Int128:     OC_I128,
 		schema.Decimal256: OC_D256,
@@ -92,10 +95,13 @@ var (
 		schema.Decimal64:  OC_D64,
 		schema.Decimal32:  OC_D32,
 		schema.Bigint:     OC_BIGINT,
+		schema.String:     OC_STRING,
 		schema.Text:       OC_TEXT,
+		schema.Bytes:      OC_BYTES,
 		schema.Binary:     OC_BLOB,
 		schema.List:       OC_LIST,
 		schema.Map:        OC_MAP, // unsupported, throws error
+		schema.Union:      OC_UNION,
 	}
 )
 

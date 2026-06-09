@@ -378,6 +378,7 @@ func TestFieldEncodeRoundtrip(t *testing.T) {
 		{"Text", schema.FieldOf(schema.Text), "hello"},
 		{"Blob", schema.FieldOf(schema.Binary), []byte("world")},
 		{"BigInt", schema.FieldOf(schema.Bigint), num.NewBig(11)},
+		{"Duration", schema.FieldOf(schema.Duration), time.Hour + time.Minute},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {

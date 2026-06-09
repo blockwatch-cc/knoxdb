@@ -18,7 +18,7 @@ func (i Compression) Is(f Compression) bool {
 
 var (
 	blockCompressNames    = "__snappy_lz4_zstd"
-	blockCompressNamesOfs = [...]int8{0, 2, 7, 13, 18}
+	blockCompressNamesOfs = [...]int8{0, 2, 9, 13, 18}
 )
 
 func (t Compression) String() string {

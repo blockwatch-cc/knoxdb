@@ -144,6 +144,14 @@ func (s TimeScale) FromUnix(v int64) time.Time {
 	}
 }
 
+func (s TimeScale) Int64(d time.Duration) int64 {
+	return int64(d) / timeScaleFactor[s]
+}
+
+func (s TimeScale) Duration(v int64) time.Duration {
+	return time.Duration(v * timeScaleFactor[s])
+}
+
 func (s TimeScale) ShortName() string {
 	switch s {
 	case TIME_SCALE_NANO:
@@ -204,6 +212,14 @@ func (s TimeScale) ParseTime(v string, isTimeOnly bool) (time.Time, error) {
 		}
 		return tm, nil
 	}
+}
+
+func (s TimeScale) ParseDuration(v string) (time.Duration, error) {
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		return 0, err
+	}
+	return d.Truncate(time.Duration(timeScaleFactor[s])), nil
 }
 
 // returns format string, scale factor, time only flag and ok flag

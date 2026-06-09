@@ -282,13 +282,14 @@ const (
 	fTime      // 14 parses as time only with optional below 1s resolution
 	fDate      // 15 parses as date only
 	fFixed     // 16 fixed length across records
+	fDuration  // 17 parses as duration
 )
 
 const defaultFlags = fFixed
 
 var (
-	fieldFlagNames = "sign_num_bool_null_empty_0x_quoted_dec_hex_other_dash_dot_exp_ts_time_date_fix"
-	fieldFlagOfs   = []int{0, 5, 9, 14, 19, 25, 28, 35, 39, 43, 49, 54, 58, 62, 65, 70, 75, 79}
+	fieldFlagNames = "sign_num_bool_null_empty_0x_quoted_dec_hex_other_dash_dot_exp_ts_time_date_fix_duration"
+	fieldFlagOfs   = []int{0, 5, 9, 14, 19, 25, 28, 35, 39, 43, 49, 54, 58, 62, 65, 70, 75, 79, 88}
 )
 
 func (f fieldFlag) String() string {
@@ -387,6 +388,8 @@ func (f field) Type() schema.FieldType {
 		return schema.Time
 	case f.is(fTimestamp):
 		return schema.Timestamp
+	case f.is(fDuration):
+		return schema.Duration
 	case f.isBytes():
 		return schema.Bytes
 	default:
@@ -445,6 +448,10 @@ func (f field) maybeDateTime() bool {
 	return f.not(fSign) && f.not(fExp) && f.not(fZerox) &&
 		(f.is(fQuoted) || f.is(fNum)) && f.is(fDecimal) && f.is(fFixed) &&
 		(f.is(fDash) || f.is(fOther))
+}
+func (f field) maybeDuration() bool {
+	return f.is(fNum) && f.is(fDecimal) && f.is(fOther) && !f.is(fDate) &&
+		!f.is(fHex) && !f.is(fQuoted) && !f.is(fBool)
 }
 
 func (f field) isDateTime() bool {
@@ -609,6 +616,14 @@ func (f *field) update(buf []byte, tfm, dfm string) {
 		f.flag &^= fFixed     // drop fixed length flag
 		f.len = max(f.len, l) // keep max length
 	}
+
+	// duration
+	if f.len > 2 && f.maybeDuration() {
+		if scale, ok := tryDuration(src); ok {
+			f.flag |= fDuration
+			f.scale = scale
+		}
+	}
 }
 
 func tryTime(buf []byte, tfm, dfm string) (fieldFlag, string, int) {
@@ -637,6 +652,23 @@ func tryTime(buf []byte, tfm, dfm string) (fieldFlag, string, int) {
 	}
 
 	return 0, "", 0
+}
+
+func tryDuration(buf []byte) (int, bool) {
+	d, err := time.ParseDuration(string(buf))
+	if err != nil {
+		return 0, false
+	}
+	switch {
+	case d.Truncate(time.Second) == d:
+		return 3, true
+	case d.Truncate(time.Millisecond) == d:
+		return 2, true
+	case d.Truncate(time.Microsecond) == d:
+		return 1, true
+	default:
+		return 0, true
+	}
 }
 
 func (s *Sniffer) analyzeHeader() {

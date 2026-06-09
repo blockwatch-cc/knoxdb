@@ -149,6 +149,9 @@ func IndexOf(base *Schema, typ IndexType, opts ...IndexOption) *IndexSchema {
 	return NewIndexSchema(typ, base, opts...)
 }
 
+// MapOf creates a new map type from primitive types for key and value.
+// Options apply to the outer map type. For controlling key and value
+// type options use MapFor.
 func MapOf(keyT, valT FieldType, opts ...FieldOption) *Field {
 	// peek field name
 	dummy := NewField(String, opts...)
@@ -179,6 +182,11 @@ func MapOf(keyT, valT FieldType, opts ...FieldOption) *Field {
 	)
 }
 
+// MapFor creates a new map type with a primitive key and a complex value.
+// Options apply to the outer map type. Unlike Go built-in hash maps,
+// schema maps are represented as lists of key/value structs. Maps contain
+// unique sorted keys and it is permitted to nest lists and maps into a
+// map value type field.
 func MapFor(keyT FieldType, valS *Schema, opts ...FieldOption) *Field {
 	// peek field name
 	dummy := NewField(String, opts...)

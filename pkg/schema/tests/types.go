@@ -95,58 +95,60 @@ var (
 )
 
 type AllTypes struct {
-	Id      uint64         `knox:"id,pk"`         // 0
-	Int64   int64          `knox:"i64"`           // 1
-	Int32   int32          `knox:"i32"`           // 2
-	Int16   int16          `knox:"i16"`           // 3
-	Int8    int8           `knox:"i8"`            // 4
-	Uint64  uint64         `knox:"u64"`           // 5
-	Uint32  uint32         `knox:"u32"`           // 6
-	Uint16  uint16         `knox:"u16"`           // 7
-	Uint8   uint8          `knox:"u8"`            // 8
-	Float64 float64        `knox:"f64"`           // 9
-	Float32 float32        `knox:"f32"`           // 10
-	D32     num.Decimal32  `knox:"d32,scale=5"`   // 11
-	D64     num.Decimal64  `knox:"d64,scale=15"`  // 12
-	D128    num.Decimal128 `knox:"d128,scale=18"` // 13
-	D256    num.Decimal256 `knox:"d256,scale=24"` // 14
-	I128    num.Int128     `knox:"i128"`          // 15
-	I256    num.Int256     `knox:"i256"`          // 16
-	Bool    bool           `knox:"bool"`          // 17
-	Time    time.Time      `knox:"time"`          // 18
-	Hash    []byte         `knox:"bytes"`         // 19
-	Array   [2]byte        `knox:"array[2]"`      // 20
-	String  string         `knox:"string"`        // 21
-	MyEnum  MyEnum         `knox:"my_enum,enum"`  // 22
-	Big     num.Big        `knox:"big"`           // 23
+	Id       uint64         `knox:"id,pk"`         // 0
+	Int64    int64          `knox:"i64"`           // 1
+	Int32    int32          `knox:"i32"`           // 2
+	Int16    int16          `knox:"i16"`           // 3
+	Int8     int8           `knox:"i8"`            // 4
+	Uint64   uint64         `knox:"u64"`           // 5
+	Uint32   uint32         `knox:"u32"`           // 6
+	Uint16   uint16         `knox:"u16"`           // 7
+	Uint8    uint8          `knox:"u8"`            // 8
+	Float64  float64        `knox:"f64"`           // 9
+	Float32  float32        `knox:"f32"`           // 10
+	D32      num.Decimal32  `knox:"d32,scale=5"`   // 11
+	D64      num.Decimal64  `knox:"d64,scale=15"`  // 12
+	D128     num.Decimal128 `knox:"d128,scale=18"` // 13
+	D256     num.Decimal256 `knox:"d256,scale=24"` // 14
+	I128     num.Int128     `knox:"i128"`          // 15
+	I256     num.Int256     `knox:"i256"`          // 16
+	Bool     bool           `knox:"bool"`          // 17
+	Time     time.Time      `knox:"time"`          // 18
+	Hash     []byte         `knox:"bytes"`         // 19
+	Array    [2]byte        `knox:"array[2]"`      // 20
+	String   string         `knox:"string"`        // 21
+	MyEnum   MyEnum         `knox:"my_enum,enum"`  // 22
+	Big      num.Big        `knox:"big"`           // 23
+	Duration time.Duration  `knox:"duration"`      // 24
 }
 
 func NewAllTypes(i int64) AllTypes {
 	return AllTypes{
-		Id:      uint64(i),
-		Int64:   i,
-		Int32:   int32(i),
-		Int16:   int16(i),
-		Int8:    int8(i),
-		Uint64:  uint64(i),
-		Uint32:  uint32(i),
-		Uint16:  uint16(i),
-		Uint8:   uint8(i),
-		Float64: float64(i),
-		Float32: float32(i),
-		D32:     num.NewDecimal32(int32(i), 5),
-		D64:     num.NewDecimal64(i, 15),
-		D128:    num.NewDecimal128(num.Int128FromInt64(i), 18),
-		D256:    num.NewDecimal256(num.Int256FromInt64(i), 24),
-		I128:    num.Int128FromInt64(i),
-		I256:    num.Int256FromInt64(i),
-		Bool:    i%2 == 1,
-		Time:    time.Unix(0, i).UTC(),
-		Hash:    binary.BigEndian.AppendUint64(nil, uint64(i)),
-		Array:   [2]byte{byte(i >> 8 & 0xf), byte(i & 0xf)},
-		String:  fmt.Sprintf("%016x", i),
-		MyEnum:  MyEnum("a"),
-		Big:     num.NewBig(i),
+		Id:       uint64(i),
+		Int64:    i,
+		Int32:    int32(i),
+		Int16:    int16(i),
+		Int8:     int8(i),
+		Uint64:   uint64(i),
+		Uint32:   uint32(i),
+		Uint16:   uint16(i),
+		Uint8:    uint8(i),
+		Float64:  float64(i),
+		Float32:  float32(i),
+		D32:      num.NewDecimal32(int32(i), 5),
+		D64:      num.NewDecimal64(i, 15),
+		D128:     num.NewDecimal128(num.Int128FromInt64(i), 18),
+		D256:     num.NewDecimal256(num.Int256FromInt64(i), 24),
+		I128:     num.Int128FromInt64(i),
+		I256:     num.Int256FromInt64(i),
+		Bool:     i%2 == 1,
+		Time:     time.Unix(0, i).UTC(),
+		Hash:     binary.BigEndian.AppendUint64(nil, uint64(i)),
+		Array:    [2]byte{byte(i >> 8 & 0xf), byte(i & 0xf)},
+		String:   fmt.Sprintf("%016x", i),
+		MyEnum:   MyEnum("a"),
+		Big:      num.NewBig(i),
+		Duration: time.Minute * time.Duration(i),
 	}
 }
 
@@ -172,15 +174,19 @@ func NewArrayTypes(i int64) ArrayTypes {
 }
 
 type TimeTypes struct {
-	TimestampNs time.Time `knox:"tsn,timestamp,scale=ns"`
-	TimestampUs time.Time `knox:"tsu,timestamp,scale=us"`
-	TimestampMs time.Time `knox:"tsm,timestamp,scale=ms"`
-	TimestampS  time.Time `knox:"tss,timestamp,scale=s"`
-	TimeNs      time.Time `knox:"tmn,time,scale=ns"`
-	TimeUs      time.Time `knox:"tmu,time,scale=us"`
-	TimeMs      time.Time `knox:"tmm,time,scale=ms"`
-	TimeS       time.Time `knox:"tms,time,scale=s"`
-	Date        time.Time `knox:"dt,date"`
+	TimestampNs time.Time     `knox:"tsn,timestamp,scale=ns"`
+	TimestampUs time.Time     `knox:"tsu,timestamp,scale=us"`
+	TimestampMs time.Time     `knox:"tsm,timestamp,scale=ms"`
+	TimestampS  time.Time     `knox:"tss,timestamp,scale=s"`
+	TimeNs      time.Time     `knox:"tmn,time,scale=ns"`
+	TimeUs      time.Time     `knox:"tmu,time,scale=us"`
+	TimeMs      time.Time     `knox:"tmm,time,scale=ms"`
+	TimeS       time.Time     `knox:"tms,time,scale=s"`
+	Date        time.Time     `knox:"dt,date"`
+	DurationN   time.Duration `knox:"dns,scale=ns"`
+	DurationU   time.Duration `knox:"dus,scale=us"`
+	DurationM   time.Duration `knox:"dms,scale=ms"`
+	DurationS   time.Duration `knox:"ds,scale=s"`
 }
 
 type LargeArrayToBlob struct {

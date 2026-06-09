@@ -26,84 +26,87 @@ type A struct {
 
 // all supported types as schema compatible kinds
 type SchemaB struct {
-	Int64   int64          `knox:"i64"`
-	Int32   int32          `knox:"i32"`
-	Int16   int16          `knox:"i16"`
-	Int8    int8           `knox:"i8"`
-	Uint64  uint64         `knox:"u64"`
-	Uint32  uint32         `knox:"u32"`
-	Uint16  uint16         `knox:"u16"`
-	Uint8   uint8          `knox:"u8"`
-	Float64 float64        `knox:"f64"`
-	Float32 float32        `knox:"f32"`
-	D32     num.Decimal32  `knox:"d32,scale=5"`
-	D64     num.Decimal64  `knox:"d64,scale=15"`
-	D128    num.Decimal128 `knox:"d128,scale=18"`
-	D256    num.Decimal256 `knox:"d256,scale=24"`
-	I128    num.Int128     `knox:"i128"`
-	I256    num.Int256     `knox:"i256"`
-	Bool    bool           `knox:"bool"`
-	Time    time.Time      `knox:"time,scale=s"`
-	Hash    []byte         `knox:"bytes"`
-	Array   [2]byte        `knox:"array2"`
-	String  string         `knox:"string"`
-	Big     num.Big        `knox:"big"`
+	Int64    int64          `knox:"i64"`
+	Int32    int32          `knox:"i32"`
+	Int16    int16          `knox:"i16"`
+	Int8     int8           `knox:"i8"`
+	Uint64   uint64         `knox:"u64"`
+	Uint32   uint32         `knox:"u32"`
+	Uint16   uint16         `knox:"u16"`
+	Uint8    uint8          `knox:"u8"`
+	Float64  float64        `knox:"f64"`
+	Float32  float32        `knox:"f32"`
+	D32      num.Decimal32  `knox:"d32,scale=5"`
+	D64      num.Decimal64  `knox:"d64,scale=15"`
+	D128     num.Decimal128 `knox:"d128,scale=18"`
+	D256     num.Decimal256 `knox:"d256,scale=24"`
+	I128     num.Int128     `knox:"i128"`
+	I256     num.Int256     `knox:"i256"`
+	Bool     bool           `knox:"bool"`
+	Time     time.Time      `knox:"time,scale=s"`
+	Hash     []byte         `knox:"bytes"`
+	Array    [2]byte        `knox:"array2"`
+	String   string         `knox:"string"`
+	Big      num.Big        `knox:"big"`
+	Duration time.Duration  `knox:"dur"`
 }
 
 // all supported types expressed by native Go types
 type NativeB struct {
-	Int64   int64    `knox:"i64"`
-	Int32   int32    `knox:"i32"`
-	Int16   int16    `knox:"i16"`
-	Int8    int8     `knox:"i8"`
-	Uint64  uint64   `knox:"u64"`
-	Uint32  uint32   `knox:"u32"`
-	Uint16  uint16   `knox:"u16"`
-	Uint8   uint8    `knox:"u8"`
-	Float64 float64  `knox:"f64"`
-	Float32 float32  `knox:"f32"`
-	D32     int32    `knox:"d32,scale=5"`
-	D64     int64    `knox:"d64,scale=15"`
-	D128    [16]byte `knox:"d128,scale=18"`
-	D256    [32]byte `knox:"d256,scale=24"`
-	I128    [16]byte `knox:"i128"`
-	I256    [32]byte `knox:"i256"`
-	Bool    bool     `knox:"bool"`
-	Time    int64    `knox:"time,scale=s"`
-	Hash    []byte   `knox:"bytes"`
-	Array   [2]byte  `knox:"array2"`
-	String  string   `knox:"string"`
-	Big     []byte   `knox:"big"`
+	Int64    int64    `knox:"i64"`
+	Int32    int32    `knox:"i32"`
+	Int16    int16    `knox:"i16"`
+	Int8     int8     `knox:"i8"`
+	Uint64   uint64   `knox:"u64"`
+	Uint32   uint32   `knox:"u32"`
+	Uint16   uint16   `knox:"u16"`
+	Uint8    uint8    `knox:"u8"`
+	Float64  float64  `knox:"f64"`
+	Float32  float32  `knox:"f32"`
+	D32      int32    `knox:"d32,scale=5"`
+	D64      int64    `knox:"d64,scale=15"`
+	D128     [16]byte `knox:"d128,scale=18"`
+	D256     [32]byte `knox:"d256,scale=24"`
+	I128     [16]byte `knox:"i128"`
+	I256     [32]byte `knox:"i256"`
+	Bool     bool     `knox:"bool"`
+	Time     int64    `knox:"time,scale=s"`
+	Hash     []byte   `knox:"bytes"`
+	Array    [2]byte  `knox:"array2"`
+	String   string   `knox:"string"`
+	Big      []byte   `knox:"big"`
+	Duration int64    `knox:"dur"`
 }
 
 var (
 	A1V = A{"Hello", 42, 23.45, true}
 	A3V = A{"  Hello  ", 42, 23.45, true}
 
-	CsvB = `-1,-1,-1,-1,1,1,1,1,1.1,1.1,1.00001,1.000000000000001,1.000000000000000001,1.000000000000000000000001,1,1,true,2026-06-07T02:00:01Z,787878,4141,sss,1234`
+	CsvB = `-1,-1,-1,-1,1,1,1,1,1.1,1.1,1.00001,1.000000000000001,1.000000000000000001,1.000000000000000000000001,1,1,true,2026-06-07T02:00:01Z,787878,4141,sss,1234,1h0m0.5s`
 	BV   = NativeB{
-		Int64:   -1,
-		Int32:   -1,
-		Int16:   -1,
-		Int8:    -1,
-		Uint64:  1,
-		Uint32:  1,
-		Uint16:  1,
-		Uint8:   1,
-		Float64: 1.1,
-		Float32: 1.1,
-		D32:     100001,
-		D64:     1000000000000001,
-		D128:    num.Int128FromInt64(1000000000000000001).Bytes16(),
-		D256:    num.MustParseDecimal256("1.000000000000000000000001").Int256().Bytes32(),
-		I128:    num.Int128FromInt64(1).Bytes16(),
-		I256:    num.Int256FromInt64(1).Bytes32(),
-		Bool:    true,
-		Time:    time.Date(2026, 6, 7, 2, 0, 1, 0, time.UTC).Unix(),
-		Hash:    []byte{0x78, 0x78, 0x78},
-		Array:   [2]byte{0x41, 0x41},
-		String:  "sss",
-		Big:     num.NewBig(1234).Bytes(),
+		Int64:    -1,
+		Int32:    -1,
+		Int16:    -1,
+		Int8:     -1,
+		Uint64:   1,
+		Uint32:   1,
+		Uint16:   1,
+		Uint8:    1,
+		Float64:  1.1,
+		Float32:  1.1,
+		D32:      100001,
+		D64:      1000000000000001,
+		D128:     num.Int128FromInt64(1000000000000000001).Bytes16(),
+		D256:     num.MustParseDecimal256("1.000000000000000000000001").Int256().Bytes32(),
+		I128:     num.Int128FromInt64(1).Bytes16(),
+		I256:     num.Int256FromInt64(1).Bytes32(),
+		Bool:     true,
+		Time:     time.Date(2026, 6, 7, 2, 0, 1, 0, time.UTC).Unix(),
+		Hash:     []byte{0x78, 0x78, 0x78},
+		Array:    [2]byte{0x41, 0x41},
+		String:   "sss",
+		Big:      num.NewBig(1234).Bytes(),
+		Duration: int64(time.Hour + time.Second/2),
 	}
 )
 

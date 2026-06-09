@@ -206,6 +206,7 @@ func TestCastNewCaster(t *testing.T) {
 		expected  any
 	}{
 		{"Datetime", schema.Timestamp, TimeCaster{}},
+		{"Duration", schema.Duration, DurationCaster{}},
 		{"Boolean", schema.Boolean, BoolCaster{}},
 		{"String", schema.String, StringCaster{}},
 		{"Bytes", schema.Bytes, BytesCaster{}},

@@ -27,7 +27,7 @@ const (
 )
 
 var filterModeOperators = [...]string{
-	FilterModeInvalid:  "",
+	FilterModeInvalid:  "_",
 	FilterModeEqual:    "eq",
 	FilterModeNotEqual: "ne",
 	FilterModeGt:       "gt",

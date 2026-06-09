@@ -31,6 +31,8 @@ func NewCaster(typ schema.FieldType, scale uint8, enum ValueCaster) ValueCaster 
 	switch typ {
 	case schema.Timestamp, schema.Time:
 		return TimeCaster{scale: schema.TimeScale(scale)}
+	case schema.Duration:
+		return DurationCaster{scale: schema.TimeScale(scale)}
 	case schema.Date:
 		return DateCaster{}
 	case schema.Boolean:

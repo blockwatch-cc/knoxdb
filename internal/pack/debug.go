@@ -97,9 +97,11 @@ func (p *Package) ReadValue(col, row int, typ types.FieldType, scale uint8) any 
 		} else {
 			return zeroTime
 		}
+	case types.FT_DURATION:
+		return types.TimeScale(scale).Duration(b.Int64().Get(row))
 	case types.FT_BOOL:
 		return b.Bool().Get(row)
-	case types.FT_BYTES, types.FT_BLOB:
+	case types.FT_BYTES, types.FT_BINARY:
 		return b.Bytes().Get(row)
 	case types.FT_STRING, types.FT_TEXT:
 		return util.UnsafeGetString(b.Bytes().Get(row))
