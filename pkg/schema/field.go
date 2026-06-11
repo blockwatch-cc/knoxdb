@@ -41,7 +41,7 @@ type Field struct {
 	Flags    FieldFlags           // schema flags
 	Compress Compression          // data compression
 	Filter   FilterType           // metadata filter type
-	Child    *Schema              // nested schemas for LIST (elem), MAP (key/val pair)
+	Child    *Schema              // nested schemas for LIST (elem), MAP (key/val pair), VARIANT (cases)
 	Enum     *enum.EnumDictionary // enum dictionary when field is an enum
 }
 
