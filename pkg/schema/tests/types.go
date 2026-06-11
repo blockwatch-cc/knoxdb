@@ -95,31 +95,32 @@ var (
 )
 
 type AllTypes struct {
-	Id       uint64         `knox:"id,pk"`         // 0
-	Int64    int64          `knox:"i64"`           // 1
-	Int32    int32          `knox:"i32"`           // 2
-	Int16    int16          `knox:"i16"`           // 3
-	Int8     int8           `knox:"i8"`            // 4
-	Uint64   uint64         `knox:"u64"`           // 5
-	Uint32   uint32         `knox:"u32"`           // 6
-	Uint16   uint16         `knox:"u16"`           // 7
-	Uint8    uint8          `knox:"u8"`            // 8
-	Float64  float64        `knox:"f64"`           // 9
-	Float32  float32        `knox:"f32"`           // 10
-	D32      num.Decimal32  `knox:"d32,scale=5"`   // 11
-	D64      num.Decimal64  `knox:"d64,scale=15"`  // 12
-	D128     num.Decimal128 `knox:"d128,scale=18"` // 13
-	D256     num.Decimal256 `knox:"d256,scale=24"` // 14
-	I128     num.Int128     `knox:"i128"`          // 15
-	I256     num.Int256     `knox:"i256"`          // 16
-	Bool     bool           `knox:"bool"`          // 17
-	Time     time.Time      `knox:"time"`          // 18
-	Hash     []byte         `knox:"bytes"`         // 19
-	Array    [2]byte        `knox:"array[2]"`      // 20
-	String   string         `knox:"string"`        // 21
-	MyEnum   MyEnum         `knox:"my_enum,enum"`  // 22
-	Big      num.Big        `knox:"big"`           // 23
-	Duration time.Duration  `knox:"duration"`      // 24
+	Id       uint64            `knox:"id,pk"`         // 0
+	Int64    int64             `knox:"i64"`           // 1
+	Int32    int32             `knox:"i32"`           // 2
+	Int16    int16             `knox:"i16"`           // 3
+	Int8     int8              `knox:"i8"`            // 4
+	Uint64   uint64            `knox:"u64"`           // 5
+	Uint32   uint32            `knox:"u32"`           // 6
+	Uint16   uint16            `knox:"u16"`           // 7
+	Uint8    uint8             `knox:"u8"`            // 8
+	Float64  float64           `knox:"f64"`           // 9
+	Float32  float32           `knox:"f32"`           // 10
+	D32      num.Decimal32     `knox:"d32,scale=5"`   // 11
+	D64      num.Decimal64     `knox:"d64,scale=15"`  // 12
+	D128     num.Decimal128    `knox:"d128,scale=18"` // 13
+	D256     num.Decimal256    `knox:"d256,scale=24"` // 14
+	I128     num.Int128        `knox:"i128"`          // 15
+	I256     num.Int256        `knox:"i256"`          // 16
+	Bool     bool              `knox:"bool"`          // 17
+	Time     time.Time         `knox:"time"`          // 18
+	Hash     []byte            `knox:"bytes"`         // 19
+	Array    [2]byte           `knox:"array[2]"`      // 20
+	String   string            `knox:"string"`        // 21
+	MyEnum   MyEnum            `knox:"my_enum,enum"`  // 22
+	Big      num.Big           `knox:"big"`           // 23
+	Duration time.Duration     `knox:"duration"`      // 24
+	Union    schema.UnionValue `knox:"union"`         // 25
 }
 
 func NewAllTypes(i int64) AllTypes {
@@ -149,6 +150,7 @@ func NewAllTypes(i int64) AllTypes {
 		MyEnum:   MyEnum("a"),
 		Big:      num.NewBig(i),
 		Duration: time.Minute * time.Duration(i),
+		Union:    schema.Int32Union(int32(i)),
 	}
 }
 
@@ -479,26 +481,26 @@ func NewPrimMapRecord() PrimMapRecord {
 	}
 }
 
-type AttrMapRecord struct {
-	Attrs map[string]schema.Attr
+type UnionMapRecord struct {
+	Unions map[string]schema.UnionValue
 }
 
-func (r AttrMapRecord) MarshalSchema(w *schema.Writer) error {
-	return schema.MarshalMap(w, r.Attrs)
+func (r UnionMapRecord) MarshalSchema(w *schema.Writer) error {
+	return schema.MarshalMap(w, r.Unions)
 }
 
-var AttrMapRecordSchema = schema.SchemaOf([]*schema.Field{
-	schema.MapFor(schema.String, schema.AttrSchema, schema.WithName("attrs")),
+var UnionMapRecordSchema = schema.SchemaOf([]*schema.Field{
+	schema.MapOf(schema.String, schema.Union, schema.WithName("unions")),
 })
 
-func NewAttrMapRecord() AttrMapRecord {
-	return AttrMapRecord{
-		Attrs: map[string]schema.Attr{
-			"a": schema.Int64Attr("i64", 1),
-			"b": schema.Int32Attr("i32", 2),
-			"c": schema.BoolAttr("bool", true),
-			"d": schema.TimestampAttr("ts", time.Now().UTC()),
-			"e": schema.Uint16Attr("u16", 3),
+func NewUnionMapRecord() UnionMapRecord {
+	return UnionMapRecord{
+		Unions: map[string]schema.UnionValue{
+			"a": schema.Int64Union(1),
+			"b": schema.Int32Union(2),
+			"c": schema.BoolUnion(true),
+			"d": schema.TimestampUnion(time.Now().UTC()),
+			"e": schema.Uint16Union(3),
 		},
 	}
 }

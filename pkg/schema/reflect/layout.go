@@ -123,7 +123,7 @@ inferLoop:
 		r++
 
 		// recurse on slice and map types (note map keys are primitive types only)
-		if f.Child != nil {
+		if f.Child != nil && (f.Type == schema.List || f.Type == schema.Map) {
 			// unwrap pointer
 			t := sf.Type
 			if t.Kind() == reflect.Pointer {
@@ -198,7 +198,7 @@ func inferLayout(typ reflect.Type, s *schema.Schema, tag string) (*Layout, error
 	}
 
 	// recurse on slice and map types
-	if f.Child != nil {
+	if f.Child != nil && (f.Type == schema.List || f.Type == schema.Map) {
 		// trim map key field from schema
 		childSchema := f.Child
 		if f.Type == schema.Map {

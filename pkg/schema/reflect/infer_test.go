@@ -14,6 +14,7 @@ import (
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type MyEnum string
@@ -61,6 +62,7 @@ type AllTypes struct {
 	ArrMap      map[string][2]byte       `knox:"arr_map,notnull"`
 	DecimalMap  map[string]num.Decimal32 `knox:"dec_map,notnull,value=scale=4"`
 	Duration    time.Duration            `knox:"duration,scale=s"`
+	Union       schema.UnionValue        `knox:"union"`
 }
 
 type Pair struct {
@@ -119,6 +121,7 @@ func TestFieldStructReadBasic(t *testing.T) {
 		{"arr_map", schema.Map, 0, 0},
 		{"dec_map", schema.Map, 0, 0},
 		{"duration", schema.Duration, 0, schema.TIME_SCALE_SECOND.AsUint()},
+		{"union", schema.Union, schema.FlagNullable, 0},
 	}
 	for i, tt := range tests {
 		sf := allTypeOf.Field(i)
@@ -304,10 +307,12 @@ func TestBadStructEmbeds(t *testing.T) {
 }
 
 type MapFun struct {
-	MapInList []map[[2]byte]Pair          `knox:"map_in_list,notnull,element=notnull"`
-	ListInMap map[[2]byte][]Pair          `knox:"list_in_map,notnull,value=notnull"`
-	MapInMap  map[[2]byte]map[string]Pair `knox:"map_in_map,notnull,value=notnull"`
-	TimeMap   map[time.Time]uint64        `knox:"time_map,notnull,key=date"`
+	MapInList []map[[2]byte]Pair           `knox:"map_in_list,notnull,element=notnull"`
+	ListInMap map[[2]byte][]Pair           `knox:"list_in_map,notnull,value=notnull"`
+	MapInMap  map[[2]byte]map[string]Pair  `knox:"map_in_map,notnull,value=notnull"`
+	TimeMap   map[time.Time]uint64         `knox:"time_map,notnull,key=date"`
+	UnionMap  map[string]schema.UnionValue `knox:"union_map,notnull"`
+	UnionList []schema.UnionValue          `knox:"union_list,notnull"`
 }
 
 func TestFunnyEmbeds(t *testing.T) {
@@ -317,5 +322,17 @@ func TestFunnyEmbeds(t *testing.T) {
 	l, err := LayoutFor[MapFun]()
 	assert.NoError(t, err)
 	_ = l
+
+	// marshal roundtrip
+	buf, err := s.MarshalBinary()
+	require.NoError(t, err)
+	require.NotNil(t, buf)
+
+	r := &schema.Schema{}
+	err = r.UnmarshalBinary(buf)
+	require.NoError(t, err)
+
+	assert.True(t, s.Equal(r))
+
 	// spew.Dump(l)
 }

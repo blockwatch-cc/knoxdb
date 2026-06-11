@@ -196,6 +196,9 @@ func NativeStructType(s *schema.Schema) reflect.Type {
 		case schema.Map:
 			// []{key,value}
 			rtyp = reflect.SliceOf(StructTypeOf(f.Child, f.Name+"."+schema.EntriesName+"."))
+		case schema.Union, schema.Variant:
+			// TODO: can only generically export in encoded form
+			rtyp = typeOfByteSlice
 		default:
 			continue
 		}

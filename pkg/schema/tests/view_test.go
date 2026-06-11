@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Blockwatch Data Inc.
+// Copyright (c) 2024-2026 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package schema_tests
@@ -39,7 +39,7 @@ func TestViewDynamic(t *testing.T) {
 	view := schema.NewView(baseSchema).Reset(buf)
 	require.True(t, view.IsValid())
 	require.False(t, view.IsFixed())
-	require.Equal(t, baseSchema.MinWireSize+8+8+16, view.Len()) // big(8), bytes(8), string(16)
+	require.Equal(t, baseSchema.MinWireSize+8+8+16+5, view.Len()) // big(8), bytes(8), string(16), union(5)
 	require.Equal(t, view.Buffer(), buf)
 }
 
@@ -88,6 +88,7 @@ func TestViewGet(t *testing.T) {
 	testViewGetVal(t, view, 22, uint16(0))
 	testViewGetVal(t, view, 23, base.Big)
 	testViewGetVal(t, view, 24, base.Duration)
+	testViewGetVal(t, view, 25, base.Union)
 }
 
 func TestViewGetWithVisibility(t *testing.T) {
@@ -130,6 +131,7 @@ func TestViewGetWithVisibility(t *testing.T) {
 	testViewGetVal(t, view, 22, uint16(0))
 	testViewGetVal(t, view, 23, base.Big)
 	testViewGetVal(t, view, 24, base.Duration)
+	testViewGetVal(t, view, 25, base.Union)
 }
 
 // TestViewSet tests the Set method of the View struct

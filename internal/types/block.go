@@ -28,22 +28,22 @@ var (
 	blockTypeNamesOfs = [...]int8{0, 2, 6, 10, 14, 17, 21, 25, 29, 32, 36, 40, 45, 51, 56, 61}
 
 	blockTypeDataSize = [...]int{
-		BlockInvalid: 0,
-		BlockInt64:   8,
-		BlockInt32:   4,
-		BlockInt16:   2,
-		BlockInt8:    1,
-		BlockUint64:  8,
-		BlockUint32:  4,
-		BlockUint16:  2,
-		BlockUint8:   1,
-		BlockFloat64: 8,
-		BlockFloat32: 4,
-		BlockBool:    1,
-		BlockBytes:   0,
-		BlockInt128:  16,
-		BlockInt256:  32,
-		15:           0, // fill to 16 entries
+		BlockInvalid: 0,  // 0
+		BlockInt64:   8,  // 1
+		BlockInt32:   4,  // 2
+		BlockInt16:   2,  // 3
+		BlockInt8:    1,  // 4
+		BlockUint64:  8,  // 5
+		BlockUint32:  4,  // 6
+		BlockUint16:  2,  // 7
+		BlockUint8:   1,  // 8
+		BlockFloat64: 8,  // 9
+		BlockFloat32: 4,  // 10
+		BlockBool:    1,  // 11
+		BlockBytes:   0,  // 12
+		BlockInt128:  16, // 13
+		BlockInt256:  32, // 14
+		15:           0,  // fill to 16 entries
 	}
 
 	BlockTypes = [...]BlockType{
@@ -74,9 +74,9 @@ var (
 		FT_TEXT:      BlockBytes,   // 24
 		FT_BYTES:     BlockBytes,   // 25
 		FT_BINARY:    BlockBytes,   // 26
-		FT_LIST:      BlockUint32,  // 27 offset map
-		FT_MAP:       BlockUint32,  // 28 offset map
-		FT_UNION:     BlockBytes,   // 29
+		FT_LIST:      BlockUint32,  // 27 offset index
+		FT_MAP:       BlockUint32,  // 28 offset index
+		FT_UNION:     0,            // 29 embedded metadata: utag, unum, uval
 		31:           0,            // fill to 32 entries
 	}
 )

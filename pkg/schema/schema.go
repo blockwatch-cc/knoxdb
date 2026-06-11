@@ -80,10 +80,12 @@ func (s *Schema) Equal(x *Schema) bool {
 	return s != nil && x != nil && s.Hash == x.Hash
 }
 
+// Returns total number of fields across all nesting levels.
 func (s *Schema) Len() int {
 	return len(s.Fields)
 }
 
+// Returns the number of fields at top lesting level.
 func (s *Schema) NumFields() int {
 	lvl := s.Fields[0].Level
 	n := 1
@@ -95,6 +97,7 @@ func (s *Schema) NumFields() int {
 	return n
 }
 
+// Counts active fields across all nesting levels.
 func (s *Schema) NumActive() int {
 	var n int
 	for _, f := range s.Fields {
@@ -105,6 +108,7 @@ func (s *Schema) NumActive() int {
 	return n
 }
 
+// Counts enum fields across all nesting levels.
 func (s *Schema) NumEnums() int {
 	var n int
 	for _, f := range s.Fields {
@@ -115,6 +119,8 @@ func (s *Schema) NumEnums() int {
 	return n
 }
 
+// Counts visible (not deleted and not metadata) fields across
+// all nesting levels.
 func (s *Schema) NumVisible() int {
 	var n int
 	for _, f := range s.Fields {
@@ -125,16 +131,7 @@ func (s *Schema) NumVisible() int {
 	return n
 }
 
-func (s *Schema) NumMeta() int {
-	var n int
-	for _, f := range s.Fields {
-		if f.IsMeta() && f.IsActive() {
-			n++
-		}
-	}
-	return n
-}
-
+// Returns all field names across all nesting levels.
 func (s *Schema) Names() []string {
 	list := make([]string, len(s.Fields))
 	for i, f := range s.Fields {
@@ -143,41 +140,11 @@ func (s *Schema) Names() []string {
 	return list
 }
 
-func (s *Schema) ActiveNames() []string {
-	list := make([]string, 0, len(s.Fields))
-	for _, f := range s.Fields {
-		if f.IsActive() {
-			list = append(list, f.Name)
-		}
-	}
-	return list
-}
-
-func (s *Schema) VisibleNames() []string {
-	list := make([]string, 0, len(s.Fields))
-	for _, f := range s.Fields {
-		if f.IsVisible() {
-			list = append(list, f.Name)
-		}
-	}
-	return list
-}
-
-func (s *Schema) MetaNames() []string {
-	list := make([]string, 0, len(s.Fields))
-	for _, f := range s.Fields {
-		if f.IsMeta() && f.IsActive() {
-			list = append(list, f.Name)
-		}
-	}
-	return list
-}
-
 func (s *Schema) EnumNames() []string {
 	list := make([]string, 0)
 	for _, f := range s.Fields {
 		if f.IsEnum() {
-			list = append(list, f.Name)
+			list = append(list, basename(f.Name))
 		}
 	}
 	return list
@@ -201,68 +168,56 @@ func (s *Schema) ActiveIds() []uint16 {
 	return list
 }
 
-func (s *Schema) VisibleIds() []uint16 {
-	list := make([]uint16, 0, len(s.Fields))
+// Returns the i-th field at top nesting level.
+func (s *Schema) Field(i int) *Field {
+	lvl := s.Fields[0].Level
+	n := 0
 	for _, f := range s.Fields {
-		if f.IsVisible() {
-			list = append(list, f.Id)
+		if f.Level != lvl {
+			continue
 		}
+		if n == i {
+			return f
+		}
+		n++
 	}
-	return list
+	return nil
 }
 
-func (s *Schema) MetaIds() []uint16 {
-	list := make([]uint16, 0, len(s.Fields))
+func (s *Schema) Find(name string) (*Field, bool) {
 	for _, f := range s.Fields {
-		if f.IsMeta() && f.IsActive() {
-			list = append(list, f.Id)
+		if f.Name == name && f.IsActive() {
+			return f, true
 		}
 	}
-	return list
+	return nil, false
 }
 
-func (s *Schema) Find(name string) (f *Field, ok bool) {
-	for _, v := range s.Fields {
-		if v.Name == name && v.IsActive() {
-			ok = true
-			f = v
-			break
+func (s *Schema) FindId(id uint16) (*Field, bool) {
+	for _, f := range s.Fields {
+		if f.Id == id {
+			return f, true
 		}
 	}
-	return
+	return nil, false
 }
 
-func (s *Schema) FindId(id uint16) (f *Field, ok bool) {
-	for _, v := range s.Fields {
-		if v.Id == id {
-			ok = true
-			f = v
-			break
-		}
-	}
-	return
-}
-
-func (s *Schema) Index(name string) (idx int, ok bool) {
+func (s *Schema) Index(name string) (int, bool) {
 	for i, f := range s.Fields {
 		if f.Name == name && f.IsActive() {
-			ok = true
-			idx = i
-			break
+			return i, true
 		}
 	}
-	return
+	return -1, false
 }
 
-func (s *Schema) IndexId(id uint16) (idx int, ok bool) {
+func (s *Schema) IndexId(id uint16) (int, bool) {
 	for i, f := range s.Fields {
 		if f.Id == id {
-			ok = true
-			idx = i
-			break
+			return i, true
 		}
 	}
-	return
+	return 0, false
 }
 
 func (s *Schema) Pk() *Field {
@@ -346,12 +301,13 @@ func (s *Schema) Clone() *Schema {
 	return clone.Finalize()
 }
 
+// assigns the next available field id
 func (s *Schema) nextFieldId() uint16 {
 	id := uint16(len(s.Fields) + 1)
-	if id == 1<<16-1 {
-		return 0
-	}
 	for {
+		if id == 1<<16-1 {
+			panic("max number of fields reached")
+		}
 		_, ok := s.FindId(id)
 		if !ok {
 			return id

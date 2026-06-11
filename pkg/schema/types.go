@@ -44,24 +44,25 @@ const (
 	List                        // 27
 	Map                         // 28
 	Union                       // 29
+	Variant                     // 30
 )
 
 const (
-	MAX_NAME   = 1<<8 - 1  // 255
-	MAX_ARRAY  = 1<<8 - 1  // 255
-	MAX_STRING = 1<<8 - 1  // 255
-	MAX_BYTES  = 1<<8 - 1  // 255
-	MAX_TEXT   = 1<<32 - 1 // 4G
-	MAX_BLOB   = 1<<32 - 1 // 4G
+	MAX_NAME     = 1<<8 - 1  // 255
+	MAX_ARRAY    = 1<<8 - 1  // 255
+	MAX_STRING   = 1<<8 - 1  // 255
+	MAX_BYTES    = 1<<8 - 1  // 255
+	MAX_VARIANTS = 1<<8 - 1  // 255
+	MAX_TEXT     = 1<<32 - 1 // 4G
+	MAX_BINARY   = 1<<32 - 1 // 4G
 )
 
 var (
-	// fieldTypeString  = "__timestamp_int64_uint64_float64_boolean_string_bytes_int32_int16_int8_uint32_uint16_uint8_float32_int256_int128_decimal256_decimal128_decimal64_decimal32_bigint_date_time_text_blob_list_map"
-	// fieldTypeIdx     = [...]uint8{0, 2, 12, 18, 25, 33, 41, 48, 54, 60, 66, 71, 78, 85, 91, 99, 106, 113, 124, 135, 145, 155, 162, 167, 172, 177, 182, 187, 191}
-	fieldTypeString  = "__timestamp_duration_date_time_u64_u32_u16_u8_i64_i32_i16_i8_bool_f64_f32_i256_i128_d256_d128_d64_d32_bigint_string_text_bytes_binary_list_map_union"
-	fieldTypeIdx     = [...]uint8{0, 2, 12, 21, 26, 31, 35, 39, 43, 46, 50, 54, 58, 61, 66, 70, 74, 79, 84, 89, 94, 98, 102, 109, 116, 121, 127, 134, 139, 143, 149}
+	fieldTypeString  = "__timestamp_duration_date_time_u64_u32_u16_u8_i64_i32_i16_i8_bool_f64_f32_i256_i128_d256_d128_d64_d32_bigint_string_text_bytes_binary_list_map_union_variant"
+	fieldTypeIdx     = [...]uint8{0, 2, 12, 21, 26, 31, 35, 39, 43, 46, 50, 54, 58, 61, 66, 70, 74, 79, 84, 89, 94, 98, 102, 109, 116, 121, 127, 134, 139, 143, 149, 157}
 	fieldTypeReverse = map[string]FieldType{}
 
+	// fixed / minimum wire sizes in bytes for record encoding
 	fieldTypeWireSize = [...]int{
 		Invalid:    0,
 		Timestamp:  8, // i64
@@ -92,7 +93,8 @@ var (
 		Binary:     4, // 4 byte size
 		List:       4, // 4 byte size
 		Map:        4, // 4 byte size
-		Union:      1, // 1 byte typeid + var bytes
+		Union:      1, // 1 byte size + var bytes
+		Variant:    5, // 4 byte size + 1 byte typeid + var bytes
 	}
 )
 
@@ -107,6 +109,15 @@ func init() {
 
 func (t FieldType) IsValid() bool {
 	return t > Invalid && t <= FieldType(len(fieldTypeIdx))
+}
+
+func (t FieldType) NullableDefault() bool {
+	switch t {
+	case Binary, Bytes, Union:
+		return true
+	default:
+		return false
+	}
 }
 
 func (t FieldType) String() string {
@@ -158,10 +169,10 @@ func (t FieldType) Zero() any {
 		return num.BigZero
 	case String, Text:
 		return ""
-	case Bytes, Binary, List, Map:
+	case Bytes, Binary, List, Map, Variant:
 		return []byte{}
 	case Union:
-		return []byte{0}
+		return UnionValue{}
 	default:
 		return nil
 	}

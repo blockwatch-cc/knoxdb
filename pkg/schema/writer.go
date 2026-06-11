@@ -112,10 +112,6 @@ func (w *Writer) Next() {
 	w.n = 0
 }
 
-func (w *Writer) next() {
-	w.n++
-}
-
 // Bytes returns written bytes. Use in combination with Done
 // to ensure a record is complete.
 func (w *Writer) Bytes() []byte {
@@ -164,27 +160,32 @@ func (w *Writer) Skip(n ...int) error {
 // Write appends an encoded value to the buffer. Value type
 // must match the next expected value in schema field order.
 // If value implements the Marshaler interface, call this
-// instead.
+// instead. Marshalers are expected to use either the public
+// Writer API which advances field offsets or call consume(n)
+// when writing to the writer buffer directly.
 func (w *Writer) Write(val any) error {
-	// redirect to marshaler if implemented
-	if m, ok := val.(Marshaler); ok {
-		return m.MarshalSchema(w)
-	}
-
 	// get the current field
 	f, err := w.getFieldChecked(w.n, 0)
 	if err != nil {
 		return err
 	}
 
-	// use field writer (will check for correct type)
-	err = f.WriteValue(w.buf, val, w.layout)
+	if m, ok := val.(Marshaler); ok {
+		// redirect to marshaler if implemented
+		err = m.MarshalSchema(w)
+	} else {
+		// use field writer (will check for correct type)
+		err = f.WriteValue(w.buf, val, w.layout)
+	}
 	if err != nil {
 		return err
 	}
 
 	// advance to next field
 	w.n++
+	if f.Child != nil {
+		w.n += len(f.Child.Fields)
+	}
 	return nil
 }
 
@@ -496,6 +497,19 @@ func (w *Writer) WriteBigint(v num.Big) error {
 	w.buf.WriteByte(byte(len(buf)))
 	w.buf.Write(buf)
 	w.n++
+	return nil
+}
+
+func (w *Writer) WriteUnion(v UnionValue) error {
+	f, err := w.getFieldChecked(w.n, Union)
+	if err != nil {
+		return err
+	}
+	err = v.MarshalSchema(w)
+	if err != nil {
+		return err
+	}
+	w.n += 1 + len(f.Child.Fields)
 	return nil
 }
 

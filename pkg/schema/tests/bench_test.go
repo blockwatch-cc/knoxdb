@@ -285,7 +285,7 @@ func BenchmarkWriterMap(b *testing.B) {
 	require.NoError(b, err)
 
 	base := NewPrimMapRecord()
-	attr := NewAttrMapRecord()
+	attr := NewUnionMapRecord()
 
 	b.Run("prim", func(b *testing.B) {
 		w := schema.NewWriter(prim, prim.NewBuffer(1))
@@ -306,12 +306,12 @@ func BenchmarkWriterMap(b *testing.B) {
 		}
 	})
 
-	b.Run("attr", func(b *testing.B) {
-		w := schema.NewWriter(AttrMapRecordSchema, AttrMapRecordSchema.NewBuffer(1))
+	b.Run("union", func(b *testing.B) {
+		w := schema.NewWriter(UnionMapRecordSchema, UnionMapRecordSchema.NewBuffer(1))
 		b.ReportAllocs()
 		for b.Loop() {
 			w.Reset()
-			schema.MarshalMap(w, attr.Attrs)
+			schema.MarshalMap(w, attr.Unions)
 		}
 	})
 }

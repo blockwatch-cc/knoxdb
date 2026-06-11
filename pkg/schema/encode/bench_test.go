@@ -393,12 +393,12 @@ func BenchmarkDecodeViewNoAlloc(b *testing.B) {
 }
 
 func BenchmarkEncodeMarshal(b *testing.B) {
-	l, err := reflect.LayoutOf(schema.Attr{}, schema.AttrSchema)
+	l, err := reflect.LayoutOf(MarshalRecord{}, MarshalRecordSchema)
 	require.NoError(b, err)
-	enc := NewEncoderWithLayout(schema.AttrSchema, l)
+	enc := NewEncoderWithLayout(MarshalRecordSchema, l)
 	for _, n := range encodeBenchmarkSizes {
 		b.Run(n.name, func(b *testing.B) {
-			slice := makeAttrData(n.num)
+			slice := makeMarsahlData(n.num)
 			buf := enc.NewBuffer(n.num)
 			res, err := enc.EncodeBatch(slice, buf)
 			require.NoError(b, err)
@@ -415,14 +415,14 @@ func BenchmarkEncodeMarshal(b *testing.B) {
 }
 
 func BenchmarkEncodeMarshalPtr(b *testing.B) {
-	l, err := reflect.LayoutOf(schema.Attr{}, schema.AttrSchema)
+	l, err := reflect.LayoutOf(MarshalRecord{}, MarshalRecordSchema)
 	require.NoError(b, err)
-	enc := NewEncoderWithLayout(schema.AttrSchema, l)
+	enc := NewEncoderWithLayout(MarshalRecordSchema, l)
 	for _, n := range encodeBenchmarkSizes {
 		b.Run(n.name, func(b *testing.B) {
-			slice := makeAttrData(n.num)
+			slice := makeMarsahlData(n.num)
 			buf := enc.NewBuffer(n.num)
-			ptrslice := make([]*schema.Attr, len(slice))
+			ptrslice := make([]*MarshalRecord, len(slice))
 			for i := range slice {
 				ptrslice[i] = &slice[i]
 			}
@@ -434,6 +434,28 @@ func BenchmarkEncodeMarshalPtr(b *testing.B) {
 			for b.Loop() {
 				enc.EncodeBatch(ptrslice, buf)
 				buf.Reset()
+			}
+			b.ReportMetric(float64(n.num*b.N)/b.Elapsed().Seconds(), "recs/s")
+		})
+	}
+}
+
+func BenchmarkDecodeMarshal(b *testing.B) {
+	l, err := reflect.LayoutOf(MarshalRecord{}, MarshalRecordSchema)
+	require.NoError(b, err)
+	enc := NewEncoderWithLayout(MarshalRecordSchema, l)
+	dec := NewDecoderWithLayout(MarshalRecordSchema, l)
+	for _, n := range encodeBenchmarkSizes {
+		slice := makeMarsahlData(n.num)
+		buf, err := enc.EncodeBatch(slice, nil)
+		require.NoError(b, err)
+		dst := make([]MarshalRecord, n.num)
+		b.Run(n.name, func(b *testing.B) {
+			b.SetBytes(int64(len(buf)))
+			b.ReportAllocs()
+			b.ResetTimer()
+			for b.Loop() {
+				dec.DecodeBatch(buf, dst)
 			}
 			b.ReportMetric(float64(n.num*b.N)/b.Elapsed().Seconds(), "recs/s")
 		})
@@ -456,28 +478,6 @@ func BenchmarkEncodeListMarshal(b *testing.B) {
 			for b.Loop() {
 				enc.EncodeBatch(slice, buf)
 				buf.Reset()
-			}
-			b.ReportMetric(float64(n.num*b.N)/b.Elapsed().Seconds(), "recs/s")
-		})
-	}
-}
-
-func BenchmarkDecodeMarshal(b *testing.B) {
-	l, err := reflect.LayoutOf(schema.Attr{}, schema.AttrSchema)
-	require.NoError(b, err)
-	enc := NewEncoderWithLayout(schema.AttrSchema, l)
-	dec := NewDecoderWithLayout(schema.AttrSchema, l)
-	for _, n := range encodeBenchmarkSizes {
-		slice := makeAttrData(n.num)
-		buf, err := enc.EncodeBatch(slice, nil)
-		require.NoError(b, err)
-		dst := make([]schema.Attr, n.num)
-		b.Run(n.name, func(b *testing.B) {
-			b.SetBytes(int64(len(buf)))
-			b.ReportAllocs()
-			b.ResetTimer()
-			for b.Loop() {
-				dec.DecodeBatch(buf, dst)
 			}
 			b.ReportMetric(float64(n.num*b.N)/b.Elapsed().Seconds(), "recs/s")
 		})

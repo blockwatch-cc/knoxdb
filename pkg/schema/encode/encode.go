@@ -5,6 +5,7 @@ package encode
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"reflect"
 	"sync"
@@ -448,6 +449,11 @@ func (e *Encoder) writeField(buf *bytes.Buffer, code OpCode, field *schema.Field
 		}
 		buf.WriteByte(byte(len(b)))
 		buf.Write(b)
+
+	case OC_UNION:
+		// 1 byte len
+		v := *(*schema.UnionValue)(ptr)
+		err = v.MarshalBuffer(buf, binary.LittleEndian)
 
 	case OC_LIST:
 		// 4 byte len

@@ -347,47 +347,56 @@ func (d *Decoder) readField(code OpCode, field *schema.Field, ptr unsafe.Pointer
 		}
 
 	case OC_TIMESTAMP, OC_TIME, OC_DATE:
+		_ = buf[7]
 		*(*time.Time)(ptr) = schema.TimeScale(field.Scale).
 			FromUnix(*(*int64)(unsafe.Pointer(&buf[0])))
 		buf = buf[8:]
 
 	case OC_DURATION:
+		_ = buf[7]
 		*(*time.Duration)(ptr) = schema.TimeScale(field.Scale).
 			Duration(*(*int64)(unsafe.Pointer(&buf[0])))
 		buf = buf[8:]
 
 	case OC_I128:
+		_ = buf[15]
 		*(*num.Int128)(ptr) = num.Int128FromBytes(buf[:16])
 		buf = buf[16:]
 
 	case OC_I256:
+		_ = buf[31]
 		*(*num.Int256)(ptr) = num.Int256FromBytes(buf[:32])
 		buf = buf[32:]
 
 	case OC_D32:
+		_ = buf[3]
 		(*(*num.Decimal32)(ptr)).Set(*(*int32)(unsafe.Pointer(&buf[0])))
 		(*(*num.Decimal32)(ptr)).SetScale(field.Scale)
 		buf = buf[4:]
 
 	case OC_D64:
+		_ = buf[7]
 		(*(*num.Decimal64)(ptr)).Set(*(*int64)(unsafe.Pointer(&buf[0])))
 		(*(*num.Decimal64)(ptr)).SetScale(field.Scale)
 		buf = buf[8:]
 
 	case OC_D128:
+		_ = buf[15]
 		(*(*num.Decimal128)(ptr)).Set(num.Int128FromBytes(buf[:16]))
 		(*(*num.Decimal128)(ptr)).SetScale(field.Scale)
 		buf = buf[16:]
 
 	case OC_D256:
+		_ = buf[31]
 		(*(*num.Decimal256)(ptr)).Set(num.Int256FromBytes(buf[:32]))
 		(*(*num.Decimal256)(ptr)).SetScale(field.Scale)
 		buf = buf[32:]
 
 	case OC_ENUM:
+		_ = buf[1]
 		u16 := *(*uint16)(unsafe.Pointer(&buf[0]))
-		buf = buf[2:]
 		val, ok := field.Enum.Value(u16)
+		buf = buf[2:]
 		if !ok {
 			return nil, enum.ErrEnumNoCode
 		}
@@ -402,10 +411,23 @@ func (d *Decoder) readField(code OpCode, field *schema.Field, ptr unsafe.Pointer
 			buf = buf[l:]
 		}
 
+	case OC_UNION:
+		l := buf[0]
+		buf = buf[1:]
+		_ = buf[l-1]
+		err := (*schema.UnionValue)(ptr).UnmarshalBuffer(buf[:l], schema.LE)
+		buf = buf[l:]
+		if err != nil {
+			return nil, err
+		}
+
 	case OC_LIST:
+		_ = buf[3]
 		l := *(*uint32)(unsafe.Pointer(&buf[0]))
 		buf = buf[4:]
 		if l > 0 {
+			_ = buf[l-1]
+
 			// use sub-decoder for schema
 			sub, ok := d.nested[uint32(field.Id)]
 			if !ok {

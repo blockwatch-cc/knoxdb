@@ -4,13 +4,13 @@
 package schema
 
 import (
+	"bytes"
 	"encoding/binary"
 	"io"
 	"math"
 	"math/big"
 	"sync"
 	"time"
-	"unsafe"
 
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/schema/enum"
@@ -20,7 +20,7 @@ import (
 var scratchBufferPool = sync.Pool{
 	New: func() any {
 		var buf [32]byte
-		return &buf[0]
+		return &buf
 	},
 }
 
@@ -31,7 +31,7 @@ var scratchBufferPool = sync.Pool{
 // compatible. It does not cast or type convert otherwise. Byte arrays
 // of type [n]byte must be converted to byte slice []byte when used as
 // argument.
-func (f *Field) WriteValue(w io.Writer, val any, layout binary.ByteOrder) (err error) {
+func (f *Field) WriteValue(w *bytes.Buffer, val any, layout binary.ByteOrder) (err error) {
 	if val == nil {
 		return ErrNilValue
 	}
@@ -40,79 +40,79 @@ func (f *Field) WriteValue(w io.Writer, val any, layout binary.ByteOrder) (err e
 	err = ErrInvalidValueType
 
 	// get scratch buffer
-	buf := unsafe.Slice(scratchBufferPool.Get().(*byte), 32)[:32]
+	// buf := unsafe.Slice(scratchBufferPool.Get().(*byte), 32)[:32]
+	buf := scratchBufferPool.Get().(*[32]byte)
 
 	switch f.Type {
 	case Timestamp, Time, Date:
 		switch tv := val.(type) {
 		case *time.Time:
-			layout.PutUint64(buf, uint64(TimeScale(f.Scale).ToUnix(*tv)))
+			layout.PutUint64(buf[:], uint64(TimeScale(f.Scale).ToUnix(*tv)))
 			_, err = w.Write(buf[:8])
 		case time.Time:
-			layout.PutUint64(buf, uint64(TimeScale(f.Scale).ToUnix(tv)))
+			layout.PutUint64(buf[:], uint64(TimeScale(f.Scale).ToUnix(tv)))
 			_, err = w.Write(buf[:8])
 		case int64:
-			layout.PutUint64(buf, uint64(tv))
+			layout.PutUint64(buf[:], uint64(tv))
 			_, err = w.Write(buf[:8])
 		}
 
 	case Duration:
 		switch d := val.(type) {
 		case time.Duration:
-			layout.PutUint64(buf, uint64(TimeScale(f.Scale).Int64(d)))
+			layout.PutUint64(buf[:], uint64(TimeScale(f.Scale).Int64(d)))
 			_, err = w.Write(buf[:8])
 		case int64:
-			layout.PutUint64(buf, uint64(d))
+			layout.PutUint64(buf[:], uint64(d))
 			_, err = w.Write(buf[:8])
 		}
 
 	case Int64:
 		if v, ok := val.(int64); ok {
-			layout.PutUint64(buf, uint64(v))
+			layout.PutUint64(buf[:], uint64(v))
 			_, err = w.Write(buf[:8])
 		}
 
 	case Int32:
 		if v, ok := val.(int32); ok {
-			layout.PutUint32(buf, uint32(v))
+			layout.PutUint32(buf[:], uint32(v))
 			_, err = w.Write(buf[:4])
 		}
 
 	case Int16:
 		if v, ok := val.(int16); ok {
-			layout.PutUint16(buf, uint16(v))
+			layout.PutUint16(buf[:], uint16(v))
 			_, err = w.Write(buf[:2])
 		}
 
 	case Int8:
 		if v, ok := val.(int8); ok {
-			buf[0] = uint8(v)
-			_, err = w.Write(buf[:1])
+			err = w.WriteByte(uint8(v))
 		}
 
 	case Uint64:
 		if v, ok := val.(uint64); ok {
-			layout.PutUint64(buf, v)
+			layout.PutUint64(buf[:], v)
 			_, err = w.Write(buf[:8])
 		}
 
 	case Uint32:
 		if v, ok := val.(uint32); ok {
-			layout.PutUint32(buf, v)
+			layout.PutUint32(buf[:], v)
 			_, err = w.Write(buf[:4])
 		}
 
 	case Uint16:
 		switch v := val.(type) {
 		case uint16:
-			layout.PutUint16(buf, v)
+			layout.PutUint16(buf[:], v)
 			_, err = w.Write(buf[:2])
 		case string:
 			if f.IsEnum() {
 				if f.Enum != nil {
 					val, ok := f.Enum.Code(v)
 					if ok {
-						layout.PutUint16(buf, val)
+						layout.PutUint16(buf[:], val)
 						_, err = w.Write(buf[:2])
 					} else {
 						err = enum.ErrEnumNoCode
@@ -125,19 +125,18 @@ func (f *Field) WriteValue(w io.Writer, val any, layout binary.ByteOrder) (err e
 
 	case Uint8:
 		if v, ok := val.(uint8); ok {
-			buf[0] = v
-			_, err = w.Write(buf[:1])
+			err = w.WriteByte(v)
 		}
 
 	case Float64:
 		if v, ok := val.(float64); ok {
-			layout.PutUint64(buf, math.Float64bits(v))
+			layout.PutUint64(buf[:], math.Float64bits(v))
 			_, err = w.Write(buf[:8])
 		}
 
 	case Float32:
 		if v, ok := val.(float32); ok {
-			layout.PutUint32(buf, math.Float32bits(v))
+			layout.PutUint32(buf[:], math.Float32bits(v))
 			_, err = w.Write(buf[:4])
 		}
 
@@ -203,7 +202,7 @@ func (f *Field) WriteValue(w io.Writer, val any, layout binary.ByteOrder) (err e
 		}
 		if ok {
 			l := len(bval)
-			layout.PutUint32(buf, uint32(l))
+			layout.PutUint32(buf[:], uint32(l))
 			_, err = w.Write(buf[:4])
 			if err == nil {
 				_, err = w.Write(bval)
@@ -239,20 +238,20 @@ func (f *Field) WriteValue(w io.Writer, val any, layout binary.ByteOrder) (err e
 	case Decimal64:
 		switch v := val.(type) {
 		case num.Decimal64:
-			layout.PutUint64(buf, uint64(v.Int64()))
+			layout.PutUint64(buf[:], uint64(v.Int64()))
 			_, err = w.Write(buf[:8])
 		case int64:
-			layout.PutUint64(buf, uint64(v))
+			layout.PutUint64(buf[:], uint64(v))
 			_, err = w.Write(buf[:8])
 		}
 
 	case Decimal32:
 		switch v := val.(type) {
 		case num.Decimal32:
-			layout.PutUint32(buf, uint32(v.Int32()))
+			layout.PutUint32(buf[:], uint32(v.Int32()))
 			_, err = w.Write(buf[:4])
 		case int32:
-			layout.PutUint32(buf, uint32(v))
+			layout.PutUint32(buf[:], uint32(v))
 			_, err = w.Write(buf[:4])
 		}
 
@@ -284,11 +283,17 @@ func (f *Field) WriteValue(w io.Writer, val any, layout binary.ByteOrder) (err e
 			}
 		}
 
+	case Union:
+		v, ok := val.(UnionValue)
+		if ok {
+			err = v.MarshalBuffer(w, layout)
+		}
+
 	default:
 		err = ErrInvalidField
 	}
 
-	scratchBufferPool.Put(&buf[0])
+	scratchBufferPool.Put(buf)
 	return
 }
 
@@ -298,7 +303,8 @@ func (f *Field) WriteValue(w io.Writer, val any, layout binary.ByteOrder) (err e
 // as byte slices []byte with the original array length to avoid reflect calls.
 func (f *Field) ReadValue(r io.Reader, layout binary.ByteOrder) (val any, err error) {
 	var (
-		buf = unsafe.Slice(scratchBufferPool.Get().(*byte), 32)[:32]
+		// buf = unsafe.Slice(scratchBufferPool.Get().(*byte), 32)[:32]
+		buf = scratchBufferPool.Get().(*[32]byte)
 		n   int
 	)
 	switch f.Type {
@@ -460,10 +466,23 @@ func (f *Field) ReadValue(r io.Reader, layout binary.ByteOrder) (val any, err er
 		n, err = r.Read(b[:buf[0]])
 		val = num.NewBigFromBytes(b[:n])
 
+	case Union:
+		_, err = r.Read(buf[:1])
+		if err != nil {
+			return
+		}
+		var b [256]byte
+		n, err = r.Read(b[:buf[0]])
+		if err == nil {
+			var u UnionValue
+			err = u.UnmarshalBuffer(b[:n], layout)
+			val = u
+		}
+
 	default:
 		err = ErrInvalidField
 	}
 
-	scratchBufferPool.Put(&buf[0])
+	scratchBufferPool.Put(buf)
 	return
 }

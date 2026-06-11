@@ -93,9 +93,9 @@ func NewIndexSchema(typ IndexType, base *Schema, opts ...IndexOption) *IndexSche
 
 func makeIndexName(typ IndexType, base *Schema, f ...*Field) string {
 	if len(f) == 0 {
-		return strings.Join([]string{base.Name, typ.String(), "index"}, "_")
+		return strings.Join([]string{base.Name, typ.String(), IndexName}, "_")
 	}
-	return strings.Join([]string{base.Name, f[0].Name, typ.String(), "index"}, "_")
+	return strings.Join([]string{base.Name, f[0].Name, typ.String(), IndexName}, "_")
 }
 
 func (s *IndexSchema) IsValid() bool {

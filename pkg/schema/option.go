@@ -34,6 +34,11 @@ func Version(v uint32) Option {
 // FieldOption defines a function type for field options.
 type FieldOption func(*Field)
 
+func peekFieldName(opts ...FieldOption) string {
+	dummy := NewField(String, opts...)
+	return dummy.Name
+}
+
 func WithName(n string) FieldOption {
 	return func(f *Field) {
 		f.Name = n

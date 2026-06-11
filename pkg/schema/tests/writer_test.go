@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"testing"
 
+	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/schema/encode"
 	"blockwatch.cc/knoxdb/pkg/schema/reflect"
@@ -47,6 +48,7 @@ func TestWriterWrite(t *testing.T) {
 	require.NoError(t, w.Write(string(base.MyEnum)))
 	require.NoError(t, w.Write(base.Big))
 	require.NoError(t, w.Write(base.Duration))
+	require.NoError(t, w.Write(base.Union))
 	require.True(t, w.Done())
 
 	require.Equal(t, buf, w.Bytes())
@@ -86,6 +88,7 @@ func TestWriterPrimitive(t *testing.T) {
 	require.NoError(t, w.WriteEnum(string(base.MyEnum)))
 	require.NoError(t, w.WriteBigint(base.Big))
 	require.NoError(t, w.WriteDuration(base.Duration))
+	require.NoError(t, w.WriteUnion(base.Union))
 	require.True(t, w.Done())
 
 	require.Equal(t, buf, w.Bytes())
@@ -300,6 +303,54 @@ func TestWriterListL3(t *testing.T) {
 	require.Equal(t, base, res)
 }
 
+func TestWriterUnion(t *testing.T) {
+	s := schema.SchemaOf(
+		[]*schema.Field{
+			schema.FieldOf(schema.Union), // u64
+			schema.FieldOf(schema.Union), // u32
+			schema.FieldOf(schema.Union), // u16
+			schema.FieldOf(schema.Union), // u8
+			schema.FieldOf(schema.Union), // string
+			schema.FieldOf(schema.Union), // []byte
+			schema.FieldOf(schema.Union), // bool
+			schema.FieldOf(schema.Union), // i128
+		},
+		schema.Name("test"),
+	)
+
+	require.Equal(t, 8, s.MinWireSize)
+
+	testValues := []schema.UnionValue{
+		schema.Uint64Union(2000),
+		schema.Uint32Union(200),
+		schema.Uint16Union(20),
+		schema.Uint8Union(2),
+		schema.StringUnion("hello"),
+		schema.BytesUnion([]byte{42}),
+		schema.BoolUnion(true),
+		schema.Int128Union(num.Int128FromInt64(23)),
+	}
+
+	v := schema.NewView(s)
+	w := schema.NewWriter(s, nil)
+
+	// write
+	w.Reset()
+	for _, val := range testValues {
+		n := w.Len()
+		require.NoError(t, w.WriteUnion(val), "write val=%s", val)
+		t.Logf("Union %s %q => %s", val.Type(), val, hex.Dump(w.Bytes()[n:]))
+	}
+	require.True(t, w.Done(), "done")
+	require.LessOrEqual(t, s.MinWireSize, w.Len())
+
+	// read back
+	v.Reset(w.Bytes())
+	for j, val := range testValues {
+		require.Equal(t, val, v.Union(j), "val")
+	}
+}
+
 func TestWriterSkip(t *testing.T) {
 	s := schema.SchemaOf(
 		[]*schema.Field{
@@ -307,18 +358,20 @@ func TestWriterSkip(t *testing.T) {
 			schema.FieldOf(schema.String), // 1
 			schema.FieldOf(schema.Uint32), // 4
 			schema.FieldOf(schema.Binary), // 4
+			schema.FieldOf(schema.Union),  // 1, has 3 nested metadata fields!
 			schema.FieldOf(schema.Uint16), // 2
 		},
 		schema.Name("test"),
 	)
 
-	require.Equal(t, 19, s.MinWireSize)
+	require.Equal(t, 20, s.MinWireSize)
 
 	testValues := []any{
 		int64(5),
 		"hello",
 		uint32(42),
 		[]byte("world"),
+		schema.Uint64Union(2),
 		uint16(23),
 	}
 
@@ -343,7 +396,7 @@ func TestWriterSkip(t *testing.T) {
 		for j, val := range testValues {
 			if j == i {
 				// expect zero
-				require.Equal(t, s.Fields[j].Type.Zero(), v.Get(j), "skip=zero")
+				require.Equal(t, s.Field(j).Type.Zero(), v.Get(j), "skip=zero")
 			} else {
 				// expect original value
 				require.Equal(t, val, v.Get(j), "val")
@@ -363,8 +416,8 @@ func TestWriterMap(t *testing.T) {
 	t.Log(hex.Dump(w.Bytes()))
 
 	// marshaler only
-	attr := NewAttrMapRecord()
-	w = schema.NewWriter(AttrMapRecordSchema, nil)
+	attr := NewUnionMapRecord()
+	w = schema.NewWriter(UnionMapRecordSchema, nil)
 	require.NoError(t, w.Write(attr))
 	t.Log(hex.Dump(w.Bytes()))
 }

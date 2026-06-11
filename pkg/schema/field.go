@@ -27,6 +27,8 @@ var (
 	EntriesName = "entries"
 	KeyName     = "key"
 	ValueName   = "value"
+	TagName     = "tag"
+	IndexName   = "index"
 )
 
 type Field struct {
@@ -74,6 +76,15 @@ func (f *Field) IsValid() bool {
 	return len(f.Name) > 0 && f.Type.IsValid()
 }
 
+func (f *Field) IsNested() bool {
+	switch f.Type {
+	case List, Map, Variant:
+		return true
+	default:
+		return false
+	}
+}
+
 func (f *Field) Is(v FieldFlags) bool {
 	return f.Flags&v > 0
 }
@@ -114,7 +125,7 @@ func (f *Field) IsFixedSize() bool {
 	switch f.Type {
 	case String, Bytes:
 		return f.IsArray()
-	case Bigint, Text, Binary, List, Map:
+	case Bigint, Text, Binary, List, Map, Union, Variant:
 		return false
 	default:
 		return true
@@ -178,8 +189,7 @@ func (f *Field) TypeName() (typ string) {
 	return
 }
 
-// TODO
-// - does not handle struct child schemas in list/map
+// Note - does not handle list/map/variant child schemas
 func ParseFieldFromTypename(typ string) (*Field, error) {
 	if len(typ) == 0 {
 		return nil, ErrNoType
@@ -362,7 +372,7 @@ func (f *Field) Validate(withNested ...bool) error {
 	}
 
 	// check nested types only if requested
-	if len(withNested) > 0 && withNested[0] && (f.Type == List || f.Type == Map) {
+	if len(withNested) > 0 && withNested[0] && f.IsNested() {
 		// require nested schema for LIST and MAP type
 		if f.Child == nil {
 			return fmt.Errorf("field[%s]: missing %s child schema", f.Name, f.Type)
@@ -389,8 +399,8 @@ func (f *Field) Validate(withNested ...bool) error {
 
 		// special checks for map fields
 		// - must contain at least two child fields (key + value)
-		// - first (key) field must short primitive
-		//   (not allowed: Bytes, Binary, Text, List, Map)
+		// - first (key) field must be a short primitive
+		//   (not allowed: Bytes, Binary, Text, List, Map, Union, Variant)
 		// - key type must not have nullable flag
 		// - may contain more than one value field of any type including List, Map
 		if f.Type == Map {
@@ -398,7 +408,7 @@ func (f *Field) Validate(withNested ...bool) error {
 				return fmt.Errorf("field[%s]: map needs at least two child fields", f.Name)
 			}
 			switch f.Child.Fields[0].Type {
-			case Binary, Text, List, Map:
+			case Binary, Text, List, Map, Union, Variant:
 				return fmt.Errorf("field[%s]: invalid map key type %s", f.Name, f.Child.Fields[0].TypeName())
 			case Bytes:
 				// must be array
@@ -426,7 +436,7 @@ func (f *Field) WriteTo(w *bytes.Buffer) error {
 	w.Write([]byte{byte(len(f.Name))})
 	w.WriteString(f.Name)
 
-	// typ, flags, compression, scale: byte
+	// typ, flags, compression, scale, level: byte
 	w.Write([]byte{
 		byte(f.Type),
 		byte(f.Flags),

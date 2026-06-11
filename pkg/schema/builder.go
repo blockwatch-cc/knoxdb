@@ -71,6 +71,17 @@ func FieldOf(typ FieldType, opts ...FieldOption) *Field {
 		opts = append(opts, WithScale(TIME_SCALE_DAY))
 	case Bytes, Binary:
 		opts = append([]FieldOption{WithNullable()}, opts...)
+	case Union:
+		// clone union metadata and nest field names
+		ut := UnionType.Clone()
+		ut.Name = peekFieldName(opts...)
+		for _, f := range ut.Fields {
+			f.Name = ut.Name + "." + f.Name
+		}
+		opts = append(
+			append([]FieldOption{WithNullable()}, opts...),
+			WithChildSchema(ut), // append last
+		)
 	}
 	return NewField(typ, opts...)
 }
@@ -93,21 +104,17 @@ func ArrayOf(typ FieldType, n int, opts ...FieldOption) *Field {
 // use ListFor with a pre-built schema.
 func ListOf(typ FieldType, opts ...FieldOption) *Field {
 	// prepare child type
-	child := FieldOf(typ, WithNullable(typ == Bytes || typ == Binary))
+	child := FieldOf(typ, WithNullable(typ.NullableDefault()))
 
 	// use dummy to extract field name from options
-	dummy := NewField(typ, opts...)
-	if dummy.Name != "" {
-		child.Name = dummy.Name + "." + ElementName
+	name := peekFieldName(opts...)
+	if name != "" {
+		child.Name = name + "." + ElementName
 	} else {
 		child.Name = ElementName
 	}
 
-	s := &Schema{
-		Name:    dummy.Name,
-		Fields:  []*Field{child},
-		Version: 1,
-	}
+	s := SchemaOf([]*Field{child}, Name(name), Version(1))
 
 	return NewField(List, append([]FieldOption{
 		WithChildSchema(s),
@@ -154,23 +161,22 @@ func IndexOf(base *Schema, typ IndexType, opts ...IndexOption) *IndexSchema {
 // type options use MapFor.
 func MapOf(keyT, valT FieldType, opts ...FieldOption) *Field {
 	// peek field name
-	dummy := NewField(String, opts...)
-	if dummy.Name == "" {
-		dummy.Name = EntriesName
+	name := peekFieldName(opts...)
+	if name == "" {
+		name = EntriesName
 	}
 
 	// create schema
-	s := &Schema{
-		Name: dummy.Name,
-		Fields: []*Field{
-			FieldOf(keyT, WithName(dummy.Name+"."+KeyName)),
-			FieldOf(valT,
-				WithName(dummy.Name+"."+ValueName),
-				WithNullable(valT == Bytes || valT == Binary),
-			),
-		},
-		Version: 1,
-	}
+	s := SchemaOf([]*Field{
+		FieldOf(keyT, WithName(name+"."+KeyName)),
+		FieldOf(valT,
+			WithName(name+"."+ValueName),
+			WithNullable(valT.NullableDefault()),
+		),
+	},
+		Name(name),
+		Version(1),
+	)
 
 	// wrap into map field
 	return NewField(Map, append([]FieldOption{
@@ -188,10 +194,11 @@ func MapOf(keyT, valT FieldType, opts ...FieldOption) *Field {
 // unique sorted keys and it is permitted to nest lists and maps into a
 // map value type field.
 func MapFor(keyT FieldType, valS *Schema, opts ...FieldOption) *Field {
-	// peek field name
+	// peek field name and enum
 	dummy := NewField(String, opts...)
-	if dummy.Name == "" {
-		dummy.Name = EntriesName
+	name := dummy.Name
+	if name == "" {
+		name = EntriesName
 	}
 
 	// create map schema which is essentially a list of {key,value} pairs
@@ -200,19 +207,19 @@ func MapFor(keyT FieldType, valS *Schema, opts ...FieldOption) *Field {
 	// same struct and then use this struct as child schema on a Map field
 	s := SchemaOf(
 		append(
-			[]*Field{FieldOf(keyT, WithName(dummy.Name+"."+KeyName), WithEnum(dummy.Enum))},
+			[]*Field{FieldOf(keyT, WithName(name+"."+KeyName), WithEnum(dummy.Enum))},
 			valS.Fields..., // SchemaOf will clone those fields
 		),
-		Name(dummy.Name),
+		Name(name),
 		Version(1),
 	)
 
 	// prefix value fields
 	for _, f := range s.Fields[1:] {
 		if f.Name == "" {
-			f.Name = dummy.Name + "." + ValueName
+			f.Name = name + "." + ValueName
 		} else {
-			f.Name = dummy.Name + "." + ValueName + "." + f.Name
+			f.Name = name + "." + ValueName + "." + f.Name
 		}
 		if f.Child != nil {
 			for _, cf := range f.Child.Fields {
@@ -230,3 +237,37 @@ func MapFor(keyT FieldType, valS *Schema, opts ...FieldOption) *Field {
 		opts...)...,
 	)
 }
+
+// VariantFor creates a new tagged union of user-defined schemas, where each
+// record (or row) uses exactly one of the defined type cases. Variant fields
+// use a distinct field structure internally
+//
+// Main                    Variant Field                    (field)
+//                               |
+//             +--------+--------+--------+--------+
+//             |        |        |        |        |
+// Content  Tag(u8) Index(u32) Type_1   Type_2   Type_N     (schema)
+// Id         id       id+1    id+2..
+// func VariantFor(cases []*Schema, opts ...FieldOption) *Field {
+// 	// peek field name
+// 	dummy := NewField(String, opts...)
+// 	if dummy.Name == "" {
+// 		dummy.Name = EntriesName
+// 	}
+
+// 	//
+// 	variantFields := []*Field{
+// 		FieldOf(Uint8, WithName(dummy.Name+"."+TagName)),    // type id (record and columnar)
+// 		FieldOf(Uint32, WithName(dummy.Name+"."+IndexName)), // offsets (columnar only)
+// 	}
+
+// 	for _, s := range cases {
+// 		variantFields = append(variantFields,
+// 			FieldOf(Variant, WithName(dummy.Name+"."+s.Name), WithChildSchema(s)),
+// 		)
+// 	}
+
+// 	return FieldOf(Variant,
+// 		append(opts, WithChildSchema(SchemaOf(variantFields, Name(dummy.Name))))...)
+
+// }

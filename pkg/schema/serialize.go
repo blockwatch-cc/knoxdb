@@ -117,8 +117,9 @@ func (s *Schema) linkParent(pid uint16, f *Field) error {
 		return ErrInvalidParent
 	}
 
+	// check parent type (not all can be containers)
 	switch p.Type {
-	case List, Map:
+	case List, Map, Union, Variant:
 		// ok
 	default:
 		return ErrInvalidParent

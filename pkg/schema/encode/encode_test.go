@@ -50,34 +50,35 @@ type KV struct {
 type Hash [32]byte
 
 type encodeTestStruct struct {
-	Id          uint64         `knox:"id,pk"`
-	Time        time.Time      `knox:"time"`
-	HashArray   [20]byte       `knox:"hash_array,filter=bloom3b"`
-	HashHash    Hash           `knox:"hash_hash,filter=bloom5b,zip=snappy"`
-	String      string         `knox:"str"`
-	Bool        bool           `knox:"bool"`
-	Enum        MyEnum         `knox:"my_enum,enum"`
-	Int64       int64          `knox:"i64"`
-	Int32       int32          `knox:"i32"`
-	Int16       int16          `knox:"i16"`
-	Int8        int8           `knox:"i8"`
-	Uint64      uint64         `knox:"u64,filter=bloom2b"`
-	Uint32      uint32         `knox:"u32"`
-	Uint16      uint16         `knox:"u16"`
-	Uint8       uint8          `knox:"u8"`
-	Float64     float64        `knox:"f64"`
-	Float32     float32        `knox:"f32"`
-	D32         num.Decimal32  `knox:"d32,scale=5"`
-	D64         num.Decimal64  `knox:"d64,scale=15"`
-	D128        num.Decimal128 `knox:"d128,scale=18"`
-	D256        num.Decimal256 `knox:"d256,scale=24"`
-	I128        num.Int128     `knox:"i128"`
-	I256        num.Int256     `knox:"i256"`
-	Big         num.Big        `knox:"big"`
-	U64List     []uint64       `knox:"u64l"`
-	U64ListList [][]uint64     `knox:"u64ll"`
-	KVList      []KV           `knox:"kvl"`
-	Duration    time.Duration  `knox:"dur"`
+	Id          uint64            `knox:"id,pk"`
+	Time        time.Time         `knox:"time"`
+	HashArray   [20]byte          `knox:"hash_array,filter=bloom3b"`
+	HashHash    Hash              `knox:"hash_hash,filter=bloom5b,zip=snappy"`
+	String      string            `knox:"str"`
+	Bool        bool              `knox:"bool"`
+	Enum        MyEnum            `knox:"my_enum,enum"`
+	Int64       int64             `knox:"i64"`
+	Int32       int32             `knox:"i32"`
+	Int16       int16             `knox:"i16"`
+	Int8        int8              `knox:"i8"`
+	Uint64      uint64            `knox:"u64,filter=bloom2b"`
+	Uint32      uint32            `knox:"u32"`
+	Uint16      uint16            `knox:"u16"`
+	Uint8       uint8             `knox:"u8"`
+	Float64     float64           `knox:"f64"`
+	Float32     float32           `knox:"f32"`
+	D32         num.Decimal32     `knox:"d32,scale=5"`
+	D64         num.Decimal64     `knox:"d64,scale=15"`
+	D128        num.Decimal128    `knox:"d128,scale=18"`
+	D256        num.Decimal256    `knox:"d256,scale=24"`
+	I128        num.Int128        `knox:"i128"`
+	I256        num.Int256        `knox:"i256"`
+	Big         num.Big           `knox:"big"`
+	U64List     []uint64          `knox:"u64l"`
+	U64ListList [][]uint64        `knox:"u64ll"`
+	KVList      []KV              `knox:"kvl"`
+	Duration    time.Duration     `knox:"dur"`
+	Union       schema.UnionValue `knox:"union"`
 }
 
 func makeTestData(sz int) (res []encodeTestStruct) {
@@ -118,6 +119,7 @@ func makeTestData(sz int) (res []encodeTestStruct) {
 				{Key: u64 + 1, Val: u64 + 1},
 			},
 			Duration: time.Minute * time.Duration(i),
+			Union:    schema.Int32Union(int32(i)),
 		})
 	}
 	return
@@ -144,20 +146,48 @@ func makeVisibilityTestData(sz int) (res []visibilityTestStruct) {
 	return
 }
 
-func makeAttrData(sz int) []schema.Attr {
-	res := make([]schema.Attr, sz)
+type MarshalRecord struct {
+	Timestamp time.Time
+	Message   string
+	Labels    []MarshalType
+}
+
+type MarshalType struct {
+	val uint64
+	tag uint32
+}
+
+func (t MarshalType) MarshalSchema(w *schema.Writer) error {
+	w.WriteUint64(t.val)
+	w.WriteUint32(t.tag)
+	return nil
+}
+
+func (t *MarshalType) UnmarshalSchema(v *schema.View) error {
+	t.val = v.Uint64(0)
+	t.tag = v.Uint32(1)
+	return nil
+}
+
+var MarshalTypeSchema = schema.SchemaOf([]*schema.Field{
+	schema.FieldOf(schema.Uint64, schema.WithName("val")),
+	schema.FieldOf(schema.Uint32, schema.WithName("tag")),
+}, schema.Name("privateMarshalType"))
+
+var MarshalRecordSchema = schema.SchemaOf([]*schema.Field{
+	schema.FieldOf(schema.Timestamp, schema.WithName("timestamp")),
+	schema.FieldOf(schema.String, schema.WithName("message")),
+	schema.ListFor(MarshalTypeSchema, schema.WithName("labels")),
+}, schema.Name("MarshalRecord"),
+)
+
+func makeMarsahlData(sz int) []MarshalRecord {
+	res := make([]MarshalRecord, sz)
 	for i := range res {
-		switch i % 5 {
-		case 0:
-			res[i] = schema.Int64Attr("i64", int64(i))
-		case 1:
-			res[i] = schema.Int32Attr("i32", int32(i))
-		case 2:
-			res[i] = schema.BoolAttr("bool", i%2 == 1)
-		case 3:
-			res[i] = schema.TimestampAttr("ts", time.Now())
-		case 4:
-			res[i] = schema.Uint16Attr("u16", uint16(i))
+		res[i] = MarshalRecord{
+			Timestamp: time.Now().UTC(),
+			Message:   fmt.Sprintf("Hello-%d", i+1),
+			Labels:    []MarshalType{{1, uint32(i) + 2}, {3, uint32(i) + 4}},
 		}
 	}
 	return res
@@ -172,7 +202,7 @@ type LogRecord struct {
 var LogRecordSchema = schema.SchemaOf([]*schema.Field{
 	schema.FieldOf(schema.Timestamp, schema.WithName("timestamp")),
 	schema.FieldOf(schema.String, schema.WithName("message")),
-	schema.ListFor(schema.AttrSchema, schema.WithName("attrs")),
+	schema.ListFor(reflect.MustSchemaFor[schema.Attr](), schema.WithName("attrs")),
 })
 
 func makeLogRecords(sz int) []LogRecord {
@@ -194,20 +224,20 @@ func makeLogRecords(sz int) []LogRecord {
 type MapRecord struct {
 	Timestamp time.Time
 	Message   string
-	Attrs     map[string]schema.Attr
+	Unions    map[string]schema.UnionValue
 }
 
 func (r MapRecord) MarshalSchema(w *schema.Writer) error {
 	_ = w.WriteTimestamp(r.Timestamp)
 	_ = w.WriteString(r.Message)
-	err := schema.MarshalMap(w, r.Attrs)
+	err := schema.MarshalMap(w, r.Unions)
 	return err
 }
 
 var MapRecordSchema = schema.SchemaOf([]*schema.Field{
 	schema.FieldOf(schema.Timestamp, schema.WithName("timestamp")),
 	schema.FieldOf(schema.String, schema.WithName("message")),
-	schema.MapFor(schema.String, schema.AttrSchema, schema.WithName("attrs")),
+	schema.MapOf(schema.String, schema.Union, schema.WithName("unions")),
 })
 
 func makeMapRecords(sz int) []MapRecord {
@@ -215,12 +245,12 @@ func makeMapRecords(sz int) []MapRecord {
 	for i := range res {
 		res[i].Timestamp = time.Now().UTC()
 		res[i].Message = fmt.Sprintf("Hello-%d", i+1)
-		res[i].Attrs = map[string]schema.Attr{
-			"a": schema.Int64Attr("i64", int64(i)),
-			"b": schema.Int32Attr("i32", int32(i)),
-			"c": schema.BoolAttr("bool", i%2 == 1),
-			"d": schema.TimestampAttr("ts", time.Now().UTC()),
-			"e": schema.Uint16Attr("u16", uint16(i)),
+		res[i].Unions = map[string]schema.UnionValue{
+			"a": schema.Int64Union(int64(i)),
+			"b": schema.Int32Union(int32(i)),
+			"c": schema.BoolUnion(i%2 == 1),
+			"d": schema.TimestampUnion(time.Now().UTC()),
+			"e": schema.Uint16Union(uint16(i)),
 		}
 	}
 	return res
@@ -330,45 +360,70 @@ func TestEncodePtrSlice(t *testing.T) {
 }
 
 func TestMarshal(t *testing.T) {
-	l, err := reflect.LayoutOf(schema.Attr{}, schema.AttrSchema)
-	require.NoError(t, err)
-	enc := NewEncoderWithLayout(schema.AttrSchema, l)
-	vals := makeAttrData(2)
-	buf, err := enc.Encode(vals, nil)
-	require.NoError(t, err)
-	require.NotNil(t, buf)
-	require.NotEmpty(t, buf)
+	// outer type has marshaler
+	t.Run("outer", func(t *testing.T) {
+		l, err := reflect.LayoutOf(MarshalType{}, MarshalTypeSchema)
+		require.NoError(t, err)
+		enc := NewEncoderWithLayout(MarshalTypeSchema, l)
+		vals := makeMarsahlData(2)
+		buf, err := enc.Encode(vals[0].Labels, nil)
+		require.NoError(t, err)
+		require.NotNil(t, buf)
+		require.NotEmpty(t, buf)
+	})
+
+	// inner type has marshaler
+	t.Run("inner", func(t *testing.T) {
+		l, err := reflect.LayoutOf(MarshalRecord{}, MarshalRecordSchema)
+		require.NoError(t, err)
+		enc := NewEncoderWithLayout(MarshalRecordSchema, l)
+		vals := makeMarsahlData(2)
+		buf, err := enc.Encode(vals, nil)
+		require.NoError(t, err)
+		require.NotNil(t, buf)
+		require.NotEmpty(t, buf)
+	})
 }
 
 func TestUnmarshal(t *testing.T) {
-	l, err := reflect.LayoutOf(schema.Attr{}, schema.AttrSchema)
-	require.NoError(t, err)
-	enc := NewEncoderWithLayout(schema.AttrSchema, l)
-	dec := NewDecoderWithLayout(schema.AttrSchema, l)
-	vals := makeAttrData(2)
-	buf, err := enc.Encode(vals, nil)
-	require.NoError(t, err)
-	require.NotNil(t, buf)
-	require.NotEmpty(t, buf)
-	res := make([]schema.Attr, 2)
-	n, err := dec.DecodeBatch(buf, res)
-	require.NoError(t, err)
-	require.Equal(t, 2, n)
-	require.Equal(t, vals, res)
+	// outer type has marshaler
+	t.Run("outer", func(t *testing.T) {
+		l, err := reflect.LayoutOf(MarshalType{}, MarshalTypeSchema)
+		require.NoError(t, err)
+		enc := NewEncoderWithLayout(MarshalTypeSchema, l)
+		dec := NewDecoderWithLayout(MarshalTypeSchema, l)
+		vals := makeMarsahlData(2)
+		buf, err := enc.Encode(vals[0].Labels, nil)
+		require.NoError(t, err)
+		require.NotNil(t, buf)
+		require.NotEmpty(t, buf)
+		res := make([]MarshalType, 2)
+		n, err := dec.DecodeBatch(buf, res)
+		require.NoError(t, err)
+		require.Equal(t, 2, n)
+		require.Equal(t, vals[0].Labels, res)
+	})
+
+	// inner type has marshaler
+	t.Run("inner", func(t *testing.T) {
+		l, err := reflect.LayoutOf(MarshalRecord{}, MarshalRecordSchema)
+		require.NoError(t, err)
+		enc := NewEncoderWithLayout(MarshalRecordSchema, l)
+		dec := NewDecoderWithLayout(MarshalRecordSchema, l)
+		vals := makeMarsahlData(2)
+		buf, err := enc.Encode(vals, nil)
+		require.NoError(t, err)
+		require.NotNil(t, buf)
+		require.NotEmpty(t, buf)
+		res := make([]MarshalRecord, 2)
+		n, err := dec.DecodeBatch(buf, res)
+		require.NoError(t, err)
+		require.Equal(t, 2, n)
+		require.Equal(t, vals, res)
+	})
 }
 
 func TestMarshalList(t *testing.T) {
-	l, err := reflect.LayoutOf(LogRecord{}, LogRecordSchema)
-	require.NoError(t, err)
-	enc := NewEncoderWithLayout(LogRecordSchema, l)
-	vals := makeLogRecords(2)
-	buf, err := enc.Encode(vals, nil)
-	require.NoError(t, err)
-	require.NotNil(t, buf)
-	require.NotEmpty(t, buf)
-}
-
-func TestUnmarshalList(t *testing.T) {
 	l, err := reflect.LayoutOf(LogRecord{}, LogRecordSchema)
 	require.NoError(t, err)
 	enc := NewEncoderWithLayout(LogRecordSchema, l)
@@ -394,29 +449,27 @@ func TestMarshalMap(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, buf)
 
+	// marshal via writer
 	buf2 := MapRecordSchema.NewBuffer(2)
 	w := schema.NewWriter(MapRecordSchema, buf2)
-	w.Write(vals[0])
+	w.Write(vals[0].Timestamp)
+	w.Write(vals[0].Message)
+	require.NoError(t, schema.MarshalMap(w, vals[0].Unions))
+	require.True(t, w.Done())
 	w.Next()
-	w.Write(vals[1])
-	w.Next()
+	w.Write(vals[1].Timestamp)
+	w.Write(vals[1].Message)
+	require.NoError(t, schema.MarshalMap(w, vals[1].Unions))
+	require.True(t, w.Done())
+
+	// compare buffer
 	require.Equal(t, buf, w.Bytes())
-}
 
-func TestUnmarshalMap(t *testing.T) {
-	l, err := reflect.LayoutOf(MapRecord{}, MapRecordSchema)
-	require.NoError(t, err)
-	buf := MapRecordSchema.NewBuffer(2)
-	vals := makeLogRecords(2)
-	w := schema.NewWriter(MapRecordSchema, buf)
-	w.Write(vals[0])
-	w.Next()
-	w.Write(vals[1])
-	w.Next()
-
-	dec := NewDecoderWithLayout(LogRecordSchema, l)
-	res := make([]LogRecord, 2)
+	// decode should fail because map decoder is not supported
+	dec := NewDecoderWithLayout(MapRecordSchema, l)
+	res := make([]MapRecord, 2)
 	n, err := dec.DecodeBatch(w.Bytes(), res)
 	require.Error(t, err)
+	require.ErrorIs(t, err, schema.ErrInvalidValueType)
 	require.Equal(t, 0, n)
 }

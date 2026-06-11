@@ -209,7 +209,7 @@ func (v *View) Cut(buf []byte) (*View, []byte, bool) {
 func (v *View) All(buf []byte) iter.Seq2[int, *View] {
 	return func(yield func(int, *View) bool) {
 		var i int
-		for len(buf) > v.minsz {
+		for len(buf) >= v.minsz {
 			v.Reset(buf)
 			buf = buf[v.Len():]
 			if !yield(i, v) {
@@ -223,7 +223,7 @@ func (v *View) All(buf []byte) iter.Seq2[int, *View] {
 // Count returns the number of records encoded in a given buffer.
 func (v *View) Count(buf []byte) int {
 	var n int
-	for len(buf) > v.minsz {
+	for len(buf) >= v.minsz {
 		v.Reset(buf)
 		buf = buf[v.Len():]
 		n++
@@ -259,7 +259,7 @@ func (v *View) Reset(buf []byte) *View {
 
 			// read variable lengths and update all future offsets
 			switch typ {
-			case String, Bytes, Bigint:
+			case String, Bytes, Bigint, Union:
 				if scale := v.scales[i]; scale > 0 {
 					// len in schema
 					v.ofs[i] = ofs
@@ -273,7 +273,7 @@ func (v *View) Reset(buf []byte) *View {
 					v.len[i] = l
 					ofs += l
 				}
-			case Text, Binary, List:
+			case Text, Binary, List, Variant:
 				// 4 byte len
 				l := int(v.layout.Uint32(buf[ofs:]))
 				ofs += 4
@@ -396,6 +396,10 @@ func (v *View) Get(i int) (val any) {
 		val = num.NewDecimal32(int32(v.layout.Uint32(v.buf[x:y])), v.scales[i])
 	case Bigint:
 		val = num.NewBigFromBytes(v.buf[x:y])
+	case Union:
+		var u UnionValue
+		u.UnmarshalBuffer(v.buf[x:y], v.layout)
+		val = u
 	}
 	return
 }
@@ -421,7 +425,7 @@ func (v *View) GetPhy(i int) (val any) {
 		val = math.Float64frombits(v.layout.Uint64(v.buf[x:y]))
 	case Boolean:
 		val = v.buf[x] > 0
-	case String, Bytes, Bigint, Text, Binary, List, Map:
+	case String, Bytes, Bigint, Text, Binary, List, Map, Union, Variant:
 		val = v.buf[x:y]
 	case Int32, Decimal32:
 		val = int32(v.layout.Uint32(v.buf[x:y]))
@@ -562,7 +566,7 @@ func (v *View) Set(i int, val any) bool {
 			v.layout.PutUint32(v.buf[x:y], uint32(d32.Int64()))
 			return true
 		}
-	case String, Bytes, Bigint, Text, Binary, List, Map:
+	case String, Bytes, Bigint, Text, Binary, List, Map, Union, Variant:
 		// unsupported, may alter length
 	}
 	return false
@@ -736,6 +740,18 @@ func (v *View) Binary(i int) []byte {
 // It panics on type mismatch or out-of-bounds access.
 func (v *View) Bigint(i int) num.Big {
 	return num.NewBigFromBytes(unsafe.Slice((*byte)(v.getCheckedPtr(i, Bigint)), v.len[i]))
+}
+
+// Union is a fast non-portable accessor to union values decoded from
+// little-endian format. It panics on type mismatch, out-of-bounds access
+// or decoding error.
+func (v *View) Union(i int) UnionValue {
+	buf := unsafe.Slice((*byte)(v.getCheckedPtr(i, Union)), v.len[i])
+	var val UnionValue
+	if err := val.UnmarshalBuffer(buf, v.layout); err != nil {
+		panic(err)
+	}
+	return val
 }
 
 // List returns an iterator for a list field at position i.

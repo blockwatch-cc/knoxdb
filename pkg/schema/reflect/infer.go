@@ -25,6 +25,7 @@ var (
 	typeOfDec128    = reflect.TypeFor[num.Decimal128]()
 	typeOfDec256    = reflect.TypeFor[num.Decimal256]()
 	typeOfBigInt    = reflect.TypeFor[num.Big]()
+	typeOfUnion     = reflect.TypeFor[schema.UnionValue]()
 	typeOfByteSlice = reflect.TypeFor[[]byte]()
 	typeOfInt8      = reflect.TypeFor[int8]()
 	typeOfInt16     = reflect.TypeFor[int16]()
@@ -126,6 +127,18 @@ func (b *builder) inferStructField(structField reflect.StructField) (*schema.Fie
 		return nil, fmt.Errorf("field[%s]: %w", b.prefix+field.Name, err)
 	}
 
+	// add metadata for union type
+	if field.Type == schema.Union {
+		field.Child = schema.UnionType.Clone()
+		for _, cf := range field.Child.Fields {
+			cf.Id = b.nextId()
+			cf.ParentId = field.Id
+			cf.Name = field.Name + "." + cf.Name
+			b.schema.Fields = append(b.schema.Fields, cf)
+		}
+		field.Child.Finalize()
+	}
+
 	// parse tags, allow feature override
 	err = b.parseFieldTag(field, tag)
 	if err != nil {
@@ -209,6 +222,9 @@ func (b *builder) inferStructFieldType(f *schema.Field, t reflect.Type) error {
 		f.Scale = num.MaxDecimal256Precision
 	case typeOfBigInt:
 		f.Type = schema.Bigint
+	case typeOfUnion:
+		f.Type = schema.Union
+		f.Flags |= schema.FlagNullable
 	default:
 		if b.allowStruct {
 			// allow nested struct in lists and maps
@@ -333,6 +349,19 @@ func (b *builder) inferListFieldType(f *schema.Field, t reflect.Type) error {
 		f.Child = &schema.Schema{
 			Version: b.schema.Version,
 			Fields:  []*schema.Field{child},
+		}
+
+		// add metadata for union type
+		if child.Type == schema.Union {
+			child.Child = schema.UnionType.Clone()
+			for _, cf := range child.Child.Fields {
+				cf.Id = b.nextId()
+				cf.ParentId = child.Id
+				cf.Name = child.Name + "." + cf.Name
+				b.schema.Fields = append(b.schema.Fields, cf)
+				f.Child.Fields = append(f.Child.Fields, cf)
+			}
+			child.Child.Finalize()
 		}
 	}
 
@@ -459,6 +488,19 @@ func (b *builder) inferMapFieldType(f *schema.Field, t reflect.Type) error {
 
 		// append to map child schema
 		f.Child.Fields = append(f.Child.Fields, valT)
+
+		// add metadata for union type
+		if valT.Type == schema.Union {
+			valT.Child = schema.UnionType.Clone()
+			for _, cf := range valT.Child.Fields {
+				cf.Id = b.nextId()
+				cf.ParentId = valT.Id
+				cf.Name = valT.Name + "." + cf.Name
+				b.schema.Fields = append(b.schema.Fields, cf)
+				f.Child.Fields = append(f.Child.Fields, cf)
+			}
+			valT.Child.Finalize()
+		}
 	}
 
 	// finalize map child
