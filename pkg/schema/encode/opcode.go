@@ -47,10 +47,11 @@ const (
 	OC_MAP                     // 0x1F 31 (unused)
 	OC_DURATION                // 0x20 32
 	OC_UNION                   // 0x21 33
+	OC_VARIANT                 // 0x22 34 (unused)
 )
 
 var (
-	opCodeStrings = "__i8_i16_i32_i64_u8_u16_u32_u64_f32_f64_bool_fixbyte_fixstr_str_byte_timestamp_time_date_i128_i256_d32_d64_d128_d256_bigint_enum_skip_text_blob_list_map_duration_union"
+	opCodeStrings = "__i8_i16_i32_i64_u8_u16_u32_u64_f32_f64_bool_fixbyte_fixstr_str_byte_timestamp_time_date_i128_i256_d32_d64_d128_d256_bigint_enum_skip_text_blob_list_map_duration_union_variant"
 	opCodeIdx     = [...]uint8{
 		0,                           // invalid
 		2, 5, 9, 13, 17, 20, 24, 28, // int/uint
@@ -69,7 +70,8 @@ var (
 		144, 149, // list, map
 		153, // duration
 		162, // union
-		168, // end-of-string
+		168, // variant
+		176, // end-of-string
 	}
 
 	ft2oc = map[schema.FieldType]OpCode{
@@ -102,6 +104,7 @@ var (
 		schema.List:       OC_LIST,
 		schema.Map:        OC_MAP, // unsupported, throws error
 		schema.Union:      OC_UNION,
+		schema.Variant:    OC_VARIANT, // unsupported, throws error
 	}
 )
 

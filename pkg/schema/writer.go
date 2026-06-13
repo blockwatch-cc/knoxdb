@@ -5,11 +5,9 @@ package schema
 
 import (
 	"bytes"
-	"cmp"
 	"encoding/binary"
 	"io"
 	"math"
-	"slices"
 	"sync"
 	"time"
 
@@ -18,9 +16,7 @@ import (
 )
 
 // TODO
-// - support generic io.Writer on Writer/ListWriter
-// - detect if underlying is *bytes.Buffer, if yes, optimize
-//   if not write to new buffer and move into io.Writer on close
+// - field offset n calculations assume no change to nested fields
 
 // Marshaler is the interface implemented by an object that can
 // write itself to a schema Writer. MarshalSchema encodes the
@@ -54,6 +50,7 @@ type Writer struct {
 	buf     *bytes.Buffer    // backing buffer
 	n       int              // current field offset
 	scratch [8]byte          // scratch buffer
+	err     error            // first captured write error
 }
 
 func NewWriter(s *Schema, buf *bytes.Buffer) *Writer {
@@ -91,10 +88,16 @@ func (w *Writer) Done() bool {
 	return w.n == len(w.schema.Fields)
 }
 
+// Err returns the first captured write error.
+func (w *Writer) Err() error {
+	return w.err
+}
+
 // Reset resets the writer buffer for reuse.
 func (w *Writer) Reset() {
 	w.buf.Reset()
 	w.n = 0
+	w.err = nil
 }
 
 // Next prepares the writer to append another record to the same buffer.
@@ -130,7 +133,7 @@ func (w *Writer) Buffer() *bytes.Buffer {
 	return w.buf
 }
 
-// Skip writes a zero value for the current field.
+// Skip writes a zero value for the current or up to n fields.
 func (w *Writer) Skip(n ...int) error {
 	c := 1
 	if len(n) > 0 {
@@ -178,7 +181,7 @@ func (w *Writer) Write(val any) error {
 		err = f.WriteValue(w.buf, val, w.layout)
 	}
 	if err != nil {
-		return err
+		return w.fail(err)
 	}
 
 	// advance to next field
@@ -349,14 +352,14 @@ func (w *Writer) WriteEnum(s string) error {
 		return err
 	}
 	if !f.IsEnum() {
-		return ErrInvalidField
+		return w.fail(ErrInvalidField)
 	}
 	if f.Enum == nil {
-		return ErrEnumUndefined
+		return w.fail(ErrEnumUndefined)
 	}
 	val, ok := f.Enum.Code(s)
 	if !ok {
-		return enum.ErrEnumNoCode
+		return w.fail(enum.ErrEnumNoCode)
 	}
 	w.writeU16(val)
 	w.n++
@@ -365,7 +368,7 @@ func (w *Writer) WriteEnum(s string) error {
 
 func (w *Writer) WriteString(s string) error {
 	if len(s) > MAX_STRING {
-		return ErrLongValue
+		return w.fail(ErrLongValue)
 	}
 	f, err := w.getFieldChecked(w.n, String)
 	if err != nil {
@@ -373,7 +376,7 @@ func (w *Writer) WriteString(s string) error {
 	}
 	if f.IsArray() {
 		if len(s) != int(f.Scale) {
-			return ErrShortValue
+			return w.fail(ErrShortValue)
 		}
 	} else {
 		w.buf.WriteByte(byte(len(s)))
@@ -396,7 +399,7 @@ func (w *Writer) WriteText(s string) error {
 
 func (w *Writer) WriteBytes(b []byte) error {
 	if len(b) > MAX_BYTES {
-		return ErrLongValue
+		return w.fail(ErrLongValue)
 	}
 	f, err := w.getFieldChecked(w.n, Bytes)
 	if err != nil {
@@ -404,7 +407,7 @@ func (w *Writer) WriteBytes(b []byte) error {
 	}
 	if f.IsArray() {
 		if len(b) != int(f.Scale) {
-			return ErrShortValue
+			return w.fail(ErrShortValue)
 		}
 	} else {
 		w.buf.WriteByte(byte(len(b)))
@@ -492,7 +495,7 @@ func (w *Writer) WriteBigint(v num.Big) error {
 	}
 	buf := v.Bytes()
 	if len(buf) >= MAX_BYTES {
-		return ErrLongValue
+		return w.fail(ErrLongValue)
 	}
 	w.buf.WriteByte(byte(len(buf)))
 	w.buf.Write(buf)
@@ -507,179 +510,116 @@ func (w *Writer) WriteUnion(v UnionValue) error {
 	}
 	err = v.MarshalSchema(w)
 	if err != nil {
-		return err
+		return w.fail(err)
 	}
 	w.n += 1 + len(f.Child.Fields)
 	return nil
 }
 
-// ListWriter returns a new list writer to append nested elements
-// to the buffer. ListWriter must be closed before writing other fields.
-func (w *Writer) ListWriter() (*ListWriter, error) {
-	f, err := w.getFieldChecked(w.n, List)
+// WriteList calls provided callback with a new list writer to
+// append nested elements to the buffer.
+func (w *Writer) WriteList(fn func(*ListWriter) error) (err error) {
+	var f *Field
+	f, err = w.getFieldChecked(w.n, List)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// advance field offset
 	w.n++
 
 	// open nested list writer
-	return newListWriter(w, f.Child), nil
+	lw := newListWriter(w, f.Child)
+	defer lw.Close()
+
+	defer func() {
+		if e := recover(); e != nil {
+			err = w.fail(e.(error))
+		}
+	}()
+
+	// call callback, capture error
+	return w.fail(fn(lw))
 }
 
-// MapWriter returns a new map writer to append nested key/value pairs
-// to the buffer. MapWriter must be closed before writing other fields.
-func (w *Writer) MapWriter() (*MapWriter, error) {
-	f, err := w.getFieldChecked(w.n, Map)
+// WriteMap calls provided callback with a new map writer to
+// append nested key/value pairs to the buffer.
+func (w *Writer) WriteMap(fn func(mw *MapWriter) error) (err error) {
+	var f *Field
+	f, err = w.getFieldChecked(w.n, Map)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// advance field offset
 	w.n++
 
 	// open nested map writer
-	return newMapWriter(w, f.Child), nil
+	mw := newMapWriter(w, f.Child)
+	defer mw.Close()
+
+	defer func() {
+		if e := recover(); e != nil {
+			err = w.fail(e.(error))
+		}
+	}()
+
+	// call callback, capture error
+	return w.fail(fn(mw))
 }
 
-// WriteMap is a generic helper that writes a map in sorted key order
-// to w. Key types are implicitly limited to ordered types like integers,
-// floats and string which is a subset of permitted Map key types.
-// Values can be any supported primitive type.
-//
-// Performance note: Go hash maps are super inefficient to work with
-// because they almost always make copies of keys and values. It is
-// often better to use lists of key-value pairs and write them directly
-// to a MapWriter (optionally inside MarshalSchema).
-func WriteMap[K cmp.Ordered, V MapValueTypes](w *Writer, m map[K]V) error {
-	mw, err := w.MapWriter()
+// WriteVariant calls provided callback with a new variant writer to
+// append a nested variant type to the buffer.
+func (w *Writer) WriteVariant(caseId uint8, fn func(vw *VariantWriter) error) (err error) {
+	var f *Field
+	f, err = w.getFieldChecked(w.n, Variant)
 	if err != nil {
 		return err
 	}
 
-	// sort keys
-	keys := make([]K, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
+	// lookup variant type
+	s, ok := f.Case(caseId)
+	if !ok {
+		return w.fail(ErrInvalidVariant)
 	}
-	slices.Sort(keys)
 
-	// walk map sorted
-	for _, k := range keys {
-		if err := mw.Write(k); err != nil {
-			return err
+	// advance field offset to the first field of the chosen case
+	// skip the two metadata fields
+	w.n++
+	for w.n < len(w.schema.Fields) && w.schema.Fields[w.n].CaseId != caseId {
+		w.n++
+	}
+
+	// open nested variant writer
+	vw := newVariantWriter(w, s, caseId)
+	defer vw.Close()
+
+	defer func() {
+		if e := recover(); e != nil {
+			err = w.fail(e.(error))
 		}
-		if err := mw.Write(m[k]); err != nil {
-			return err
-		}
-		mw.Next()
-	}
-	mw.Close()
-	return nil
-}
+	}()
 
-// WriteTimeMap is a generic helper that writes a map using time-based
-// keys in sorted order to w. Values can be any supported primitive type.
-// See performance note above.
-func WriteTimeMap[K time.Time, V MapValueTypes](w *Writer, m map[K]V) error {
-	mw, err := w.MapWriter()
-	if err != nil {
-		return err
-	}
-
-	// sort keys
-	keys := make([]K, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	slices.SortFunc(keys, CompareTime)
-
-	// walk map sorted
-	for _, k := range keys {
-		if err := mw.Write(k); err != nil {
-			return err
-		}
-		if err := mw.Write(m[k]); err != nil {
-			return err
-		}
-		mw.Next()
-	}
-	mw.Close()
-	return nil
-}
-
-// MarshalMap is a generic helper that writes a map in sorted key order
-// to w. Key types are implicitly limited to ordered types like integers,
-// floats and string which is a subset of permitted Map key types.
-// Values must implement the Marshaler interface.
-// See performance note above.
-func MarshalMap[K cmp.Ordered, V Marshaler](w *Writer, m map[K]V) error {
-	mw, err := w.MapWriter()
-	if err != nil {
-		return err
-	}
-
-	// sort keys
-	keys := make([]K, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	slices.Sort(keys)
-
-	// walk map sorted
-	for _, k := range keys {
-		if err := mw.Write(k); err != nil {
-			return err
-		}
-		if err := mw.Write(m[k]); err != nil {
-			return err
-		}
-		mw.Next()
-	}
-	mw.Close()
-	return nil
-}
-
-// MarshalTimeMap is a generic helper that writes a map using time-based
-// keys in sorted order to w. Values must implement the Marshaler interface.
-// See performance note above.
-func MarshalTimeMap[K time.Time, V Marshaler](w *Writer, m map[K]V) error {
-	mw, err := w.MapWriter()
-	if err != nil {
-		return err
-	}
-
-	// sort keys
-	keys := make([]K, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	slices.SortFunc(keys, CompareTime)
-
-	// walk map sorted
-	for _, k := range keys {
-		if err := mw.Write(&k); err != nil {
-			return err
-		}
-		if err := mw.Write(m[k]); err != nil {
-			return err
-		}
-		mw.Next()
-	}
-	mw.Close()
-	return nil
+	// call callback, capture error
+	return w.fail(fn(vw))
 }
 
 func (w *Writer) getFieldChecked(n int, ty FieldType) (*Field, error) {
 	if n >= len(w.schema.Fields) {
-		return nil, io.EOF
+		return nil, w.fail(io.EOF)
 	}
 	f := w.schema.Fields[n]
 	if ty > 0 && f.Type != ty {
-		return nil, ErrInvalidValueType
+		return nil, w.fail(ErrInvalidValueType)
 	}
 	return f, nil
+}
+
+func (w *Writer) fail(err error) error {
+	if w.err == nil {
+		w.err = err
+	}
+	return err
 }
 
 func (w *Writer) writeLen(v int) {
@@ -700,205 +640,4 @@ func (w *Writer) writeU32(v uint32) {
 func (w *Writer) writeU16(v uint16) {
 	w.layout.PutUint16(w.scratch[:2], v)
 	w.buf.Write(w.scratch[:2])
-}
-
-var listWriterPool = sync.Pool{}
-
-// ListWriter appends elements to a nested list. It is created
-// with Writer.WriteList and must be released with Close.
-type ListWriter struct {
-	*Writer         // the main writer
-	elem    *Schema // list element schema
-	ofs     int     // list start offset in writer buffer
-	align   int     // field alignment in top schema (reset point for each elem)
-}
-
-func newListWriter(w *Writer, s *Schema) *ListWriter {
-	var lw *ListWriter
-	if iw := listWriterPool.Get(); iw != nil {
-		lw = iw.(*ListWriter)
-	} else {
-		lw = &ListWriter{}
-	}
-
-	// write list size, will patch correct size on close
-	ofs := w.buf.Len()
-	w.writeLen(0)
-
-	lw.Writer = w
-	lw.elem = s
-	lw.ofs = ofs
-	lw.align = w.n
-
-	return lw
-}
-
-func (w *ListWriter) Schema() *Schema {
-	return w.elem
-}
-
-// Done returns true when a list element is fully written.
-func (w *ListWriter) Done() bool {
-	return w.n == w.align+len(w.elem.Fields)
-}
-
-// Next prepares the list writer to accept the next element.
-// It is important to call Next after each list element is done.
-// Failing to do so will result in undefined behavior and invalid
-// buffer contents. When Next is called early, before all element
-// fields were written, it skips the remaining fields writing zeros.
-func (w *ListWriter) Next() {
-	// noop if we expect the first field
-	if w.n == w.align {
-		return
-	}
-	// fill remaining fields with zeros
-	for !w.Done() {
-		w.Skip()
-	}
-	w.n = w.align
-}
-
-// Reset resets the write buffer to a state before list writing
-// started, i.e. it clears all data written by this ListWriter
-// so far, but preserves the list header length bytes. Use Reset
-// to undo all writes to a list.
-func (w *ListWriter) Reset() {
-	w.buf.Truncate(w.ofs + 4)
-}
-
-// Close finalizes a list. It writes the length of the encoded
-// data as a prefix back to the writer buffer and resets the
-// main writer's write position. It is important to call Close,
-// even on empty lists when no data has been written.
-func (w *ListWriter) Close() {
-	// noop when there were no writes (empty list)
-	if w.buf.Len() > w.ofs+4 {
-
-		// fill remaining fields if writing stopped early but do not
-		// append another list element if we're at the start (right
-		// after a call to Next)
-		if w.n > w.align && !w.Done() {
-			w.Next()
-		}
-
-		// patch list data length in bytes
-		buf := w.buf
-		n := buf.Len()
-		w.layout.PutUint32(buf.Bytes()[w.ofs:], uint32(n-w.ofs-4))
-
-		// advance writer field offset past the nested type
-		w.n = w.align + len(w.elem.Fields)
-	}
-
-	// clear and reuse
-	w.Writer = nil
-	w.elem = nil
-	w.ofs = 0
-	w.align = 0
-	listWriterPool.Put(w)
-}
-
-var mapWriterPool = sync.Pool{}
-
-// MapWriter appends entries to a nested map. It is created
-// with Writer.WriteMap and must be released with Close. The
-// first WriteXX call to a MapWriter must write the key for
-// a map entry, subsequent calls write value fields.
-type MapWriter struct {
-	*Writer         // the main writer
-	entries *Schema // map schema (single key field, one or muliple value fields)
-	ofs     int     // map start offset in writer buffer
-	align   int     // field alignment in top schema (reset point for each entry)
-}
-
-func newMapWriter(w *Writer, s *Schema) *MapWriter {
-	var mw *MapWriter
-	if iw := mapWriterPool.Get(); iw != nil {
-		mw = iw.(*MapWriter)
-	} else {
-		mw = &MapWriter{}
-	}
-
-	// write map size, will patch correct size on close
-	ofs := w.buf.Len()
-	w.writeLen(0)
-
-	mw.Writer = w
-	mw.entries = s
-	mw.ofs = ofs
-	mw.align = w.n
-
-	return mw
-}
-
-func (w *MapWriter) KeyType() *Field {
-	return w.entries.Fields[0]
-}
-
-func (w *MapWriter) Schema() *Schema {
-	return w.entries
-}
-
-// Done returns true when a list element is fully written.
-func (w *MapWriter) Done() bool {
-	return w.n == w.align+len(w.entries.Fields)
-}
-
-// Next prepares the map writer to accept the next map entry.
-// It is important to call Next after each map entry is done.
-// Failing to do so will result in undefined behavior and invalid
-// buffer contents. When Next is called early, before all value
-// fields were written and after the key was written, it skips
-// the remaining value fields writing zeros.
-func (w *MapWriter) Next() {
-	// noop if we expect the first field
-	if w.n == w.align {
-		return
-	}
-	// fill remaining fields with zeros
-	for !w.Done() {
-		w.Skip()
-	}
-	w.n = w.align
-}
-
-// Reset resets the write buffer to a state before map writing
-// started, i.e. it clears all data written by this MapWriter
-// so far, but preserves the map header length bytes. Use Reset
-// to undo all writes to a map.
-func (w *MapWriter) Reset() {
-	w.buf.Truncate(w.ofs + 4)
-}
-
-// Close finalizes a map. It writes the length of the encoded
-// data as a prefix back to the writer buffer and resets the
-// main writer's write position. It is important to call Close,
-// even on empty maps when no data has been written.
-func (w *MapWriter) Close() {
-	// noop when there were no writes (empty list)
-	if w.buf.Len() > w.ofs+4 {
-
-		// fill remaining fields if writing stopped early but do not
-		// append another list element if we're at the start (right
-		// after a call to Next)
-		if w.n > w.align && !w.Done() {
-			w.Next()
-		}
-
-		// patch list data length in bytes
-		buf := w.buf
-		n := buf.Len()
-		w.layout.PutUint32(buf.Bytes()[w.ofs:], uint32(n-w.ofs-4))
-
-		// advance writer field offset past the nested type
-		w.n = w.align + len(w.entries.Fields)
-	}
-
-	// clear and reuse
-	w.Writer = nil
-	w.entries = nil
-	w.ofs = 0
-	w.align = 0
-	mapWriterPool.Put(w)
 }

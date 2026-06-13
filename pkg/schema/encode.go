@@ -186,7 +186,7 @@ func (f *Field) WriteValue(w *bytes.Buffer, val any, layout binary.ByteOrder) (e
 			}
 		}
 
-	case Text, Binary, List, Map:
+	case Text, Binary, List, Map, Variant:
 		// 4 byte len
 		var (
 			bval []byte
@@ -417,7 +417,7 @@ func (f *Field) ReadValue(r io.Reader, layout binary.ByteOrder) (val any, err er
 			val = b[:n]
 		}
 
-	case Binary, List, Map:
+	case Binary, List, Map, Variant:
 		_, err = r.Read(buf[:4])
 		if err != nil {
 			return

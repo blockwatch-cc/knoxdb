@@ -335,3 +335,68 @@ func countIter(it iter.Seq2[int, *schema.View]) int {
 	}
 	return n
 }
+
+func TestViewVariant(t *testing.T) {
+	buf := customerT.NewBuffer(2)
+	w := schema.NewWriter(customerT, buf)
+	require.NoError(t, w.WriteUint64(1))
+	require.NoError(t, w.WriteString("user"))
+	require.NoError(t, w.WriteVariant(3, // pay: bank transfer
+		func(vw *schema.VariantWriter) error {
+			require.NoError(t, vw.WriteString("iban"))
+			require.NoError(t, vw.WriteString("bic"))
+			require.NoError(t, vw.WriteString("holder"))
+			require.NoError(t, vw.WriteString("bank"))
+			require.True(t, vw.Done())
+			return nil
+		}))
+	require.NoError(t, w.WriteVariant(2, // billing: business
+		func(vw *schema.VariantWriter) error {
+			require.NoError(t, vw.WriteString("company"))
+			require.NoError(t, vw.WriteString("street"))
+			require.NoError(t, vw.WriteString("city"))
+			require.NoError(t, vw.WriteString("postcode"))
+			require.NoError(t, vw.WriteString("country"))
+			require.NoError(t, vw.WriteString("taxid"))
+			require.True(t, vw.Done())
+			return nil
+		}))
+	require.NoError(t, w.WriteVariant(1, // shipping: residential
+		func(vw *schema.VariantWriter) error {
+			require.NoError(t, vw.WriteString("street"))
+			require.NoError(t, vw.WriteString("city"))
+			require.NoError(t, vw.WriteString("postcode"))
+			require.NoError(t, vw.WriteString("country"))
+			require.True(t, vw.Done())
+			return nil
+		}))
+	require.True(t, w.Done())
+
+	v := schema.NewView(customerT).Reset(w.Bytes())
+	require.Equal(t, uint64(1), v.Uint64(0))
+	require.Equal(t, "user", v.String(1))
+	vv, caseId := v.Variant(2, nil)
+	require.Equal(t, uint8(3), caseId)
+	require.Equal(t, "iban", vv.String(0))
+	require.Equal(t, "bic", vv.String(1))
+	require.Equal(t, "holder", vv.String(2))
+	require.Equal(t, "bank", vv.String(3))
+	require.Panics(t, func() { vv.String(4) })
+	vv, caseId = v.Variant(3, nil)
+	require.Equal(t, uint8(2), caseId)
+	require.Equal(t, "company", vv.String(0))
+	require.Equal(t, "street", vv.String(1))
+	require.Equal(t, "city", vv.String(2))
+	require.Equal(t, "postcode", vv.String(3))
+	require.Equal(t, "country", vv.String(4))
+	require.Equal(t, "taxid", vv.String(5))
+	require.Panics(t, func() { vv.String(6) })
+	vv, caseId = v.Variant(4, nil)
+	require.Equal(t, uint8(1), caseId)
+	require.Equal(t, "street", vv.String(0))
+	require.Equal(t, "city", vv.String(1))
+	require.Equal(t, "postcode", vv.String(2))
+	require.Equal(t, "country", vv.String(3))
+	require.Panics(t, func() { vv.String(4) })
+	require.Panics(t, func() { v.String(5) })
+}

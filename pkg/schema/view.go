@@ -769,12 +769,41 @@ func (v *View) Map(i int) iter.Seq2[int, *View] {
 	return v.makeIter(i, p)
 }
 
-func (v *View) makeIter(i int, p unsafe.Pointer) iter.Seq2[int, *View] {
-	// find the i-th field at the current nesting level; we don't store
-	// field pointers and skip nested fields, so we need this extra lookup
-	// to find the list field and access its child schema
+// Variant returns a view for a nested variant field at position i
+// and the selected case id. Note caseId starts at 1.
+// It panics on type mismatch or when i is out of range. Users can
+// pass in a list of initialized views returned by earlir calls
+// to re-use allocations.
+func (v *View) Variant(i int, views []*View) (*View, uint8) {
+	// get encoded sub-buffer
+	buf := unsafe.Slice((*byte)(v.getCheckedPtr(i, Variant)), v.len[i])
+
+	// read case id
+	caseId := buf[0]
+
+	// read typeid, select case schema, init view
+	s, ok := v.findField(i).Case(caseId)
+	if !ok {
+		panic(ErrInvalidVariant)
+	}
+
+	// reuse the first view with matching schema
+	for _, vv := range views {
+		if vv != nil && vv.schema.Hash == s.Hash {
+			return vv.Reset(buf[1:]), caseId
+		}
+	}
+
+	// alloc new view
+	return NewView(s, WithViewLayout(v.layout), WithViewMeta(v.meta)).
+		Reset(buf[1:]), caseId
+}
+
+// find the i-th field at the current nesting level; we don't store
+// field pointers and skip nested fields, so we need this extra lookup
+// to find the list field and access its child schema
+func (v *View) findField(i int) *Field {
 	var (
-		f   *Field
 		lvl = v.schema.Fields[0].Level
 		n   int
 	)
@@ -783,19 +812,21 @@ func (v *View) makeIter(i int, p unsafe.Pointer) iter.Seq2[int, *View] {
 			continue
 		}
 		if i == n {
-			f = cf
-			break
+			return cf
 		}
 		n++
 	}
+	return nil
+}
 
+func (v *View) makeIter(i int, p unsafe.Pointer) iter.Seq2[int, *View] {
 	// make iterator func using child view for nested fields
 	return func(yield func(int, *View) bool) {
 		// slice the list buffer
 		buf := unsafe.Slice((*byte)(p), v.len[i])
 
 		// make a new child view
-		view := NewView(f.Child)
+		view := NewView(v.findField(i).Child)
 
 		// loop through all nested records
 		var i int

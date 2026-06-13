@@ -320,6 +320,8 @@ func TestFieldSerializationRoundTrip(t *testing.T) {
 
 	assert.Equal(t, original.Name, readField.Name)
 	assert.Equal(t, original.Id, readField.Id)
+	assert.Equal(t, original.ParentId, readField.ParentId)
+	assert.Equal(t, original.CaseId, readField.CaseId)
 	assert.Equal(t, original.Type, readField.Type)
 	assert.Equal(t, original.Flags, readField.Flags)
 	assert.Equal(t, original.Compress, readField.Compress)
@@ -379,6 +381,7 @@ func TestFieldEncodeRoundtrip(t *testing.T) {
 		{"Blob", schema.FieldOf(schema.Binary), []byte("world")},
 		{"BigInt", schema.FieldOf(schema.Bigint), num.NewBig(11)},
 		{"Duration", schema.FieldOf(schema.Duration), time.Hour + time.Minute},
+		{"Union", schema.FieldOf(schema.Union), schema.Int16Union(2)},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {

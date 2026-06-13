@@ -4,6 +4,7 @@
 package schema
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 
@@ -32,9 +33,28 @@ func SchemaOf(fields []*Field, opts ...Option) *Schema {
 			// enforce all child schema versions are equal
 			newChild.Version = s.Version
 
-			// add child fields to main schema
+			// clone case schemas and relink to the new field
+			// pointers in newChild
+			if f.Cases != nil {
+				newCases := make([]*Schema, len(*f.Cases))
+				for i, cs := range *f.Cases {
+					newSchema := &Schema{
+						Name:    cs.Name,
+						Version: cs.Version,
+						Fields:  slices.Clone(cs.Fields),
+					}
+					// relink fields
+					if ok := newSchema.relink(newChild); ok {
+						newCases[i] = newSchema
+					} else {
+						panic(fmt.Errorf("schema %s: failed to relink nested variant field %q", s.Name, f.Name))
+					}
+				}
+				f.Cases = &newCases
+			}
+
+			// add child fields to main schema, always create new ids
 			for _, c := range newChild.Fields {
-				// always create new ids
 				c.Id = s.nextFieldId()
 				s.Fields = append(s.Fields, c)
 			}
@@ -99,20 +119,30 @@ func ArrayOf(typ FieldType, n int, opts ...FieldOption) *Field {
 	return FieldOf(typ, append([]FieldOption{WithArray(n), WithNullable(false)}, opts...)...)
 }
 
+// IndexOf creates a new table index for one or multiple fields in
+// a base schema. Options control which fields are indexed and which
+// extra fields are included in the index.
+func IndexOf(base *Schema, typ IndexType, opts ...IndexOption) *IndexSchema {
+	if typ == PrimaryKeyIndex {
+		opts = append([]IndexOption{WithIndexFieldId(base.PkId())}, opts...)
+	}
+	return NewIndexSchema(typ, base, opts...)
+}
+
 // ListOf creates a new list (slice) of a primitive type. Options
 // apply to the list field. To control options of the inner type
 // use ListFor with a pre-built schema.
 func ListOf(typ FieldType, opts ...FieldOption) *Field {
-	// prepare child type
-	child := FieldOf(typ, WithNullable(typ.NullableDefault()))
-
-	// use dummy to extract field name from options
+	// peek field name from options
 	name := peekFieldName(opts...)
 	if name != "" {
-		child.Name = name + "." + ElementName
+		name = name + "." + ElementName
 	} else {
-		child.Name = ElementName
+		name = ElementName
 	}
+
+	// prepare child type
+	child := FieldOf(typ, WithName(name), WithNullable(typ.NullableDefault()))
 
 	s := SchemaOf([]*Field{child}, Name(name), Version(1))
 
@@ -130,7 +160,7 @@ func ListOf(typ FieldType, opts ...FieldOption) *Field {
 func ListFor(s *Schema, opts ...FieldOption) *Field {
 	f := NewField(List, append([]FieldOption{
 		WithNullable(),
-		WithChildSchema(s),
+		WithChildSchema(s.Clone()),
 	}, opts...)...)
 
 	for _, v := range f.Child.Fields {
@@ -144,16 +174,6 @@ func ListFor(s *Schema, opts ...FieldOption) *Field {
 	}
 
 	return f
-}
-
-// IndexOf creates a new table index for one or multiple fields in
-// a base schema. Options control which fields are indexed and which
-// extra fields are included in the index.
-func IndexOf(base *Schema, typ IndexType, opts ...IndexOption) *IndexSchema {
-	if typ == PrimaryKeyIndex {
-		opts = append([]IndexOption{WithIndexFieldId(base.PkId())}, opts...)
-	}
-	return NewIndexSchema(typ, base, opts...)
 }
 
 // MapOf creates a new map type from primitive types for key and value.
@@ -180,9 +200,9 @@ func MapOf(keyT, valT FieldType, opts ...FieldOption) *Field {
 
 	// wrap into map field
 	return NewField(Map, append([]FieldOption{
+		WithName(name),
 		WithChildSchema(s),
 		WithNullable(),
-		WithName(EntriesName),
 	},
 		opts...)...,
 	)
@@ -205,9 +225,13 @@ func MapFor(keyT FieldType, valS *Schema, opts ...FieldOption) *Field {
 	// however, because there is no support for struct-in-struct (yet?),
 	// we allow only a single key field and merge value fields into the
 	// same struct and then use this struct as child schema on a Map field
+	// SchemaOf clones and assignes new sequential ids
 	s := SchemaOf(
 		append(
-			[]*Field{FieldOf(keyT, WithName(name+"."+KeyName), WithEnum(dummy.Enum))},
+			[]*Field{FieldOf(keyT,
+				WithName(name+"."+KeyName), // prefix key
+				WithEnum(dummy.Enum)),      // allow enum keys
+			},
 			valS.Fields..., // SchemaOf will clone those fields
 		),
 		Name(name),
@@ -242,32 +266,56 @@ func MapFor(keyT FieldType, valS *Schema, opts ...FieldOption) *Field {
 // record (or row) uses exactly one of the defined type cases. Variant fields
 // use a distinct field structure internally
 //
-// Main                    Variant Field                    (field)
-//                               |
-//             +--------+--------+--------+--------+
-//             |        |        |        |        |
-// Content  Tag(u8) Index(u32) Type_1   Type_2   Type_N     (schema)
-// Id         id       id+1    id+2..
-// func VariantFor(cases []*Schema, opts ...FieldOption) *Field {
-// 	// peek field name
-// 	dummy := NewField(String, opts...)
-// 	if dummy.Name == "" {
-// 		dummy.Name = EntriesName
-// 	}
+//		              Variant Field
+//		      +-------------+--------------------------+
+//	          |                                      Cases
+//	          |                                  +-----+-----+
+//		    Child                                T1    T2    TN        (schemas)
+//		      |                                  |     |     |
+//	+---------+-----------+-----------+          |     |     |
+//	|         |           |           |          |     |     |
+//	vtag(u8) vidx(u32)  T1/F0..n .. TN/F0..n   F0..n  F0..n  F0..n     (fields)
+//	__________________  ____________________   ___________________
+//	Metadata            Flat case fields       Nested case schemas
+func VariantFor(cases []*Schema, opts ...FieldOption) *Field {
+	// create field
+	field := FieldOf(Variant, opts...)
 
-// 	//
-// 	variantFields := []*Field{
-// 		FieldOf(Uint8, WithName(dummy.Name+"."+TagName)),    // type id (record and columnar)
-// 		FieldOf(Uint32, WithName(dummy.Name+"."+IndexName)), // offsets (columnar only)
-// 	}
+	// create metadata schema
+	field.Child = SchemaOf([]*Field{
+		// type id
+		FieldOf(Uint8, WithName(field.Name+"."+VariantTagName), WithFlags(FlagMetadata)),
+		// offsets
+		FieldOf(Uint32, WithName(field.Name+"."+VariantIndexName), WithFlags(FlagMetadata)),
+	}, Name(field.Name), Version(1))
 
-// 	for _, s := range cases {
-// 		variantFields = append(variantFields,
-// 			FieldOf(Variant, WithName(dummy.Name+"."+s.Name), WithChildSchema(s)),
-// 		)
-// 	}
+	// alloc cases slice
+	caseSchemas := make([]*Schema, len(cases))
+	field.Cases = &caseSchemas
 
-// 	return FieldOf(Variant,
-// 		append(opts, WithChildSchema(SchemaOf(variantFields, Name(dummy.Name))))...)
+	// attach variant case schemas
+	for i, cs := range cases {
+		// clone child schema; we're going to change fields
+		cs = cs.Clone()
 
-// }
+		// prefix name and assign case id (+1 since caseid=0 has meaning)
+		for _, cf := range cs.Fields {
+			cf.Name = strings.Join([]string{field.Name, cs.Name, cf.Name}, ".")
+			cf.CaseId = uint8(i + 1)
+		}
+
+		// store as case
+		caseSchemas[i] = cs
+
+		// collect per-case fields into child schema and assign unique ids
+		// to each case schema field (this preserves the invariant that a
+		// schema must contain unique ids which is required for correct
+		// le-linking when the variant field is used in higher-level schemas)
+		for _, cf := range cs.Fields {
+			cf.Id = field.Child.nextFieldId()
+			field.Child.Fields = append(field.Child.Fields, cf)
+		}
+	}
+
+	return field
+}

@@ -447,22 +447,34 @@ type PrimMapRecord struct {
 }
 
 func (r PrimMapRecord) MarshalSchema(w *schema.Writer) error {
-	if err := schema.WriteMap(w, r.U64); err != nil {
+	if err := w.WriteMap(func(mw *schema.MapWriter) error {
+		return schema.WriteMap(mw, r.U64)
+	}); err != nil {
 		return err
 	}
-	if err := schema.WriteMap(w, r.Bools); err != nil {
+	if err := w.WriteMap(func(mw *schema.MapWriter) error {
+		return schema.WriteMap(mw, r.Bools)
+	}); err != nil {
 		return err
 	}
-	if err := schema.WriteMap(w, r.Strings); err != nil {
+	if err := w.WriteMap(func(mw *schema.MapWriter) error {
+		return schema.WriteMap(mw, r.Strings)
+	}); err != nil {
 		return err
 	}
-	if err := schema.WriteMap(w, r.Bigs); err != nil {
+	if err := w.WriteMap(func(mw *schema.MapWriter) error {
+		return schema.WriteMap(mw, r.Bigs)
+	}); err != nil {
 		return err
 	}
-	if err := schema.WriteMap(w, r.Dates); err != nil {
+	if err := w.WriteMap(func(mw *schema.MapWriter) error {
+		return schema.WriteMap(mw, r.Dates)
+	}); err != nil {
 		return err
 	}
-	if err := schema.WriteTimeMap(w, r.Times); err != nil {
+	if err := w.WriteMap(func(mw *schema.MapWriter) error {
+		return schema.WriteTimeMap(mw, r.Times)
+	}); err != nil {
 		return err
 	}
 	return nil
@@ -486,7 +498,9 @@ type UnionMapRecord struct {
 }
 
 func (r UnionMapRecord) MarshalSchema(w *schema.Writer) error {
-	return schema.MarshalMap(w, r.Unions)
+	return w.WriteMap(func(mw *schema.MapWriter) error {
+		return schema.MarshalMap(mw, r.Unions)
+	})
 }
 
 var UnionMapRecordSchema = schema.SchemaOf([]*schema.Field{
@@ -504,3 +518,152 @@ func NewUnionMapRecord() UnionMapRecord {
 		},
 	}
 }
+
+var (
+	// - k64 int64
+	// - kv4 int64
+	pairT = schema.SchemaOf([]*schema.Field{
+		schema.FieldOf(schema.Int64, schema.WithName("k64")),
+		schema.FieldOf(schema.Int64, schema.WithName("v64")),
+	},
+		schema.Name("pair"),
+	)
+
+	// different single nested list types with or without
+	// special settings on the content type
+	// - u64list []uint64
+	// - time_list []Date
+	// - pair_list []Pair
+	// - byte_list [][]byte
+	// - arr_list [][2]byte
+	// - dec_list []Decimal32(4)
+	listFieldsT = schema.SchemaOf([]*schema.Field{
+		schema.FieldOf(schema.Int64, schema.WithName("int64a")),
+		schema.ListOf(schema.Uint64, schema.WithName("u64_list")),
+		schema.ListOf(schema.Date, schema.WithName("time_list")),
+		schema.ListFor(pairT, schema.WithName("pair_list")),
+		schema.ListOf(schema.Bytes, schema.WithName("byte_list"), schema.WithNullable(false)),
+		schema.ListFor(
+			schema.SchemaOf([]*schema.Field{
+				schema.FieldOf(schema.Bytes, schema.WithArray(2)),
+			}),
+			schema.WithName("arr_list"),
+			schema.WithNullable(false),
+		),
+		schema.ListFor(
+			schema.SchemaOf([]*schema.Field{
+				schema.FieldOf(schema.Decimal32, schema.WithScale(4)),
+			}),
+			schema.WithName("dec_list"),
+			schema.WithNullable(false),
+		),
+		schema.FieldOf(schema.Int64, schema.WithName("int64b")),
+	},
+		schema.Name("list_fields"),
+	)
+
+	// double nested lists
+	// - nested_uints [][]uint64
+	// - nested_pairs [][]Pair
+	listInListT = schema.SchemaOf([]*schema.Field{
+		schema.FieldOf(schema.Int64, schema.WithName("int64a")),
+		schema.ListFor(
+			schema.SchemaOf([]*schema.Field{
+				schema.ListOf(schema.Uint64),
+			}),
+			schema.WithName("nested_uints"),
+		),
+		schema.ListFor(
+			schema.SchemaOf([]*schema.Field{
+				schema.ListFor(pairT),
+			}),
+			schema.WithName("nested_pairs"),
+		),
+		schema.FieldOf(schema.Int64, schema.WithName("int64b")),
+	},
+		schema.Name("list_in_list_fields"),
+	)
+
+	// a list-in-struct-in-list-in-struct type
+	//
+	outerPairStructT = schema.SchemaOf([]*schema.Field{
+		schema.FieldOf(schema.Uint32, schema.WithName("val")),
+		schema.ListFor(pairT, schema.WithName("pairs2")),
+	},
+		schema.Name("outer_pair_struct"),
+	)
+	listInStructInListT = schema.SchemaOf([]*schema.Field{
+		schema.FieldOf(schema.Int64, schema.WithName("int64a")),
+		schema.ListFor(outerPairStructT, schema.WithName("pairs1")),
+		schema.FieldOf(schema.Int64, schema.WithName("int64b")),
+	},
+		schema.Name("list_in_struct_in_list_fields"),
+	)
+
+	// variant fields
+	addrT = []*schema.Schema{
+		schema.SchemaOf([]*schema.Field{
+			schema.FieldOf(schema.String, schema.WithName("street")),
+			schema.FieldOf(schema.String, schema.WithName("city")),
+			schema.FieldOf(schema.String, schema.WithName("postal_code")),
+			schema.FieldOf(schema.String, schema.WithName("country")),
+		}, schema.Name("residential")),
+		schema.SchemaOf([]*schema.Field{
+			schema.FieldOf(schema.String, schema.WithName("company_name")),
+			schema.FieldOf(schema.String, schema.WithName("street")),
+			schema.FieldOf(schema.String, schema.WithName("city")),
+			schema.FieldOf(schema.String, schema.WithName("postal_code")),
+			schema.FieldOf(schema.String, schema.WithName("country")),
+			schema.FieldOf(schema.String, schema.WithName("tax_id")),
+		}, schema.Name("business")),
+		schema.SchemaOf([]*schema.Field{
+			schema.FieldOf(schema.String, schema.WithName("po_box_number")),
+			schema.FieldOf(schema.String, schema.WithName("city")),
+			schema.FieldOf(schema.String, schema.WithName("postal_code")),
+			schema.FieldOf(schema.String, schema.WithName("country")),
+		}, schema.Name("po_box")),
+		schema.SchemaOf([]*schema.Field{
+			schema.FieldOf(schema.String, schema.WithName("street")),
+			schema.FieldOf(schema.String, schema.WithName("city")),
+			schema.FieldOf(schema.String, schema.WithName("postal_code")),
+			schema.FieldOf(schema.String, schema.WithName("country")),
+			schema.FieldOf(schema.String, schema.WithName("state_province")),
+			schema.FieldOf(schema.String, schema.WithName("phone")),
+		}, schema.Name("international")),
+	}
+
+	payT = []*schema.Schema{
+		schema.SchemaOf([]*schema.Field{
+			schema.FieldOf(schema.String, schema.WithName("last_four")),
+			schema.FieldOf(schema.String, schema.WithName("brand")),
+			schema.FieldOf(schema.Uint8, schema.WithName("expiry_month")),
+			schema.FieldOf(schema.Uint16, schema.WithName("expiry_year")),
+			schema.FieldOf(schema.String, schema.WithName("holder_name")),
+		}, schema.Name("credit_card")),
+		schema.SchemaOf([]*schema.Field{
+			schema.FieldOf(schema.String, schema.WithName("email")),
+			schema.FieldOf(schema.String, schema.WithName("paypal_account_id")),
+			schema.FieldOf(schema.Boolean, schema.WithName("verified")),
+		}, schema.Name("paypal")),
+		schema.SchemaOf([]*schema.Field{
+			schema.FieldOf(schema.String, schema.WithName("iban")),
+			schema.FieldOf(schema.String, schema.WithName("bic")),
+			schema.FieldOf(schema.String, schema.WithName("account_holder")),
+			schema.FieldOf(schema.String, schema.WithName("bank_name")),
+		}, schema.Name("bank_transfer")),
+		schema.SchemaOf([]*schema.Field{
+			schema.FieldOf(schema.String, schema.WithName("chain")),
+			schema.FieldOf(schema.String, schema.WithName("wallet_address")),
+			schema.FieldOf(schema.Decimal256, schema.WithName("amount_in_native"), schema.WithScale(18)),
+			schema.FieldOf(schema.String, schema.WithName("tx_hash"), schema.WithNullable()),
+		}, schema.Name("crypto")),
+	}
+
+	customerT = schema.SchemaOf([]*schema.Field{
+		schema.FieldOf(schema.Uint64, schema.WithName("user_id")),
+		schema.FieldOf(schema.String, schema.WithName("user_name")),
+		schema.VariantFor(payT, schema.WithName("payment")),
+		schema.VariantFor(addrT, schema.WithName("billing_address")),
+		schema.VariantFor(addrT, schema.WithName("shipping_address")),
+	}, schema.Name("consumer"))
+)

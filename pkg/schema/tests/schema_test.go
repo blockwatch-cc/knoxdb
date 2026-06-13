@@ -927,7 +927,6 @@ func TestNestedMarshalFromInference(t *testing.T) {
 		assert.Equal(t, s.NumVisible(), r.NumVisible())
 		assert.Equal(t, s.Names(), r.Names())
 		assert.Equal(t, s.Ids(), r.Ids())
-		// assert.Equal(t, s.VisibleIds(), r.VisibleIds())
 		assert.Equal(t, s.PkId(), r.PkId())
 		assert.Equal(t, s.PkIndex(), r.PkIndex())
 		t.Log(r)
@@ -935,88 +934,11 @@ func TestNestedMarshalFromInference(t *testing.T) {
 }
 
 func TestNestedMarshalFromBuilder(t *testing.T) {
-	pair := schema.SchemaOf([]*schema.Field{
-		schema.FieldOf(schema.Int64, schema.WithName("k64")),
-		schema.FieldOf(schema.Int64, schema.WithName("v64")),
-	},
-		schema.Name("pair"),
-	)
-
-	// different single nested list types with or without
-	// special settings on the content type
-	// - u64list []uint64
-	// - time_list []Date
-	// - pair_list []Pair
-	// - byte_list [][]byte
-	// - arr_list [][2]byte
-	// - dec_list []Decimal32(4)
-	listFields := schema.SchemaOf([]*schema.Field{
-		schema.FieldOf(schema.Int64, schema.WithName("int64a")),
-		schema.ListOf(schema.Uint64, schema.WithName("u64_list")),
-		schema.ListOf(schema.Date, schema.WithName("time_list")),
-		schema.ListFor(pair, schema.WithName("pair_list")),
-		schema.ListOf(schema.Bytes, schema.WithName("byte_list"), schema.WithNullable(false)),
-		schema.ListFor(
-			schema.SchemaOf([]*schema.Field{
-				schema.FieldOf(schema.Bytes, schema.WithArray(2)),
-			}),
-			schema.WithName("arr_list"),
-			schema.WithNullable(false),
-		),
-		schema.ListFor(
-			schema.SchemaOf([]*schema.Field{
-				schema.FieldOf(schema.Decimal32, schema.WithScale(4)),
-			}),
-			schema.WithName("dec_list"),
-			schema.WithNullable(false),
-		),
-		schema.FieldOf(schema.Int64, schema.WithName("int64b")),
-	},
-		schema.Name("list_fields"),
-	)
-
-	// double nested lists
-	// - nested_uints [][]uint64
-	// - nested_pairs [][]Pair
-	listInList := schema.SchemaOf([]*schema.Field{
-		schema.FieldOf(schema.Int64, schema.WithName("int64a")),
-		schema.ListFor(
-			schema.SchemaOf([]*schema.Field{
-				schema.ListOf(schema.Uint64),
-			}),
-			schema.WithName("nested_uints"),
-		),
-		schema.ListFor(
-			schema.SchemaOf([]*schema.Field{
-				schema.ListFor(pair),
-			}),
-			schema.WithName("nested_pairs"),
-		),
-		schema.FieldOf(schema.Int64, schema.WithName("int64b")),
-	},
-		schema.Name("list_in_list_fields"),
-	)
-
-	// a list-in-struct-in-list-in-struct type
-	//
-	outerPairStruct := schema.SchemaOf([]*schema.Field{
-		schema.FieldOf(schema.Uint32, schema.WithName("val")),
-		schema.ListFor(pair, schema.WithName("pairs2")),
-	},
-		schema.Name("outer_pair_struct"),
-	)
-	listInStructInList := schema.SchemaOf([]*schema.Field{
-		schema.FieldOf(schema.Int64, schema.WithName("int64a")),
-		schema.ListFor(outerPairStruct, schema.WithName("pairs1")),
-		schema.FieldOf(schema.Int64, schema.WithName("int64b")),
-	},
-		schema.Name("list_in_struct_in_list_fields"),
-	)
-
 	for _, s := range []*schema.Schema{
-		listFields,
-		listInList,
-		listInStructInList,
+		listFieldsT,
+		listInListT,
+		listInStructInListT,
+		customerT,
 	} {
 		t.Log(s)
 		require.NoError(t, s.Validate())
@@ -1027,6 +949,7 @@ func TestNestedMarshalFromBuilder(t *testing.T) {
 		r := &schema.Schema{}
 		err = r.UnmarshalBinary(buf)
 		require.NoError(t, err)
+		t.Log(r)
 
 		assert.True(t, s.Equal(r))
 		assert.Equal(t, s.Hash, r.Hash)
@@ -1039,9 +962,7 @@ func TestNestedMarshalFromBuilder(t *testing.T) {
 		assert.Equal(t, s.NumVisible(), r.NumVisible())
 		assert.Equal(t, s.Names(), r.Names())
 		assert.Equal(t, s.Ids(), r.Ids())
-		// assert.Equal(t, s.VisibleIds(), r.VisibleIds())
 		assert.Equal(t, s.PkId(), r.PkId())
 		assert.Equal(t, s.PkIndex(), r.PkIndex())
-		t.Log(r)
 	}
 }

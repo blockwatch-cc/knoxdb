@@ -111,56 +111,56 @@ func TestWriterListL1(t *testing.T) {
 	require.NoError(t, w.WriteInt64(base.Int64a))
 
 	// []uint64
-	lw, err := w.ListWriter()
-	require.NoError(t, err)
-	require.NoError(t, lw.WriteUint64(base.U64List[0]))
-	lw.Next()
-	require.NoError(t, lw.WriteUint64(base.U64List[1]))
-	lw.Close()
+	require.NoError(t, w.WriteList(func(lw *schema.ListWriter) error {
+		require.NoError(t, lw.WriteUint64(base.U64List[0]))
+		lw.Next()
+		require.NoError(t, lw.WriteUint64(base.U64List[1]))
+		return nil
+	}))
 
 	// []time
-	lw, err = w.ListWriter()
-	require.NoError(t, err)
-	require.NoError(t, lw.WriteDate(base.TimeList[0]))
-	lw.Next()
-	require.NoError(t, lw.WriteDate(base.TimeList[1]))
-	lw.Close()
+	require.NoError(t, w.WriteList(func(lw *schema.ListWriter) error {
+		require.NoError(t, lw.WriteDate(base.TimeList[0]))
+		lw.Next()
+		require.NoError(t, lw.WriteDate(base.TimeList[1]))
+		return nil
+	}))
 
 	// []Pair
-	lw, err = w.ListWriter()
-	require.NoError(t, err)
-	require.NoError(t, lw.WriteInt64(base.PairList[0].Key))
-	require.NoError(t, lw.WriteInt64(base.PairList[0].Val))
-	lw.Next()
-	require.NoError(t, lw.WriteInt64(base.PairList[1].Key))
-	require.NoError(t, lw.WriteInt64(base.PairList[1].Val))
-	lw.Close()
+	require.NoError(t, w.WriteList(func(lw *schema.ListWriter) error {
+		require.NoError(t, lw.WriteInt64(base.PairList[0].Key))
+		require.NoError(t, lw.WriteInt64(base.PairList[0].Val))
+		lw.Next()
+		require.NoError(t, lw.WriteInt64(base.PairList[1].Key))
+		require.NoError(t, lw.WriteInt64(base.PairList[1].Val))
+		return nil
+	}))
 
 	// [][]byte
-	lw, err = w.ListWriter()
-	require.NoError(t, err)
-	require.NoError(t, lw.WriteBytes(base.ByteList[0]))
-	lw.Next()
-	require.NoError(t, lw.WriteBytes(base.ByteList[1]))
-	lw.Close()
+	require.NoError(t, w.WriteList(func(lw *schema.ListWriter) error {
+		require.NoError(t, lw.WriteBytes(base.ByteList[0]))
+		lw.Next()
+		require.NoError(t, lw.WriteBytes(base.ByteList[1]))
+		return nil
+	}))
 
 	// [][2]byte
-	lw, err = w.ListWriter()
-	require.NoError(t, err)
-	require.NoError(t, lw.WriteBytes(base.ArrList[0][:]))
-	lw.Next()
-	require.NoError(t, lw.WriteBytes(base.ArrList[1][:]))
-	lw.Close()
+	require.NoError(t, w.WriteList(func(lw *schema.ListWriter) error {
+		require.NoError(t, lw.WriteBytes(base.ArrList[0][:]))
+		lw.Next()
+		require.NoError(t, lw.WriteBytes(base.ArrList[1][:]))
+		return nil
+	}))
 
 	// []Decimal32
-	lw, err = w.ListWriter()
-	require.NoError(t, err)
-	require.NoError(t, lw.WriteDecimal32(base.DecimalList[0]))
-	lw.Next()
-	require.NoError(t, lw.WriteDecimal32(base.DecimalList[1]))
-	lw.Next()
-	require.NoError(t, lw.WriteDecimal32(base.DecimalList[2]))
-	lw.Close()
+	require.NoError(t, w.WriteList(func(lw *schema.ListWriter) error {
+		require.NoError(t, lw.WriteDecimal32(base.DecimalList[0]))
+		lw.Next()
+		require.NoError(t, lw.WriteDecimal32(base.DecimalList[1]))
+		lw.Next()
+		require.NoError(t, lw.WriteDecimal32(base.DecimalList[2]))
+		return nil
+	}))
 
 	require.NoError(t, w.WriteInt64(base.Int64b))
 	require.True(t, w.Done())
@@ -194,44 +194,44 @@ func TestWriterListL2(t *testing.T) {
 	require.NoError(t, w.WriteInt64(base.Int64a))
 
 	// [][]uint64
-	lw, err := w.ListWriter()
-	require.NoError(t, err)
-	lwi, err := w.ListWriter()
-	require.NoError(t, err)
-	require.NoError(t, lwi.WriteUint64(base.NestedUints[0][0]))
-	lwi.Next()
-	require.NoError(t, lwi.WriteUint64(base.NestedUints[0][1]))
-	lwi.Close()
-	lw.Next()
-	lwi, err = w.ListWriter()
-	require.NoError(t, err)
-	require.NoError(t, lwi.WriteUint64(base.NestedUints[1][0]))
-	lwi.Next()
-	require.NoError(t, lwi.WriteUint64(base.NestedUints[1][1]))
-	lwi.Close()
-	lw.Close()
+	require.NoError(t, w.WriteList(func(lw *schema.ListWriter) error {
+		require.NoError(t, lw.WriteList(func(lwi *schema.ListWriter) error {
+			require.NoError(t, lwi.WriteUint64(base.NestedUints[0][0]))
+			lwi.Next()
+			require.NoError(t, lwi.WriteUint64(base.NestedUints[0][1]))
+			return nil
+		}))
+		lw.Next()
+		require.NoError(t, lw.WriteList(func(lwi *schema.ListWriter) error {
+			require.NoError(t, lwi.WriteUint64(base.NestedUints[1][0]))
+			lwi.Next()
+			require.NoError(t, lwi.WriteUint64(base.NestedUints[1][1]))
+			return nil
+		}))
+		return nil
+	}))
 
 	// []Pair
-	lw, err = w.ListWriter()
-	require.NoError(t, err)
-	lwi, err = w.ListWriter()
-	require.NoError(t, err)
-	require.NoError(t, lwi.WriteInt64(base.NestedPairs[0][0].Key))
-	require.NoError(t, lwi.WriteInt64(base.NestedPairs[0][0].Val))
-	lwi.Next()
-	require.NoError(t, lw.WriteInt64(base.NestedPairs[0][1].Key))
-	require.NoError(t, lw.WriteInt64(base.NestedPairs[0][1].Val))
-	lwi.Close()
-	lw.Next()
-	lwi, err = w.ListWriter()
-	require.NoError(t, err)
-	require.NoError(t, lwi.WriteInt64(base.NestedPairs[1][0].Key))
-	require.NoError(t, lwi.WriteInt64(base.NestedPairs[1][0].Val))
-	lwi.Next()
-	require.NoError(t, lw.WriteInt64(base.NestedPairs[1][1].Key))
-	require.NoError(t, lw.WriteInt64(base.NestedPairs[1][1].Val))
-	lwi.Close()
-	lw.Close()
+	require.NoError(t, w.WriteList(func(lw *schema.ListWriter) error {
+		require.NoError(t, lw.WriteList(func(lwi *schema.ListWriter) error {
+			require.NoError(t, lwi.WriteInt64(base.NestedPairs[0][0].Key))
+			require.NoError(t, lwi.WriteInt64(base.NestedPairs[0][0].Val))
+			lwi.Next()
+			require.NoError(t, lw.WriteInt64(base.NestedPairs[0][1].Key))
+			require.NoError(t, lw.WriteInt64(base.NestedPairs[0][1].Val))
+			return nil
+		}))
+		lw.Next()
+		require.NoError(t, lw.WriteList(func(lwi *schema.ListWriter) error {
+			require.NoError(t, lwi.WriteInt64(base.NestedPairs[1][0].Key))
+			require.NoError(t, lwi.WriteInt64(base.NestedPairs[1][0].Val))
+			lwi.Next()
+			require.NoError(t, lw.WriteInt64(base.NestedPairs[1][1].Key))
+			require.NoError(t, lw.WriteInt64(base.NestedPairs[1][1].Val))
+			return nil
+		}))
+		return nil
+	}))
 
 	require.NoError(t, w.WriteInt64(base.Int64b))
 	require.True(t, w.Done())
@@ -265,28 +265,21 @@ func TestWriterListL3(t *testing.T) {
 	require.NoError(t, w.WriteInt64(base.Int64a))
 
 	// []OuterPairStruct
-	lw, err := w.ListWriter()
-	require.NoError(t, err)
-	require.NoError(t, lw.WriteUint32(base.Pairs1[0].Val))
-	lwi, err := w.ListWriter()
-	require.NoError(t, err)
-	require.NoError(t, lwi.WriteInt64(base.Pairs1[0].Pairs2[0].Key))
-	require.NoError(t, lwi.WriteInt64(base.Pairs1[0].Pairs2[0].Val))
-	lwi.Next()
-	require.NoError(t, lw.WriteInt64(base.Pairs1[0].Pairs2[1].Key))
-	require.NoError(t, lw.WriteInt64(base.Pairs1[0].Pairs2[1].Val))
-	lwi.Close()
-	lw.Next()
-	require.NoError(t, lw.WriteUint32(base.Pairs1[1].Val))
-	lwi, err = w.ListWriter()
-	require.NoError(t, err)
-	require.NoError(t, lwi.WriteInt64(base.Pairs1[1].Pairs2[0].Key))
-	require.NoError(t, lwi.WriteInt64(base.Pairs1[1].Pairs2[0].Val))
-	lwi.Next()
-	require.NoError(t, lw.WriteInt64(base.Pairs1[1].Pairs2[1].Key))
-	require.NoError(t, lw.WriteInt64(base.Pairs1[1].Pairs2[1].Val))
-	lwi.Close()
-	lw.Close()
+	require.NoError(t, w.WriteList(func(lw *schema.ListWriter) error {
+		for i := range 2 {
+			require.NoError(t, lw.WriteUint32(base.Pairs1[i].Val))
+			require.NoError(t, lw.WriteList(func(lwi *schema.ListWriter) error {
+				require.NoError(t, lwi.WriteInt64(base.Pairs1[i].Pairs2[0].Key))
+				require.NoError(t, lwi.WriteInt64(base.Pairs1[i].Pairs2[0].Val))
+				lwi.Next()
+				require.NoError(t, lwi.WriteInt64(base.Pairs1[i].Pairs2[1].Key))
+				require.NoError(t, lwi.WriteInt64(base.Pairs1[i].Pairs2[1].Val))
+				return nil
+			}))
+			lw.Next()
+		}
+		return nil
+	}))
 
 	require.NoError(t, w.WriteInt64(base.Int64b))
 	require.True(t, w.Done())
@@ -419,5 +412,44 @@ func TestWriterMap(t *testing.T) {
 	attr := NewUnionMapRecord()
 	w = schema.NewWriter(UnionMapRecordSchema, nil)
 	require.NoError(t, w.Write(attr))
+	t.Log(hex.Dump(w.Bytes()))
+}
+
+func TestWriterVariant(t *testing.T) {
+	buf := customerT.NewBuffer(2)
+	w := schema.NewWriter(customerT, buf)
+	require.NoError(t, w.WriteUint64(1))
+	require.NoError(t, w.WriteString("user"))
+	require.NoError(t, w.WriteVariant(3, // pay: bank transfer
+		func(vw *schema.VariantWriter) error {
+			require.NoError(t, vw.WriteString("iban"))
+			require.NoError(t, vw.WriteString("bic"))
+			require.NoError(t, vw.WriteString("holder"))
+			require.NoError(t, vw.WriteString("bank"))
+			require.True(t, vw.Done())
+			return nil
+		}))
+	require.NoError(t, w.WriteVariant(2, // billing: business
+		func(vw *schema.VariantWriter) error {
+			require.NoError(t, vw.WriteString("company"))
+			require.NoError(t, vw.WriteString("street"))
+			require.NoError(t, vw.WriteString("city"))
+			require.NoError(t, vw.WriteString("postcode"))
+			require.NoError(t, vw.WriteString("country"))
+			require.NoError(t, vw.WriteString("taxid"))
+			require.True(t, vw.Done())
+			return nil
+		}))
+	require.NoError(t, w.WriteVariant(1, // shipping: residential
+		func(vw *schema.VariantWriter) error {
+			require.NoError(t, vw.WriteString("street"))
+			require.NoError(t, vw.WriteString("city"))
+			require.NoError(t, vw.WriteString("postcode"))
+			require.NoError(t, vw.WriteString("country"))
+			require.True(t, vw.Done())
+			return nil
+		}))
+	require.True(t, w.Done())
+
 	t.Log(hex.Dump(w.Bytes()))
 }

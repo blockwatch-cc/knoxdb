@@ -286,6 +286,25 @@ func (s *Schema) Clone() *Schema {
 		} else {
 			panic(fmt.Errorf("schema %s: failed to relink nested field %q", s.Name, f.Name))
 		}
+
+		// clone cases
+		if f.Cases != nil {
+			newCases := make([]*Schema, len(*f.Cases))
+			for i, cs := range *f.Cases {
+				newSchema := &Schema{
+					Name:    cs.Name,
+					Version: cs.Version,
+					Fields:  slices.Clone(cs.Fields),
+				}
+				// relink fields
+				if ok := newSchema.relink(newChild); ok {
+					newCases[i] = newSchema
+				} else {
+					panic(fmt.Errorf("schema %s: failed to relink nested variant field %q", s.Name, f.Name))
+				}
+			}
+			f.Cases = &newCases
+		}
 	}
 
 	// finalize children in reverse order to roll up hashes correctly
@@ -295,6 +314,13 @@ func (s *Schema) Clone() *Schema {
 			continue
 		}
 		f.Child.Finalize()
+
+		// finalize case schemas after child fields are final
+		if f.Cases != nil {
+			for _, cs := range *f.Cases {
+				cs.Finalize()
+			}
+		}
 	}
 
 	// finalize the outer schema
@@ -338,7 +364,7 @@ func (s *Schema) relink(dst *Schema) bool {
 func (s *Schema) Relevel(lvl uint8, parent uint16) {
 	// safeguard against circular dependencies and errors
 	if lvl == 255 {
-		panic(fmt.Errorf("schema: max nesting level reached"))
+		panic(ErrMaxNested)
 	}
 	// reset level for all nested fields
 	for _, f := range s.Fields {
@@ -358,7 +384,10 @@ func (s *Schema) Relevel(lvl uint8, parent uint16) {
 }
 
 // AddField adds a new field to the schema. It creates a new field id
-// and links the field to : support nested fields
+// and links the field to the given parent to support nesting.
+// TODO:
+// - handle variant case changes
+// - support adding new variant cases
 func (s *Schema) AddField(f *Field) (*Schema, error) {
 	// require name and structure to be ok
 	if err := f.Validate(); err != nil {
@@ -438,6 +467,11 @@ func (s *Schema) AddField(f *Field) (*Schema, error) {
 		if f.Child != nil {
 			f.Child.Finalize()
 		}
+		if f.Cases != nil {
+			for _, cf := range *f.Cases {
+				cf.Finalize()
+			}
+		}
 	}
 
 	// finalize the top-level schema and validate
@@ -448,6 +482,7 @@ func (s *Schema) AddField(f *Field) (*Schema, error) {
 	return clone, nil
 }
 
+// TODO: support deleting variant cases
 func (s *Schema) DeleteId(id uint16) (*Schema, error) {
 	// perform checks
 	f, ok := s.FindId(id)
@@ -484,6 +519,11 @@ func (s *Schema) DeleteId(id uint16) (*Schema, error) {
 		for _, f := range slices.Backward(clone.Fields) {
 			if f.Child != nil {
 				f.Child.Finalize()
+			}
+			if f.Cases != nil {
+				for _, cf := range *f.Cases {
+					cf.Finalize()
+				}
 			}
 		}
 	}
@@ -619,6 +659,11 @@ func (s *Schema) SelectIds(fieldIds ...uint16) (*Schema, error) {
 			return nil, fmt.Errorf("schema %s: missing field id %d", s.Name, fid)
 		}
 		ns.Fields = append(ns.Fields, f)
+
+		// add all nested child fields
+		if f.Child != nil {
+			ns.Fields = append(ns.Fields, f.Child.Fields...)
+		}
 	}
 
 	return ns.Finalize(), nil
@@ -638,6 +683,11 @@ func (s *Schema) Select(fields ...string) (*Schema, error) {
 			return nil, fmt.Errorf("schema %s: missing field name %s", s.Name, fname)
 		}
 		ns.Fields = append(ns.Fields, f)
+
+		// add all nested child fields
+		if f.Child != nil {
+			ns.Fields = append(ns.Fields, f.Child.Fields...)
+		}
 	}
 
 	return ns.Finalize(), nil
@@ -858,11 +908,12 @@ func (s *Schema) String() string {
 		maxFilterLen = max(maxFilterLen, len(f.Filter.String()))
 		isNested = isNested || f.Child != nil
 	}
-	fmt.Fprintf(&b, "\n#  ID   %[1]*[2]s %[3]*[4]s %[5]*[6]s %[7]*[8]s ",
+	fmt.Fprintf(&b, "\n#  ID   %[1]*[2]s %[3]*[4]s %[5]*[6]s %[7]*[8]s %[9]*[10]s ",
 		-maxNameLen, "Name",
 		-maxTypeLen, "Type",
 		-maxFlagLen, "Flags",
 		-5, "Level",
+		-4, "Case",
 	)
 	if maxFilterLen > 0 {
 		fmt.Fprintf(&b, "%[1]*[2]s ", -maxFilterLen, "Filter")
@@ -871,12 +922,13 @@ func (s *Schema) String() string {
 		fmt.Fprintf(&b, "%-18s %s", "Child", "Links")
 	}
 	for i, f := range s.Fields {
-		fmt.Fprintf(&b, "\n%02d F#%02d %[3]*[4]s %[5]*[6]s %[7]*[8]s %[9]*[10]d ",
+		fmt.Fprintf(&b, "\n%02d F#%02d %[3]*[4]s %[5]*[6]s %[7]*[8]s %[9]*[10]d %[11]*[12]d ",
 			i, f.Id,
 			-maxNameLen, f.Name,
 			-maxTypeLen, f.TypeName(),
 			-maxFlagLen, f.Flags.String(),
 			-5, f.Level,
+			-4, f.CaseId,
 		)
 		if maxFilterLen > 0 {
 			fmt.Fprintf(&b, "%[1]*[2]s ", -maxFilterLen, f.Filter.String())
@@ -884,7 +936,7 @@ func (s *Schema) String() string {
 		if f.Child != nil {
 			fmt.Fprintf(&b, "0x%016x ", f.Child.Hash)
 			for _, cf := range f.Child.Fields {
-				fmt.Fprintf(&b, "%s ", cf.Name)
+				fmt.Fprintf(&b, "%s(%d) ", cf.Name, cf.Id)
 			}
 		}
 	}

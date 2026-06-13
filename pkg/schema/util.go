@@ -1,6 +1,8 @@
 package schema
 
 import (
+	"cmp"
+	"slices"
 	"strings"
 	"time"
 
@@ -44,4 +46,16 @@ func basename(name string) string {
 // CompareTime is a custom compare func for slices.SortedFunc
 func CompareTime[K time.Time](a, b K) int {
 	return time.Time(a).Compare(time.Time(b))
+}
+
+// SortedKeys is a generic helper to sort Go map keys. It allocates
+// a new slice of type K which escapes to heap, so embedding this
+// code at call location may be cheaper.
+func SortedKeys[K cmp.Ordered, V any](m map[K]V) []K {
+	keys := make([]K, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	return keys
 }

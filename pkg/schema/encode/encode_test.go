@@ -230,8 +230,9 @@ type MapRecord struct {
 func (r MapRecord) MarshalSchema(w *schema.Writer) error {
 	_ = w.WriteTimestamp(r.Timestamp)
 	_ = w.WriteString(r.Message)
-	err := schema.MarshalMap(w, r.Unions)
-	return err
+	return w.WriteMap(func(mw *schema.MapWriter) error {
+		return schema.MarshalMap(mw, r.Unions)
+	})
 }
 
 var MapRecordSchema = schema.SchemaOf([]*schema.Field{
@@ -454,12 +455,16 @@ func TestMarshalMap(t *testing.T) {
 	w := schema.NewWriter(MapRecordSchema, buf2)
 	w.Write(vals[0].Timestamp)
 	w.Write(vals[0].Message)
-	require.NoError(t, schema.MarshalMap(w, vals[0].Unions))
+	require.NoError(t, w.WriteMap(func(mw *schema.MapWriter) error {
+		return schema.MarshalMap(mw, vals[0].Unions)
+	}))
 	require.True(t, w.Done())
 	w.Next()
 	w.Write(vals[1].Timestamp)
 	w.Write(vals[1].Message)
-	require.NoError(t, schema.MarshalMap(w, vals[1].Unions))
+	require.NoError(t, w.WriteMap(func(mw *schema.MapWriter) error {
+		return schema.MarshalMap(mw, vals[1].Unions)
+	}))
 	require.True(t, w.Done())
 
 	// compare buffer

@@ -473,7 +473,7 @@ func (d *Decoder) readField(code OpCode, field *schema.Field, ptr unsafe.Pointer
 
 			buf = buf[l:]
 		}
-	case OC_MAP:
+	case OC_INVALID, OC_MAP, OC_VARIANT:
 		return nil, schema.ErrInvalidValueType
 	}
 	return buf, nil

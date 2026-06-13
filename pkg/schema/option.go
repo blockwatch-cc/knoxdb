@@ -111,7 +111,7 @@ func WithEnum(e *enum.EnumDictionary) FieldOption {
 
 func WithChildSchema(s *Schema) FieldOption {
 	return func(f *Field) {
-		f.Child = s.Clone()
+		f.Child = s
 	}
 }
 

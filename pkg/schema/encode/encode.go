@@ -481,7 +481,7 @@ func (e *Encoder) writeField(buf *bytes.Buffer, code OpCode, field *schema.Field
 		// patch len in bytes
 		*(*uint32)(unsafe.Pointer(&buf.Bytes()[ofs])) = uint32(buf.Len() - ofs - 4)
 
-	case OC_MAP:
+	case OC_INVALID, OC_MAP, OC_VARIANT:
 		err = schema.ErrInvalidValueType
 	}
 	return

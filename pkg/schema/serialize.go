@@ -102,6 +102,11 @@ func (s *Schema) ReadFrom(buf *bytes.Buffer) (err error) {
 		if f.Child != nil {
 			f.Child.Finalize()
 		}
+		if f.Cases != nil {
+			for _, cf := range *f.Cases {
+				cf.Finalize()
+			}
+		}
 	}
 
 	// fill in computed fields
@@ -133,6 +138,12 @@ func (s *Schema) linkParent(pid uint16, f *Field) error {
 		}
 	}
 	p.Child.Fields = append(p.Child.Fields, f)
+
+	// assign to variant case in direct parent
+	if f.CaseId > 0 && pid == f.ParentId {
+		cs := p.EnsureCase(f.CaseId)
+		cs.Fields = append(cs.Fields, f)
+	}
 
 	// propagate to parent if set
 	if p.ParentId > 0 {

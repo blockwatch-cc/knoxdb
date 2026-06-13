@@ -5,6 +5,8 @@ package schema_tests
 
 import (
 	"bytes"
+	"cmp"
+	"slices"
 	"testing"
 
 	"blockwatch.cc/knoxdb/pkg/schema"
@@ -230,50 +232,56 @@ func BenchmarkWriterList(b *testing.B) {
 			w.Reset()
 			w.WriteInt64(base.Int64a)
 			// []uint64
-			lw, _ := w.ListWriter()
-			lw.WriteUint64(base.U64List[0])
-			lw.Next()
-			lw.WriteUint64(base.U64List[1])
-			lw.Close()
+			w.WriteList(func(lw *schema.ListWriter) error {
+				lw.WriteUint64(base.U64List[0])
+				lw.Next()
+				lw.WriteUint64(base.U64List[1])
+				return nil
+			})
 
 			// []time
-			lw, _ = w.ListWriter()
-			lw.WriteDate(base.TimeList[0])
-			lw.Next()
-			lw.WriteDate(base.TimeList[1])
-			lw.Close()
+			w.WriteList(func(lw *schema.ListWriter) error {
+				lw.WriteDate(base.TimeList[0])
+				lw.Next()
+				lw.WriteDate(base.TimeList[1])
+				return nil
+			})
 
 			// []Pair
-			lw, _ = w.ListWriter()
-			lw.WriteInt64(base.PairList[0].Key)
-			lw.WriteInt64(base.PairList[0].Val)
-			lw.Next()
-			lw.WriteInt64(base.PairList[1].Key)
-			lw.WriteInt64(base.PairList[1].Val)
-			lw.Close()
+			w.WriteList(func(lw *schema.ListWriter) error {
+				lw.WriteInt64(base.PairList[0].Key)
+				lw.WriteInt64(base.PairList[0].Val)
+				lw.Next()
+				lw.WriteInt64(base.PairList[1].Key)
+				lw.WriteInt64(base.PairList[1].Val)
+				return nil
+			})
 
 			// [][]byte
-			lw, _ = w.ListWriter()
-			lw.WriteBytes(base.ByteList[0])
-			lw.Next()
-			lw.WriteBytes(base.ByteList[1])
-			lw.Close()
+			w.WriteList(func(lw *schema.ListWriter) error {
+				lw.WriteBytes(base.ByteList[0])
+				lw.Next()
+				lw.WriteBytes(base.ByteList[1])
+				return nil
+			})
 
 			// [][2]byte
-			lw, _ = w.ListWriter()
-			lw.WriteBytes(base.ArrList[0][:])
-			lw.Next()
-			lw.WriteBytes(base.ArrList[1][:])
-			lw.Close()
+			w.WriteList(func(lw *schema.ListWriter) error {
+				lw.WriteBytes(base.ArrList[0][:])
+				lw.Next()
+				lw.WriteBytes(base.ArrList[1][:])
+				return nil
+			})
 
 			// []Decimal32
-			lw, _ = w.ListWriter()
-			lw.WriteDecimal32(base.DecimalList[0])
-			lw.Next()
-			lw.WriteDecimal32(base.DecimalList[1])
-			lw.Next()
-			lw.WriteDecimal32(base.DecimalList[2])
-			lw.Close()
+			w.WriteList(func(lw *schema.ListWriter) error {
+				lw.WriteDecimal32(base.DecimalList[0])
+				lw.Next()
+				lw.WriteDecimal32(base.DecimalList[1])
+				lw.Next()
+				lw.WriteDecimal32(base.DecimalList[2])
+				return nil
+			})
 
 			w.WriteInt64(base.Int64b)
 		}
@@ -287,31 +295,84 @@ func BenchmarkWriterMap(b *testing.B) {
 	base := NewPrimMapRecord()
 	attr := NewUnionMapRecord()
 
-	b.Run("prim", func(b *testing.B) {
+	b.Run("prim-generic", func(b *testing.B) {
 		w := schema.NewWriter(prim, prim.NewBuffer(1))
 		b.ReportAllocs()
 		for b.Loop() {
 			w.Reset()
-			schema.WriteMap(w, base.U64)
+			w.WriteMap(func(mw *schema.MapWriter) error {
+				return schema.WriteMap(mw, base.U64)
+			})
 		}
 	})
 
-	b.Run("time", func(b *testing.B) {
+	b.Run("time-generic", func(b *testing.B) {
 		w := schema.NewWriter(prim, prim.NewBuffer(1))
 		b.ReportAllocs()
 		for b.Loop() {
 			w.Reset()
 			w.Skip(5)
-			schema.WriteTimeMap(w, base.Times)
+			w.WriteMap(func(mw *schema.MapWriter) error {
+				return schema.WriteTimeMap(mw, base.Times)
+			})
 		}
 	})
 
-	b.Run("union", func(b *testing.B) {
+	b.Run("union-generic", func(b *testing.B) {
 		w := schema.NewWriter(UnionMapRecordSchema, UnionMapRecordSchema.NewBuffer(1))
 		b.ReportAllocs()
 		for b.Loop() {
 			w.Reset()
-			schema.MarshalMap(w, attr.Unions)
+			w.WriteMap(func(mw *schema.MapWriter) error {
+				return schema.MarshalMap(mw, attr.Unions)
+			})
 		}
 	})
+
+	b.Run("union-direct", func(b *testing.B) {
+		w := schema.NewWriter(UnionMapRecordSchema, UnionMapRecordSchema.NewBuffer(1))
+		b.ReportAllocs()
+		for b.Loop() {
+			w.Reset()
+			w.WriteMap(func(mw *schema.MapWriter) error {
+				keys := make([]string, 0, len(attr.Unions))
+				for k := range attr.Unions {
+					keys = append(keys, k)
+				}
+				slices.Sort(keys)
+
+				for _, k := range keys {
+					mw.WriteString(k)
+					mw.WriteUnion(attr.Unions[k])
+					mw.Next()
+				}
+				return mw.Err()
+			})
+		}
+	})
+
+	b.Run("union-unsorted", func(b *testing.B) {
+		w := schema.NewWriter(UnionMapRecordSchema, UnionMapRecordSchema.NewBuffer(1))
+		b.ReportAllocs()
+		for b.Loop() {
+			w.Reset()
+			w.WriteMap(func(mw *schema.MapWriter) error {
+				for n, u := range attr.Unions {
+					mw.WriteString(n)
+					mw.WriteUnion(u)
+					mw.Next()
+				}
+				return mw.Err()
+			})
+		}
+	})
+}
+
+func SortedKeys[K cmp.Ordered, V any](m map[K]V) []K {
+	keys := make([]K, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	return keys
 }

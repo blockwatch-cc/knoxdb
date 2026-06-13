@@ -21,28 +21,21 @@ const (
 	defaultVarFieldSize = 64
 )
 
-var (
-	// default field names for list/map
-	ElementName = "element"
-	EntriesName = "entries"
-	KeyName     = "key"
-	ValueName   = "value"
-	TagName     = "tag"
-	IndexName   = "index"
-)
-
 type Field struct {
-	Name     string               // field name
-	Id       uint16               // unique lifetime id
-	ParentId uint16               // reference to parent field id (nested fields only)
-	Scale    uint8                // 0..255 fixed point scale, time scale, array len
-	Level    uint8                // nesting level
-	Type     FieldType            // schema field type
-	Flags    FieldFlags           // schema flags
-	Compress Compression          // data compression
-	Filter   FilterType           // metadata filter type
-	Child    *Schema              // nested schemas for LIST (elem), MAP (key/val pair), VARIANT (cases)
-	Enum     *enum.EnumDictionary // enum dictionary when field is an enum
+	Name       string               // field name
+	Id         uint16               // unique lifetime id
+	ParentId   uint16               // parent reference (nested fields only)
+	CaseId     uint8                // VARIANT only: case this field belongs to
+	Scale      uint8                // 0..255 fixed point scale, time scale, array len
+	Level      uint8                // nesting level
+	Type       FieldType            // schema field type
+	Flags      FieldFlags           // schema flags
+	Compress   Compression          // data compression
+	Filter     FilterType           // metadata filter type
+	Enum       *enum.EnumDictionary // enum dictionary when field is an enum
+	Child      *Schema              // LIST, MAP, UNION, VARIANT flat fields
+	Cases      *[]*Schema           // VARIANT cases
+	UserData64 uint64               // pad to 64 byte
 }
 
 func NewField(typ FieldType, opts ...FieldOption) *Field {
@@ -147,8 +140,51 @@ func (f *Field) TimeFormat() string {
 	}
 }
 
-// TODO
-// - does not handle nested struct child schemas in list/map
+func (f *Field) NumCases() int {
+	if f.Cases == nil {
+		return 0
+	}
+	return len(*f.Cases)
+}
+
+func (f *Field) Case(i uint8) (*Schema, bool) {
+	if f.Cases == nil || i == 0 || len(*f.Cases) < int(i) {
+		return nil, false
+	}
+	return (*f.Cases)[i-1], true
+}
+
+func (f *Field) EnsureCase(i uint8) *Schema {
+	if i == 0 {
+		panic("illegal variant field case id 0")
+	}
+	// alloc slice when nil
+	if f.Cases == nil {
+		c := make([]*Schema, i)
+		f.Cases = &c
+	}
+	// grow slice when too small
+	if cap(*f.Cases) < int(i) {
+		c := make([]*Schema, i)
+		copy(c, *f.Cases)
+		f.Cases = &c
+	}
+	// resize slice for i
+	if len(*f.Cases) < int(i) {
+		*f.Cases = (*f.Cases)[:i]
+	}
+	// alloc case[i] when nil
+	if (*f.Cases)[i-1] == nil {
+		(*f.Cases)[i-1] = &Schema{
+			Name:    f.Name + "{" + strconv.Itoa(int(i)) + "}",
+			Version: f.Child.Version,
+			Fields:  make([]*Field, 0),
+		}
+	}
+	return (*f.Cases)[i-1]
+}
+
+// note: does not nest struct child schemas in list/map/variant
 func (f *Field) TypeName() (typ string) {
 	typ = f.Type.String()
 	switch f.Type {
@@ -189,7 +225,7 @@ func (f *Field) TypeName() (typ string) {
 	return
 }
 
-// Note - does not handle list/map/variant child schemas
+// Note: does not handle list/map/variant child schemas
 func ParseFieldFromTypename(typ string) (*Field, error) {
 	if len(typ) == 0 {
 		return nil, ErrNoType
@@ -373,27 +409,35 @@ func (f *Field) Validate(withNested ...bool) error {
 
 	// check nested types only if requested
 	if len(withNested) > 0 && withNested[0] && f.IsNested() {
-		// require nested schema for LIST and MAP type
+		// require nested schema for LIST, MAP, VARIANT types
 		if f.Child == nil {
 			return fmt.Errorf("field[%s]: missing %s child schema", f.Name, f.Type)
 		}
 		if err := f.Child.Validate(); err != nil {
 			return fmt.Errorf("field[%s]: invalid %s child schema: %w", f.Name, f.Type, err)
 		}
-		id := f.Id
+		id := f.Id + 1
 		for _, c := range f.Child.Fields {
 			// child field must have shared prefix
 			if !strings.HasPrefix(c.Name, f.Name) {
 				return fmt.Errorf("field[%s]: invalid child name %s", f.Name, c.Name)
 			}
-			// child field must have consecutive ids
-			id++
-			if c.Id != id {
-				return fmt.Errorf("field[%s]: invalid child %s id %d (want %d)", f.Name, c.Name, c.Id, id)
+			// child field must have sorted ids
+			if c.Id < id {
+				return fmt.Errorf("field[%s]: invalid child %s id %d (want >= %d)", f.Name, c.Name, c.Id, id)
 			}
+			id = c.Id + 1
 			// child field must have higher level
 			if c.Level <= f.Level {
 				return fmt.Errorf("field[%s]: invalid child %s level %d (want > %d)", f.Name, c.Name, c.Level, f.Level)
+			}
+			// child field must have parent id defined
+			if c.ParentId == 0 {
+				return fmt.Errorf("field[%s]: missing parent id on child %s", f.Name, c.Name)
+			}
+			// parent id must be < child field id (no circular dependenices)
+			if c.ParentId > c.Id {
+				return fmt.Errorf("field[%s]: invalid parent id %d on child %s/%d", f.Name, c.ParentId, c.Name, c.Id)
 			}
 		}
 
@@ -420,6 +464,37 @@ func (f *Field) Validate(withNested ...bool) error {
 				return fmt.Errorf("field[%s]: map key must not be nullable", f.Name)
 			}
 		}
+
+		// special checks for variant fields
+		if f.Type == Variant {
+			// must have at least two cases
+			if f.Cases == nil || len(*f.Cases) < 2 {
+				return fmt.Errorf("field[%s]: missing cases on %s field", f.Name, f.Type)
+			}
+
+			// non-metadata child fields must have case id set
+			for _, cf := range f.Child.Fields[2:] {
+				if cf.CaseId == 0 {
+					return fmt.Errorf("field[%s]: zero case id on case field %s", f.Name, cf.Name)
+				}
+			}
+
+			// case schemas must validate
+			for i, cf := range *f.Cases {
+				if cf == nil {
+					return fmt.Errorf("field[%s]: nil %s case %d", f.Name, f.Type, i+1)
+				}
+				if err := cf.Validate(); err != nil {
+					return fmt.Errorf("field[%s]: invalid %s case %d schema: %w", f.Name, f.Type, i+1, err)
+				}
+				// all case fields must be listed in child schema and re-linked
+				for _, ccf := range cf.Fields {
+					if _, ok := f.Child.FindId(ccf.Id); !ok {
+						return fmt.Errorf("field[%s]: missing child field %s (%d) in variant case %d/%s ", f.Name, ccf.Name, ccf.Id, i+1, cf.Name)
+					}
+				}
+			}
+		}
 	}
 
 	return nil
@@ -436,7 +511,7 @@ func (f *Field) WriteTo(w *bytes.Buffer) error {
 	w.Write([]byte{byte(len(f.Name))})
 	w.WriteString(f.Name)
 
-	// typ, flags, compression, scale, level: byte
+	// typ, flags, compression, filter, scale, level, caseid: byte
 	w.Write([]byte{
 		byte(f.Type),
 		byte(f.Flags),
@@ -444,6 +519,7 @@ func (f *Field) WriteTo(w *bytes.Buffer) error {
 		byte(f.Filter),
 		f.Scale,
 		f.Level,
+		f.CaseId,
 	})
 
 	return nil
@@ -473,8 +549,8 @@ func (f *Field) ReadFrom(buf *bytes.Buffer) (err error) {
 		return io.ErrShortBuffer
 	}
 
-	// typ, flags, compression, filter, scale, level: byte
-	if buf.Len() < 5 {
+	// typ, flags, compression, filter, scale, level, caseid: byte
+	if buf.Len() < 7 {
 		return io.ErrShortBuffer
 	}
 	f.Type = FieldType(buf.Next(1)[0])
@@ -483,6 +559,7 @@ func (f *Field) ReadFrom(buf *bytes.Buffer) (err error) {
 	f.Filter = FilterType(buf.Next(1)[0])
 	f.Scale = buf.Next(1)[0]
 	f.Level = buf.Next(1)[0]
+	f.CaseId = buf.Next(1)[0]
 
 	// alloc empty enum dict to satisfy field validity
 	if f.IsEnum() {

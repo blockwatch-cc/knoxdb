@@ -16,6 +16,13 @@ import (
 	"blockwatch.cc/knoxdb/pkg/num"
 )
 
+const (
+	// Union metadata field names
+	UnionTagName = "utag"
+	UnionNumName = "unum"
+	UnionValName = "uval"
+)
+
 var (
 	// ensure UnionValue implements schema marshaling
 	_ Marshaler   = UnionValue{}
@@ -26,9 +33,9 @@ var (
 	// All fields are metadata tagged, so they are not picked up by
 	// default encoders.
 	UnionType = SchemaOf([]*Field{
-		{Type: Uint8, Name: "utag", Flags: FlagMetadata},  // id+1 field type
-		{Type: Uint64, Name: "unum", Flags: FlagMetadata}, // id+2 numeric values
-		{Type: Bytes, Name: "uval", Flags: FlagMetadata},  // id+3 string, bytes, bigint, i128/256 values
+		{Type: Uint8, Name: UnionTagName, Flags: FlagMetadata},  // id+1 field type
+		{Type: Uint64, Name: UnionNumName, Flags: FlagMetadata}, // id+2 numeric values
+		{Type: Bytes, Name: UnionValName, Flags: FlagMetadata},  // id+3 string, bytes, bigint, i128/256 values
 	})
 )
 

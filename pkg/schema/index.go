@@ -15,6 +15,11 @@ import (
 	"blockwatch.cc/knoxdb/internal/hash"
 )
 
+const (
+	// default field name/suffix
+	IndexName = "index"
+)
+
 type IndexType byte
 
 const (
