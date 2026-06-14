@@ -48,8 +48,8 @@ func (op *Logger) Process(_ context.Context, src *pack.Package) (*pack.Package, 
 					return hex.EncodeToString(val.([]byte))
 				},
 			})
-		case types.FT_U16:
-			if field.IsEnum() && field.Enum != nil {
+		case types.FT_ENUM:
+			if field.Enum != nil {
 				cfgs = append(cfgs, table.ColumnConfig{
 					Name: field.Name,
 					Transformer: func(val any) string {

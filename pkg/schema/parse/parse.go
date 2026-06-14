@@ -57,11 +57,7 @@ func NewParser(typ schema.FieldType, scale uint8, enum ValueParser) ValueParser 
 	case schema.Uint8:
 		return UintParser[uint8]{8}
 	case schema.Uint16:
-		if enum == nil {
-			return UintParser[uint16]{16}
-		} else {
-			return enum
-		}
+		return UintParser[uint16]{16}
 	case schema.Uint32:
 		return UintParser[uint32]{32}
 	case schema.Uint64:
@@ -84,6 +80,8 @@ func NewParser(typ schema.FieldType, scale uint8, enum ValueParser) ValueParser 
 		return D256Parser{scale}
 	case schema.Bigint:
 		return BigIntParser{}
+	case schema.Enum:
+		return enum
 	default:
 		panic(fmt.Errorf("parser: unsupported field type %s %d", typ, typ))
 	}

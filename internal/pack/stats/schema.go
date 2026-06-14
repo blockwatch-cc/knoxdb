@@ -37,8 +37,8 @@ func MakeSchema(s *schema.Schema) *schema.Schema {
 			schema.WithName("min_"+src.Name),
 			// add scale or fixed array len
 			schema.WithScale(src.Scale),
-			// only keep array and deleted flags
-			schema.WithFlags(src.Flags&(types.F_DELETED|types.F_ARRAY)),
+			// only keep deleted flag
+			schema.WithFlags(src.Flags&types.F_DELETED),
 			// keep filter (in case its bloom)
 			schema.WithFilter(src.Filter),
 			// keep enum for validation

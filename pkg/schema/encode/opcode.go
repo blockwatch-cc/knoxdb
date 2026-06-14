@@ -105,6 +105,7 @@ var (
 		schema.Map:        OC_MAP, // unsupported, throws error
 		schema.Union:      OC_UNION,
 		schema.Variant:    OC_VARIANT, // unsupported, throws error
+		schema.Enum:       OC_ENUM,
 	}
 )
 
@@ -166,10 +167,6 @@ func CodecFor(f *schema.Field) OpCode {
 		if f.Type == schema.Bytes {
 			return OC_FIXBYTES
 		}
-	}
-
-	if f.IsEnum() {
-		return OC_ENUM
 	}
 
 	return oc

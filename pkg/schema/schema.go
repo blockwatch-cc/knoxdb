@@ -47,7 +47,7 @@ func (s *Schema) As(alias string) *Schema {
 func (s *Schema) UseEnums(r *enum.EnumRegistry) *Schema {
 	s.Enums.Store(r)
 	for _, f := range s.Fields {
-		if f.IsEnum() {
+		if f.Type == Enum {
 			if e, ok := r.Find(basename(f.Name)); ok {
 				f.Enum = e
 			}
@@ -112,7 +112,7 @@ func (s *Schema) NumActive() int {
 func (s *Schema) NumEnums() int {
 	var n int
 	for _, f := range s.Fields {
-		if f.IsEnum() {
+		if f.Type == Enum {
 			n++
 		}
 	}
@@ -143,7 +143,7 @@ func (s *Schema) Names() []string {
 func (s *Schema) EnumNames() []string {
 	list := make([]string, 0)
 	for _, f := range s.Fields {
-		if f.IsEnum() {
+		if f.Type == Enum {
 			list = append(list, basename(f.Name))
 		}
 	}
@@ -549,7 +549,7 @@ func (s *Schema) RenameId(id uint16, name string) (*Schema, error) {
 		return nil, ErrInvalidField
 	}
 	// enums are connected to named dictionaries and cannot be changed
-	if f.IsEnum() {
+	if f.Type == Enum {
 		return nil, ErrRenameEnum
 	}
 
@@ -832,7 +832,7 @@ func (s *Schema) Finalize(opts ...Option) *Schema {
 	if s.NumEnums() > 0 && !s.HasEnums() {
 		reg := enum.NewEnumRegistry()
 		for _, f := range s.Fields {
-			if f.IsEnum() && f.Enum != nil {
+			if f.Type == Enum && f.Enum != nil {
 				reg.Put(uint64(f.Id), f.Enum)
 			}
 		}

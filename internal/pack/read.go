@@ -224,16 +224,14 @@ func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, dstLayo
 		// insert zero value when block is not available (e.g. after schema change)
 		b := p.blocks[srcId]
 		if b == nil {
-			if !field.IsEnum() {
-				sz := field.WireSize()
-				buf := unsafe.Slice((*byte)(fptr), sz)
+			sz := field.WireSize()
+			buf := unsafe.Slice((*byte)(fptr), sz)
 
-				// loop copy 32 zeros (some fixed types may be larger)
-				for sz > 0 {
-					copy(buf, zeros[:])
-					buf = buf[min(sz, 32):]
-					sz -= 32
-				}
+			// loop copy 32 zeros (some fixed types may be larger)
+			for sz > 0 {
+				copy(buf, zeros[:])
+				buf = buf[min(sz, 32):]
+				sz -= 32
 			}
 			continue
 		}
@@ -261,16 +259,7 @@ func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, dstLayo
 			*(*int16)(fptr) = b.Int16().Get(row)
 
 		case types.FT_U16:
-			if field.IsEnum() {
-				u16 := b.Uint16().Get(row)
-				val, ok := field.Enum.Value(u16)
-				if !ok {
-					return fmt.Errorf("%s: invalid enum value %d", field.Name, u16)
-				}
-				*(*string)(fptr) = val // FIXME: may break when enum dict grows
-			} else {
-				*(*uint16)(fptr) = b.Uint16().Get(row)
-			}
+			*(*uint16)(fptr) = b.Uint16().Get(row)
 
 		case types.FT_I8:
 			*(*int8)(fptr) = b.Int8().Get(row)
@@ -334,6 +323,20 @@ func (p *Package) ReadStruct(row int, dst any, dstSchema *schema.Schema, dstLayo
 
 		case types.FT_BIGINT:
 			(*(*num.Big)(fptr)).SetBytes(b.Bytes().Get(row))
+
+		case types.FT_ENUM:
+			u16 := b.Uint16().Get(row)
+			val, ok := field.Enum.Value(u16)
+			if !ok {
+				return fmt.Errorf("%s: invalid enum value %d", field.Name, u16)
+			}
+			*(*string)(fptr) = val // FIXME: may break when enum dict grows
+
+			// TODO
+			// case types.FT_LIST:
+			// case types.FT_MAP:
+			// case types.FT_UNION:
+			// case types.FT_VARIANT:
 
 		default:
 			// oh, its a type we don't support yet

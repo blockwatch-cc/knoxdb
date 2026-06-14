@@ -52,11 +52,7 @@ func NewCaster(typ schema.FieldType, scale uint8, enum ValueCaster) ValueCaster 
 	case schema.Uint8:
 		return UintCaster[uint8]{}
 	case schema.Uint16:
-		if enum == nil {
-			return UintCaster[uint16]{}
-		} else {
-			return enum
-		}
+		return UintCaster[uint16]{}
 	case schema.Uint32:
 		return UintCaster[uint32]{}
 	case schema.Uint64:
@@ -79,6 +75,8 @@ func NewCaster(typ schema.FieldType, scale uint8, enum ValueCaster) ValueCaster 
 		return I256Caster{}
 	case schema.Bigint:
 		return BigIntCaster{}
+	case schema.Enum:
+		return enum
 	default:
 		panic(fmt.Errorf("caster: unsupported field type %s %d", typ, typ))
 	}

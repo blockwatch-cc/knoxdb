@@ -194,7 +194,6 @@ func (b *builder) inferArrayFieldType(f *schema.Field, t reflect.Type) error {
 		} else {
 			f.Type = schema.Bytes
 			f.Scale = uint8(t.Len())
-			f.Flags |= schema.FlagArray
 		}
 	}
 	return nil
@@ -669,7 +668,6 @@ func (b *builder) parseFieldTag(field *schema.Field, tag string) error {
 					return err
 				}
 				f.Scale = uint8(fx)
-				f.Flags |= schema.FlagArray
 			} else {
 				return fmt.Errorf("missing value for array tag")
 			}
@@ -699,9 +697,7 @@ func (b *builder) parseFieldTag(field *schema.Field, tag string) error {
 			}
 		case "enum":
 			if f.Type == schema.String {
-				// ok
-				f.Flags |= schema.FlagEnum
-				f.Type = schema.Uint16
+				f.Type = schema.Enum
 			} else {
 				return fmt.Errorf("unsupported enum type %s", f.Type)
 			}
@@ -735,14 +731,12 @@ func (b *builder) parseFieldTag(field *schema.Field, tag string) error {
 				return fmt.Errorf("text tag unsupported on type %s", f.Type)
 			}
 			f.Type = schema.Text
-			f.Flags &^= schema.FlagArray
 			f.Scale = 0
 		case "binary":
 			if f.Type != schema.Bytes {
 				return fmt.Errorf("binary tag unsupported on type %s", f.Type)
 			}
 			f.Type = schema.Binary
-			f.Flags &^= schema.FlagArray
 			f.Scale = 0
 		default:
 			return fmt.Errorf("unsupported struct tag '%s'", key)

@@ -400,6 +400,8 @@ func (v *View) Get(i int) (val any) {
 		var u UnionValue
 		u.UnmarshalBuffer(v.buf[x:y], v.layout)
 		val = u
+	case Enum:
+		val, _ = v.findField(i).Enum.Value(v.layout.Uint16(v.buf[x:y]))
 	}
 	return
 }
@@ -435,7 +437,7 @@ func (v *View) GetPhy(i int) (val any) {
 		val = int8(v.buf[x])
 	case Uint32:
 		val = v.layout.Uint32(v.buf[x:y])
-	case Uint16:
+	case Uint16, Enum:
 		val = v.layout.Uint16(v.buf[x:y])
 	case Uint8:
 		val = v.buf[x]
@@ -566,6 +568,13 @@ func (v *View) Set(i int, val any) bool {
 			v.layout.PutUint32(v.buf[x:y], uint32(d32.Int64()))
 			return true
 		}
+	case Enum:
+		if s, ok := val.(string); ok {
+			if u16, ok := v.findField(i).Enum.Code(s); ok {
+				v.layout.PutUint16(v.buf[x:y], u16)
+				return true
+			}
+		}
 	case String, Bytes, Bigint, Text, Binary, List, Map, Union, Variant:
 		// unsupported, may alter length
 	}
@@ -680,7 +689,7 @@ func (v *View) Bool(i int) bool {
 // decodes enums from uint16 and returns their string value.
 // It panics on type mismatch or out-of-bounds access.
 func (v *View) Enum(i int) string {
-	val, _ := v.schema.Fields[i].Enum.Value(*(*uint16)(v.getCheckedPtr(i, Uint16)))
+	val, _ := v.findField(i).Enum.Value(*(*uint16)(v.getCheckedPtr(i, Enum)))
 	return val
 }
 
@@ -801,7 +810,6 @@ func (v *View) Variant(i int, views []*View) (*View, uint8) {
 
 // find the i-th field at the current nesting level; we don't store
 // field pointers and skip nested fields, so we need this extra lookup
-// to find the list field and access its child schema
 func (v *View) findField(i int) *Field {
 	var (
 		lvl = v.schema.Fields[0].Level

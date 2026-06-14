@@ -11,6 +11,7 @@ import (
 	"blockwatch.cc/knoxdb/pkg/num"
 )
 
+// FieldType defines the logical type of fields used in a schema.
 type FieldType byte
 
 const (
@@ -45,6 +46,7 @@ const (
 	Map                         // 28
 	Union                       // 29
 	Variant                     // 30
+	Enum                        // 31
 )
 
 const (
@@ -58,8 +60,8 @@ const (
 )
 
 var (
-	fieldTypeString  = "__timestamp_duration_date_time_u64_u32_u16_u8_i64_i32_i16_i8_bool_f64_f32_i256_i128_d256_d128_d64_d32_bigint_string_text_bytes_binary_list_map_union_variant"
-	fieldTypeIdx     = [...]uint8{0, 2, 12, 21, 26, 31, 35, 39, 43, 46, 50, 54, 58, 61, 66, 70, 74, 79, 84, 89, 94, 98, 102, 109, 116, 121, 127, 134, 139, 143, 149, 157}
+	fieldTypeString  = "__timestamp_duration_date_time_u64_u32_u16_u8_i64_i32_i16_i8_bool_f64_f32_i256_i128_d256_d128_d64_d32_bigint_string_text_bytes_binary_list_map_union_variant_enum"
+	fieldTypeIdx     = [...]uint8{0, 2, 12, 21, 26, 31, 35, 39, 43, 46, 50, 54, 58, 61, 66, 70, 74, 79, 84, 89, 94, 98, 102, 109, 116, 121, 127, 134, 139, 143, 149, 157, 162}
 	fieldTypeReverse = map[string]FieldType{}
 
 	// fixed / minimum wire sizes in bytes for record encoding
@@ -95,6 +97,7 @@ var (
 		Map:        4, // 4 byte size
 		Union:      1, // 1 byte size + var bytes
 		Variant:    5, // 4 byte size + 1 byte typeid + var bytes
+		Enum:       2, // u16
 	}
 )
 
@@ -135,7 +138,7 @@ func (t FieldType) Zero() any {
 		return uint64(0)
 	case Uint32:
 		return uint32(0)
-	case Uint16:
+	case Uint16, Enum:
 		return uint16(0)
 	case Uint8:
 		return uint8(0)
@@ -190,8 +193,6 @@ type FieldFlags byte
 
 const (
 	FlagPrimary  FieldFlags = 1 << iota // primary key
-	FlagArray                           // fixed length string/byte array
-	FlagEnum                            // enumeration
 	FlagDeleted                         // is deleted, hide
 	FlagMetadata                        // field is metadata
 	FlagNullable                        // can be null
@@ -200,8 +201,8 @@ const (
 )
 
 var (
-	fieldFlagNames   = "primary_array_enum_deleted_metadata_nullable_timebase_action"
-	fieldFlagIdx     = [...]int8{0, 8, 14, 19, 27, 36, 45, 54, 61}
+	fieldFlagNames   = "primary_deleted_metadata_nullable_timebase_action"
+	fieldFlagIdx     = [...]int8{0, 8, 16, 25, 34, 43, 50}
 	fieldFlagReverse = map[string]FieldFlags{}
 )
 

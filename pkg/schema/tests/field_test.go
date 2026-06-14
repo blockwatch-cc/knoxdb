@@ -162,7 +162,7 @@ func TestFieldWithMethods(t *testing.T) {
 	t.Run("schema.WithArray", func(t *testing.T) {
 		field := schema.FieldOf(schema.String, schema.WithArray(10))
 		assert.Equal(t, uint8(10), field.Scale)
-		assert.Equal(t, schema.FlagArray, field.Flags)
+		assert.Equal(t, schema.FieldFlags(0), field.Flags)
 	})
 
 	t.Run("WithScale", func(t *testing.T) {
@@ -233,20 +233,16 @@ func TestFieldValidation(t *testing.T) {
 			expectErr: false,
 		},
 		{
-			name: "Valid enum flag for u16 type",
-			field: schema.FieldOf(schema.Uint16,
+			name: "Valid enum",
+			field: schema.FieldOf(schema.Enum,
 				schema.WithName("test_field"),
-				schema.WithFlags(schema.FlagEnum),
 				schema.WithEnum(enum.NewEnumDictionary("test_field")),
 			),
 			expectErr: false,
 		},
 		{
-			name: "Invalid enum flag for string type (must be U16 interally)",
-			field: schema.FieldOf(schema.String,
-				schema.WithName("test_field"),
-				schema.WithFlags(schema.FlagEnum),
-			),
+			name:      "Missing enum dict",
+			field:     schema.FieldOf(schema.Enum, schema.WithName("test_field")),
 			expectErr: true,
 		},
 		{
@@ -278,14 +274,6 @@ func TestFieldValidation(t *testing.T) {
 			field: schema.FieldOf(schema.String,
 				schema.WithName("test_field"),
 				schema.WithFlags(schema.FlagTimebase),
-			),
-			expectErr: true,
-		},
-		{
-			name: "Invalid enum flag",
-			field: schema.FieldOf(schema.Date,
-				schema.WithName("test_field"),
-				schema.WithFlags(schema.FlagEnum),
 			),
 			expectErr: true,
 		},
@@ -332,11 +320,11 @@ func TestFieldSerializationRoundTrip(t *testing.T) {
 // Helper function for encoding and decoding
 func encodeDecodeField(t *testing.T, field *schema.Field, value any) any {
 	t.Helper()
-	var buf bytes.Buffer
-	err := field.WriteValue(&buf, value, binary.NativeEndian)
+	buf := bytes.NewBuffer(nil)
+	err := field.WriteValue(buf, value, binary.NativeEndian)
 	require.NoError(t, err, "Encoding failed")
 
-	decoded, err := field.ReadValue(bytes.NewReader(buf.Bytes()), binary.NativeEndian)
+	decoded, err := field.ReadValue(buf, binary.NativeEndian)
 	require.NoError(t, err, "Decoding failed")
 
 	return decoded

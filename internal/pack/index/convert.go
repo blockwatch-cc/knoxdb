@@ -94,12 +94,12 @@ func makeStorageSchema(s *schema.IndexSchema) (*schema.Schema, error) {
 	}
 
 	// add extra fields (assign new ids because existing ids may collide
-	// with the new hash field id; drop flags except ARRAY|NULLABLE)
+	// with the new hash field id; drop flags except NULLABLE)
 	for _, ex := range s.Extra {
 		fields = append(fields,
 			schema.FieldOf(ex.Type,
 				schema.WithName(ex.Name),
-				schema.WithFlags(ex.Flags&(types.F_ARRAY|types.F_NULLABLE)),
+				schema.WithFlags(ex.Flags&types.F_NULLABLE),
 			),
 		)
 	}

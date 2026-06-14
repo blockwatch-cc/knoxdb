@@ -45,14 +45,14 @@ const (
 	FT_LIST      = schema.List       // 27
 	FT_MAP       = schema.Map        // 28
 	FT_UNION     = schema.Union      // 29
+	FT_VARIANT   = schema.Variant    // 30
+	FT_ENUM      = schema.Enum       // 31
 )
 
 type FieldFlags = schema.FieldFlags
 
 const (
 	F_PRIMARY  = schema.FlagPrimary
-	F_ARRAY    = schema.FlagArray
-	F_ENUM     = schema.FlagEnum
 	F_DELETED  = schema.FlagDeleted
 	F_METADATA = schema.FlagMetadata
 	F_NULLABLE = schema.FlagNullable

@@ -6,7 +6,6 @@ package schema
 import (
 	"bytes"
 	"encoding/binary"
-	"io"
 	"math"
 	"math/big"
 	"sync"
@@ -103,23 +102,27 @@ func (f *Field) WriteValue(w *bytes.Buffer, val any, layout binary.ByteOrder) (e
 		}
 
 	case Uint16:
+		if v, ok := val.(uint16); ok {
+			layout.PutUint16(buf[:], v)
+			_, err = w.Write(buf[:2])
+		}
+
+	case Enum:
 		switch v := val.(type) {
 		case uint16:
 			layout.PutUint16(buf[:], v)
 			_, err = w.Write(buf[:2])
 		case string:
-			if f.IsEnum() {
-				if f.Enum != nil {
-					val, ok := f.Enum.Code(v)
-					if ok {
-						layout.PutUint16(buf[:], val)
-						_, err = w.Write(buf[:2])
-					} else {
-						err = enum.ErrEnumNoCode
-					}
+			if f.Enum != nil {
+				val, ok := f.Enum.Code(v)
+				if ok {
+					layout.PutUint16(buf[:], val)
+					_, err = w.Write(buf[:2])
 				} else {
-					err = ErrEnumUndefined
+					err = enum.ErrEnumNoCode
 				}
+			} else {
+				err = ErrEnumUndefined
 			}
 		}
 
@@ -301,188 +304,107 @@ func (f *Field) WriteValue(w *bytes.Buffer, val any, layout binary.ByteOrder) (e
 // It is used in query conditions. Read always emits the logical type for
 // a field, e.g. time.Time instead of int64. Byte arrays [n]byte are returned
 // as byte slices []byte with the original array length to avoid reflect calls.
-func (f *Field) ReadValue(r io.Reader, layout binary.ByteOrder) (val any, err error) {
-	var (
-		// buf = unsafe.Slice(scratchBufferPool.Get().(*byte), 32)[:32]
-		buf = scratchBufferPool.Get().(*[32]byte)
-		n   int
-	)
+// ReadValue panics when remaining buffer content is too short.
+func (f *Field) ReadValue(buf *bytes.Buffer, layout binary.ByteOrder) (val any, err error) {
 	switch f.Type {
 	case Timestamp, Time, Date:
-		_, err = r.Read(buf[:8])
-		val = TimeScale(f.Scale).FromUnix(int64(layout.Uint64(buf[:8])))
+		val = TimeScale(f.Scale).FromUnix(int64(layout.Uint64(buf.Next(8))))
 
 	case Duration:
-		_, err = r.Read(buf[:8])
-		val = TimeScale(f.Scale).Duration(int64(layout.Uint64(buf[:8])))
+		val = TimeScale(f.Scale).Duration(int64(layout.Uint64(buf.Next(8))))
 
 	case Int64:
-		_, err = r.Read(buf[:8])
-		val = int64(layout.Uint64(buf[:8]))
+		val = int64(layout.Uint64(buf.Next(8)))
 
 	case Int32:
-		_, err = r.Read(buf[:4])
-		val = int32(layout.Uint32(buf[:4]))
+		val = int32(layout.Uint32(buf.Next(4)))
 
 	case Int16:
-		_, err = r.Read(buf[:2])
-		val = int16(layout.Uint16(buf[:2]))
+		val = int16(layout.Uint16(buf.Next(2)))
 
 	case Int8:
-		_, err = r.Read(buf[:1])
-		val = int8(buf[0])
+		val = int8(buf.Next(1)[0])
 
 	case Uint64:
-		_, err = r.Read(buf[:8])
-		val = layout.Uint64(buf[:8])
+		val = layout.Uint64(buf.Next(8))
 
 	case Uint32:
-		_, err = r.Read(buf[:4])
-		val = layout.Uint32(buf[:4])
+		val = layout.Uint32(buf.Next(4))
 
 	case Uint16:
-		_, err = r.Read(buf[:2])
-		val = layout.Uint16(buf[:2])
-		if f.IsEnum() {
-			if f.Enum != nil {
-				s, ok := f.Enum.Value(val.(uint16))
-				if ok {
-					return s, nil
-				}
-				return nil, ErrInvalidEnum
-			} else {
-				return nil, ErrEnumUndefined
-			}
-		}
+		val = layout.Uint16(buf.Next(2))
 
 	case Uint8:
-		_, err = r.Read(buf[:1])
-		val = buf[0]
+		val = buf.Next(1)[0]
 
 	case Float64:
-		_, err = r.Read(buf[:8])
-		val = math.Float64frombits(layout.Uint64(buf[:8]))
+		val = math.Float64frombits(layout.Uint64(buf.Next(8)))
 
 	case Float32:
-		_, err = r.Read(buf[:4])
-		val = math.Float32frombits(layout.Uint32(buf[:4]))
+		val = math.Float32frombits(layout.Uint32(buf.Next(4)))
 
 	case Boolean:
-		_, err = r.Read(buf[:1])
-		val = buf[0] > 0
+		val = buf.Next(1)[0] > 0
 
 	case String:
 		if f.IsArray() {
-			b := make([]byte, f.Scale)
-			n, err = r.Read(b)
-			if n < int(f.Scale) {
-				return nil, ErrShortBuffer
-			}
-			val = util.UnsafeGetString(b[:n])
+			val = util.UnsafeGetString(buf.Next(int(f.Scale)))
 		} else {
-			_, err = r.Read(buf[:1])
-			if err != nil {
-				return
-			}
-			b := make([]byte, int(buf[0]))
-			n, err = r.Read(b)
-			val = util.UnsafeGetString(b[:n])
+			val = util.UnsafeGetString(buf.Next(int(buf.Next(1)[0])))
 		}
 
 	case Text:
-		_, err = r.Read(buf[:4])
-		if err != nil {
-			return
-		}
-		u32 := layout.Uint32(buf[:4])
-		b := make([]byte, int(u32))
-		n, err = r.Read(b)
-		val = util.UnsafeGetString(b[:n])
+		val = util.UnsafeGetString(buf.Next(int(layout.Uint32(buf.Next(4)))))
 
 	case Bytes:
 		if f.IsArray() {
-			b := make([]byte, f.Scale)
-			n, err = r.Read(b)
-			if n < int(f.Scale) {
-				return nil, ErrShortBuffer
-			}
-			val = b[:n]
+			val = buf.Next(int(f.Scale))
 		} else {
-			_, err = r.Read(buf[:1])
-			if err != nil {
-				return
-			}
-			b := make([]byte, int(buf[0]))
-			n, err = r.Read(b)
-			val = b[:n]
+			val = buf.Next(int(buf.Next(1)[0]))
 		}
 
 	case Binary, List, Map, Variant:
-		_, err = r.Read(buf[:4])
-		if err != nil {
-			return
-		}
-		u32 := layout.Uint32(buf[:4])
-		b := make([]byte, int(u32))
-		n, err = r.Read(b)
-		val = b[:n]
+		val = buf.Next(int(layout.Uint32(buf.Next(4))))
 
 	case Int256:
-		_, err = r.Read(buf[:32])
-		i256 := num.Int256FromBytes(buf[:32])
-		val = i256
+		val = num.Int256FromBytes(buf.Next(32))
 
 	case Int128:
-		_, err = r.Read(buf[:16])
-		i128 := num.Int128FromBytes(buf[:16])
-		val = i128
+		val = num.Int128FromBytes(buf.Next(16))
 
 	case Decimal256:
-		_, err = r.Read(buf[:32])
-		d256 := num.NewDecimal256(num.Int256FromBytes(buf[:32]), f.Scale)
-		val = d256
+		val = num.NewDecimal256(num.Int256FromBytes(buf.Next(32)), f.Scale)
 
 	case Decimal128:
-		_, err = r.Read(buf[:16])
-		d128 := num.NewDecimal128(num.Int128FromBytes(buf[:16]), f.Scale)
-		val = d128
+		val = num.NewDecimal128(num.Int128FromBytes(buf.Next(16)), f.Scale)
 
 	case Decimal64:
-		_, err = r.Read(buf[:8])
-		d64 := num.NewDecimal64(int64(layout.Uint64(buf[:8])), f.Scale)
-		val = d64
+		val = num.NewDecimal64(int64(layout.Uint64(buf.Next(8))), f.Scale)
 
 	case Decimal32:
-		_, err = r.Read(buf[:4])
-		d32 := num.NewDecimal32(int32(layout.Uint32(buf[:4])), f.Scale)
-		val = d32
+		val = num.NewDecimal32(int32(layout.Uint32(buf.Next(4))), f.Scale)
 
 	case Bigint:
-		_, err = r.Read(buf[:1])
-		if err != nil {
-			return
-		}
-		var b [256]byte
-		n, err = r.Read(b[:buf[0]])
-		val = num.NewBigFromBytes(b[:n])
+		val = num.NewBigFromBytes(buf.Next(int(buf.Next(1)[0])))
 
 	case Union:
-		_, err = r.Read(buf[:1])
-		if err != nil {
-			return
+		var u UnionValue
+		err = u.UnmarshalBuffer(buf.Next(int(buf.Next(1)[0])), layout)
+		val = u
+
+	case Enum:
+		if f.Enum == nil {
+			return nil, ErrEnumUndefined
 		}
-		var b [256]byte
-		n, err = r.Read(b[:buf[0]])
-		if err == nil {
-			var u UnionValue
-			err = u.UnmarshalBuffer(b[:n], layout)
-			val = u
+		if s, ok := f.Enum.Value(layout.Uint16(buf.Next(2))); ok {
+			val = s
+		} else {
+			err = ErrInvalidEnum
 		}
 
 	default:
 		err = ErrInvalidField
 	}
 
-	scratchBufferPool.Put(buf)
 	return
 }

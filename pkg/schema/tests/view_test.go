@@ -85,7 +85,7 @@ func TestViewGet(t *testing.T) {
 	testViewGetVal(t, view, 19, base.Hash)
 	testViewGetVal(t, view, 20, base.Array[:]) // return type is []byte
 	testViewGetVal(t, view, 21, base.String)
-	testViewGetVal(t, view, 22, uint16(0))
+	testViewGetVal(t, view, 22, string(base.MyEnum))
 	testViewGetVal(t, view, 23, base.Big)
 	testViewGetVal(t, view, 24, base.Duration)
 	testViewGetVal(t, view, 25, base.Union)
@@ -128,7 +128,7 @@ func TestViewGetWithVisibility(t *testing.T) {
 	testViewGetVal(t, view, 19, base.Hash)
 	testViewGetVal(t, view, 20, base.Array[:]) // return type is []byte
 	testViewGetVal(t, view, 21, base.String)
-	testViewGetVal(t, view, 22, uint16(0))
+	testViewGetVal(t, view, 22, string(base.MyEnum))
 	testViewGetVal(t, view, 23, base.Big)
 	testViewGetVal(t, view, 24, base.Duration)
 	testViewGetVal(t, view, 25, base.Union)

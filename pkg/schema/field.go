@@ -106,12 +106,8 @@ func (f *Field) IsNullable() bool {
 	return f.Flags&FlagNullable > 0
 }
 
-func (f *Field) IsEnum() bool {
-	return f.Flags&FlagEnum > 0
-}
-
 func (f *Field) IsArray() bool {
-	return f.Flags&FlagArray > 0
+	return f.Scale > 0 && (f.Type == Bytes || f.Type == String)
 }
 
 func (f *Field) IsFixedSize() bool {
@@ -249,7 +245,6 @@ func ParseFieldFromTypename(typ string) (*Field, error) {
 		}
 		scale = uint8(n)
 		typ = typstr
-		flags |= FlagArray
 	case strings.HasSuffix(typ, "]"):
 		// LIST or MAP
 		typstr, subtypstr, ok := strings.Cut(typ, "[")
@@ -389,11 +384,8 @@ func (f *Field) Validate(withNested ...bool) error {
 		}
 	}
 
-	// require uint16 for enum types
-	if f.IsEnum() && f.Type != Uint16 {
-		return fmt.Errorf("field[%s]: invalid type %s for enum, requires uint16", f.Name, f.Type)
-	}
-	if f.IsEnum() && f.Enum == nil {
+	// require enum dict for enum types
+	if f.Type == Enum && f.Enum == nil {
 		return fmt.Errorf("field[%s]: nil enum registry", f.Name)
 	}
 
@@ -562,7 +554,7 @@ func (f *Field) ReadFrom(buf *bytes.Buffer) (err error) {
 	f.CaseId = buf.Next(1)[0]
 
 	// alloc empty enum dict to satisfy field validity
-	if f.IsEnum() {
+	if f.Type == Enum {
 		f.Enum = enum.NewEnumDictionary(f.Name)
 	}
 

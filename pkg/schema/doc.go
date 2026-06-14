@@ -29,7 +29,7 @@ package schema
 // be created programmatically `schema.SchemaOf` or be infered from Go types
 // and struct tags `reflect.SchemaOf`.
 //
-// Schemas are typically flat, single-level type lists. There is no concept
+// Schemas are flat, single-level field type lists. There is no concept
 // of structs, however users can use dot separator in field names to simulate
 // such structure. Schemas may, however, be nested using list and map types
 // which allow repetition of nested values. Nesting still produces a flat
@@ -132,3 +132,36 @@ package schema
 // - `Decimal64` values from `0..18`
 // - `Decimal128` values from `0..38`
 // - `Decimal256` values from `0..76`
+//
+// Schema Evolution
+// ----------------
+//
+// Schemas are explicitly versioned with a monotonic version number and uniquely
+// identified by a hash value. Every schema change (add/rename/delete field)
+// increments the version of a schema and all its parent schemas and changes the
+// schema hash. The schema version is stored on record headers
+// and column store metadata. Encoders never write deleted fields, decoders
+// treat deleted fields as if they don't exist. When new decoders read records
+// produced by old schema versions, newly added fields default to nil (when
+// nullable) or a type domain neutral value (zero).
+//
+// - a schema may contain at most 2^16-1 fields
+// - fields can be added, deleted and renamed
+// - changing a field's type or traits is forbidden
+// - field ids are immutable and unique, id reuse is forbidden
+// - adding a field at any nesting level assigns a new id
+// - re-adding a deleted field assigns a new id
+// - deleted fields are marked as deleted and remain in the schema forever
+// - deleting a field with nested children marks all children as deleted
+//
+// variant specific rules
+// - a variant may contain at most 255 cases
+// - fields in cases can be added, deleted and renamed
+// - cases can be added and deleted
+// - case id reuse is forbidden
+// - re-adding a deleted case assigns a new case id
+//
+// reader rules
+// - (todo) forward/backward compatibility: read/skip/zero/fail
+//
+// Migration

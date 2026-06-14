@@ -53,18 +53,12 @@ func WithParentId(id uint16) FieldOption {
 
 func WithArray[T int | uint8](n T) FieldOption {
 	return func(f *Field) {
-		if n > 0 {
-			f.Flags |= FlagArray
-		} else {
-			f.Flags &^= FlagArray
-		}
 		f.Scale = uint8(n)
 	}
 }
 
 func WithScale[T int | ~uint8](n T) FieldOption {
 	return func(f *Field) {
-		f.Flags &^= FlagArray
 		f.Scale = uint8(n)
 	}
 }
@@ -100,12 +94,9 @@ func WithNullable(b ...bool) FieldOption {
 func WithEnum(e *enum.EnumDictionary) FieldOption {
 	return func(f *Field) {
 		if e != nil {
-			f.Flags |= FlagEnum
-			f.Type = Uint16
-		} else {
-			f.Flags &^= FlagEnum
+			f.Type = Enum
+			f.Enum = e
 		}
-		f.Enum = e
 	}
 }
 

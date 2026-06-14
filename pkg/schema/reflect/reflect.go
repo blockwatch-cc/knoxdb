@@ -291,6 +291,8 @@ func makeTag(f *schema.Field) string {
 		tag += ",text"
 	case schema.Binary:
 		tag += ",binary"
+	case schema.Enum:
+		tag += ",enum"
 	case schema.String:
 		if f.IsArray() {
 			tag += fmt.Sprintf(",array=%d", f.Scale)
@@ -303,8 +305,8 @@ func makeTag(f *schema.Field) string {
 	}
 
 	// flags
-	if flags := f.Flags &^ schema.FlagArray; flags > 0 {
-		tag += "," + flags.String()
+	if f.Flags > 0 {
+		tag += "," + f.Flags.String()
 	}
 
 	// slices are nullable by default, so check for notnull
@@ -327,7 +329,7 @@ func TypeOf(f *schema.Field) reflect.Type {
 	if f.Type == schema.Bytes && f.IsArray() {
 		return reflect.ArrayOf(int(f.Scale), reflect.TypeFor[byte]())
 	}
-	if f.Type == schema.Uint16 && f.IsEnum() {
+	if f.Type == schema.Enum {
 		return reflect.TypeFor[string]()
 	}
 	if f.Type == schema.List {

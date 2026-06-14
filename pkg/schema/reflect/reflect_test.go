@@ -69,6 +69,7 @@ func TestSchemaRoundtrip(t *testing.T) {
 	// produce a schema from Go type
 	s, err := SchemaFor[AllTypes](schema.Enums(enums))
 	require.NoError(t, err)
+	t.Log(s)
 
 	// produce a dynamic Go reflect.Type from schema
 	ty := StructTypeOf(s)
@@ -78,6 +79,7 @@ func TestSchemaRoundtrip(t *testing.T) {
 	// infer schema from the dynamic type
 	r, err := SchemaOf(reflect.New(ty).Interface(), schema.Enums(enums))
 	require.NoError(t, err)
+	t.Log(r)
 
 	// schema hashes must match (field types, order, ids, flags are the same,
 	// names don't matter, but fields must be exported/visible Go struct fields)

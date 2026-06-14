@@ -76,8 +76,9 @@ var (
 		FT_BINARY:    BlockBytes,   // 26
 		FT_LIST:      BlockUint32,  // 27 offset index
 		FT_MAP:       BlockUint32,  // 28 offset index
-		FT_UNION:     0,            // 29 embedded metadata: utag, unum, uval
-		31:           0,            // fill to 32 entries
+		FT_UNION:     0,            // 29 metadata: utag, unum, uval
+		FT_VARIANT:   0,            // 30 metadata: vtag, vidx
+		FT_ENUM:      BlockUint16,  // 31
 	}
 )
 

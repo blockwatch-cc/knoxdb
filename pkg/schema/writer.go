@@ -347,12 +347,9 @@ func (w *Writer) WriteBool(v bool) error {
 }
 
 func (w *Writer) WriteEnum(s string) error {
-	f, err := w.getFieldChecked(w.n, Uint16)
+	f, err := w.getFieldChecked(w.n, Enum)
 	if err != nil {
 		return err
-	}
-	if !f.IsEnum() {
-		return w.fail(ErrInvalidField)
 	}
 	if f.Enum == nil {
 		return w.fail(ErrEnumUndefined)

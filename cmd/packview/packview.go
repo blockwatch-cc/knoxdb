@@ -403,8 +403,8 @@ func printValue(f *schema.Field, val any) any {
 	switch f.Type {
 	case schema.Bytes:
 		return LimitStringEllipsis(fmt.Sprintf("%x", val), 33)
-	case schema.Uint16:
-		if f.IsEnum() && f.Enum != nil {
+	case schema.Enum:
+		if f.Enum != nil {
 			enum, ok := f.Enum.Value(val.(uint16))
 			if ok {
 				return enum
@@ -437,8 +437,8 @@ func PrintContent(ctx context.Context, view ContentViewer, desc TableDescriptor,
 					return hex.EncodeToString(val.([]byte))
 				},
 			})
-		case schema.Uint16:
-			if field.IsEnum() && field.Enum != nil {
+		case schema.Enum:
+			if field.Enum != nil {
 				cfgs = append(cfgs, table.ColumnConfig{
 					Name: field.Name,
 					Transformer: func(val any) string {
