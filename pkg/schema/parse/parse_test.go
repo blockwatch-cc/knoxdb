@@ -35,10 +35,10 @@ func TestSingleValueParsing(t *testing.T) {
 		{"Bool", NewParser(schema.Boolean, 0, nil), "true", true},
 		{"String", NewParser(schema.String, 0, nil), "hello world", []byte("hello world")},
 		{"Bytes", NewParser(schema.Bytes, 0, nil), "0x68656c6c6f", []byte("hello")},
-		{"Timestamp_s", NewParser(schema.Timestamp, 3, nil), "2023-05-17 12:34:56 UTC", time.Date(2023, 5, 17, 12, 34, 56, 0, time.UTC).Unix()},
-		{"Timestamp_ms", NewParser(schema.Timestamp, 2, nil), "2023-05-17 12:34:56.001 UTC", time.Date(2023, 5, 17, 12, 34, 56, 1000000, time.UTC).UnixMilli()},
-		{"Timestamp_us", NewParser(schema.Timestamp, 1, nil), "2023-05-17 12:34:56.000001 UTC", time.Date(2023, 5, 17, 12, 34, 56, 1000, time.UTC).UnixMicro()},
-		{"Timestamp_ns", NewParser(schema.Timestamp, 0, nil), "2023-05-17 12:34:56.000000001 UTC", time.Date(2023, 5, 17, 12, 34, 56, 1, time.UTC).UnixNano()},
+		{"Timestamp_s", NewParser(schema.Timestamp, 3, nil), "2023-05-17T12:34:56Z", time.Date(2023, 5, 17, 12, 34, 56, 0, time.UTC).Unix()},
+		{"Timestamp_ms", NewParser(schema.Timestamp, 2, nil), "2023-05-17T12:34:56.001Z", time.Date(2023, 5, 17, 12, 34, 56, 1000000, time.UTC).UnixMilli()},
+		{"Timestamp_us", NewParser(schema.Timestamp, 1, nil), "2023-05-17T12:34:56.000001Z", time.Date(2023, 5, 17, 12, 34, 56, 1000, time.UTC).UnixMicro()},
+		{"Timestamp_ns", NewParser(schema.Timestamp, 0, nil), "2023-05-17T12:34:56.000000001Z", time.Date(2023, 5, 17, 12, 34, 56, 1, time.UTC).UnixNano()},
 		{"Time_s", NewParser(schema.Time, 3, nil), "12:34:56", time.Date(1970, 1, 1, 12, 34, 56, 0, time.UTC).Unix()},
 		{"Time_ms", NewParser(schema.Time, 2, nil), "12:34:56.001", time.Date(1970, 1, 1, 12, 34, 56, 1000000, time.UTC).UnixMilli()},
 		{"Time_us", NewParser(schema.Time, 1, nil), "12:34:56.000001", time.Date(1970, 1, 1, 12, 34, 56, 1000, time.UTC).UnixMicro()},
@@ -87,19 +87,19 @@ func TestSliceParsing(t *testing.T) {
 		{"BoolSlice", NewParser(schema.Boolean, 0, nil), "true,false,true", []bool{true, false, true}},
 		{"StringSlice", NewParser(schema.String, 0, nil), "a,b,c", [][]byte{[]byte("a"), []byte("b"), []byte("c")}},
 		{"BytesSlice", NewParser(schema.Bytes, 0, nil), "0x68,0x65,0x6c", [][]byte{{0x68}, {0x65}, {0x6c}}},
-		{"TimeSlice_sec", NewParser(schema.Timestamp, 3, nil), "2023-05-17 12:34:56 UTC,2023-05-18 12:34:56 UTC", []int64{
+		{"TimeSlice_sec", NewParser(schema.Timestamp, 3, nil), "2023-05-17T12:34:56Z,2023-05-18T12:34:56Z", []int64{
 			time.Date(2023, 5, 17, 12, 34, 56, 0, time.UTC).Unix(),
 			time.Date(2023, 5, 18, 12, 34, 56, 0, time.UTC).Unix(),
 		}},
-		{"TimeSlice_ms", NewParser(schema.Timestamp, 2, nil), "2023-05-17 12:34:56.001 UTC,2023-05-18 12:34:56.002 UTC", []int64{
+		{"TimeSlice_ms", NewParser(schema.Timestamp, 2, nil), "2023-05-17T12:34:56.001Z,2023-05-18T12:34:56.002Z", []int64{
 			time.Date(2023, 5, 17, 12, 34, 56, 1000000, time.UTC).UnixMilli(),
 			time.Date(2023, 5, 18, 12, 34, 56, 2000000, time.UTC).UnixMilli(),
 		}},
-		{"TimeSlice_us", NewParser(schema.Timestamp, 1, nil), "2023-05-17 12:34:56.000001 UTC,2023-05-18 12:34:56.000002 UTC", []int64{
+		{"TimeSlice_us", NewParser(schema.Timestamp, 1, nil), "2023-05-17T12:34:56.000001Z,2023-05-18T12:34:56.000002Z", []int64{
 			time.Date(2023, 5, 17, 12, 34, 56, 1000, time.UTC).UnixMicro(),
 			time.Date(2023, 5, 18, 12, 34, 56, 2000, time.UTC).UnixMicro(),
 		}},
-		{"TimeSlice_ns", NewParser(schema.Timestamp, 0, nil), "2023-05-17 12:34:56.000000001 UTC,2023-05-18 12:34:56.000000002 UTC", []int64{
+		{"TimeSlice_ns", NewParser(schema.Timestamp, 0, nil), "2023-05-17T12:34:56.000000001Z,2023-05-18T12:34:56.000000002Z", []int64{
 			time.Date(2023, 5, 17, 12, 34, 56, 1, time.UTC).UnixNano(),
 			time.Date(2023, 5, 18, 12, 34, 56, 2, time.UTC).UnixNano(),
 		}},
