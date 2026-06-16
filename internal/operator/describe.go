@@ -32,7 +32,7 @@ func (d *Describer) Process(_ context.Context, src *pack.Package) (*pack.Package
 		t.AppendRow([]any{
 			field.Id,
 			field.Name,
-			field.TypeName(),
+			field.Typename(),
 			field.Flags,
 			field.Filter,
 			field.IsVisible(),

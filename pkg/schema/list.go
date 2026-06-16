@@ -47,7 +47,7 @@ func (w *ListWriter) Schema() *Schema {
 
 // Done returns true when a list element is fully written.
 func (w *ListWriter) Done() bool {
-	return w.n == w.align+len(w.elem.Fields)
+	return w.n >= w.align+len(w.elem.Fields)
 }
 
 // Next prepares the list writer to accept the next element.

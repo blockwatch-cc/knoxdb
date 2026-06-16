@@ -34,7 +34,7 @@ func TestViewDynamic(t *testing.T) {
 	base := NewAllTypes(int64(0x0faf0faf0faf0faf))
 	baseSchema := reflect.MustSchemaFor[AllTypes]()
 	baseEnc := encode.NewEncoder(baseSchema)
-	buf, err := baseEnc.Encode(&base, nil)
+	buf, err := baseEnc.Encode(base, nil)
 	require.NoError(t, err)
 	view := schema.NewView(baseSchema).Reset(buf)
 	require.True(t, view.IsValid())
@@ -58,7 +58,7 @@ func TestViewGet(t *testing.T) {
 	base := NewAllTypes(int64(0x0faf0faf0faf0faf))
 	baseSchema := reflect.MustSchemaFor[AllTypes]()
 	baseEnc := encode.NewEncoder(baseSchema)
-	buf, err := baseEnc.Encode(&base, nil)
+	buf, err := baseEnc.Encode(base, nil)
 	require.NoError(t, err)
 	view := schema.NewView(baseSchema).Reset(buf)
 
@@ -101,7 +101,7 @@ func TestViewGetWithVisibility(t *testing.T) {
 	visSchema, err = visSchema.DeleteId(5)
 	require.NoError(t, err)
 	visEnc := encode.NewEncoder(visSchema)
-	buf, err := visEnc.Encode(&base, nil)
+	buf, err := visEnc.Encode(base, nil)
 	require.NoError(t, err)
 	view := schema.NewView(visSchema).Reset(buf)
 
@@ -139,7 +139,7 @@ func TestViewSet(t *testing.T) {
 	base := NewAllTypes(int64(0x0faf0faf0faf0faf))
 	baseSchema := reflect.MustSchemaFor[AllTypes]()
 	baseEnc := encode.NewEncoder(baseSchema)
-	buf, err := baseEnc.Encode(&base, nil)
+	buf, err := baseEnc.Encode(base, nil)
 	require.NoError(t, err)
 	view := schema.NewView(baseSchema).Reset(buf)
 
@@ -210,7 +210,7 @@ func TestViewNestingL1(t *testing.T) {
 	base := NewListFields()
 	baseSchema := reflect.MustSchemaFor[ListFields]()
 	baseEnc := encode.NewEncoder(baseSchema)
-	buf, err := baseEnc.Encode([]ListFields{base, base}, nil)
+	buf, err := baseEnc.Encode([]ListFields{*base, *base}, nil)
 	require.NoError(t, err)
 	require.LessOrEqual(t, 2*baseSchema.MinWireSize, len(buf))
 
@@ -258,7 +258,7 @@ func TestViewNestingL2(t *testing.T) {
 	base := NewListInListFields()
 	baseSchema := reflect.MustSchemaFor[ListInListFields]()
 	baseEnc := encode.NewEncoder(baseSchema)
-	buf, err := baseEnc.Encode([]ListInListFields{base, base}, nil)
+	buf, err := baseEnc.Encode([]ListInListFields{*base, *base}, nil)
 	require.NoError(t, err)
 	require.LessOrEqual(t, 2*baseSchema.MinWireSize, len(buf))
 
@@ -278,16 +278,87 @@ func TestViewNestingL2(t *testing.T) {
 	// [][]uint64
 	for i, vv := range v.List(1) {
 		require.Equal(t, 2, countIter(vv.List(0)))
+		require.LessOrEqual(t, vv.Schema().MinWireSize, len(vv.Buffer()))
 		for j, vvv := range vv.List(0) {
+			require.LessOrEqual(t, vvv.Schema().MinWireSize, len(vvv.Buffer()))
 			require.Equal(t, base.NestedUints[i][j], vvv.Uint64(0), "U64List[%d][%d]", i, j)
 		}
 	}
 	// [][]Pair
 	for i, vv := range v.List(2) {
 		require.Equal(t, 2, countIter(vv.List(0)))
+		require.LessOrEqual(t, vv.Schema().MinWireSize, len(vv.Buffer()))
 		for j, vvv := range vv.List(0) {
+			require.LessOrEqual(t, vvv.Schema().MinWireSize, len(vvv.Buffer()))
 			require.Equal(t, base.NestedPairs[i][j].Key, vvv.Int64(0), "Pairs[%d][%d].Key", i, j)
 			require.Equal(t, base.NestedPairs[i][j].Val, vvv.Int64(1), "Pairs[%d][%d].Val", i, j)
+		}
+	}
+}
+
+func TestViewNestingL2Empty(t *testing.T) {
+	// type ListInListFields struct {
+	// 	Int64a      int64
+	// 	NestedUints [][]uint64
+	// 	NestedPairs [][]Pair
+	// 	Int64b      int64
+	// }
+	// one level nested
+	base := NewListInListFields()
+	baseSchema := reflect.MustSchemaFor[ListInListFields]()
+	baseEnc := encode.NewEncoder(baseSchema)
+	t.Log(baseSchema)
+
+	// empty one of the the inner list
+	base.NestedUints[0] = base.NestedUints[0][:0]
+	base.NestedPairs[0] = base.NestedPairs[0][:0]
+
+	buf, err := baseEnc.Encode([]ListInListFields{*base, *base}, nil)
+	require.NoError(t, err)
+	require.LessOrEqual(t, 2*baseSchema.MinWireSize, len(buf))
+
+	// test view methods for 2 records with nested fields each
+	v := schema.NewView(baseSchema)
+	require.Equal(t, 2, v.Count(buf))
+
+	v.Reset(buf)
+	require.LessOrEqual(t, baseSchema.MinWireSize, v.Len())
+	require.Equal(t, len(buf)/2, v.Len())
+
+	// list iterators produce correct number of list elements
+	require.Equal(t, 2, countIter(v.List(1)))
+	require.Equal(t, 2, countIter(v.List(2)))
+
+	// individual values
+	// [][]uint64
+	for i, vv := range v.List(1) {
+		require.LessOrEqual(t, vv.Schema().MinWireSize, len(vv.Buffer()))
+		if i == 0 {
+			require.Equal(t, 0, countIter(vv.List(0)))
+		} else {
+			require.Equal(t, 2, countIter(vv.List(0)))
+		}
+		for j, vvv := range vv.List(0) {
+			require.LessOrEqual(t, vvv.Schema().MinWireSize, len(vvv.Buffer()))
+			if j > 0 {
+				require.Equal(t, base.NestedUints[i][j], vvv.Uint64(0), "U64List[%d][%d]", i, j)
+			}
+		}
+	}
+	// [][]Pair
+	for i, vv := range v.List(2) {
+		require.LessOrEqual(t, vv.Schema().MinWireSize, len(vv.Buffer()))
+		if i == 0 {
+			require.Equal(t, 0, countIter(vv.List(0)))
+		} else {
+			require.Equal(t, 2, countIter(vv.List(0)))
+		}
+		for j, vvv := range vv.List(0) {
+			require.LessOrEqual(t, vvv.Schema().MinWireSize, len(vvv.Buffer()))
+			if j > 0 {
+				require.Equal(t, base.NestedPairs[i][j].Key, vvv.Int64(0), "Pairs[%d][%d].Key", i, j)
+				require.Equal(t, base.NestedPairs[i][j].Val, vvv.Int64(1), "Pairs[%d][%d].Val", i, j)
+			}
 		}
 	}
 }
@@ -302,7 +373,7 @@ func TestViewNestingL3(t *testing.T) {
 	base := NewListInStructInListFields()
 	baseSchema := reflect.MustSchemaFor[ListInStructInListFields]()
 	baseEnc := encode.NewEncoder(baseSchema)
-	buf, err := baseEnc.Encode([]ListInStructInListFields{base, base}, nil)
+	buf, err := baseEnc.Encode([]ListInStructInListFields{*base, *base}, nil)
 	require.NoError(t, err)
 	require.LessOrEqual(t, 2*baseSchema.MinWireSize, len(buf))
 
@@ -321,11 +392,107 @@ func TestViewNestingL3(t *testing.T) {
 	// []OuterPairStruct
 	for i, vv := range v.List(1) {
 		require.Equal(t, 2, countIter(vv.List(1)))
+		require.LessOrEqual(t, vv.Schema().MinWireSize, len(vv.Buffer()))
 		for j, vvv := range vv.List(1) {
+			require.LessOrEqual(t, vvv.Schema().MinWireSize, len(vvv.Buffer()))
 			require.Equal(t, base.Pairs1[i].Pairs2[j].Key, vvv.Int64(0), "Pairs1[%d].Pairs2[%d].Key", i, j)
 			require.Equal(t, base.Pairs1[i].Pairs2[j].Val, vvv.Int64(1), "Pairs1[%d].Pairs2[%d].Val", i, j)
 		}
 	}
+}
+
+func TestViewMap(t *testing.T) {
+	// 	type PrimMapRecord struct {
+	// 	U64     map[uint64]uint64
+	// 	Bools   map[uint64]bool
+	// 	Strings map[string]string
+	// 	Bigs    map[string]num.Big
+	// 	Dates   map[string]time.Time
+	// 	Times   map[time.Time]uint32
+	// }
+	base := NewPrimMapRecord()
+	baseSchema := reflect.MustSchemaFor[PrimMapRecord]()
+	w := schema.NewWriter(baseSchema, nil)
+	require.NoError(t, w.Write(base))
+	buf := w.Bytes()
+	require.LessOrEqual(t, baseSchema.MinWireSize, len(buf))
+	// t.Log(baseSchema)
+	// t.Log(string(hex.Dump(buf)))
+
+	// test view methods for 1 record with nested fields each
+	v := schema.NewView(baseSchema)
+	require.Equal(t, 1, v.Count(buf))
+
+	v.Reset(buf)
+	require.LessOrEqual(t, baseSchema.MinWireSize, v.Len())
+
+	// map iterators produce correct number of map elements
+	require.Equal(t, 2, countIter(v.Map(0)))
+	require.Equal(t, 2, countIter(v.Map(1)))
+	require.Equal(t, 2, countIter(v.Map(2)))
+	require.Equal(t, 2, countIter(v.Map(3)))
+	require.Equal(t, 1, countIter(v.Map(4)))
+	require.Equal(t, 1, countIter(v.Map(5)))
+
+	// map[uint64]uint64
+	next, stop := iter.Pull2(v.Map(0))
+	for _, k := range SortedKeys(base.U64) {
+		_, vv, ok := next()
+		require.True(t, ok)
+		require.Equal(t, k, vv.Uint64(0), "key", k)
+		require.Equal(t, base.U64[k], vv.Uint64(1), "val", k)
+	}
+	stop()
+
+	// map[uint64]bool
+	next, stop = iter.Pull2(v.Map(1))
+	for _, k := range SortedKeys(base.Bools) {
+		_, vv, ok := next()
+		require.True(t, ok)
+		require.Equal(t, k, vv.Uint64(0), "key", k)
+		require.Equal(t, base.Bools[k], vv.Bool(1), "val", k)
+	}
+	stop()
+
+	// map[string]string
+	next, stop = iter.Pull2(v.Map(2))
+	for _, k := range SortedKeys(base.Strings) {
+		_, vv, ok := next()
+		require.True(t, ok)
+		require.Equal(t, k, vv.String(0), "key", k)
+		require.Equal(t, base.Strings[k], vv.String(1), "val", k)
+	}
+	stop()
+
+	// map[string]num.Big
+	next, stop = iter.Pull2(v.Map(3))
+	for _, k := range SortedKeys(base.Bigs) {
+		_, vv, ok := next()
+		require.True(t, ok)
+		require.Equal(t, k, vv.String(0), "key", k)
+		require.Equal(t, base.Bigs[k], vv.Bigint(1), "val", k)
+	}
+	stop()
+
+	// map[string]time.Time
+	next, stop = iter.Pull2(v.Map(4))
+	for _, k := range SortedKeys(base.Dates) {
+		_, vv, ok := next()
+		require.True(t, ok)
+		require.Equal(t, k, vv.String(0), "key", k)
+		require.Equal(t, base.Dates[k], vv.Timestamp(1), "val", k)
+	}
+	stop()
+
+	// map[time.Time]uint32
+	next, stop = iter.Pull2(v.Map(5))
+	for _, k := range SortedTimes(base.Times) {
+		_, vv, ok := next()
+		require.True(t, ok)
+		require.Equal(t, k, vv.Timestamp(0), "key", k)
+		require.Equal(t, base.Times[k], vv.Uint32(1), "val", k)
+	}
+	stop()
 }
 
 func countIter(it iter.Seq2[int, *schema.View]) int {

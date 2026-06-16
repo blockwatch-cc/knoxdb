@@ -9,20 +9,14 @@ import (
 	"testing"
 
 	"blockwatch.cc/knoxdb/pkg/schema"
-	"blockwatch.cc/knoxdb/pkg/schema/enum"
 	"blockwatch.cc/knoxdb/pkg/schema/reflect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestMain(m *testing.M) {
-	// prepare enum
-	myEnum = enum.NewEnumDictionary("my_enum")
-	myEnum.Append("a", "b", "c", "d", "e")
-
-	// create test registry and add enum to registry
-	enums = enum.NewEnumRegistry()
-	enums.Register(0, myEnum)
+	// create and register enums
+	RegisterEnums()
 
 	// init schema and link enums (will lookup myEnum and link to field)
 	reflect.MustSchemaFor[AllTypes](schema.Enums(enums))

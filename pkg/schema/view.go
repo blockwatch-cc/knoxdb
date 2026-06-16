@@ -59,6 +59,11 @@ func WithViewMeta(b ...bool) ViewOption {
 // endian) and tell a view that data was encoded including metadata fields.
 // Use generic accessor methods Get/GetPhy or optimized typed accessirs
 // (e.g. Uint64, String).
+//
+// On containers like list and map accessors return sequence iterators
+// over elements with a view scoped to the nested element's type. Views
+// always only visit fields at the current nesting level which means
+// accessor indexes count per level.
 type View struct {
 	mu     sync.Mutex       // view mutex, use explicit Lock/Unlock methods
 	schema *Schema          // encoding schema
@@ -159,13 +164,16 @@ func (v *View) Unlock() {
 	v.mu.Unlock()
 }
 
-// Schema returns the view's configured schema. On list elements
-// this is the nested child schema. Note schemas contain a flattened
-// list of nested fields across all nesting levels in type tree
-// pre-order. A view's accessors visit only the top-most nesting
-// level.
+// Schema returns the view's configured schema at the current nesting level.
+// This may be a top-level schema, a child schema for a list or map or a
+// case schema for a variant.
 func (v *View) Schema() *Schema {
 	return v.schema
+}
+
+// Field returns the i-th field at the view's nesting level.
+func (v *View) Field(i int) *Field {
+	return v.findField(i)
 }
 
 // IsValid returns true when the buffer is initialized with a
@@ -273,7 +281,7 @@ func (v *View) Reset(buf []byte) *View {
 					v.len[i] = l
 					ofs += l
 				}
-			case Text, Binary, List, Variant:
+			case Text, Binary, List, Map, Variant:
 				// 4 byte len
 				l := int(v.layout.Uint32(buf[ofs:]))
 				ofs += 4

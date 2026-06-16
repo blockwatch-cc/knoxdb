@@ -6,6 +6,7 @@ package enum
 import (
 	"bytes"
 	"fmt"
+	"iter"
 	"slices"
 	"strings"
 
@@ -83,12 +84,14 @@ func (e *EnumDictionary) Clone() *EnumDictionary {
 	return clone
 }
 
-func (e *EnumDictionary) Values() []string {
-	vals := make([]string, len(e.offsets))
-	for i := range vals {
-		vals[i] = e.value(i)
+func (e *EnumDictionary) Values() iter.Seq[string] {
+	return func(yield func(string) bool) {
+		for i := range len(e.offsets) {
+			if !yield(e.value(i)) {
+				return
+			}
+		}
 	}
-	return vals
 }
 
 func (e *EnumDictionary) Value(code uint16) (string, bool) {

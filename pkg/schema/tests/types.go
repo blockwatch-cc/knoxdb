@@ -13,6 +13,18 @@ import (
 	"blockwatch.cc/knoxdb/pkg/schema/enum"
 )
 
+func RegisterEnums() *enum.EnumRegistry {
+	// prepare enum
+	myEnum = enum.NewEnumDictionary("my_enum")
+	myEnum.Append("a", "b", "c", "d", "e")
+
+	// create test registry and add enum to registry
+	enums = enum.NewEnumRegistry()
+	enums.Register(0, myEnum)
+
+	return enums
+}
+
 // not supported, used for error checks only
 type Stringer []string
 
@@ -123,8 +135,8 @@ type AllTypes struct {
 	Union    schema.UnionValue `knox:"union"`         // 25
 }
 
-func NewAllTypes(i int64) AllTypes {
-	return AllTypes{
+func NewAllTypes(i int64) *AllTypes {
+	return &AllTypes{
 		Id:       uint64(i),
 		Int64:    i,
 		Int32:    int32(i),
@@ -307,8 +319,8 @@ type ListFields struct {
 	Int64b      int64
 }
 
-func NewListFields() ListFields {
-	return ListFields{
+func NewListFields() *ListFields {
+	return &ListFields{
 		Int64a:  1,
 		U64List: []uint64{2, 3},
 		TimeList: []time.Time{
@@ -341,6 +353,12 @@ type Pair struct {
 	Val int64 `knox:"v64"`
 }
 
+func (p Pair) MarshalSchema(w *schema.Writer) error {
+	w.WriteInt64(p.Key)
+	w.WriteInt64(p.Val)
+	return w.Err()
+}
+
 type ListInListFields struct {
 	Int64a      int64
 	NestedUints [][]uint64
@@ -348,8 +366,8 @@ type ListInListFields struct {
 	Int64b      int64
 }
 
-func NewListInListFields() ListInListFields {
-	return ListInListFields{
+func NewListInListFields() *ListInListFields {
+	return &ListInListFields{
 		Int64a: 1,
 		NestedUints: [][]uint64{
 			{2, 3},
@@ -380,8 +398,8 @@ type ListInStructInListFields struct {
 	Int64b int64
 }
 
-func NewListInStructInListFields() ListInStructInListFields {
-	return ListInStructInListFields{
+func NewListInStructInListFields() *ListInStructInListFields {
+	return &ListInStructInListFields{
 		Int64a: 1,
 		Pairs1: []OuterPairStruct{
 			{Val: 2, Pairs2: []Pair{
@@ -408,8 +426,8 @@ type MapFields struct {
 	Int64b     int64
 }
 
-func NewMapFields() MapFields {
-	return MapFields{
+func NewMapFields() *MapFields {
+	return &MapFields{
 		Int64a: 1,
 		U64Map: map[uint64]uint64{2: 2, 3: 3},
 		DateMap: map[uint32]time.Time{
@@ -437,6 +455,36 @@ func NewMapFields() MapFields {
 	}
 }
 
+func (r MapFields) MarshalSchema(w *schema.Writer) error {
+	w.WriteInt64(r.Int64a)
+	w.WriteMap(func(mw *schema.MapWriter) error {
+		return schema.WriteMap(mw, r.U64Map)
+	})
+	w.WriteMap(func(mw *schema.MapWriter) error {
+		return schema.WriteMap(mw, r.DateMap)
+	})
+	w.WriteMap(func(mw *schema.MapWriter) error {
+		return schema.MarshalMap(mw, r.PairMap)
+	})
+	w.WriteMap(func(mw *schema.MapWriter) error {
+		return schema.WriteMap(mw, r.ByteMap)
+	})
+	w.WriteMap(func(mw *schema.MapWriter) error {
+		for _, k := range schema.SortedKeys(r.ArrMap) {
+			mw.WriteString(k)
+			v := r.ArrMap[k]
+			mw.WriteBytes(v[:])
+			mw.Next()
+		}
+		return mw.Err()
+	})
+	w.WriteMap(func(mw *schema.MapWriter) error {
+		return schema.WriteMap(mw, r.DecimalMap)
+	})
+	w.WriteInt64(r.Int64b)
+	return w.Err()
+}
+
 type PrimMapRecord struct {
 	U64     map[uint64]uint64
 	Bools   map[uint64]bool
@@ -447,41 +495,29 @@ type PrimMapRecord struct {
 }
 
 func (r PrimMapRecord) MarshalSchema(w *schema.Writer) error {
-	if err := w.WriteMap(func(mw *schema.MapWriter) error {
+	w.WriteMap(func(mw *schema.MapWriter) error {
 		return schema.WriteMap(mw, r.U64)
-	}); err != nil {
-		return err
-	}
-	if err := w.WriteMap(func(mw *schema.MapWriter) error {
+	})
+	w.WriteMap(func(mw *schema.MapWriter) error {
 		return schema.WriteMap(mw, r.Bools)
-	}); err != nil {
-		return err
-	}
-	if err := w.WriteMap(func(mw *schema.MapWriter) error {
+	})
+	w.WriteMap(func(mw *schema.MapWriter) error {
 		return schema.WriteMap(mw, r.Strings)
-	}); err != nil {
-		return err
-	}
-	if err := w.WriteMap(func(mw *schema.MapWriter) error {
+	})
+	w.WriteMap(func(mw *schema.MapWriter) error {
 		return schema.WriteMap(mw, r.Bigs)
-	}); err != nil {
-		return err
-	}
-	if err := w.WriteMap(func(mw *schema.MapWriter) error {
+	})
+	w.WriteMap(func(mw *schema.MapWriter) error {
 		return schema.WriteMap(mw, r.Dates)
-	}); err != nil {
-		return err
-	}
-	if err := w.WriteMap(func(mw *schema.MapWriter) error {
+	})
+	w.WriteMap(func(mw *schema.MapWriter) error {
 		return schema.WriteTimeMap(mw, r.Times)
-	}); err != nil {
-		return err
-	}
-	return nil
+	})
+	return w.Err()
 }
 
-func NewPrimMapRecord() PrimMapRecord {
-	return PrimMapRecord{
+func NewPrimMapRecord() *PrimMapRecord {
+	return &PrimMapRecord{
 		U64:     map[uint64]uint64{1: 1, 2: 2},
 		Bools:   map[uint64]bool{1: true, 2: false},
 		Strings: map[string]string{"a": "b", "c": "d"},
@@ -507,8 +543,8 @@ var UnionMapRecordSchema = schema.SchemaOf([]*schema.Field{
 	schema.MapOf(schema.String, schema.Union, schema.WithName("unions")),
 })
 
-func NewUnionMapRecord() UnionMapRecord {
-	return UnionMapRecord{
+func NewUnionMapRecord() *UnionMapRecord {
+	return &UnionMapRecord{
 		Unions: map[string]schema.UnionValue{
 			"a": schema.Int64Union(1),
 			"b": schema.Int32Union(2),
@@ -667,3 +703,43 @@ var (
 		schema.VariantFor(addrT, schema.WithName("shipping_address")),
 	}, schema.Name("consumer"))
 )
+
+var CustomerT = customerT
+
+type CustomerVariant struct{}
+
+func NewCustomer() *CustomerVariant {
+	return &CustomerVariant{}
+}
+
+func (c CustomerVariant) MarshalSchema(w *schema.Writer) error {
+	w.WriteUint64(1)
+	w.WriteString("user")
+	w.WriteVariant(3, // pay: bank transfer
+		func(vw *schema.VariantWriter) error {
+			vw.WriteString("iban")
+			vw.WriteString("bic")
+			vw.WriteString("holder")
+			vw.WriteString("bank")
+			return vw.Err()
+		})
+	w.WriteVariant(2, // billing: business
+		func(vw *schema.VariantWriter) error {
+			vw.WriteString("company")
+			vw.WriteString("street")
+			vw.WriteString("city")
+			vw.WriteString("postcode")
+			vw.WriteString("country")
+			vw.WriteString("taxid")
+			return vw.Err()
+		})
+	w.WriteVariant(1, // shipping: residential
+		func(vw *schema.VariantWriter) error {
+			vw.WriteString("street")
+			vw.WriteString("city")
+			vw.WriteString("postcode")
+			vw.WriteString("country")
+			return vw.Err()
+		})
+	return w.Err()
+}

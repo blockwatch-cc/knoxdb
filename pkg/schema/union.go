@@ -174,6 +174,86 @@ func (u *UnionValue) UnmarshalBuffer(buf []byte, layout binary.ByteOrder) error 
 	return nil
 }
 
+func MakeUnionValue(typ FieldType, val any) (u UnionValue, ok bool) {
+	ok = true
+	switch typ {
+	case Uint64:
+		u = Uint64Union(val.(uint64))
+	case Uint32:
+		u = Uint32Union(val.(uint32))
+	case Uint16:
+		u = Uint16Union(val.(uint16))
+	case Uint8:
+		u = Uint8Union(val.(uint8))
+	case Int64:
+		u = Int64Union(val.(int64))
+	case Int32:
+		u = Int32Union(val.(int32))
+	case Int16:
+		u = Int16Union(val.(int16))
+	case Int8:
+		u = Int8Union(val.(int8))
+	case Float64:
+		u = Float64Union(val.(float64))
+	case Float32:
+		u = Float32Union(val.(float32))
+	case Boolean:
+		u = BoolUnion(val.(bool))
+	case Int128:
+		u = Int128Union(val.(num.Int128))
+	case Int256:
+		u = Int256Union(val.(num.Int256))
+	case Bigint:
+		u = BigintUnion(val.(num.Big))
+		ok = u.num <= MAX_BYTES-1
+	case String:
+		u = StringUnion(val.(string))
+		ok = u.num <= MAX_BYTES-1
+	case Bytes:
+		u = BytesUnion(val.([]byte))
+		ok = u.num <= MAX_BYTES-1
+	case Timestamp:
+		switch v := val.(type) {
+		case int64:
+			u = TimestampUnion(TIME_SCALE_NANO.FromUnix(v))
+		case time.Time:
+			u = TimestampUnion(v)
+		default:
+			ok = false
+		}
+	case Time:
+		switch v := val.(type) {
+		case int64:
+			u = TimeUnion(TIME_SCALE_SECOND.FromUnix(v))
+		case time.Time:
+			u = TimeUnion(v.Truncate(time.Duration(TIME_SCALE_SECOND)))
+		default:
+			ok = false
+		}
+	case Date:
+		switch v := val.(type) {
+		case int64:
+			u = DateUnion(TIME_SCALE_DAY.FromUnix(v))
+		case time.Time:
+			u = DateUnion(v.Truncate(time.Duration(TIME_SCALE_DAY)))
+		default:
+			ok = false
+		}
+	case Duration:
+		switch v := val.(type) {
+		case int64:
+			u = DurationUnion(time.Duration(v))
+		case time.Duration:
+			u = DurationUnion(v)
+		default:
+			ok = false
+		}
+	default:
+		ok = false
+	}
+	return
+}
+
 func Int64Union(value int64) UnionValue {
 	return UnionValue{typ: Int64, num: uint64(value)}
 }

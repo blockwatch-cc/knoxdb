@@ -83,9 +83,14 @@ func (w *Writer) Schema() *Schema {
 	return w.schema
 }
 
+// Field returns the current field to be written by the next Write call.
+func (w *Writer) Field() *Field {
+	return w.schema.Fields[w.n]
+}
+
 // Done returns true when all nested fields have been written.
 func (w *Writer) Done() bool {
-	return w.n == len(w.schema.Fields)
+	return w.n >= len(w.schema.Fields)
 }
 
 // Err returns the first captured write error.

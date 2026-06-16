@@ -482,7 +482,7 @@ func (e *Encoder) writeField(buf *bytes.Buffer, code OpCode, field *schema.Field
 		*(*uint32)(unsafe.Pointer(&buf.Bytes()[ofs])) = uint32(buf.Len() - ofs - 4)
 
 	case OC_INVALID, OC_MAP, OC_VARIANT:
-		err = schema.ErrInvalidValueType
+		err = fmt.Errorf("encode: unsupported value type %s", field.Type)
 	}
 	return
 }

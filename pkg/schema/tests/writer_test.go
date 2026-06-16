@@ -19,7 +19,7 @@ func TestWriterWrite(t *testing.T) {
 	baseSchema := reflect.MustSchemaFor[AllTypes]()
 
 	baseEnc := encode.NewEncoder(baseSchema)
-	buf, err := baseEnc.Encode(&base, nil)
+	buf, err := baseEnc.Encode(base, nil)
 	require.NoError(t, err)
 
 	w := schema.NewWriter(baseSchema, nil)
@@ -59,7 +59,7 @@ func TestWriterPrimitive(t *testing.T) {
 	baseSchema := reflect.MustSchemaFor[AllTypes]()
 
 	baseEnc := encode.NewEncoder(baseSchema)
-	buf, err := baseEnc.Encode(&base, nil)
+	buf, err := baseEnc.Encode(base, nil)
 	require.NoError(t, err)
 
 	w := schema.NewWriter(baseSchema, nil)
@@ -102,7 +102,7 @@ func TestWriterListL1(t *testing.T) {
 	baseEnc := encode.NewEncoder(baseSchema)
 
 	// encode
-	buf, err := baseEnc.Encode(&base, nil)
+	buf, err := baseEnc.Encode(base, nil)
 	require.NoError(t, err)
 	require.LessOrEqual(t, baseSchema.MinWireSize, len(buf))
 
@@ -174,7 +174,7 @@ func TestWriterListL1(t *testing.T) {
 	require.NoError(t, dec.Decode(buf, &res))
 
 	// check decoder produces the exact same struct values
-	require.Equal(t, base, res)
+	require.Equal(t, *base, res)
 }
 
 func TestWriterListL2(t *testing.T) {
@@ -185,7 +185,7 @@ func TestWriterListL2(t *testing.T) {
 	baseEnc := encode.NewEncoder(baseSchema)
 
 	// encode
-	buf, err := baseEnc.Encode(&base, nil)
+	buf, err := baseEnc.Encode(base, nil)
 	require.NoError(t, err)
 	require.LessOrEqual(t, baseSchema.MinWireSize, len(buf))
 
@@ -245,7 +245,7 @@ func TestWriterListL2(t *testing.T) {
 	require.NoError(t, dec.Decode(buf, &res))
 
 	// check decoder produces the exact same struct values
-	require.Equal(t, base, res)
+	require.Equal(t, *base, res)
 }
 
 func TestWriterListL3(t *testing.T) {
@@ -256,7 +256,7 @@ func TestWriterListL3(t *testing.T) {
 	baseEnc := encode.NewEncoder(baseSchema)
 
 	// encode
-	buf, err := baseEnc.Encode(&base, nil)
+	buf, err := baseEnc.Encode(base, nil)
 	require.NoError(t, err)
 	require.LessOrEqual(t, baseSchema.MinWireSize, len(buf))
 
@@ -293,7 +293,7 @@ func TestWriterListL3(t *testing.T) {
 	require.NoError(t, dec.Decode(buf, &res))
 
 	// check decoder produces the exact same struct values
-	require.Equal(t, base, res)
+	require.Equal(t, *base, res)
 }
 
 func TestWriterUnion(t *testing.T) {
@@ -400,55 +400,42 @@ func TestWriterSkip(t *testing.T) {
 
 func TestWriterMap(t *testing.T) {
 	// primitives
-	s, err := reflect.SchemaFor[PrimMapRecord]()
-	require.NoError(t, err)
-	t.Log(s)
-	base := NewPrimMapRecord()
-	w := schema.NewWriter(s, nil)
-	require.NoError(t, w.Write(base))
-	t.Log(hex.Dump(w.Bytes()))
+	t.Run("prim", func(t *testing.T) {
+		s, err := reflect.SchemaFor[PrimMapRecord]()
+		require.NoError(t, err)
+		t.Log(s)
+		base := NewPrimMapRecord()
+		w := schema.NewWriter(s, nil)
+		require.NoError(t, w.Write(base))
+		t.Log(hex.Dump(w.Bytes()))
+	})
 
-	// marshaler only
-	attr := NewUnionMapRecord()
-	w = schema.NewWriter(UnionMapRecordSchema, nil)
-	require.NoError(t, w.Write(attr))
-	t.Log(hex.Dump(w.Bytes()))
+	// marshaler only union map
+	t.Run("union", func(t *testing.T) {
+		attr := NewUnionMapRecord()
+		w := schema.NewWriter(UnionMapRecordSchema, nil)
+		require.NoError(t, w.Write(attr))
+		t.Log(hex.Dump(w.Bytes()))
+	})
+
+	// marshaler only maps
+	t.Run("maps", func(t *testing.T) {
+		s, err := reflect.SchemaFor[MapFields]()
+		require.NoError(t, err)
+		t.Log(s)
+		base := NewMapFields()
+		w := schema.NewWriter(s, nil)
+		require.NoError(t, w.Write(base))
+		t.Log(hex.Dump(w.Bytes()))
+	})
 }
 
 func TestWriterVariant(t *testing.T) {
 	buf := customerT.NewBuffer(2)
 	w := schema.NewWriter(customerT, buf)
-	require.NoError(t, w.WriteUint64(1))
-	require.NoError(t, w.WriteString("user"))
-	require.NoError(t, w.WriteVariant(3, // pay: bank transfer
-		func(vw *schema.VariantWriter) error {
-			require.NoError(t, vw.WriteString("iban"))
-			require.NoError(t, vw.WriteString("bic"))
-			require.NoError(t, vw.WriteString("holder"))
-			require.NoError(t, vw.WriteString("bank"))
-			require.True(t, vw.Done())
-			return nil
-		}))
-	require.NoError(t, w.WriteVariant(2, // billing: business
-		func(vw *schema.VariantWriter) error {
-			require.NoError(t, vw.WriteString("company"))
-			require.NoError(t, vw.WriteString("street"))
-			require.NoError(t, vw.WriteString("city"))
-			require.NoError(t, vw.WriteString("postcode"))
-			require.NoError(t, vw.WriteString("country"))
-			require.NoError(t, vw.WriteString("taxid"))
-			require.True(t, vw.Done())
-			return nil
-		}))
-	require.NoError(t, w.WriteVariant(1, // shipping: residential
-		func(vw *schema.VariantWriter) error {
-			require.NoError(t, vw.WriteString("street"))
-			require.NoError(t, vw.WriteString("city"))
-			require.NoError(t, vw.WriteString("postcode"))
-			require.NoError(t, vw.WriteString("country"))
-			require.True(t, vw.Done())
-			return nil
-		}))
+	val := NewCustomer()
+	require.NoError(t, w.Write(val))
+	require.NoError(t, w.Err())
 	require.True(t, w.Done())
 
 	t.Log(hex.Dump(w.Bytes()))

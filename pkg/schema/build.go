@@ -45,7 +45,7 @@ func SchemaOf(fields []*Field, opts ...Option) *Schema {
 					}
 					// relink fields
 					if ok := newSchema.relink(newChild); ok {
-						newCases[i] = newSchema
+						newCases[i] = newSchema.Finalize()
 					} else {
 						panic(fmt.Errorf("schema %s: failed to relink nested variant field %q", s.Name, f.Name))
 					}
@@ -64,6 +64,9 @@ func SchemaOf(fields []*Field, opts ...Option) *Schema {
 		}
 	}
 
+	// relevel the type tree and assign parents
+	s.Relevel(0, 0)
+
 	// finalize child fields backwards for bottom up hashing
 	for _, f := range slices.Backward(s.Fields) {
 		if f.Child == nil {
@@ -71,9 +74,6 @@ func SchemaOf(fields []*Field, opts ...Option) *Schema {
 		}
 		f.Child.Finalize()
 	}
-
-	// relevel the type tree and assign parents
-	s.Relevel(0, 0)
 
 	// finalize, apply opts again
 	return s.Finalize(opts...)

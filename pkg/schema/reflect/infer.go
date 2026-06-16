@@ -364,6 +364,9 @@ func (b *builder) inferListFieldType(f *schema.Field, t reflect.Type) error {
 		}
 	}
 
+	// relevel for correct size counts in finalize
+	f.Child.Relevel(0, 0)
+
 	// finalize to re-calculate nested schema hashes and sizes
 	f.Child.Finalize()
 	return nil
@@ -501,6 +504,9 @@ func (b *builder) inferMapFieldType(f *schema.Field, t reflect.Type) error {
 			valT.Child.Finalize()
 		}
 	}
+
+	// relevel for correct size counts in finalize
+	f.Child.Relevel(0, 0)
 
 	// finalize map child
 	f.Child.Finalize()

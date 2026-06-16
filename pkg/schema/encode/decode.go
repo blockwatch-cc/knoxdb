@@ -474,7 +474,7 @@ func (d *Decoder) readField(code OpCode, field *schema.Field, ptr unsafe.Pointer
 			buf = buf[l:]
 		}
 	case OC_INVALID, OC_MAP, OC_VARIANT:
-		return nil, schema.ErrInvalidValueType
+		return nil, fmt.Errorf("decode: unsupported value type %s", field.Type)
 	}
 	return buf, nil
 }

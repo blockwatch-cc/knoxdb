@@ -145,7 +145,7 @@ func TestFieldStructReadBasic(t *testing.T) {
 			assert.Equal(t, tt.flags, f.Flags, "wrong flags %s", f.Flags)
 			assert.Equal(t, tt.scale, f.Scale, "wrong scale %d", f.Scale)
 
-			t.Logf("f[%d][%s]: type %s %s", f.Id, f.Name, f.TypeName(), f.Flags)
+			t.Logf("f[%d][%s]: type %s %s", f.Id, f.Name, f.Typename(), f.Flags)
 			if f.Child != nil {
 				t.Log("child schema:", f.Child.String())
 			}

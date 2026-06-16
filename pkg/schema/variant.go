@@ -57,7 +57,7 @@ func (w *VariantWriter) CaseId() uint8 {
 
 // Done returns true when a nested type is fully written.
 func (w *VariantWriter) Done() bool {
-	return w.n == w.align+len(w.elem.Fields)
+	return w.n >= w.align+len(w.elem.Fields)
 }
 
 // Reset resets the write buffer to a state before writing

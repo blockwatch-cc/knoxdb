@@ -475,6 +475,5 @@ func TestMarshalMap(t *testing.T) {
 	res := make([]MapRecord, 2)
 	n, err := dec.DecodeBatch(w.Bytes(), res)
 	require.Error(t, err)
-	require.ErrorIs(t, err, schema.ErrInvalidValueType)
 	require.Equal(t, 0, n)
 }

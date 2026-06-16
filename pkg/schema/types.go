@@ -123,8 +123,35 @@ func (t FieldType) NullableDefault() bool {
 	}
 }
 
+func (t FieldType) IsPrimitive() bool {
+	switch t {
+	case List, Map, Variant:
+		return false
+	default:
+		return true
+	}
+}
+
+func (t FieldType) CanUnion() bool {
+	switch t {
+	case Text, Binary, List, Map, Variant,
+		Decimal32, Decimal64, Decimal128, Decimal256:
+		return false
+	default:
+		return true
+	}
+}
+
 func (t FieldType) String() string {
 	return fieldTypeString[fieldTypeIdx[t] : fieldTypeIdx[t+1]-1]
+}
+
+func ParseFieldType(s string) FieldType {
+	return fieldTypeReverse[s]
+}
+
+func (t FieldType) Size() int {
+	return fieldTypeWireSize[t]
 }
 
 func (t FieldType) Zero() any {
@@ -179,14 +206,6 @@ func (t FieldType) Zero() any {
 	default:
 		return nil
 	}
-}
-
-func ParseFieldType(s string) FieldType {
-	return fieldTypeReverse[s]
-}
-
-func (t FieldType) Size() int {
-	return fieldTypeWireSize[t]
 }
 
 type FieldFlags byte

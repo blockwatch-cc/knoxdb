@@ -46,6 +46,10 @@ func NewField(typ FieldType, opts ...FieldOption) *Field {
 	return f
 }
 
+func (f *Field) Basename() string {
+	return basename(f.Name)
+}
+
 func (f *Field) Clone() *Field {
 	clone := *f
 	return &clone
@@ -75,6 +79,21 @@ func (f *Field) IsNested() bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func (f *Field) ValueType() *Schema {
+	switch f.Type {
+	case List:
+		return f.Child
+	case Map:
+		return (&Schema{
+			Name:    f.Child.Name,
+			Version: f.Child.Version,
+			Fields:  f.Child.Fields[1:],
+		}).Finalize()
+	default:
+		return nil
 	}
 }
 
@@ -150,6 +169,15 @@ func (f *Field) Case(i uint8) (*Schema, bool) {
 	return (*f.Cases)[i-1], true
 }
 
+func (f *Field) FindCase(n string) (uint8, *Schema) {
+	for i, c := range *f.Cases {
+		if c.Name == n {
+			return uint8(i + 1), c
+		}
+	}
+	return 0, nil
+}
+
 func (f *Field) EnsureCase(i uint8) *Schema {
 	if i == 0 {
 		panic("illegal variant field case id 0")
@@ -181,7 +209,7 @@ func (f *Field) EnsureCase(i uint8) *Schema {
 }
 
 // note: does not nest struct child schemas in list/map/variant
-func (f *Field) TypeName() (typ string) {
+func (f *Field) Typename() (typ string) {
 	typ = f.Type.String()
 	switch f.Type {
 	case Time, Timestamp, Duration:
@@ -194,7 +222,7 @@ func (f *Field) TypeName() (typ string) {
 		}
 	case List:
 		if f.Child.NumFields() == 1 {
-			typ += "[" + f.Child.Fields[0].TypeName() + "]"
+			typ += "[" + f.Child.Fields[0].Typename() + "]"
 		} else {
 			typ += "[" + f.Child.Name + "]"
 		}
@@ -203,15 +231,16 @@ func (f *Field) TypeName() (typ string) {
 		// child is a key/value struct
 		if f.Child.Fields[0].Child == nil {
 			// primitive key type
-			typ += f.Child.Fields[0].TypeName()
+			typ += f.Child.Fields[0].Typename()
 		} else {
 			// complex key type
 			typ += f.Child.Fields[0].Child.Name
 		}
 		typ += ","
-		if len(f.Child.Fields) == 2 {
+		// if len(f.Child.Fields) == 2 {
+		if f.Child.NumFields() == 2 {
 			// primitive value type
-			typ += f.Child.Fields[1].TypeName()
+			typ += f.Child.Fields[1].Typename()
 		} else {
 			// complex value type
 			typ += ValueName
@@ -445,11 +474,11 @@ func (f *Field) Validate(withNested ...bool) error {
 			}
 			switch f.Child.Fields[0].Type {
 			case Binary, Text, List, Map, Union, Variant:
-				return fmt.Errorf("field[%s]: invalid map key type %s", f.Name, f.Child.Fields[0].TypeName())
+				return fmt.Errorf("field[%s]: invalid map key type %s", f.Name, f.Child.Fields[0].Typename())
 			case Bytes:
 				// must be array
 				if !f.Child.Fields[0].IsArray() {
-					return fmt.Errorf("field[%s]: invalid map key type %s", f.Name, f.Child.Fields[0].TypeName())
+					return fmt.Errorf("field[%s]: invalid map key type %s", f.Name, f.Child.Fields[0].Typename())
 				}
 			}
 			if f.Child.Fields[0].IsNullable() {

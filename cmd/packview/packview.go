@@ -278,7 +278,7 @@ func PrintSchema(s *schema.Schema, w io.Writer) {
 		t.AppendRow([]any{
 			f.Id,
 			f.Name,
-			f.TypeName(),
+			f.Typename(),
 			f.Flags.String(),
 			filter,
 			f.WireSize(),

@@ -60,7 +60,7 @@ func (w *MapWriter) Schema() *Schema {
 
 // Done returns true when a map element is fully written.
 func (w *MapWriter) Done() bool {
-	return w.n == w.align+len(w.entries.Fields)
+	return w.n >= w.align+len(w.entries.Fields)
 }
 
 // Next prepares the map writer to accept the next map entry.

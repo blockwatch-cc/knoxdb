@@ -6,6 +6,7 @@ package schema
 import (
 	"bytes"
 	"fmt"
+	"iter"
 	"slices"
 	"sort"
 	"strconv"
@@ -48,7 +49,7 @@ func (s *Schema) UseEnums(r *enum.EnumRegistry) *Schema {
 	s.Enums.Store(r)
 	for _, f := range s.Fields {
 		if f.Type == Enum {
-			if e, ok := r.Find(basename(f.Name)); ok {
+			if e, ok := r.Find(f.Basename()); ok {
 				f.Enum = e
 			}
 		}
@@ -144,7 +145,7 @@ func (s *Schema) EnumNames() []string {
 	list := make([]string, 0)
 	for _, f := range s.Fields {
 		if f.Type == Enum {
-			list = append(list, basename(f.Name))
+			list = append(list, f.Basename())
 		}
 	}
 	return list
@@ -166,6 +167,22 @@ func (s *Schema) ActiveIds() []uint16 {
 		}
 	}
 	return list
+}
+
+func (s *Schema) FieldsSeq() iter.Seq2[int, *Field] {
+	lvl := s.Fields[0].Level
+	return func(yield func(int, *Field) bool) {
+		var n int
+		for _, f := range s.Fields {
+			if f.Level != lvl {
+				continue
+			}
+			if !yield(n, f) {
+				return
+			}
+			n++
+		}
+	}
 }
 
 // Returns the i-th field at top nesting level.
@@ -765,6 +782,11 @@ func (s *Schema) Validate() error {
 		return fmt.Errorf("schema %s: no supported fields found", s.Name)
 	}
 
+	// require sizes
+	if s.MinWireSize == 0 || s.EstWireSize == 0 {
+		return fmt.Errorf("schema %s: zero wire size", s.Name)
+	}
+
 	// TODO
 	// - we could require strictly sorted fields by id
 
@@ -840,10 +862,18 @@ func (s *Schema) Finalize(opts ...Option) *Schema {
 	}
 
 	// generate schema hash from visible fields
-	var b [8]byte
+	var (
+		b   [8]byte
+		lvl uint8
+	)
 	h := hash.New()
 	LE.PutUint32(b[:], s.Version)
 	h.Write(b[:4])
+
+	// use the first field's level as top level (may be empty on invalid schema)
+	if len(s.Fields) > 0 {
+		lvl = s.Fields[0].Level
+	}
 
 	for _, f := range s.Fields {
 		// collect sizes from visible fields only
@@ -851,9 +881,9 @@ func (s *Schema) Finalize(opts ...Option) *Schema {
 			continue
 		}
 
-		// skip sizes from nested fields inside LIST/MAP
-		// but count the top-level LIST/MAP header size
-		if f.Level == 0 {
+		// skip sizes from nested fields inside containers
+		// but count the top-level container header size
+		if f.Level == lvl {
 			sz := f.WireSize()
 			s.MinWireSize += sz
 			s.EstWireSize += sz
@@ -863,7 +893,8 @@ func (s *Schema) Finalize(opts ...Option) *Schema {
 			}
 		}
 
-		// hash: id, type, flags, scale, level (not: filter, compress, name)
+		// hash: id, type, flags, scale, level, caseid
+		// (not: filter, compress, name)
 		LE.PutUint16(b[:], f.Id)
 		h.Write(b[:2])
 		h.Write([]byte{
@@ -871,6 +902,7 @@ func (s *Schema) Finalize(opts ...Option) *Schema {
 			byte(f.Flags),
 			f.Scale,
 			f.Level,
+			f.CaseId,
 		})
 	}
 
@@ -903,7 +935,7 @@ func (s *Schema) String() string {
 	)
 	for _, f := range s.Fields {
 		maxNameLen = max(maxNameLen, len(f.Name))
-		maxTypeLen = max(maxTypeLen, len(f.TypeName()))
+		maxTypeLen = max(maxTypeLen, len(f.Typename()))
 		maxFlagLen = max(maxFlagLen, len(f.Flags.String()))
 		maxFilterLen = max(maxFilterLen, len(f.Filter.String()))
 		isNested = isNested || f.Child != nil
@@ -925,7 +957,7 @@ func (s *Schema) String() string {
 		fmt.Fprintf(&b, "\n%02d F#%02d %[3]*[4]s %[5]*[6]s %[7]*[8]s %[9]*[10]d %[11]*[12]d ",
 			i, f.Id,
 			-maxNameLen, f.Name,
-			-maxTypeLen, f.TypeName(),
+			-maxTypeLen, f.Typename(),
 			-maxFlagLen, f.Flags.String(),
 			-5, f.Level,
 			-4, f.CaseId,

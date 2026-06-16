@@ -9,6 +9,7 @@ import (
 	"encoding/binary"
 	"io"
 	"path/filepath"
+	"slices"
 
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/wal"
@@ -167,7 +168,7 @@ func (c *Catalog) AppendEnumCmd(ctx context.Context, act ActionType, e *enum.Enu
 		cat:    c,
 		id:     tag,
 		name:   e.Name(),
-		vals:   e.Values(),
+		vals:   slices.AppendSeq(make([]string, 0, e.Len()), e.Values()),
 		action: act,
 	}
 	return c.append(ctx, obj)
