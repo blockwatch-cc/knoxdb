@@ -549,7 +549,7 @@ func NewUnionMapRecord() *UnionMapRecord {
 			"a": schema.Int64Union(1),
 			"b": schema.Int32Union(2),
 			"c": schema.BoolUnion(true),
-			"d": schema.TimestampUnion(time.Now().UTC()),
+			"d": schema.TimestampUnion(time.Date(2026, 1, 1, 1, 2, 3, 4, time.UTC)),
 			"e": schema.Uint16Union(3),
 		},
 	}
