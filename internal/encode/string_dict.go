@@ -233,8 +233,8 @@ type DictStringIterator struct {
 func NewDictStringIterator(c *DictStringContainer) *DictStringIterator {
 	it := newStringIterator[DictStringIterator](TStringDictionary)
 	it.dict = c.dict
-	it.start = c.ofs.AppendTo(arena.AllocUint32(c.ofs.Len()), nil)
-	it.size = c.len.AppendTo(arena.AllocUint32(c.len.Len()), nil)
+	it.start = c.ofs.AppendTo(arena.Alloc[uint32](c.ofs.Len()), nil)
+	it.size = c.len.AppendTo(arena.Alloc[uint32](c.len.Len()), nil)
 	it.code = c.code.Chunks()
 	it.base = -1
 	it.len = c.Len()

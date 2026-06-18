@@ -5,12 +5,12 @@ package cast
 
 import (
 	"math"
+	"math/bits"
 	"reflect"
 	"testing"
 
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/schema"
-	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -245,7 +245,7 @@ func TestCastIntCaster(t *testing.T) {
 		caster ValueCaster
 		size   int
 	}{
-		{"Int", IntCaster[int]{}, util.SizeFor[int]() * 8},
+		{"Int", IntCaster[int]{}, bits.UintSize},
 		{"Int8", IntCaster[int8]{}, 8},
 		{"Int16", IntCaster[int16]{}, 16},
 		{"Int32", IntCaster[int32]{}, 32},
@@ -368,7 +368,7 @@ func TestCastUintCaster(t *testing.T) {
 		caster ValueCaster
 		size   int
 	}{
-		{"Uint", UintCaster[uint]{}, util.SizeFor[uint]() * 8},
+		{"Uint", UintCaster[uint]{}, bits.UintSize},
 		{"Uint8", UintCaster[uint8]{}, 8},
 		{"Uint16", UintCaster[uint16]{}, 16},
 		{"Uint32", UintCaster[uint32]{}, 32},

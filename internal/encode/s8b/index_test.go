@@ -8,6 +8,7 @@ import (
 	"slices"
 	"testing"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/cpu"
@@ -15,7 +16,6 @@ import (
 	stests "blockwatch.cc/knoxdb/internal/encode/s8b/tests"
 	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -44,7 +44,7 @@ func IndexBenchmark[T types.Unsigned, I uint16 | uint32](b *testing.B, enc stest
 		require.NoError(b, err)
 		dst := make([]I, len(c.Data))
 		b.Run(c.Name, func(b *testing.B) {
-			b.SetBytes(int64(len(c.Data) * util.SizeOf[T]()))
+			b.SetBytes(int64(len(c.Data) * arena.SizeFor[T]()))
 			for range b.N {
 				idx(buf, dst)
 			}
@@ -90,28 +90,28 @@ func CmpEqualUnpackedBenchmark[T types.Unsigned](b *testing.B) {
 		bits := bitset.New(len(c.Data))
 		val := c.Data[len(c.Data)/2]
 		b.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(b *testing.B) {
-			b.SetBytes(int64(len(c.Data) * util.SizeOf[T]()))
+			b.SetBytes(int64(len(c.Data) * arena.SizeFor[T]()))
 			for b.Loop() {
 				dst := make([]T, len(c.Data))
 				var n int64
 				switch any(T(0)).(type) {
 				case uint64:
-					u64 := util.ReinterpretSlice[T, uint64](dst)
+					u64 := arena.ReinterpretSlice[T, uint64](dst)
 					_, err = DecodeUint64(u64, buf, uint64(minv))
 					require.NoError(b, err)
 					n = cmp.Uint64Equal(u64, uint64(val), bits.Bytes())
 				case uint32:
-					u32 := util.ReinterpretSlice[T, uint32](dst)
+					u32 := arena.ReinterpretSlice[T, uint32](dst)
 					_, err = DecodeUint32(u32, buf, uint32(minv))
 					require.NoError(b, err)
 					n = cmp.Uint32Equal(u32, uint32(val), bits.Bytes())
 				case uint16:
-					u16 := util.ReinterpretSlice[T, uint16](dst)
+					u16 := arena.ReinterpretSlice[T, uint16](dst)
 					_, err = DecodeUint16(u16, buf, uint16(minv))
 					require.NoError(b, err)
 					n = cmp.Uint16Equal(u16, uint16(val), bits.Bytes())
 				case uint8:
-					u8 := util.ReinterpretSlice[T, uint8](dst)
+					u8 := arena.ReinterpretSlice[T, uint8](dst)
 					_, err = DecodeUint8(u8, buf, uint8(minv))
 					require.NoError(b, err)
 					n = cmp.Uint8Equal(u8, uint8(val), bits.Bytes())

@@ -21,14 +21,14 @@ var (
 )
 
 func llb_add_u32_purego(llb *LogLogBeta, val []uint32) {
-	hashes := arena.AllocUint64(len(val))[:len(val)]
+	hashes := arena.Alloc[uint64](len(val))[:len(val)]
 	hashes = hash.Vec32(val, hashes)
 	llb.Add(hashes...)
 	arena.Free(hashes)
 }
 
 func llb_add_u64_purego(llb *LogLogBeta, val []uint64) {
-	hashes := arena.AllocUint64(len(val))[:len(val)]
+	hashes := arena.Alloc[uint64](len(val))[:len(val)]
 	hashes = hash.Vec64(val, hashes)
 	llb.Add(hashes...)
 	arena.Free(hashes)

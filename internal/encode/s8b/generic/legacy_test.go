@@ -7,9 +7,9 @@ import (
 	"slices"
 	"testing"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	stests "blockwatch.cc/knoxdb/internal/encode/s8b/tests"
 	"blockwatch.cc/knoxdb/internal/tests"
-	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -69,7 +69,7 @@ func BenchmarkCountLegacy(b *testing.B) {
 		b.Run("uint64/"+c.Name, func(b *testing.B) {
 			b.SetBytes(int64(len(c.Data) * 8))
 			for b.Loop() {
-				_, _ = CountLegacy(util.ToByteSlice(enc))
+				_, _ = CountLegacy(arena.ToBytes(enc))
 			}
 			b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 		})

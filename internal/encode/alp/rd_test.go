@@ -8,7 +8,7 @@ import (
 	"math"
 	"testing"
 
-	"blockwatch.cc/knoxdb/pkg/util"
+	"blockwatch.cc/knoxdb/internal/arena"
 	"github.com/stretchr/testify/require"
 )
 
@@ -18,7 +18,7 @@ func TestAlpRD(t *testing.T) {
 }
 
 func AlpRDTest[T Float, U Uint](t *testing.T) {
-	w := util.SizeFor[T]()
+	w := arena.SizeFor[T]()
 	for _, c := range MakeTestcases[T]() {
 		t.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(t *testing.T) {
 			// estimate shift

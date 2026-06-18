@@ -8,12 +8,12 @@ import (
 	"slices"
 	"testing"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/bitset"
 	etests "blockwatch.cc/knoxdb/internal/encode/tests"
 	"blockwatch.cc/knoxdb/internal/tests/testutil"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
-	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -183,7 +183,7 @@ func testIntEncodeT[T types.Integer](t *testing.T) {
 // data may wrap (sequence is too long for type width and delta value). this
 // typically affects uint8 and int8 cases.
 func isCompatibleTest[T types.Integer](scheme ContainerType, ctx *Context[T]) bool {
-	maxv := uint64(1<<(util.SizeOf[T]()*8) - 1)
+	maxv := uint64(1<<(arena.SizeFor[T]()*8) - 1)
 	if types.IsSigned[T]() {
 		maxv >>= 1
 	}

@@ -4,8 +4,8 @@
 package tests
 
 import (
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 func EstimateSize(log2, n int) int {
@@ -15,7 +15,7 @@ func EstimateSize(log2, n int) int {
 func Decoder[T types.Integer](buf []byte, log2 int, minv T) DecodeIndex[T] {
 	mask := uint64((1 << log2) - 1)
 	bits := 64
-	inBuff := util.FromByteSlice[uint64](buf)
+	inBuff := arena.FromBytes[uint64](buf)
 	inBuffLen := len(inBuff)
 	return func(index int) T {
 		idx := index * log2

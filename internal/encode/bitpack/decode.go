@@ -7,6 +7,7 @@ import (
 	"sync"
 	"unsafe"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
@@ -23,7 +24,7 @@ type Decoder[T types.Integer] struct {
 
 func NewDecoder[T types.Integer](buf []byte, log2, n int, minv T) *Decoder[T] {
 	d := newDecoder[T]()
-	d.src = util.FromByteSlice[uint64](buf)
+	d.src = arena.FromBytes[uint64](buf)
 	d.log2 = log2
 	d.len = n
 	d.mask = uint64((1 << log2) - 1)
@@ -47,7 +48,7 @@ func (d *Decoder[T]) Close() {
 // Decode unpacks the full source vector into dst and returns the number of
 // elements. Dst must have sufficient capacity.
 func (d *Decoder[T]) Decode(dst []T) int {
-	n, _ := Decode[T](dst[:d.len], util.ToByteSlice(d.src), d.log2, d.minv)
+	n, _ := Decode[T](dst[:d.len], arena.ToBytes(d.src), d.log2, d.minv)
 	return n
 }
 
@@ -104,35 +105,35 @@ func (d *Decoder[T]) DecodeChunk(dst *[CHUNK_SIZE]T, ofs int) int {
 	// call the correct kernel
 	switch any(T(0)).(type) {
 	case uint8:
-		d8 := util.ReinterpretSlice[T, uint8](dst[:])
+		d8 := arena.ReinterpretSlice[T, uint8](dst[:])
 		unpack_u8[d.log2]((*[64]uint8)(d8[:64]), group0, uint64(d.minv))
 		unpack_u8[d.log2]((*[64]uint8)(d8[64:]), group1, uint64(d.minv))
 	case uint16:
-		d16 := util.ReinterpretSlice[T, uint16](dst[:])
+		d16 := arena.ReinterpretSlice[T, uint16](dst[:])
 		unpack_u16[d.log2]((*[64]uint16)(d16[:64]), group0, uint64(d.minv))
 		unpack_u16[d.log2]((*[64]uint16)(d16[64:]), group1, uint64(d.minv))
 	case uint32:
-		d32 := util.ReinterpretSlice[T, uint32](dst[:])
+		d32 := arena.ReinterpretSlice[T, uint32](dst[:])
 		unpack_u32[d.log2]((*[64]uint32)(d32[:64]), group0, uint64(d.minv))
 		unpack_u32[d.log2]((*[64]uint32)(d32[64:]), group1, uint64(d.minv))
 	case uint64:
-		d64 := util.ReinterpretSlice[T, uint64](dst[:])
+		d64 := arena.ReinterpretSlice[T, uint64](dst[:])
 		unpack_u64[d.log2]((*[64]uint64)(d64[:64]), group0, uint64(d.minv))
 		unpack_u64[d.log2]((*[64]uint64)(d64[64:]), group1, uint64(d.minv))
 	case int8:
-		d8 := util.ReinterpretSlice[T, uint8](dst[:])
+		d8 := arena.ReinterpretSlice[T, uint8](dst[:])
 		unpack_u8[d.log2]((*[64]uint8)(d8[:64]), group0, uint64(d.minv))
 		unpack_u8[d.log2]((*[64]uint8)(d8[64:]), group1, uint64(d.minv))
 	case int16:
-		d16 := util.ReinterpretSlice[T, uint16](dst[:])
+		d16 := arena.ReinterpretSlice[T, uint16](dst[:])
 		unpack_u16[d.log2]((*[64]uint16)(d16[:64]), group0, uint64(d.minv))
 		unpack_u16[d.log2]((*[64]uint16)(d16[64:]), group1, uint64(d.minv))
 	case int32:
-		d32 := util.ReinterpretSlice[T, uint32](dst[:])
+		d32 := arena.ReinterpretSlice[T, uint32](dst[:])
 		unpack_u32[d.log2]((*[64]uint32)(d32[:64]), group0, uint64(d.minv))
 		unpack_u32[d.log2]((*[64]uint32)(d32[64:]), group1, uint64(d.minv))
 	case int64:
-		d64 := util.ReinterpretSlice[T, uint64](dst[:])
+		d64 := arena.ReinterpretSlice[T, uint64](dst[:])
 		unpack_u64[d.log2]((*[64]uint64)(d64[:64]), group0, uint64(d.minv))
 		unpack_u64[d.log2]((*[64]uint64)(d64[64:]), group1, uint64(d.minv))
 	}
@@ -188,27 +189,27 @@ func Decode[T types.Integer](dst []T, src []byte, log2 int, minv T) (int, error)
 	)
 	switch any(T(0)).(type) {
 	case uint8:
-		n, err = Decode8(util.ReinterpretSlice[T, uint8](dst), src, log2, uint8(minv))
+		n, err = Decode8(arena.ReinterpretSlice[T, uint8](dst), src, log2, uint8(minv))
 	case uint16:
-		n, err = Decode16(util.ReinterpretSlice[T, uint16](dst), src, log2, uint16(minv))
+		n, err = Decode16(arena.ReinterpretSlice[T, uint16](dst), src, log2, uint16(minv))
 	case uint32:
-		n, err = Decode32(util.ReinterpretSlice[T, uint32](dst), src, log2, uint32(minv))
+		n, err = Decode32(arena.ReinterpretSlice[T, uint32](dst), src, log2, uint32(minv))
 	case uint64:
-		n, err = Decode64(util.ReinterpretSlice[T, uint64](dst), src, log2, uint64(minv))
+		n, err = Decode64(arena.ReinterpretSlice[T, uint64](dst), src, log2, uint64(minv))
 	case int8:
-		n, err = Decode8(util.ReinterpretSlice[T, int8](dst), src, log2, int8(minv))
+		n, err = Decode8(arena.ReinterpretSlice[T, int8](dst), src, log2, int8(minv))
 	case int16:
-		n, err = Decode16(util.ReinterpretSlice[T, int16](dst), src, log2, int16(minv))
+		n, err = Decode16(arena.ReinterpretSlice[T, int16](dst), src, log2, int16(minv))
 	case int32:
-		n, err = Decode32(util.ReinterpretSlice[T, int32](dst), src, log2, int32(minv))
+		n, err = Decode32(arena.ReinterpretSlice[T, int32](dst), src, log2, int32(minv))
 	case int64:
-		n, err = Decode64(util.ReinterpretSlice[T, int64](dst), src, log2, int64(minv))
+		n, err = Decode64(arena.ReinterpretSlice[T, int64](dst), src, log2, int64(minv))
 	}
 	return n, err
 }
 
 func Decode8[T int8 | uint8](dst []T, src []byte, log2 int, minv T) (int, error) {
-	in := util.FromByteSlice[uint64](src)
+	in := arena.FromBytes[uint64](src)
 	blockN := len(dst) / (4 * BlockSize)
 	if blockN == 0 {
 		// input less than block size, use generic decoder
@@ -252,7 +253,7 @@ func Decode8[T int8 | uint8](dst []T, src []byte, log2 int, minv T) (int, error)
 }
 
 func Decode16[T int16 | uint16](dst []T, src []byte, log2 int, minv T) (int, error) {
-	in := util.FromByteSlice[uint64](src)
+	in := arena.FromBytes[uint64](src)
 	blockN := len(dst) / (4 * BlockSize)
 	if blockN == 0 {
 		// input less than block size, use generic decoder
@@ -296,7 +297,7 @@ func Decode16[T int16 | uint16](dst []T, src []byte, log2 int, minv T) (int, err
 }
 
 func Decode32[T int32 | uint32](dst []T, src []byte, log2 int, minv T) (int, error) {
-	in := util.FromByteSlice[uint64](src)
+	in := arena.FromBytes[uint64](src)
 	blockN := len(dst) / (4 * BlockSize)
 	if blockN == 0 {
 		// input less than block size, use generic decoder
@@ -341,7 +342,7 @@ func Decode32[T int32 | uint32](dst []T, src []byte, log2 int, minv T) (int, err
 }
 
 func Decode64[T int64 | uint64](dst []T, src []byte, log2 int, minv T) (int, error) {
-	in := util.FromByteSlice[uint64](src)
+	in := arena.FromBytes[uint64](src)
 	blockN := len(dst) / (4 * BlockSize)
 	if blockN == 0 {
 		// input less than block size, use generic decoder
@@ -392,15 +393,15 @@ func DecodeAlp[T types.Float](dst []T, src []byte, log2 int, minv, f, e T) (int,
 	)
 	switch any(T(0)).(type) {
 	case float32:
-		n, err = Decodef32(util.ReinterpretSlice[T, float32](dst), src, log2, float32(minv), float32(f), float32(e))
+		n, err = Decodef32(arena.ReinterpretSlice[T, float32](dst), src, log2, float32(minv), float32(f), float32(e))
 	case float64:
-		n, err = Decodef64(util.ReinterpretSlice[T, float64](dst), src, log2, float64(minv), float64(f), float64(e))
+		n, err = Decodef64(arena.ReinterpretSlice[T, float64](dst), src, log2, float64(minv), float64(f), float64(e))
 	}
 	return n, err
 }
 
 func Decodef32[T float32](dst []T, src []byte, log2 int, minv, f, e T) (int, error) {
-	in := util.FromByteSlice[uint64](src)
+	in := arena.FromBytes[uint64](src)
 	blockN := len(dst) / (4 * BlockSize)
 	if blockN == 0 {
 		// input less than block size, use generic decoder
@@ -444,7 +445,7 @@ func Decodef32[T float32](dst []T, src []byte, log2 int, minv, f, e T) (int, err
 }
 
 func Decodef64[T float64](dst []T, src []byte, log2 int, minv, f, e T) (int, error) {
-	in := util.FromByteSlice[uint64](src)
+	in := arena.FromBytes[uint64](src)
 	blockN := len(dst) / (4 * BlockSize)
 	if blockN == 0 {
 		// input less than block size, use generic decoder

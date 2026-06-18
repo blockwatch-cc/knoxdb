@@ -192,7 +192,7 @@ func (j *Journal) insertPackWithWal(_ context.Context, src *pack.Package, xid ty
 	} else {
 		sz += j.schema.EstWireSize * len(sel)
 	}
-	buf := arena.AllocBytes(sz)
+	buf := arena.Alloc[uint8](sz)
 	msg := bytes.NewBuffer(buf)
 
 	if sel == nil {

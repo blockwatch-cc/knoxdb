@@ -23,7 +23,7 @@ var (
 	blockPool = &sync.Pool{
 		New: func() any { return &Block{} },
 	}
-	blockSize = util.SizeFor[Block]()
+	blockSize = arena.SizeFor[Block]()
 )
 
 // TODO: replace with BufferManager page
@@ -121,7 +121,7 @@ func New(typ BlockType, sz int) *Block {
 	case BlockBytes:
 		b.any = stringx.NewStringPool(sz)
 	default:
-		b.buf = unsafe.SliceData(arena.AllocBytes(sz * int(b.sz)))
+		b.buf = unsafe.SliceData(arena.Alloc[uint8](sz * int(b.sz)))
 	}
 	return b
 }

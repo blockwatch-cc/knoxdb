@@ -8,7 +8,6 @@ package hashprobe
 import (
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/pkg/slicex"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 //go:noescape
@@ -24,15 +23,15 @@ func ht_encode64(vals, ht_keys *uint64, ht_values, codes *uint16, len uint32)
 func ht_encode32(vals, ht_keys *uint32, ht_values, codes *uint16, len uint32)
 
 func buildDictAVX2[T Integer](vals []T, numUnique int) ([]T, []uint16) {
-	switch util.SizeOf[T]() {
+	switch arena.SizeFor[T]() {
 	case 8:
-		u64 := util.ReinterpretSlice[T, uint64](vals)
+		u64 := arena.ReinterpretSlice[T, uint64](vals)
 		r64, codes := buildDict64AVX2(u64, numUnique)
-		return util.ReinterpretSlice[uint64, T](r64), codes
+		return arena.ReinterpretSlice[uint64, T](r64), codes
 	case 4:
-		u32 := util.ReinterpretSlice[T, uint32](vals)
+		u32 := arena.ReinterpretSlice[T, uint32](vals)
 		r32, codes := buildDict32AVX2(u32, numUnique)
-		return util.ReinterpretSlice[uint32, T](r32), codes
+		return arena.ReinterpretSlice[uint32, T](r32), codes
 	default:
 		return nil, nil
 	}

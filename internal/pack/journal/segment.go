@@ -7,6 +7,7 @@ import (
 	"math"
 	"sync/atomic"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/operator/filter"
@@ -16,7 +17,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/wal"
 	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/schema"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 const (
@@ -36,7 +36,7 @@ const (
 	SegmentStateMerged                       // 5 merge complete, can be closed
 )
 
-var segmentSz = util.SizeFor[Segment]()
+var segmentSz = arena.SizeFor[Segment]()
 
 // Journal segment optimized for single writer tx. Only the current tx
 // can add/commit/abort data. Concurrent queries hide uncommitted,

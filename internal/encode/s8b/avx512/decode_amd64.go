@@ -7,8 +7,8 @@
 package avx512
 
 import (
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/cpu"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 /**************************** AVX512 64bit **************************/
@@ -25,7 +25,7 @@ func DecodeUint64(dst []uint64, src []byte, minv uint64) (int, error) {
 }
 
 func DecodeInt64(dst []int64, src []byte, minv int64) (int, error) {
-	return decodeUint64AVX512(util.ReinterpretSlice[int64, uint64](dst), src, uint64(minv)), nil
+	return decodeUint64AVX512(arena.ReinterpretSlice[int64, uint64](dst), src, uint64(minv)), nil
 }
 
 func init() {

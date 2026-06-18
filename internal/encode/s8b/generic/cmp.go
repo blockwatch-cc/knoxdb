@@ -4,8 +4,8 @@
 package generic
 
 import (
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/bitset"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 type cmpFunc func(word, val uint64) (int, uint64)
@@ -51,7 +51,7 @@ func compare(src []byte, val uint64, bits *bitset.Bitset, cmp [16]cmpFunc, neg b
 		buf  = bits.Bytes()
 	)
 
-	for _, word := range util.FromByteSlice[uint64](src) {
+	for _, word := range arena.FromBytes[uint64](src) {
 		// choose the comparison kernel for this word
 		sel := byte(word>>60) & 0xF
 		n, mask := cmp[sel](word, val)
@@ -112,7 +112,7 @@ func compare2(src []byte, val, val2 uint64, bits *bitset.Bitset, cmp [16]cmpFunc
 		buf  = bits.Bytes()
 	)
 
-	for _, word := range util.FromByteSlice[uint64](src) {
+	for _, word := range arena.FromBytes[uint64](src) {
 		// choose the comparison kernel for this word
 		sel := byte(word>>60) & 0xF
 		n, mask := cmp[sel](word, val, val2)

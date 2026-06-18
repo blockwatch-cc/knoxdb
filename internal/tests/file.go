@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 type Test[T types.Number] struct {
@@ -124,7 +124,7 @@ func (f *File[T]) Close() error {
 }
 
 func (f *File[T]) Len() int {
-	return f.Size() / util.SizeFor[T]()
+	return f.Size() / arena.SizeFor[T]()
 }
 
 func (f *File[T]) Size() int {
@@ -146,11 +146,11 @@ func (f *File[T]) NextN(n int, dst []T) ([]T, int) {
 	}
 	dst = dst[:n]
 
-	n, err := f.f.Read(util.ToByteSlice(dst))
+	n, err := f.f.Read(arena.ToBytes(dst))
 	if err != nil {
 		n = 0
 	}
-	n /= util.SizeFor[T]()
+	n /= arena.SizeFor[T]()
 
 	return dst[:n], n
 }

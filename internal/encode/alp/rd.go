@@ -7,7 +7,6 @@ import (
 	"unsafe"
 
 	"blockwatch.cc/knoxdb/internal/arena"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 type EncoderRD[T Float, U Uint] struct{}
@@ -42,14 +41,14 @@ func (enc *EncoderRD[T, U]) Encode(src []T, split int) *RDResult[U] {
 }
 
 func (enc *EncoderRD[T, U]) split(src []T, left []uint16, right []U, shift int) {
-	switch util.SizeFor[T]() {
+	switch arena.SizeFor[T]() {
 	case 4:
-		s32 := util.ReinterpretSlice[T, uint32](src)
-		r32 := util.ReinterpretSlice[U, uint32](right)
+		s32 := arena.ReinterpretSlice[T, uint32](src)
+		r32 := arena.ReinterpretSlice[U, uint32](right)
 		split32(s32, left, r32, shift)
 	case 8:
-		s64 := util.ReinterpretSlice[T, uint64](src)
-		r64 := util.ReinterpretSlice[U, uint64](right)
+		s64 := arena.ReinterpretSlice[T, uint64](src)
+		r64 := arena.ReinterpretSlice[U, uint64](right)
 		split64(s64, left, r64, shift)
 	}
 }
@@ -188,7 +187,7 @@ type DecoderRD[T Float, U Uint] struct {
 func NewDecoderRD[T Float, U Uint](split int) *DecoderRD[T, U] {
 	return &DecoderRD[T, U]{
 		split: split,
-		width: util.SizeFor[T](),
+		width: arena.SizeFor[T](),
 	}
 }
 
@@ -211,14 +210,14 @@ func (d *DecoderRD[T, U]) DecodeValue(left uint16, right U) T {
 }
 
 func (d *DecoderRD[T, U]) merge(dst []T, left []uint16, right []U, shift int) []T {
-	switch util.SizeFor[T]() {
+	switch arena.SizeFor[T]() {
 	case 4:
-		d32 := util.ReinterpretSlice[T, uint32](dst)
-		r32 := util.ReinterpretSlice[U, uint32](right)
+		d32 := arena.ReinterpretSlice[T, uint32](dst)
+		r32 := arena.ReinterpretSlice[U, uint32](right)
 		merge32(d32, left, r32, shift)
 	case 8:
-		d64 := util.ReinterpretSlice[T, uint64](dst)
-		r64 := util.ReinterpretSlice[U, uint64](right)
+		d64 := arena.ReinterpretSlice[T, uint64](dst)
+		r64 := arena.ReinterpretSlice[U, uint64](right)
 		merge64(d64, left, r64, shift)
 	}
 	return dst

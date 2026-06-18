@@ -88,7 +88,7 @@ func (t *Table) NewReader() engine.TableReader {
 			Log:     t.log,
 		},
 		reqFields: []uint16{types.MetaRid, types.MetaXmin, types.MetaXmax},
-		hits:      arena.AllocUint32(t.opts.PackSize),
+		hits:      arena.Alloc[uint32](t.opts.PackSize),
 		bits:      bitset.New(t.opts.PackSize),
 		log:       t.log,
 		useCache:  true,
@@ -261,7 +261,7 @@ func (r *Reader) nextLookupMatch(ctx context.Context) (*pack.Package, error) {
 		p    int
 		rids = r.pack.RowIds()
 		it   = r.mask.NewIterator()
-		sel  = arena.AllocUint32(n)
+		sel  = arena.Alloc[uint32](n)
 	)
 	for {
 		n, ok := it.Next()

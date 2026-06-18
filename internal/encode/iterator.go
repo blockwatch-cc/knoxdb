@@ -6,10 +6,10 @@ package encode
 import (
 	"unsafe"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/slicex"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 const (
@@ -116,7 +116,7 @@ var (
 )
 
 func matchFn[T types.Float](mode types.FilterMode) unsafe.Pointer {
-	if util.SizeFor[T]() == 8 {
+	if arena.SizeFor[T]() == 8 {
 		return floatMatch64Fn[mode]
 	} else {
 		return floatMatch32Fn[mode]

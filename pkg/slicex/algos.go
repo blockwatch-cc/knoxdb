@@ -20,6 +20,13 @@ type Number interface {
 	Integer | Float
 }
 
+func SizeFor[T Integer]() int {
+	x := uint16(1 << 8)
+	y := uint32(2 << 16)
+	z := uint64(4 << 32)
+	return 1 + int(T(x))>>8 + int(T(y))>>16 + int(T(z))>>32
+}
+
 // assumes src and rem are sorted
 func remove[T cmp.Ordered](src, rem []T) []T {
 	if len(src) == 0 || len(rem) == 0 {

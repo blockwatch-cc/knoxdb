@@ -14,6 +14,7 @@ import (
 	"errors"
 	"math/bits"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/operator/filter"
 	"blockwatch.cc/knoxdb/internal/types"
@@ -54,8 +55,8 @@ func BuildRangeIndex(b *block.Block, minVal, maxVal any) (*RangeIndex, error) {
 func RangeIndexFromBytes(buf []byte) *RangeIndex {
 	return &RangeIndex{
 		buf:   buf,
-		lower: util.FromByteSlice[uint32](buf[:len(buf)/2]),
-		upper: util.FromByteSlice[uint32](buf[len(buf)/2:]),
+		lower: arena.FromBytes[uint32](buf[:len(buf)/2]),
+		upper: arena.FromBytes[uint32](buf[len(buf)/2:]),
 	}
 }
 
@@ -236,8 +237,8 @@ func buildRangeIndex[T types.Integer](src []T, minVal, maxVal T) *RangeIndex {
 	buf := make([]byte, nSlots*8)        // 2x uint32
 	idx := &RangeIndex{
 		buf:   buf,
-		lower: util.FromByteSlice[uint32](buf[:nSlots*4]),
-		upper: util.FromByteSlice[uint32](buf[nSlots*4:]),
+		lower: arena.FromBytes[uint32](buf[:nSlots*4]),
+		upper: arena.FromBytes[uint32](buf[nSlots*4:]),
 	}
 	for i, v := range src {
 		slot, _ := getSlot(v, minVal)

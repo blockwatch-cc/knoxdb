@@ -20,7 +20,6 @@ import (
 	"blockwatch.cc/knoxdb/pkg/assert"
 	"blockwatch.cc/knoxdb/pkg/slicex"
 	"blockwatch.cc/knoxdb/pkg/store"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 // key = [field_id:pack_id:version], cluster filter types in storage pages
@@ -218,13 +217,13 @@ func EstimateCardinality(b *block.Block, precision int) (int, []uint64) {
 	switch b.Type() {
 	case block.BlockInt64, block.BlockUint64, block.BlockFloat64:
 		flt := llb.NewFilterWithPrecision(uint32(precision))
-		hashes := hash.Vec64(b.Uint64().Slice(), arena.AllocUint64(l))
+		hashes := hash.Vec64(b.Uint64().Slice(), arena.Alloc[uint64](l))
 		flt.Add(hashes...)
 		return min(l, int(flt.Cardinality())), hashes
 
 	case block.BlockInt32, block.BlockUint32, block.BlockFloat32:
 		flt := llb.NewFilterWithPrecision(uint32(precision))
-		hashes := hash.Vec32(b.Uint32().Slice(), arena.AllocUint64(l))
+		hashes := hash.Vec32(b.Uint32().Slice(), arena.Alloc[uint64](l))
 		flt.Add(hashes...)
 		return min(l, int(flt.Cardinality())), hashes
 
@@ -244,7 +243,7 @@ func EstimateCardinality(b *block.Block, precision int) (int, []uint64) {
 
 	case block.BlockInt256:
 		flt := llb.NewFilterWithPrecision(uint32(precision))
-		hashes := arena.AllocUint64(l)[:l]
+		hashes := arena.Alloc[uint64](l)[:l]
 		for i, v := range b.Int256().Iterator() {
 			hashes[i] = hash.Hash(v.Bytes())
 		}
@@ -253,7 +252,7 @@ func EstimateCardinality(b *block.Block, precision int) (int, []uint64) {
 
 	case block.BlockInt128:
 		flt := llb.NewFilterWithPrecision(uint32(precision))
-		hashes := arena.AllocUint64(l)[:l]
+		hashes := arena.Alloc[uint64](l)[:l]
 		for i, v := range b.Int128().Iterator() {
 			hashes[i] = hash.Hash(v.Bytes())
 		}
@@ -262,7 +261,7 @@ func EstimateCardinality(b *block.Block, precision int) (int, []uint64) {
 
 	case block.BlockBytes:
 		flt := llb.NewFilterWithPrecision(uint32(precision))
-		hashes := arena.AllocUint64(l)[:l]
+		hashes := arena.Alloc[uint64](l)[:l]
 		for i, v := range b.Bytes().Iterator() {
 			hashes[i] = hash.Hash(v)
 		}
@@ -302,7 +301,7 @@ func BuildBloomFilter(b *block.Block, cardinality int, factor int, hashes []uint
 	// reuse hashes from cardinality estimation if available
 	if hashes == nil {
 		// pre-alloc a hash slice
-		hashes = arena.AllocUint64(b.Len())[:b.Len()]
+		hashes = arena.Alloc[uint64](b.Len())[:b.Len()]
 		switch b.Type() {
 		case block.BlockInt64, block.BlockUint64, block.BlockFloat64:
 			// we write uint64 data in little endian order into the filter,
@@ -402,17 +401,17 @@ func BuildFuseFilter[T uint8 | uint16](b *block.Block) (*fuse.BinaryFuse[T], err
 		u64 = slices.Clone(b.Uint64().Slice())
 
 	case block.BlockInt32, block.BlockUint32:
-		u64 = util.ConvertSlice[uint32, uint64](b.Uint32().Slice())
+		u64 = arena.ConvertSlice[uint32, uint64](b.Uint32().Slice())
 
 	case block.BlockInt16, block.BlockUint16:
-		u64 = util.ConvertSlice[uint16, uint64](b.Uint16().Slice())
+		u64 = arena.ConvertSlice[uint16, uint64](b.Uint16().Slice())
 
 	case block.BlockInt8, block.BlockUint8:
-		u64 = util.ConvertSlice[uint8, uint64](b.Uint8().Slice())
+		u64 = arena.ConvertSlice[uint8, uint64](b.Uint8().Slice())
 
 	case block.BlockInt256:
 		// write individual elements (no optimization exists)
-		u64 = arena.AllocUint64(b.Len())
+		u64 = arena.Alloc[uint64](b.Len())
 		defer arena.Free(u64)
 		for i, v := range b.Int256().Iterator() {
 			u64[i] = hash.Hash(v.Bytes())
@@ -420,7 +419,7 @@ func BuildFuseFilter[T uint8 | uint16](b *block.Block) (*fuse.BinaryFuse[T], err
 
 	case block.BlockInt128:
 		// write individual elements (no optimization exists)
-		u64 = arena.AllocUint64(b.Len())
+		u64 = arena.Alloc[uint64](b.Len())
 		defer arena.Free(u64)
 		for i, v := range b.Int128().Iterator() {
 			u64[i] = hash.Hash(v.Bytes())
@@ -428,7 +427,7 @@ func BuildFuseFilter[T uint8 | uint16](b *block.Block) (*fuse.BinaryFuse[T], err
 
 	case block.BlockBytes:
 		// write all strings
-		u64 = arena.AllocUint64(b.Len())
+		u64 = arena.Alloc[uint64](b.Len())
 		defer arena.Free(u64)
 		for i, v := range b.Bytes().Iterator() {
 			u64[i] = hash.Hash(v)

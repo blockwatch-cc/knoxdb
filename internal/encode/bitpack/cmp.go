@@ -6,7 +6,7 @@ package bitpack
 import (
 	"unsafe"
 
-	"blockwatch.cc/knoxdb/pkg/util"
+	"blockwatch.cc/knoxdb/internal/arena"
 )
 
 // We use special compare kernels for bitpacked data. They assume data is MinFOR
@@ -50,7 +50,7 @@ func compare(src []byte, log2 int, val uint64, n int, bits *Bitset, cmp [65]cmpF
 	if len(src) > 0 {
 		p = unsafe.Pointer(&src[0])
 	}
-	out := util.FromByteSlice[uint64](bits.Bytes())
+	out := arena.FromBytes[uint64](bits.Bytes())
 
 	if neg {
 		for i := range n / 64 {
@@ -67,7 +67,7 @@ func compare(src []byte, log2 int, val uint64, n int, bits *Bitset, cmp [65]cmpF
 	// tail
 	if rem := n & 63; rem != 0 {
 		var out [64]uint64
-		in := util.FromByteSlice[uint64](src)
+		in := arena.FromBytes[uint64](src)
 		decode(out[:rem], in[n/64*log2:], log2, 0)
 		k := n &^ 63
 		if neg {
@@ -93,7 +93,7 @@ func compare2(src []byte, log2 int, val1, val2 uint64, n int, bits *Bitset, cmp 
 	if len(src) > 0 {
 		p = unsafe.Pointer(&src[0])
 	}
-	out := util.FromByteSlice[uint64](bits.Bytes())
+	out := arena.FromBytes[uint64](bits.Bytes())
 
 	for i := range n / 64 {
 		out[i] = cmp[log2](p, val1, val2)
@@ -103,7 +103,7 @@ func compare2(src []byte, log2 int, val1, val2 uint64, n int, bits *Bitset, cmp 
 	// tail
 	if rem := n & 63; rem != 0 {
 		var out [64]uint64
-		in := util.FromByteSlice[uint64](src)
+		in := arena.FromBytes[uint64](src)
 		decode(out[:rem], in[n/64*log2:], log2, 0)
 		k := n &^ 63
 		c2 := val2 - val1

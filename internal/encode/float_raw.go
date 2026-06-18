@@ -14,7 +14,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 // ensure we implement required interfaces
@@ -49,8 +48,8 @@ func (c *FloatRawContainer[T]) Len() int {
 }
 
 func (c *FloatRawContainer[T]) Size() int {
-	return 1 + UvarintLen(uint64(util.SizeFor[T]()*len(c.Values))) +
-		util.SizeFor[T]()*len(c.Values)
+	return 1 + UvarintLen(uint64(arena.SizeFor[T]()*len(c.Values))) +
+		arena.SizeFor[T]()*len(c.Values)
 }
 
 func (c *FloatRawContainer[T]) Matcher() types.NumberMatcher[T] {
@@ -73,8 +72,8 @@ func (c *FloatRawContainer[T]) Iterator() iter.Seq2[int, T] {
 
 func (c *FloatRawContainer[T]) Store(dst []byte) []byte {
 	dst = append(dst, byte(TFloatRaw))
-	dst = binary.AppendUvarint(dst, uint64(util.SizeFor[T]()*len(c.Values)))
-	return append(dst, util.ToByteSlice(c.Values)...)
+	dst = binary.AppendUvarint(dst, uint64(arena.SizeFor[T]()*len(c.Values)))
+	return append(dst, arena.ToBytes(c.Values)...)
 }
 
 func (c *FloatRawContainer[T]) Load(buf []byte) ([]byte, error) {
@@ -84,7 +83,7 @@ func (c *FloatRawContainer[T]) Load(buf []byte) ([]byte, error) {
 	buf = buf[1:]
 	v, n := binary.Uvarint(buf)
 	buf = buf[n:]
-	c.Values = util.FromByteSlice[T](buf[:int(v)])
+	c.Values = arena.FromBytes[T](buf[:int(v)])
 	c.typ = AsBlockType[T]()
 	return buf[int(v):], nil
 }
@@ -118,11 +117,11 @@ func (c *FloatRawContainer[T]) MatchEqual(val T, bits, _ *Bitset) {
 	var n int64
 	switch c.typ {
 	case types.BlockFloat64:
-		f64 := util.ReinterpretSlice[T, float64](c.Values)
+		f64 := arena.ReinterpretSlice[T, float64](c.Values)
 		n = cmp.Float64Equal(f64, float64(val), bits.Bytes())
 
 	case types.BlockFloat32:
-		f32 := util.ReinterpretSlice[T, float32](c.Values)
+		f32 := arena.ReinterpretSlice[T, float32](c.Values)
 		n = cmp.Float32Equal(f32, float32(val), bits.Bytes())
 	}
 	bits.ResetCount(int(n))
@@ -132,10 +131,10 @@ func (c *FloatRawContainer[T]) MatchNotEqual(val T, bits, _ *Bitset) {
 	var n int64
 	switch c.typ {
 	case types.BlockFloat64:
-		f64 := util.ReinterpretSlice[T, float64](c.Values)
+		f64 := arena.ReinterpretSlice[T, float64](c.Values)
 		n = cmp.Float64NotEqual(f64, float64(val), bits.Bytes())
 	case types.BlockFloat32:
-		f32 := util.ReinterpretSlice[T, float32](c.Values)
+		f32 := arena.ReinterpretSlice[T, float32](c.Values)
 		n = cmp.Float32NotEqual(f32, float32(val), bits.Bytes())
 	}
 	bits.ResetCount(int(n))
@@ -145,10 +144,10 @@ func (c *FloatRawContainer[T]) MatchLess(val T, bits, _ *Bitset) {
 	var n int64
 	switch c.typ {
 	case types.BlockFloat64:
-		f64 := util.ReinterpretSlice[T, float64](c.Values)
+		f64 := arena.ReinterpretSlice[T, float64](c.Values)
 		n = cmp.Float64Less(f64, float64(val), bits.Bytes())
 	case types.BlockFloat32:
-		f32 := util.ReinterpretSlice[T, float32](c.Values)
+		f32 := arena.ReinterpretSlice[T, float32](c.Values)
 		n = cmp.Float32Less(f32, float32(val), bits.Bytes())
 	}
 	bits.ResetCount(int(n))
@@ -158,10 +157,10 @@ func (c *FloatRawContainer[T]) MatchLessEqual(val T, bits, _ *Bitset) {
 	var n int64
 	switch c.typ {
 	case types.BlockFloat64:
-		f64 := util.ReinterpretSlice[T, float64](c.Values)
+		f64 := arena.ReinterpretSlice[T, float64](c.Values)
 		n = cmp.Float64LessEqual(f64, float64(val), bits.Bytes())
 	case types.BlockFloat32:
-		f32 := util.ReinterpretSlice[T, float32](c.Values)
+		f32 := arena.ReinterpretSlice[T, float32](c.Values)
 		n = cmp.Float32LessEqual(f32, float32(val), bits.Bytes())
 	}
 	bits.ResetCount(int(n))
@@ -171,10 +170,10 @@ func (c *FloatRawContainer[T]) MatchGreater(val T, bits, _ *Bitset) {
 	var n int64
 	switch c.typ {
 	case types.BlockFloat64:
-		f64 := util.ReinterpretSlice[T, float64](c.Values)
+		f64 := arena.ReinterpretSlice[T, float64](c.Values)
 		n = cmp.Float64Greater(f64, float64(val), bits.Bytes())
 	case types.BlockFloat32:
-		f32 := util.ReinterpretSlice[T, float32](c.Values)
+		f32 := arena.ReinterpretSlice[T, float32](c.Values)
 		n = cmp.Float32Greater(f32, float32(val), bits.Bytes())
 	}
 	bits.ResetCount(int(n))
@@ -184,10 +183,10 @@ func (c *FloatRawContainer[T]) MatchGreaterEqual(val T, bits, _ *Bitset) {
 	var n int64
 	switch c.typ {
 	case types.BlockFloat64:
-		f64 := util.ReinterpretSlice[T, float64](c.Values)
+		f64 := arena.ReinterpretSlice[T, float64](c.Values)
 		n = cmp.Float64GreaterEqual(f64, float64(val), bits.Bytes())
 	case types.BlockFloat32:
-		f32 := util.ReinterpretSlice[T, float32](c.Values)
+		f32 := arena.ReinterpretSlice[T, float32](c.Values)
 		n = cmp.Float32GreaterEqual(f32, float32(val), bits.Bytes())
 	}
 	bits.ResetCount(int(n))
@@ -197,10 +196,10 @@ func (c *FloatRawContainer[T]) MatchBetween(a, b T, bits, _ *Bitset) {
 	var n int64
 	switch c.typ {
 	case types.BlockFloat64:
-		f64 := util.ReinterpretSlice[T, float64](c.Values)
+		f64 := arena.ReinterpretSlice[T, float64](c.Values)
 		n = cmp.Float64Between(f64, float64(a), float64(b), bits.Bytes())
 	case types.BlockFloat32:
-		f32 := util.ReinterpretSlice[T, float32](c.Values)
+		f32 := arena.ReinterpretSlice[T, float32](c.Values)
 		n = cmp.Float32Between(f32, float32(a), float32(b), bits.Bytes())
 	}
 	bits.ResetCount(int(n))

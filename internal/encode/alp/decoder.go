@@ -8,10 +8,10 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/cpu"
 	"blockwatch.cc/knoxdb/internal/encode/alp/avx2"
 	"blockwatch.cc/knoxdb/internal/encode/bitpack"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 type Decoder[T Float, E Int] struct {
@@ -132,14 +132,14 @@ func (d *Decoder[T, E]) Decode(dst []T, src []E) {
 
 	var i int
 	if l >= 128 {
-		switch util.SizeFor[T]() {
+		switch arena.SizeFor[T]() {
 		case 8:
-			d64 := util.ReinterpretSlice[T, float64](dst)
-			s64 := util.ReinterpretSlice[E, int64](src)
+			d64 := arena.ReinterpretSlice[T, float64](dst)
+			s64 := arena.ReinterpretSlice[E, int64](src)
 			i += decode64(d64, s64, d._f, d._e, d._safe)
 		case 4:
-			d32 := util.ReinterpretSlice[T, float32](dst)
-			s32 := util.ReinterpretSlice[E, int32](src)
+			d32 := arena.ReinterpretSlice[T, float32](dst)
+			s32 := arena.ReinterpretSlice[E, int32](src)
 			i += decode32(d32, s32, d._f, d._e, d._safe)
 		}
 	}
@@ -213,14 +213,14 @@ func decodeCore[T Float, E Int](dst []T, src []E, fx, ex uint8, _ bool) int {
 func (d *Decoder[T, E]) DecodeChunk(dst *[128]T, src *[128]E, n, ofs int) {
 	// decode values
 	if n == 128 {
-		switch util.SizeFor[T]() {
+		switch arena.SizeFor[T]() {
 		case 8:
-			d64 := util.ReinterpretSlice[T, float64](dst[:])
-			s64 := util.ReinterpretSlice[E, int64](src[:])
+			d64 := arena.ReinterpretSlice[T, float64](dst[:])
+			s64 := arena.ReinterpretSlice[E, int64](src[:])
 			decode64(d64, s64, d._f, d._e, d._safe)
 		case 4:
-			d32 := util.ReinterpretSlice[T, float32](dst[:])
-			s32 := util.ReinterpretSlice[E, int32](src[:])
+			d32 := arena.ReinterpretSlice[T, float32](dst[:])
+			s32 := arena.ReinterpretSlice[E, int32](src[:])
 			decode32(d32, s32, d._f, d._e, d._safe)
 		}
 	} else {

@@ -56,9 +56,9 @@ func (j *Journal) deletePackWithWal(src *pack.Package, xid types.XID, w *wal.Wal
 
 	// dimension WAL write buffer
 	if sel == nil {
-		buf = arena.AllocBytes(binary.MaxVarintLen64 * src.Len())
+		buf = arena.Alloc[uint8](binary.MaxVarintLen64 * src.Len())
 	} else {
-		buf = arena.AllocBytes(binary.MaxVarintLen64 * len(sel))
+		buf = arena.Alloc[uint8](binary.MaxVarintLen64 * len(sel))
 	}
 
 	if sel == nil {

@@ -84,14 +84,14 @@ func Log2ceil(i int) int {
 }
 
 // Donald Knuth, The Art of Computer Programming, Volume 2, Section 4.6.3
-func Pow[T Integer](a, b T) (c T) {
-	c = 1
-	for b > 0 {
-		if b&1 != 0 {
-			c *= a
-		}
-		b >>= 1
-		a *= a
-	}
-	return c
-}
+// func Pow[T constraints.Integer](a, b T) (c T) {
+// 	c = 1
+// 	for b > 0 {
+// 		if b&1 != 0 {
+// 			c *= a
+// 		}
+// 		b >>= 1
+// 		a *= a
+// 	}
+// 	return c
+// }

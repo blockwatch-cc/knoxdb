@@ -276,7 +276,7 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 			// copy journal segment pack and attach private selection vector
 			pkg := seg.Data().Copy()
 
-			sel := replaced.Indexes(arena.AllocUint32(replaced.Count()))
+			sel := replaced.Indexes(arena.Alloc[uint32](replaced.Count()))
 			pkg.WithSelection(sel)
 
 			// append to history and indexes
@@ -307,7 +307,7 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 				live = replaced.Clone().Neg()
 			}
 			n := live.Count()
-			pkg.WithSelection(live.Indexes(arena.AllocUint32(n)))
+			pkg.WithSelection(live.Indexes(arena.Alloc[uint32](n)))
 			nAdd += n
 			nPacks += (n + t.opts.PackSize - 1) / t.opts.PackSize
 			live.Close()

@@ -15,7 +15,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 // ensure we implement required interfaces
@@ -77,7 +76,7 @@ func (c *RawContainer[T]) Store(dst []byte) []byte {
 	// if cpu.IsBigEndian {
 	//  // TODO: flip byte order
 	// }
-	return append(dst, util.ToByteSlice(c.Values)...)
+	return append(dst, arena.ToBytes(c.Values)...)
 }
 
 func (c *RawContainer[T]) Load(buf []byte) ([]byte, error) {
@@ -87,10 +86,10 @@ func (c *RawContainer[T]) Load(buf []byte) ([]byte, error) {
 	buf = buf[1:]
 	v, n := binary.Uvarint(buf)
 	buf = buf[n:]
-	c.sz = util.SizeOf[T]()
+	c.sz = arena.SizeFor[T]()
 	c.typ = AsBlockType[T]()
 	n = int(v) * c.sz
-	c.Values = util.FromByteSlice[T](buf[:n])
+	c.Values = arena.FromBytes[T](buf[:n])
 	return buf[n:], nil
 }
 
@@ -111,7 +110,7 @@ func (c *RawContainer[T]) AppendTo(dst []T, sel []uint32) []T {
 
 func (c *RawContainer[T]) Encode(ctx *Context[T], vals []T) NumberContainer[T] {
 	c.Values = slices.Clone(vals)
-	c.sz = util.SizeOf[T]()
+	c.sz = arena.SizeFor[T]()
 	c.typ = AsBlockType[T]()
 	return c
 }
@@ -124,28 +123,28 @@ func (c *RawContainer[T]) MatchEqual(val T, bits, _ *Bitset) {
 	var n int64
 	switch c.typ {
 	case types.BlockInt64:
-		i64 := util.ReinterpretSlice[T, int64](c.Values)
+		i64 := arena.ReinterpretSlice[T, int64](c.Values)
 		n = cmp.Int64Equal(i64, int64(val), bits.Bytes())
 	case types.BlockUint64:
-		u64 := util.ReinterpretSlice[T, uint64](c.Values)
+		u64 := arena.ReinterpretSlice[T, uint64](c.Values)
 		n = cmp.Uint64Equal(u64, uint64(val), bits.Bytes())
 	case types.BlockInt32:
-		i32 := util.ReinterpretSlice[T, int32](c.Values)
+		i32 := arena.ReinterpretSlice[T, int32](c.Values)
 		n = cmp.Int32Equal(i32, int32(val), bits.Bytes())
 	case types.BlockUint32:
-		u32 := util.ReinterpretSlice[T, uint32](c.Values)
+		u32 := arena.ReinterpretSlice[T, uint32](c.Values)
 		n = cmp.Uint32Equal(u32, uint32(val), bits.Bytes())
 	case types.BlockInt16:
-		i16 := util.ReinterpretSlice[T, int16](c.Values)
+		i16 := arena.ReinterpretSlice[T, int16](c.Values)
 		n = cmp.Int16Equal(i16, int16(val), bits.Bytes())
 	case types.BlockUint16:
-		u16 := util.ReinterpretSlice[T, uint16](c.Values)
+		u16 := arena.ReinterpretSlice[T, uint16](c.Values)
 		n = cmp.Uint16Equal(u16, uint16(val), bits.Bytes())
 	case types.BlockInt8:
-		i8 := util.ReinterpretSlice[T, int8](c.Values)
+		i8 := arena.ReinterpretSlice[T, int8](c.Values)
 		n = cmp.Int8Equal(i8, int8(val), bits.Bytes())
 	case types.BlockUint8:
-		u8 := util.ReinterpretSlice[T, uint8](c.Values)
+		u8 := arena.ReinterpretSlice[T, uint8](c.Values)
 		n = cmp.Uint8Equal(u8, uint8(val), bits.Bytes())
 	}
 	bits.ResetCount(int(n))
@@ -155,28 +154,28 @@ func (c *RawContainer[T]) MatchNotEqual(val T, bits, mask *Bitset) {
 	var n int64
 	switch c.typ {
 	case types.BlockInt64:
-		i64 := util.ReinterpretSlice[T, int64](c.Values)
+		i64 := arena.ReinterpretSlice[T, int64](c.Values)
 		n = cmp.Int64NotEqual(i64, int64(val), bits.Bytes())
 	case types.BlockUint64:
-		u64 := util.ReinterpretSlice[T, uint64](c.Values)
+		u64 := arena.ReinterpretSlice[T, uint64](c.Values)
 		n = cmp.Uint64NotEqual(u64, uint64(val), bits.Bytes())
 	case types.BlockInt32:
-		i32 := util.ReinterpretSlice[T, int32](c.Values)
+		i32 := arena.ReinterpretSlice[T, int32](c.Values)
 		n = cmp.Int32NotEqual(i32, int32(val), bits.Bytes())
 	case types.BlockUint32:
-		u32 := util.ReinterpretSlice[T, uint32](c.Values)
+		u32 := arena.ReinterpretSlice[T, uint32](c.Values)
 		n = cmp.Uint32NotEqual(u32, uint32(val), bits.Bytes())
 	case types.BlockInt16:
-		i16 := util.ReinterpretSlice[T, int16](c.Values)
+		i16 := arena.ReinterpretSlice[T, int16](c.Values)
 		n = cmp.Int16NotEqual(i16, int16(val), bits.Bytes())
 	case types.BlockUint16:
-		u16 := util.ReinterpretSlice[T, uint16](c.Values)
+		u16 := arena.ReinterpretSlice[T, uint16](c.Values)
 		n = cmp.Uint16NotEqual(u16, uint16(val), bits.Bytes())
 	case types.BlockInt8:
-		i8 := util.ReinterpretSlice[T, int8](c.Values)
+		i8 := arena.ReinterpretSlice[T, int8](c.Values)
 		n = cmp.Int8NotEqual(i8, int8(val), bits.Bytes())
 	case types.BlockUint8:
-		u8 := util.ReinterpretSlice[T, uint8](c.Values)
+		u8 := arena.ReinterpretSlice[T, uint8](c.Values)
 		n = cmp.Uint8NotEqual(u8, uint8(val), bits.Bytes())
 	}
 	bits.ResetCount(int(n))
@@ -186,28 +185,28 @@ func (c *RawContainer[T]) MatchLess(val T, bits, mask *Bitset) {
 	var n int64
 	switch c.typ {
 	case types.BlockInt64:
-		i64 := util.ReinterpretSlice[T, int64](c.Values)
+		i64 := arena.ReinterpretSlice[T, int64](c.Values)
 		n = cmp.Int64Less(i64, int64(val), bits.Bytes())
 	case types.BlockUint64:
-		u64 := util.ReinterpretSlice[T, uint64](c.Values)
+		u64 := arena.ReinterpretSlice[T, uint64](c.Values)
 		n = cmp.Uint64Less(u64, uint64(val), bits.Bytes())
 	case types.BlockInt32:
-		i32 := util.ReinterpretSlice[T, int32](c.Values)
+		i32 := arena.ReinterpretSlice[T, int32](c.Values)
 		n = cmp.Int32Less(i32, int32(val), bits.Bytes())
 	case types.BlockUint32:
-		u32 := util.ReinterpretSlice[T, uint32](c.Values)
+		u32 := arena.ReinterpretSlice[T, uint32](c.Values)
 		n = cmp.Uint32Less(u32, uint32(val), bits.Bytes())
 	case types.BlockInt16:
-		i16 := util.ReinterpretSlice[T, int16](c.Values)
+		i16 := arena.ReinterpretSlice[T, int16](c.Values)
 		n = cmp.Int16Less(i16, int16(val), bits.Bytes())
 	case types.BlockUint16:
-		u16 := util.ReinterpretSlice[T, uint16](c.Values)
+		u16 := arena.ReinterpretSlice[T, uint16](c.Values)
 		n = cmp.Uint16Less(u16, uint16(val), bits.Bytes())
 	case types.BlockInt8:
-		i8 := util.ReinterpretSlice[T, int8](c.Values)
+		i8 := arena.ReinterpretSlice[T, int8](c.Values)
 		n = cmp.Int8Less(i8, int8(val), bits.Bytes())
 	case types.BlockUint8:
-		u8 := util.ReinterpretSlice[T, uint8](c.Values)
+		u8 := arena.ReinterpretSlice[T, uint8](c.Values)
 		n = cmp.Uint8Less(u8, uint8(val), bits.Bytes())
 	}
 	bits.ResetCount(int(n))
@@ -217,28 +216,28 @@ func (c *RawContainer[T]) MatchLessEqual(val T, bits, mask *Bitset) {
 	var n int64
 	switch c.typ {
 	case types.BlockInt64:
-		i64 := util.ReinterpretSlice[T, int64](c.Values)
+		i64 := arena.ReinterpretSlice[T, int64](c.Values)
 		n = cmp.Int64LessEqual(i64, int64(val), bits.Bytes())
 	case types.BlockUint64:
-		u64 := util.ReinterpretSlice[T, uint64](c.Values)
+		u64 := arena.ReinterpretSlice[T, uint64](c.Values)
 		n = cmp.Uint64LessEqual(u64, uint64(val), bits.Bytes())
 	case types.BlockInt32:
-		i32 := util.ReinterpretSlice[T, int32](c.Values)
+		i32 := arena.ReinterpretSlice[T, int32](c.Values)
 		n = cmp.Int32LessEqual(i32, int32(val), bits.Bytes())
 	case types.BlockUint32:
-		u32 := util.ReinterpretSlice[T, uint32](c.Values)
+		u32 := arena.ReinterpretSlice[T, uint32](c.Values)
 		n = cmp.Uint32LessEqual(u32, uint32(val), bits.Bytes())
 	case types.BlockInt16:
-		i16 := util.ReinterpretSlice[T, int16](c.Values)
+		i16 := arena.ReinterpretSlice[T, int16](c.Values)
 		n = cmp.Int16LessEqual(i16, int16(val), bits.Bytes())
 	case types.BlockUint16:
-		u16 := util.ReinterpretSlice[T, uint16](c.Values)
+		u16 := arena.ReinterpretSlice[T, uint16](c.Values)
 		n = cmp.Uint16LessEqual(u16, uint16(val), bits.Bytes())
 	case types.BlockInt8:
-		i8 := util.ReinterpretSlice[T, int8](c.Values)
+		i8 := arena.ReinterpretSlice[T, int8](c.Values)
 		n = cmp.Int8LessEqual(i8, int8(val), bits.Bytes())
 	case types.BlockUint8:
-		u8 := util.ReinterpretSlice[T, uint8](c.Values)
+		u8 := arena.ReinterpretSlice[T, uint8](c.Values)
 		n = cmp.Uint8LessEqual(u8, uint8(val), bits.Bytes())
 	}
 	bits.ResetCount(int(n))
@@ -248,28 +247,28 @@ func (c *RawContainer[T]) MatchGreater(val T, bits, mask *Bitset) {
 	var n int64
 	switch c.typ {
 	case types.BlockInt64:
-		i64 := util.ReinterpretSlice[T, int64](c.Values)
+		i64 := arena.ReinterpretSlice[T, int64](c.Values)
 		n = cmp.Int64Greater(i64, int64(val), bits.Bytes())
 	case types.BlockUint64:
-		u64 := util.ReinterpretSlice[T, uint64](c.Values)
+		u64 := arena.ReinterpretSlice[T, uint64](c.Values)
 		n = cmp.Uint64Greater(u64, uint64(val), bits.Bytes())
 	case types.BlockInt32:
-		i32 := util.ReinterpretSlice[T, int32](c.Values)
+		i32 := arena.ReinterpretSlice[T, int32](c.Values)
 		n = cmp.Int32Greater(i32, int32(val), bits.Bytes())
 	case types.BlockUint32:
-		u32 := util.ReinterpretSlice[T, uint32](c.Values)
+		u32 := arena.ReinterpretSlice[T, uint32](c.Values)
 		n = cmp.Uint32Greater(u32, uint32(val), bits.Bytes())
 	case types.BlockInt16:
-		i16 := util.ReinterpretSlice[T, int16](c.Values)
+		i16 := arena.ReinterpretSlice[T, int16](c.Values)
 		n = cmp.Int16Greater(i16, int16(val), bits.Bytes())
 	case types.BlockUint16:
-		u16 := util.ReinterpretSlice[T, uint16](c.Values)
+		u16 := arena.ReinterpretSlice[T, uint16](c.Values)
 		n = cmp.Uint16Greater(u16, uint16(val), bits.Bytes())
 	case types.BlockInt8:
-		i8 := util.ReinterpretSlice[T, int8](c.Values)
+		i8 := arena.ReinterpretSlice[T, int8](c.Values)
 		n = cmp.Int8Greater(i8, int8(val), bits.Bytes())
 	case types.BlockUint8:
-		u8 := util.ReinterpretSlice[T, uint8](c.Values)
+		u8 := arena.ReinterpretSlice[T, uint8](c.Values)
 		n = cmp.Uint8Greater(u8, uint8(val), bits.Bytes())
 	}
 	bits.ResetCount(int(n))
@@ -279,28 +278,28 @@ func (c *RawContainer[T]) MatchGreaterEqual(val T, bits, mask *Bitset) {
 	var n int64
 	switch c.typ {
 	case types.BlockInt64:
-		i64 := util.ReinterpretSlice[T, int64](c.Values)
+		i64 := arena.ReinterpretSlice[T, int64](c.Values)
 		n = cmp.Int64GreaterEqual(i64, int64(val), bits.Bytes())
 	case types.BlockUint64:
-		u64 := util.ReinterpretSlice[T, uint64](c.Values)
+		u64 := arena.ReinterpretSlice[T, uint64](c.Values)
 		n = cmp.Uint64GreaterEqual(u64, uint64(val), bits.Bytes())
 	case types.BlockInt32:
-		i32 := util.ReinterpretSlice[T, int32](c.Values)
+		i32 := arena.ReinterpretSlice[T, int32](c.Values)
 		n = cmp.Int32GreaterEqual(i32, int32(val), bits.Bytes())
 	case types.BlockUint32:
-		u32 := util.ReinterpretSlice[T, uint32](c.Values)
+		u32 := arena.ReinterpretSlice[T, uint32](c.Values)
 		n = cmp.Uint32GreaterEqual(u32, uint32(val), bits.Bytes())
 	case types.BlockInt16:
-		i16 := util.ReinterpretSlice[T, int16](c.Values)
+		i16 := arena.ReinterpretSlice[T, int16](c.Values)
 		n = cmp.Int16GreaterEqual(i16, int16(val), bits.Bytes())
 	case types.BlockUint16:
-		u16 := util.ReinterpretSlice[T, uint16](c.Values)
+		u16 := arena.ReinterpretSlice[T, uint16](c.Values)
 		n = cmp.Uint16GreaterEqual(u16, uint16(val), bits.Bytes())
 	case types.BlockInt8:
-		i8 := util.ReinterpretSlice[T, int8](c.Values)
+		i8 := arena.ReinterpretSlice[T, int8](c.Values)
 		n = cmp.Int8GreaterEqual(i8, int8(val), bits.Bytes())
 	case types.BlockUint8:
-		u8 := util.ReinterpretSlice[T, uint8](c.Values)
+		u8 := arena.ReinterpretSlice[T, uint8](c.Values)
 		n = cmp.Uint8GreaterEqual(u8, uint8(val), bits.Bytes())
 	}
 	bits.ResetCount(int(n))
@@ -310,28 +309,28 @@ func (c *RawContainer[T]) MatchBetween(a, b T, bits, mask *Bitset) {
 	var n int64
 	switch c.typ {
 	case types.BlockInt64:
-		i64 := util.ReinterpretSlice[T, int64](c.Values)
+		i64 := arena.ReinterpretSlice[T, int64](c.Values)
 		n = cmp.Int64Between(i64, int64(a), int64(b), bits.Bytes())
 	case types.BlockUint64:
-		u64 := util.ReinterpretSlice[T, uint64](c.Values)
+		u64 := arena.ReinterpretSlice[T, uint64](c.Values)
 		n = cmp.Uint64Between(u64, uint64(a), uint64(b), bits.Bytes())
 	case types.BlockInt32:
-		i32 := util.ReinterpretSlice[T, int32](c.Values)
+		i32 := arena.ReinterpretSlice[T, int32](c.Values)
 		n = cmp.Int32Between(i32, int32(a), int32(b), bits.Bytes())
 	case types.BlockUint32:
-		u32 := util.ReinterpretSlice[T, uint32](c.Values)
+		u32 := arena.ReinterpretSlice[T, uint32](c.Values)
 		n = cmp.Uint32Between(u32, uint32(a), uint32(b), bits.Bytes())
 	case types.BlockInt16:
-		i16 := util.ReinterpretSlice[T, int16](c.Values)
+		i16 := arena.ReinterpretSlice[T, int16](c.Values)
 		n = cmp.Int16Between(i16, int16(a), int16(b), bits.Bytes())
 	case types.BlockUint16:
-		u16 := util.ReinterpretSlice[T, uint16](c.Values)
+		u16 := arena.ReinterpretSlice[T, uint16](c.Values)
 		n = cmp.Uint16Between(u16, uint16(a), uint16(b), bits.Bytes())
 	case types.BlockInt8:
-		i8 := util.ReinterpretSlice[T, int8](c.Values)
+		i8 := arena.ReinterpretSlice[T, int8](c.Values)
 		n = cmp.Int8Between(i8, int8(a), int8(b), bits.Bytes())
 	case types.BlockUint8:
-		u8 := util.ReinterpretSlice[T, uint8](c.Values)
+		u8 := arena.ReinterpretSlice[T, uint8](c.Values)
 		n = cmp.Uint8Between(u8, uint8(a), uint8(b), bits.Bytes())
 	}
 	bits.ResetCount(int(n))

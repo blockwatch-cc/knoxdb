@@ -16,7 +16,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
-	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -357,7 +356,7 @@ func BenchmarkUniqueLLB(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(c.N * 2))
 			for range b.N {
-				hashes := hash.Vec32(data, arena.AllocUint64(len(data))[:len(data)])
+				hashes := hash.Vec32(data, arena.Alloc[uint64](len(data))[:len(data)])
 				var scratch [256]byte // need 256 byte scratch space
 				unique, _ := llb.NewFilterBuffer(scratch[:], 8)
 				unique.Add(hashes...)
@@ -382,7 +381,7 @@ func DictArrayBenchmark[T types.Integer](b *testing.B) {
 			var card int
 			b.Run(fmt.Sprintf("%T/%s/%s", T(0), c.Name, p.Name), func(b *testing.B) {
 				b.ReportAllocs()
-				b.SetBytes(int64(c.N * util.SizeOf[T]()))
+				b.SetBytes(int64(c.N * arena.SizeFor[T]()))
 				for range b.N {
 					dict, codes := dictEncodeArray(ctx, data)
 					card = len(dict)

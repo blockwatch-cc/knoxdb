@@ -13,27 +13,65 @@ import (
 	"unsafe"
 )
 
+const (
+	minAllocClass = 7                                 // 128 byte
+	maxAllocClass = 20                                // 1MB
+	numClasses    = maxAllocClass - minAllocClass + 1 // 14 pools
+)
+
 // counting allocator with assertion
-
-type Allocator interface {
-	Alloc(int) any
-	Free(any, int)
-}
-
-// 1k (10) .. 2M (22) = 13 sync.Pools
-type allocator[T any] struct {
+type countAllocator struct {
 	mu    sync.Mutex
-	pools [13]atomic.Pointer[sync.Pool]
+	pools [numClasses]atomic.Pointer[sync.Pool]
 	track map[uintptr]int
 }
 
-const (
-	minAllocClass = 10
-	maxAllocClass = 22
-)
+func newGoAllocator() Allocator {
+	return &countAllocator{track: make(map[uintptr]int)}
+}
 
-func newAllocator[T any]() *allocator[T] {
-	return &allocator[T]{track: make(map[uintptr]int)}
+func (a *countAllocator) Alloc(sz int) any {
+	class := 63 - bits.LeadingZeros(uint(sz))
+	if bits.OnesCount(uint(sz)) > 1 {
+		class++
+	}
+	if class > maxAllocClass {
+		return make([]T, sz)
+	}
+	if class < minAllocClass {
+		class = minAllocClass
+	}
+	val := a.pool(class).Get()
+	s := (*val.(*[]byte))[:1]
+	ptr := uintptr(unsafe.Pointer(&s[0]))
+	a.mu.Lock()
+	a.track[ptr] = 1
+	a.mu.Unlock()
+	return val
+}
+
+func (a *countAllocator) Free(val []byte) {
+	// don't recycle out of bounds or non-power of 2 slices
+	sz := uint(cap(val))
+	class := 63 - bits.LeadingZeros(sz)
+	if class < minAllocClass || class > maxAllocClass || bits.OnesCount(sz) > 1 {
+		return
+	}
+
+	ptr := uintptr(unsafe.Pointer(&val[:1][0]))
+	a.mu.Lock()
+	a.track[ptr]++
+	cnt := a.track[ptr]
+	a.mu.Unlock()
+
+	if cnt == 0 {
+		panic(fmt.Errorf("free without alloc for %p", ptr))
+	}
+	if cnt > 2 {
+		panic(fmt.Errorf("double free for %p", ptr))
+	}
+
+	a.pool(class).Put(&val)
 }
 
 func (a *allocator[T]) pool(class int) *sync.Pool {
@@ -42,51 +80,12 @@ func (a *allocator[T]) pool(class int) *sync.Pool {
 	if p == nil {
 		sz := 1 << class
 		p = &sync.Pool{
-			New: func() any { return make([]T, 0, sz) },
+			New: func() any {
+				buf := make([]byte, 0, sz)
+				return &buf
+			},
 		}
 		a.pools[idx].Store(p)
 	}
 	return p
-}
-
-func (a *allocator[T]) Alloc(sz int) any {
-	class := 63 - bits.LeadingZeros(uint(sz))
-	if bits.OnesCount(uint(sz)) > 1 {
-		class++
-	}
-	if class < minAllocClass || class > maxAllocClass {
-		return make([]T, 0, max(sz, 8))
-	}
-
-	val := a.pool(class).Get()
-	s := val.([]T)[:1]
-	ptr := uintptr(unsafe.Pointer(&s[0]))
-	a.mu.Lock()
-	a.track[ptr] = 1
-	a.mu.Unlock()
-	return val
-}
-
-func (a *allocator[T]) Free(val any, sz int) {
-	// don't recycle out of bounds or non-power of 2 slices
-	class := 63 - bits.LeadingZeros(uint(sz))
-	if class < minAllocClass || class > maxAllocClass || bits.OnesCount(uint(sz)) > 1 {
-		return
-	}
-
-	s := val.([]T)[:1]
-	ptr := uintptr(unsafe.Pointer(&s[0]))
-	a.mu.Lock()
-	a.track[ptr]++
-	cnt := a.track[ptr]
-	a.mu.Unlock()
-
-	if cnt == 0 {
-		panic(fmt.Errorf("free without alloc for %T %p", s[0], &s[0]))
-	}
-	if cnt > 2 {
-		panic(fmt.Errorf("double free for %T %p", s[0], &s[0]))
-	}
-
-	a.pool(class).Put(val)
 }

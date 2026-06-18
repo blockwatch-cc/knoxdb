@@ -11,7 +11,7 @@ import (
 	"sync"
 	"unsafe"
 
-	"blockwatch.cc/knoxdb/pkg/util"
+	"blockwatch.cc/knoxdb/internal/arena"
 	"github.com/FastFilter/xorfilter"
 )
 
@@ -56,7 +56,7 @@ func NewFromBytes[T Unsigned](buf []byte) (*BinaryFuse[T], error) {
 }
 
 func (f *BinaryFuse[T]) MarshalBinary() ([]byte, error) {
-	size := util.SizeOf[T]()
+	size := arena.SizeFor[T]()
 	space := len(f.Fingerprints)*size + 28
 	buf := bytes.NewBuffer(make([]byte, 0, space))
 	err := f.Save(buf)

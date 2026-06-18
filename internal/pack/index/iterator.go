@@ -271,7 +271,7 @@ func NewScanIterator(idx *Index, node *filter.Node, useCache bool) *ScanIterator
 	return &ScanIterator{
 		node:     node,
 		idx:      idx,
-		hits:     arena.AllocUint32(idx.opts.PackSize),
+		hits:     arena.Alloc[uint32](idx.opts.PackSize),
 		bits:     bitset.New(idx.opts.PackSize),
 		useCache: useCache,
 		btypes: [2]types.BlockType{

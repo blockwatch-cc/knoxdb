@@ -11,7 +11,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/slicex"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 type Analysis struct {
@@ -169,7 +168,7 @@ func analyzeRD[T Float, U Uint](sample []T) Analysis {
 		bestSize  = math.MaxInt32
 		useDict   = false
 		sz        = len(sample)
-		w         = util.SizeFor[T]()
+		w         = arena.SizeFor[T]()
 		unique    = arena.Alloc[uint16](1 << 16)[:1<<16]
 	)
 
@@ -182,14 +181,14 @@ func analyzeRD[T Float, U Uint](sample []T) Analysis {
 			lUnique    int
 		)
 
-		for _, v := range util.ReinterpretSlice[T, U](sample) {
+		for _, v := range arena.ReinterpretSlice[T, U](sample) {
 			l, r := uint16(v>>shift), v&mask
 			lmin = min(lmin, l)
 			lmax = max(lmax, l)
 			rmin = min(rmin, r)
 			rmax = max(rmax, r)
 		}
-		for _, v := range util.ReinterpretSlice[T, U](sample) {
+		for _, v := range arena.ReinterpretSlice[T, U](sample) {
 			k := uint16(v>>shift) - lmin
 			if unique[k] == 0 {
 				lUnique++

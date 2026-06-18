@@ -9,7 +9,6 @@ import (
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/arena"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 // Benchmark M1
@@ -90,7 +89,7 @@ func (s *Bitset) Iterator() iter.Seq[int] {
 		var i int
 
 		// process 64 bit words
-		for _, word := range util.FromByteSlice[uint64](s.buf) {
+		for _, word := range arena.FromBytes[uint64](s.buf) {
 			for word != 0 {
 				if !fn(i + bits.TrailingZeros64(word)) {
 					return
@@ -232,7 +231,7 @@ func (s *Bitset) Iterate(last int, res []int) ([]int, bool) {
 	}
 
 	// process full 64 bit words
-	for _, word := range util.FromByteSlice[uint64](s.buf[i>>3:]) {
+	for _, word := range arena.FromBytes[uint64](s.buf[i>>3:]) {
 		for word != 0 && n < nmax {
 			res[n] = i + bits.TrailingZeros64(word)
 			n++
@@ -278,7 +277,7 @@ func (s *Bitset) Indexes(result []uint32) []uint32 {
 	// index lookup algo which always writes multiples of 8 entries
 	cnt += 7
 	if result == nil || cap(result) < cnt {
-		result = arena.AllocUint32(cnt)[:cnt]
+		result = arena.Alloc[uint32](cnt)[:cnt]
 	} else {
 		result = result[:cnt]
 	}

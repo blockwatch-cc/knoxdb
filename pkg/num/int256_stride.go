@@ -28,10 +28,10 @@ type Int256Stride struct {
 
 func NewInt256Stride(sz int) *Int256Stride {
 	return &Int256Stride{
-		arena.AllocInt64(sz),
-		arena.AllocUint64(sz),
-		arena.AllocUint64(sz),
-		arena.AllocUint64(sz),
+		arena.Alloc[int64](sz),
+		arena.Alloc[uint64](sz),
+		arena.Alloc[uint64](sz),
+		arena.Alloc[uint64](sz),
 	}
 }
 

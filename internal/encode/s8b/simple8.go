@@ -6,12 +6,12 @@ package s8b
 import (
 	"math/bits"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/cpu"
 	"blockwatch.cc/knoxdb/internal/encode/s8b/avx2"
 	"blockwatch.cc/knoxdb/internal/encode/s8b/avx512"
 	"blockwatch.cc/knoxdb/internal/encode/s8b/generic"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 var (
@@ -76,21 +76,21 @@ func Encode[T types.Integer](dst []byte, src []T, minv, maxv T) ([]byte, error) 
 func Decode[T types.Integer](dst []T, buf []byte, minv T) (int, error) {
 	switch any(T(0)).(type) {
 	case uint64:
-		return DecodeUint64(util.ReinterpretSlice[T, uint64](dst), buf, uint64(minv))
+		return DecodeUint64(arena.ReinterpretSlice[T, uint64](dst), buf, uint64(minv))
 	case uint32:
-		return DecodeUint32(util.ReinterpretSlice[T, uint32](dst), buf, uint32(minv))
+		return DecodeUint32(arena.ReinterpretSlice[T, uint32](dst), buf, uint32(minv))
 	case uint16:
-		return DecodeUint16(util.ReinterpretSlice[T, uint16](dst), buf, uint16(minv))
+		return DecodeUint16(arena.ReinterpretSlice[T, uint16](dst), buf, uint16(minv))
 	case uint8:
-		return DecodeUint8(util.ReinterpretSlice[T, uint8](dst), buf, uint8(minv))
+		return DecodeUint8(arena.ReinterpretSlice[T, uint8](dst), buf, uint8(minv))
 	case int64:
-		return DecodeUint64(util.ReinterpretSlice[T, uint64](dst), buf, uint64(minv))
+		return DecodeUint64(arena.ReinterpretSlice[T, uint64](dst), buf, uint64(minv))
 	case int32:
-		return DecodeUint32(util.ReinterpretSlice[T, uint32](dst), buf, uint32(minv))
+		return DecodeUint32(arena.ReinterpretSlice[T, uint32](dst), buf, uint32(minv))
 	case int16:
-		return DecodeUint16(util.ReinterpretSlice[T, uint16](dst), buf, uint16(minv))
+		return DecodeUint16(arena.ReinterpretSlice[T, uint16](dst), buf, uint16(minv))
 	case int8:
-		return DecodeUint8(util.ReinterpretSlice[T, uint8](dst), buf, uint8(minv))
+		return DecodeUint8(arena.ReinterpretSlice[T, uint8](dst), buf, uint8(minv))
 	default:
 		return 0, nil
 	}

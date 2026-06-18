@@ -141,7 +141,7 @@ func (c *Simple8Container[T]) AppendTo(dst []T, sel []uint32) []T {
 
 func (c *Simple8Container[T]) Encode(ctx *Context[T], vals []T) NumberContainer[T] {
 	sz := s8b.EstimateMaxSize(len(vals), ctx.Min, ctx.Max) * 8
-	buf := arena.AllocBytes(sz)[:sz]
+	buf := arena.Alloc[uint8](sz)[:sz]
 	buf, err := s8b.Encode(buf, vals, ctx.Min, ctx.Max)
 	if err != nil {
 		// unlikely

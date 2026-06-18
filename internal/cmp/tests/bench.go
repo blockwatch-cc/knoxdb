@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"testing"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 type BenchmarkMask struct {
@@ -36,7 +36,7 @@ func BenchCases[T types.Number](b *testing.B, fn CmpFunc[T]) {
 		a := tests.GenRnd[T](c.N)
 		bits := MakeBitsPoison(c.N)
 		b.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(b *testing.B) {
-			b.SetBytes(int64(c.N * util.SizeFor[T]()))
+			b.SetBytes(int64(c.N * arena.SizeFor[T]()))
 			for range b.N {
 				fn(a, 127, bits)
 			}
@@ -50,7 +50,7 @@ func BenchCases2[T types.Number](b *testing.B, fn CmpFunc2[T]) {
 		a := tests.GenRnd[T](c.N)
 		bits := MakeBitsPoison(c.N)
 		b.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(b *testing.B) {
-			b.SetBytes(int64(c.N * util.SizeFor[T]()))
+			b.SetBytes(int64(c.N * arena.SizeFor[T]()))
 			for range b.N {
 				fn(a, 5, 127, bits)
 			}
@@ -65,7 +65,7 @@ func BenchMaskCases[T types.Number](b *testing.B, fn CmpMaskFunc[T]) {
 			a := tests.GenRnd[T](c.N)
 			bits, mask := MakeBitsAndMaskPoison(c.N, m.Pattern)
 			b.Run(fmt.Sprintf("%T/%s/mask_%s", T(0), c.Name, m.Name), func(b *testing.B) {
-				b.SetBytes(int64(c.N * util.SizeFor[T]()))
+				b.SetBytes(int64(c.N * arena.SizeFor[T]()))
 				for range b.N {
 					fn(a, 127, bits, mask)
 				}
@@ -81,7 +81,7 @@ func BenchMaskCases2[T types.Number](b *testing.B, fn CmpMaskFunc2[T]) {
 			a := tests.GenRnd[T](c.N)
 			bits, mask := MakeBitsAndMaskPoison(c.N, m.Pattern)
 			b.Run(fmt.Sprintf("%T/%s/mask_%s", T(0), c.Name, m.Name), func(b *testing.B) {
-				b.SetBytes(int64(c.N * util.SizeFor[T]()))
+				b.SetBytes(int64(c.N * arena.SizeFor[T]()))
 				for range b.N {
 					fn(a, 5, 127, bits, mask)
 				}

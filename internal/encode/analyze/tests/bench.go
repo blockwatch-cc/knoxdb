@@ -7,15 +7,15 @@ import (
 	"fmt"
 	"testing"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 func AnalyzeBenchmark[T types.Integer](b *testing.B, fn AnalyzeFunc[T]) {
 	for _, c := range tests.MakeBenchmarks[T]() {
 		b.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(b *testing.B) {
-			b.SetBytes(int64(len(c.Data) * util.SizeOf[T]()))
+			b.SetBytes(int64(len(c.Data) * arena.SizeFor[T]()))
 			for b.Loop() {
 				fn(c.Data)
 			}
@@ -27,7 +27,7 @@ func AnalyzeBenchmark[T types.Integer](b *testing.B, fn AnalyzeFunc[T]) {
 func AnalyzeFloatBenchmark[T types.Float](b *testing.B, fn AnalyzeFloatFunc[T]) {
 	for _, c := range tests.MakeBenchmarks[T]() {
 		b.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(b *testing.B) {
-			b.SetBytes(int64(len(c.Data) * util.SizeFor[T]()))
+			b.SetBytes(int64(len(c.Data) * arena.SizeFor[T]()))
 			for b.Loop() {
 				fn(c.Data)
 			}

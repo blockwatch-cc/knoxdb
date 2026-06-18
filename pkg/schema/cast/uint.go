@@ -10,15 +10,15 @@ import (
 
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/schema"
-	"blockwatch.cc/knoxdb/pkg/util"
+	"blockwatch.cc/knoxdb/pkg/slicex"
 )
 
 // uint caster
-type UintCaster[T schema.Unsigned] struct{}
+type UintCaster[T schema.Unsigned | uint] struct{}
 
 func (c UintCaster[T]) CastValue(val any) (res any, err error) {
 	var ok bool
-	width := util.SizeOf[T]() * 8
+	width := slicex.SizeFor[T]() * 8
 	res = val
 	switch v := val.(type) {
 	case int:
@@ -77,7 +77,7 @@ func (c UintCaster[T]) CastValue(val any) (res any, err error) {
 
 func (c UintCaster[T]) CastSlice(val any) (res any, err error) {
 	ok := true
-	width := util.SizeOf[T]() * 8
+	width := slicex.SizeFor[T]() * 8
 	res = val
 	switch v := val.(type) {
 	case []int:

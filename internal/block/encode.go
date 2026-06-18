@@ -26,7 +26,7 @@ func (b *Block) Encode(c Compression) ([]byte, encode.ContextExporter, error) {
 
 	// optional: compress block buffer
 	if c > 0 {
-		cbuf := bytes.NewBuffer(arena.AllocBytes(len(buf)))
+		cbuf := bytes.NewBuffer(arena.Alloc[uint8](len(buf)))
 		cbuf.WriteByte(byte(c))
 		enc := NewCompressor(cbuf, c)
 		if _, err := enc.Write(buf); err != nil {
@@ -50,7 +50,7 @@ func (b *Block) encode() ([]byte, encode.ContextExporter, error) {
 		ctx := encode.AnalyzeInt(src, true)
 		enc := encode.EncodeInt(ctx, src)
 		// add zero byte for compression
-		buf := arena.AllocBytes(enc.Size() + 1)
+		buf := arena.Alloc[uint8](enc.Size() + 1)
 		buf = enc.Store(buf[:1])
 		enc.Close()
 		return buf, ctx, nil
@@ -60,7 +60,7 @@ func (b *Block) encode() ([]byte, encode.ContextExporter, error) {
 		ctx := encode.AnalyzeInt(src, true)
 		enc := encode.EncodeInt(ctx, src)
 		// add zero byte for compression
-		buf := arena.AllocBytes(enc.Size() + 1)
+		buf := arena.Alloc[uint8](enc.Size() + 1)
 		buf = enc.Store(buf[:1])
 		enc.Close()
 		return buf, ctx, nil
@@ -70,7 +70,7 @@ func (b *Block) encode() ([]byte, encode.ContextExporter, error) {
 		ctx := encode.AnalyzeInt(src, true)
 		enc := encode.EncodeInt(ctx, src)
 		// add zero byte for compression
-		buf := arena.AllocBytes(enc.Size() + 1)
+		buf := arena.Alloc[uint8](enc.Size() + 1)
 		buf = enc.Store(buf[:1])
 		enc.Close()
 		return buf, ctx, nil
@@ -80,7 +80,7 @@ func (b *Block) encode() ([]byte, encode.ContextExporter, error) {
 		ctx := encode.AnalyzeInt(src, true)
 		enc := encode.EncodeInt(ctx, src)
 		// add zero byte for compression
-		buf := arena.AllocBytes(enc.Size() + 1)
+		buf := arena.Alloc[uint8](enc.Size() + 1)
 		buf = enc.Store(buf[:1])
 		enc.Close()
 		return buf, ctx, nil
@@ -90,7 +90,7 @@ func (b *Block) encode() ([]byte, encode.ContextExporter, error) {
 		ctx := encode.AnalyzeInt(src, true)
 		enc := encode.EncodeInt(ctx, src)
 		// add zero byte for compression
-		buf := arena.AllocBytes(enc.Size() + 1)
+		buf := arena.Alloc[uint8](enc.Size() + 1)
 		buf = enc.Store(buf[:1])
 		enc.Close()
 		return buf, ctx, nil
@@ -100,7 +100,7 @@ func (b *Block) encode() ([]byte, encode.ContextExporter, error) {
 		ctx := encode.AnalyzeInt(src, true)
 		enc := encode.EncodeInt(ctx, src)
 		// add zero byte for compression
-		buf := arena.AllocBytes(enc.Size() + 1)
+		buf := arena.Alloc[uint8](enc.Size() + 1)
 		buf = enc.Store(buf[:1])
 		enc.Close()
 		return buf, ctx, nil
@@ -110,7 +110,7 @@ func (b *Block) encode() ([]byte, encode.ContextExporter, error) {
 		ctx := encode.AnalyzeInt(src, true)
 		enc := encode.EncodeInt(ctx, src)
 		// add zero byte for compression
-		buf := arena.AllocBytes(enc.Size() + 1)
+		buf := arena.Alloc[uint8](enc.Size() + 1)
 		buf = enc.Store(buf[:1])
 		enc.Close()
 		return buf, ctx, nil
@@ -120,7 +120,7 @@ func (b *Block) encode() ([]byte, encode.ContextExporter, error) {
 		ctx := encode.AnalyzeInt(src, true)
 		enc := encode.EncodeInt(ctx, src)
 		// add zero byte for compression
-		buf := arena.AllocBytes(enc.Size() + 1)
+		buf := arena.Alloc[uint8](enc.Size() + 1)
 		buf = enc.Store(buf[:1])
 		enc.Close()
 		return buf, ctx, nil
@@ -130,7 +130,7 @@ func (b *Block) encode() ([]byte, encode.ContextExporter, error) {
 		ctx := encode.AnalyzeFloat(src, true, true)
 		enc := encode.EncodeFloat(ctx, src)
 		// add zero byte for compression
-		buf := arena.AllocBytes(enc.Size() + 1)
+		buf := arena.Alloc[uint8](enc.Size() + 1)
 		buf = enc.Store(buf[:1])
 		enc.Close()
 		return buf, ctx, nil
@@ -140,7 +140,7 @@ func (b *Block) encode() ([]byte, encode.ContextExporter, error) {
 		ctx := encode.AnalyzeFloat(src, true, true)
 		enc := encode.EncodeFloat(ctx, src)
 		// add zero byte for compression
-		buf := arena.AllocBytes(enc.Size() + 1)
+		buf := arena.Alloc[uint8](enc.Size() + 1)
 		buf = enc.Store(buf[:1])
 		enc.Close()
 		return buf, ctx, nil
@@ -150,7 +150,7 @@ func (b *Block) encode() ([]byte, encode.ContextExporter, error) {
 		ctx := encode.AnalyzeBitmap(src.(*bitset.Bitset))
 		enc := encode.EncodeBitmap(ctx, src.(*bitset.Bitset))
 		// add zero byte for compression
-		buf := arena.AllocBytes(enc.Size() + 1)
+		buf := arena.Alloc[uint8](enc.Size() + 1)
 		buf = enc.Store(buf[:1])
 		enc.Close()
 		return buf, ctx, nil
@@ -160,7 +160,7 @@ func (b *Block) encode() ([]byte, encode.ContextExporter, error) {
 		ctx := encode.AnalyzeString(src)
 		enc := encode.EncodeString(ctx, src)
 		// add zero byte for compression
-		buf := arena.AllocBytes(enc.Size() + 1)
+		buf := arena.Alloc[uint8](enc.Size() + 1)
 		buf = enc.Store(buf[:1])
 		enc.Close()
 		return buf, ctx, nil
@@ -170,7 +170,7 @@ func (b *Block) encode() ([]byte, encode.ContextExporter, error) {
 		ctx := encode.AnalyzeInt128(i128)
 		enc := encode.EncodeInt128(ctx, i128)
 		// add zero byte for compression
-		buf := arena.AllocBytes(enc.Size() + 1)
+		buf := arena.Alloc[uint8](enc.Size() + 1)
 		buf = enc.Store(buf[:1])
 		enc.Close()
 		return buf, ctx, nil
@@ -180,7 +180,7 @@ func (b *Block) encode() ([]byte, encode.ContextExporter, error) {
 		ctx := encode.AnalyzeInt256(i256)
 		enc := encode.EncodeInt256(ctx, i256)
 		// add zero byte for compression
-		buf := arena.AllocBytes(enc.Size() + 1)
+		buf := arena.Alloc[uint8](enc.Size() + 1)
 		buf = enc.Store(buf[:1])
 		enc.Close()
 		return buf, ctx, nil

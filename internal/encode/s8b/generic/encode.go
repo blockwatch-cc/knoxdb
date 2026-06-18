@@ -48,8 +48,8 @@ import (
 	"math/bits"
 	"unsafe"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 const (
@@ -128,7 +128,7 @@ func Encode[T types.Integer](dst []byte, src []T, minv, maxv T) ([]byte, error) 
 		return nil, ErrValueOutOfBounds
 	}
 
-	out := util.FromByteSlice[uint64](dst)
+	out := arena.FromBytes[uint64](dst)
 	var i, j int
 	for i < len(src) {
 		remaining := src[i:]

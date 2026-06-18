@@ -7,7 +7,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/cpu"
 	"blockwatch.cc/knoxdb/pkg/slicex"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 func BuildDict[T Integer](vals []T, numUnique int) ([]T, []uint16) {
@@ -27,14 +26,14 @@ func BuildFloatDict[T float32 | float64](vals []T, numUnique int) ([]T, []uint16
 	)
 	switch any(T(0)).(type) {
 	case float32:
-		u32 := util.ReinterpretSlice[T, uint32](vals)
+		u32 := arena.ReinterpretSlice[T, uint32](vals)
 		d, c := BuildDict(u32, numUnique)
-		dict = util.ReinterpretSlice[uint32, T](d)
+		dict = arena.ReinterpretSlice[uint32, T](d)
 		codes = c
 	case float64:
-		u64 := util.ReinterpretSlice[T, uint64](vals)
+		u64 := arena.ReinterpretSlice[T, uint64](vals)
 		d, c := BuildDict(u64, numUnique)
-		dict = util.ReinterpretSlice[uint64, T](d)
+		dict = arena.ReinterpretSlice[uint64, T](d)
 		codes = c
 	}
 	return dict, codes

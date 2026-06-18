@@ -39,7 +39,7 @@ func New(size int) *Bitset {
 	sz := bitFieldLen(size)
 	s := bitsetPool.Get().(*Bitset)
 	if size > 0 {
-		s.buf = arena.AllocBytes(sz)[:sz]
+		s.buf = arena.Alloc[uint8](sz)[:sz]
 		clear(s.buf)
 	}
 	s.cnt = 0
@@ -129,7 +129,7 @@ func (s *Bitset) SetFromBytes(buf []byte, size int, reverse bool) *Bitset {
 			arena.Free(s.buf)
 			s.noclose = false
 		}
-		s.buf = arena.AllocBytes(l)[:l]
+		s.buf = arena.Alloc[uint8](l)[:l]
 	} else if s.size > size && s.cnt >= 0 {
 		s.cnt = -1
 		clear(s.buf[size>>3:])
@@ -343,7 +343,7 @@ func (s *Bitset) Copy(b *Bitset) *Bitset {
 			arena.Free(s.buf)
 			s.noclose = false
 		}
-		s.buf = arena.AllocBytes(len(b.buf))[:len(b.buf)]
+		s.buf = arena.Alloc[uint8](len(b.buf))[:len(b.buf)]
 	}
 	s.size = b.size
 	s.buf = s.buf[:len(b.buf)]
@@ -367,7 +367,7 @@ func (s *Bitset) Resize(size int) *Bitset {
 	}
 	sz := bitFieldLen(size)
 	if s.buf == nil || cap(s.buf) < sz {
-		buf := arena.AllocBytes(sz)[:sz]
+		buf := arena.Alloc[uint8](sz)[:sz]
 		n := copy(buf, s.buf)
 		clear(buf[n:])
 		if !s.noclose {

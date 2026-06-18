@@ -673,7 +673,7 @@ func (idx *Index) Get(key uint32) (*Record, bool) {
 		smatch: bitset.New(0),
 		vmatch: bitset.New(0),
 		snode:  node,
-		match:  arena.AllocUint32(STATS_PACK_SIZE)[:0],
+		match:  arena.Alloc[uint32](STATS_PACK_SIZE)[:0],
 	}
 	it.match = append(it.match, uint32(pos))
 	// load missing fields but don't run an spack query (flt = nil)
@@ -731,7 +731,7 @@ func (idx *Index) FindRid(ctx context.Context, rid uint64) (*Iterator, bool) {
 			use:    0,
 			vmatch: bitset.New(STATS_PACK_SIZE),
 			smatch: bitset.New(slen),
-			match:  arena.AllocUint32(STATS_PACK_SIZE),
+			match:  arena.Alloc[uint32](STATS_PACK_SIZE),
 			sx:     slen - 2, // start at last spack (it will +1)
 			n:      -1,       // start at first offset (it will +1)
 		}
@@ -885,7 +885,7 @@ func (idx *Index) Query(ctx context.Context, flt *filter.Node, dir types.OrderTy
 		ids:     slicex.Unique(ids),
 		smatch:  nodeBits,
 		vmatch:  bitset.New(STATS_PACK_SIZE),
-		match:   arena.AllocUint32(STATS_PACK_SIZE),
+		match:   arena.Alloc[uint32](STATS_PACK_SIZE),
 		sx:      -1, // start at first bit (it will +1)
 		n:       -1, // start at first offset (it will +1)
 		reverse: dir.IsReverse(),

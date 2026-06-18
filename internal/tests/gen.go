@@ -10,11 +10,11 @@ import (
 	"reflect"
 	"strconv"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/tests/testutil"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/stringx"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 const BENCH_WIDTH = 60
@@ -265,21 +265,21 @@ func GenRnd[T types.Number](n int) []T {
 	var res []T
 	switch any(T(0)).(type) {
 	case int64:
-		res = util.ReinterpretSlice[int64, T](testutil.RandIntsn[int64](n, 1<<BENCH_WIDTH-1))
+		res = arena.ReinterpretSlice[int64, T](testutil.RandIntsn[int64](n, 1<<BENCH_WIDTH-1))
 	case int32:
-		res = util.ReinterpretSlice[int32, T](testutil.RandIntsn[int32](n, 1<<(BENCH_WIDTH/2-1)))
+		res = arena.ReinterpretSlice[int32, T](testutil.RandIntsn[int32](n, 1<<(BENCH_WIDTH/2-1)))
 	case int16:
-		res = util.ReinterpretSlice[int16, T](testutil.RandInts[int16](n))
+		res = arena.ReinterpretSlice[int16, T](testutil.RandInts[int16](n))
 	case int8:
-		res = util.ReinterpretSlice[int8, T](testutil.RandInts[int8](n))
+		res = arena.ReinterpretSlice[int8, T](testutil.RandInts[int8](n))
 	case uint64:
-		res = util.ReinterpretSlice[uint64, T](testutil.RandUintsn[uint64](n, 1<<BENCH_WIDTH-1))
+		res = arena.ReinterpretSlice[uint64, T](testutil.RandUintsn[uint64](n, 1<<BENCH_WIDTH-1))
 	case uint32:
-		res = util.ReinterpretSlice[uint32, T](testutil.RandUintsn[uint32](n, 1<<(BENCH_WIDTH/2-1)))
+		res = arena.ReinterpretSlice[uint32, T](testutil.RandUintsn[uint32](n, 1<<(BENCH_WIDTH/2-1)))
 	case uint16:
-		res = util.ReinterpretSlice[uint16, T](testutil.RandUints[uint16](n))
+		res = arena.ReinterpretSlice[uint16, T](testutil.RandUints[uint16](n))
 	case uint8:
-		res = util.ReinterpretSlice[uint8, T](testutil.RandUints[uint8](n))
+		res = arena.ReinterpretSlice[uint8, T](testutil.RandUints[uint8](n))
 	case float64:
 		res = make([]T, n)
 		for i, v := range testutil.RandUintsn[uint64](n, 1<<BENCH_WIDTH-1) {
@@ -302,21 +302,21 @@ func GenRndBits[T types.Number](n, w int) []T {
 	var res []T
 	switch any(T(0)).(type) {
 	case int64:
-		res = util.ReinterpretSlice[int64, T](testutil.RandIntsn[int64](n, 1<<min(w, 63)-1))
+		res = arena.ReinterpretSlice[int64, T](testutil.RandIntsn[int64](n, 1<<min(w, 63)-1))
 	case int32:
-		res = util.ReinterpretSlice[int32, T](testutil.RandIntsn[int32](n, 1<<min(w, 31)-1))
+		res = arena.ReinterpretSlice[int32, T](testutil.RandIntsn[int32](n, 1<<min(w, 31)-1))
 	case int16:
-		res = util.ReinterpretSlice[int16, T](testutil.RandIntsn[int16](n, 1<<min(w, 15)-1))
+		res = arena.ReinterpretSlice[int16, T](testutil.RandIntsn[int16](n, 1<<min(w, 15)-1))
 	case int8:
-		res = util.ReinterpretSlice[int8, T](testutil.RandIntsn[int8](n, 1<<min(w, 7)-1))
+		res = arena.ReinterpretSlice[int8, T](testutil.RandIntsn[int8](n, 1<<min(w, 7)-1))
 	case uint64:
-		res = util.ReinterpretSlice[uint64, T](testutil.RandUintsn[uint64](n, 1<<w-1))
+		res = arena.ReinterpretSlice[uint64, T](testutil.RandUintsn[uint64](n, 1<<w-1))
 	case uint32:
-		res = util.ReinterpretSlice[uint32, T](testutil.RandUintsn[uint32](n, 1<<w-1))
+		res = arena.ReinterpretSlice[uint32, T](testutil.RandUintsn[uint32](n, 1<<w-1))
 	case uint16:
-		res = util.ReinterpretSlice[uint16, T](testutil.RandUintsn[uint16](n, 1<<w-1))
+		res = arena.ReinterpretSlice[uint16, T](testutil.RandUintsn[uint16](n, 1<<w-1))
 	case uint8:
-		res = util.ReinterpretSlice[uint8, T](testutil.RandUintsn[uint8](n, 1<<w-1))
+		res = arena.ReinterpretSlice[uint8, T](testutil.RandUintsn[uint8](n, 1<<w-1))
 	case float64:
 		res = make([]T, n)
 		for i, v := range testutil.RandUintsn[uint64](n, 1<<min(w, 49)-1) {

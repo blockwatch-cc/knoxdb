@@ -8,10 +8,10 @@ import (
 	"testing"
 	"unsafe"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	stests "blockwatch.cc/knoxdb/internal/encode/s8b/tests"
 	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -40,10 +40,10 @@ func TestDecode(t *testing.T) {
 }
 
 func DecodeLegacyWrapper[T types.Unsigned](dst []T, buf []byte) (int, error) {
-	src := util.FromByteSlice[uint64](buf)
+	src := arena.FromBytes[uint64](buf)
 	switch any(T(0)).(type) {
 	case uint64:
-		return DecodeLegacy(util.ReinterpretSlice[T, uint64](dst), src)
+		return DecodeLegacy(arena.ReinterpretSlice[T, uint64](dst), src)
 	default:
 		u64 := make([]uint64, len(dst))
 		n, err := DecodeLegacy(u64, src)

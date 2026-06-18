@@ -8,10 +8,10 @@ import (
 	"slices"
 	"testing"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,7 +28,7 @@ type TestCase[T types.Integer] struct {
 }
 
 func MakeTests[T types.Integer]() []TestCase[T] {
-	width := util.SizeOf[T]()
+	width := arena.SizeFor[T]()
 	tests := []TestCase[T]{
 		{Name: "nil", Data: nil},
 		{Name: "empty", Data: []T{}},
@@ -122,7 +122,7 @@ func MakeTests[T types.Integer]() []TestCase[T] {
 			{Name: "60 bits", Gen: bits[T](120, 60)},
 			{
 				Name: "too big",
-				Data: util.ReinterpretSlice[uint64, T]([]uint64{7, 6, 2<<61 - 1, 4, 3, 2, 1}),
+				Data: arena.ReinterpretSlice[uint64, T]([]uint64{7, 6, 2<<61 - 1, 4, 3, 2, 1}),
 				Err:  true,
 			},
 		}...)

@@ -7,17 +7,17 @@ import (
 	"sync"
 	"time"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/assert"
 	"blockwatch.cc/knoxdb/pkg/schema"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 var (
 	pool      = sync.Pool{New: func() any { return &Package{} }}
 	zeroTime  = time.Time{}
-	szPackage = util.SizeFor[Package]()
+	szPackage = arena.SizeFor[Package]()
 )
 
 type Package struct {

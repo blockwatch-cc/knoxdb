@@ -14,7 +14,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/encode/hashprobe"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 // ensure we implement required interfaces
@@ -128,7 +127,7 @@ func (c *DictionaryContainer[T]) Encode(ctx *Context[T], vals []T) NumberContain
 		dict  []T
 		codes []uint16
 	)
-	if len(ctx.UniqueArray) > 0 || util.SizeOf[T]() <= 2 {
+	if len(ctx.UniqueArray) > 0 || arena.SizeFor[T]() <= 2 {
 		dict, codes = dictEncodeArray(ctx, vals)
 	} else {
 		dict, codes = hashprobe.BuildDict(vals, ctx.NumUnique)
@@ -165,7 +164,7 @@ func dictEncodeArray[T types.Integer](ctx *Context[T], vals []T) ([]T, []uint16)
 		}
 	}
 
-	codes := arena.AllocUint16(len(vals))[:len(vals)]
+	codes := arena.Alloc[uint16](len(vals))[:len(vals)]
 	for i, v := range vals {
 		// apply min-FOR to value for compatibility with buildUniqueArray()
 		// subtract -1 from code (buildUniqueArray had added +1)

@@ -7,8 +7,8 @@ import (
 	"encoding/binary"
 	"unsafe"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 //go:nocheckptr
@@ -24,7 +24,7 @@ func Decode[T types.Integer](dst []T, buf []byte, minv T) (int, error) {
 	unpack := unpackSelector[T](minv)
 
 	var i, j int
-	src := util.FromByteSlice[uint64](buf)
+	src := arena.FromBytes[uint64](buf)
 	for range len(src) / 8 {
 		v0 := src[i]
 		s0 := (v0 >> 60) & 0xf

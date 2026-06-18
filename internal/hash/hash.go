@@ -7,6 +7,7 @@ import (
 	"math"
 	"unsafe"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/zeebo/xxh3"
@@ -127,17 +128,17 @@ func Vec(src any, dst []uint64) []uint64 {
 	case []uint8:
 		res = Vec8(v, makeSlice(dst, len(v)))
 	case []int64:
-		res = Vec64(util.ReinterpretSlice[int64, uint64](v), makeSlice(dst, len(v)))
+		res = Vec64(arena.ReinterpretSlice[int64, uint64](v), makeSlice(dst, len(v)))
 	case []int32:
-		res = Vec32(util.ReinterpretSlice[int32, uint32](v), makeSlice(dst, len(v)))
+		res = Vec32(arena.ReinterpretSlice[int32, uint32](v), makeSlice(dst, len(v)))
 	case []int16:
-		res = Vec16(util.ReinterpretSlice[int16, uint16](v), makeSlice(dst, len(v)))
+		res = Vec16(arena.ReinterpretSlice[int16, uint16](v), makeSlice(dst, len(v)))
 	case []int8:
-		res = Vec8(util.ReinterpretSlice[int8, uint8](v), makeSlice(dst, len(v)))
+		res = Vec8(arena.ReinterpretSlice[int8, uint8](v), makeSlice(dst, len(v)))
 	case []float64:
-		res = Vec64(util.ReinterpretSlice[float64, uint64](v), makeSlice(dst, len(v)))
+		res = Vec64(arena.ReinterpretSlice[float64, uint64](v), makeSlice(dst, len(v)))
 	case []float32:
-		res = Vec32(util.ReinterpretSlice[float32, uint32](v), makeSlice(dst, len(v)))
+		res = Vec32(arena.ReinterpretSlice[float32, uint32](v), makeSlice(dst, len(v)))
 	case []bool:
 		res = makeSlice(dst, len(v))
 		for i := range res {

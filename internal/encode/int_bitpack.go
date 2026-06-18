@@ -149,7 +149,7 @@ func (c *BitpackContainer[T]) Encode(ctx *Context[T], vals []T) NumberContainer[
 	c.For = ctx.Min
 
 	sz := bitpack.EstimateSize(ctx.UseBits, len(vals))
-	c.Packed, c.Log2 = bitpack.Encode(arena.AllocBytes(sz)[:sz], vals, ctx.Min, ctx.Max)
+	c.Packed, c.Log2 = bitpack.Encode(arena.Alloc[uint8](sz)[:sz], vals, ctx.Min, ctx.Max)
 	c.dec = bitpack.NewDecoder(c.Packed, c.Log2, c.N, c.For)
 	c.free = sz > 0
 

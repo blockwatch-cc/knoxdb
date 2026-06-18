@@ -23,8 +23,8 @@ type Int128Stride struct {
 
 func NewInt128Stride(sz int) *Int128Stride {
 	return &Int128Stride{
-		arena.AllocInt64(sz),
-		arena.AllocUint64(sz),
+		arena.Alloc[int64](sz),
+		arena.Alloc[uint64](sz),
 	}
 }
 

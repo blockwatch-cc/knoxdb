@@ -6,8 +6,8 @@ package bitpack
 import (
 	"unsafe"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 const (
@@ -22,27 +22,27 @@ func Encode[T types.Integer](dst []byte, src []T, minv, maxv T) ([]byte, int) {
 	var n, log2 int
 	switch any(T(0)).(type) {
 	case uint8:
-		n, log2 = Bitpack8(dst, util.ReinterpretSlice[T, uint8](src), uint8(minv), uint8(maxv))
+		n, log2 = Bitpack8(dst, arena.ReinterpretSlice[T, uint8](src), uint8(minv), uint8(maxv))
 	case uint16:
-		n, log2 = Bitpack16(dst, util.ReinterpretSlice[T, uint16](src), uint16(minv), uint16(maxv))
+		n, log2 = Bitpack16(dst, arena.ReinterpretSlice[T, uint16](src), uint16(minv), uint16(maxv))
 	case uint32:
-		n, log2 = Bitpack32(dst, util.ReinterpretSlice[T, uint32](src), uint32(minv), uint32(maxv))
+		n, log2 = Bitpack32(dst, arena.ReinterpretSlice[T, uint32](src), uint32(minv), uint32(maxv))
 	case uint64:
-		n, log2 = Bitpack64(dst, util.ReinterpretSlice[T, uint64](src), uint64(minv), uint64(maxv))
+		n, log2 = Bitpack64(dst, arena.ReinterpretSlice[T, uint64](src), uint64(minv), uint64(maxv))
 	case int8:
-		n, log2 = Bitpack8(dst, util.ReinterpretSlice[T, int8](src), int8(minv), int8(maxv))
+		n, log2 = Bitpack8(dst, arena.ReinterpretSlice[T, int8](src), int8(minv), int8(maxv))
 	case int16:
-		n, log2 = Bitpack16(dst, util.ReinterpretSlice[T, int16](src), int16(minv), int16(maxv))
+		n, log2 = Bitpack16(dst, arena.ReinterpretSlice[T, int16](src), int16(minv), int16(maxv))
 	case int32:
-		n, log2 = Bitpack32(dst, util.ReinterpretSlice[T, int32](src), int32(minv), int32(maxv))
+		n, log2 = Bitpack32(dst, arena.ReinterpretSlice[T, int32](src), int32(minv), int32(maxv))
 	case int64:
-		n, log2 = Bitpack64(dst, util.ReinterpretSlice[T, int64](src), int64(minv), int64(maxv))
+		n, log2 = Bitpack64(dst, arena.ReinterpretSlice[T, int64](src), int64(minv), int64(maxv))
 	}
 	return dst[:n], log2
 }
 
 func Bitpack8[T int8 | uint8](dst []byte, src []T, minv, maxv T) (int, int) {
-	out := util.FromByteSlice[uint64](dst)
+	out := arena.FromBytes[uint64](dst)
 	log2 := types.Log2Range(minv, maxv)
 	blockN := len(src) / (4 * BlockSize)
 	if blockN == 0 {
@@ -85,7 +85,7 @@ func Bitpack8[T int8 | uint8](dst []byte, src []T, minv, maxv T) (int, int) {
 }
 
 func Bitpack16[T int16 | uint16](dst []byte, src []T, minv, maxv T) (int, int) {
-	out := util.FromByteSlice[uint64](dst)
+	out := arena.FromBytes[uint64](dst)
 	log2 := types.Log2Range(minv, maxv)
 	blockN := len(src) / (4 * BlockSize)
 	if blockN == 0 {
@@ -128,7 +128,7 @@ func Bitpack16[T int16 | uint16](dst []byte, src []T, minv, maxv T) (int, int) {
 }
 
 func Bitpack32[T int32 | uint32](dst []byte, src []T, minv, maxv T) (int, int) {
-	out := util.FromByteSlice[uint64](dst)
+	out := arena.FromBytes[uint64](dst)
 	log2 := types.Log2Range(minv, maxv)
 	blockN := len(src) / (4 * BlockSize)
 	if blockN == 0 {
@@ -171,7 +171,7 @@ func Bitpack32[T int32 | uint32](dst []byte, src []T, minv, maxv T) (int, int) {
 }
 
 func Bitpack64[T int64 | uint64](dst []byte, src []T, minv, maxv T) (int, int) {
-	out := util.FromByteSlice[uint64](dst)
+	out := arena.FromBytes[uint64](dst)
 	log2 := types.Log2Range(minv, maxv)
 	blockN := len(src) / (4 * BlockSize)
 	if blockN == 0 {

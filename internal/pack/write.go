@@ -271,7 +271,7 @@ func (p *Package) AppendSelected(src *Package, mode WriteMode, state AppendState
 		sel := src.selected[state.selOffset:]
 		last := uint32(state.srcOffset)
 		free := p.maxRows - p.nRows
-		neg := arena.AllocUint32(free)
+		neg := arena.Alloc[uint32](free)
 
 		for {
 			// find the next gap

@@ -10,7 +10,6 @@ import (
 	etests "blockwatch.cc/knoxdb/internal/encode/tests"
 	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/pkg/slicex"
-	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -113,7 +112,7 @@ func DictBenchmark[T Integer](b *testing.B, fn buildFunc[T]) {
 			card := estimateCardinality(data)
 			b.Run(fmt.Sprintf("%T/%s/%s", T(0), c.Name, p.Name), func(b *testing.B) {
 				b.ReportAllocs()
-				b.SetBytes(int64(c.N * util.SizeOf[T]()))
+				b.SetBytes(int64(c.N * arena.SizeFor[T]()))
 				for range b.N {
 					dict, codes := fn(data, card)
 					card = len(dict)
@@ -130,7 +129,7 @@ func DictBenchmarkFloat[T Float, U Integer](b *testing.B, fn buildFunc[U]) {
 	for _, p := range tests.BenchmarkPatterns {
 		for _, c := range tests.BenchmarkSizes {
 			data := tests.GenDups[T](c.N, min(c.N, p.Size), 25)
-			src := util.ReinterpretSlice[T, U](data)
+			src := arena.ReinterpretSlice[T, U](data)
 			card := estimateCardinality(data)
 			once := true
 			b.Run(fmt.Sprintf("%T/%s/%s", T(0), c.Name, p.Name), func(b *testing.B) {
@@ -139,7 +138,7 @@ func DictBenchmarkFloat[T Float, U Integer](b *testing.B, fn buildFunc[U]) {
 					once = false
 				}
 				b.ReportAllocs()
-				b.SetBytes(int64(c.N * util.SizeFor[T]()))
+				b.SetBytes(int64(c.N * arena.SizeFor[T]()))
 				for range b.N {
 					dict, codes := fn(src, card)
 					card = len(dict)

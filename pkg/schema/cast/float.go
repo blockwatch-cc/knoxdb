@@ -9,7 +9,6 @@ import (
 
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/schema"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 // float caster
@@ -70,7 +69,7 @@ func (c FloatCaster[T]) CastValue(val any) (res any, err error) {
 		}
 	}
 	if !ok {
-		err = CastError(val, "float"+strconv.Itoa(util.SizeFor[T]()*8))
+		err = CastError(val, "float"+strconv.Itoa(reflect.TypeFor[T]().Bits()))
 	}
 	return
 }
@@ -220,7 +219,7 @@ func (c FloatCaster[T]) CastSlice(val any) (res any, err error) {
 		}
 	}
 	if !ok {
-		err = CastError(val, "float"+strconv.Itoa(util.SizeFor[T]()*8))
+		err = CastError(val, "float"+strconv.Itoa(reflect.TypeFor[T]().Bits()))
 	}
 	return
 }

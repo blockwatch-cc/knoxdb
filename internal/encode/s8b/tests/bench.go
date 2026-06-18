@@ -8,10 +8,10 @@ import (
 	"slices"
 	"testing"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
@@ -21,7 +21,7 @@ func EncodeBenchmark[T types.Unsigned](b *testing.B, fn EncodeFunc[T]) {
 		buf := make([]byte, 8*len(c.Data))
 		var sz int
 		b.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(b *testing.B) {
-			b.SetBytes(int64(len(c.Data) * util.SizeOf[T]()))
+			b.SetBytes(int64(len(c.Data) * arena.SizeFor[T]()))
 			for b.Loop() {
 				buf, _ := fn(buf, c.Data, minv, maxv)
 				sz += len(buf)
@@ -38,7 +38,7 @@ func DecodeBenchmark[T types.Unsigned](b *testing.B, enc EncodeFunc[T], dec Deco
 		require.NoError(b, err)
 		dst := make([]T, len(c.Data))
 		b.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(b *testing.B) {
-			b.SetBytes(int64(len(c.Data) * util.SizeOf[T]()))
+			b.SetBytes(int64(len(c.Data) * arena.SizeFor[T]()))
 			for b.Loop() {
 				dec(dst, buf, minv)
 			}
@@ -56,7 +56,7 @@ func CompareBenchmark[T types.Unsigned](b *testing.B, enc EncodeFunc[T], cmp Com
 		val := c.Data[len(c.Data)/2]
 
 		b.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(b *testing.B) {
-			b.SetBytes(int64(len(c.Data) * util.SizeOf[T]()))
+			b.SetBytes(int64(len(c.Data) * arena.SizeFor[T]()))
 			for b.Loop() {
 				cmp(buf, uint64(val), bits)
 			}
@@ -75,7 +75,7 @@ func CompareBenchmark2[T types.Unsigned](b *testing.B, enc EncodeFunc[T], cmp Co
 		from, to := max(val/2, minv+1), min(val*2, maxv-1)
 
 		b.Run(fmt.Sprintf("%T/%s", T(0), c.Name), func(b *testing.B) {
-			b.SetBytes(int64(len(c.Data) * util.SizeOf[T]()))
+			b.SetBytes(int64(len(c.Data) * arena.SizeFor[T]()))
 			for b.Loop() {
 				cmp(buf, uint64(from), uint64(to), bits)
 			}

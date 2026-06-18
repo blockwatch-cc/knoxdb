@@ -60,7 +60,7 @@ func (j *Journal) UpdateRecords(ctx context.Context, src []byte, ridMap map[uint
 	// dimension WAL write buffer
 	baseSz := (bits.Len()+7)/8 + binary.MaxVarintLen64 // changeset + rid1
 	sz := baseSz + 2*binary.MaxVarintLen64 + len(src)  // add max rid + refid space
-	buf := arena.AllocBytes(sz)
+	buf := arena.Alloc[uint8](sz)
 	msg := bytes.NewBuffer(buf)
 
 	// split buf into wire messages
@@ -261,7 +261,7 @@ func (j *Journal) updatePackWithWal(src *pack.Package, xid types.XID, w *wal.Wal
 	} else {
 		sz = baseSz + sz*len(sel)
 	}
-	buf := arena.AllocBytes(sz)
+	buf := arena.Alloc[uint8](sz)
 	msg := bytes.NewBuffer(buf)
 
 	if sel == nil {

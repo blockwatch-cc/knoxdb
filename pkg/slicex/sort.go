@@ -6,8 +6,6 @@ package slicex
 import (
 	"cmp"
 	"sort"
-
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 type PairSorter[S, T cmp.Ordered] struct {
@@ -36,7 +34,7 @@ const nbits = 8
 
 // custom radix sort, faster than slices.Sort
 func Sort[T Integer](vs []T, shift int) {
-	w := util.SizeFor[T]() * 8
+	w := SizeFor[T]() * 8
 	s := w - nbits - shift
 
 	if len(vs) < 1<<6 {

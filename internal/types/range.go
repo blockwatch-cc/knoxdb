@@ -67,7 +67,7 @@ func (r Range) AsSelection() []uint32 {
 
 func MakeSelection[T uint32 | uint64 | int | uint](a, b T) []uint32 {
 	n := b - a
-	sel := arena.AllocUint32(int(n))[:n]
+	sel := arena.Alloc[uint32](int(n))[:n]
 	if b <= T(maxSeq) {
 		copy(sel, constRange[a:])
 	} else {
@@ -86,7 +86,7 @@ func NegateSelection(s []uint32, sz int) []uint32 {
 		return MakeSelection(0, sz) // empty = none -> neg = all
 	}
 	sz -= len(s)
-	neg := arena.AllocUint32(sz)[:sz]
+	neg := arena.Alloc[uint32](sz)[:sz]
 	var (
 		i uint32
 		j int

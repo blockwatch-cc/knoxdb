@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"math"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/encode/alp"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 // NewFloat creates a new integer container from scheme type.
@@ -66,7 +66,7 @@ func EncodeFloat[T types.Float](ctx *Context[T], v []T) NumberContainer[T] {
 func EstimateFloat[T types.Float](ctx *Context[T], scheme ContainerType, vals []T) float64 {
 	// estimate cheap encodings
 	var (
-		w       = util.SizeFor[T]()
+		w       = arena.SizeFor[T]()
 		rawSize = ctx.rawCosts()
 		estSize int
 	)

@@ -15,7 +15,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/filter/llb"
 	"blockwatch.cc/knoxdb/internal/hash"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/util"
 )
 
 type ContextExporter interface {
@@ -52,7 +51,7 @@ func (c *Context[T]) WithLevel(l int) *Context[T] {
 func NewIntContext[T types.Integer](minv, maxv T, n int) *Context[T] {
 	c := newContext[T]()
 	c.Lvl = MAX_LEVEL
-	c.PhyBits = util.SizeOf[T]() * 8
+	c.PhyBits = arena.SizeFor[T]() * 8
 	c.UseBits = types.Log2Range(minv, maxv)
 	c.NumValues = n
 	c.Min = minv
@@ -65,7 +64,7 @@ func NewIntContext[T types.Integer](minv, maxv T, n int) *Context[T] {
 func NewFloatContext[T types.Float](minv, maxv T, n int) *Context[T] {
 	c := newContext[T]()
 	c.Lvl = MAX_LEVEL
-	c.PhyBits = util.SizeFor[T]() * 8
+	c.PhyBits = arena.SizeFor[T]() * 8
 	c.UseBits = c.PhyBits
 	c.NumValues = n
 	c.Min = minv
@@ -79,34 +78,34 @@ func NewFloatContext[T types.Float](minv, maxv T, n int) *Context[T] {
 func AnalyzeInt[T types.Integer](vals []T, checkUnique bool) *Context[T] {
 	c := newContext[T]()
 	c.Lvl = MAX_LEVEL
-	c.PhyBits = util.SizeOf[T]() * 8
+	c.PhyBits = arena.SizeFor[T]() * 8
 	c.NumValues = len(vals)
 
 	// vector analyze
 	switch any(T(0)).(type) {
 	case int64:
-		minv, maxv, delta, nruns := analyze.AnalyzeInt64(util.ReinterpretSlice[T, int64](vals))
+		minv, maxv, delta, nruns := analyze.AnalyzeInt64(arena.ReinterpretSlice[T, int64](vals))
 		c.Min, c.Max, c.Delta, c.NumRuns = T(minv), T(maxv), T(delta), nruns
 	case int32:
-		minv, maxv, delta, nruns := analyze.AnalyzeInt32(util.ReinterpretSlice[T, int32](vals))
+		minv, maxv, delta, nruns := analyze.AnalyzeInt32(arena.ReinterpretSlice[T, int32](vals))
 		c.Min, c.Max, c.Delta, c.NumRuns = T(minv), T(maxv), T(delta), nruns
 	case int16:
-		minv, maxv, delta, nruns := analyze.AnalyzeInt16(util.ReinterpretSlice[T, int16](vals))
+		minv, maxv, delta, nruns := analyze.AnalyzeInt16(arena.ReinterpretSlice[T, int16](vals))
 		c.Min, c.Max, c.Delta, c.NumRuns = T(minv), T(maxv), T(delta), nruns
 	case int8:
-		minv, maxv, delta, nruns := analyze.AnalyzeInt8(util.ReinterpretSlice[T, int8](vals))
+		minv, maxv, delta, nruns := analyze.AnalyzeInt8(arena.ReinterpretSlice[T, int8](vals))
 		c.Min, c.Max, c.Delta, c.NumRuns = T(minv), T(maxv), T(delta), nruns
 	case uint64:
-		minv, maxv, delta, nruns := analyze.AnalyzeUint64(util.ReinterpretSlice[T, uint64](vals))
+		minv, maxv, delta, nruns := analyze.AnalyzeUint64(arena.ReinterpretSlice[T, uint64](vals))
 		c.Min, c.Max, c.Delta, c.NumRuns = T(minv), T(maxv), T(delta), nruns
 	case uint32:
-		minv, maxv, delta, nruns := analyze.AnalyzeUint32(util.ReinterpretSlice[T, uint32](vals))
+		minv, maxv, delta, nruns := analyze.AnalyzeUint32(arena.ReinterpretSlice[T, uint32](vals))
 		c.Min, c.Max, c.Delta, c.NumRuns = T(minv), T(maxv), T(delta), nruns
 	case uint16:
-		minv, maxv, delta, nruns := analyze.AnalyzeUint16(util.ReinterpretSlice[T, uint16](vals))
+		minv, maxv, delta, nruns := analyze.AnalyzeUint16(arena.ReinterpretSlice[T, uint16](vals))
 		c.Min, c.Max, c.Delta, c.NumRuns = T(minv), T(maxv), T(delta), nruns
 	case uint8:
-		minv, maxv, delta, nruns := analyze.AnalyzeUint8(util.ReinterpretSlice[T, uint8](vals))
+		minv, maxv, delta, nruns := analyze.AnalyzeUint8(arena.ReinterpretSlice[T, uint8](vals))
 		c.Min, c.Max, c.Delta, c.NumRuns = T(minv), T(maxv), T(delta), nruns
 	}
 
@@ -166,7 +165,7 @@ func AnalyzeInt[T types.Integer](vals []T, checkUnique bool) *Context[T] {
 func AnalyzeFloat[T types.Float](vals []T, checkUnique, checkALP bool) *Context[T] {
 	c := newContext[T]()
 	c.Lvl = MAX_LEVEL
-	c.PhyBits = util.SizeFor[T]() * 8
+	c.PhyBits = arena.SizeFor[T]() * 8
 	c.UseBits = c.PhyBits
 	if len(vals) == 0 {
 		return c
@@ -174,10 +173,10 @@ func AnalyzeFloat[T types.Float](vals []T, checkUnique, checkALP bool) *Context[
 	c.NumValues = len(vals)
 
 	if c.PhyBits == 64 {
-		minv, maxv, nruns := analyze.AnalyzeFloat64(util.ReinterpretSlice[T, float64](vals))
+		minv, maxv, nruns := analyze.AnalyzeFloat64(arena.ReinterpretSlice[T, float64](vals))
 		c.Min, c.Max, c.NumRuns = T(minv), T(maxv), nruns
 	} else {
-		minv, maxv, nruns := analyze.AnalyzeFloat32(util.ReinterpretSlice[T, float32](vals))
+		minv, maxv, nruns := analyze.AnalyzeFloat32(arena.ReinterpretSlice[T, float32](vals))
 		c.Min, c.Max, c.NumRuns = T(minv), T(maxv), nruns
 	}
 
@@ -211,15 +210,15 @@ func (c *Context[T]) estimateCardinality(vals []T) int {
 	unique, _ := llb.NewFilterBuffer(scratch[:], 8)
 	if c.PhyBits == 64 {
 		hashes := hash.Vec64(
-			util.ReinterpretSlice[T, uint64](vals),
-			arena.AllocUint64(len(vals))[:len(vals)],
+			arena.ReinterpretSlice[T, uint64](vals),
+			arena.Alloc[uint64](len(vals))[:len(vals)],
 		)
 		unique.Add(hashes...)
 		arena.Free(hashes)
 	} else {
 		hashes := hash.Vec32(
-			util.ReinterpretSlice[T, uint32](vals),
-			arena.AllocUint64(len(vals))[:len(vals)],
+			arena.ReinterpretSlice[T, uint32](vals),
+			arena.Alloc[uint64](len(vals))[:len(vals)],
 		)
 		unique.Add(hashes...)
 		arena.Free(hashes)

@@ -7,7 +7,7 @@ import (
 	"encoding/binary"
 	"math/bits"
 
-	"blockwatch.cc/knoxdb/pkg/util"
+	"blockwatch.cc/knoxdb/internal/arena"
 )
 
 func And(dst, src []byte, size int) {
@@ -337,7 +337,7 @@ func PopCount(src []byte, size int) int64 {
 	var cnt int64
 
 	// process 8 bytes per loop, byte order doesn't matter (Intel maybe faster)
-	for _, v := range util.FromByteSlice[uint64](src[:(size-1)>>3]) {
+	for _, v := range arena.FromBytes[uint64](src[:(size-1)>>3]) {
 		cnt += int64(bits.OnesCount64(v))
 	}
 
@@ -361,7 +361,7 @@ func Indexes(src []byte, size int, dst []uint32) int {
 		j   int                 // output index
 		val uint32 = 0xffffffff // running index
 	)
-	for _, word := range util.FromByteSlice[uint64](src) {
+	for _, word := range arena.FromBytes[uint64](src) {
 		if word == 0 {
 			val += 64
 			i += 8
