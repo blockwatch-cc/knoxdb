@@ -75,7 +75,7 @@ func buildSchema(s *schema.Schema) *yaml.Node {
 }
 
 func buildField(f *schema.Field) *yaml.Node {
-	node := mapNode(24)
+	node := mapNode(16)
 	node.Content = append(node.Content,
 		strNode("id"), intNode(f.Id),
 		strNode("name"), strNode(f.Basename()),
@@ -115,11 +115,13 @@ func buildField(f *schema.Field) *yaml.Node {
 		}
 		node.Content = append(node.Content, strNode("cases"), cases)
 	case schema.Enum:
-		vals := seqNode(f.Enum.Len())
-		for v := range f.Enum.Values() {
-			vals.Content = append(vals.Content, strNode(v))
+		if f.Enum.Len() > 0 {
+			vals := seqNode(f.Enum.Len())
+			for v := range f.Enum.Values() {
+				vals.Content = append(vals.Content, strNode(v))
+			}
+			node.Content = append(node.Content, strNode("values"), vals)
 		}
-		node.Content = append(node.Content, strNode("values"), vals)
 	}
 
 	return node

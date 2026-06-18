@@ -4,6 +4,7 @@
 package schema_tests
 
 import (
+	"encoding/json"
 	"math/bits"
 	"strings"
 	"testing"
@@ -585,29 +586,42 @@ func TestSchemaDetect(t *testing.T) {
 }
 
 func TestSchemaMarshal(t *testing.T) {
-	s, err := reflect.SchemaFor[AllTypes]()
-	require.NoError(t, err)
-	buf, err := s.MarshalBinary()
-	require.NoError(t, err)
-	require.NotNil(t, buf)
+	for _, s := range []*schema.Schema{
+		reflect.MustSchemaFor[AllTypes](schema.Enums(enums)),
+		reflect.MustSchemaFor[ArrayTypes](),
+		reflect.MustSchemaFor[TimeTypes](),
+		reflect.MustSchemaFor[ListFields](),
+		reflect.MustSchemaFor[MapFields](),
+		reflect.MustSchemaFor[MetaFields](),
+		listFieldsT,
+		listInListT,
+		listInStructInListT,
+		customerT,
+	} {
+		t.Run(s.Name, func(t *testing.T) {
+			buf, err := s.MarshalBinary()
+			require.NoError(t, err)
+			require.NotNil(t, buf)
 
-	r := &schema.Schema{}
-	err = r.UnmarshalBinary(buf)
-	require.NoError(t, err)
+			r := &schema.Schema{}
+			err = r.UnmarshalBinary(buf)
+			require.NoError(t, err)
 
-	assert.True(t, s.Equal(r))
-	assert.Equal(t, s.Hash, r.Hash)
-	assert.Equal(t, s.Version, r.Version)
-	assert.Equal(t, s.Name, r.Name)
-	assert.Equal(t, s.IsFixedSize, r.IsFixedSize)
-	assert.Equal(t, s.MinWireSize, r.MinWireSize)
-	assert.Equal(t, s.NumFields(), r.NumFields())
-	assert.Equal(t, s.NumActive(), r.NumActive())
-	assert.Equal(t, s.NumVisible(), r.NumVisible())
-	assert.Equal(t, s.Names(), r.Names())
-	assert.Equal(t, s.Ids(), r.Ids())
-	assert.Equal(t, s.PkId(), r.PkId())
-	assert.Equal(t, s.PkIndex(), r.PkIndex())
+			assert.True(t, s.Equal(r))
+			assert.Equal(t, s.Hash, r.Hash)
+			assert.Equal(t, s.Version, r.Version)
+			assert.Equal(t, s.Name, r.Name)
+			assert.Equal(t, s.IsFixedSize, r.IsFixedSize)
+			assert.Equal(t, s.MinWireSize, r.MinWireSize)
+			assert.Equal(t, s.NumFields(), r.NumFields())
+			assert.Equal(t, s.NumActive(), r.NumActive())
+			assert.Equal(t, s.NumVisible(), r.NumVisible())
+			assert.Equal(t, s.Names(), r.Names())
+			assert.Equal(t, s.Ids(), r.Ids())
+			assert.Equal(t, s.PkId(), r.PkId())
+			assert.Equal(t, s.PkIndex(), r.PkIndex())
+		})
+	}
 }
 
 // TestSchemaIsValid checks if the Schema.IsValid() method correctly identifies
@@ -995,4 +1009,35 @@ func TestSchemaRegistry(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, s)
 	require.Equal(t, listFieldsT2.Hash, s.Hash)
+}
+
+func TestSchemaExportImport(t *testing.T) {
+	for _, s := range []*schema.Schema{
+		reflect.MustSchemaFor[AllTypes](schema.Enums(enums)),
+		reflect.MustSchemaFor[ArrayTypes](),
+		reflect.MustSchemaFor[TimeTypes](),
+		reflect.MustSchemaFor[ListFields](),
+		reflect.MustSchemaFor[MapFields](),
+		reflect.MustSchemaFor[MetaFields](),
+		listFieldsT,
+		listInListT,
+		listInStructInListT,
+		customerT,
+	} {
+		t.Run(s.Name, func(t *testing.T) {
+			m := s.Export()
+			r := new(schema.Schema)
+			require.NoError(t, r.Import(m))
+			require.Equal(t, s.Hash, r.Hash, "map roundtrip failed")
+
+			// json marshal
+			buf, err := json.Marshal(m)
+			require.NoError(t, err)
+			m2 := make(map[string]any)
+			require.NoError(t, json.Unmarshal(buf, &m2))
+			u := new(schema.Schema)
+			require.NoError(t, u.Import(m2))
+			require.Equal(t, s.Hash, u.Hash, "json rountrip failed")
+		})
+	}
 }
