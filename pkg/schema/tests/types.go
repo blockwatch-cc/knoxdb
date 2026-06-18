@@ -13,13 +13,13 @@ import (
 	"blockwatch.cc/knoxdb/pkg/schema/enum"
 )
 
-func RegisterEnums() *enum.EnumRegistry {
+func RegisterEnums() *enum.Registry {
 	// prepare enum
-	myEnum = enum.NewEnumDictionary("my_enum")
+	myEnum = enum.NewDictionary("my_enum")
 	myEnum.Append("a", "b", "c", "d", "e")
 
 	// create test registry and add enum to registry
-	enums = enum.NewEnumRegistry()
+	enums = enum.NewRegistry()
 	enums.Register(0, myEnum)
 
 	return enums
@@ -102,8 +102,8 @@ type InvalidPkType struct {
 type MyEnum string
 
 var (
-	enums  *enum.EnumRegistry
-	myEnum *enum.EnumDictionary
+	enums  *enum.Registry
+	myEnum *enum.Dictionary
 )
 
 type AllTypes struct {

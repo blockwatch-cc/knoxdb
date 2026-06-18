@@ -111,8 +111,8 @@ type Database interface {
 
 	// enums
 	ListEnums() []string
-	FindEnum(name string) (*enum.EnumDictionary, error)
-	CreateEnum(ctx context.Context, name string) (*enum.EnumDictionary, error)
+	FindEnum(name string) (*enum.Dictionary, error)
+	CreateEnum(ctx context.Context, name string) (*enum.Dictionary, error)
 	ExtendEnum(ctx context.Context, name string, vals ...string) error
 	DropEnum(ctx context.Context, name string) error
 }

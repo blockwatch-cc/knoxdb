@@ -11,7 +11,7 @@ type Option func(*Schema)
 // Enums adds enums from the provided registry to a schema's
 // enum fields. Us this option with reflect.SchemaOf and SchemaFor[T]
 // to initialize the schema with enums.
-func Enums(r *enum.EnumRegistry) Option {
+func Enums(r *enum.Registry) Option {
 	return func(s *Schema) {
 		s.UseEnums(r)
 	}
@@ -91,7 +91,7 @@ func WithNullable(b ...bool) FieldOption {
 	}
 }
 
-func WithEnum(e *enum.EnumDictionary) FieldOption {
+func WithEnum(e *enum.Dictionary) FieldOption {
 	return func(f *Field) {
 		if e != nil {
 			f.Type = Enum

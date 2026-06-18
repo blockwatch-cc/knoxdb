@@ -33,7 +33,7 @@ var (
 var myEnums = []string{"one", "two", "three", "four"}
 
 var (
-	enums          *enum.EnumRegistry
+	enums          *enum.Registry
 	allTypesSchema *schema.Schema
 	securitySchema *schema.Schema
 )
@@ -45,11 +45,11 @@ func RegisterEnum() {
 	}
 
 	// create dictionary
-	myEnum := enum.NewEnumDictionary("my_enum")
+	myEnum := enum.NewDictionary("my_enum")
 	myEnum.Append(myEnums...)
 
 	// create test registry and add enum to registry
-	enums = enum.NewEnumRegistry()
+	enums = enum.NewRegistry()
 	enums.Register(0, myEnum)
 
 	// init schema and link enums (will lookup myEnum and link to field)

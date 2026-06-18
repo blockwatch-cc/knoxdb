@@ -236,7 +236,7 @@ func TestFieldValidation(t *testing.T) {
 			name: "Valid enum",
 			field: schema.FieldOf(schema.Enum,
 				schema.WithName("test_field"),
-				schema.WithEnum(enum.NewEnumDictionary("test_field")),
+				schema.WithEnum(enum.NewDictionary("test_field")),
 			),
 			expectErr: false,
 		},

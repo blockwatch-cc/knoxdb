@@ -12,13 +12,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// func (e *EnumDictionary) dump() {
+// func (e *Dictionary) dump() {
 // 	fmt.Printf("Values\n%s", hex.Dump(e.values))
 // 	fmt.Printf("Offsets %v\n", e.offsets)
 // }
 
 func TestEnumAdd(t *testing.T) {
-	d := NewEnumDictionary("")
+	d := NewDictionary("")
 	d.Append("a", "b")
 	t.Log("Added 2 values")
 	// d.dump()
@@ -59,7 +59,7 @@ func TestEnumAdd(t *testing.T) {
 }
 
 func TestEnumSort(t *testing.T) {
-	d := NewEnumDictionary("")
+	d := NewDictionary("")
 	d.Append("b", "a")
 	t.Log("Added 2 values")
 	// d.dump()
@@ -89,7 +89,7 @@ func TestEnumSort(t *testing.T) {
 }
 
 func TestEnumMarshal(t *testing.T) {
-	d := NewEnumDictionary("")
+	d := NewDictionary("")
 	d.Append("b", "a")
 	t.Log("Added 2 values")
 	assert.Equal(t, d.Len(), 2)
@@ -100,7 +100,7 @@ func TestEnumMarshal(t *testing.T) {
 	require.NotNil(t, buf)
 
 	t.Log("Unmarshal")
-	d2 := NewEnumDictionary("")
+	d2 := NewDictionary("")
 	err = d2.UnmarshalBinary(buf)
 	require.NoError(t, err)
 
@@ -133,8 +133,8 @@ func makeRandStrings(n int) []string {
 	return vals
 }
 
-func makeEnum(name string, n int) *EnumDictionary {
-	enum := NewEnumDictionary(name)
+func makeEnum(name string, n int) *Dictionary {
+	enum := NewDictionary(name)
 	err := enum.Append(makeRandStrings(n)...)
 	if err != nil {
 		panic(err)
@@ -149,7 +149,7 @@ func BenchmarkEnumAdd(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
-				NewEnumDictionary(v.name).Append(vals...)
+				NewDictionary(v.name).Append(vals...)
 			}
 		})
 	}
@@ -172,7 +172,7 @@ func BenchmarkEnumCodeLookup(b *testing.B) {
 	for _, v := range enumBenchSizes {
 		b.Run(v.name, func(b *testing.B) {
 			vals := makeRandStrings(v.num)
-			enum := NewEnumDictionary(v.name)
+			enum := NewDictionary(v.name)
 			enum.Append(vals...)
 			b.ResetTimer()
 			b.ReportAllocs()
@@ -183,11 +183,11 @@ func BenchmarkEnumCodeLookup(b *testing.B) {
 	}
 }
 
-// TestEnumConversionScenarios tests the conversion methods of EnumDictionary,
+// TestEnumConversionScenarios tests the conversion methods of Dictionary,
 // including positive tests for valid conversions and negative tests for
 // handling unregistered values, as well as type mismatches.
 func TestEnumConversionScenarios(t *testing.T) {
-	d := NewEnumDictionary("")
+	d := NewDictionary("")
 	d.Append("a", "b", "c")
 	t.Log("Added 3 values")
 

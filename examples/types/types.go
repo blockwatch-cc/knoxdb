@@ -284,7 +284,7 @@ func Create(ctx context.Context) (db knox.Database, table knox.Table, err error)
 		return
 	}
 
-	enums := enum.NewEnumRegistry()
+	enums := enum.NewRegistry()
 	enums.Register(0, e)
 	s, err := reflect.SchemaFor[Types](schema.Enums(enums))
 	if err != nil {

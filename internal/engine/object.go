@@ -162,7 +162,7 @@ type EnumObject struct {
 	vals   []string
 }
 
-func (c *Catalog) AppendEnumCmd(ctx context.Context, act ActionType, e *enum.EnumDictionary) error {
+func (c *Catalog) AppendEnumCmd(ctx context.Context, act ActionType, e *enum.Dictionary) error {
 	tag := types.TaggedHash(types.ObjectTagEnum, e.Name())
 	obj := &EnumObject{
 		cat:    c,
@@ -187,7 +187,7 @@ func (o *EnumObject) Type() types.ObjectTag {
 }
 
 func (o *EnumObject) Create(ctx context.Context) error {
-	e := enum.NewEnumDictionary(o.name)
+	e := enum.NewDictionary(o.name)
 	_ = e.Append(o.vals...)
 	return o.cat.AddEnum(ctx, e)
 }
@@ -197,7 +197,7 @@ func (o *EnumObject) Drop(ctx context.Context) error {
 }
 
 func (o *EnumObject) Update(ctx context.Context) error {
-	e := enum.NewEnumDictionary(o.name)
+	e := enum.NewDictionary(o.name)
 	_ = e.Append(o.vals...)
 	return o.cat.PutEnum(ctx, e)
 }

@@ -22,20 +22,20 @@ const (
 )
 
 type Field struct {
-	Name       string               // field name
-	Id         uint16               // unique lifetime id
-	ParentId   uint16               // parent reference (nested fields only)
-	CaseId     uint8                // VARIANT only: case this field belongs to
-	Scale      uint8                // 0..255 fixed point scale, time scale, array len
-	Level      uint8                // nesting level
-	Type       FieldType            // schema field type
-	Flags      FieldFlags           // schema flags
-	Compress   Compression          // data compression
-	Filter     FilterType           // metadata filter type
-	Enum       *enum.EnumDictionary // enum dictionary when field is an enum
-	Child      *Schema              // LIST, MAP, UNION, VARIANT flat fields
-	Cases      *[]*Schema           // VARIANT cases
-	UserData64 uint64               // pad to 64 byte
+	Name       string           // field name
+	Id         uint16           // unique lifetime id
+	ParentId   uint16           // parent reference (nested fields only)
+	CaseId     uint8            // VARIANT only: case this field belongs to
+	Scale      uint8            // 0..255 fixed point scale, time scale, array len
+	Level      uint8            // nesting level
+	Type       FieldType        // schema field type
+	Flags      FieldFlags       // schema flags
+	Compress   Compression      // data compression
+	Filter     FilterType       // metadata filter type
+	Enum       *enum.Dictionary // enum dictionary when field is an enum
+	Child      *Schema          // LIST, MAP, UNION, VARIANT flat fields
+	Cases      *[]*Schema       // VARIANT cases
+	UserData64 uint64           // pad to 64 byte
 }
 
 func NewField(typ FieldType, opts ...FieldOption) *Field {
@@ -418,8 +418,8 @@ func (f *Field) Validate(withNested ...bool) error {
 		return fmt.Errorf("field[%s]: nil enum registry", f.Name)
 	}
 
-	// allow timebase flag only on timestamp fields
-	if f.IsTimebase() && f.Type != Timestamp {
+	// allow timebase flag only on 64bit fields
+	if f.IsTimebase() && f.Type.Size() != 8 {
 		return fmt.Errorf("field[%s]: invalid use of timebase flag on type %s", f.Name, f.Type)
 	}
 
@@ -584,7 +584,7 @@ func (f *Field) ReadFrom(buf *bytes.Buffer) (err error) {
 
 	// alloc empty enum dict to satisfy field validity
 	if f.Type == Enum {
-		f.Enum = enum.NewEnumDictionary(f.Name)
+		f.Enum = enum.NewDictionary(f.Name)
 	}
 
 	return f.Validate()

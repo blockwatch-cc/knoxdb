@@ -19,23 +19,28 @@ const (
 	EnumMaxValues = 1 << 16  // 65536 (0 .. 0xFFFF)
 )
 
-type EnumRegistry struct {
-	*util.LockFreeMap[uint64, *EnumDictionary]
+// Registry implements a basic enum registry that keeps all
+// enums in memory only. It is safe to call concurrently and
+// may be used as global enum registry, however, due to
+// lack of persistence all enums must be registered at least
+// once on start.
+type Registry struct {
+	*util.LockFreeMap[uint64, *Dictionary]
 }
 
-func NewEnumRegistry() *EnumRegistry {
-	return &EnumRegistry{util.NewLockFreeMap[uint64, *EnumDictionary]()}
+func NewRegistry() *Registry {
+	return &Registry{util.NewLockFreeMap[uint64, *Dictionary]()}
 }
 
-func (r EnumRegistry) Register(tag uint64, e *EnumDictionary) {
+func (r Registry) Register(tag uint64, e *Dictionary) {
 	r.Put(tag, e)
 }
 
-func (r EnumRegistry) Lookup(tag uint64) (*EnumDictionary, bool) {
+func (r Registry) Lookup(tag uint64) (*Dictionary, bool) {
 	return r.Get(tag)
 }
 
-func (r EnumRegistry) Find(name string) (*EnumDictionary, bool) {
+func (r Registry) Find(name string) (*Dictionary, bool) {
 	for _, v := range r.Iter() {
 		if v.name == name {
 			return v, true
@@ -44,18 +49,25 @@ func (r EnumRegistry) Find(name string) (*EnumDictionary, bool) {
 	return nil, false
 }
 
-type EnumDictionary struct {
+// Dictionary implements an enum namespace that keeps all
+// values in memory. It is not safe to read and append values
+// concurrently. A user must provide its own synchronization
+// (e.g. database transaction semantics or write once on load).
+// Dictionary offers serialzation methods, but does not handle
+// persistence itself. Hence all enum values must be loaded
+// before use.
+type Dictionary struct {
 	name    string
 	values  []byte
 	offsets []uint32
 	codes   map[uint64]uint16
 }
 
-func NewEnumDictionary(name string) *EnumDictionary {
+func NewDictionary(name string) *Dictionary {
 	if name == "" {
 		name = "enum"
 	}
-	return &EnumDictionary{
+	return &Dictionary{
 		name:    name,
 		values:  make([]byte, 0),
 		offsets: make([]uint32, 0),
@@ -63,16 +75,16 @@ func NewEnumDictionary(name string) *EnumDictionary {
 	}
 }
 
-func (e *EnumDictionary) Name() string {
+func (e *Dictionary) Name() string {
 	return e.name
 }
 
-func (e *EnumDictionary) Len() int {
+func (e *Dictionary) Len() int {
 	return len(e.offsets)
 }
 
-func (e *EnumDictionary) Clone() *EnumDictionary {
-	clone := &EnumDictionary{
+func (e *Dictionary) Clone() *Dictionary {
+	clone := &Dictionary{
 		name:    e.name,
 		values:  bytes.Clone(e.values),
 		offsets: slices.Clone(e.offsets),
@@ -84,7 +96,7 @@ func (e *EnumDictionary) Clone() *EnumDictionary {
 	return clone
 }
 
-func (e *EnumDictionary) Values() iter.Seq[string] {
+func (e *Dictionary) Values() iter.Seq[string] {
 	return func(yield func(string) bool) {
 		for i := range len(e.offsets) {
 			if !yield(e.value(i)) {
@@ -94,26 +106,26 @@ func (e *EnumDictionary) Values() iter.Seq[string] {
 	}
 }
 
-func (e *EnumDictionary) Value(code uint16) (string, bool) {
+func (e *Dictionary) Value(code uint16) (string, bool) {
 	if int(code) >= len(e.offsets) {
 		return "", false
 	}
 	return e.value(int(code)), true
 }
 
-func (e *EnumDictionary) MustValue(code uint16) string {
+func (e *Dictionary) MustValue(code uint16) string {
 	if int(code) >= len(e.offsets) {
 		panic(ErrEnumNoCode)
 	}
 	return e.value(int(code))
 }
 
-func (e *EnumDictionary) Code(val string) (uint16, bool) {
+func (e *Dictionary) Code(val string) (uint16, bool) {
 	code, ok := e.codes[hash.Hash([]byte(val))]
 	return code, ok
 }
 
-func (e *EnumDictionary) Append(vals ...string) error {
+func (e *Dictionary) Append(vals ...string) error {
 	if e.Len()+len(vals) > EnumMaxValues {
 		return ErrEnumFull
 	}
@@ -140,7 +152,7 @@ func (e *EnumDictionary) Append(vals ...string) error {
 	return nil
 }
 
-func (e EnumDictionary) MarshalBinary() ([]byte, error) {
+func (e Dictionary) MarshalBinary() ([]byte, error) {
 	buf := make([]byte, 0, len(e.values)+len(e.offsets))
 	if len(e.offsets) > 0 {
 		var pos uint32
@@ -155,7 +167,7 @@ func (e EnumDictionary) MarshalBinary() ([]byte, error) {
 	return buf, nil
 }
 
-func (e *EnumDictionary) UnmarshalBinary(buf []byte) error {
+func (e *Dictionary) UnmarshalBinary(buf []byte) error {
 	e.values = e.values[:0]
 	e.offsets = e.offsets[:0]
 	for len(buf) > 0 {
@@ -169,7 +181,7 @@ func (e *EnumDictionary) UnmarshalBinary(buf []byte) error {
 	return nil
 }
 
-func (e *EnumDictionary) value(i int) string {
+func (e *Dictionary) value(i int) string {
 	start, end := int(e.offsets[i]), len(e.values)
 	if i < len(e.offsets)-1 {
 		end = int(e.offsets[i+1])
@@ -178,12 +190,12 @@ func (e *EnumDictionary) value(i int) string {
 }
 
 // var (
-// 	_ parse.ValueParser = (*EnumDictionary)(nil)
-// 	_ cast.ValueCaster  = (*EnumDictionary)(nil)
+// 	_ parse.ValueParser = (*Dictionary)(nil)
+// 	_ cast.ValueCaster  = (*Dictionary)(nil)
 // )
 
 // ValueParser interface
-func (e *EnumDictionary) ParseValue(s string) (any, error) {
+func (e *Dictionary) ParseValue(s string) (any, error) {
 	code, ok := e.Code(s)
 	if !ok {
 		return nil, fmt.Errorf("invalid enum value %q", s)
@@ -191,7 +203,7 @@ func (e *EnumDictionary) ParseValue(s string) (any, error) {
 	return code, nil
 }
 
-func (e *EnumDictionary) ParseSlice(s string) (any, error) {
+func (e *Dictionary) ParseSlice(s string) (any, error) {
 	vals := strings.Split(s, ",")
 	codes := make([]uint16, len(vals))
 	var ok bool
@@ -205,7 +217,7 @@ func (e *EnumDictionary) ParseSlice(s string) (any, error) {
 }
 
 // ValueCaster interface
-func (e *EnumDictionary) CastValue(val any) (any, error) {
+func (e *Dictionary) CastValue(val any) (any, error) {
 	switch v := val.(type) {
 	case string:
 		code, ok := e.Code(v)
@@ -229,7 +241,7 @@ func (e *EnumDictionary) CastValue(val any) (any, error) {
 	}
 }
 
-func (e *EnumDictionary) CastSlice(val any) (any, error) {
+func (e *Dictionary) CastSlice(val any) (any, error) {
 	switch v := val.(type) {
 	case []string:
 		codes := make([]uint16, len(v))

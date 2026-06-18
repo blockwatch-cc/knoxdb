@@ -107,7 +107,7 @@ func FieldOf(typ FieldType, opts ...FieldOption) *Field {
 }
 
 // EnumOf creates a new enu field from an enum dictionary.
-func EnumOf(e *enum.EnumDictionary, opts ...FieldOption) *Field {
+func EnumOf(e *enum.Dictionary, opts ...FieldOption) *Field {
 	return NewField(Uint16, append([]FieldOption{
 		WithEnum(e),
 		WithName(e.Name()),

@@ -11,11 +11,11 @@ import (
 	"blockwatch.cc/knoxdb/pkg/schema/enum"
 )
 
-func (e *Engine) CloneEnums(names ...string) *enum.EnumRegistry {
+func (e *Engine) CloneEnums(names ...string) *enum.Registry {
 	if len(names) == 0 {
 		return nil
 	}
-	clone := enum.NewEnumRegistry()
+	clone := enum.NewRegistry()
 	for _, n := range names {
 		tag := types.TaggedHash(types.ObjectTagEnum, n)
 		dict, ok := e.enums.Lookup(tag)
@@ -39,7 +39,7 @@ func (e *Engine) NumEnums() int {
 	return len(e.enums.Map())
 }
 
-func (e *Engine) FindEnum(name string) (*enum.EnumDictionary, error) {
+func (e *Engine) FindEnum(name string) (*enum.Dictionary, error) {
 	if e.IsShutdown() {
 		return nil, ErrDatabaseShutdown
 	}
@@ -50,12 +50,12 @@ func (e *Engine) FindEnum(name string) (*enum.EnumDictionary, error) {
 	return enum, nil
 }
 
-func (e *Engine) GetEnum(tag uint64) (*enum.EnumDictionary, bool) {
+func (e *Engine) GetEnum(tag uint64) (*enum.Dictionary, bool) {
 	enum, ok := e.enums.Get(tag)
 	return enum, ok
 }
 
-func (e *Engine) CreateEnum(ctx context.Context, name string) (*enum.EnumDictionary, error) {
+func (e *Engine) CreateEnum(ctx context.Context, name string) (*enum.Dictionary, error) {
 	// check name is unique
 	tag := types.TaggedHash(types.ObjectTagEnum, name)
 	_, ok := e.enums.Get(tag)
@@ -71,7 +71,7 @@ func (e *Engine) CreateEnum(ctx context.Context, name string) (*enum.EnumDiction
 	defer abort()
 
 	// create object
-	enum := enum.NewEnumDictionary(name)
+	enum := enum.NewDictionary(name)
 
 	// register commit callback
 	tx.OnAbort(func(ctx context.Context) error {

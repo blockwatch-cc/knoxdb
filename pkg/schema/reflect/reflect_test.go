@@ -13,17 +13,17 @@ import (
 )
 
 var (
-	enums  *enum.EnumRegistry
-	myEnum *enum.EnumDictionary
+	enums  *enum.Registry
+	myEnum *enum.Dictionary
 )
 
 func TestMain(m *testing.M) {
 	// prepare enum
-	myEnum = enum.NewEnumDictionary("my_enum")
+	myEnum = enum.NewDictionary("my_enum")
 	myEnum.Append("a", "b", "c", "d", "e")
 
 	// create test registry and add enum to registry
-	enums = enum.NewEnumRegistry()
+	enums = enum.NewRegistry()
 	enums.Register(0, myEnum)
 
 	m.Run()

@@ -19,7 +19,7 @@ import (
 
 type Schema struct {
 	Fields      []*Field
-	Enums       atomic.Pointer[enum.EnumRegistry]
+	Enums       atomic.Pointer[enum.Registry]
 	Name        string
 	Hash        uint64
 	MinWireSize int
@@ -45,7 +45,7 @@ func (s *Schema) As(alias string) *Schema {
 	return s
 }
 
-func (s *Schema) UseEnums(r *enum.EnumRegistry) *Schema {
+func (s *Schema) UseEnums(r *enum.Registry) *Schema {
 	s.Enums.Store(r)
 	for _, f := range s.Fields {
 		if f.Type == Enum {
@@ -169,6 +169,7 @@ func (s *Schema) ActiveIds() []uint16 {
 	return list
 }
 
+// Visits all fields at top nesting level.
 func (s *Schema) FieldsSeq() iter.Seq2[int, *Field] {
 	lvl := s.Fields[0].Level
 	return func(yield func(int, *Field) bool) {
@@ -852,7 +853,7 @@ func (s *Schema) Finalize(opts ...Option) *Schema {
 
 	// collect enums when used but no registry exists yet
 	if s.NumEnums() > 0 && !s.HasEnums() {
-		reg := enum.NewEnumRegistry()
+		reg := enum.NewRegistry()
 		for _, f := range s.Fields {
 			if f.Type == Enum && f.Enum != nil {
 				reg.Put(uint64(f.Id), f.Enum)

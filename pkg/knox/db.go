@@ -149,7 +149,7 @@ func (d *DB) ListEnums() []string {
 	return d.engine.EnumNames()
 }
 
-func (d *DB) FindEnum(name string) (*enum.EnumDictionary, error) {
+func (d *DB) FindEnum(name string) (*enum.Dictionary, error) {
 	enum, err := d.engine.FindEnum(name)
 	if err != nil {
 		return nil, err
@@ -157,7 +157,7 @@ func (d *DB) FindEnum(name string) (*enum.EnumDictionary, error) {
 	return enum, nil
 }
 
-func (d *DB) CreateEnum(ctx context.Context, name string) (*enum.EnumDictionary, error) {
+func (d *DB) CreateEnum(ctx context.Context, name string) (*enum.Dictionary, error) {
 	return d.engine.CreateEnum(ctx, name)
 }
 

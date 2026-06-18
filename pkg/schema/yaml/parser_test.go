@@ -16,7 +16,7 @@ import (
 	"go.yaml.in/yaml/v4"
 )
 
-var enums *enum.EnumRegistry
+var enums *enum.Registry
 
 func TestMain(m *testing.M) {
 	enums = tests.RegisterEnums()

@@ -584,7 +584,7 @@ func (c *Catalog) ListEnums(ctx context.Context) ([]uint64, error) {
 	return c.listObjectKeys(ctx, enumsKey)
 }
 
-func (c *Catalog) GetEnum(ctx context.Context, key uint64) (e *enum.EnumDictionary, err error) {
+func (c *Catalog) GetEnum(ctx context.Context, key uint64) (e *enum.Dictionary, err error) {
 	var tx store.Tx
 	tx, err = GetTx(ctx).CatalogTx(c.db, false)
 	if err != nil {
@@ -605,12 +605,12 @@ func (c *Catalog) GetEnum(ctx context.Context, key uint64) (e *enum.EnumDictiona
 		err = ErrNoKey
 		return
 	}
-	e = enum.NewEnumDictionary(string(name))
+	e = enum.NewDictionary(string(name))
 	err = e.UnmarshalBinary(data)
 	return
 }
 
-func (c *Catalog) PutEnum(ctx context.Context, e *enum.EnumDictionary) error {
+func (c *Catalog) PutEnum(ctx context.Context, e *enum.Dictionary) error {
 	tx, err := GetTx(ctx).CatalogTx(c.db, true)
 	if err != nil {
 		return err
@@ -627,7 +627,7 @@ func (c *Catalog) PutEnum(ctx context.Context, e *enum.EnumDictionary) error {
 	return bucket.Put(dataKey, buf)
 }
 
-func (c *Catalog) AddEnum(ctx context.Context, e *enum.EnumDictionary) error {
+func (c *Catalog) AddEnum(ctx context.Context, e *enum.Dictionary) error {
 	// create enum bucket, add enum name and data
 	tx, err := GetTx(ctx).CatalogTx(c.db, true)
 	if err != nil {

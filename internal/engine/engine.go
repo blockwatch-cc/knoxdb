@@ -70,7 +70,7 @@ type Engine struct {
 	cache    CacheManager                           // block and buffer caches
 	tables   *util.LockFreeMap[uint64, TableEngine] // table objects
 	indexes  *util.LockFreeMap[uint64, IndexEngine] // index objects
-	enums    *enum.EnumRegistry                     // enum objects
+	enums    *enum.Registry                         // enum objects
 	opts     Options                                // engine-wide configuration
 	txchan   chan struct{}                          // single writer enforcement
 	txs      TxList                                 // active read transactions
@@ -241,7 +241,7 @@ func Create(ctx context.Context, name string, options ...Option) (*Engine, error
 		},
 		tables:  util.NewLockFreeMap[uint64, TableEngine](),
 		indexes: util.NewLockFreeMap[uint64, IndexEngine](),
-		enums:   enum.NewEnumRegistry(),
+		enums:   enum.NewRegistry(),
 		txs:     make(TxList, 0),
 		txchan:  make(chan struct{}, 1),
 		xmin:    1,
@@ -338,7 +338,7 @@ func Open(ctx context.Context, name string, options ...Option) (*Engine, error) 
 		},
 		tables:  util.NewLockFreeMap[uint64, TableEngine](),
 		indexes: util.NewLockFreeMap[uint64, IndexEngine](),
-		enums:   enum.NewEnumRegistry(),
+		enums:   enum.NewRegistry(),
 		txs:     make(TxList, 0),
 		txchan:  make(chan struct{}, 1),
 		xmin:    1,

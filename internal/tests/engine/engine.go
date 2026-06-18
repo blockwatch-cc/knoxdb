@@ -119,7 +119,7 @@ func NewDatabase(t testing.TB, typs ...any) (*engine.Engine, func()) {
 	err = db.ExtendEnum(ctx, "my_enum", myEnums...)
 	require.NoError(t, err, "Failed to extend enum")
 
-	enums := enum.NewEnumRegistry()
+	enums := enum.NewRegistry()
 	enums.Register(0, e)
 
 	// Create tables and indexes for given types

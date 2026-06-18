@@ -30,15 +30,15 @@ import (
 var (
 	testSchema      *types.TableSchema
 	testIndexSchema *schema.IndexSchema
-	testEnums       *enum.EnumRegistry
+	testEnums       *enum.Registry
 )
 
 func init() {
-	statusEnum := enum.NewEnumDictionary("status")
+	statusEnum := enum.NewDictionary("status")
 	statusEnum.Append("active", "pending", "inactive")
 	statusTag := types.TaggedHash(types.ObjectTagEnum, "status")
 
-	testEnums = enum.NewEnumRegistry()
+	testEnums = enum.NewRegistry()
 	testEnums.Register(statusTag, statusEnum)
 
 	baseSchema := sreflect.MustSchemaFor[testStruct](schema.Enums(testEnums))

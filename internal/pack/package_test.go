@@ -18,16 +18,16 @@ import (
 const PACK_SIZE = 1 << 16
 
 var (
-	enums *enum.EnumRegistry
+	enums *enum.Registry
 )
 
 func init() {
 	// register enum type with global schema registry (before first schema is created)
-	myEnum := enum.NewEnumDictionary("my_enum")
+	myEnum := enum.NewDictionary("my_enum")
 	myEnum.Append([]string{"one", "two", "three", "four"}...)
 
 	// create test registry and add enum to registry
-	enums = enum.NewEnumRegistry()
+	enums = enum.NewRegistry()
 	enums.Register(0, myEnum)
 
 	// init schema and link enums (will lookup myEnum and link to field)

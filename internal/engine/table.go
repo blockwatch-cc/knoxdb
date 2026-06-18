@@ -58,7 +58,7 @@ func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, options ...O
 	}
 
 	// check enums exist and collect
-	enums := enum.NewEnumRegistry()
+	enums := enum.NewRegistry()
 	var err error
 	for _, n := range s.EnumNames() {
 		tag := types.TaggedHash(types.ObjectTagEnum, n)
