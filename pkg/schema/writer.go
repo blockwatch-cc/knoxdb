@@ -48,6 +48,7 @@ type Writer struct {
 	schema  *Schema          // target schema
 	layout  binary.ByteOrder // int byte order (little endian)
 	buf     *bytes.Buffer    // backing buffer
+	head    int              // buffer header
 	n       int              // current field offset
 	scratch [8]byte          // scratch buffer
 	err     error            // first captured write error
@@ -70,6 +71,7 @@ func NewWriterLayout(s *Schema, layout binary.ByteOrder, buf *bytes.Buffer) *Wri
 	w.schema = s
 	w.layout = layout
 	w.buf = buf
+	w.head = buf.Len()
 	return w
 }
 
@@ -90,7 +92,8 @@ func (w *Writer) Field() *Field {
 
 // Done returns true when all nested fields have been written.
 func (w *Writer) Done() bool {
-	return w.n >= len(w.schema.Fields)
+	return w.n == 0 && w.buf.Len() >= w.schema.MinWireSize ||
+		w.n >= len(w.schema.Fields)
 }
 
 // Err returns the first captured write error.
@@ -100,7 +103,7 @@ func (w *Writer) Err() error {
 
 // Reset resets the writer buffer for reuse.
 func (w *Writer) Reset() {
-	w.buf.Reset()
+	w.buf.Truncate(w.head)
 	w.n = 0
 	w.err = nil
 }

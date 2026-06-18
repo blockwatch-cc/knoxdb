@@ -440,3 +440,77 @@ func TestWriterVariant(t *testing.T) {
 
 	t.Log(hex.Dump(w.Bytes()))
 }
+
+func TestBatchWriter(t *testing.T) {
+	cases := []struct {
+		Name   string
+		Schema *schema.Schema
+		New    func() any
+	}{
+		{
+			"maps",
+			reflect.MustSchemaFor[MapFields](),
+			func() any { return NewMapFields() },
+		},
+		{
+			"variants",
+			customerT,
+			func() any { return NewCustomer() },
+		},
+	}
+
+	reg := schema.NewRegistry()
+
+	for _, c := range cases {
+		reg.Register(c.Schema)
+		t.Run(c.Name, func(t *testing.T) {
+			// write batch
+			w := schema.NewBatchWriter(c.Schema, 10)
+			for range 10 {
+				require.NoError(t, w.Write(c.New()))
+				w.Next()
+			}
+			require.NoError(t, w.Err())
+			require.True(t, w.Done())
+
+			// extract buffer
+			buf := w.Bytes()
+			batch := w.Batch()
+			require.Equal(t, buf[schema.BatchHeaderSize:], batch.Bytes())
+			require.Equal(t, c.Schema.Version, batch.Version())
+			require.Equal(t, 10, batch.Len())
+			require.Equal(t, 10, countIter(batch.Records()))
+
+			// batch header
+			require.Equal(t, buf[:schema.BatchHeaderSize], batch.Header())
+
+			// resolve batch
+			res, err := schema.ResolveBatch(buf, reg)
+			require.NoError(t, err)
+			require.Equal(t, batch.Size(), res.Size())
+			require.Equal(t, batch.Header(), res.Header())
+			require.Equal(t, batch.Version(), res.Version())
+			require.Equal(t, batch.Schema(), res.Schema())
+
+			// records
+			require.Equal(t, 10, res.Len())
+			require.Equal(t, 10, countIter(res.Records()))
+
+			// split
+			res, res2, ok := res.Split(5)
+			require.True(t, ok)
+			require.Equal(t, 5, res.Len())
+			require.Equal(t, 5, res2.Len())
+			require.Equal(t, 5, countIter(res.Records()))
+			require.Equal(t, 5, countIter(res2.Records()))
+
+			// chunk
+			chunks := []int{}
+			for b := range res.Chunk(2) {
+				chunks = append(chunks, b.Len())
+			}
+			require.Len(t, chunks, 3)
+			require.Equal(t, []int{2, 2, 1}, chunks)
+		})
+	}
+}

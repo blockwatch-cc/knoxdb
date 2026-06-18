@@ -960,3 +960,39 @@ func TestNestedMarshalFromBuilder(t *testing.T) {
 		assert.Equal(t, s.PkIndex(), r.PkIndex())
 	}
 }
+
+func TestSchemaRegistry(t *testing.T) {
+	reg := schema.NewRegistry()
+	require.True(t, reg.Register(listFieldsT))
+	require.True(t, reg.Register(listInListT))
+	require.True(t, reg.Register(listInStructInListT))
+	require.True(t, reg.Register(customerT))
+	require.True(t, reg.Register(reflect.MustSchemaFor[AllTypes](schema.Enums(enums))))
+
+	// create a version
+	listFieldsT2, err := listFieldsT.DeleteId(1)
+	require.NoError(t, err)
+	require.True(t, reg.Register(listFieldsT2))
+
+	// lookup by version
+	s, ok := reg.Lookup(listFieldsT.Name, listFieldsT.Version)
+	require.True(t, ok)
+	require.NotNil(t, s)
+	require.Equal(t, listFieldsT.Hash, s.Hash)
+
+	s, ok = reg.Lookup(listFieldsT.Name, listFieldsT2.Version)
+	require.True(t, ok)
+	require.NotNil(t, s)
+	require.Equal(t, listFieldsT2.Hash, s.Hash)
+
+	// lookup by hash
+	s, ok = reg.LookupHash(listFieldsT.Hash)
+	require.True(t, ok)
+	require.NotNil(t, s)
+	require.Equal(t, listFieldsT.Hash, s.Hash)
+
+	s, ok = reg.LookupHash(listFieldsT2.Hash)
+	require.True(t, ok)
+	require.NotNil(t, s)
+	require.Equal(t, listFieldsT2.Hash, s.Hash)
+}

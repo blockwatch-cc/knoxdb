@@ -2,6 +2,7 @@ package schema
 
 import (
 	"cmp"
+	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -41,6 +42,13 @@ func basename(name string) string {
 		return name
 	}
 	return name[idx+1:]
+}
+
+func validateInt(name string, n, minVal, maxVal int) error {
+	if n < minVal || (maxVal > 0 && n > maxVal) {
+		return fmt.Errorf("%s %d out of bounds [%d..%d]", name, n, minVal, maxVal)
+	}
+	return nil
 }
 
 // CompareTime is a custom compare func for slices.SortedFunc
