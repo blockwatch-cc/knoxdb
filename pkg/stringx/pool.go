@@ -27,6 +27,9 @@ var (
 	// zero is a zero length zero capacity slice uses as placeholder
 	// for returning zero length strings and to avoid allocations
 	zero = make([]byte, 0)[:0:0]
+
+	// minPoolSize defines the minimal number of entries in a pool
+	minPoolSize = 128
 )
 
 const StringPoolDefaultSize = 64
@@ -62,6 +65,8 @@ func NewStringPool(n int) *StringPool {
 }
 
 func NewStringPoolSize(n, sz int) *StringPool {
+	n = max(n, minPoolSize)
+	sz = max(sz, StringPoolDefaultSize)
 	p := stringPool.Get().(*StringPool)
 	p.buf = arena.Alloc[byte](n * sz)
 	p.ptr = arena.Alloc[uint64](n)

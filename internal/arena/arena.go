@@ -11,6 +11,9 @@ type Allocator interface {
 var _alloc = newGoAllocator()
 
 func Alloc[T FixedSizeType](sz int) []T {
+	if sz <= 0 {
+		return nil
+	}
 	return FromBytes[T](_alloc.Alloc(SizeFor[T]() * sz))[:0]
 }
 

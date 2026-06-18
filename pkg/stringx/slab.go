@@ -121,6 +121,7 @@ func NewSlabPool(n int) *SlabPool {
 // strings (n > 2048).
 func NewSlabPoolSize(n, pagesz int) *SlabPool {
 	p := slabPool.Get().(*SlabPool)
+	n = max(n, minPoolSize)
 	p.pagesz = max(pagesz, minPageSize)
 	p.tidx = 0
 	p.ptr = arena.Alloc[uint64](n)[:n]

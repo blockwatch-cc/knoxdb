@@ -10,7 +10,6 @@ import (
 	"math/bits"
 	"sync"
 	"sync/atomic"
-	"unsafe"
 )
 
 const (
@@ -23,31 +22,29 @@ const (
 type countAllocator struct {
 	mu    sync.Mutex
 	pools [numClasses]atomic.Pointer[sync.Pool]
-	track map[uintptr]int
+	track map[*byte]int
 }
 
 func newGoAllocator() Allocator {
-	return &countAllocator{track: make(map[uintptr]int)}
+	return &countAllocator{track: make(map[*byte]int)}
 }
 
-func (a *countAllocator) Alloc(sz int) any {
+func (a *countAllocator) Alloc(sz int) []byte {
 	class := 63 - bits.LeadingZeros(uint(sz))
 	if bits.OnesCount(uint(sz)) > 1 {
 		class++
 	}
 	if class > maxAllocClass {
-		return make([]T, sz)
+		return make([]byte, sz)
 	}
 	if class < minAllocClass {
 		class = minAllocClass
 	}
-	val := a.pool(class).Get()
-	s := (*val.(*[]byte))[:1]
-	ptr := uintptr(unsafe.Pointer(&s[0]))
+	buf := (*a.pool(class).Get().(*[]byte))[:sz]
 	a.mu.Lock()
-	a.track[ptr] = 1
+	a.track[&buf[0]] = 1
 	a.mu.Unlock()
-	return val
+	return buf
 }
 
 func (a *countAllocator) Free(val []byte) {
@@ -58,7 +55,7 @@ func (a *countAllocator) Free(val []byte) {
 		return
 	}
 
-	ptr := uintptr(unsafe.Pointer(&val[:1][0]))
+	ptr := &val[:1][0]
 	a.mu.Lock()
 	a.track[ptr]++
 	cnt := a.track[ptr]
@@ -74,7 +71,7 @@ func (a *countAllocator) Free(val []byte) {
 	a.pool(class).Put(&val)
 }
 
-func (a *allocator[T]) pool(class int) *sync.Pool {
+func (a *countAllocator) pool(class int) *sync.Pool {
 	idx := class - minAllocClass
 	p := a.pools[idx].Load()
 	if p == nil {

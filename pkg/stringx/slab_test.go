@@ -130,7 +130,7 @@ func TestSlabPoolExtremes(t *testing.T) {
 
 func TestSlabPoolIterators(t *testing.T) {
 	pool := NewSlabPool(64)
-	data := testutil.RandByteSlices(64, 8) // 64x length 8
+	data := testutil.RandByteSlices(128, 8) // 128x length 8
 	pool.AppendMany(data...)
 
 	// values
