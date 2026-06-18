@@ -39,7 +39,6 @@ func (f *Field) WriteValue(w *bytes.Buffer, val any, layout binary.ByteOrder) (e
 	err = ErrInvalidValueType
 
 	// get scratch buffer
-	// buf := unsafe.Slice(scratchBufferPool.Get().(*byte), 32)[:32]
 	buf := scratchBufferPool.Get().(*[32]byte)
 
 	switch f.Type {
@@ -53,6 +52,9 @@ func (f *Field) WriteValue(w *bytes.Buffer, val any, layout binary.ByteOrder) (e
 			_, err = w.Write(buf[:8])
 		case int64:
 			layout.PutUint64(buf[:], uint64(tv))
+			_, err = w.Write(buf[:8])
+		case uint64:
+			layout.PutUint64(buf[:], tv)
 			_, err = w.Write(buf[:8])
 		}
 

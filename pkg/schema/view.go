@@ -127,8 +127,8 @@ func (v *View) buildFromSchema() *View {
 		if v.pki < 0 && f.IsPrimary() && f.Type == Uint64 {
 			v.pki = i
 		}
-		// remember the first timebase field (must be int64)
-		if v.tbi < 0 && f.IsTimebase() && f.Type == Int64 {
+		// remember the first timebase field (must be 64bit type)
+		if v.tbi < 0 && f.IsTimebase() && f.Type.Size() == 8 {
 			v.tbi = i
 		}
 		switch {
@@ -212,8 +212,8 @@ func (v *View) Cut(buf []byte) (*View, []byte, bool) {
 	return v, buf, v.IsValid()
 }
 
-// All returns a sequence that visits all records in a buffer. The sequence
-// yields the same view instance initialized to the next record in turn.
+// All returns a sequence that visits all records in a batch buffer.
+// Yields a counter and the current view reset to the next record.
 func (v *View) All(buf []byte) iter.Seq2[int, *View] {
 	return func(yield func(int, *View) bool) {
 		var i int
@@ -228,7 +228,7 @@ func (v *View) All(buf []byte) iter.Seq2[int, *View] {
 	}
 }
 
-// Count returns the number of records encoded in a given buffer.
+// Count returns the number of records encoded in a batch buffer.
 func (v *View) Count(buf []byte) int {
 	var n int
 	for len(buf) >= v.minsz {
@@ -239,12 +239,12 @@ func (v *View) Count(buf []byte) int {
 	return n
 }
 
-// Reset resets the view to read from a new encoded buffer. When buf is nil
-// the current read buffer is released. For fixed size schemas reset only
-// performs a length check. For variable sized schemas Reset scans all fields
-// following the last fixed size field and updates its buffer index.
-// Reset will panic if buffer is short or invalid for the schema or contains
-// corrupt data.
+// Reset resets the view to read an encoded record from the buffer.
+// When buf is nil the current read buffer is released. For fixed size
+// schemas reset only performs a length check. For variable sized
+// schemas Reset scans all fields following the last fixed size field
+// and updates its buffer index. Reset will panic on short buffers
+// and invalid or corrupt data that does not match the schema.
 func (v *View) Reset(buf []byte) *View {
 	v.buf = nil
 	if len(buf) < v.minsz {
@@ -326,7 +326,8 @@ func (v *View) GetTimebase() time.Time {
 	if v.tbi < 0 {
 		return time.Time{}
 	}
-	return v.Timestamp(v.tbi)
+	u64 := v.layout.Uint64(v.buf[v.ofs[v.tbi]:])
+	return TimeScale(v.scales[v.tbi]).FromUnix(int64(u64))
 }
 
 // SetTimebase overrides the record's timebase field with a new

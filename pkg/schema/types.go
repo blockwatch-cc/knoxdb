@@ -4,7 +4,6 @@
 package schema
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
@@ -230,7 +229,7 @@ func (i FieldFlags) String() string {
 		return ""
 	}
 	var b strings.Builder
-	for p, k := 0, FieldFlags(1); p < 7; p, k = p+1, k<<1 {
+	for p, k := 0, FieldFlags(1); p < len(fieldFlagIdx)-1; p, k = p+1, k<<1 {
 		if i&k > 0 {
 			start, end := fieldFlagIdx[p], fieldFlagIdx[p+1]-1
 			if b.Len() > 0 {
@@ -244,11 +243,4 @@ func (i FieldFlags) String() string {
 
 func ParseFieldFlag(s string) FieldFlags {
 	return fieldFlagReverse[s]
-}
-
-func validateInt(name string, n, minVal, maxVal int) error {
-	if n < minVal || (maxVal > 0 && n > maxVal) {
-		return fmt.Errorf("%s %d out of bounds [%d..%d]", name, n, minVal, maxVal)
-	}
-	return nil
 }

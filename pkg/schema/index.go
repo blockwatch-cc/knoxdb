@@ -103,6 +103,11 @@ func makeIndexName(typ IndexType, base *Schema, f ...*Field) string {
 	return strings.Join([]string{base.Name, f[0].Name, typ.String(), IndexName}, "_")
 }
 
+func (s *IndexSchema) As(name string) *IndexSchema {
+	s.Name = name
+	return s
+}
+
 func (s *IndexSchema) IsValid() bool {
 	return s.Type.IsValid() && len(s.Fields) > 0
 }
