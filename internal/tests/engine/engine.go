@@ -126,10 +126,10 @@ func NewDatabase(t testing.TB, typs ...any) (*engine.Engine, func()) {
 	for _, typ := range typs {
 		s, err := reflect.SchemaOf(typ, schema.Enums(enums))
 		require.NoError(t, err, "Failed to generate schema for type %T", typ)
-		t.Log("Using schema", s)
 		opts := NewTestTableOptions(t, "", "")
 		if testing.Verbose() {
 			t.Logf("NEW table=%s driver=%s engine=%s", s.Name, opts.Driver, opts.Engine)
+			t.Log("Using schema", s)
 		}
 		_, err = db.CreateTable(ctx, s, opts.TableOptions()...)
 		require.NoError(t, err, "Failed to create table for type %T", typ)

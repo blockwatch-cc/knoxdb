@@ -53,7 +53,7 @@ func (j *Journal) UpdateRecords(ctx context.Context, src []byte, ridMap map[uint
 			Tag:    types.ObjectTagTable,
 			Entity: j.id,
 			TxID:   xid,
-			Data:   make([][]byte, 1),
+			Data:   make([][]byte, 1), // TODO: add static bits, add batch header
 		}
 	)
 
@@ -239,7 +239,7 @@ func (j *Journal) updatePackWithWal(src *pack.Package, xid types.XID, w *wal.Wal
 			Tag:    types.ObjectTagTable,
 			Entity: j.id,
 			TxID:   xid,
-			Data:   make([][]byte, 1),
+			Data:   make([][]byte, 1), // TODO: add static bits, add batch header
 		}
 	)
 

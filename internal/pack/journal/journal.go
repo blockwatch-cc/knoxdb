@@ -22,17 +22,24 @@ import (
 // In-memory journal for table insert, update and delete
 // - journal acts as overlay to table storage
 // - fix max size segments with data pack and tomb
-// - row-id centric (each row-id represents a unique record version, updates produce new row ids)
+// - row-id centric
+//   - each row-id represents a unique record version
+//   - updates always produce new row ids
+//   - visible (committed) rowids are never reused
+//   - invisible (aborted) rowids are rolled back (safe due to single writer tx)
 //
 // Queries
 // - merge-on-query: merge journal data and tomb with table query result
 // - uses snapshot isolation to hide invisible records and deletes
-// - journal query produces a journal result which is a list of segment packs with selection
-//   vectors
+// - journal query produces a journal result which is a list of segment
+//   packs with selection vectors
 //
 // Merge
 // - only full segments and with no open tx can be merged
-// takes to oldest mergable segmet
+// - background task handles oldest mergable segment
+// - on success, the oldest segment is removed atomically
+// - on fail, already written data remains invisible (new storage key versions)
+//   and will be overwritten next merge round
 //
 // Recover
 // - journal data is saved to WAL and replayed on startup
@@ -579,6 +586,8 @@ func (j *Journal) ReplayWalRecord(ctx context.Context, rec *wal.Record, rd engin
 				j.tip.tstate.NextRid, rid)
 		}
 
+		// TODO: read batch header & load schema at version
+
 		// split buf into wire messages
 		view, buf, _ := schema.NewView(j.schema).Cut(buf)
 		for view.IsValid() {
@@ -625,6 +634,9 @@ func (j *Journal) ReplayWalRecord(ctx context.Context, rec *wal.Record, rd engin
 
 		if cset.Count() == j.schema.NumFields() {
 			// optimize, we have full records available
+
+			// TODO: read batch header & load schema at version
+
 			var (
 				view    = schema.NewView(j.schema)
 				nextRid = j.tip.tstate.NextRid
@@ -661,6 +673,10 @@ func (j *Journal) ReplayWalRecord(ctx context.Context, rec *wal.Record, rd engin
 				cids = append(cids, j.schema.Fields[i].Id)
 				cols = append(cols, i)
 			}
+
+			// TODO: read batch header & load schema at version
+			// otherwise new deleted fields will offset view index
+
 			cschema, err := j.schema.SelectIds(cids...)
 			if err != nil {
 				// should not happen

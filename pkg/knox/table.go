@@ -59,8 +59,8 @@ func (t TableImpl) Insert(ctx context.Context, val any) (uint64, int, error) {
 		}
 		t.enc = encode.NewEncoderWithLayout(s, l)
 	}
-	buf, err := t.enc.Encode(val, nil)
-	if err != nil {
+	buf := t.enc.NewBuffer(1024)
+	if err := t.enc.Encode(buf, val); err != nil {
 		return 0, 0, err
 	}
 
@@ -72,7 +72,7 @@ func (t TableImpl) Insert(ctx context.Context, val any) (uint64, int, error) {
 	defer abort()
 
 	// call backend
-	pk, n, err := t.table.InsertRows(ctx, buf)
+	pk, n, err := t.table.InsertRows(ctx, buf.Bytes())
 	if err != nil {
 		return 0, 0, err
 	}
@@ -106,8 +106,8 @@ func (t TableImpl) Update(ctx context.Context, val any) (int, error) {
 		}
 		t.enc = encode.NewEncoderWithLayout(s, l)
 	}
-	buf, err := t.enc.Encode(val, nil)
-	if err != nil {
+	buf := t.enc.NewBuffer(1024)
+	if err := t.enc.Encode(buf, val); err != nil {
 		return 0, err
 	}
 
@@ -119,7 +119,7 @@ func (t TableImpl) Update(ctx context.Context, val any) (int, error) {
 	defer abort()
 
 	// call backend
-	n, err := t.table.UpdateRows(ctx, buf)
+	n, err := t.table.UpdateRows(ctx, buf.Bytes())
 	if err != nil {
 		return 0, err
 	}
@@ -307,8 +307,8 @@ func (t *TableT[T]) Insert(ctx context.Context, val any) (uint64, int, error) {
 	if t.enc == nil {
 		t.enc = encode.NewEncoderFor[T](schema.Enums(t.Schema().Enums.Load()))
 	}
-	buf, err := t.enc.Encode(val, nil)
-	if err != nil {
+	buf := t.enc.NewBuffer(1024)
+	if err := t.enc.Encoder.Encode(buf, val); err != nil {
 		return 0, 0, fmt.Errorf("insert: %T %w", val, err)
 	}
 
@@ -320,7 +320,7 @@ func (t *TableT[T]) Insert(ctx context.Context, val any) (uint64, int, error) {
 	defer abort()
 
 	// call backend, returns first sequential pk assigned
-	pk, n, err := t.table.InsertRows(ctx, buf)
+	pk, n, err := t.table.InsertRows(ctx, buf.Bytes())
 	if err != nil {
 		return 0, 0, err
 	}
@@ -351,8 +351,8 @@ func (t *TableT[T]) Update(ctx context.Context, val any) (int, error) {
 	if t.enc == nil {
 		t.enc = encode.NewEncoderFor[T](schema.Enums(t.Schema().Enums.Load()))
 	}
-	buf, err := t.enc.Encode(val, nil)
-	if err != nil {
+	buf := t.enc.NewBuffer(1024)
+	if err := t.enc.Encoder.Encode(buf, val); err != nil {
 		return 0, fmt.Errorf("update: %T %w", val, err)
 	}
 
@@ -364,7 +364,7 @@ func (t *TableT[T]) Update(ctx context.Context, val any) (int, error) {
 	defer abort()
 
 	// call backend
-	n, err := t.table.UpdateRows(ctx, buf)
+	n, err := t.table.UpdateRows(ctx, buf.Bytes())
 	if err != nil {
 		return 0, err
 	}

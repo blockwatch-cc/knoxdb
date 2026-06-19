@@ -14,7 +14,9 @@ import (
 	"blockwatch.cc/knoxdb/internal/tests/testutil"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
+	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/schema/encode"
+	"blockwatch.cc/knoxdb/pkg/schema/enum"
 	"blockwatch.cc/knoxdb/pkg/schema/reflect"
 )
 
@@ -24,7 +26,13 @@ func main() {
 	}
 }
 
+var enums = enum.NewRegistry()
+
 func run() error {
+	e := enum.NewDictionary("my_enum")
+	e.Append(myEnums...)
+	enums.Register(types.TaggedHash(types.ObjectTagEnum, e.Name()), e)
+
 	pl := operator.NewPhysicalPipeline().
 		WithSource(NewGenerator(128, 257)).
 		WithOperator(operator.NewDescriber(os.Stdout)).
@@ -59,14 +67,10 @@ func NewGenerator(maxsz, limit int) *Generator {
 
 func (gen *Generator) Next(context.Context) (*pack.Package, operator.Result) {
 	if gen.pkg == nil {
-		s, err := reflect.SchemaFor[Record]()
+		s, err := reflect.SchemaFor[Record](schema.Enums(enums))
 		if err != nil {
 			gen.err = err
 			return nil, operator.ResultError
-		}
-		tag := types.TaggedHash(types.ObjectTagEnum, "my_enum")
-		if enum, ok := s.Enums.Load().Lookup(tag); ok {
-			enum.Append(myEnums...)
 		}
 		gen.enc = encode.NewEncoder(s)
 		gen.buf = gen.enc.NewBuffer(1)
@@ -86,13 +90,13 @@ func (gen *Generator) Next(context.Context) (*pack.Package, operator.Result) {
 	}
 
 	for gen.limit > 0 && !gen.pkg.IsFull() {
-		buf, err := gen.enc.Encode(MakeRecord(gen.next), gen.buf)
+		err := gen.enc.Encode(gen.buf, MakeRecord(gen.next))
 		if err != nil {
 			gen.err = err
 			return nil, operator.ResultError
 		}
 		gen.buf.Reset()
-		gen.pkg.AppendWire(buf, &types.Meta{Rid: uint64(gen.next), Ref: uint64(gen.next), Xmin: 1})
+		gen.pkg.AppendWire(gen.buf.Bytes(), &types.Meta{Rid: uint64(gen.next), Ref: uint64(gen.next), Xmin: 1})
 		gen.limit--
 		gen.next++
 	}

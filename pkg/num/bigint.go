@@ -5,11 +5,15 @@ package num
 
 import (
 	"bytes"
+	"errors"
+	"io"
 	"math"
 	"math/big"
 	"math/bits"
 	"strings"
 )
+
+var ErrBigOverflow = errors.New("bigint larger than 255 byte")
 
 // A variable length sequence of bytes representing an unsigned Big integer
 // number with unlimited precision. Negative bigints are unsupported for
@@ -175,8 +179,15 @@ func (z *Big) UnmarshalBinary(buf []byte) error {
 	return nil
 }
 
-func (z *Big) DecodeBuffer(buf *bytes.Buffer) error {
-	(*big.Int)(z).SetBytes(buf.Bytes())
+func (z *Big) UnmarshalBuffer(buf *bytes.Buffer) error {
+	if buf.Len() < 1 {
+		return io.ErrShortBuffer
+	}
+	l := int(buf.Next(1)[0])
+	if buf.Len() < l {
+		return io.ErrShortBuffer
+	}
+	(*big.Int)(z).SetBytes(buf.Next(l))
 	return nil
 }
 
@@ -188,9 +199,19 @@ func (z Big) MarshalBinary() ([]byte, error) {
 	return z.Bytes(), nil
 }
 
-func (z Big) EncodeBuffer(buf *bytes.Buffer) error {
-	buf.Write(z.Bytes())
-	return nil
+func (z Big) MarshalBuffer(buf *bytes.Buffer) error {
+	// 1 byte len
+	x := z.Big()
+	l := (x.BitLen() + 7) / 8
+	if l > 255 {
+		return ErrBigOverflow
+	}
+	buf.Grow(l + 1)
+	buf.WriteByte(byte(l))
+	space := buf.AvailableBuffer()[:l]
+	x.FillBytes(space)
+	_, err := buf.Write(space)
+	return err
 }
 
 func ParseBig(s string) (Big, error) {

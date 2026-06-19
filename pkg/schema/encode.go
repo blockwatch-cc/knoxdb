@@ -262,26 +262,17 @@ func (f *Field) WriteValue(w *bytes.Buffer, val any, layout binary.ByteOrder) (e
 
 	case Bigint:
 		// 1 byte len
-		var (
-			bval []byte
-			ok   = true
-		)
 		switch v := val.(type) {
 		case num.Big:
-			bval = v.Bytes()
+			err = v.MarshalBuffer(w)
 		case *big.Int:
-			bval = v.Bytes()
+			err = num.NewFromBigInt(v).MarshalBuffer(w)
 		case []byte:
-			bval = v
-		default:
-			ok = false
-		}
-		if ok {
-			l := len(bval)
+			l := len(v)
 			if l <= MAX_BYTES {
-				_, err = w.Write([]byte{byte(l)})
+				err = w.WriteByte(byte(l))
 				if err == nil {
-					_, err = w.Write(bval)
+					_, err = w.Write(v)
 				}
 			} else {
 				err = ErrLongValue

@@ -121,7 +121,7 @@ func (e *Dictionary) MustValue(code uint16) string {
 }
 
 func (e *Dictionary) Code(val string) (uint16, bool) {
-	code, ok := e.codes[hash.Hash([]byte(val))]
+	code, ok := e.codes[hash.HashString(val)]
 	return code, ok
 }
 
@@ -145,7 +145,7 @@ func (e *Dictionary) Append(vals ...string) error {
 
 	clear(e.codes)
 	for _, v := range vals {
-		e.codes[hash.Hash([]byte(v))] = uint16(e.Len())
+		e.codes[hash.HashString(v)] = uint16(e.Len())
 		e.offsets = append(e.offsets, uint32(len(e.values)))
 		e.values = append(e.values, []byte(v)...)
 	}

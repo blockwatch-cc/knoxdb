@@ -38,6 +38,7 @@ func (j *Journal) InsertRecords(ctx context.Context, buf []byte) (uint64, int, e
 		nextPk   = firstPk
 		nextRid  = firstRid
 		count    int
+		scratch  [binary.MaxVarintLen64]byte
 	)
 	for len(buf) > 0 {
 		var (
@@ -68,7 +69,11 @@ func (j *Journal) InsertRecords(ctx context.Context, buf []byte) (uint64, int, e
 				Tag:    types.ObjectTagTable,
 				Entity: j.id,
 				TxID:   xid,
-				Data:   [][]byte{binary.AppendUvarint(nil, firstRid), buf[:sz]},
+				Data: [][]byte{
+					binary.AppendUvarint(scratch[:0], firstRid),
+					// TODO: write batch.Header()
+					buf[:sz],
+				},
 			})
 			if err != nil {
 				// will likely abort the tx
@@ -203,6 +208,7 @@ func (j *Journal) insertPackWithWal(_ context.Context, src *pack.Package, xid ty
 
 			// 1 create & assign pks, rids, xid, write to journal vectors
 			writeBinaryUvarint(msg, nextRid)
+			// TODO: write batch header
 			for range n {
 				// create wire format for wal write
 				start := msg.Len()
@@ -245,6 +251,7 @@ func (j *Journal) insertPackWithWal(_ context.Context, src *pack.Package, xid ty
 
 			// 1 create & assign pks, rids, xid, write to journal vectors
 			writeBinaryUvarint(msg, nextRid)
+			// TODO: write batch header
 			for _, v := range sel[:n] {
 				start := msg.Len()
 				src.ReadWireBuffer(msg, int(v))

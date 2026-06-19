@@ -61,8 +61,8 @@ func (s *Schema) HasEnums() bool {
 	return s.Enums.Load() != nil
 }
 
-func (s *Schema) NewBuffer(sz int) *bytes.Buffer {
-	return bytes.NewBuffer(make([]byte, 0, sz*s.EstWireSize))
+func (s *Schema) NewBuffer(n int) *bytes.Buffer {
+	return bytes.NewBuffer(make([]byte, 0, n*s.EstWireSize))
 }
 
 func (s *Schema) IsValid() bool {

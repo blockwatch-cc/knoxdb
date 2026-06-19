@@ -134,15 +134,16 @@ func FillIndex(t *testing.T, e *engine.Engine, ie engine.IndexEngine) *pack.Pack
 	t.Helper()
 	ctx := engine.WithEngine(context.Background(), e)
 	enc := encode.NewEncoder(ie.Table().Schema().Base())
+	buf := enc.NewBuffer(1)
 	pkg := pack.New().WithSchema(ie.Table().Schema().Base()).WithMaxRows(1 << 11).Alloc()
 	meta := &types.Meta{}
 	for i := range 6 {
 		allType := NewAllTypes(i)
 		allType.Id = uint64(i + 1)
 		meta.Rid = uint64(i + 1)
-		buf, err := enc.Encode(allType, nil)
-		require.NoError(t, err)
-		pkg.AppendWire(buf, meta)
+		buf.Reset()
+		require.NoError(t, enc.Encode(buf, allType))
+		pkg.AppendWire(buf.Bytes(), meta)
 	}
 	require.NoError(t, ie.AddPack(ctx, pkg, pack.WriteModeAll))
 	require.NoError(t, ie.Finalize(ctx, 1))

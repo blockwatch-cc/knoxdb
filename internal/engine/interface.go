@@ -18,6 +18,7 @@ import (
 type (
 	Context     = context.Context
 	Schema      = schema.Schema
+	Batch       = schema.Batch
 	TableSchema = types.TableSchema
 	IndexSchema = schema.IndexSchema
 	View        = schema.View
@@ -57,6 +58,8 @@ type TableEngine interface {
 	Checkpoint(Context) error
 
 	// data ingress
+	// InsertBatch(Context, *Batch) (uint64, int, error)
+	// UpdateBatch(Context, *Batch) (int, error)
 	InsertRows(Context, []byte) (uint64, int, error) // wire encoded rows
 	InsertInto(Context, *Package) (uint64, int, error)
 	ImportInto(Context, *Package) (uint64, int, error)

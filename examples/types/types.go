@@ -150,7 +150,7 @@ func run() error {
 	for i := 1; i <= c; i++ {
 		data = append(data, NewRandomTypes(i))
 	}
-	_, _, err = table.Insert(ctx, data)
+	_, _, err = table.Insert(ctx, data...)
 	if err != nil {
 		return err
 	}
@@ -169,7 +169,7 @@ func run() error {
 	var count int
 	start = time.Now()
 	err = knox.NewQueryFor[Types]().
-		WithTable(table).
+		WithTable(table.Table()).
 		WithTag("three_million_records").
 		WithLimit(3000000).
 		WithStats(true).
@@ -182,13 +182,14 @@ func run() error {
 		log.Errorf("Decode: %v", err)
 	} else {
 		dur := time.Since(start)
-		log.Infof("Decoded %d records in %s (%d/s)", count, dur, count*1000000000/int(dur))
+		log.Infof("Decoded %d records in %s (%.0f/s)", count, dur, float64(count)/dur.Seconds())
 	}
 
 	// read a single entry
+	start = time.Now()
 	var single Types
 	_, err = knox.NewQueryFor[Types]().
-		WithTable(table).
+		WithTable(table.Table()).
 		WithTag("two_conditions_single").
 		AndGte("int64", 42).
 		AndLt("int64", 1024).
@@ -198,12 +199,13 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("single: %v", err)
 	}
-	log.Infof("Single value int64=%d pk=%d", single.Int64, single.Id)
+	log.Infof("Point value int64=%d pk=%d in %s", single.Int64, single.Id, time.Since(start))
 
 	// read up to 10 records via query interface
 	multi := make([]Types, 10)
+	start = time.Now()
 	_, err = knox.NewQuery().
-		WithTable(table).
+		WithTable(table.Table()).
 		WithTag("no_condition_limit").
 		WithLimit(10).
 		WithStats(true).
@@ -212,7 +214,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("multi: %v", err)
 	}
-	log.Infof("%d Multi values", len(multi))
+	log.Infof("%d Multi values in %s", len(multi), time.Since(start))
 	// for i, v := range multi {
 	// 	log.Tracef("%d int64=%d pk=%d", i, v.Int64, v.Id)
 	// }
@@ -220,16 +222,17 @@ func run() error {
 	// Step 3
 	//
 	// delete some records
+	start = time.Now()
 	n, err := knox.NewQuery().
 		WithTag("delete").
-		WithTable(table).
+		WithTable(table.Table()).
 		AndLt("int64", 1024).
 		// WithDebug(true).
 		Delete(ctx)
 	if err != nil {
 		log.Errorf("Decode: %v", err)
 	} else {
-		log.Infof("Deleted %d records", n)
+		log.Infof("Deleted %d records in %s", n, time.Since(start))
 	}
 
 	time.Sleep(100 * time.Millisecond)
@@ -244,7 +247,7 @@ func run() error {
 	return nil
 }
 
-func OpenOrCreate(ctx context.Context) (db knox.Database, table knox.Table, err error) {
+func OpenOrCreate(ctx context.Context) (db knox.Database, table *knox.TableT[Types], err error) {
 	ok, err := knox.IsDatabaseExist(
 		"types",
 		append(knox.NewDefaultOptions(), knox.WithPath("./db"))...,
@@ -259,7 +262,7 @@ func OpenOrCreate(ctx context.Context) (db knox.Database, table knox.Table, err 
 	}
 }
 
-func Create(ctx context.Context) (db knox.Database, table knox.Table, err error) {
+func Create(ctx context.Context) (db knox.Database, table *knox.TableT[Types], err error) {
 	opts := append(
 		knox.NewDefaultOptions(),
 		knox.WithPath("./db"),
@@ -293,7 +296,7 @@ func Create(ctx context.Context) (db knox.Database, table knox.Table, err error)
 
 	log.Infof("Creating Table %s", s.Name)
 	log.Tracef("Input Schema %s", s)
-	table, err = db.CreateTable(ctx, s, append(
+	tab, err := db.CreateTable(ctx, s, append(
 		knox.NewTableOptions(),
 		knox.WithEngineType("pack"),
 		knox.WithDriverType("bolt"),
@@ -305,7 +308,7 @@ func Create(ctx context.Context) (db knox.Database, table knox.Table, err error)
 	if err != nil {
 		return
 	}
-	ts := table.Schema()
+	ts := tab.Schema()
 	log.Tracef("Table Schema %s", ts)
 
 	indexes, err := reflect.IndexesFor[Types](schema.Enums(enums))
@@ -328,10 +331,13 @@ func Create(ctx context.Context) (db knox.Database, table knox.Table, err error)
 			return
 		}
 	}
+
+	table, err = knox.TableFor[Types](tab)
+
 	return
 }
 
-func Open(ctx context.Context) (db knox.Database, table knox.Table, err error) {
+func Open(ctx context.Context) (db knox.Database, table *knox.TableT[Types], err error) {
 	log.Info("Opening DB")
 	db, err = knox.OpenDatabase(ctx, "types", append(
 		knox.NewDefaultOptions(),
@@ -344,7 +350,7 @@ func Open(ctx context.Context) (db knox.Database, table knox.Table, err error) {
 		return
 	}
 
-	table, err = db.FindTable("types")
+	table, err = knox.FindTableFor[Types](db, "types")
 	if err != nil {
 		return
 	}

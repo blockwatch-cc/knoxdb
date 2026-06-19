@@ -157,12 +157,13 @@ func InsertData(t *testing.T, e *engine.Engine, tab engine.TableEngine) {
 
 	var cnt int
 	enc := encode.NewEncoder(tab.Schema().Base())
+	buf := enc.NewBuffer(1)
 	for _, rec := range data {
-		buf, err := enc.Encode(rec, nil)
-		require.NoError(t, err)
+		buf.Reset()
+		require.NoError(t, enc.Encode(buf, rec))
 		ctx, _, commit, abort, err := e.WithTransaction(context.Background())
 		require.NoError(t, err)
-		_, _, err = tab.InsertRows(ctx, buf)
+		_, _, err = tab.InsertRows(ctx, buf.Bytes())
 		assert.NoError(t, err)
 		assert.NoError(t, commit())
 		abort()
@@ -258,10 +259,10 @@ func InsertRowsReadOnlyTableTest(t *testing.T, e *engine.Engine, tab engine.Tabl
 	require.NoError(t, err)
 
 	enc := encode.NewEncoder(tab.Schema().Base())
-	buf, err := enc.Encode(NewAllTypes(10), nil)
-	require.NoError(t, err)
+	buf := enc.NewBuffer(10)
+	require.NoError(t, enc.EncodeBatch(buf, NewAllTypes(10)))
 
-	_, cnt, err := tab.InsertRows(ctx, buf)
+	_, cnt, err := tab.InsertRows(ctx, buf.Bytes())
 	require.Error(t, err)
 	assert.Equal(t, uint64(0), cnt)
 
@@ -281,19 +282,19 @@ func UpdateRowsTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine,
 	tab.ConnectIndex(idx)
 
 	enc := encode.NewEncoder(tab.Schema().Base())
+	buf := enc.NewBuffer(10)
 	data := make([]*AllTypes, 10)
 	for i := range data {
 		data[i] = NewAllTypes(i)
 		data[i].Id = uint64(i + 1)
 	}
-	buf, err := enc.Encode(data, nil)
-	require.NoError(t, err)
+	require.NoError(t, enc.EncodeBatch(buf, data))
 
 	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
 	defer abort()
 	require.NoError(t, err)
 
-	cnt, err := tab.UpdateRows(ctx, buf)
+	cnt, err := tab.UpdateRows(ctx, buf.Bytes())
 	require.NoError(t, err)
 	assert.Equal(t, len(data), cnt)
 	require.NoError(t, commit())

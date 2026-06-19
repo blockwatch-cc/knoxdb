@@ -4,7 +4,6 @@
 package schema_tests
 
 import (
-	"bytes"
 	"cmp"
 	"slices"
 	"testing"
@@ -88,11 +87,9 @@ func BenchmarkViewCut(b *testing.B) {
 	baseSchema := reflect.MustSchemaFor[AllTypes]()
 	base := NewAllTypes(int64(0x0faf0faf0faf0faf))
 	baseEnc := encode.NewEncoder(baseSchema)
-	buf := bytes.NewBuffer(nil)
-	_, err := baseEnc.Encode(base, buf)
-	require.NoError(b, err)
-	_, err = baseEnc.Encode(base, buf)
-	require.NoError(b, err)
+	buf := baseEnc.NewBuffer(2)
+	require.NoError(b, baseEnc.Encode(buf, base))
+	require.NoError(b, baseEnc.Encode(buf, base))
 	view := schema.NewView(baseSchema)
 
 	b.ReportAllocs()
@@ -110,11 +107,9 @@ func BenchmarkViewCutSkip(b *testing.B) {
 	require.NoError(b, err)
 	base := NewAllTypes(int64(0x0faf0faf0faf0faf))
 	baseEnc := encode.NewEncoder(baseSchema)
-	buf := bytes.NewBuffer(nil)
-	_, err = baseEnc.Encode(base, buf)
-	require.NoError(b, err)
-	_, err = baseEnc.Encode(base, buf)
-	require.NoError(b, err)
+	buf := baseEnc.NewBuffer(2)
+	require.NoError(b, baseEnc.Encode(buf, base))
+	require.NoError(b, baseEnc.Encode(buf, base))
 	view := schema.NewView(baseSchema)
 
 	b.ReportAllocs()
@@ -127,9 +122,8 @@ func BenchmarkView(b *testing.B) {
 	baseSchema := reflect.MustSchemaFor[AllTypes]()
 	base := NewAllTypes(int64(0x0faf0faf0faf0faf))
 	baseEnc := encode.NewEncoder(baseSchema)
-	buf := bytes.NewBuffer(nil)
-	_, err := baseEnc.Encode(base, buf)
-	require.NoError(b, err)
+	buf := baseEnc.NewBuffer(2)
+	require.NoError(b, baseEnc.Encode(buf, base))
 	view := schema.NewView(baseSchema)
 	view.Reset(buf.Bytes())
 	b.Log(view.Schema().String())

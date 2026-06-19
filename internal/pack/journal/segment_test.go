@@ -37,9 +37,9 @@ func TestSegmentInsert(t *testing.T) {
 	require.False(t, seg.ContainsRid(1))
 
 	// insert val
-	buf, err := enc.Encode(BaseModel{Id: 1}, nil)
-	require.NoError(t, err)
-	seg.InsertRecord(1, 1, buf)
+	buf := enc.NewBuffer(1)
+	require.NoError(t, enc.Encode(buf, &BaseModel{Id: 1}))
+	seg.InsertRecord(1, 1, buf.Bytes())
 	require.Equal(t, 1, seg.Data().Len())
 	require.False(t, seg.IsEmpty())
 	require.False(t, seg.IsDone())
@@ -60,14 +60,14 @@ func TestSegmentUpdate(t *testing.T) {
 	enc := encode.NewEncoderFor[BaseModel]()
 
 	// insert val1
-	buf, err := enc.Encode(BaseModel{Id: 1}, nil)
-	require.NoError(t, err)
-	seg.InsertRecord(1, 1, buf)
+	buf := enc.NewBuffer(1)
+	require.NoError(t, enc.Encode(buf, &BaseModel{Id: 1}))
+	seg.InsertRecord(1, 1, buf.Bytes())
 
 	// update val
-	buf, err = enc.Encode(BaseModel{Id: 2}, nil)
-	require.NoError(t, err)
-	seg.UpdateRecord(1, 2, 1, buf)
+	buf.Reset()
+	require.NoError(t, enc.Encode(buf, &BaseModel{Id: 2}))
+	seg.UpdateRecord(1, 2, 1, buf.Bytes())
 	require.True(t, seg.ContainsTx(1))
 	require.True(t, seg.IsActiveTx(1))
 	seg.CommitTx(1)
@@ -90,12 +90,12 @@ func TestSegmentDelete(t *testing.T) {
 	enc := encode.NewEncoderFor[BaseModel]()
 
 	// insert val 1 & 2 and commit
-	buf, err := enc.Encode(BaseModel{Id: 1}, nil)
-	require.NoError(t, err)
-	seg.InsertRecord(1, 1, buf)
-	buf, err = enc.Encode(BaseModel{Id: 2}, nil)
-	require.NoError(t, err)
-	seg.InsertRecord(1, 2, buf)
+	buf := enc.NewBuffer(1)
+	require.NoError(t, enc.Encode(buf, &BaseModel{Id: 1}))
+	seg.InsertRecord(1, 1, buf.Bytes())
+	buf.Reset()
+	require.NoError(t, enc.Encode(buf, &BaseModel{Id: 2}))
+	seg.InsertRecord(1, 2, buf.Bytes())
 	seg.CommitTx(1)
 
 	// delete val 2
@@ -133,27 +133,27 @@ func TestSegmentMatch(t *testing.T) {
 	enc := encode.NewEncoderFor[BaseModel]()
 
 	// xid 1 committed
-	buf, err := enc.Encode(BaseModel{Id: 1}, nil)
-	require.NoError(t, err)
-	seg.InsertRecord(1, 1, buf)
+	buf := enc.NewBuffer(1)
+	require.NoError(t, enc.Encode(buf, &BaseModel{Id: 1}))
+	seg.InsertRecord(1, 1, buf.Bytes())
 	seg.CommitTx(1)
 
 	// xid 2 aborted
-	buf, err = enc.Encode(BaseModel{Id: 2}, nil)
-	require.NoError(t, err)
-	seg.InsertRecord(2, 2, buf)
+	buf.Reset()
+	require.NoError(t, enc.Encode(buf, &BaseModel{Id: 2}))
+	seg.InsertRecord(2, 2, buf.Bytes())
 	seg.AbortTx(2)
 
 	// xid 3 committed, replaces rid 1
-	buf, err = enc.Encode(BaseModel{Id: 1}, nil)
-	require.NoError(t, err)
-	seg.UpdateRecord(3, 2, 1, buf)
+	buf.Reset()
+	require.NoError(t, enc.Encode(buf, &BaseModel{Id: 1}))
+	seg.UpdateRecord(3, 2, 1, buf.Bytes())
 	seg.CommitTx(3)
 
 	// xid 4 open
-	buf, err = enc.Encode(BaseModel{Id: 3}, nil)
-	require.NoError(t, err)
-	seg.InsertRecord(4, 3, buf)
+	buf.Reset()
+	require.NoError(t, enc.Encode(buf, &BaseModel{Id: 3}))
+	seg.InsertRecord(4, 3, buf.Bytes())
 
 	// query at 3
 	snap := types.NewSnapshot(3, 3, 4) // pretend 3 is the only tx
@@ -192,9 +192,9 @@ func TestSegmentStateUpdates(t *testing.T) {
 		setCheckpoint(42)
 	enc := encode.NewEncoderFor[BaseModel]()
 	makeRecord := func(i int) []byte {
-		buf, err := enc.Encode(BaseModel{Id: uint64(i)}, nil)
-		require.NoError(t, err)
-		return buf
+		buf := enc.NewBuffer(1)
+		require.NoError(t, enc.Encode(buf, &BaseModel{Id: uint64(i)}))
+		return buf.Bytes()
 	}
 
 	var xid types.XID = 1

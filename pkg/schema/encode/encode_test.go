@@ -257,14 +257,45 @@ func makeMapRecords(sz int) []MapRecord {
 	return res
 }
 
-func TestEncodeVal(t *testing.T) {
+func TestEncodePtrVal(t *testing.T) {
 	vals := makeTestData(1)
 	enc := NewEncoderFor[encodeTestStruct]()
-	buf, err := enc.Encode(vals[0], nil)
-	require.NoError(t, err)
-	require.NotNil(t, buf)
-	require.NotEmpty(t, buf)
-	require.LessOrEqual(t, enc.Schema().MinWireSize, len(buf))
+	buf := enc.NewBuffer(1)
+	require.NoError(t, enc.Encode(buf, &vals[0]))
+	require.NotEmpty(t, buf.Bytes())
+	require.LessOrEqual(t, enc.Schema().MinWireSize, buf.Len())
+}
+
+func TestEncodeBatch(t *testing.T) {
+	vals := makeTestData(2)
+	ptrs := make([]*encodeTestStruct, 2)
+	for i := range vals {
+		ptrs[i] = &vals[i]
+	}
+	enc := NewEncoderFor[encodeTestStruct]()
+	buf := enc.NewBuffer(len(vals))
+	require.NoError(t, enc.Encode(buf, ptrs...))
+	require.NotEmpty(t, buf.Bytes())
+}
+
+func TestEncodeEncoderBatch(t *testing.T) {
+	vals := makeTestData(2)
+	enc := NewEncoderFor[encodeTestStruct]()
+	buf := enc.NewBuffer(len(vals))
+	require.NoError(t, enc.Encoder.EncodeBatch(buf, vals))
+	require.NotEmpty(t, buf.Bytes())
+}
+
+func TestEncodeEncoderPtrBatch(t *testing.T) {
+	vals := makeTestData(2)
+	ptrs := make([]*encodeTestStruct, 2)
+	for i := range vals {
+		ptrs[i] = &vals[i]
+	}
+	enc := NewEncoderFor[encodeTestStruct]()
+	buf := enc.NewBuffer(len(vals))
+	require.NoError(t, enc.Encoder.EncodeBatch(buf, ptrs))
+	require.NotEmpty(t, buf.Bytes())
 }
 
 func TestEncodeValWithVisibility(t *testing.T) {
@@ -277,26 +308,42 @@ func TestEncodeValWithVisibility(t *testing.T) {
 	s, err = s.DeleteId(4)
 	require.NoError(t, err)
 	enc := NewEncoder(s)
-	buf, err := enc.Encode(&val, nil)
-	require.NoError(t, err)
-	require.NotNil(t, buf)
-	require.NotEmpty(t, buf)
-	require.Equal(t, s.MinWireSize, len(buf))
-	require.Equal(t, 40, len(buf))
+	buf := enc.NewBuffer(1)
+	require.NoError(t, enc.Encode(buf, &val))
+	require.NotEmpty(t, buf.Bytes())
+	require.Equal(t, s.MinWireSize, buf.Len())
+	require.Equal(t, 40, buf.Len())
 }
 
 func TestEncodeRoundtrip(t *testing.T) {
 	vals := makeTestData(1)
 	val := vals[0]
 	enc := NewEncoderFor[encodeTestStruct]()
-	buf, err := enc.Encode(val, nil)
-	require.NoError(t, err)
+	buf := enc.NewBuffer(1)
+	require.NoError(t, enc.Encode(buf, &val))
 	require.NotNil(t, buf)
 	require.NotEmpty(t, buf)
-	require.LessOrEqual(t, enc.Schema().MinWireSize, len(buf))
+	require.LessOrEqual(t, enc.Schema().MinWireSize, buf.Len())
 
 	dec := NewDecoderFor[encodeTestStruct]()
-	val2, err := dec.Decode(buf, nil)
+	val2, err := dec.Decode(buf.Bytes(), nil)
+	require.NoError(t, err)
+	require.IsType(t, val, *val2)
+	require.Exactly(t, val, *val2)
+}
+
+func TestEncodeEncoderRoundtrip(t *testing.T) {
+	vals := makeTestData(1)
+	val := vals[0]
+	enc := NewEncoderFor[encodeTestStruct]()
+	buf := enc.NewBuffer(1)
+	require.NoError(t, enc.Encoder.Encode(buf, &val))
+	require.NotNil(t, buf)
+	require.NotEmpty(t, buf)
+	require.LessOrEqual(t, enc.Schema().MinWireSize, buf.Len())
+
+	dec := NewDecoderFor[encodeTestStruct]()
+	val2, err := dec.Decode(buf.Bytes(), nil)
 	require.NoError(t, err)
 	require.IsType(t, val, *val2)
 	require.Exactly(t, val, *val2)
@@ -312,15 +359,14 @@ func TestEncodeRoundtripWithVisibility(t *testing.T) {
 	require.NoError(t, err)
 	val := makeVisibilityTestData(1)[0]
 	enc := NewEncoder(s)
-	buf, err := enc.Encode(&val, nil)
-	require.NoError(t, err)
-	require.NotNil(t, buf)
-	require.NotEmpty(t, buf)
-	require.Len(t, buf, s.MinWireSize)
+	buf := enc.NewBuffer(1)
+	require.NoError(t, enc.Encode(buf, &val))
+	require.NotEmpty(t, buf.Bytes())
+	require.Len(t, buf.Bytes(), s.MinWireSize)
 
 	dec := NewDecoder(s)
 	var val2 visibilityTestStruct
-	err = dec.Decode(buf, &val2)
+	err = dec.Decode(buf.Bytes(), &val2)
 	require.NoError(t, err)
 	require.Equal(t, val.Id, val2.Id)
 	require.Equal(t, val.Hash, val2.Hash, "hash")
@@ -329,35 +375,85 @@ func TestEncodeRoundtripWithVisibility(t *testing.T) {
 	require.Equal(t, uint64(0), val2.FMetaDeleted, "meta_deleted")
 }
 
-func TestEncodeSlice(t *testing.T) {
-	vals := makeTestData(2)
-	enc := NewEncoderFor[encodeTestStruct]()
-	buf, err := enc.Encode(vals, nil)
-	require.NoError(t, err)
-	require.NotNil(t, buf)
-	require.NotEmpty(t, buf)
+func TestEncodeSpecial(t *testing.T) {
+	t.Run("nil_value", func(t *testing.T) {
+		enc := NewEncoderFor[encodeTestStruct]()
+		buf := enc.NewBuffer(1)
+		require.NoError(t, enc.Encoder.Encode(buf, nil))
+		require.Empty(t, buf.Bytes())
+	})
+	t.Run("nil_slice", func(t *testing.T) {
+		enc := NewEncoderFor[encodeTestStruct]()
+		buf := enc.NewBuffer(1)
+		require.NoError(t, enc.Encoder.EncodeBatch(buf, nil))
+		require.Empty(t, buf.Bytes())
+	})
+	t.Run("empty_slice", func(t *testing.T) {
+		enc := NewEncoderFor[encodeTestStruct]()
+		buf := enc.NewBuffer(1)
+		require.NoError(t, enc.Encoder.EncodeBatch(buf, []encodeTestStruct{}))
+		require.Empty(t, buf.Bytes())
+	})
+	t.Run("empty_ptr_slice", func(t *testing.T) {
+		enc := NewEncoderFor[encodeTestStruct]()
+		buf := enc.NewBuffer(1)
+		require.NoError(t, enc.Encoder.EncodeBatch(buf, []*encodeTestStruct{}))
+		require.Empty(t, buf.Bytes())
+	})
 }
 
-func TestEncodeValPtr(t *testing.T) {
-	vals := makeTestData(1)
-	enc := NewEncoderFor[encodeTestStruct]()
-	buf, err := enc.Encode(&vals[0], nil)
-	require.NoError(t, err)
-	require.NotNil(t, buf)
-	require.NotEmpty(t, buf)
-}
-
-func TestEncodePtrSlice(t *testing.T) {
-	vals := makeTestData(2)
-	ptrs := make([]*encodeTestStruct, 2)
-	for i := range vals {
-		ptrs[i] = &vals[i]
-	}
-	enc := NewEncoderFor[encodeTestStruct]()
-	buf, err := enc.Encode(ptrs, nil)
-	require.NoError(t, err)
-	require.NotNil(t, buf)
-	require.NotEmpty(t, buf)
+func TestEncodeErrors(t *testing.T) {
+	t.Run("val_mismatch", func(t *testing.T) {
+		enc := NewEncoderFor[encodeTestStruct]()
+		buf := enc.NewBuffer(1)
+		bad := makeVisibilityTestData(1)
+		require.Error(t, enc.Encoder.Encode(buf, bad[0]))
+	})
+	t.Run("slice_mismatch", func(t *testing.T) {
+		enc := NewEncoderFor[encodeTestStruct]()
+		buf := enc.NewBuffer(2)
+		bad := makeVisibilityTestData(2)
+		require.Error(t, enc.Encoder.EncodeBatch(buf, bad))
+	})
+	t.Run("no_marshaler", func(t *testing.T) {
+		enc := NewEncoderFor[encodeTestStruct]()
+		vals := makeTestData(1)
+		buf := enc.NewBuffer(1)
+		require.Error(t, enc.Encoder.Encode(buf, vals[0]))
+		require.Empty(t, buf.Bytes())
+	})
+	t.Run("no_ptr", func(t *testing.T) {
+		enc := NewEncoderFor[encodeTestStruct]()
+		vals := makeTestData(1)
+		buf := enc.NewBuffer(1)
+		require.Error(t, enc.Encoder.Encode(buf, vals)) // <- []T not allowed
+		require.Empty(t, buf.Bytes())
+	})
+	t.Run("nil_in_slice", func(t *testing.T) {
+		enc := NewEncoderFor[encodeTestStruct]()
+		vals := makeTestData(2)
+		ptrs := make([]*encodeTestStruct, 2)
+		for i := range vals {
+			ptrs[i] = &vals[i]
+		}
+		ptrs[1] = nil
+		buf := enc.NewBuffer(2)
+		require.Error(t, enc.Encoder.EncodeBatch(buf, ptrs)) // <- nil not allowed
+	})
+	t.Run("no_slice", func(t *testing.T) {
+		enc := NewEncoderFor[encodeTestStruct]()
+		vals := makeTestData(1)
+		buf := enc.NewBuffer(1)
+		require.Error(t, enc.Encoder.EncodeBatch(buf, vals[0])) // <- T not allowed
+		require.Empty(t, buf.Bytes())
+	})
+	t.Run("no_slice_2", func(t *testing.T) {
+		enc := NewEncoderFor[encodeTestStruct]()
+		vals := makeTestData(1)
+		buf := enc.NewBuffer(1)
+		require.Error(t, enc.Encoder.EncodeBatch(buf, &vals[0])) // <- *T not allowed
+		require.Empty(t, buf.Bytes())
+	})
 }
 
 func TestMarshal(t *testing.T) {
@@ -367,10 +463,9 @@ func TestMarshal(t *testing.T) {
 		require.NoError(t, err)
 		enc := NewEncoderWithLayout(MarshalTypeSchema, l)
 		vals := makeMarsahlData(2)
-		buf, err := enc.Encode(vals[0].Labels, nil)
-		require.NoError(t, err)
-		require.NotNil(t, buf)
-		require.NotEmpty(t, buf)
+		buf := enc.NewBuffer(2)
+		require.NoError(t, enc.EncodeBatch(buf, vals[0].Labels))
+		require.NotEmpty(t, buf.Bytes())
 	})
 
 	// inner type has marshaler
@@ -379,10 +474,9 @@ func TestMarshal(t *testing.T) {
 		require.NoError(t, err)
 		enc := NewEncoderWithLayout(MarshalRecordSchema, l)
 		vals := makeMarsahlData(2)
-		buf, err := enc.Encode(vals, nil)
-		require.NoError(t, err)
-		require.NotNil(t, buf)
-		require.NotEmpty(t, buf)
+		buf := enc.NewBuffer(2)
+		require.NoError(t, enc.EncodeBatch(buf, vals))
+		require.NotEmpty(t, buf.Bytes())
 	})
 }
 
@@ -394,12 +488,11 @@ func TestUnmarshal(t *testing.T) {
 		enc := NewEncoderWithLayout(MarshalTypeSchema, l)
 		dec := NewDecoderWithLayout(MarshalTypeSchema, l)
 		vals := makeMarsahlData(2)
-		buf, err := enc.Encode(vals[0].Labels, nil)
-		require.NoError(t, err)
-		require.NotNil(t, buf)
-		require.NotEmpty(t, buf)
+		buf := enc.NewBuffer(2)
+		require.NoError(t, enc.EncodeBatch(buf, vals[0].Labels))
+		require.NotEmpty(t, buf.Bytes())
 		res := make([]MarshalType, 2)
-		n, err := dec.DecodeBatch(buf, res)
+		n, err := dec.DecodeBatch(buf.Bytes(), res)
 		require.NoError(t, err)
 		require.Equal(t, 2, n)
 		require.Equal(t, vals[0].Labels, res)
@@ -412,12 +505,11 @@ func TestUnmarshal(t *testing.T) {
 		enc := NewEncoderWithLayout(MarshalRecordSchema, l)
 		dec := NewDecoderWithLayout(MarshalRecordSchema, l)
 		vals := makeMarsahlData(2)
-		buf, err := enc.Encode(vals, nil)
-		require.NoError(t, err)
-		require.NotNil(t, buf)
-		require.NotEmpty(t, buf)
+		buf := enc.NewBuffer(2)
+		require.NoError(t, enc.EncodeBatch(buf, vals))
+		require.NotEmpty(t, buf.Bytes())
 		res := make([]MarshalRecord, 2)
-		n, err := dec.DecodeBatch(buf, res)
+		n, err := dec.DecodeBatch(buf.Bytes(), res)
 		require.NoError(t, err)
 		require.Equal(t, 2, n)
 		require.Equal(t, vals, res)
@@ -430,12 +522,11 @@ func TestMarshalList(t *testing.T) {
 	enc := NewEncoderWithLayout(LogRecordSchema, l)
 	dec := NewDecoderWithLayout(LogRecordSchema, l)
 	vals := makeLogRecords(2)
-	buf, err := enc.Encode(vals, nil)
-	require.NoError(t, err)
-	require.NotNil(t, buf)
-	require.NotEmpty(t, buf)
+	buf := enc.NewBuffer(2)
+	require.NoError(t, enc.EncodeBatch(buf, vals))
+	require.NotEmpty(t, buf.Bytes())
 	res := make([]LogRecord, 2)
-	n, err := dec.DecodeBatch(buf, res)
+	n, err := dec.DecodeBatch(buf.Bytes(), res)
 	require.NoError(t, err)
 	require.Equal(t, 2, n)
 	require.Equal(t, vals, res)
@@ -446,9 +537,9 @@ func TestMarshalMap(t *testing.T) {
 	require.NoError(t, err)
 	enc := NewEncoderWithLayout(MapRecordSchema, l)
 	vals := makeMapRecords(2)
-	buf, err := enc.Encode(vals, nil)
-	require.NoError(t, err)
-	require.NotNil(t, buf)
+	buf := enc.NewBuffer(2)
+	require.NoError(t, enc.EncodeBatch(buf, vals))
+	require.NotEmpty(t, buf.Bytes())
 
 	// marshal via writer
 	buf2 := MapRecordSchema.NewBuffer(2)
@@ -468,7 +559,7 @@ func TestMarshalMap(t *testing.T) {
 	require.True(t, w.Done())
 
 	// compare buffer
-	require.Equal(t, buf, w.Bytes())
+	require.Equal(t, buf.Bytes(), w.Bytes())
 
 	// decode should fail because map decoder is not supported
 	dec := NewDecoderWithLayout(MapRecordSchema, l)

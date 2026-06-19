@@ -136,7 +136,7 @@ func (w *Writer) Len() int {
 
 // Buffer returns internal buffer. Use in combination with custom
 // type marshalers to append data to an existing buffer. Users
-// must not call Reset.
+// must not call Reset or Truncate.
 func (w *Writer) Buffer() *bytes.Buffer {
 	return w.buf
 }

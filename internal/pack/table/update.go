@@ -25,6 +25,8 @@ import (
 // to WAL. The WAL message encoding is compatible with Update.
 //
 // [Records] -> [List Pks] -> [Index Lookup Rids] -> [Update Journal]
+
+// TODO: rename to UpdateBatch(context.Context, *schema.Batch)
 func (t *Table) UpdateRows(ctx context.Context, buf []byte) (int, error) {
 	// Update (pk != 0)
 	// - input is record format without metadata

@@ -44,11 +44,11 @@ func TestParser(t *testing.T) {
 
 			// encode data (golden version)
 			enc := encode.NewEncoder(s)
-			buf, err := enc.Encode(val, nil)
-			require.NoError(t, err)
+			buf := s.NewBuffer(1)
+			require.NoError(t, enc.Encode(buf, val))
 
 			// produce YAML (alternative 2: via builder)
-			v := schema.NewView(s).Reset(buf)
+			v := schema.NewView(s).Reset(buf.Bytes())
 			ynode, err := RecordToNode(v)
 			require.NoError(t, err)
 
@@ -65,7 +65,7 @@ func TestParser(t *testing.T) {
 			require.NoError(t, err)
 
 			// compare against golden encoded version
-			require.Equal(t, buf, rec)
+			require.Equal(t, buf.Bytes(), rec)
 			t.Logf("%T OK", val)
 		}
 	})
@@ -87,11 +87,11 @@ func TestParser(t *testing.T) {
 
 			// encode data (golden version)
 			enc := encode.NewEncoder(s)
-			buf, err := enc.Encode(val, nil)
-			require.NoError(t, err)
+			buf := s.NewBuffer(1)
+			require.NoError(t, enc.Encode(buf, val))
 
 			// produce YAML (alternative 2: via builder)
-			v := schema.NewView(s).Reset(buf)
+			v := schema.NewView(s).Reset(buf.Bytes())
 			ynode, err := RecordToNode(v)
 			require.NoError(t, err)
 
@@ -108,7 +108,7 @@ func TestParser(t *testing.T) {
 			require.NoError(t, err)
 
 			// compare against golden encoded version
-			require.Equal(t, buf, rec)
+			require.Equal(t, buf.Bytes(), rec)
 			t.Logf("%T OK", val)
 		}
 	})

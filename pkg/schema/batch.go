@@ -5,6 +5,7 @@ package schema
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"iter"
 )
@@ -22,6 +23,7 @@ func batchSize(i int) int {
 // containing a list of records prefixed by schema version and hash.
 type BatchWriter struct {
 	*Writer
+	n int
 }
 
 // NewBatchWriter creates a batch writer for schema s
@@ -52,12 +54,43 @@ func (w *BatchWriter) Bytes() []byte {
 func (w *BatchWriter) Batch() *Batch {
 	buf := w.Bytes()
 	c := len(buf)
-	return &Batch{buf: buf[BatchHeaderSize:c:c], schema: w.schema}
+	return &Batch{buf: buf[BatchHeaderSize:c:c], schema: w.schema, num: w.n}
 }
 
+// Next prepares the writer to append another record to the batch.
+// When Next is called early, before all fields were written, it skips
+// the remaining fields writing zeros.
+func (w *BatchWriter) Next() {
+	if w.Writer.n > 0 {
+		w.n++
+	}
+	w.Writer.Next()
+}
+
+// Reset resets the writer buffer for reuse.
+func (w *BatchWriter) Reset() {
+	w.Writer.Reset()
+	w.n = 0
+}
+
+// Resize ensures the writer buffer has space for up to n records
+// for writes to be allocation free. Capacity will only grow. To
+// reclaim allocated space and shrink memory usage close the writer
+// and allocate a new writer.
+func (w *BatchWriter) Resize(n int) {
+	need := w.schema.EstWireSize*n + BatchHeaderSize
+	if w.buf.Cap() < need {
+		w.buf.Grow(need - w.buf.Cap())
+	}
+}
+
+// Close closes the underlying writer and reclaims resources.
+// It is not strictly necessary to call close, but it helps
+// reduce allocations for high-performance applications.
 func (w *BatchWriter) Close() {
 	w.Writer.Close()
 	w.Writer = nil
+	w.n = 0
 }
 
 // Batch contains a type-safe list of records produced by a schema.
@@ -84,11 +117,34 @@ func ResolveBatch(buf []byte, r SchemaRegistry) (*Batch, error) {
 	if len(buf) < BatchHeaderSize {
 		return nil, ErrShortBuffer
 	}
-	ver := LE.Uint32(buf)
 	hash := LE.Uint64(buf[4:])
 	s, ok := r.LookupHash(hash)
 	if !ok {
 		return nil, fmt.Errorf("unknown schema hash 0x%016x", hash)
+	}
+	return makeBatch(buf, s)
+}
+
+func (s *Schema) WrapBatch(buf []byte) (*Batch, error) {
+	return makeBatch(buf, s)
+}
+
+func (s *Schema) WriteBatchHeader(buf *bytes.Buffer) error {
+	err := binary.Write(buf, LE, s.Version)
+	if err == nil {
+		err = binary.Write(buf, LE, s.Hash)
+	}
+	return err
+}
+
+func makeBatch(buf []byte, s *Schema) (*Batch, error) {
+	if len(buf) < BatchHeaderSize {
+		return nil, ErrShortBuffer
+	}
+	ver := LE.Uint32(buf)
+	hash := LE.Uint64(buf[4:])
+	if s.Hash != hash {
+		return nil, fmt.Errorf("%s: invalid batch hash %016x", s.Label(), hash)
 	}
 	if s.Version != ver {
 		return nil, fmt.Errorf("%s: invalid batch version %d", s.Label(), ver)

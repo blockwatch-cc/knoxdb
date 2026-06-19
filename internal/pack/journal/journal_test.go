@@ -633,9 +633,9 @@ func setupJournalTest(t *testing.T) (context.Context, *Journal, func(int) []byte
 	// create record producer helper
 	enc := encode.NewEncoderFor[BaseModel]()
 	makeRecord := func(i int) []byte {
-		buf, err := enc.Encode(BaseModel{Id: uint64(i)}, nil)
-		require.NoError(t, err)
-		return buf
+		buf := enc.NewBuffer(1)
+		require.NoError(t, enc.Encode(buf, &BaseModel{Id: uint64(i)}))
+		return buf.Bytes()
 	}
 
 	return ctx, j, makeRecord

@@ -19,8 +19,8 @@ func TestWriterWrite(t *testing.T) {
 	baseSchema := reflect.MustSchemaFor[AllTypes]()
 
 	baseEnc := encode.NewEncoder(baseSchema)
-	buf, err := baseEnc.Encode(base, nil)
-	require.NoError(t, err)
+	buf := baseEnc.NewBuffer(1)
+	require.NoError(t, baseEnc.Encode(buf, base))
 
 	w := schema.NewWriter(baseSchema, nil)
 	require.NoError(t, w.Write(base.Id))
@@ -51,7 +51,7 @@ func TestWriterWrite(t *testing.T) {
 	require.NoError(t, w.Write(base.Union))
 	require.True(t, w.Done())
 
-	require.Equal(t, buf, w.Bytes())
+	require.Equal(t, buf.Bytes(), w.Bytes())
 }
 
 func TestWriterPrimitive(t *testing.T) {
@@ -59,8 +59,8 @@ func TestWriterPrimitive(t *testing.T) {
 	baseSchema := reflect.MustSchemaFor[AllTypes]()
 
 	baseEnc := encode.NewEncoder(baseSchema)
-	buf, err := baseEnc.Encode(base, nil)
-	require.NoError(t, err)
+	buf := baseEnc.NewBuffer(1)
+	require.NoError(t, baseEnc.Encode(buf, base))
 
 	w := schema.NewWriter(baseSchema, nil)
 	require.NoError(t, w.WriteUint64(base.Id))
@@ -91,7 +91,7 @@ func TestWriterPrimitive(t *testing.T) {
 	require.NoError(t, w.WriteUnion(base.Union))
 	require.True(t, w.Done())
 
-	require.Equal(t, buf, w.Bytes())
+	require.Equal(t, buf.Bytes(), w.Bytes())
 }
 
 func TestWriterListL1(t *testing.T) {
@@ -102,9 +102,9 @@ func TestWriterListL1(t *testing.T) {
 	baseEnc := encode.NewEncoder(baseSchema)
 
 	// encode
-	buf, err := baseEnc.Encode(base, nil)
-	require.NoError(t, err)
-	require.LessOrEqual(t, baseSchema.MinWireSize, len(buf))
+	buf := baseEnc.NewBuffer(1)
+	require.NoError(t, baseEnc.Encode(buf, base))
+	require.LessOrEqual(t, baseSchema.MinWireSize, buf.Len())
 
 	// write
 	w := schema.NewWriter(baseSchema, nil)
@@ -166,12 +166,12 @@ func TestWriterListL1(t *testing.T) {
 	require.True(t, w.Done())
 
 	// check writer and encoder produce the same bytes
-	require.Equal(t, buf, w.Bytes())
+	require.Equal(t, buf.Bytes(), w.Bytes())
 
 	// test decoder can read the bytes
 	dec := encode.NewDecoder(baseSchema)
 	var res ListFields
-	require.NoError(t, dec.Decode(buf, &res))
+	require.NoError(t, dec.Decode(w.Bytes(), &res))
 
 	// check decoder produces the exact same struct values
 	require.Equal(t, *base, res)
@@ -185,9 +185,9 @@ func TestWriterListL2(t *testing.T) {
 	baseEnc := encode.NewEncoder(baseSchema)
 
 	// encode
-	buf, err := baseEnc.Encode(base, nil)
-	require.NoError(t, err)
-	require.LessOrEqual(t, baseSchema.MinWireSize, len(buf))
+	buf := baseEnc.NewBuffer(1)
+	require.NoError(t, baseEnc.Encode(buf, base))
+	require.LessOrEqual(t, baseSchema.MinWireSize, buf.Len())
 
 	// write
 	w := schema.NewWriter(baseSchema, nil)
@@ -237,12 +237,12 @@ func TestWriterListL2(t *testing.T) {
 	require.True(t, w.Done())
 
 	// check writer and encoder produce the same bytes
-	require.Equal(t, buf, w.Bytes())
+	require.Equal(t, buf.Bytes(), w.Bytes())
 
 	// test decoder can read the bytes
 	dec := encode.NewDecoder(baseSchema)
 	var res ListInListFields
-	require.NoError(t, dec.Decode(buf, &res))
+	require.NoError(t, dec.Decode(w.Bytes(), &res))
 
 	// check decoder produces the exact same struct values
 	require.Equal(t, *base, res)
@@ -256,9 +256,9 @@ func TestWriterListL3(t *testing.T) {
 	baseEnc := encode.NewEncoder(baseSchema)
 
 	// encode
-	buf, err := baseEnc.Encode(base, nil)
-	require.NoError(t, err)
-	require.LessOrEqual(t, baseSchema.MinWireSize, len(buf))
+	buf := baseEnc.NewBuffer(1)
+	require.NoError(t, baseEnc.Encode(buf, base))
+	require.LessOrEqual(t, baseSchema.MinWireSize, buf.Len())
 
 	// write
 	w := schema.NewWriter(baseSchema, nil)
@@ -285,12 +285,12 @@ func TestWriterListL3(t *testing.T) {
 	require.True(t, w.Done())
 
 	// check writer and encoder produce the same bytes
-	require.Equal(t, buf, w.Bytes())
+	require.Equal(t, buf.Bytes(), w.Bytes())
 
 	// test decoder can read the bytes
 	dec := encode.NewDecoder(baseSchema)
 	var res ListInStructInListFields
-	require.NoError(t, dec.Decode(buf, &res))
+	require.NoError(t, dec.Decode(w.Bytes(), &res))
 
 	// check decoder produces the exact same struct values
 	require.Equal(t, *base, res)

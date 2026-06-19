@@ -87,12 +87,12 @@ func makeTypedPackage(typ any, fill int) *Package {
 	}
 	pkg := New().WithMaxRows(PACK_SIZE).WithSchema(s).Alloc()
 	enc := encode.NewEncoder(s)
-	buf, err := enc.Encode(makeZeroStruct(typ), nil)
-	if err != nil {
+	buf := enc.NewBuffer(1)
+	if err = enc.Encode(buf, makeZeroStruct(typ)); err != nil {
 		panic(err)
 	}
 	for range fill {
-		pkg.AppendWire(buf, nil)
+		pkg.AppendWire(buf.Bytes(), nil)
 	}
 	return pkg
 }
@@ -131,7 +131,7 @@ type scalarStruct struct {
 
 func (s *scalarStruct) Encode() []byte {
 	scalarStructBuf.Reset()
-	scalarStructEnc.Encode(s, scalarStructBuf)
+	scalarStructEnc.Encode(scalarStructBuf, s)
 	return scalarStructBuf.Bytes()
 }
 
@@ -147,7 +147,7 @@ type byteStruct struct {
 
 func (s *byteStruct) Encode() []byte {
 	byteStructBuf.Reset()
-	byteStructEnc.Encode(s, byteStructBuf)
+	byteStructEnc.Encode(byteStructBuf, s)
 	return byteStructBuf.Bytes()
 }
 
@@ -163,9 +163,9 @@ type arrayStruct struct {
 	Seven Hash   `knox:"seven"`
 }
 
-func (s arrayStruct) Encode() []byte {
+func (s *arrayStruct) Encode() []byte {
 	arrayStructBuf.Reset()
-	arrayStructEnc.Encode(s, arrayStructBuf)
+	arrayStructEnc.Encode(arrayStructBuf, s)
 	return arrayStructBuf.Bytes()
 }
 
@@ -185,7 +185,7 @@ type smallStruct struct {
 
 func (s *smallStruct) Encode() []byte {
 	smallStructBuf.Reset()
-	smallStructEnc.Encode(s, smallStructBuf)
+	smallStructEnc.Encode(smallStructBuf, s)
 	return smallStructBuf.Bytes()
 }
 
@@ -241,7 +241,7 @@ type largeStruct struct {
 
 func (s *largeStruct) Encode() []byte {
 	largeStructBuf.Reset()
-	largeStructEnc.Encode(s, largeStructBuf)
+	largeStructEnc.Encode(largeStructBuf, s)
 	return largeStructBuf.Bytes()
 }
 
@@ -302,7 +302,7 @@ type tradeStruct struct {
 
 func (s *tradeStruct) Encode() []byte {
 	tradeStructBuf.Reset()
-	tradeStructEnc.Encode(s, tradeStructBuf)
+	tradeStructEnc.Encode(tradeStructBuf, s)
 	return tradeStructBuf.Bytes()
 }
 
@@ -326,7 +326,7 @@ type specialStruct struct {
 func (s *specialStruct) Encode() []byte {
 	s.init()
 	specialStructBuf.Reset()
-	specialStructEnc.Encode(s, specialStructBuf)
+	specialStructEnc.Encode(specialStructBuf, s)
 	return specialStructBuf.Bytes()
 }
 
@@ -373,7 +373,7 @@ type encodeTestStruct struct {
 func (s *encodeTestStruct) Encode() []byte {
 	s.init()
 	encodeTestStructBuf.Reset()
-	encodeTestStructEnc.Encode(s, encodeTestStructBuf)
+	encodeTestStructEnc.Encode(encodeTestStructBuf, s)
 	return encodeTestStructBuf.Bytes()
 }
 

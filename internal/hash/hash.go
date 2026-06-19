@@ -24,15 +24,16 @@ type Hasher interface {
 }
 
 var (
-	Hash   = xxh3.Hash       // []byte
-	Vec8   = xxh3_u8_purego  // []uint8
-	Vec16  = xxh3_u16_purego // []uint16
-	Vec32  = xxh3_u32_purego // []uint32, AVX2, AVX512
-	Vec64  = xxh3_u64_purego // []uint64, AVX2, AVX512
-	Uint64 = xxh3_u64
-	Uint32 = xxh3_u32
-	Uint16 = xxh3_u16
-	Uint8  = xxh3_u8
+	Hash       = xxh3.Hash       // []byte
+	HashString = xxh3.HashString // string
+	Vec8       = xxh3_u8_purego  // []uint8
+	Vec16      = xxh3_u16_purego // []uint16
+	Vec32      = xxh3_u32_purego // []uint32, AVX2, AVX512
+	Vec64      = xxh3_u64_purego // []uint64, AVX2, AVX512
+	Uint64     = xxh3_u64
+	Uint32     = xxh3_u32
+	Uint16     = xxh3_u16
+	Uint8      = xxh3_u8
 
 	Zero = Hash([]byte{0})
 	One  = Hash([]byte{1})

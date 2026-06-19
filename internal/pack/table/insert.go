@@ -51,6 +51,7 @@ import (
 //   - next segment references parent and inherits counters
 //   - merge only ever merges one fork
 
+// TODO: rename to InsertBatch(context.Context, *schema.Batch)
 func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, int, error) {
 	// reject invalid messages
 	if len(buf) == 0 {

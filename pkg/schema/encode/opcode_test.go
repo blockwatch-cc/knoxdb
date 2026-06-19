@@ -81,10 +81,10 @@ func TestFieldGenericCodecRoundTrip(t *testing.T) {
 		DecimalField: num.NewDecimal64(314, 2),
 	}
 
-	buf, err := enc.Encode(testData, nil)
-	require.NoError(t, err)
+	buf := enc.NewBuffer(1)
+	require.NoError(t, enc.Encode(buf, &testData))
 
-	decoded, err := dec.Decode(buf, nil)
+	decoded, err := dec.Decode(buf.Bytes(), nil)
 	require.NoError(t, err)
 
 	assert.Equal(t, testData, *decoded)

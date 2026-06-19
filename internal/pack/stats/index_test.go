@@ -70,10 +70,10 @@ func makeTestPackage(t testing.TB, key int, pk uint64) *pack.Package {
 		WithStats().
 		Alloc()
 	enc := encode.NewEncoderFor[TestStruct]()
+	buf := enc.NewBuffer(1)
 	for _, v := range makeTestData(TEST_PKG_SIZE, pk) {
-		buf, err := enc.Encode(v, nil)
-		require.NoError(t, err)
-		pkg.AppendWire(buf, &types.Meta{Rid: v.Id, Xmin: 1})
+		require.NoError(t, enc.Encode(buf, &v))
+		pkg.AppendWire(buf.Bytes(), &types.Meta{Rid: v.Id, Xmin: 1})
 	}
 	// init statistics
 	pstats := pkg.Stats()

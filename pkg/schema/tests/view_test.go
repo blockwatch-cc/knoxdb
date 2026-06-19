@@ -17,14 +17,14 @@ func TestViewFixed(t *testing.T) {
 	base := NewArrayTypes(int64(0x0faf0faf0faf0faf))
 	baseSchema := reflect.MustSchemaFor[ArrayTypes]()
 	baseEnc := encode.NewEncoder(baseSchema)
-	buf, err := baseEnc.Encode(&base, nil)
-	require.NoError(t, err)
+	buf := baseEnc.NewBuffer(1)
+	require.NoError(t, baseEnc.Encode(buf, base))
 	require.NotNil(t, buf)
-	view := schema.NewView(baseSchema).Reset(buf)
+	view := schema.NewView(baseSchema).Reset(buf.Bytes())
 	require.True(t, view.IsValid())
 	require.True(t, view.IsFixed())
 	require.Equal(t, baseSchema.MinWireSize, view.Len())
-	require.Equal(t, view.Buffer(), buf)
+	require.Equal(t, view.Buffer(), buf.Bytes())
 	val := view.Get(0)
 	require.Equal(t, base.Id, val)
 	require.Equal(t, base.Id, view.GetPk())
@@ -34,13 +34,13 @@ func TestViewDynamic(t *testing.T) {
 	base := NewAllTypes(int64(0x0faf0faf0faf0faf))
 	baseSchema := reflect.MustSchemaFor[AllTypes]()
 	baseEnc := encode.NewEncoder(baseSchema)
-	buf, err := baseEnc.Encode(base, nil)
-	require.NoError(t, err)
-	view := schema.NewView(baseSchema).Reset(buf)
+	buf := baseEnc.NewBuffer(1)
+	require.NoError(t, baseEnc.Encode(buf, base))
+	view := schema.NewView(baseSchema).Reset(buf.Bytes())
 	require.True(t, view.IsValid())
 	require.False(t, view.IsFixed())
 	require.Equal(t, baseSchema.MinWireSize+8+8+16+5, view.Len()) // big(8), bytes(8), string(16), union(5)
-	require.Equal(t, view.Buffer(), buf)
+	require.Equal(t, view.Buffer(), buf.Bytes())
 }
 
 func testViewGetVal(t *testing.T, view *schema.View, pos int, cmp any) {
@@ -58,9 +58,9 @@ func TestViewGet(t *testing.T) {
 	base := NewAllTypes(int64(0x0faf0faf0faf0faf))
 	baseSchema := reflect.MustSchemaFor[AllTypes]()
 	baseEnc := encode.NewEncoder(baseSchema)
-	buf, err := baseEnc.Encode(base, nil)
-	require.NoError(t, err)
-	view := schema.NewView(baseSchema).Reset(buf)
+	buf := baseEnc.NewBuffer(1)
+	require.NoError(t, baseEnc.Encode(buf, base))
+	view := schema.NewView(baseSchema).Reset(buf.Bytes())
 
 	require.Equal(t, base.Id, view.GetPk())
 	testViewGetVal(t, view, 0, base.Id)
@@ -101,9 +101,9 @@ func TestViewGetWithVisibility(t *testing.T) {
 	visSchema, err = visSchema.DeleteId(5)
 	require.NoError(t, err)
 	visEnc := encode.NewEncoder(visSchema)
-	buf, err := visEnc.Encode(base, nil)
-	require.NoError(t, err)
-	view := schema.NewView(visSchema).Reset(buf)
+	buf := visEnc.NewBuffer(1)
+	require.NoError(t, visEnc.Encode(buf, base))
+	view := schema.NewView(visSchema).Reset(buf.Bytes())
 
 	require.Equal(t, base.Id, view.GetPk())
 	testViewGetVal(t, view, 0, base.Id)
@@ -139,9 +139,9 @@ func TestViewSet(t *testing.T) {
 	base := NewAllTypes(int64(0x0faf0faf0faf0faf))
 	baseSchema := reflect.MustSchemaFor[AllTypes]()
 	baseEnc := encode.NewEncoder(baseSchema)
-	buf, err := baseEnc.Encode(base, nil)
-	require.NoError(t, err)
-	view := schema.NewView(baseSchema).Reset(buf)
+	buf := baseEnc.NewBuffer(1)
+	require.NoError(t, baseEnc.Encode(buf, base))
+	view := schema.NewView(baseSchema).Reset(buf.Bytes())
 
 	// Test setting uint64 field
 	newId := uint64(12345)
@@ -210,17 +210,17 @@ func TestViewNestingL1(t *testing.T) {
 	base := NewListFields()
 	baseSchema := reflect.MustSchemaFor[ListFields]()
 	baseEnc := encode.NewEncoder(baseSchema)
-	buf, err := baseEnc.Encode([]ListFields{*base, *base}, nil)
-	require.NoError(t, err)
-	require.LessOrEqual(t, 2*baseSchema.MinWireSize, len(buf))
+	buf := baseEnc.NewBuffer(2)
+	require.NoError(t, baseEnc.EncodeBatch(buf, []ListFields{*base, *base}))
+	require.LessOrEqual(t, 2*baseSchema.MinWireSize, buf.Len())
 
 	// test view methods for 2 records with nested fields each
 	v := schema.NewView(baseSchema)
-	require.Equal(t, 2, v.Count(buf))
+	require.Equal(t, 2, v.Count(buf.Bytes()))
 
-	v.Reset(buf)
+	v.Reset(buf.Bytes())
 	require.LessOrEqual(t, baseSchema.MinWireSize, v.Len())
-	require.Equal(t, len(buf)/2, v.Len())
+	require.Equal(t, buf.Len()/2, v.Len())
 
 	// list iterators produce correct number of list elements
 	require.Equal(t, 2, countIter(v.List(1)))
@@ -258,17 +258,17 @@ func TestViewNestingL2(t *testing.T) {
 	base := NewListInListFields()
 	baseSchema := reflect.MustSchemaFor[ListInListFields]()
 	baseEnc := encode.NewEncoder(baseSchema)
-	buf, err := baseEnc.Encode([]ListInListFields{*base, *base}, nil)
-	require.NoError(t, err)
-	require.LessOrEqual(t, 2*baseSchema.MinWireSize, len(buf))
+	buf := baseEnc.NewBuffer(2)
+	require.NoError(t, baseEnc.EncodeBatch(buf, []ListInListFields{*base, *base}))
+	require.LessOrEqual(t, 2*baseSchema.MinWireSize, buf.Len())
 
 	// test view methods for 2 records with nested fields each
 	v := schema.NewView(baseSchema)
-	require.Equal(t, 2, v.Count(buf))
+	require.Equal(t, 2, v.Count(buf.Bytes()))
 
-	v.Reset(buf)
+	v.Reset(buf.Bytes())
 	require.LessOrEqual(t, baseSchema.MinWireSize, v.Len())
-	require.Equal(t, len(buf)/2, v.Len())
+	require.Equal(t, buf.Len()/2, v.Len())
 
 	// list iterators produce correct number of list elements
 	require.Equal(t, 2, countIter(v.List(1)))
@@ -312,18 +312,17 @@ func TestViewNestingL2Empty(t *testing.T) {
 	// empty one of the the inner list
 	base.NestedUints[0] = base.NestedUints[0][:0]
 	base.NestedPairs[0] = base.NestedPairs[0][:0]
-
-	buf, err := baseEnc.Encode([]ListInListFields{*base, *base}, nil)
-	require.NoError(t, err)
-	require.LessOrEqual(t, 2*baseSchema.MinWireSize, len(buf))
+	buf := baseEnc.NewBuffer(2)
+	require.NoError(t, baseEnc.EncodeBatch(buf, []ListInListFields{*base, *base}))
+	require.LessOrEqual(t, 2*baseSchema.MinWireSize, buf.Len())
 
 	// test view methods for 2 records with nested fields each
 	v := schema.NewView(baseSchema)
-	require.Equal(t, 2, v.Count(buf))
+	require.Equal(t, 2, v.Count(buf.Bytes()))
 
-	v.Reset(buf)
+	v.Reset(buf.Bytes())
 	require.LessOrEqual(t, baseSchema.MinWireSize, v.Len())
-	require.Equal(t, len(buf)/2, v.Len())
+	require.Equal(t, buf.Len()/2, v.Len())
 
 	// list iterators produce correct number of list elements
 	require.Equal(t, 2, countIter(v.List(1)))
@@ -373,17 +372,17 @@ func TestViewNestingL3(t *testing.T) {
 	base := NewListInStructInListFields()
 	baseSchema := reflect.MustSchemaFor[ListInStructInListFields]()
 	baseEnc := encode.NewEncoder(baseSchema)
-	buf, err := baseEnc.Encode([]ListInStructInListFields{*base, *base}, nil)
-	require.NoError(t, err)
-	require.LessOrEqual(t, 2*baseSchema.MinWireSize, len(buf))
+	buf := baseEnc.NewBuffer(2)
+	require.NoError(t, baseEnc.EncodeBatch(buf, []ListInStructInListFields{*base, *base}))
+	require.LessOrEqual(t, 2*baseSchema.MinWireSize, buf.Len())
 
 	// test view methods for 2 records with nested fields each
 	v := schema.NewView(baseSchema)
-	require.Equal(t, 2, v.Count(buf))
+	require.Equal(t, 2, v.Count(buf.Bytes()))
 
-	v.Reset(buf)
+	v.Reset(buf.Bytes())
 	require.LessOrEqual(t, baseSchema.MinWireSize, v.Len())
-	require.Equal(t, len(buf)/2, v.Len())
+	require.Equal(t, buf.Len()/2, v.Len())
 
 	// list iterators produce correct number of list elements
 	require.Equal(t, 2, countIter(v.List(1)))

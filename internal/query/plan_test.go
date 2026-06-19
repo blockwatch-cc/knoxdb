@@ -60,11 +60,11 @@ type testStruct struct {
 
 func (t *testStruct) Encode() []byte {
 	enc := encode.NewEncoder(testSchema.Schema)
-	buf, err := enc.Encode(t, nil)
-	if err != nil {
+	buf := enc.NewBuffer(1)
+	if err := enc.Encode(buf, t); err != nil {
 		panic(err)
 	}
-	return buf
+	return buf.Bytes()
 }
 
 func makeIndex(rids ...uint64) engine.QueryableIndex {

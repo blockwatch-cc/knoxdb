@@ -177,10 +177,10 @@ type ArrayTypes struct {
 	StringArray string   `knox:"string_array,array=20"`
 }
 
-func NewArrayTypes(i int64) ArrayTypes {
+func NewArrayTypes(i int64) *ArrayTypes {
 	b := binary.LittleEndian.AppendUint64(nil, uint64(i))
 	buf := bytes.Repeat(b, 3)[:20]
-	return ArrayTypes{
+	return &ArrayTypes{
 		Id:          uint64(i),
 		ByteArray:   [20]byte(buf),
 		StringArray: hex.EncodeToString(buf[:10]),

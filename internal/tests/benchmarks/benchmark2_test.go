@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	tests "blockwatch.cc/knoxdb/internal/tests/engine"
+	etests "blockwatch.cc/knoxdb/internal/tests/engine"
 	"blockwatch.cc/knoxdb/internal/tests/testutil"
 	"blockwatch.cc/knoxdb/pkg/knox"
 	"github.com/echa/log"
@@ -19,7 +19,7 @@ import (
 
 func BenchmarkInsertSequential(b *testing.B) {
 	log.SetLevel(log.LevelOff)
-	eng, cleanup := tests.NewDatabase(b, &Account{})
+	eng, cleanup := etests.NewDatabase(b, &Account{})
 	db := knox.WrapEngine(eng)
 	table, err := db.FindTable("account")
 	require.NoError(b, err, "Missing table")
@@ -58,7 +58,7 @@ func BenchmarkInsertSequential(b *testing.B) {
 
 func BenchmarkInsertParallel(b *testing.B) {
 	log.SetLevel(log.LevelOff)
-	eng, cleanup := tests.NewDatabase(b, &Account{})
+	eng, cleanup := etests.NewDatabase(b, &Account{})
 	db := knox.WrapEngine(eng)
 	table, err := db.FindTable("account")
 	require.NoError(b, err, "Missing table")
