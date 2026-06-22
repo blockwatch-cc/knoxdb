@@ -112,11 +112,9 @@ func PrevKey(key []byte) []byte {
 // the effect of having an added bucket prefix on keys.
 func TrimKeyPrefix(n int, seq iter.Seq2[[]byte, []byte]) iter.Seq2[[]byte, []byte] {
 	return func(yield func([]byte, []byte) bool) {
-		for k, v := range seq {
-			if !yield(k[n:], v) {
-				return
-			}
-		}
+		seq(func(k, v []byte) bool {
+			return yield(k[n:], v)
+		})
 	}
 }
 

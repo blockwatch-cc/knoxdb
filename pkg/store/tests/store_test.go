@@ -1130,3 +1130,52 @@ func TestBucket_SearchGELE(t *testing.T) {
 		})
 	}
 }
+
+// TestTxIsolation tests whether readers cannot see write changes
+func TestTxIsolation(t *testing.T) {
+	for _, tt := range testedDBs {
+		t.Run(tt, func(t *testing.T) {
+			db := openDB(t, tt)
+			defer closeAndCleanup(t, db)
+
+			// TODO: bucket create/delete isolation in memdb
+
+			// create bucket
+			err := db.Update(func(tx store.Tx) error {
+				t.Log("create bucket")
+				_, err := tx.CreateBucket([]byte("test"))
+				return err
+			})
+			require.NoError(t, err)
+
+			// open read tx
+			t.Log("open reader")
+			rtx, err := db.Begin()
+			require.NoError(t, err)
+			defer rtx.Rollback()
+
+			// open write tx (read tx must not block)
+			t.Log("open writer")
+			wtx, err := db.Begin(store.WithTxWrite(), store.WithTxNoWait())
+			require.NoError(t, err)
+			defer wtx.Commit()
+
+			t.Log("write bucket")
+			wb, err := wtx.Bucket([]byte("test"))
+			require.NoError(t, err)
+
+			t.Log("read bucket")
+			rb, err := rtx.Bucket([]byte("test"))
+			require.NoError(t, err)
+
+			// write key
+			t.Log("write key")
+			require.NoError(t, wb.Put([]byte("a"), []byte("1")))
+
+			// read key must fail
+			t.Log("read key")
+			_, err = rb.Get([]byte("a"))
+			require.Error(t, err)
+		})
+	}
+}
