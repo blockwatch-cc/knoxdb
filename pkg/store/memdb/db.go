@@ -8,10 +8,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
-	"iter"
 	"sync"
 
-	"blockwatch.cc/knoxdb/pkg/btree"
 	"blockwatch.cc/knoxdb/pkg/store"
 	"github.com/RaduBerinde/btreemap"
 	"github.com/echa/log"
@@ -108,11 +106,8 @@ func (db *db) begin(options ...store.TxOption) (*tx, error) {
 			return nil, store.ErrDatabaseClosed
 		}
 
-		// alloc change data
-		t.pending = btree.NewChangeTree()
-
-		// use the original database state as snapshot
-		t.snap = db.store
+		// snapshot the database state
+		t.snap = db.store.Clone()
 
 	} else {
 		// ensure we see a concurrent close
@@ -128,8 +123,8 @@ func (db *db) begin(options ...store.TxOption) (*tx, error) {
 			return nil, store.ErrDatabaseClosed
 		}
 
-		// snapshot the database state
-		t.snap = db.store.Clone()
+		// use the original database state as snapshot
+		t.snap = db.store
 	}
 
 	return t, nil
@@ -369,20 +364,4 @@ func (db *db) Restore(r io.Reader) (err error) {
 		}
 	}
 	return
-}
-
-func (db *db) Scan(prefix []byte) iter.Seq2[[]byte, []byte] {
-	return btree.Scan(db.store, prefix)
-}
-
-func (db *db) ScanReverse(prefix []byte) iter.Seq2[[]byte, []byte] {
-	return btree.ScanReverse(db.store, prefix)
-}
-
-func (db *db) ScanRange(start, end []byte) iter.Seq2[[]byte, []byte] {
-	return btree.ScanRange(db.store, start, end)
-}
-
-func (db *db) ScanRangeReverse(start, end []byte) iter.Seq2[[]byte, []byte] {
-	return btree.ScanRangeReverse(db.store, start, end)
 }

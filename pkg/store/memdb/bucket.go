@@ -132,10 +132,10 @@ func (b *bucket) DeleteBucket(key []byte) error {
 		id := toRemove[len(toRemove)-1]
 		toRemove = toRemove[:len(toRemove)-1]
 
-		// Delete all keys through tx.pending
+		// Delete all keys through tx.snap
 		prefix := store.EncodeUvarint(id)
-		for k := range b.tx.db.Scan(prefix) {
-			b.tx.pending.Delete(k)
+		for k := range btree.Scan(b.tx.snap, prefix) {
+			b.tx.snap.Delete(k)
 		}
 
 		// Collect nested buckets.
@@ -235,20 +235,10 @@ func (b *bucket) Scan(prefix []byte) iter.Seq2[[]byte, []byte] {
 	prefix = bucketizedKey(b.id, prefix)
 
 	// strip bucket id from key prefixes on return
-	if b.tx.IsWriteable() {
-		return store.TrimKeyPrefix(
-			store.UvarintLen(b.id),
-			btree.Merge2(
-				b.tx.pending.Scan(prefix),
-				b.tx.db.Scan(prefix),
-			),
-		)
-	} else {
-		return store.TrimKeyPrefix(
-			store.UvarintLen(b.id),
-			b.tx.db.Scan(prefix),
-		)
-	}
+	return store.TrimKeyPrefix(
+		store.UvarintLen(b.id),
+		btree.Scan(b.tx.snap, prefix),
+	)
 }
 
 // ScanReverse iterates over keys in a bucket in descending order
@@ -262,20 +252,10 @@ func (b *bucket) ScanReverse(prefix []byte) iter.Seq2[[]byte, []byte] {
 	prefix = bucketizedKey(b.id, prefix)
 
 	// strip bucket id from key prefixes on return
-	if b.tx.IsWriteable() {
-		return store.TrimKeyPrefix(
-			store.UvarintLen(b.id),
-			btree.Merge2R(
-				b.tx.pending.ScanReverse(prefix),
-				b.tx.db.ScanReverse(prefix),
-			),
-		)
-	} else {
-		return store.TrimKeyPrefix(
-			store.UvarintLen(b.id),
-			b.tx.db.ScanReverse(prefix),
-		)
-	}
+	return store.TrimKeyPrefix(
+		store.UvarintLen(b.id),
+		btree.ScanReverse(b.tx.snap, prefix),
+	)
 }
 
 // ScanRange iterates over an explicit range of keys starting at
@@ -297,20 +277,10 @@ func (b *bucket) ScanRange(start, end []byte) iter.Seq2[[]byte, []byte] {
 	}
 
 	// strip bucket id from key prefixes on return
-	if b.tx.IsWriteable() {
-		return store.TrimKeyPrefix(
-			store.UvarintLen(b.id),
-			btree.Merge2(
-				b.tx.pending.ScanRange(start, end),
-				b.tx.db.ScanRange(start, end),
-			),
-		)
-	} else {
-		return store.TrimKeyPrefix(
-			store.UvarintLen(b.id),
-			b.tx.db.ScanRange(start, end),
-		)
-	}
+	return store.TrimKeyPrefix(
+		store.UvarintLen(b.id),
+		btree.ScanRange(b.tx.snap, start, end),
+	)
 }
 
 // ScanRangeReverse iterates over an explicit range of keys starting at
@@ -332,20 +302,10 @@ func (b *bucket) ScanRangeReverse(start, end []byte) iter.Seq2[[]byte, []byte] {
 	}
 
 	// strip bucket id from key prefixes on return
-	if b.tx.IsWriteable() {
-		return store.TrimKeyPrefix(
-			store.UvarintLen(b.id),
-			btree.Merge2R(
-				b.tx.pending.ScanRangeReverse(start, end),
-				b.tx.db.ScanRangeReverse(start, end),
-			),
-		)
-	} else {
-		return store.TrimKeyPrefix(
-			store.UvarintLen(b.id),
-			b.tx.db.ScanRangeReverse(start, end),
-		)
-	}
+	return store.TrimKeyPrefix(
+		store.UvarintLen(b.id),
+		btree.ScanRangeReverse(b.tx.snap, start, end),
+	)
 }
 
 // SearchGE returns the first key and its value that is greater or
@@ -383,7 +343,8 @@ func (b *bucket) SearchLE(key []byte) ([]byte, []byte, error) {
 // Since it is an internal helper function, it does not check.
 func (db *db) nextBucketID() (uint32, error) {
 	// get and sort all bucket ids
-	ids := slices.Collect(maps.Values(db.buckets))
+	ids := make([]uint32, 0, len(db.buckets))
+	ids = slices.AppendSeq(ids, maps.Values(db.buckets))
 	slices.Sort(ids)
 
 	// all ids in use, generate next

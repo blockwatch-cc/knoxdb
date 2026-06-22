@@ -8,7 +8,6 @@ import (
 	"strings"
 	"sync"
 
-	"blockwatch.cc/knoxdb/pkg/btree"
 	"blockwatch.cc/knoxdb/pkg/store"
 	"github.com/RaduBerinde/btreemap"
 )
@@ -40,10 +39,9 @@ func NewTxFlags(o store.TxOptions) TxFlags {
 // read-write. The transaction tracks all changes in a pair of btrees
 // which are merged with the main btree store on commit.
 type tx struct {
-	db      *db                                // DB instance the tx was created from.
-	snap    *btreemap.BTreeMap[[]byte, []byte] // read only snapshot
-	pending btree.ChangeTree                   // pending updates and deletes per bucket
-	flags   TxFlags                            // flags control tx features and lifecycle
+	db    *db                                // DB instance the tx was created from.
+	snap  *btreemap.BTreeMap[[]byte, []byte] // cow or read only snapshot
+	flags TxFlags                            // flags control tx features and lifecycle
 }
 
 // Ensure tx implements the store.Tx interface.
@@ -156,12 +154,8 @@ func (tx *tx) Commit() error {
 		return tx.Rollback()
 	}
 
-	// Write (merge) pending updates and deletes.
-	if tx.pending.Len() > 0 {
-		tx.pending.Apply(tx.db.store)
-		tx.pending.Clear()
-	}
-
+	// promote snapshot
+	tx.db.store = tx.snap
 	tx.snap = nil
 	tx.flags = TxFlagClosed
 	tx.db.mu.Unlock()
@@ -185,15 +179,14 @@ func (tx *tx) Rollback() (err error) {
 		err = store.ErrTxManaged
 	}
 
-	// Clear pending changes when the transaction is writable.
+	// Release write lock when the transaction is writable.
 	if tx.IsWriteable() {
-		tx.pending.Clear()
-		tx.flags = TxFlagClosed
 		tx.db.mu.Unlock()
-	} else {
-		tx.snap = nil
-		tx.flags = TxFlagClosed
 	}
+
+	// cleanup
+	tx.snap = nil
+	tx.flags = TxFlagClosed
 	tx.db.wg.Done()
 	tx.db = nil
 	txPool.Put(tx)
@@ -202,19 +195,8 @@ func (tx *tx) Rollback() (err error) {
 }
 
 func (tx *tx) get(key []byte) ([]byte, error) {
-	// check tx first
-	if tx.IsWriteable() {
-		val, isDeleted := tx.pending.Get(key)
-		if isDeleted {
-			return nil, store.ErrKeyNotFound
-		}
-		if val != nil {
-			return val, nil
-		}
-	}
-
-	// lookup in btree
-	_, val, ok := tx.db.store.Get(key)
+	// lookup in btree snapshot
+	_, val, ok := tx.snap.Get(key)
 	if !ok {
 		return nil, store.ErrKeyNotFound
 	}
@@ -222,9 +204,9 @@ func (tx *tx) get(key []byte) ([]byte, error) {
 }
 
 func (tx *tx) put(key, value []byte) {
-	tx.pending.Put(key, value)
+	tx.snap.ReplaceOrInsert(key, value)
 }
 
 func (tx *tx) del(key []byte) {
-	tx.pending.Delete(key)
+	tx.snap.Delete(key)
 }
