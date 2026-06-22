@@ -28,34 +28,28 @@ import (
 //
 // buckets
 // - options: key=name_hash, val=options
-// - schemas: key=name_hash:schema_hash, val=schema
+// - schemas: key=schema_hash, val=schema
 // - database
 //   - checkpoint
 // - tables
 //   - name_hash
-//     - name
-//     - schema_hash
-//     - last_id -> state
-//     - num_tuples -> state
-//     - opts -> options
+//     - name: table name
+//     - schema: schema hash
+//     - versionN: schema hash
 // - indexes
 //   - name_hash
-//     - name
-//     - schema_hash
-//     - table_hash
-//     - type
-//     - status (empty,rebuilding,ready) -> state
-//     - opts -> options
+//     - name: index name
+//     - schema: schema hash
+//     - table: table hash
 // - enums
 //   - name_hash
-//     - name
-//     - data (string values)
+//     - name: enum name
+//     - data: encoded values
 // - views (todo)
 //   - name_hash
-//     - name
-//     - schema_hash
-//     - query
-//     - opts -> options
+//     - name: view name
+//     - schema: schema hash
+//     - query: encoded query
 // - snapshots (todo)
 // - streams (todo)
 //
@@ -79,10 +73,10 @@ var (
 	streamsKey   = []byte("streams")   // key => serialized stream config
 
 	// keys
-	schemaKey = []byte("schema")
-	tableKey  = []byte("table")
-	nameKey   = []byte("name")
-	// statusKey     = []byte("status")
+	versionKey    = []byte("version") // table/index schema versions prefix
+	schemaKey     = []byte("schema")  // table/index to current schema hash
+	tableKey      = []byte("table")   // index to table reference
+	nameKey       = []byte("name")    // table/index/enum name
 	dataKey       = []byte("data")
 	checkpointKey = []byte("checkpoint")
 )
@@ -412,6 +406,27 @@ func (c *Catalog) GetTable(ctx context.Context, key uint64) (s *types.TableSchem
 	return
 }
 
+func (c *Catalog) GetTableVersion(ctx context.Context, key uint64, ver uint32) (s *types.TableSchema, o Options, err error) {
+	var tx store.Tx
+	tx, err = GetTx(ctx).CatalogTx(c.db, false)
+	if err != nil {
+		return
+	}
+	vkey := append(make([]byte, 0, len(versionKey)+4), versionKey...)
+	vkey = binary.BigEndian.AppendUint32(vkey, ver)
+	skey, err := store.GetKey(tx, tablesKey, encodeKey(key), vkey)
+	if err != nil {
+		err = ErrNoKey
+		return
+	}
+	s, err = c.GetSchema(ctx, decodeKey(skey))
+	if err != nil {
+		return
+	}
+	err = c.GetOptions(ctx, key, &o)
+	return
+}
+
 func (c *Catalog) AddTable(ctx context.Context, key uint64, s *types.TableSchema, o Options) error {
 	if err := c.PutSchema(ctx, s); err != nil {
 		return err
@@ -440,12 +455,16 @@ func (c *Catalog) AddTable(ctx context.Context, key uint64, s *types.TableSchema
 	if err := bucket.Put(nameKey, []byte(s.Name)); err != nil {
 		return err
 	}
-
+	// write table schema version
+	vkey := append(make([]byte, 0, len(versionKey)+4), versionKey...)
+	vkey = binary.BigEndian.AppendUint32(vkey, s.Version)
+	if err := bucket.Put(vkey, encodeKey(s.Hash)); err != nil {
+		return err
+	}
 	return nil
 }
 
 func (c *Catalog) DropTable(ctx context.Context, key uint64) error {
-	// TODO: we don't have a reference to previous schema versions/hashes for removal
 	tx, err := GetTx(ctx).CatalogTx(c.db, true)
 	if err != nil {
 		return err
@@ -454,13 +473,17 @@ func (c *Catalog) DropTable(ctx context.Context, key uint64) error {
 	if err != nil {
 		return ErrDatabaseCorrupt
 	}
+	schemas, err := tx.Bucket(schemasKey)
+	if err != nil {
+		return ErrDatabaseCorrupt
+	}
 	bucket, err := tables.Bucket(encodeKey(key))
 	if err != nil {
 		return ErrNoTable
 	}
-	skey, err := bucket.Get(schemaKey)
-	if err != nil {
-		return ErrNoKey
+	// walk all version keys and delete schemas
+	for _, skey := range bucket.Scan(versionKey) {
+		schemas.Delete(skey)
 	}
 	if err := tables.DeleteBucket(encodeKey(key)); err != nil {
 		return err
@@ -468,10 +491,6 @@ func (c *Catalog) DropTable(ctx context.Context, key uint64) error {
 	if err := c.DelOptions(ctx, key); err != nil {
 		return err
 	}
-	if err := c.DelSchema(ctx, decodeKey(skey)); err != nil {
-		return err
-	}
-
 	return nil
 }
 

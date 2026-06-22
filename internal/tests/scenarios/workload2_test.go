@@ -30,7 +30,7 @@ func TestWorkload2(t *testing.T) {
 		tests.SaveDatabaseFiles(t, eng)
 	})
 	db := knox.WrapEngine(eng)
-	table, err := db.FindTable("types")
+	table, err := knox.FindTableFor[tests.Types](db, "types")
 	require.NoError(t, err, "Missing table")
 
 	ctx := context.Background()
@@ -51,7 +51,7 @@ func TestWorkload2(t *testing.T) {
 			}()
 			for i := range txnSize {
 				record := tests.NewRandomTypes(threadID*txnSize + i)
-				pk, _, err := table.Insert(ctx, []*tests.Types{record})
+				pk, _, err := table.Insert(ctx, record)
 				require.NoError(t, err, "Failed to insert data")
 				record.Id = pk
 				insertedData.Store(record.Id, record)
@@ -65,7 +65,7 @@ func TestWorkload2(t *testing.T) {
 	// Validate all rows are inserted correctly
 	count := 0
 	err = knox.NewQueryFor[tests.Types]().
-		WithTable(table).
+		WithTable(table.Table()).
 		WithTag("validate-stream").
 		// WithDebug(testing.Verbose()). // Enable detailed query logging
 		Stream(ctx, func(res *tests.Types) error {

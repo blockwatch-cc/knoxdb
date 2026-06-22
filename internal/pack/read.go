@@ -162,23 +162,27 @@ func (p *Package) ReadWireBuffer(buf *bytes.Buffer, row int) {
 			buf.WriteByte(uint8(b.Int8().Get(row)))
 		case types.BlockBool:
 			v := b.Bool().Get(row)
-			buf.WriteByte(*(*byte)(unsafe.Pointer(&v)))
+			if v {
+				buf.WriteByte(1)
+			} else {
+				buf.WriteByte(0)
+			}
 		case types.BlockBytes:
 			v := b.Bytes().Get(row)
-			switch field.Type {
-			case types.FT_BYTES, types.FT_STRING, types.FT_BIGINT:
-				if field.IsArray() {
-					buf.Write(v[:field.Scale])
-				} else {
+			if field.IsArray() {
+				buf.Write(v[:field.Scale])
+			} else {
+				switch field.Type {
+				case types.FT_BYTES, types.FT_STRING, types.FT_BIGINT:
 					// 1 byte length
 					buf.WriteByte(byte(len(v)))
 					buf.Write(v)
+				default:
+					// 4 byte length
+					LE.PutUint32(x[:], uint32(len(v)))
+					buf.Write(x[:4])
+					buf.Write(v)
 				}
-			default:
-				// 4 byte length
-				LE.PutUint32(x[:], uint32(len(v)))
-				buf.Write(x[:4])
-				buf.Write(v)
 			}
 		case types.BlockInt256:
 			buf.Write(b.Int256().Get(row).Bytes())

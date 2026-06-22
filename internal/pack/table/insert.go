@@ -51,14 +51,16 @@ import (
 //   - next segment references parent and inherits counters
 //   - merge only ever merges one fork
 
-// TODO: rename to InsertBatch(context.Context, *schema.Batch)
-func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, int, error) {
+func (t *Table) InsertBatch(ctx context.Context, batch *schema.Batch) (uint64, int, error) {
 	// reject invalid messages
-	if len(buf) == 0 {
+	if batch.Size() == 0 {
 		return 0, 0, nil
 	}
-	if len(buf) < t.schema.MinWireSize {
+	if batch.Size() < t.schema.MinWireSize {
 		return 0, 0, engine.ErrShortMessage
+	}
+	if batch.Schema().Hash != t.schema.Hash {
+		return 0, 0, schema.ErrSchemaMismatch
 	}
 
 	// check table state
@@ -82,7 +84,7 @@ func (t *Table) InsertRows(ctx context.Context, buf []byte) (uint64, int, error)
 	defer t.mu.Unlock()
 
 	// insert to journal, write WAL
-	pk, n, err := t.journal.InsertRecords(ctx, buf)
+	pk, n, err := t.journal.InsertBatch(ctx, batch)
 	if err != nil {
 		return 0, 0, err
 	}

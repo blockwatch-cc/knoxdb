@@ -667,16 +667,19 @@ func (s *Bitset) ResetCount(n int) {
 	s.cnt = n
 }
 
+// Len returns the bitsets current size in bits.
 func (s *Bitset) Len() int {
 	return s.size
 }
 
+// Cap returns the bitsets current capacity in bits.
 func (s *Bitset) Cap() int {
 	return cap(s.buf) * 8
 }
 
+// Size returns the bitsets memory buffer size in bytes.
 func (s *Bitset) Size() int {
-	return cap(s.buf) + 24 + 16 + 1
+	return (s.size + 7) >> 3
 }
 
 func (s *Bitset) ReadFrom(r io.Reader) (int64, error) {

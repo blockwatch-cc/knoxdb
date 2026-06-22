@@ -21,7 +21,7 @@ func BenchmarkInsertSequential(b *testing.B) {
 	log.SetLevel(log.LevelOff)
 	eng, cleanup := etests.NewDatabase(b, &Account{})
 	db := knox.WrapEngine(eng)
-	table, err := db.FindTable("account")
+	table, err := knox.FindTableFor[Account](db, "account")
 	require.NoError(b, err, "Missing table")
 
 	var (
@@ -60,7 +60,7 @@ func BenchmarkInsertParallel(b *testing.B) {
 	log.SetLevel(log.LevelOff)
 	eng, cleanup := etests.NewDatabase(b, &Account{})
 	db := knox.WrapEngine(eng)
-	table, err := db.FindTable("account")
+	table, err := knox.FindTableFor[Account](db, "account")
 	require.NoError(b, err, "Missing table")
 
 	var (

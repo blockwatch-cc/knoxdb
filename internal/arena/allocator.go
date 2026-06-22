@@ -9,6 +9,7 @@ import (
 	"math/bits"
 	"sync"
 	"sync/atomic"
+	"unsafe"
 )
 
 const (
@@ -36,7 +37,7 @@ func (a *goAllocator) Alloc(sz int) []byte {
 	if class < minAllocClass {
 		class = minAllocClass
 	}
-	return (*a.pool(class).Get().(*[]byte))[:sz]
+	return unsafe.Slice(a.pool(class).Get().(*byte), sz)
 }
 
 func (a *goAllocator) Free(val []byte) {
@@ -46,7 +47,7 @@ func (a *goAllocator) Free(val []byte) {
 	if class < minAllocClass || class > maxAllocClass || bits.OnesCount(sz) > 1 {
 		return
 	}
-	a.pool(class).Put(&val)
+	a.pool(class).Put(&val[:1][0])
 }
 
 // lazy allocate sync pools
@@ -57,8 +58,8 @@ func (a *goAllocator) pool(class int) *sync.Pool {
 		sz := 1 << class
 		p = &sync.Pool{
 			New: func() any {
-				buf := make([]byte, 0, sz)
-				return &buf
+				buf := make([]byte, sz)
+				return &buf[0]
 			},
 		}
 		a.pools[idx].Store(p)

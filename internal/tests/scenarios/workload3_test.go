@@ -34,7 +34,7 @@ func TestWorkload3(t *testing.T) {
 		tests.SaveDatabaseFiles(t, eng)
 	})
 	db := knox.WrapEngine(eng)
-	table, err := db.FindTable("ledger")
+	table, err := knox.FindTableFor[Ledger](db, "ledger")
 	require.NoError(t, err, "Missing table")
 
 	ctx := context.Background()
@@ -49,7 +49,7 @@ func TestWorkload3(t *testing.T) {
 			Balance: initialBalance,
 		}
 	}
-	startPK, _, err := table.Insert(ctx, data)
+	startPK, _, err := table.Insert(ctx, data...)
 	require.NoError(t, err, "Failed to initialize accounts")
 
 	// Update IDs for accounts
@@ -71,7 +71,7 @@ func TestWorkload3(t *testing.T) {
 
 				// Load the "from" account
 				_, err := knox.NewQueryFor[Ledger]().
-					WithTable(table).
+					WithTable(table.Table()).
 					AndEqual("id", data[from].Id).
 					Execute(ctx, &fromAccount)
 				require.NoError(t, err, "Failed to load 'from' account with ID: %d", data[from].Id)
@@ -79,7 +79,7 @@ func TestWorkload3(t *testing.T) {
 
 				// Load the "to" account
 				_, err = knox.NewQueryFor[Ledger]().
-					WithTable(table).
+					WithTable(table.Table()).
 					AndEqual("id", data[to].Id).
 					Execute(ctx, &toAccount)
 				require.NoError(t, err, "Failed to load 'to' account with ID: %d", data[to].Id)
@@ -100,7 +100,7 @@ func TestWorkload3(t *testing.T) {
 				// 	toAccount.Balance,
 				// )
 
-				_, err = table.Update(ctx, []*Ledger{&fromAccount, &toAccount})
+				_, err = table.Update(ctx, &fromAccount, &toAccount)
 				require.NoError(t, err, "Failed to update accounts during transaction")
 			}
 			require.NoError(t, commit())
@@ -110,7 +110,7 @@ func TestWorkload3(t *testing.T) {
 	// Validate total balance consistency and individual account
 	totalBalance := int64(0)
 	err = knox.NewQueryFor[Ledger]().
-		WithTable(table).
+		WithTable(table.Table()).
 		Stream(ctx, func(res *Ledger) error {
 			if res.Id%2 == 1 {
 				// sender
@@ -129,7 +129,7 @@ func TestWorkload3(t *testing.T) {
 	for _, a := range data {
 		var account Ledger
 		_, err := knox.NewQueryFor[Ledger]().
-			WithTable(table).
+			WithTable(table.Table()).
 			AndEqual("id", a.Id).
 			Execute(ctx, &account)
 		require.NoError(t, err, "Failed to load account with ID: %d", a.Id)

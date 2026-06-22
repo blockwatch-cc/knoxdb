@@ -4,6 +4,7 @@
 package schema_tests
 
 import (
+	"context"
 	"encoding/json"
 	"math/bits"
 	"strings"
@@ -989,23 +990,24 @@ func TestSchemaRegistry(t *testing.T) {
 	require.True(t, reg.Register(listFieldsT2))
 
 	// lookup by version
-	s, ok := reg.Lookup(listFieldsT.Name, listFieldsT.Version)
+	ctx := context.Background()
+	s, ok := reg.LookupSchemaName(ctx, listFieldsT.Name, listFieldsT.Version)
 	require.True(t, ok)
 	require.NotNil(t, s)
 	require.Equal(t, listFieldsT.Hash, s.Hash)
 
-	s, ok = reg.Lookup(listFieldsT.Name, listFieldsT2.Version)
+	s, ok = reg.LookupSchemaName(ctx, listFieldsT.Name, listFieldsT2.Version)
 	require.True(t, ok)
 	require.NotNil(t, s)
 	require.Equal(t, listFieldsT2.Hash, s.Hash)
 
 	// lookup by hash
-	s, ok = reg.LookupHash(listFieldsT.Hash)
+	s, ok = reg.LookupSchemaHash(ctx, listFieldsT.Hash)
 	require.True(t, ok)
 	require.NotNil(t, s)
 	require.Equal(t, listFieldsT.Hash, s.Hash)
 
-	s, ok = reg.LookupHash(listFieldsT2.Hash)
+	s, ok = reg.LookupSchemaHash(ctx, listFieldsT2.Hash)
 	require.True(t, ok)
 	require.NotNil(t, s)
 	require.Equal(t, listFieldsT2.Hash, s.Hash)

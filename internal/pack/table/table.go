@@ -17,6 +17,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/pack/stats"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/wal"
+	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/store"
 	"github.com/echa/log"
 )
@@ -55,20 +56,21 @@ var (
 )
 
 type Table struct {
-	mu      sync.RWMutex                // global table lock (syncs r/w access, single writer)
-	engine  *engine.Engine              // engine access
-	schema  *types.TableSchema          // ordered list of table fields as central type info
-	opts    engine.Options              // copy of config options
-	id      uint64                      // unique table id (tagged name hash)
-	px      int                         // field index for primary key (required)
-	db      store.DBManager             // lower-level storage (e.g. boltdb wrapper)
-	state   engine.ObjectState          // volatile state
-	indexes []engine.QueryableIndex     // list of indexes
-	stats   *stats.AtomicPointer        // in-memory metadata
-	journal *journal.Journal            // in-memory data not yet written to packs
-	metrics engine.TableMetrics         // usage statistics
-	task    atomic.Pointer[engine.Task] // merge task pointer
-	log     log.Logger
+	mu       sync.RWMutex                // global table lock (syncs r/w access, single writer)
+	engine   *engine.Engine              // engine access
+	schema   *types.TableSchema          // ordered list of table fields as central type info
+	resolver schema.SchemaResolver       // schema version resolver
+	opts     engine.Options              // copy of config options
+	id       uint64                      // unique table id (tagged name hash)
+	px       int                         // field index for primary key (required)
+	db       store.DBManager             // lower-level storage (e.g. boltdb wrapper)
+	state    engine.ObjectState          // volatile state
+	indexes  []engine.QueryableIndex     // list of indexes
+	stats    *stats.AtomicPointer        // in-memory metadata
+	journal  *journal.Journal            // in-memory data not yet written to packs
+	metrics  engine.TableMetrics         // usage statistics
+	task     atomic.Pointer[engine.Task] // merge task pointer
+	log      log.Logger
 }
 
 func NewTable() engine.TableEngine {
@@ -134,6 +136,7 @@ func (t *Table) Create(ctx context.Context, s *types.TableSchema, options ...eng
 	// setup table
 	t.engine = engine.GetEngine(ctx)
 	t.schema = s
+	t.resolver = schema.NewResolver(t.engine)
 	t.id = types.TaggedHash(types.ObjectTagTable, s.Name)
 	t.px = s.PkIndex()
 	t.opts = mergeDefaultOptions(options...)
@@ -223,10 +226,15 @@ func (t *Table) createBackend(ctx context.Context) error {
 
 	// setup journal (note: history tables have no journal)
 	if t.opts.JournalSize > 0 {
-		t.journal = journal.NewJournal(t.schema.Schema, t.opts.JournalSize, t.opts.JournalSegments).
-			WithState(t.state).
-			WithWal(t.engine.Wal()).
-			WithLogger(t.log)
+		t.journal = journal.NewJournal(
+			journal.WithMaxSize(t.opts.JournalSize),
+			journal.WithMaxSegments(t.opts.JournalSegments),
+			journal.WithSchema(t.schema.Schema), // use after max-size
+			journal.WithWal(t.engine.Wal()),
+			journal.WithResolver(t.resolver),
+			journal.WithState(t.state),
+			journal.WithLogger(t.log),
+		)
 	}
 
 	// commit backend tx
@@ -237,6 +245,7 @@ func (t *Table) Open(ctx context.Context, s *types.TableSchema, options ...engin
 	// setup table
 	t.engine = engine.GetEngine(ctx)
 	t.schema = s
+	t.resolver = schema.NewResolver(t.engine)
 	t.id = types.TaggedHash(types.ObjectTagTable, s.Name)
 	t.px = s.PkIndex()
 	t.opts = mergeDefaultOptions(options...)
@@ -260,10 +269,15 @@ func (t *Table) Open(ctx context.Context, s *types.TableSchema, options ...engin
 
 	// setup journal and replay wal, no journal on history tables
 	if t.opts.JournalSize > 0 {
-		t.journal = journal.NewJournal(s.Schema, t.opts.JournalSize, t.opts.JournalSegments).
-			WithWal(t.engine.Wal()).
-			WithState(t.state).
-			WithLogger(t.log)
+		t.journal = journal.NewJournal(
+			journal.WithMaxSize(t.opts.JournalSize),
+			journal.WithMaxSegments(t.opts.JournalSegments),
+			journal.WithSchema(t.schema.Schema), // use after max-size
+			journal.WithWal(t.engine.Wal()),
+			journal.WithResolver(t.resolver),
+			journal.WithState(t.state),
+			journal.WithLogger(t.log),
+		)
 
 		// replay wal from latest checkpoint
 		if err := t.ReplayWal(ctx); err != nil {
@@ -447,7 +461,7 @@ func (t *Table) Truncate(ctx context.Context) error {
 		// reset state
 		t.state.Reset()
 		t.state.Checkpoint = lsn
-		t.journal.WithState(t.state)
+		t.journal.ResetState(t.state)
 		return t.state.Store(ctx, tx)
 	})
 	if err != nil {

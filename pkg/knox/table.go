@@ -38,30 +38,10 @@ func (t TableImpl) DB() Database {
 	return t.db
 }
 
-func (t TableImpl) Insert(ctx context.Context, val any) (uint64, int, error) {
-	// analyze reflect
-	s, err := reflect.SchemaOf(val, schema.Enums(t.table.Schema().Enums.Load()))
-	if err != nil {
-		return 0, 0, err
-	}
+func (t TableImpl) Insert(ctx context.Context, batch *schema.Batch) (uint64, int, error) {
 	// check schema matches
-	if t.table.Schema().Hash != s.Hash {
+	if t.table.Schema().Base().Hash != batch.Schema().Hash {
 		return 0, 0, schema.ErrSchemaMismatch
-	}
-
-	// encode wire (single or slice) - schema is guaranteed the same
-	// but we must use the one derived from Go type for struct read
-	if t.enc == nil {
-		// analyze struct layout
-		l, err := reflect.LayoutOf(val, s)
-		if err != nil {
-			return 0, 0, err
-		}
-		t.enc = encode.NewEncoderWithLayout(s, l)
-	}
-	buf := t.enc.NewBuffer(1024)
-	if err := t.enc.Encode(buf, val); err != nil {
-		return 0, 0, err
 	}
 
 	// use or open tx
@@ -72,7 +52,7 @@ func (t TableImpl) Insert(ctx context.Context, val any) (uint64, int, error) {
 	defer abort()
 
 	// call backend
-	pk, n, err := t.table.InsertRows(ctx, buf.Bytes())
+	pk, n, err := t.table.InsertBatch(ctx, batch)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -85,30 +65,10 @@ func (t TableImpl) Insert(ctx context.Context, val any) (uint64, int, error) {
 	return pk, n, nil
 }
 
-func (t TableImpl) Update(ctx context.Context, val any) (int, error) {
-	// analyze reflect
-	s, err := reflect.SchemaOf(val, schema.Enums(t.table.Schema().Enums.Load()))
-	if err != nil {
-		return 0, err
-	}
+func (t TableImpl) Update(ctx context.Context, batch *schema.Batch) (int, error) {
 	// check schema matches
-	if t.table.Schema().Hash != s.Hash {
+	if t.table.Schema().Base().Hash != batch.Schema().Hash {
 		return 0, schema.ErrSchemaMismatch
-	}
-
-	// encode wire (single or slice) - schema is guaranteed the same
-	// but we must use the one derived from Go type for struct read
-	if t.enc == nil {
-		// analyze struct layout
-		l, err := reflect.LayoutOf(val, s)
-		if err != nil {
-			return 0, err
-		}
-		t.enc = encode.NewEncoderWithLayout(s, l)
-	}
-	buf := t.enc.NewBuffer(1024)
-	if err := t.enc.Encode(buf, val); err != nil {
-		return 0, err
 	}
 
 	// use or open tx
@@ -119,7 +79,7 @@ func (t TableImpl) Update(ctx context.Context, val any) (int, error) {
 	defer abort()
 
 	// call backend
-	n, err := t.table.UpdateRows(ctx, buf.Bytes())
+	n, err := t.table.UpdateBatch(ctx, batch)
 	if err != nil {
 		return 0, err
 	}
@@ -251,17 +211,21 @@ type TableT[T any] struct {
 	db     Database
 }
 
+// TODO: TableFor[T any](t Table, opts ...schema.Option) for version control
 func TableFor[T any](t Table) (*TableT[T], error) {
 	return FindTableFor[T](t.DB(), t.Schema().Name)
 }
 
+// TODO:
+// FindTableFor[T any](db Database, opts ...schema.Option) (*TableT[T], error) {
+// so we can do version control and consistent names
+// FindTableFor[T](db, schema.Name("override"), schema.Version(2))
 func FindTableFor[T any](db Database, name string) (*TableT[T], error) {
 	table, err := db.FindTable(name)
 	if err != nil {
 		return nil, err
 	}
-	var t T
-	s, err := reflect.SchemaOf(t, schema.Enums(table.Schema().Enums.Load()))
+	s, err := reflect.SchemaFor[T](schema.Enums(table.Schema().Enums.Load()))
 	if err != nil {
 		return nil, err
 	}
@@ -303,13 +267,17 @@ func (t *TableT[T]) DB() Database {
 	return t.db
 }
 
-func (t *TableT[T]) Insert(ctx context.Context, val any) (uint64, int, error) {
+func (t *TableT[T]) Insert(ctx context.Context, vals ...*T) (uint64, int, error) {
+	if len(vals) == 0 {
+		return 0, 0, ErrNoValues
+	}
 	if t.enc == nil {
 		t.enc = encode.NewEncoderFor[T](schema.Enums(t.Schema().Enums.Load()))
 	}
-	buf := t.enc.NewBuffer(1024)
-	if err := t.enc.Encoder.Encode(buf, val); err != nil {
-		return 0, 0, fmt.Errorf("insert: %T %w", val, err)
+	wr := t.enc.NewBatchWriter(len(vals))
+	defer wr.Close()
+	if err := t.enc.EncodeBatch(wr.Buffer(), vals); err != nil {
+		return 0, 0, fmt.Errorf("insert: %T %w", new(T), err)
 	}
 
 	// use or open tx
@@ -320,7 +288,7 @@ func (t *TableT[T]) Insert(ctx context.Context, val any) (uint64, int, error) {
 	defer abort()
 
 	// call backend, returns first sequential pk assigned
-	pk, n, err := t.table.InsertRows(ctx, buf.Bytes())
+	pk, n, err := t.table.InsertBatch(ctx, wr.Batch())
 	if err != nil {
 		return 0, 0, err
 	}
@@ -331,29 +299,21 @@ func (t *TableT[T]) Insert(ctx context.Context, val any) (uint64, int, error) {
 
 	// assign primary keys to all values
 	pkOffset := t.enc.Offset(t.schema.PkIndex())
-	switch v := val.(type) {
-	case *T:
+	for _, v := range vals {
 		*(*uint64)(unsafe.Add(unsafe.Pointer(v), pkOffset)) = pk
-	case []T:
-		for i := range v {
-			*(*uint64)(unsafe.Add(unsafe.Pointer(&v[i]), pkOffset)) = pk
-		}
-	case []*T:
-		for i := range v {
-			*(*uint64)(unsafe.Add(unsafe.Pointer(v[i]), pkOffset)) = pk
-		}
 	}
 
 	return pk, n, nil
 }
 
-func (t *TableT[T]) Update(ctx context.Context, val any) (int, error) {
+func (t *TableT[T]) Update(ctx context.Context, vals ...*T) (int, error) {
 	if t.enc == nil {
 		t.enc = encode.NewEncoderFor[T](schema.Enums(t.Schema().Enums.Load()))
 	}
-	buf := t.enc.NewBuffer(1024)
-	if err := t.enc.Encoder.Encode(buf, val); err != nil {
-		return 0, fmt.Errorf("update: %T %w", val, err)
+	wr := t.enc.NewBatchWriter(len(vals))
+	defer wr.Close()
+	if err := t.enc.EncodeBatch(wr.Buffer(), vals); err != nil {
+		return 0, fmt.Errorf("update: %T %w", new(T), err)
 	}
 
 	// use or open tx
@@ -364,7 +324,7 @@ func (t *TableT[T]) Update(ctx context.Context, val any) (int, error) {
 	defer abort()
 
 	// call backend
-	n, err := t.table.UpdateRows(ctx, buf.Bytes())
+	n, err := t.table.UpdateBatch(ctx, wr.Batch())
 	if err != nil {
 		return 0, err
 	}

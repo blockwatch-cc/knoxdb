@@ -282,7 +282,7 @@ func TestEncodeEncoderBatch(t *testing.T) {
 	vals := makeTestData(2)
 	enc := NewEncoderFor[encodeTestStruct]()
 	buf := enc.NewBuffer(len(vals))
-	require.NoError(t, enc.Encoder.EncodeBatch(buf, vals))
+	require.NoError(t, enc.EncodeBatch(buf, vals))
 	require.NotEmpty(t, buf.Bytes())
 }
 
@@ -294,7 +294,7 @@ func TestEncodeEncoderPtrBatch(t *testing.T) {
 	}
 	enc := NewEncoderFor[encodeTestStruct]()
 	buf := enc.NewBuffer(len(vals))
-	require.NoError(t, enc.Encoder.EncodeBatch(buf, ptrs))
+	require.NoError(t, enc.EncodeBatch(buf, ptrs))
 	require.NotEmpty(t, buf.Bytes())
 }
 
@@ -385,19 +385,19 @@ func TestEncodeSpecial(t *testing.T) {
 	t.Run("nil_slice", func(t *testing.T) {
 		enc := NewEncoderFor[encodeTestStruct]()
 		buf := enc.NewBuffer(1)
-		require.NoError(t, enc.Encoder.EncodeBatch(buf, nil))
+		require.NoError(t, enc.EncodeBatch(buf, nil))
 		require.Empty(t, buf.Bytes())
 	})
 	t.Run("empty_slice", func(t *testing.T) {
 		enc := NewEncoderFor[encodeTestStruct]()
 		buf := enc.NewBuffer(1)
-		require.NoError(t, enc.Encoder.EncodeBatch(buf, []encodeTestStruct{}))
+		require.NoError(t, enc.EncodeBatch(buf, []encodeTestStruct{}))
 		require.Empty(t, buf.Bytes())
 	})
 	t.Run("empty_ptr_slice", func(t *testing.T) {
 		enc := NewEncoderFor[encodeTestStruct]()
 		buf := enc.NewBuffer(1)
-		require.NoError(t, enc.Encoder.EncodeBatch(buf, []*encodeTestStruct{}))
+		require.NoError(t, enc.EncodeBatch(buf, []*encodeTestStruct{}))
 		require.Empty(t, buf.Bytes())
 	})
 }
@@ -413,7 +413,7 @@ func TestEncodeErrors(t *testing.T) {
 		enc := NewEncoderFor[encodeTestStruct]()
 		buf := enc.NewBuffer(2)
 		bad := makeVisibilityTestData(2)
-		require.Error(t, enc.Encoder.EncodeBatch(buf, bad))
+		require.Error(t, enc.EncodeBatch(buf, bad))
 	})
 	t.Run("no_marshaler", func(t *testing.T) {
 		enc := NewEncoderFor[encodeTestStruct]()
@@ -438,20 +438,20 @@ func TestEncodeErrors(t *testing.T) {
 		}
 		ptrs[1] = nil
 		buf := enc.NewBuffer(2)
-		require.Error(t, enc.Encoder.EncodeBatch(buf, ptrs)) // <- nil not allowed
+		require.Error(t, enc.EncodeBatch(buf, ptrs)) // <- nil not allowed
 	})
 	t.Run("no_slice", func(t *testing.T) {
 		enc := NewEncoderFor[encodeTestStruct]()
 		vals := makeTestData(1)
 		buf := enc.NewBuffer(1)
-		require.Error(t, enc.Encoder.EncodeBatch(buf, vals[0])) // <- T not allowed
+		require.Error(t, enc.EncodeBatch(buf, vals[0])) // <- T not allowed
 		require.Empty(t, buf.Bytes())
 	})
 	t.Run("no_slice_2", func(t *testing.T) {
 		enc := NewEncoderFor[encodeTestStruct]()
 		vals := makeTestData(1)
 		buf := enc.NewBuffer(1)
-		require.Error(t, enc.Encoder.EncodeBatch(buf, &vals[0])) // <- *T not allowed
+		require.Error(t, enc.EncodeBatch(buf, &vals[0])) // <- *T not allowed
 		require.Empty(t, buf.Bytes())
 	})
 }

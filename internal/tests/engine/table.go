@@ -89,16 +89,16 @@ var TestCases = []TestCase{
 	},
 }
 
-func TestTableEngine[T any, F TF[T]](t *testing.T, driver, eng string) {
+func TestTableEngine[T any, F TF[T]](t *testing.T, opts ...engine.Option) {
 	for _, c := range TestCases {
-		t.Run(fmt.Sprintf("%s/%s", c.Name, driver), func(t *testing.T) {
+		o := NewTestDatabaseOptions(t, opts...)
+		t.Run(fmt.Sprintf("%s/%s", c.Name, o.Driver), func(t *testing.T) {
 			ctx := context.Background()
-			dopts := NewTestDatabaseOptions(t, driver)
-			e := NewTestEngine(t, dopts)
+			e := NewTestEngine(t, opts...)
 			defer e.Close(ctx)
 
 			var tab F = new(T)
-			topts := NewTestTableOptions(t, driver, eng)
+			topts := NewTestTableOptions(t, opts...)
 			c.Run(t, e, tab, topts)
 		})
 	}
@@ -157,13 +157,13 @@ func InsertData(t *testing.T, e *engine.Engine, tab engine.TableEngine) {
 
 	var cnt int
 	enc := encode.NewEncoder(tab.Schema().Base())
-	buf := enc.NewBuffer(1)
+	wr := schema.NewBatchWriter(tab.Schema().Base(), 1)
 	for _, rec := range data {
-		buf.Reset()
-		require.NoError(t, enc.Encode(buf, rec))
+		wr.Reset()
+		require.NoError(t, enc.Encode(wr.Buffer(), rec))
 		ctx, _, commit, abort, err := e.WithTransaction(context.Background())
 		require.NoError(t, err)
-		_, _, err = tab.InsertRows(ctx, buf.Bytes())
+		_, _, err = tab.InsertBatch(ctx, wr.Batch())
 		assert.NoError(t, err)
 		assert.NoError(t, commit())
 		abort()
@@ -259,10 +259,10 @@ func InsertRowsReadOnlyTableTest(t *testing.T, e *engine.Engine, tab engine.Tabl
 	require.NoError(t, err)
 
 	enc := encode.NewEncoder(tab.Schema().Base())
-	buf := enc.NewBuffer(10)
-	require.NoError(t, enc.EncodeBatch(buf, NewAllTypes(10)))
+	wr := schema.NewBatchWriter(tab.Schema().Base(), 10)
+	require.NoError(t, enc.EncodeBatch(wr.Buffer(), NewAllTypes(10)))
 
-	_, cnt, err := tab.InsertRows(ctx, buf.Bytes())
+	_, cnt, err := tab.InsertBatch(ctx, wr.Batch())
 	require.Error(t, err)
 	assert.Equal(t, uint64(0), cnt)
 
@@ -282,19 +282,19 @@ func UpdateRowsTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine,
 	tab.ConnectIndex(idx)
 
 	enc := encode.NewEncoder(tab.Schema().Base())
-	buf := enc.NewBuffer(10)
+	wr := schema.NewBatchWriter(tab.Schema().Base(), 10)
 	data := make([]*AllTypes, 10)
 	for i := range data {
 		data[i] = NewAllTypes(i)
 		data[i].Id = uint64(i + 1)
 	}
-	require.NoError(t, enc.EncodeBatch(buf, data))
+	require.NoError(t, enc.EncodeBatch(wr.Buffer(), data))
 
 	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
 	defer abort()
 	require.NoError(t, err)
 
-	cnt, err := tab.UpdateRows(ctx, buf.Bytes())
+	cnt, err := tab.UpdateBatch(ctx, wr.Batch())
 	require.NoError(t, err)
 	assert.Equal(t, len(data), cnt)
 	require.NoError(t, commit())

@@ -153,15 +153,16 @@ func (a Accessor[T]) Cmp(i, j int) int {
 func (a Accessor[T]) Append(v T) int {
 	assert.Always(a.block != nil, "append: nil block")
 	assert.Always(a.block.IsMaterialized(), "append: block not materialized")
-	assert.Always(a.block.len < a.block.cap, "append: block capacity exhausted", "len", a.block.len, "cap", a.block.cap)
+	// assert.Always(a.block.len < a.block.cap, "append: block capacity exhausted", "len", a.block.len, "cap", a.block.cap)
 	if a.block.len >= a.block.cap {
 		panic(fmt.Errorf("append: out of bounds block access [:%d:%d]", a.block.len, a.block.cap))
 	}
 	ptr := unsafe.Add(unsafe.Pointer(a.block.buf), a.block.len*uint32(a.block.sz))
 	*(*T)(ptr) = v
+	l := a.block.len
 	a.block.len++
 	a.block.SetDirty()
-	return int(a.block.len) - 1
+	return int(l)
 }
 
 func (a Accessor[T]) Set(n int, v T) {
@@ -184,7 +185,13 @@ func (a Accessor[T]) Delete(i, j int) {
 
 // ---------------------------------------------
 // Block Accessor Selection
-//
+// func (b *Block) AppendWire(buf []byte) int {
+// 	dst := unsafe.Slice((*byte)(unsafe.Add(unsafe.Pointer(b.buf), b.len*uint32(b.sz))), b.sz)
+// 	n := copy(dst, buf)
+// 	b.len++
+// 	b.dirty = true
+// 	return n
+// }
 
 func (b *Block) Int64() types.NumberAccessor[int64] {
 	if b.IsMaterialized() {

@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Blockwatch Data Inc.
+// Copyright (c) 2024-2026 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package enum
@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"fmt"
 	"iter"
+	"maps"
 	"slices"
 	"strings"
 
@@ -84,16 +85,12 @@ func (e *Dictionary) Len() int {
 }
 
 func (e *Dictionary) Clone() *Dictionary {
-	clone := &Dictionary{
+	return &Dictionary{
 		name:    e.name,
 		values:  bytes.Clone(e.values),
 		offsets: slices.Clone(e.offsets),
-		codes:   make(map[uint64]uint16, len(e.codes)),
+		codes:   maps.Clone(e.codes),
 	}
-	for c := range e.codes {
-		clone.codes[c] = e.codes[c]
-	}
-	return clone
 }
 
 func (e *Dictionary) Values() iter.Seq[string] {
@@ -129,23 +126,15 @@ func (e *Dictionary) Append(vals ...string) error {
 	if e.Len()+len(vals) > EnumMaxValues {
 		return ErrEnumFull
 	}
-	unique := make(map[string]struct{})
 	for _, v := range vals {
 		if len(v) > EnumMaxSize {
 			return fmt.Errorf("enum: %s %q: %w", e.name, v, ErrEnumTooLong)
 		}
-		if _, ok := e.Code(v); ok {
+		h := hash.HashString(v)
+		if _, ok := e.codes[h]; ok {
 			return fmt.Errorf("enum: %s %q: %w", e.name, v, ErrEnumDuplicate)
 		}
-		if _, ok := unique[v]; ok {
-			return fmt.Errorf("enum: %s %q: %w", e.name, v, ErrEnumDuplicate)
-		}
-		unique[v] = struct{}{}
-	}
-
-	clear(e.codes)
-	for _, v := range vals {
-		e.codes[hash.HashString(v)] = uint16(e.Len())
+		e.codes[h] = uint16(e.Len())
 		e.offsets = append(e.offsets, uint32(len(e.values)))
 		e.values = append(e.values, []byte(v)...)
 	}

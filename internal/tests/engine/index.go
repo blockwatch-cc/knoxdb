@@ -85,20 +85,21 @@ var IndexTestCases = []IndexTestCase{
 	},
 }
 
-func TestIndexEngine[T any, F IF[T]](t *testing.T, driver, eng string, table engine.TableEngine, ityps []types.IndexType) {
+func TestIndexEngine[T any, F IF[T]](t *testing.T, table engine.TableEngine, ityps []types.IndexType, opts ...engine.Option) {
 	t.Helper()
 	for _, c := range IndexTestCases {
 		for _, indexType := range ityps {
-			t.Run(fmt.Sprintf("%s/%s/%s", c.Name, driver, indexType), func(t *testing.T) {
+			o := NewTestDatabaseOptions(t, opts...)
+			t.Run(fmt.Sprintf("%s/%s/%s", c.Name, o.Driver, indexType), func(t *testing.T) {
 				t.Helper()
 
 				ctx := context.Background()
-				e := NewTestEngine(t, NewTestDatabaseOptions(t, driver))
+				e := NewTestEngine(t, opts...)
 				defer e.Close(ctx)
 
 				// create table
 				CreateEnum(t, e)
-				topts := NewTestTableOptions(t, driver, eng)
+				topts := NewTestTableOptions(t, opts...)
 				CreateTable(t, e, table, topts, allTypesSchema)
 				defer table.Close(ctx)
 
@@ -106,7 +107,7 @@ func TestIndexEngine[T any, F IF[T]](t *testing.T, driver, eng string, table eng
 				ts := table.Schema()
 
 				// prepare index
-				iopts := NewTestIndexOptions(t, driver, eng)
+				iopts := NewTestIndexOptions(t, opts...)
 				ss, err := ts.Select("u64")
 				require.NoError(t, err)
 				indexSchema := &schema.IndexSchema{

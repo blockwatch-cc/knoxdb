@@ -235,7 +235,7 @@ func (s *Schema) IndexId(id uint16) (int, bool) {
 			return i, true
 		}
 	}
-	return 0, false
+	return -1, false
 }
 
 func (s *Schema) Pk() *Field {

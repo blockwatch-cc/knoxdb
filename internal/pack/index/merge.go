@@ -72,6 +72,7 @@ type MergeIterator struct {
 	lastSz  int                       // current pack data size (to calculate diff)
 	halfSel []uint32                  // selector for second half of a pack for splitting
 	btypes  [2]types.BlockType        // expected block types for decode
+	scratch [PackKeySize]byte         // storage key scratch space
 
 	// stats
 	nTxBytes      int // pending tx bytes to write
@@ -206,7 +207,7 @@ func (it *MergeIterator) Store(pkg *pack.Package) error {
 	var n int
 	for i := range []int{0, 1} {
 		var err error
-		key := it.idx.encodePackKey(id.Key, id.Rid, i)
+		key := it.idx.appendPackKey(it.scratch[:0], id.Key, id.Rid, i)
 		if pkg.Len() == 0 {
 			err = it.bucket.Delete(key)
 			it.nTxBytes++
@@ -311,7 +312,8 @@ func (it *MergeIterator) loadNextPack(find MergeValue) ([]byte, error) {
 	// hit the second block of the searched pack or less likely (on equal
 	// match) the first block, or very unlikely nothing (empty bucket
 	// or find key is smaller than the first pack)
-	key, val, err := it.bucket.SearchLE(it.idx.encodePackKey(find.Key, find.Rid, 0))
+	search := it.idx.appendPackKey(it.scratch[:0], find.Key, find.Rid, 0)
+	key, val, err := it.bucket.SearchLE(search)
 	if err != nil {
 		// it.idx.log.Tracef("merge: search 0x%016x:%016x:%d: %v", find.Key, find.Rid, 0, err)
 		if !errors.Is(err, store.ErrKeyNotFound) {
@@ -354,7 +356,7 @@ func (it *MergeIterator) loadNextPack(find MergeValue) ([]byte, error) {
 			buf = val
 		} else {
 			// we must load this block
-			buf, err = it.bucket.Get(it.idx.encodePackKey(ikey, rid, i))
+			buf, err = it.bucket.Get(it.idx.appendPackKey(it.scratch[:0], ikey, rid, i))
 			if err != nil {
 				return nil, fmt.Errorf("loading block 0x%016x:%016x:%d: %v", ikey, rid, i, err)
 			}
@@ -375,7 +377,7 @@ func (it *MergeIterator) loadNextPack(find MergeValue) ([]byte, error) {
 	it.nBytesRead += n
 
 	// peek into the next key on disk to identify the boundary
-	key, val, err = it.bucket.SearchGE(it.idx.encodePackKey(ikey, rid+1, 0))
+	key, val, err = it.bucket.SearchGE(it.idx.appendPackKey(it.scratch[:0], ikey, rid+1, 0))
 	if err != nil {
 		if !errors.Is(err, store.ErrKeyNotFound) {
 			return nil, err

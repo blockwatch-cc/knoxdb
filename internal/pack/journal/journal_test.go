@@ -19,6 +19,7 @@ import (
 	etests "blockwatch.cc/knoxdb/internal/tests/engine"
 	"blockwatch.cc/knoxdb/internal/tests/testutil"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/schema/encode"
 	"blockwatch.cc/knoxdb/pkg/slicex"
 	"github.com/echa/log"
@@ -34,7 +35,7 @@ func TestJournalInsert(t *testing.T) {
 	xid := engine.GetTxId(ctx)
 
 	// insert single
-	pk, n, err := j.InsertRecords(ctx, makeRecord(0))
+	pk, n, err := j.InsertBatch(ctx, makeRecord(0))
 	require.NoError(t, err)
 	require.Equal(t, uint64(1), pk, "assigned pk")
 	require.Equal(t, 1, n, "insert count")
@@ -74,15 +75,15 @@ func TestJournalUpdate(t *testing.T) {
 	xid := engine.GetTxId(ctx)
 
 	// insert 1st
-	_, _, err := j.InsertRecords(ctx, makeRecord(0))
+	_, _, err := j.InsertBatch(ctx, makeRecord(0))
 	require.NoError(t, err)
 
 	// insert 2nd
-	_, _, err = j.InsertRecords(ctx, makeRecord(0))
+	_, _, err = j.InsertBatch(ctx, makeRecord(0))
 	require.NoError(t, err)
 
 	// update 1st
-	n, err := j.UpdateRecords(ctx, makeRecord(1), map[uint64]uint64{1: 1})
+	n, err := j.UpdateBatch(ctx, makeRecord(1), map[uint64]uint64{1: 1})
 	require.NoError(t, err)
 	require.Equal(t, 1, n, "update count")
 
@@ -120,11 +121,11 @@ func TestJournalDelete(t *testing.T) {
 	xid := engine.GetTxId(ctx)
 
 	// insert 1st
-	_, _, err := j.InsertRecords(ctx, makeRecord(0))
+	_, _, err := j.InsertBatch(ctx, makeRecord(0))
 	require.NoError(t, err)
 
 	// insert 2nd
-	_, _, err = j.InsertRecords(ctx, makeRecord(0))
+	_, _, err = j.InsertBatch(ctx, makeRecord(0))
 	require.NoError(t, err)
 
 	// delete 1st
@@ -168,7 +169,7 @@ func TestJournalRotate(t *testing.T) {
 
 	// insert 128+1 records
 	for i := range 128 + 1 {
-		pk, n, err := j.InsertRecords(ctx, makeRecord(0))
+		pk, n, err := j.InsertBatch(ctx, makeRecord(0))
 		require.NoError(t, err)
 		require.Equal(t, 1, n, "n")
 		require.Equal(t, uint64(i+1), pk, "pk")
@@ -231,7 +232,7 @@ func TestJournalRotateAborted(t *testing.T) {
 	xid := engine.GetTxId(ctx)
 
 	// insert and commit one record
-	pk, n, err := j.InsertRecords(ctx, makeRecord(0))
+	pk, n, err := j.InsertBatch(ctx, makeRecord(0))
 	require.NoError(t, err)
 	require.Equal(t, 1, n, "n")
 	require.Equal(t, uint64(1), pk, "pk")
@@ -244,7 +245,7 @@ func TestJournalRotateAborted(t *testing.T) {
 	xid = engine.GetTxId(ctx)
 
 	// update first record
-	n, err = j.UpdateRecords(ctx, makeRecord(1), map[uint64]uint64{1: 1})
+	n, err = j.UpdateBatch(ctx, makeRecord(1), map[uint64]uint64{1: 1})
 	require.NoError(t, err)
 	require.Equal(t, 1, n, "update count")
 	canMerge, shouldWait = j.CommitTx(xid)
@@ -261,7 +262,7 @@ func TestJournalRotateAborted(t *testing.T) {
 
 	// insert 64 more records
 	for i := range 64 {
-		pk, n, err := j.InsertRecords(ctx, makeRecord(0))
+		pk, n, err := j.InsertBatch(ctx, makeRecord(0))
 		require.NoError(t, err)
 		require.Equal(t, 1, n, "n")
 		require.Equal(t, uint64(i+2), pk, "pk")
@@ -271,7 +272,7 @@ func TestJournalRotateAborted(t *testing.T) {
 	for i := range 64 {
 		// note: due to the update of pk 1, the rid for new inserts start at 3
 		ridMap := map[uint64]uint64{uint64(i + 2): uint64(i + 3)}
-		n, err := j.UpdateRecords(ctx, makeRecord(i+2), ridMap)
+		n, err := j.UpdateBatch(ctx, makeRecord(i+2), ridMap)
 		require.NoError(t, err)
 		require.Equal(t, 1, n, "n")
 	}
@@ -370,7 +371,7 @@ func TestJournalRandom(t *testing.T) {
 
 	// seed with 16 values
 	for i := range 16 {
-		pk, n, err := j.InsertRecords(ctx, makeRecord(0))
+		pk, n, err := j.InsertBatch(ctx, makeRecord(0))
 		require.NoError(t, err)
 		require.Equal(t, 1, n, "n")
 		require.Equal(t, uint64(i+1), pk, "pk")
@@ -397,7 +398,7 @@ func TestJournalRandom(t *testing.T) {
 		case 0: // insert
 			// t.Logf("X-%d Insert %d[%d] into #%d",
 			// 	xid, j.Tip().State().NextPk, j.Tip().State().NextRid, j.Tip().Id())
-			pk, n, err := j.InsertRecords(ctx, makeRecord(0))
+			pk, n, err := j.InsertBatch(ctx, makeRecord(0))
 			require.NoError(t, err)
 			require.Equal(t, 1, n, "n = 1")
 			require.Equal(t, pk, j.Tip().State().NextPk-1, "pk reflects state")
@@ -410,7 +411,7 @@ func TestJournalRandom(t *testing.T) {
 				// t.Logf("X-%d Update %d[%d] => [%d] into #%d",
 				// 	xid, pk, live[pk], j.Tip().State().NextRid, j.Tip().Id())
 				// note update rewrites the live map with new rid
-				n, err := j.UpdateRecords(ctx, makeRecord(int(pk)), live)
+				n, err := j.UpdateBatch(ctx, makeRecord(int(pk)), live)
 				require.NoError(t, err)
 				require.Equal(t, 1, n, "n = 1")
 			}
@@ -424,9 +425,10 @@ func TestJournalRandom(t *testing.T) {
 				// live record which has the nice side effect that we
 				// can also test the query code this way.
 				// t.Logf("X-%d Delete %d[%d] into #%d", xid, pk, live[pk], j.Tip().Id())
+				s := j.tip.data.Schema()
 				plan := &query.QueryPlan{
 					Filters: filter.NewNode().AddLeaf(
-						filter.NewFilter(j.schema.Pk(), j.schema.PkIndex(), types.FilterModeEqual, pk),
+						filter.NewFilter(s.Pk(), s.PkIndex(), types.FilterModeEqual, pk),
 					),
 					Snap: engine.GetSnapshot(ctx),
 					Log:  j.log,
@@ -617,14 +619,18 @@ func setupNextTx(t *testing.T, ctx context.Context) context.Context {
 	return ctx
 }
 
-func setupJournalTest(t *testing.T) (context.Context, *Journal, func(int) []byte) {
+func setupJournalTest(t *testing.T) (context.Context, *Journal, func(int) *schema.Batch) {
 	// create test engine
-	e := etests.NewTestEngine(t, etests.NewTestDatabaseOptions(t, "mem"))
+	e := etests.NewTestEngine(t, engine.WithDriverType("mem"))
 
 	// create test journal
-	j := NewJournal(testSchema.Schema, 128, 64).
-		WithLogger(log.Log).
-		WithState(engine.NewObjectState("tst"))
+	j := NewJournal(
+		WithMaxSize(128),
+		WithMaxSegments(64),
+		WithSchema(testSchema.Schema),
+		WithLogger(log.Log),
+		WithState(engine.NewObjectState("tst")),
+	)
 
 	// create tx without wal support (wo don't want to write)
 	ctx, _, _, _, err := e.WithTransaction(context.Background(), engine.TxFlagNoWal)
@@ -632,10 +638,10 @@ func setupJournalTest(t *testing.T) (context.Context, *Journal, func(int) []byte
 
 	// create record producer helper
 	enc := encode.NewEncoderFor[BaseModel]()
-	makeRecord := func(i int) []byte {
-		buf := enc.NewBuffer(1)
-		require.NoError(t, enc.Encode(buf, &BaseModel{Id: uint64(i)}))
-		return buf.Bytes()
+	makeRecord := func(i int) *schema.Batch {
+		wr := schema.NewBatchWriter(j.tip.data.Schema(), i)
+		require.NoError(t, enc.Encode(wr.Buffer(), &BaseModel{Id: uint64(i)}))
+		return wr.Batch()
 	}
 
 	return ctx, j, makeRecord

@@ -100,7 +100,7 @@ func (p Package) Schema() *schema.Schema {
 }
 
 func (p *Package) Cols() int {
-	return p.schema.NumFields()
+	return p.schema.Len()
 }
 
 func (p *Package) Len() int {

@@ -261,7 +261,7 @@ func (w *Writer) DeleteIndexes(ctx context.Context, src *pack.Package, mode engi
 }
 
 func (w *Writer) FinalizeIndexes(ctx context.Context) error {
-	for _, v := range w.table.Indexes() {
+	for _, v := range w.table.indexes {
 		idx := v.(engine.IndexEngine)
 		if err := idx.Finalize(ctx, w.stats.Epoch()); err != nil {
 			return err

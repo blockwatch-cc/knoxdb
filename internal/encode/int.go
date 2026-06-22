@@ -45,9 +45,10 @@ func EncodeInt[T types.Integer](ctx *Context[T], v []T) NumberContainer[T] {
 	var (
 		bestScheme = TIntRaw
 		bestRatio  = 1.0
+		schemes    [10]ContainerType
 	)
 	if ctx.Lvl > 0 {
-		for _, scheme := range ctx.EligibleIntSchemes() {
+		for _, scheme := range ctx.EligibleIntSchemes(schemes[:0]) {
 			if rd := EstimateInt(ctx, scheme, v); rd < bestRatio {
 				bestRatio = rd
 				bestScheme = scheme

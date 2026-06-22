@@ -29,15 +29,23 @@ func cacheKey(packkey, version uint32, blockId uint16) uint64 {
 	return uint64(blockId)<<48 | uint64(version&0xFFFF)<<32 | uint64(packkey)
 }
 
+const BlockKeySize = store.MaxVarintLen32 + 2*store.MaxVarintLen16
+
 // EncodeBlockKey produces a block key for use inside the table's data bucket.
 // The key clusters blocks of the same column into on-disk data pages which
 // amortizes load costs.
-func EncodeBlockKey(packkey, version uint32, blockId uint16) []byte {
-	var b [store.MaxVarintLen32 + 2*store.MaxVarintLen16]byte
-	buf := store.AppendUvarint(b[:0], uint64(blockId))
+// func EncodeBlockKey(packkey, version uint32, blockId uint16) []byte {
+// 	var b [store.MaxVarintLen32 + 2*store.MaxVarintLen16]byte
+// 	buf := store.AppendUvarint(b[:0], uint64(blockId))
+// 	buf = store.AppendUvarint(buf, uint64(packkey))
+// 	buf = store.AppendUvarint(buf, uint64(version))
+// 	return buf
+// }
+
+func AppendBlockKey(buf []byte, packkey, version uint32, blockId uint16) []byte {
+	buf = store.AppendUvarint(buf, uint64(blockId))
 	buf = store.AppendUvarint(buf, uint64(packkey))
-	buf = store.AppendUvarint(buf, uint64(version))
-	return buf
+	return store.AppendUvarint(buf, uint64(version))
 }
 
 func DecodeBlockKey(buf []byte) (packkey uint32, version uint32, blockId uint16) {
@@ -129,7 +137,10 @@ func (p *Package) LoadFromDisk(ctx context.Context, bucket store.Bucket, fids []
 		return 0, store.ErrBucketNotFound
 	}
 
-	var n int
+	var (
+		n    int
+		bkey [BlockKeySize]byte
+	)
 	for i, f := range p.schema.Fields {
 		// skip already loaded blocks
 		if p.blocks[i] != nil {
@@ -147,10 +158,10 @@ func (p *Package) LoadFromDisk(ctx context.Context, bucket store.Bucket, fids []
 		}
 
 		// generate storage key for this block
-		bkey := EncodeBlockKey(p.key, p.version, f.Id)
+		key := AppendBlockKey(bkey[:0], p.key, p.version, f.Id)
 
 		// load block data
-		buf, err := bucket.Get(bkey)
+		buf, err := bucket.Get(key)
 		if err != nil {
 			// when missing (new fields in old packs) keep block nil
 			continue
@@ -195,7 +206,10 @@ func (p *Package) StoreToDisk(ctx context.Context, bucket store.Bucket) (int, er
 		return 0, store.ErrBucketNotFound
 	}
 
-	var n int
+	var (
+		n    int
+		bkey [BlockKeySize]byte
+	)
 	for i, f := range p.schema.Fields {
 		// skip empty blocks, deleted fields; write all blocks for consistent version
 		b := p.blocks[i]
@@ -218,13 +232,9 @@ func (p *Package) StoreToDisk(ctx context.Context, bucket store.Bucket) (int, er
 		// fmt.Printf("store block 0x%08x:%02d[v%d]: len=%d size=%d min=%v max=%v\n",
 		// 	p.key, f.Id, p.version, b.Len(), len(buf), minv, maxv)
 
-		// generate new and old storage keys for this block
-		bkey := EncodeBlockKey(p.key, p.version, f.Id)
-		okey := EncodeBlockKey(p.key, p.version-1, f.Id)
-
 		// export block statistics
 		if p.stats != nil {
-			val, _ := bucket.Get(okey)
+			val, _ := bucket.Get(AppendBlockKey(bkey[:0], p.key, p.version-1, f.Id))
 			minv, maxv := stats.MinMax()
 			p.stats.MinMax[i][0] = minv
 			p.stats.MinMax[i][1] = maxv
@@ -234,9 +244,12 @@ func (p *Package) StoreToDisk(ctx context.Context, bucket store.Bucket) (int, er
 		stats.Close()
 		n += len(buf)
 
+		// generate new and old storage keys for this block
+		key := AppendBlockKey(bkey[:0], p.key, p.version, f.Id)
+
 		// write to store (will keep a reference to buf until tx closes,
 		// so we cannot free buf at this point, TODO: likely changes with buffer manager)
-		if err := bucket.Put(bkey, buf); err != nil {
+		if err := bucket.Put(key, buf); err != nil {
 			return n, fmt.Errorf("storing block 0x%08x:%02d[v%d]: %v", p.key, f.Id, p.version, err)
 		}
 		p.blocks[i].SetClean()

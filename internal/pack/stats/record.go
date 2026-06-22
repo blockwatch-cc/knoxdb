@@ -70,6 +70,13 @@ func NewRecordFromWire(s *schema.Schema, buf []byte) *Record {
 	return r
 }
 
+func NewRecordFromPack(pkg *pack.Package, n int) *Record {
+	rec := &Record{
+		view: schema.NewView(MakeSchema(pkg.Schema())),
+	}
+	return rec.Update(pkg, n)
+}
+
 func (r *Record) MinMax(col int) (any, any) {
 	return r.view.Get(minColIndex(col)), r.view.Get(maxColIndex(col))
 }
@@ -82,27 +89,25 @@ func (r *Record) Max(col int) any {
 	return r.view.Get(maxColIndex(col))
 }
 
-func (r Record) View() *schema.View {
+func (r *Record) View() *schema.View {
 	return r.view
 }
 
-func NewRecordFromPack(pkg *pack.Package, n int) *Record {
-	s := MakeSchema(pkg.Schema())
-	rec := &Record{
-		Key:      pkg.Key(),
-		Version:  pkg.Version(),
-		SchemaId: pkg.Schema().Hash,
-		NValues:  uint64(pkg.Len()),
-		DiskSize: int64(n),
-		view:     schema.NewView(s),
-	}
+func (r *Record) Update(pkg *pack.Package, n int) *Record {
+	r.Key = pkg.Key()
+	r.Version = pkg.Version()
+	r.SchemaId = pkg.Schema().Hash
+	r.NValues = uint64(pkg.Len())
+	r.DiskSize = int64(n)
 	pstats := pkg.Stats()
+
+	s := r.view.Schema()
 	wr := s.NewBuffer(1)
-	s.Fields[STATS_ROW_KEY].WriteValue(wr, rec.Key, LE)
-	s.Fields[STATS_ROW_VERSION].WriteValue(wr, rec.Version, LE)
-	s.Fields[STATS_ROW_SCHEMA].WriteValue(wr, rec.SchemaId, LE)
-	s.Fields[STATS_ROW_NVALS].WriteValue(wr, rec.NValues, LE)
-	s.Fields[STATS_ROW_SIZE].WriteValue(wr, rec.DiskSize+pstats.SizeDiff(), LE)
+	s.Fields[STATS_ROW_KEY].WriteValue(wr, r.Key, LE)
+	s.Fields[STATS_ROW_VERSION].WriteValue(wr, r.Version, LE)
+	s.Fields[STATS_ROW_SCHEMA].WriteValue(wr, r.SchemaId, LE)
+	s.Fields[STATS_ROW_NVALS].WriteValue(wr, r.NValues, LE)
+	s.Fields[STATS_ROW_SIZE].WriteValue(wr, r.DiskSize+pstats.SizeDiff(), LE)
 
 	for i, b := range pkg.Blocks() {
 		var minv, maxv any
@@ -123,6 +128,6 @@ func NewRecordFromPack(pkg *pack.Package, n int) *Record {
 		s.Fields[minx].WriteValue(wr, minv, LE)
 		s.Fields[maxx].WriteValue(wr, maxv, LE)
 	}
-	rec.view.Reset(wr.Bytes())
-	return rec
+	r.view.Reset(wr.Bytes())
+	return r
 }

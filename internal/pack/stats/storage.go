@@ -40,10 +40,9 @@ var (
 	TombKeySuffix   = engine.TombKeySuffix   // version tomb bucket
 )
 
-func encodeNodeKey(kind byte, id, key, ver uint32) []byte {
-	var b [1 + 3*store.MaxVarintLen32]byte
-	b[0] = kind
-	buf := store.AppendUvarint(b[:1], uint64(id))
+func appendNodeKey(buf []byte, kind byte, id, key, ver uint32) []byte {
+	buf = append(buf, kind)
+	buf = store.AppendUvarint(buf, uint64(id))
 	buf = store.AppendUvarint(buf, uint64(key))
 	buf = store.AppendUvarint(buf, uint64(ver))
 	return buf
@@ -117,6 +116,7 @@ func (idx *Index) Store(ctx context.Context, tx store.Tx) error {
 		k         int
 		haveEmpty bool
 		tomb      = idx.tomb.NewWriter(tx)
+		scratch   [1 + 3*store.MaxVarintLen32]byte
 	)
 	defer tomb.Close()
 	for i, n := range idx.snodes {
@@ -130,7 +130,7 @@ func (idx *Index) Store(ctx context.Context, tx store.Tx) error {
 		key, ver := n.Key(), n.Version()
 
 		// mark empty snodes for gc
-		if err := tomb.AddNode(tx, encodeNodeKey(KIND_SNODE, uint32(i), key, ver)); err != nil {
+		if err := tomb.AddNode(tx, appendNodeKey(scratch[:0], KIND_SNODE, uint32(i), key, ver)); err != nil {
 			return err
 		}
 
@@ -159,7 +159,7 @@ func (idx *Index) Store(ctx context.Context, tx store.Tx) error {
 			ver := n.Version(idx.view)
 			vmin = min(vmin, ver)
 			vmax = max(vmax, ver)
-			key := encodeNodeKey(KIND_INODE, uint32(i), 0, ver)
+			key := appendNodeKey(scratch[:0], KIND_INODE, uint32(i), 0, ver)
 			if err := tomb.AddNode(tx, key); err != nil {
 				return err
 			}
@@ -180,7 +180,7 @@ func (idx *Index) Store(ctx context.Context, tx store.Tx) error {
 			if n == nil || !n.dirty {
 				continue
 			}
-			key := encodeNodeKey(KIND_INODE, uint32(i), 0, n.Version(idx.view))
+			key := appendNodeKey(scratch[:0], KIND_INODE, uint32(i), 0, n.Version(idx.view))
 			if err := tomb.AddNode(tx, key); err != nil {
 				return err
 			}
@@ -207,7 +207,7 @@ func (idx *Index) Store(ctx context.Context, tx store.Tx) error {
 		inode.SetVersion(idx.view, ver+1)
 
 		// key is tree node kind + id (u32) + 0 + version
-		key := encodeNodeKey(KIND_INODE, uint32(i), 0, inode.Version(idx.view))
+		key := appendNodeKey(scratch[:0], KIND_INODE, uint32(i), 0, inode.Version(idx.view))
 		// idx.log.Tracef("store inode %d [%x]", i, key)
 		err := tree.Put(key, inode.meta)
 		if err != nil {
@@ -228,7 +228,7 @@ func (idx *Index) Store(ctx context.Context, tx store.Tx) error {
 		sver := pkg.Version()
 
 		// mark previous snodes for gc
-		key := encodeNodeKey(KIND_SNODE, uint32(i), skey, sver)
+		key := appendNodeKey(scratch[:0], KIND_SNODE, uint32(i), skey, sver)
 		if err := tomb.AddNode(tx, key); err != nil {
 			return err
 		}
@@ -242,7 +242,7 @@ func (idx *Index) Store(ctx context.Context, tx store.Tx) error {
 		snode.SetVersion(idx.view, sver+1)
 
 		// key is tree node kind + id (u32) + spack key (u32) + version
-		key = encodeNodeKey(KIND_SNODE, uint32(i), skey, sver+1)
+		key = appendNodeKey(scratch[:0], KIND_SNODE, uint32(i), skey, sver+1)
 		// idx.log.Tracef("store snode %d [%x]", i, key)
 		err := tree.Put(key, snode.meta)
 		if err != nil {

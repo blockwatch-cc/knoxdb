@@ -52,7 +52,7 @@ type LockManager struct {
 	timeout time.Duration
 	locks   []*lock         // all granted locks, use chan for exclusive access
 	granted map[XID][]*lock // map of tx id to locks granted
-	nlocks  int64           // total number of locks currently in existence
+	nlocks  atomic.Int64    // total number of locks currently in existence
 }
 
 func NewLockManager() *LockManager {
@@ -70,7 +70,7 @@ func (m *LockManager) WithTimeout(t time.Duration) *LockManager {
 }
 
 func (m *LockManager) Len() int {
-	return int(atomic.LoadInt64(&m.nlocks))
+	return int(m.nlocks.Load())
 }
 
 // waits for all locks to be released
@@ -107,7 +107,7 @@ func (m *LockManager) Clear() {
 	}
 	clear(m.locks)
 	clear(m.granted)
-	atomic.StoreInt64(&m.nlocks, 0)
+	m.nlocks.Store(0)
 }
 
 // lock represents a lock on a unique database resource. Each resource has at most
@@ -126,12 +126,12 @@ func (m *LockManager) Clear() {
 // a lock exit on early on context cancellation (i.e. a lock timeout or other
 // cancellation reason), then the corresponding FIFO entry will be dropped.
 type lock struct {
-	typ       LockType // object or predicate
-	exclusive bool     // flag indicating if this lock is exclusive or shared
 	oid       uint64   // container id when type is object or predicate
 	count     int      // shared lock reference counter
 	front     *waiter  // next waiter in queue or nil
 	back      *waiter  // last waiter in queue or nil
+	typ       LockType // object or predicate
+	exclusive bool     // flag indicating if this lock is exclusive or shared
 }
 
 var (
@@ -337,7 +337,7 @@ func (m *LockManager) Done(xid XID) {
 		}
 		return false
 	})
-	atomic.StoreInt64(&m.nlocks, int64(len(m.locks)))
+	m.nlocks.Store(int64(len(m.locks)))
 }
 
 func (m *LockManager) acquire(ctx context.Context, xid XID, mode LockMode, typ LockType, oid uint64, _ ConditionMatcher) error {
@@ -362,7 +362,7 @@ func (m *LockManager) acquire(ctx context.Context, xid XID, mode LockMode, typ L
 	case isNew:
 		// new shared or exclusive lock, add to state and grant
 		m.locks = append(m.locks, l)
-		atomic.AddInt64(&m.nlocks, 1)
+		m.nlocks.Add(1)
 		isGranted = true
 		m.granted[xid] = append(m.granted[xid], l)
 

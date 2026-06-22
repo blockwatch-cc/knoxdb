@@ -108,23 +108,18 @@ func (idx *Index) RunGC(tx store.Tx) error {
 	idx.log.Debugf("gc watermark %d", watermark)
 
 	// identify epochs with GC data
-	drop := make([]uint32, 0)
+	var n int
 	for key := range idx.tombBucket(tx).Scan(nil) {
 		v, _ := store.Uvarint(key)
 		if uint32(v) >= watermark {
 			break
 		}
-		drop = append(drop, uint32(v))
-	}
-	idx.log.Debugf("gc %d epochs ready to drop", len(drop))
-
-	// gc epochs
-	for _, v := range drop {
-		if err := idx.gcEpoch(tx, v); err != nil {
+		if err := idx.gcEpoch(tx, uint32(v)); err != nil {
 			return fmt.Errorf("gc: epoch %d: %v", v, err)
 		}
+		n++
 	}
-
+	idx.log.Debugf("gc processed %d epochs", n)
 	return nil
 }
 
@@ -211,6 +206,7 @@ func (idx *Index) gcEpoch(tx store.Tx, epoch uint32) error {
 		nFilters     int
 		nStatsBlocks int
 		nTreeNodes   int
+		bkey         [pack.BlockKeySize]byte
 	)
 	idx.log.Debugf("gc epoch %d", epoch)
 
@@ -227,7 +223,7 @@ func (idx *Index) gcEpoch(tx store.Tx, epoch uint32) error {
 
 			// drop blocks
 			for _, id := range idx.tomb.activeFields {
-				err := dbucket.Delete(pack.EncodeBlockKey(uint32(pk), uint32(pv), id))
+				err := dbucket.Delete(pack.AppendBlockKey(bkey[:0], uint32(pk), uint32(pv), id))
 				if err != nil {
 					return fmt.Errorf("delete pack key 0x%08x:%02d[v%d]: %v", pk, id, pv, err)
 				}
@@ -265,7 +261,7 @@ func (idx *Index) gcEpoch(tx store.Tx, epoch uint32) error {
 
 			// drop blocks (id is u16(pos + 1))
 			for id := range idx.tomb.nSpackFields {
-				err := sbucket.Delete(pack.EncodeBlockKey(uint32(pk), uint32(pv), uint16(id+1)))
+				err := sbucket.Delete(pack.AppendBlockKey(bkey[:0], uint32(pk), uint32(pv), uint16(id+1)))
 				if err != nil {
 					return fmt.Errorf("delete spack key 0x%08x:%02d[v%d]: %v", pk, id, pv, err)
 				}

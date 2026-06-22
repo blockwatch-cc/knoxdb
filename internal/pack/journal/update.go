@@ -17,78 +17,84 @@ import (
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
-// Appends updates of full wire-encoded records to journal and WAL. Each
-// record update appends one post-image to the journal and one tombstone
-// for the pre-image row id. Full records are written to WAL since its
-// unclear which fields have changed.
+// UpdateBatch appends record updates to journal and WAL. Requires an active
+// write transaction which may or may not commit. Encoding schema for the
+// batch is already validated to match the current table schema.
 //
-// Requires an active write transaction which at this point is unclear if
-// it will commit. Hence the updates are tentative and require a subseqent
-// Abort() or Commit() call.
+// For each updated record UpdateBatch adds one new record to the active
+// journal segment (a.k.a. post-image) and one tombstone record to the
+// active journal segment's tombstone which marks the pre-image row id
+// as deleted. UpdateBatch assignes a new row id to the post image record
+// and ensures row ids are not reused (assigment is sequential). However,
+// when a transaction aborts, the still invisible new row ids are reclaimed
+// which is safe under single-writer transaction policy.
 //
-// For metadata updates we require the current PK -> RID mapping as visible
-// under MVCC snapshot isolation rules. This mapping was looked up prior to
-// the call to UpdateRecords and is in ridMap. This map will be updated by
-// the call to retain the most recent rid in case a batch contains multiple
-// updates of the same pk.
+// For efficient tombstone inserts the previous row id for an updated
+// record is required. UpdateBatch expects this mapping to get passed
+// in via ridMap, so it must be looked up prior to calling UpdateBatch.
+// The mapping will be updated by to the most recent rid in case a batch
+// contains multiple updates of the same pk.
+//
+// UpdateBatch does not analyze which fields have changed and instead
+// writes full records to WAL.
 //
 // Only source of errors is WAL write or system crash. For efficient recovery
 // we break the message batch into pieces so that each piece fits into the
 // current journal's active segment. This ensures each journal segment aligns
 // with a WAL LSN which we can use as recovery checkpoint.
 //
-// Transactions allow to turn WAL mode off selectively. We choose the appropriate
-// algorithm for each case.
-func (j *Journal) UpdateRecords(ctx context.Context, src []byte, ridMap map[uint64]uint64) (int, error) {
+//	WAL Record format for update actions
+//
+// | schema-version | schema-hash | changeset | rid-start | ref1 | wire1 | ... |
+//
+// Transactions can disable WAL mode selectively in which case no WAL records
+// are written and updates go to the journal only.
+func (j *Journal) UpdateBatch(ctx context.Context, batch *schema.Batch, ridMap map[uint64]uint64) (int, error) {
 	var (
-		view     = schema.NewView(j.schema)
+		sm       = j.tip.data.Schema()
 		tx       = engine.GetTx(ctx)
-		bits     = bitset.New(j.schema.NumFields()).One() // bitset of all column positions
-		xid      = tx.Id()                                // id of user tx
-		firstRid = j.tip.tstate.NextRid                   // first assigned rid (per wal batch!)
-		nextRid  = firstRid                               // next free row id to assign
-		count    int                                      // count of processed records so far
-		rec      = &wal.Record{                           // wal record template
-			Type:   wal.RecordTypeUpdate,
-			Tag:    types.ObjectTagTable,
-			Entity: j.id,
-			TxID:   xid,
-			Data:   make([][]byte, 1), // TODO: add static bits, add batch header
-		}
+		xid      = tx.Id()                    // id of user tx
+		firstRid = j.tip.tstate.NextRid       // first assigned rid (per wal batch!)
+		nextRid  = firstRid                   // next free row id to assign
+		count    int                          // count of processed records so far
+		bits     = bitset.New(sm.Len()).One() // bitset of all column positions
+		scratch  [binary.MaxVarintLen64]byte
 	)
 
-	// dimension WAL write buffer
-	baseSz := (bits.Len()+7)/8 + binary.MaxVarintLen64 // changeset + rid1
-	sz := baseSz + 2*binary.MaxVarintLen64 + len(src)  // add max rid + refid space
-	buf := arena.Alloc[uint8](sz)
-	msg := bytes.NewBuffer(buf)
+	// write header once (schema + changeset)
+	head := make([]byte, 0, schema.BatchHeaderSize+bits.Size())
+	head = sm.AppendBatchHeader(head)
+	head = append(head, bits.Bytes()...)
 
-	// split buf into wire messages
-	view, vbuf, _ := view.Cut(src)
+	// dimension WAL write buffer (rid + refid + record)
+	sz := j.maxsz * (binary.MaxVarintLen64 + sm.EstWireSize)
+	if batch.Len() < j.maxsz {
+		sz = binary.MaxVarintLen64*batch.Len() + batch.Size()
+	}
+	buf := arena.Alloc[uint8](sz)[:0]
 
-	for view.IsValid() {
+	for batch.Size() > 0 {
 		var (
 			sz, n int
 			jcap  = j.Capacity()
 		)
 
-		// prepare WAL message
-		// | changeset | rid1 | ref1 | wire1 | ..
-		msg.Write(bits.Bytes())
+		// split batch into wire messages
+		for _, view := range batch.Records() {
+			// stop on journal segment bounadry
+			if jcap == 0 {
+				break
+			}
 
-		// assign new row ids, insert to active segment and assemble WAL batch buffer
-		for view.IsValid() && jcap > 0 {
 			// get pk and lookup current rid
 			pk := view.GetPk()
 			ref := ridMap[pk]
 
-			// write to wal msg
-			writeBinaryUvarint(msg, nextRid)
-			writeBinaryUvarint(msg, ref)
-			msg.Write(view.Buffer())
+			// write to wal msg | ref | wire |
+			buf = binary.AppendUvarint(buf, ref)
+			buf = append(buf, view.Buffer()...)
 
 			// add update to journal
-			// j.log.Debugf("journal update record %d[%d] -> [%d]", pk, ref, nextRid)
 			j.tip.UpdateRecord(xid, nextRid, ref, view.Buffer())
 
 			// keep new assigned rid (in case we update again later)
@@ -99,21 +105,33 @@ func (j *Journal) UpdateRecords(ctx context.Context, src []byte, ridMap map[uint
 			jcap--
 			n++
 			sz += len(view.Buffer())
-			view, vbuf, _ = view.Cut(vbuf)
 		}
 		// j.log.Debugf("journal updated %d records in segment %d", nextRid-firstRid, j.tip.Id())
 
 		// 2 write to wal
 		if tx.UseWal() {
-			rec.Data[0] = msg.Bytes()
-			_, err := j.wal.Write(rec)
+			_, err := j.wal.Write(&wal.Record{
+				Type:   wal.RecordTypeUpdate,
+				Tag:    types.ObjectTagTable,
+				Entity: j.id,
+				TxID:   xid,
+				Data: [][]byte{
+					head,
+					binary.AppendUvarint(scratch[:0], firstRid),
+					buf,
+				},
+			})
 			if err != nil {
 				return 0, err
 			}
+			firstRid = nextRid
 		}
 
-		rec.Data[0] = nil
-		msg.Reset()
+		// advance batch buffer
+		batch.TrimAt(sz)
+
+		// prepare next iteration
+		buf = buf[:0]
 		count += n
 
 		// update object state
@@ -154,7 +172,7 @@ func (j *Journal) UpdatePack(ctx context.Context, src *pack.Package) (int, error
 	tx := engine.GetTx(ctx)
 	xid := tx.Id()
 	if tx.UseWal() {
-		return j.updatePackWithWal(src, xid, tx.Engine().Wal())
+		return j.updatePackWithWal(src, xid)
 	} else {
 		return j.updatePackNoWal(src, xid)
 	}
@@ -211,91 +229,109 @@ func (j *Journal) updatePackNoWal(src *pack.Package, xid types.XID) (int, error)
 	return count, nil
 }
 
-func (j *Journal) updatePackWithWal(src *pack.Package, xid types.XID, w *wal.Wal) (int, error) {
-	// - src: full pack with current PK / RID, some columns changed (dirty, materialized)
-	//   and optional selection vector
-	// - dst: journal and WAL
-	//
-	// update process
-	// - assign new rids
-	// - use old rids as refs
-	// - mark old rids as deleted
-	// - append full record to journal segment
-	// - extract and write changeset to WAL
-	//
-	// WAL format
-	// | changeset | rid1 | ref1 | wire1 | ... |
-
+// updatePackWithWal processes all selected records from src and
+// appends them as updates to journal and WAL. Not all column
+// vectors in src may have changed, but it is guaranteed that
+// the ones that are updated are backed by materialized blocks.
+// Updated blocks are identified by the dirty flag. Src may contain
+// a selection vector when some records have changed, otherwise
+// all records are assumed to require update.
+//
+// The update constructs short wire messages from just the updated
+// columns and signals which columns were updated with a changeset
+// bitmap. Row ids in src are "old" pre-image row ids which are added
+// to the tombstone. On journal insert, updatePackWithWal will assign
+// new row ids sequentially. The WAL record will contain the first
+// assigned rowid in its header.
+//
+// WAL format
+// | schema-version | schema-hash | changeset | rid-start | ref1 | wire1 | ... |
+func (j *Journal) updatePackWithWal(src *pack.Package, xid types.XID) (int, error) {
 	var (
-		sel     = src.Selected()         // selection vector, may be nil
-		changed = make([]int, 0)         // change column positions
-		bits    = bitset.New(src.Cols()) // bitset of changed column positions
-		nextRid = j.tip.tstate.NextRid   // next free row id to assign
-		sz      int                      // estimated per msg size for WAL buffer
-		count   int                      // count of processed records so far
-		rids    = src.RowIds()           // current rowid accessor
-		rec     = &wal.Record{           // wal record template
+		sm      = src.Schema()         // source schema
+		sel     = src.Selected()       // selection vector, may be nil
+		changed = make([]int, 0)       // change column positions
+		bits    = bitset.New(sm.Len()) // bitset of changed column positions
+		nextRid = j.tip.tstate.NextRid // next free row id to assign
+		count   int                    // count of processed records so far
+		rids    = src.RowIds()         // current rowid accessor
+		rec     = &wal.Record{         // wal record template
 			Type:   wal.RecordTypeUpdate,
 			Tag:    types.ObjectTagTable,
 			Entity: j.id,
 			TxID:   xid,
-			Data:   make([][]byte, 1), // TODO: add static bits, add batch header
+			Data:   make([][]byte, 3),
 		}
+		scratch [binary.MaxVarintLen64]byte
 	)
 
-	// determine change set columns (from block dirty flags)
+	// determine change set columns (from block dirty flags) and
+	// estimate change record size
+	var sz int
 	for i, b := range src.Blocks() {
 		if b == nil || !b.IsDirty() {
 			continue
 		}
 		bits.Set(i)
 		changed = append(changed, i)
-		sz += j.schema.Fields[i].WireSize()
+		f := sm.Fields[i]
+		sz += f.WireSize()
+		if !f.IsFixedSize() {
+			sz += len(b.Max().([]byte)) // only var sized block type
+		}
 	}
 
-	// dimension WAL write buffer (may still with grow with long strings)
-	baseSz := (bits.Len()+7)/8 + binary.MaxVarintLen64 // changeset + rid1
-	sz += binary.MaxVarintLen64                        // add max refid space
-	if sel == nil {
-		sz = baseSz + sz*src.Len()
+	// write header once (schema + changeset)
+	head := make([]byte, 0, schema.BatchHeaderSize+bits.Size())
+	head = sm.AppendBatchHeader(head)
+	head = append(head, bits.Bytes()...)
+
+	// dimension WAL write buffer (N * refid + record)
+	if src.NumSelected() < j.maxsz {
+		sz += (binary.MaxVarintLen64 + sz) * src.NumSelected()
 	} else {
-		sz = baseSz + sz*len(sel)
+		sz += (binary.MaxVarintLen64 + sz) * j.maxsz
 	}
 	buf := arena.Alloc[uint8](sz)
-	msg := bytes.NewBuffer(buf)
+	msg := bytes.NewBuffer(buf[:0])
 
 	if sel == nil {
 		// write all records when no selection vector is defined
 		var i int
 		for i < src.Len() {
 			n := min(src.Len()-count, j.Capacity())
+			batchRid := nextRid
 
-			// 1 write WAL buffer and update journal metadata
-			// | changeset | rid1 | ref1 | wire1 | ..
-			msg.Write(bits.Bytes())
-			writeBinaryUvarint(msg, nextRid)
+			// write to WAL msg and update journal metadata
+			// | ref1 | wire1 | ..
 			for range n {
+				// get ref id and write to WAL msg
 				ref := rids.Get(i)
-				writeBinaryUvarint(msg, ref)
+				msg.Write(binary.AppendUvarint(scratch[:0], ref))
 
 				// extract wire change format for the record
 				src.ReadWireFields(msg, i, changed)
 
-				// add insert + delete info, set xmax on ref when in tip segment
+				// insert + delete ref to tip, set xmax on ref when in tip segment
 				j.tip.NotifyUpdate(xid, nextRid, ref)
 
 				nextRid++
 				i++
 			}
 
-			// 2 write to wal
-			rec.Data[0] = msg.Bytes()
-			_, err := w.Write(rec)
+			// write to wal
+			rec.Data[0] = head
+			rec.Data[1] = binary.AppendUvarint(scratch[:0], batchRid)
+			rec.Data[2] = msg.Bytes()
+			_, err := j.wal.Write(rec)
 			if err != nil {
 				return 0, err
 			}
 
+			// prepare next round
 			rec.Data[0] = nil
+			rec.Data[1] = nil
+			rec.Data[2] = nil
 			msg.Reset()
 			count += n
 
@@ -311,36 +347,40 @@ func (j *Journal) updatePackWithWal(src *pack.Package, xid types.XID, w *wal.Wal
 		// write selected rows up until capacity limit, continue with next sel each round
 		for len(sel) > 0 {
 			n := min(len(sel), j.Capacity())
+			batchRid := nextRid
 
-			// 1 write WAL buffer and update journal metadata
-			// | changeset | rid1 | ref1 | wire1 | ..
-			msg.Write(bits.Bytes())
-			writeBinaryUvarint(msg, nextRid)
+			// write to WAL msg and update journal metadata
+			// | ref1 | wire1 | ..
 			for _, v := range sel[:n] {
+				// get ref id and write to WAL msg
 				ref := rids.Get(int(v))
-				writeBinaryUvarint(msg, ref)
+				msg.Write(binary.AppendUvarint(scratch[:0], ref))
 
 				// extract wire change format for this record
 				src.ReadWireFields(msg, int(v), changed)
 
-				// add insert + delete record, set xmax on ref when in tip segment
+				// insert + delete ref to tip, set xmax on ref when in tip segment
 				j.tip.NotifyUpdate(xid, nextRid, ref)
 
 				nextRid++
 			}
 
-			// 2 write to wal
-			rec.Data[0] = msg.Bytes()
-			_, err := w.Write(rec)
+			// write to wal
+			rec.Data[0] = head
+			rec.Data[1] = binary.AppendUvarint(scratch[:0], batchRid)
+			rec.Data[2] = msg.Bytes()
+			_, err := j.wal.Write(rec)
 			if err != nil {
 				return 0, err
 			}
 
 			// prepare next round
+			rec.Data[0] = nil
+			rec.Data[1] = nil
+			rec.Data[2] = nil
+			msg.Reset()
 			count += n
 			sel = sel[n:]
-			rec.Data[0] = nil
-			msg.Reset()
 
 			// update object state
 			j.tip.tstate.NextRid = nextRid

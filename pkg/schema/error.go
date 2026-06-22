@@ -23,6 +23,7 @@ var (
 	ErrInvalidParent    = errors.New("schema: invalid parent field")
 	ErrInvalidEnum      = errors.New("schema: invalid enum value")
 	ErrInvalidVariant   = errors.New("schema: invalid variant")
+	ErrInvalidVersion   = errors.New("schema: invalid version")
 	ErrShortBuffer      = errors.New("schema: short buffer")
 	ErrSchemaMismatch   = errors.New("schema: mismatch")
 	ErrDeletePrimary    = errors.New("schema: cannot delete primary key field")

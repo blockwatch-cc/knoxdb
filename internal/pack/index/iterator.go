@@ -170,12 +170,15 @@ func (it *LookupIterator) loadNextPack(ctx context.Context) (bool, error) {
 	// the key does not exist in the index, then we load an unrelated
 	// pack; use the expected next row id as hint to make progress
 	// in case the same index key spreads across multiple index packs
-	var search []byte
+	var (
+		search  []byte
+		scratch [PackKeySize]byte
+	)
 	if it.nextRid > 0 {
-		search = it.idx.encodePackKey(it.keys[0], it.nextRid, 0)
+		search = it.idx.appendPackKey(scratch[:0], it.keys[0], it.nextRid, 0)
 		// it.idx.log.Debugf("lookup: searchLE 0x%016x:%016x:%d", it.keys[0], it.nextRid, 0)
 	} else {
-		search = store.EncodeUvarint(it.keys[0])
+		search = store.AppendUvarint(scratch[:0], it.keys[0])
 		// it.idx.log.Debugf("lookup: searchLE 0x%016x", it.keys[0])
 	}
 	key, val, err := it.bucket.SearchLE(search)
@@ -223,7 +226,7 @@ func (it *LookupIterator) loadNextPack(ctx context.Context) (bool, error) {
 			buf = val
 		} else {
 			// we must load this block
-			buf, err = it.bucket.Get(it.idx.encodePackKey(ikey, rid, i))
+			buf, err = it.bucket.Get(it.idx.appendPackKey(scratch[:0], ikey, rid, i))
 			if err != nil {
 				return false, fmt.Errorf("loading block 0x%016x:%016x:%d: %v", ikey, rid, i, err)
 			}
@@ -347,7 +350,7 @@ func (it *ScanIterator) Next(ctx context.Context) (*pack.Package, []uint32, erro
 			// use the pack's key as actual range start, but re-encode
 			// to make sure we start at block 0
 			ik, rid, _ := it.idx.decodePackKey(key)
-			it.from = it.idx.encodePackKey(ik, rid, 0)
+			it.from = it.idx.appendPackKey(it.from[:0], ik, rid, 0)
 		}
 
 		it.idx.log.Tracef("Scan %s => range %#v .. %#v", it.node, it.from, it.to)

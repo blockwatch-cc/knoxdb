@@ -4,12 +4,9 @@
 package journal
 
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
-	"io"
 
-	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/types"
@@ -17,20 +14,27 @@ import (
 	"blockwatch.cc/knoxdb/pkg/schema"
 )
 
-// Appends records to journal and WAL and requires an active write transaction.
-// At this point it is unclear if the tx will commit, hence the insert is
-// tentative and requires a subseqent Abort() or Commit() call.
+// InsertBatch appends new records to journal and WAL. Requires an active
+// write transaction which may or may not commit. Encoding schema for the
+// batch is already validated to match the current table schema.
 //
 // Only source of errors is WAL write or system crash. For efficient recovery
 // we break the message batch into pieces so that each piece fits into the
 // current journal's active segment. This ensures each journal segment aligns
 // with a WAL LSN which we can use as recovery checkpoint.
 //
-// Transactions allow to turn WAL mode off selectively. We choose the appropriate
-// algorithm for each case.
-func (j *Journal) InsertRecords(ctx context.Context, buf []byte) (uint64, int, error) {
+// WAL Record format for insert actions
+// | rid1 | schema-hash | schema-version | wire1 | wire2 | ... |
+//
+// Row ids are sequentially assigned, so we only store the first RID for
+// each batch. When a transaction aborts, the still invisible row ids are
+// reclaimed which is safe under single-writer transaction policy.
+// Schema hash/version specifies the schema used to encode the batch.
+//
+// Transactions can disable WAL mode selectively in which case no WAL records
+// are written and inserts go to the journal only.
+func (j *Journal) InsertBatch(ctx context.Context, batch *schema.Batch) (uint64, int, error) {
 	var (
-		view     = schema.NewView(j.schema)
 		tx       = engine.GetTx(ctx)
 		xid      = tx.Id()              // id of user tx
 		firstPk  = j.tip.tstate.NextPk  // first assigned pk
@@ -40,27 +44,33 @@ func (j *Journal) InsertRecords(ctx context.Context, buf []byte) (uint64, int, e
 		count    int
 		scratch  [binary.MaxVarintLen64]byte
 	)
-	for len(buf) > 0 {
+
+	for batch.Size() > 0 {
 		var (
 			sz, n int
 			jcap  = j.Capacity()
 		)
 
-		// split buf into wire messages
-		view, vbuf, _ := view.Cut(buf)
+		// split batch into wire messages
+		for _, view := range batch.Records() {
+			// stop on journal segment bounadry
+			if jcap == 0 {
+				break
+			}
 
-		// assign PKs, insert to active segment and assemble WAL batch buffer
-		for view.IsValid() && jcap > 0 {
+			// assign pk
 			view.SetPk(nextPk)
+
+			// add update to journal
 			j.tip.InsertRecord(xid, nextRid, view.Buffer())
+
+			// next iteration
 			nextRid++
 			nextPk++
 			jcap--
 			n++
 			sz += len(view.Buffer())
-			view, vbuf, _ = view.Cut(vbuf)
 		}
-		// j.log.Debugf("journal inserted %d records into segment %d", nextRid-firstRid, j.tip.Id())
 
 		// write wal batch
 		if tx.UseWal() {
@@ -71,20 +81,18 @@ func (j *Journal) InsertRecords(ctx context.Context, buf []byte) (uint64, int, e
 				TxID:   xid,
 				Data: [][]byte{
 					binary.AppendUvarint(scratch[:0], firstRid),
-					// TODO: write batch.Header()
-					buf[:sz],
+					batch.Header(),
+					batch.Bytes()[:sz],
 				},
 			})
 			if err != nil {
-				// will likely abort the tx
 				return 0, 0, err
 			}
 			firstRid = nextRid
 		}
 
-		// advance message buffer
-		view.Reset(nil)
-		buf = buf[sz:]
+		// advance batch buffer
+		batch.TrimAt(sz)
 
 		// update object state
 		j.tip.tstate.NextPk = nextPk
@@ -171,13 +179,11 @@ func (j *Journal) insertPackNoWal(_ context.Context, src *pack.Package, xid type
 }
 
 func (j *Journal) insertPackWithWal(_ context.Context, src *pack.Package, xid types.XID, w *wal.Wal) (uint64, int, error) {
-	// WAL Record format (rids are sequential)
-	// | rid1 | wire1 | wire2 | ... |
 	var (
-		view     = schema.NewView(j.schema) // view for patching pk
-		sel      = src.Selected()           // selection vector, may be nil
-		firstPk  = j.tip.tstate.NextPk      // first assigned pk
-		firstRid = j.tip.tstate.NextRid     // first assigned rid (per wal batch!)
+		view     = schema.NewView(src.Schema()) // view for patching pk
+		sel      = src.Selected()               // selection vector, may be nil
+		firstPk  = j.tip.tstate.NextPk          // first assigned pk
+		firstRid = j.tip.tstate.NextRid         // first assigned rid (per wal batch!)
 		nextPk   = firstPk
 		nextRid  = firstRid
 		count    int
@@ -186,34 +192,26 @@ func (j *Journal) insertPackWithWal(_ context.Context, src *pack.Package, xid ty
 			Tag:    types.ObjectTagTable,
 			Entity: j.id,
 			TxID:   xid,
-			Data:   make([][]byte, 1),
+			Data:   make([][]byte, 3),
 		}
+		scratch [binary.MaxVarintLen64]byte
+		wr      = schema.NewBatchWriter(src.Schema(), src.NumSelected())
 	)
-
-	// dimension WAL write buffer (may still with grow with long strings)
-	sz := binary.MaxVarintLen64
-	if sel == nil {
-		sz += j.schema.EstWireSize * src.Len()
-	} else {
-		sz += j.schema.EstWireSize * len(sel)
-	}
-	buf := arena.Alloc[uint8](sz)
-	msg := bytes.NewBuffer(buf)
+	defer wr.Close()
 
 	if sel == nil {
 		// write all records when no selection vector is defined
 		var i int
 		for i < src.Len() {
 			n := min(src.Len()-count, j.Capacity())
+			batchRid := nextRid
 
 			// 1 create & assign pks, rids, xid, write to journal vectors
-			writeBinaryUvarint(msg, nextRid)
-			// TODO: write batch header
 			for range n {
 				// create wire format for wal write
-				start := msg.Len()
-				src.ReadWireBuffer(msg, i)
-				view.Reset(msg.Bytes()[start:]).SetPk(nextPk)
+				start := wr.Len()
+				src.ReadWireBuffer(wr.Buffer(), i)
+				view.Reset(wr.Bytes()[start:]).SetPk(nextPk)
 				j.tip.InsertRecord(xid, nextRid, view.Buffer())
 				i++
 				nextPk++
@@ -221,7 +219,10 @@ func (j *Journal) insertPackWithWal(_ context.Context, src *pack.Package, xid ty
 			}
 
 			// 2 write record batch to WAL (in record format)
-			rec.Data[0] = msg.Bytes()
+			batch := wr.Batch()
+			rec.Data[0] = binary.AppendUvarint(scratch[:0], batchRid)
+			rec.Data[1] = batch.Header()
+			rec.Data[2] = batch.Bytes()
 			_, err := w.Write(rec)
 			if err != nil {
 				return 0, 0, err
@@ -229,8 +230,9 @@ func (j *Journal) insertPackWithWal(_ context.Context, src *pack.Package, xid ty
 
 			// prepare next round
 			rec.Data[0] = nil
-			msg.Reset()
-			count += n
+			rec.Data[1] = nil
+			rec.Data[2] = nil
+			wr.Reset()
 
 			// update object state
 			j.tip.tstate.NextPk = nextPk
@@ -248,32 +250,34 @@ func (j *Journal) insertPackWithWal(_ context.Context, src *pack.Package, xid ty
 		// write selected rows up until capacity limit, continue with next sel each round
 		for len(sel) > 0 {
 			n := min(len(sel), j.Capacity())
+			batchRid := nextRid
 
 			// 1 create & assign pks, rids, xid, write to journal vectors
-			writeBinaryUvarint(msg, nextRid)
-			// TODO: write batch header
 			for _, v := range sel[:n] {
-				start := msg.Len()
-				src.ReadWireBuffer(msg, int(v))
-				view.Reset(msg.Bytes()[start:]).SetPk(nextPk)
+				start := wr.Len()
+				src.ReadWireBuffer(wr.Buffer(), int(v))
+				view.Reset(wr.Bytes()[start:]).SetPk(nextPk)
 				j.tip.InsertRecord(xid, nextRid, view.Buffer())
-
 				nextPk++
 				nextRid++
 			}
 
 			// 2 write record batch to WAL (in record format)
-			rec.Data[0] = msg.Bytes()
+			batch := wr.Batch()
+			rec.Data[0] = binary.AppendUvarint(scratch[:0], batchRid)
+			rec.Data[1] = batch.Header()
+			rec.Data[2] = batch.Bytes()
 			_, err := w.Write(rec)
 			if err != nil {
 				return 0, 0, err
 			}
 
 			// prepare next round
-			count += n
-			sel = sel[n:]
 			rec.Data[0] = nil
-			msg.Reset()
+			rec.Data[1] = nil
+			rec.Data[2] = nil
+			sel = sel[n:]
+			wr.Reset()
 
 			// update object state
 			j.tip.tstate.NextPk = nextPk
@@ -288,13 +292,5 @@ func (j *Journal) insertPackWithWal(_ context.Context, src *pack.Package, xid ty
 		}
 	}
 
-	arena.Free(buf)
-
 	return firstPk, count, nil
-}
-
-func writeBinaryUvarint(w io.Writer, x uint64) (int, error) {
-	var v [binary.MaxVarintLen64]byte
-	n := binary.PutUvarint(v[:], x)
-	return w.Write(v[:n])
 }

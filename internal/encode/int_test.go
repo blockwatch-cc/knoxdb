@@ -29,8 +29,8 @@ func TestAnalyzeInt(t *testing.T) {
 	assert.InDelta(t, 4, x.NumUnique, 1.0, "num_unique")
 	assert.Equal(t, 4, x.NumRuns, "num_runs")
 	assert.Equal(t, 4, x.NumValues, "num_values")
-	assert.Len(t, x.EligibleIntSchemes(), 1, "eligible list")
-	assert.Contains(t, x.EligibleIntSchemes(), TIntDelta, "delta only")
+	assert.Len(t, x.EligibleIntSchemes(nil), 1, "eligible list")
+	assert.Contains(t, x.EligibleIntSchemes(nil), TIntDelta, "delta only")
 
 	// runs
 	x = AnalyzeInt([]int64{-1, -1, 5, 5, 1, 1}, true)
@@ -44,8 +44,8 @@ func TestAnalyzeInt(t *testing.T) {
 	assert.Equal(t, 3, x.NumRuns, "num_runs")
 	assert.Equal(t, 6, x.NumValues, "num_values")
 	// assert.Contains(t, x.EligibleIntSchemes(), TIntRunEnd, "missing eligible scheme")
-	assert.Contains(t, x.EligibleIntSchemes(), TIntBitpacked, "missing eligible scheme")
-	assert.Contains(t, x.EligibleIntSchemes(), TIntRaw, "missing eligible scheme")
+	assert.Contains(t, x.EligibleIntSchemes(nil), TIntBitpacked, "missing eligible scheme")
+	assert.Contains(t, x.EligibleIntSchemes(nil), TIntRaw, "missing eligible scheme")
 	// assert.Contains(t, x.EligibleIntSchemes(), TIntSimple8, "missing eligible scheme")
 
 	// dict-friendly
@@ -60,10 +60,10 @@ func TestAnalyzeInt(t *testing.T) {
 	assert.InDelta(t, 3, x.NumUnique, 1.0, "num_unique")
 	assert.Equal(t, 30, x.NumRuns, "num_runs")
 	assert.Equal(t, 30, x.NumValues, "num_values")
-	assert.NotContains(t, x.EligibleIntSchemes(), TIntRunEnd, "not eligible")
-	assert.Contains(t, x.EligibleIntSchemes(), TIntBitpacked, "missing eligible scheme")
-	assert.Contains(t, x.EligibleIntSchemes(), TIntRaw, "missing eligible scheme")
-	assert.Contains(t, x.EligibleIntSchemes(), TIntDictionary, "missing eligible scheme")
+	assert.NotContains(t, x.EligibleIntSchemes(nil), TIntRunEnd, "not eligible")
+	assert.Contains(t, x.EligibleIntSchemes(nil), TIntBitpacked, "missing eligible scheme")
+	assert.Contains(t, x.EligibleIntSchemes(nil), TIntRaw, "missing eligible scheme")
+	assert.Contains(t, x.EligibleIntSchemes(nil), TIntDictionary, "missing eligible scheme")
 	// assert.Contains(t, x.EligibleIntSchemes(), TIntSimple8, "missing eligible scheme")
 }
 

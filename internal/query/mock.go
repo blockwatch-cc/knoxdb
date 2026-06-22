@@ -57,9 +57,9 @@ func (idx *MockIndex) QueryComposite(_ context.Context, _ engine.QueryCondition)
 	return idx.result, false, nil
 }
 
-func (idx *MockIndex) Lookup(_ context.Context, pks []uint64, ridMap map[uint64]uint64) error {
-	for _, v := range pks {
-		ridMap[v] = v
+func (idx *MockIndex) Lookup(_ context.Context, ridMap map[uint64]uint64) error {
+	for k := range ridMap {
+		ridMap[k] = k
 	}
 	return nil
 }

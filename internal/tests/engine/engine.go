@@ -34,82 +34,75 @@ func firstOf(s ...string) string {
 	return ""
 }
 
-func NewTestDatabaseOptions(t testing.TB, driver string) engine.Options {
+func NewTestDatabaseOptions(t testing.TB, opts ...engine.Option) engine.Options {
 	t.Helper()
-	driver = firstOf(driver, os.Getenv("KNOX_DRIVER"), "bolt")
-	return engine.Options{
+	testOpts := engine.Options{
 		Path:       t.TempDir(),
 		MaxWorkers: 2,
 		MaxTasks:   4,
-		Driver:     driver,
+		Driver:     firstOf(os.Getenv("KNOX_DRIVER"), "bolt"),
 		PageSize:   4096,
 		PageFill:   1.0,
 		CacheSize:  1 << 20,
 		// NoSync:     true, // required for table wal tests
-		ReadOnly: false,
-		Log:      log.Log.Clone(""),
-		IsTemp:   false,
+		Log: log.Log.Clone(""),
 	}
+	return testOpts.Apply(opts...)
 }
 
-func NewTestTableOptions(t testing.TB, driver, eng string) engine.Options {
+func NewTestTableOptions(t testing.TB, opts ...engine.Option) engine.Options {
 	t.Helper()
-	driver = firstOf(driver, os.Getenv("KNOX_DRIVER"), "bolt")
-	eng = firstOf(eng, os.Getenv("KNOX_ENGINE"), "pack")
-	return engine.Options{
-		Driver:      driver,
-		Engine:      eng,
+	testOpts := engine.Options{
+		Driver:      firstOf(os.Getenv("KNOX_DRIVER"), "bolt"),
+		Engine:      firstOf(os.Getenv("KNOX_ENGINE"), "pack"),
 		PageSize:    1 << 16, // 64kB
 		PageFill:    0.9,
 		PackSize:    1 << 16, // 64k
 		JournalSize: 1 << 16, // 64k
 		// NoSync:      true,
-		ReadOnly: false,
-		Log:      log.Log.Clone(""),
-		IsTemp:   false,
+		Log: log.Log.Clone(""),
 	}
+	return testOpts.Apply(opts...)
 }
 
-func NewTestIndexOptions(t testing.TB, driver, eng string) engine.Options {
+func NewTestIndexOptions(t testing.TB, opts ...engine.Option) engine.Options {
 	t.Helper()
-	driver = firstOf(driver, os.Getenv("KNOX_DRIVER"), "bolt")
-	eng = firstOf(eng, os.Getenv("KNOX_ENGINE"), "pack")
-	return engine.Options{
-		Driver:      driver,
-		Engine:      eng,
+	testOpts := engine.Options{
+		Driver:      firstOf(os.Getenv("KNOX_DRIVER"), "bolt"),
+		Engine:      firstOf(os.Getenv("KNOX_ENGINE"), "pack"),
 		JournalSize: 1 << 16, // 64k
 		PageSize:    1 << 16, // 64kB
 		PageFill:    0.9,
 		PackSize:    1 << 12, // 4k
-		ReadOnly:    false,
 		// NoSync:      true,
-		Log:    log.Log.Clone(""),
-		IsTemp: false,
+		Log: log.Log.Clone(""),
 	}
+	return testOpts.Apply(opts...)
 }
 
-func NewTestEngine(t testing.TB, opts engine.Options) *engine.Engine {
+func NewTestEngine(t testing.TB, opts ...engine.Option) *engine.Engine {
 	t.Helper()
-	eng, err := engine.Create(context.Background(), TEST_DB_NAME, opts.DatabaseOptions()...)
-	require.NoError(t, err, "Failed to create database")
+	dbo := NewTestDatabaseOptions(t, opts...)
+	if testing.Verbose() {
+		t.Logf("NEW DB catalog driver=%s at %s", dbo.Driver, dbo.Path)
+	}
+	eng, err := engine.Create(context.Background(), TEST_DB_NAME, dbo.DatabaseOptions()...)
+	require.NoError(t, err, "Failed to create database at %s", dbo.Path)
 	return eng
 }
 
-func OpenTestEngine(t testing.TB, opts engine.Options) *engine.Engine {
+func OpenTestEngine(t testing.TB, opts ...engine.Option) *engine.Engine {
 	t.Helper()
-	eng, err := engine.Open(context.Background(), TEST_DB_NAME, opts.DatabaseOptions()...)
-	require.NoError(t, err, "Failed to open database at %s", opts.Path)
+	opt := NewTestDatabaseOptions(t, opts...)
+	eng, err := engine.Open(context.Background(), TEST_DB_NAME, opt.DatabaseOptions()...)
+	require.NoError(t, err, "Failed to open database at %s", opt.Path)
 	return eng
 }
 
 // NewDatabase sets up a fresh database and creates tables from struct types.
-func NewDatabase(t testing.TB, typs ...any) (*engine.Engine, func()) {
+func NewDatabase(t testing.TB, typ any, opts ...engine.Option) (*engine.Engine, func()) {
 	t.Helper()
-	dbo := NewTestDatabaseOptions(t, "")
-	if testing.Verbose() {
-		t.Logf("NEW DB catalog driver=%s at %s", dbo.Driver, dbo.Path)
-	}
-	db := NewTestEngine(t, dbo)
+	db := NewTestEngine(t, opts...)
 
 	ctx := context.Background()
 	// t.Logf("NEW enum=my_enum")
@@ -123,43 +116,36 @@ func NewDatabase(t testing.TB, typs ...any) (*engine.Engine, func()) {
 	enums.Register(0, e)
 
 	// Create tables and indexes for given types
-	for _, typ := range typs {
-		s, err := reflect.SchemaOf(typ, schema.Enums(enums))
-		require.NoError(t, err, "Failed to generate schema for type %T", typ)
-		opts := NewTestTableOptions(t, "", "")
-		if testing.Verbose() {
-			t.Logf("NEW table=%s driver=%s engine=%s", s.Name, opts.Driver, opts.Engine)
-			t.Log("Using schema", s)
-		}
-		_, err = db.CreateTable(ctx, s, opts.TableOptions()...)
-		require.NoError(t, err, "Failed to create table for type %T", typ)
+	s, err := reflect.SchemaOf(typ, schema.Enums(enums))
+	require.NoError(t, err, "Failed to generate schema for type %T", typ)
+	to := NewTestTableOptions(t, opts...)
+	if testing.Verbose() {
+		t.Logf("NEW table=%s driver=%s engine=%s", s.Name, to.Driver, to.Engine)
+		t.Log("Using schema", s)
+	}
+	_, err = db.CreateTable(ctx, s, to.TableOptions()...)
+	require.NoError(t, err, "Failed to create table for type %T", typ)
 
-		indexes, err := reflect.IndexesOf(typ)
-		require.NoError(t, err, "Failed to generate index schemas for type %T", typ)
+	indexes, err := reflect.IndexesOf(typ)
+	require.NoError(t, err, "Failed to generate index schemas for type %T", typ)
 
-		// create indexes for type
-		for _, is := range indexes {
-			iopts := NewTestIndexOptions(t, "", "")
-			_, err = db.CreateIndex(ctx, is, iopts.IndexOptions()...)
-			require.NoError(t, err, "create pk index")
-		}
+	// create indexes for type
+	for _, is := range indexes {
+		iop := NewTestIndexOptions(t, opts...)
+		_, err = db.CreateIndex(ctx, is, iop.IndexOptions()...)
+		require.NoError(t, err, "create pk index")
 	}
 
 	return db, func() {
 		if testing.Verbose() {
 			t.Log("Cleanup up after test.")
 		}
-		for _, typ := range typs {
-			s, _ := reflect.SchemaOf(typ)
-			idxs, _ := reflect.IndexesOf(typ)
-			for _, is := range idxs {
-				require.NoError(t, db.DropIndex(ctx, is.Name))
-			}
-			require.NoError(t, db.DropTable(ctx, s.Name))
+		for _, is := range indexes {
+			require.NoError(t, db.DropIndex(ctx, is.Name))
 		}
+		require.NoError(t, db.DropTable(ctx, s.Name))
 		require.NoError(t, db.DropEnum(ctx, "my_enum"))
 		require.NoError(t, db.Close(ctx))
-		require.NoError(t, engine.Drop(TEST_DB_NAME, dbo.DatabaseOptions()...))
 	}
 }
 

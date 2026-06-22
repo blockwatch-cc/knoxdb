@@ -4,6 +4,7 @@
 package schema_tests
 
 import (
+	"context"
 	"encoding/hex"
 	"testing"
 
@@ -485,7 +486,8 @@ func TestBatchWriter(t *testing.T) {
 			require.Equal(t, buf[:schema.BatchHeaderSize], batch.Header())
 
 			// resolve batch
-			res, err := schema.ResolveBatch(buf, reg)
+			resolver := schema.NewResolver(reg)
+			res, err := resolver.ResolveBatch(context.Background(), buf)
 			require.NoError(t, err)
 			require.Equal(t, batch.Size(), res.Size())
 			require.Equal(t, batch.Header(), res.Header())

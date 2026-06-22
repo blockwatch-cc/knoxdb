@@ -27,7 +27,7 @@ func TestWorkload1(t *testing.T) {
 		tests.SaveDatabaseFiles(t, eng)
 	})
 	db := knox.WrapEngine(eng)
-	table, err := db.FindTable("types")
+	table, err := knox.FindTableFor[tests.Types](db, "types")
 	require.NoError(t, err, "Missing table")
 
 	ctx := context.Background()
@@ -38,7 +38,7 @@ func TestWorkload1(t *testing.T) {
 	for i := range txnSize {
 		data[i] = tests.NewRandomTypes(i)
 	}
-	startPK, _, err := table.Insert(ctx, data)
+	startPK, _, err := table.Insert(ctx, data...)
 	require.NoError(t, err, "Failed to insert data")
 
 	// Assign primary keys to records
@@ -49,7 +49,7 @@ func TestWorkload1(t *testing.T) {
 	// Validate all rows are correctly inserted
 	count := 0
 	err = knox.NewQueryFor[tests.Types]().
-		WithTable(table).
+		WithTable(table.Table()).
 		WithTag("validate-stream").
 		WithDebug(true).
 		// WithDebug(testing.Verbose()). // Enable detailed query logging
@@ -68,7 +68,7 @@ func TestWorkload1(t *testing.T) {
 	for _, v := range data {
 		var res tests.Types
 		_, err := knox.NewQueryFor[tests.Types]().
-			WithTable(table).
+			WithTable(table.Table()).
 			AndEqual("int64", v.Int64).
 			Execute(ctx, &res)
 		require.NoError(t, err)

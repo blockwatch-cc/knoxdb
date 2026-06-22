@@ -5,16 +5,12 @@ package journal
 
 import (
 	"context"
-	"encoding/binary"
-	"fmt"
+	"sync"
 
-	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack/stats"
-	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/wal"
-	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"github.com/echa/log"
 )
@@ -28,62 +24,124 @@ import (
 //   - visible (committed) rowids are never reused
 //   - invisible (aborted) rowids are rolled back (safe due to single writer tx)
 //
+// Operations
+// - insert: inserts new records from batch or pack with or without WAL
+// - import: imports records from packs without WAL writes
+// - update: inserts post-image records, adds pre-image rids to tombstone
+// - delete: adds row ids to tombstone
+// - merge: merges one journal segment into table storage
+// - query: matches query conditions against MVCC visible journal segments
+//
 // Queries
-// - merge-on-query: merge journal data and tomb with table query result
-// - uses snapshot isolation to hide invisible records and deletes
-// - journal query produces a journal result which is a list of segment
-//   packs with selection vectors
+//   - merge-on-query: merge journal data and tomb with table query result
+//   - uses snapshot isolation to hide invisible records and deletes
+//   - journal query produces a journal result which is a list of segment
+//     packs with selection vectors
 //
 // Merge
-// - only full segments and with no open tx can be merged
-// - background task handles oldest mergable segment
-// - on success, the oldest segment is removed atomically
-// - on fail, already written data remains invisible (new storage key versions)
-//   and will be overwritten next merge round
+//   - only full segments and with no open tx can be merged
+//   - background task handles oldest mergable segment
+//   - on success, the oldest segment is removed atomically
+//   - on fail, already written data remains invisible (new storage key versions)
+//     and will be overwritten next merge round
 //
 // Recover
 // - journal data is saved to WAL and replayed on startup
-
+//
+// # Schema versioning
+//
+// When the table schema changes within a transaction (i.e. user calls
+// the ALTER TABLE method) the current active journal segment is closed
+// and a new segment using the new schema version is created. Future
+// writes are expected to use the new schema when encoding batches.
+// Aborting a schema changing transaction will mark all journal segments
+// using the new schema as prunable after the abort was processed.
+// Replaying WAL records will preserve the order of schema change and
+// journal inserts/updates.
+//
+// Invariants:
+// - schema is constant for all records in a batch
+// - schema is constant for all records in a pack (and journal segment)
+// - each schema change increases the version number
+// - schema fields are never removed, field ids are not reused
+// - schema updates precede inserts in WAL LSN order
 type Journal struct {
-	schema *schema.Schema // data schema
-	wal    *wal.Wal       // wal reference
-	key    []byte         // storage bucket name
-	id     uint64         // table id (tagged hash)
-	tip    *Segment       // active head segment used for writing
-	tail   []*Segment     // immutable tail segments waiting for completion and flush
-	maxsz  int            // max number of records before segment freeze
-	maxseg int            // max number of immutable segments
-	log    log.Logger     // journal logger instance
+	resolver   schema.SchemaResolver // finds schema versions
+	wal        *wal.Wal              // wal reference
+	key        []byte                // storage bucket name
+	id         uint64                // table id (tagged hash)
+	tip        *Segment              // active head segment used for writing
+	tail       []*Segment            // immutable tail segments waiting for completion and flush
+	maxsz      int                   // max number of records before segment freeze
+	maxseg     int                   // max number of immutable segments
+	log        log.Logger            // journal logger instance
+	recordPool sync.Pool             // metadata records cache
 }
 
-func NewJournal(s *schema.Schema, maxsz, maxseg int) *Journal {
-	return &Journal{
-		schema: s,
-		key:    []byte(s.Name + "_journal"),
-		id:     types.TaggedHash(types.ObjectTagTable, s.Name),
-		tip:    newSegment(s, 0, maxsz),
-		tail:   make([]*Segment, 0, maxseg),
-		maxsz:  maxsz,
-		maxseg: maxseg,
-		log:    log.Disabled,
+type Option func(*Journal)
+
+func WithMaxSize(s int) Option {
+	return func(j *Journal) {
+		j.maxsz = s
 	}
 }
 
-func (j *Journal) WithWal(w *wal.Wal) *Journal {
-	j.wal = w
+func WithMaxSegments(s int) Option {
+	return func(j *Journal) {
+		j.maxseg = s
+		j.tail = make([]*Segment, 0, s)
+	}
+}
+
+func WithSchema(s *schema.Schema) Option {
+	return func(j *Journal) {
+		j.tip = newSegment(s, 0, j.maxsz)
+		j.key = []byte(s.Name + "_journal")
+		j.id = types.TaggedHash(types.ObjectTagTable, s.Name)
+	}
+}
+
+func WithLogger(l log.Logger) Option {
+	return func(j *Journal) {
+		j.log = l
+	}
+}
+
+func WithWal(w *wal.Wal) Option {
+	return func(j *Journal) {
+		j.wal = w
+	}
+}
+
+func WithState(s engine.ObjectState) Option {
+	return func(j *Journal) {
+		j.ResetState(s)
+	}
+}
+
+func WithResolver(r schema.SchemaResolver) Option {
+	return func(j *Journal) {
+		j.resolver = r
+	}
+}
+
+func NewJournal(opts ...Option) *Journal {
+	j := &Journal{
+		tail:   make([]*Segment, 0),
+		maxsz:  2048,
+		maxseg: 16,
+		log:    log.Disabled,
+	}
+	for _, o := range opts {
+		o(j)
+	}
 	return j
 }
 
-func (j *Journal) WithState(s engine.ObjectState) *Journal {
+func (j *Journal) ResetState(s engine.ObjectState) {
 	s.Epoch++
 	j.tip.WithState(s)
 	j.tip.data.WithVersion(uint32(s.Epoch)).WithKey(uint32(s.Epoch))
-	return j
-}
-
-func (j *Journal) WithLogger(l log.Logger) *Journal {
-	j.log = l
-	return j
 }
 
 func (j *Journal) Len() int {
@@ -127,10 +185,6 @@ func (j *Journal) MaxSize() int {
 	return j.maxsz
 }
 
-func (j *Journal) Schema() *schema.Schema {
-	return j.schema
-}
-
 func (j *Journal) Tip() *Segment {
 	return j.tip
 }
@@ -161,7 +215,6 @@ func (j *Journal) Reset() {
 }
 
 func (j *Journal) Close() {
-	j.schema = nil
 	j.tip.Close()
 	j.tip = nil
 	for i := range j.tail {
@@ -171,6 +224,7 @@ func (j *Journal) Close() {
 	j.tail = j.tail[:0]
 	j.tail = nil
 	j.wal = nil
+	j.resolver = nil
 }
 
 // Force-rotates the current segment and writes a new WAL checkpoint.
@@ -222,15 +276,34 @@ func (j *Journal) doRotate() bool {
 	j.tip.setState(SegmentStateWaiting)
 
 	// generate metadata
-	j.tip.stats = stats.NewRecordFromPack(j.tip.data.BuildStats(), 0)
+	j.tip.stats = j.makeStats(j.tip)
 
 	// append to immutable list
 	j.tail = append(j.tail, j.tip)
 
 	// create new segment and link to parent
-	j.tip = newSegment(j.schema, j.tip.Id()+1, j.maxsz).WithParent(j.tip).WithState(j.tip.tstate)
+	j.tip = newSegment(j.tip.data.Schema(), j.tip.Id()+1, j.maxsz).
+		WithParent(j.tip).
+		WithState(j.tip.tstate)
 
 	return true
+}
+
+func (j *Journal) makeStats(s *Segment) *stats.Record {
+	var rec *stats.Record
+
+	// try reuse a recently dropped record
+	if irec := j.recordPool.Get(); irec != nil {
+		rec = irec.(*stats.Record)
+	}
+
+	// reuse only when schema matches
+	if rec != nil && rec.SchemaId == s.data.Schema().Hash {
+		return rec.Update(s.data.BuildStats(), 0)
+	}
+
+	// otherwise build a new record
+	return stats.NewRecordFromPack(s.data.BuildStats(), 0)
 }
 
 // NextMergable returns the next journal segment that is ready to merge.
@@ -277,8 +350,7 @@ func (j *Journal) ConfirmMerged(ctx context.Context, s *Segment) {
 	// set segment state
 	s.setState(SegmentStateMerged)
 
-	id := s.Id()
-	j.log.Debugf("journal: removing merged segment %d", id)
+	j.log.Debugf("journal: removing merged segment %d", s.Id())
 
 	// remove empty and merged segments, concurrent readers hold a copy
 	j.prune()
@@ -452,6 +524,9 @@ func (j *Journal) prune() {
 	for _, v := range j.tail {
 		switch v.getState() {
 		case SegmentStateEmpty, SegmentStateMerged:
+			if v.stats != nil {
+				j.recordPool.Put(v.stats)
+			}
 			v.Close()
 		default:
 			j.tail[k] = v
@@ -460,333 +535,4 @@ func (j *Journal) prune() {
 	}
 	clear(j.tail[k:])
 	j.tail = j.tail[:k]
-}
-
-// Merges results from a chain of journal segments under snapshot isolation
-// rules. Guarantees to find the last visible version of each matching record
-// or excludes the record when deleted. An epoch id (from table state,
-// TableReader or IndexReader) ensures merged segments are skipped.
-//
-// Returns a stable read-only result containing (a) private copies of matching
-// segment data packs with added selection vectors and (b) a global view
-// of the tombstone. The tomb view is used during query processing to
-// exclude deleted records from TableReader scans. The segment data pack
-// matches function like regular table scan matches.
-//
-// The merge result is concurrency safe, i.e. readers can process a query
-// without additional locks while a concurrent writer can add new data the
-// journal in insert/update/delete calls.
-func (j *Journal) Query(plan *query.QueryPlan, epoch uint32) *Result {
-	// TODO: lock-free segment walk
-	// - ideally only active segment requires lock
-	// - use linked list for passive segments and optimistic locks
-	// - requires max size array and rotation (is this desirable?)
-	// - walk may conflict with rotation and free after merge (SegmentStateMerged)
-	// j.mu.RLock()
-	// defer j.mu.RUnlock()
-
-	// alloc result and match bitset
-	res := NewResult()
-	bits := bitset.New(j.maxsz)
-
-	// Single-pass merge
-	// Walk segments in backwards order starting at tip. This ensures we first
-	// find all snapshot visible tombstones (row ids) and use them to hide
-	// deleted/replaced records from the query result as we walk segments.
-	seg := j.tip
-	for seg != nil {
-		// skip merged and empty segments
-		if seg.Id() <= epoch || seg.canDrop() {
-			// plan.Log.Debugf("skip journal query segment %d", seg.Id())
-			seg = seg.parent
-			continue
-		}
-
-		// step 1: identify deleted records
-		seg.MergeDeleted(res.tomb, plan.Snap)
-
-		// step 2: match filters, apply snapshot visibility rules and tomb
-		seg.Match(plan.Filters, plan.Snap, res.tomb, bits)
-
-		// add segment to result if it has any match
-		if bits.Any() {
-			// plan.Log.Debugf("using journal segment %d with %d matches", seg.Id(), bits.Count())
-			res.Append(seg, bits)
-		}
-
-		// next segment in history order
-		seg = seg.parent
-	}
-
-	// free scratch
-	bits.Close()
-
-	return res
-}
-
-// Identify most recent visible row ids for primary keys in map. Walk segments in
-// backwards order and keep max(rid). When the first rid is found in a visible
-// tombstones or when an rid cannot be resolved return false. Only return true
-// if all pks have been successfully resolved.
-func (j *Journal) Lookup(ridMap map[uint64]uint64, snap *types.Snapshot) bool {
-	// TODO: lock-free segment walk
-
-	// stage 1: find highest visible rid for each pk
-	// start at tip then load next segment in history order
-	for seg := j.tip; seg != nil; seg = seg.parent {
-		seg.LookupRids(ridMap, snap)
-	}
-
-	// check if all pks are resolved
-	for _, rid := range ridMap {
-		if rid == 0 {
-			return false
-		}
-	}
-
-	// stage 2: check tombs whether any found rid has been visibly deleted
-	// again start at tip then load next segment in history order
-	// stop at first deletion (our only use-case for lookup is for
-	// update calls which fail when a user tries to update any deleted record)
-	for seg := j.tip; seg != nil; seg = seg.parent {
-		if !seg.CheckRids(ridMap, snap) {
-			return false
-		}
-	}
-
-	return true
-}
-
-func (j *Journal) ReplayWalRecord(ctx context.Context, rec *wal.Record, rd engine.TableReader) error {
-	// j.log.Debugf("journal: apply %s", rec)
-	switch rec.Type {
-	case wal.RecordTypeCommit:
-		j.CommitTx(rec.TxID)
-
-	case wal.RecordTypeAbort:
-		j.AbortTx(rec.TxID)
-
-	case wal.RecordTypeCheckpoint:
-		// each segment starts with a checkpoint
-		j.tip.WithLSN(rec.Lsn)
-
-	case wal.RecordTypeInsert:
-		// read data header (first rid)
-		buf := rec.Data[0]
-		rid, n := binary.Uvarint(buf)
-		buf = buf[n:]
-		var (
-			count    uint64
-			expectPk = j.tip.tstate.NextPk
-		)
-
-		// sanity check row id
-		if j.tip.tstate.NextRid != rid {
-			return fmt.Errorf("update: state rid %d does not match WAL record %d",
-				j.tip.tstate.NextRid, rid)
-		}
-
-		// TODO: read batch header & load schema at version
-
-		// split buf into wire messages
-		view, buf, _ := schema.NewView(j.schema).Cut(buf)
-		for view.IsValid() {
-			// check pk is correct
-			pk := view.GetPk()
-			if pk != expectPk {
-				return fmt.Errorf("insert: unexpected pk=%d, expected=%d", pk, expectPk)
-			}
-			expectPk++
-
-			// fail on overlow, should not happen
-			if j.Capacity() == 0 {
-				return fmt.Errorf("insert: journal overflow")
-			}
-			j.tip.InsertRecord(rec.TxID, rid, view.Buffer())
-			rid++
-			count++
-			view, buf, _ = view.Cut(buf)
-		}
-		view.Reset(nil)
-		if len(buf) > 0 {
-			return fmt.Errorf("decode wal record: %d extra bytes", len(buf))
-		}
-		j.tip.tstate.NextPk = expectPk
-		j.tip.tstate.NextRid = rid
-		j.tip.tstate.NRows += count
-
-	case wal.RecordTypeUpdate:
-		buf := rec.Data[0]
-
-		// changeset bitset
-		csize := (j.schema.NumFields() + 7) / 8
-		cset := bitset.NewFromBytes(buf[:csize], j.schema.NumFields())
-		buf = buf[csize:]
-
-		// peek first rowid
-		rid, _ := binary.Uvarint(buf)
-
-		// sanity check row id
-		if j.tip.tstate.NextRid != rid {
-			return fmt.Errorf("update: state rid %d does not match WAL record %d",
-				j.tip.tstate.NextRid, rid)
-		}
-
-		if cset.Count() == j.schema.NumFields() {
-			// optimize, we have full records available
-
-			// TODO: read batch header & load schema at version
-
-			var (
-				view    = schema.NewView(j.schema)
-				nextRid = j.tip.tstate.NextRid
-			)
-			for len(buf) > 0 {
-				// decode rid
-				rid, n := binary.Uvarint(buf)
-				buf = buf[n:]
-
-				// decode ref
-				ref, n := binary.Uvarint(buf)
-				buf = buf[n:]
-
-				// decode record
-				view, buf, _ = view.Cut(buf)
-
-				// append to journal
-				j.tip.UpdateRecord(rec.TxID, rid, ref, view.Buffer())
-				nextRid++
-
-				// ensure amount of updates fits into current journal tip
-				if j.Capacity() == 0 {
-					// should not happen
-					return fmt.Errorf("update: num updates is larger than journal capacity")
-				}
-			}
-			j.tip.tstate.NextRid = nextRid
-
-		} else {
-			// make change schema (for parsing change records)
-			cids := make([]uint16, 0, cset.Count())
-			cols := make([]int, 0, cset.Count())
-			for i := range cset.Iterator() {
-				cids = append(cids, j.schema.Fields[i].Id)
-				cols = append(cols, i)
-			}
-
-			// TODO: read batch header & load schema at version
-			// otherwise new deleted fields will offset view index
-
-			cschema, err := j.schema.SelectIds(cids...)
-			if err != nil {
-				// should not happen
-				return fmt.Errorf("update: make change schema: %v", err)
-			}
-
-			// decode refs from WAL record and construct a query mask
-			var (
-				tmp  = buf
-				refs = xroar.New()
-				recs = make(map[uint64]int)
-				view = schema.NewView(cschema)
-				c    int
-			)
-			for len(buf) > 0 {
-				// decode rid
-				_, n := binary.Uvarint(buf)
-				buf = buf[n:]
-				c += n
-				// decode ref
-				ref, n := binary.Uvarint(buf)
-				buf = buf[n:]
-				c += n
-				refs.Set(ref)
-				recs[ref] = c
-				// skip record
-				view, buf, _ = view.Cut(buf)
-				c += view.Len()
-			}
-			buf = tmp
-
-			// ensure amount of updates fits into current journal tip
-			if len(recs) > j.Capacity() {
-				// should not happen
-				return fmt.Errorf("update: num updates %d is larger than journal capacity %d",
-					len(recs), j.Capacity())
-			}
-
-			// run query visiting all packs with matches
-			rd.WithMask(refs, engine.ReadModeIncludeMask)
-			for {
-				pkg, err := rd.Next(ctx)
-				if err != nil {
-					return err
-				}
-				if pkg == nil {
-					break
-				}
-
-				// materialize columns in the change set
-				for _, col := range cols {
-					pkg.MaterializeBlock(col)
-				}
-
-				// patch records
-				for _, row := range pkg.Selected() {
-					rid := pkg.RowId(int(row))
-					ofs, ok := recs[rid]
-					if !ok {
-						// should not happen
-						return fmt.Errorf("update: found invalid original rid=%d", rid)
-					}
-
-					// set values
-					view.Reset(buf[ofs:])
-					for i, col := range cols {
-						pkg.Block(col).Set(int(row), view.Get(i))
-					}
-
-					// remove patched update
-					delete(recs, rid)
-				}
-
-				// append changed records to journal (will set new rowid, xid, ref)
-				_, err = j.updatePackNoWal(pkg, rec.TxID)
-				if err != nil {
-					return fmt.Errorf("replay update: %v", err)
-				}
-			}
-
-			// sanity check we have applied changes to all records found in WAL
-			if len(recs) > 0 {
-				// should not happen
-				return fmt.Errorf("update: %d unhandled records", len(recs))
-			}
-		}
-
-	case wal.RecordTypeDelete:
-		buf := rec.Data[0]
-		var nDeleted uint64
-		for len(buf) > 0 && j.Capacity() > 0 {
-			rid, n := binary.Uvarint(buf)
-			buf = buf[n:]
-
-			// append to tomb, set xmax on rid when in tip segment
-			j.tip.NotifyDelete(rec.TxID, rid)
-
-			nDeleted++
-		}
-
-		// fail on overlow, should not happen
-		if len(buf) > 0 {
-			return fmt.Errorf("delete: journal overflow")
-		}
-
-		j.tip.tstate.NRows -= nDeleted
-	}
-
-	// try rotate segment once full
-	j.rotateWhenFull()
-
-	return nil
 }

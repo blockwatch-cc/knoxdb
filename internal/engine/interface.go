@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Blockwatch Data Inc.
+// Copyright (c) 2024-2026 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
 package engine
@@ -34,7 +34,6 @@ type TableKind string
 
 const (
 	TableKindPack    = "pack"
-	TableKindLSM     = "lsm"
 	TableKindHistory = "history"
 )
 
@@ -58,12 +57,10 @@ type TableEngine interface {
 	Checkpoint(Context) error
 
 	// data ingress
-	// InsertBatch(Context, *Batch) (uint64, int, error)
-	// UpdateBatch(Context, *Batch) (int, error)
-	InsertRows(Context, []byte) (uint64, int, error) // wire encoded rows
+	InsertBatch(Context, *Batch) (uint64, int, error)
 	InsertInto(Context, *Package) (uint64, int, error)
 	ImportInto(Context, *Package) (uint64, int, error)
-	UpdateRows(Context, []byte) (int, error) // wire encoded rows
+	UpdateBatch(Context, *Batch) (int, error)
 	Update(Context, QueryPlan) (int, error)
 
 	// data egress
@@ -147,7 +144,7 @@ type QueryableIndex interface {
 	CanMatch(QueryCondition) bool
 	Query(Context, QueryCondition) (*Bitmap, bool, error)
 	QueryComposite(Context, QueryCondition) (*Bitmap, bool, error)
-	Lookup(Context, []uint64, map[uint64]uint64) error
+	Lookup(Context, map[uint64]uint64) error
 }
 
 type QueryableTable interface {
@@ -212,7 +209,6 @@ type IndexKind string
 
 const (
 	IndexKindPack = "pack"
-	IndexKindLSM  = "lsm"
 )
 
 type IndexFactory func() IndexEngine
@@ -243,7 +239,7 @@ type IndexEngine interface {
 	CanMatch(QueryCondition) bool // static: based to index engine type
 	Query(Context, QueryCondition) (*Bitmap, bool, error)
 	QueryComposite(Context, QueryCondition) (*Bitmap, bool, error)
-	Lookup(Context, []uint64, map[uint64]uint64) error
+	Lookup(Context, map[uint64]uint64) error
 }
 
 type ConditionMatcher interface {

@@ -13,7 +13,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/pack/journal"
 	"blockwatch.cc/knoxdb/internal/query"
 	"blockwatch.cc/knoxdb/pkg/schema"
-	"blockwatch.cc/knoxdb/pkg/slicex"
 )
 
 // UpdateRows appends full wire-encoded update records to journal and WAL.
@@ -25,9 +24,7 @@ import (
 // to WAL. The WAL message encoding is compatible with Update.
 //
 // [Records] -> [List Pks] -> [Index Lookup Rids] -> [Update Journal]
-
-// TODO: rename to UpdateBatch(context.Context, *schema.Batch)
-func (t *Table) UpdateRows(ctx context.Context, buf []byte) (int, error) {
+func (t *Table) UpdateBatch(ctx context.Context, batch *schema.Batch) (int, error) {
 	// Update (pk != 0)
 	// - input is record format without metadata
 	// - same pk can be updated multiple times in the same batch
@@ -42,11 +39,14 @@ func (t *Table) UpdateRows(ctx context.Context, buf []byte) (int, error) {
 	//      and track multiple updates to the same pk
 
 	// reject invalid messages
-	if len(buf) == 0 {
+	if batch.Size() == 0 {
 		return 0, nil
 	}
-	if len(buf) < t.schema.MinWireSize {
+	if batch.Size() < t.schema.MinWireSize {
 		return 0, engine.ErrShortMessage
+	}
+	if batch.Schema().Hash != t.schema.Hash {
+		return 0, schema.ErrSchemaMismatch
 	}
 
 	// check table state
@@ -61,23 +61,18 @@ func (t *Table) UpdateRows(ctx context.Context, buf []byte) (int, error) {
 		return 0, engine.ErrNoPkIndex
 	}
 
-	// extract list of primary keys
-	var (
-		view = schema.NewView(t.schema.Schema)
-		pks  = make([]uint64, 0, len(buf)/t.schema.MinWireSize) // upper bound
-	)
+	// extract list of primary keys into hash map for pk -> rid
+	// lookup (assumes u64 primary keys)
+	ridMap := make(map[uint64]uint64, batch.Len())
 
-	// split buf into wire messages
-	view, vbuf, _ := view.Cut(buf)
-	for view.IsValid() {
+	// split buf into wire messages to access pk values
+	for _, view := range batch.Records() {
 		pk := view.GetPk()
 		if pk == 0 {
 			return 0, engine.ErrNoPk
 		}
-		pks = append(pks, pk)
-		view, vbuf, _ = view.Cut(vbuf)
+		ridMap[pk] = 0 // seed with 0
 	}
-	pks = slicex.Unique(pks)
 
 	// obtain shared table lock
 	tx := engine.GetTx(ctx)
@@ -89,14 +84,8 @@ func (t *Table) UpdateRows(ctx context.Context, buf []byte) (int, error) {
 	// register table for commit/abort callbacks
 	tx.Touch(t.id)
 
-	// build a hash map for pk -> rid (assumes u64 primary keys)
-	ridMap := make(map[uint64]uint64, len(pks))
-	for _, v := range pks {
-		ridMap[v] = 0 // seed with 0
-	}
-
 	// lookup from index (stale when journal contains newer updates/deletes)
-	if err := idx.Lookup(ctx, pks, ridMap); err != nil {
+	if err := idx.Lookup(ctx, ridMap); err != nil {
 		return 0, err
 	}
 
@@ -124,7 +113,7 @@ func (t *Table) UpdateRows(ctx context.Context, buf []byte) (int, error) {
 	}
 
 	// write updates to journal and WAL
-	n, err := t.journal.UpdateRecords(ctx, buf, ridMap)
+	n, err := t.journal.UpdateBatch(ctx, batch, ridMap)
 	if err != nil {
 		return 0, err
 	}

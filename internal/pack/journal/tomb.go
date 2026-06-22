@@ -228,7 +228,8 @@ func (t *Tomb) MergeVisible(set *xroar.Bitmap, snap *types.Snapshot) {
 }
 
 func (t *Tomb) Load(ctx context.Context, bucket store.Bucket, id uint32) error {
-	buf, err := bucket.Get(pack.EncodeBlockKey(id, 0, TombKey))
+	var bkey [pack.BlockKeySize]byte
+	buf, err := bucket.Get(pack.AppendBlockKey(bkey[:0], id, 0, TombKey))
 	if err != nil {
 		return nil // accept missing tomstone
 	}
@@ -242,7 +243,8 @@ func (t *Tomb) Store(ctx context.Context, bucket store.Bucket, id uint32) error 
 	if bucket == nil {
 		return store.ErrBucketNotFound
 	}
-	key := pack.EncodeBlockKey(id, 0, TombKey)
+	var bkey [pack.BlockKeySize]byte
+	key := pack.AppendBlockKey(bkey[:0], id, 0, TombKey)
 
 	// don't store empty tombs
 	if t.Len() == 0 {
@@ -265,7 +267,8 @@ func (t *Tomb) Remove(ctx context.Context, bucket store.Bucket, id uint32) error
 	if bucket == nil {
 		return store.ErrBucketNotFound
 	}
-	return bucket.Delete(pack.EncodeBlockKey(id, 0, TombKey))
+	var bkey [pack.BlockKeySize]byte
+	return bucket.Delete(pack.AppendBlockKey(bkey[:0], id, 0, TombKey))
 }
 
 func (t *Tomb) MarshalBinary() ([]byte, error) {

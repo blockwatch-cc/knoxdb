@@ -123,6 +123,10 @@ func (e *Encoder) NewBuffer(sz int) *bytes.Buffer {
 	return e.schema.NewBuffer(sz)
 }
 
+func (e *Encoder) NewBatchWriter(sz int) *schema.BatchWriter {
+	return schema.NewBatchWriter(e.Schema(), sz)
+}
+
 // Encode encodes single values of type T and *T into buffer.
 // Non-pointer types T must implement schema.Marshaler or will
 // fail otherwise because call by value interfaces are non-addressable

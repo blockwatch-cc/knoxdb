@@ -6,6 +6,8 @@ package index
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"sort"
 	"sync/atomic"
 
@@ -330,11 +332,16 @@ func (idx *Index) lookupKeys(ctx context.Context, keys []uint64) (*xroar.Bitmap,
 // in journal even if committed. Index is only updated during journal merge.
 // This means all matches found here must be cross-checked against the journal
 // by our query engine under MVCC.
-func (idx *Index) Lookup(ctx context.Context, keys []uint64, ridMap map[uint64]uint64) error {
+func (idx *Index) Lookup(ctx context.Context, ridMap map[uint64]uint64) error {
 	// gracefully handle empty query list
-	if len(keys) == 0 {
+	if len(ridMap) == 0 {
 		return nil
 	}
+
+	// need a sorted pk slice
+	keys := slices.AppendSeq(make([]uint64, 0, len(ridMap)), maps.Keys(ridMap))
+	slices.Sort(keys)
+
 	// idx.log.Infof("lookup keys %v", keys)
 	var (
 		next         int

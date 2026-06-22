@@ -472,6 +472,9 @@ func Open(ctx context.Context, name string, options ...Option) (*Engine, error) 
 }
 
 func (e *Engine) Close(ctx context.Context) error {
+	if e.IsShutdown() {
+		return ErrDatabaseShutdown
+	}
 	e.log.Debugf("close database %s at %s", e.cat.name, e.path)
 
 	// export engine
@@ -718,6 +721,22 @@ func (e *Engine) Schedule(t *Task) bool {
 	return e.tasks.Submit(t)
 }
 
+func (e *Engine) LockObject(ctx context.Context, oid uint64) (func(), error) {
+	err := e.lm.Lock(ctx, XID(0), LockModeExclusive, oid)
+	if err != nil {
+		return nil, err
+	}
+	return func() { e.lm.Done(XID(0)) }, nil
+}
+
+func (e *Engine) RLockObject(ctx context.Context, oid uint64) (func(), error) {
+	err := e.lm.Lock(ctx, XID(0), LockModeShared, oid)
+	if err != nil {
+		return nil, err
+	}
+	return func() { e.lm.Done(XID(0)) }, nil
+}
+
 // TryGC is triggered after table engines have merged new journal checkpoints.
 // Its aim is to reduce the number of WAL files we need to keep around for crash
 // recovery by writing new table and catalog checkpoints at the end of the WAL.
@@ -856,4 +875,27 @@ func (e *Engine) RunGC(ctx context.Context) error {
 		return err
 	}
 	return nil
+}
+
+// LookupSchemaName implements the schema.SchemaRegistry interface.
+// Resolution happens from catalog which requires the context to
+// contain a valid transaction.
+func (e *Engine) LookupSchemaName(ctx context.Context, name string, ver uint32) (*Schema, bool) {
+	tag := types.TaggedHash(types.ObjectTagTable, name)
+	ts, _, err := e.cat.GetTableVersion(ctx, tag, ver)
+	if err != nil {
+		return nil, false
+	}
+	if ts.Version != ver {
+		return nil, false
+	}
+	return ts.Base(), true
+}
+
+func (e *Engine) LookupSchemaHash(ctx context.Context, hash uint64) (*Schema, bool) {
+	ts, err := e.cat.GetSchema(ctx, hash)
+	if err != nil {
+		return nil, false
+	}
+	return ts.Base(), true
 }

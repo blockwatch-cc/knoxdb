@@ -113,6 +113,13 @@ func (t *Table) Merge(ctx context.Context) error {
 		return engine.ErrTableReadOnly
 	}
 
+	// protect against concurrent table management ops using lock manager
+	unlock, err := t.engine.RLockObject(ctx, t.id)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+
 	for {
 		// get next mergable segment, will atomically mark as merge in progress
 		t.mu.Lock()
@@ -136,11 +143,12 @@ func (t *Table) Merge(ctx context.Context) error {
 	}
 
 	// run merge
-	t.log.Tracef("merging journal segment %d", seg.Id())
+	sid := seg.Id()
+	t.log.Tracef("merging journal segment %d", sid)
 	err = t.mergeJournal(ctx, seg)
 	if err != nil {
 		// notify journal, will keep segment in memory and retry
-		t.log.Errorf("merge segment %d: %v", seg.Id(), err)
+		t.log.Errorf("merge segment %d: %v", sid, err)
 		t.mu.Lock()
 		t.journal.AbortMerged(seg)
 		t.mu.Unlock()

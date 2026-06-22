@@ -22,6 +22,8 @@ func (idx *Index) dataBucket(tx store.Tx) store.Bucket {
 	return b
 }
 
+const PackKeySize = 2*store.MaxVarintLen64 + store.MaxVarintLen16
+
 // Encode sortable keys for referencing data blocks on storage.
 //
 // Format:
@@ -29,9 +31,8 @@ func (idx *Index) dataBucket(tx store.Tx) store.Bucket {
 //
 // We append primary keys for uniqueness in case the same
 // non-unique index key spans multiple packs.
-func (idx *Index) encodePackKey(ik, pk uint64, id int) []byte {
-	var b [2*store.MaxVarintLen64 + store.MaxVarintLen16]byte
-	buf := store.AppendUvarint(b[:0], ik)
+func (idx *Index) appendPackKey(buf []byte, ik, pk uint64, id int) []byte {
+	buf = store.AppendUvarint(buf, ik)
 	buf = store.AppendUvarint(buf, pk)
 	buf = store.AppendUvarint(buf, uint64(id))
 	return buf
@@ -138,8 +139,9 @@ func (idx *Index) dropTomb(_ context.Context, key, epoch uint32) error {
 		if err != nil {
 			return err
 		}
+		var bkey [pack.BlockKeySize]byte
 		for _, f := range idx.sstore.Fields {
-			if err := b.Delete(pack.EncodeBlockKey(key, epoch, f.Id)); err != nil {
+			if err := b.Delete(pack.AppendBlockKey(bkey[:0], key, epoch, f.Id)); err != nil {
 				return err
 			}
 		}

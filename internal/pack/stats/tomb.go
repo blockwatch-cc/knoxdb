@@ -156,10 +156,12 @@ func (t *Tomb) bucket(tx store.Tx, kind byte) (store.Bucket, error) {
 			return nil, fmt.Errorf("create epoch bucket: %v", err)
 		}
 	}
-	kb, err := eb.Bucket([]byte{kind})
+	var kindKey [1]byte
+	kindKey[0] = kind
+	kb, err := eb.Bucket(kindKey[:])
 	if err != nil {
 		// fmt.Printf("Create kind bucket %x for epoch %d\n", kind, t.epoch)
-		kb, err = eb.CreateBucket([]byte{kind})
+		kb, err = eb.CreateBucket(kindKey[:])
 		if err != nil {
 			return nil, fmt.Errorf("create kind bucket: %v", err)
 		}

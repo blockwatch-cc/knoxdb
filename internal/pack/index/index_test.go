@@ -3,6 +3,7 @@ package index
 import (
 	"testing"
 
+	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack/table"
 	etests "blockwatch.cc/knoxdb/internal/tests/engine"
 	"blockwatch.cc/knoxdb/internal/types"
@@ -22,11 +23,23 @@ func TestIndex(t *testing.T) {
 		types.IT_INT,
 		types.IT_HASH,
 	}
-	etests.TestIndexEngine[Index](t, "mem", "pack", table.NewTable(), typs)
-	etests.TestIndexEngine[Index](t, "bolt", "pack", table.NewTable(), typs)
+	etests.TestIndexEngine[Index](t, table.NewTable(), typs,
+		engine.WithDriverType("mem"),
+		engine.WithEngineType("pack"),
+	)
+	etests.TestIndexEngine[Index](t, table.NewTable(), typs,
+		engine.WithDriverType("bolt"),
+		engine.WithEngineType("pack"),
+	)
 }
 
 func TestIndexComposite(t *testing.T) {
-	etests.TestCompositeIndexEngine[Index](t, "mem", "pack", table.NewTable())
-	etests.TestCompositeIndexEngine[Index](t, "bolt", "pack", table.NewTable())
+	etests.TestCompositeIndexEngine[Index](t, table.NewTable(),
+		engine.WithDriverType("mem"),
+		engine.WithEngineType("pack"),
+	)
+	etests.TestCompositeIndexEngine[Index](t, table.NewTable(),
+		engine.WithDriverType("bolt"),
+		engine.WithEngineType("pack"),
+	)
 }

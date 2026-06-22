@@ -23,7 +23,7 @@ func BenchmarkQuerySequential(b *testing.B) {
 		log.SetLevel(log.LevelOff)
 		eng, cleanup := etests.NewDatabase(b, &Account{})
 		db := knox.WrapEngine(eng)
-		table, err := db.FindTable("account")
+		table, err := knox.FindTableFor[Account](db, "account")
 		require.NoError(b, err, "Missing table")
 
 		// write 128x N records (128k .. 8M)
@@ -33,7 +33,7 @@ func BenchmarkQuerySequential(b *testing.B) {
 			if err != nil {
 				b.Fatalf("begin: %v", err)
 			}
-			_, _, err = table.Insert(ctx, data)
+			_, _, err = table.Insert(ctx, data...)
 			if err != nil {
 				b.Fatalf("begin: %v", err)
 			}
@@ -55,7 +55,7 @@ func BenchmarkQuerySequential(b *testing.B) {
 
 			for b.Loop() {
 				res, err := knox.NewQuery().
-					WithTable(table).
+					WithTable(table.Table()).
 					WithTag("bench").
 					WithLimit(1).
 					// WithDebug(true).
@@ -81,7 +81,7 @@ func BenchmarkQueryParallel(b *testing.B) {
 		log.SetLevel(log.LevelOff)
 		eng, cleanup := etests.NewDatabase(b, &Account{})
 		db := knox.WrapEngine(eng)
-		table, err := db.FindTable("account")
+		table, err := knox.FindTableFor[Account](db, "account")
 		require.NoError(b, err, "Missing table")
 
 		// write 128x N records (128k .. 8M)
@@ -91,7 +91,7 @@ func BenchmarkQueryParallel(b *testing.B) {
 			if err != nil {
 				b.Fatalf("begin: %v", err)
 			}
-			_, _, err = table.Insert(ctx, data)
+			_, _, err = table.Insert(ctx, data...)
 			if err != nil {
 				b.Fatalf("begin: %v", err)
 			}
@@ -112,7 +112,7 @@ func BenchmarkQueryParallel(b *testing.B) {
 			b.RunParallel(func(pb *testing.PB) {
 				for pb.Next() {
 					res, err := knox.NewQuery().
-						WithTable(table).
+						WithTable(table.Table()).
 						WithTag("bench").
 						WithLimit(1).
 						AndEqual("balance", testutil.RandInt64n(int64(sz.N))).

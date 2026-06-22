@@ -148,7 +148,7 @@ func BenchmarkEnumAdd(b *testing.B) {
 			vals := makeRandStrings(v.num)
 			b.ResetTimer()
 			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				NewDictionary(v.name).Append(vals...)
 			}
 		})
@@ -161,7 +161,7 @@ func BenchmarkEnumValueLookup(b *testing.B) {
 			enum := makeEnum(v.name, v.num)
 			b.ResetTimer()
 			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
+			for i := range b.N {
 				_, _ = enum.Value(uint16(i % enum.Len()))
 			}
 		})
@@ -176,7 +176,7 @@ func BenchmarkEnumCodeLookup(b *testing.B) {
 			enum.Append(vals...)
 			b.ResetTimer()
 			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
+			for i := range b.N {
 				_, _ = enum.Code(vals[i%enum.Len()])
 			}
 		})

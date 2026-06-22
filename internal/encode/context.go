@@ -252,19 +252,18 @@ func (c *Context[T]) buildUniqueArray(vals []T) int {
 	return numUnique
 }
 
-func (c *Context[T]) EligibleIntSchemes() []ContainerType {
+func (c *Context[T]) EligibleIntSchemes(schemes []ContainerType) []ContainerType {
 	// constant only
 	if c.NumRuns == 1 {
-		return []ContainerType{TIntConstant}
+		return append(schemes, TIntConstant)
 	}
 	// delta only with at least 3 values
 	if c.Delta > 0 && c.NumValues > 2 {
-		return []ContainerType{TIntDelta}
+		return append(schemes, TIntDelta)
 	}
 	// raw always works
-	schemes := []ContainerType{
-		TIntRaw,
-	}
+	schemes = append(schemes, TIntRaw)
+
 	// bit-packed width must decrease
 	if c.UseBits < c.PhyBits {
 		schemes = append(schemes, TIntBitpacked)

@@ -74,6 +74,7 @@ func makeTestPackage(t testing.TB, key int, pk uint64) *pack.Package {
 	for _, v := range makeTestData(TEST_PKG_SIZE, pk) {
 		require.NoError(t, enc.Encode(buf, &v))
 		pkg.AppendWire(buf.Bytes(), &types.Meta{Rid: v.Id, Xmin: 1})
+		buf.Reset()
 	}
 	// init statistics
 	pstats := pkg.Stats()

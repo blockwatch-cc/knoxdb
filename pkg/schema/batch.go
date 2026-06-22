@@ -109,22 +109,6 @@ type Batch struct {
 	num    int     // number of records, lazy init
 }
 
-// ResolveBatch attempts to resolve the schema version the batch was
-// encoded with using hash and version from the batch header and a
-// provided schema registry. Returns an error when buffer is invalid
-// or no schema was found.
-func ResolveBatch(buf []byte, r SchemaRegistry) (*Batch, error) {
-	if len(buf) < BatchHeaderSize {
-		return nil, ErrShortBuffer
-	}
-	hash := LE.Uint64(buf[4:])
-	s, ok := r.LookupHash(hash)
-	if !ok {
-		return nil, fmt.Errorf("unknown schema hash 0x%016x", hash)
-	}
-	return makeBatch(buf, s)
-}
-
 func (s *Schema) WrapBatch(buf []byte) (*Batch, error) {
 	return makeBatch(buf, s)
 }
@@ -137,12 +121,15 @@ func (s *Schema) WriteBatchHeader(buf *bytes.Buffer) error {
 	return err
 }
 
+func (s *Schema) AppendBatchHeader(buf []byte) []byte {
+	return LE.AppendUint64(LE.AppendUint32(buf, s.Version), s.Hash)
+}
+
 func makeBatch(buf []byte, s *Schema) (*Batch, error) {
 	if len(buf) < BatchHeaderSize {
 		return nil, ErrShortBuffer
 	}
-	ver := LE.Uint32(buf)
-	hash := LE.Uint64(buf[4:])
+	ver, hash := LE.Uint32(buf), LE.Uint64(buf[4:])
 	if s.Hash != hash {
 		return nil, fmt.Errorf("%s: invalid batch hash %016x", s.Label(), hash)
 	}
@@ -186,6 +173,11 @@ func (b *Batch) Len() int {
 		b.num = b.getView().Count(b.buf)
 	}
 	return b.num
+}
+
+func (b *Batch) TrimAt(pos int) {
+	b.buf = b.buf[pos:]
+	b.num = 0
 }
 
 func (b *Batch) getView() *View {

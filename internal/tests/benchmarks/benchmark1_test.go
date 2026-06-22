@@ -9,10 +9,12 @@ import (
 	"testing"
 	"time"
 
+	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/tests"
 	etests "blockwatch.cc/knoxdb/internal/tests/engine"
 	"blockwatch.cc/knoxdb/internal/tests/testutil"
 	"blockwatch.cc/knoxdb/pkg/knox"
+	"blockwatch.cc/knoxdb/pkg/schema/encode"
 	"github.com/echa/log"
 	"github.com/stretchr/testify/require"
 )
@@ -37,24 +39,28 @@ func genAccounts(n, k int) []*Account {
 
 func BenchmarkInsertBulk(b *testing.B) {
 	for _, sz := range tests.BenchmarkSizes {
-		log.SetLevel(log.LevelOff)
-		eng, cleanup := etests.NewDatabase(b, &Account{})
-		db := knox.WrapEngine(eng)
-		table, err := db.FindTable("account")
-		require.NoError(b, err, "Missing table")
-		data := genAccounts(sz.N, 1)
-
 		b.Run(sz.Name, func(b *testing.B) {
 			var (
 				nrec int
 				ntx  int
 			)
+
+			// log.SetLevel(log.LevelOff)
+			eng, cleanup := etests.NewDatabase(b, &Account{},
+				engine.WithNoSync(true),
+			)
+			defer cleanup()
+			db := knox.WrapEngine(eng)
+			table, err := knox.FindTableFor[Account](db, "account")
+			require.NoError(b, err, "Missing table")
+			data := genAccounts(sz.N, 1)
+
 			for b.Loop() {
 				ctx, commit, _, err := db.Begin(context.Background(), knox.TxFlagNoWal)
 				if err != nil {
 					b.Fatalf("begin: %v", err)
 				}
-				_, n, err := table.Insert(ctx, data)
+				_, n, err := table.Insert(ctx, data...)
 				if err != nil {
 					b.Fatalf("insert: %v", err)
 				}
@@ -69,6 +75,53 @@ func BenchmarkInsertBulk(b *testing.B) {
 			b.ReportMetric(float64(nrec)/float64(b.Elapsed().Seconds()), "rec/s")
 			b.ReportMetric(float64(ntx)/float64(b.Elapsed().Seconds()), "tx/s")
 		})
-		cleanup()
+	}
+}
+
+func BenchmarkInsertBatch(b *testing.B) {
+	for _, sz := range tests.BenchmarkSizes {
+		b.Run(sz.Name, func(b *testing.B) {
+			var (
+				nrec int
+				ntx  int
+			)
+
+			log.SetLevel(log.LevelOff)
+			eng, cleanup := etests.NewDatabase(b, &Account{},
+				// engine.WithDriverType("mem"),
+				// engine.WithJournalSegments(2),
+				engine.WithNoSync(true),
+				// engine.WithPageSize(1<<14),
+			)
+
+			defer cleanup()
+			db := knox.WrapEngine(eng)
+			table, err := knox.FindTableFor[Account](db, "account")
+			require.NoError(b, err, "Missing table")
+			data := genAccounts(sz.N, 1)
+			enc := encode.NewEncoderFor[Account]()
+			wr := enc.NewBatchWriter(sz.N)
+			require.NoError(b, enc.EncodeBatch(wr.Buffer(), data))
+
+			for b.Loop() {
+				ctx, commit, _, err := db.Begin(context.Background(), knox.TxFlagNoWal)
+				if err != nil {
+					b.Fatalf("begin: %v", err)
+				}
+				_, n, err := table.Table().Insert(ctx, wr.Batch())
+				if err != nil {
+					b.Fatalf("insert: %v", err)
+				}
+				err = commit()
+				if err != nil {
+					b.Fatalf("commit: %v", err)
+				}
+				nrec += n
+				ntx++
+			}
+			b.ReportAllocs()
+			b.ReportMetric(float64(nrec)/float64(b.Elapsed().Seconds()), "rec/s")
+			b.ReportMetric(float64(ntx)/float64(b.Elapsed().Seconds()), "tx/s")
+		})
 	}
 }

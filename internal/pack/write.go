@@ -27,44 +27,16 @@ func (p *Package) AppendWire(buf []byte, meta *types.Meta) {
 	// 	"len", len(buf),
 	// 	"wiresz", p.schema.WireSize(),
 	// )
+
+	// write metadata columns
+	p.AppendMeta(meta)
+
 	for i, field := range p.schema.Fields {
-		// skip missing blocks (e.g. after schema change)
-		b := p.blocks[i]
-		if b == nil {
-			continue
-		}
-
-		// fill internal fields from metadata
-		if field.IsMeta() {
-			if meta != nil {
-				switch field.Id {
-				case types.MetaRid:
-					b.Uint64().Append(meta.Rid)
-				case types.MetaRef:
-					b.Uint64().Append(meta.Ref)
-				case types.MetaXmin:
-					b.Uint64().Append(uint64(meta.Xmin))
-				case types.MetaXmax:
-					b.Uint64().Append(uint64(meta.Xmax))
-				case types.MetaDel:
-					b.Bool().Append(meta.IsDel)
-				}
-			} else {
-				switch field.Type {
-				case types.FT_U64:
-					b.Uint64().Append(0)
-				case types.FT_BOOL:
-					b.Bool().Append(false)
-				}
-			}
-			b.SetDirty()
-			continue
-		}
-
-		// deleted and internal fields are invisible
+		// skip metadata and deleted fields
 		if !field.IsVisible() {
 			continue
 		}
+		b := p.blocks[i]
 
 		switch b.Type() {
 		case types.BlockUint64, types.BlockInt64, types.BlockFloat64:
@@ -84,7 +56,7 @@ func (p *Package) AppendWire(buf []byte, meta *types.Meta) {
 			buf = buf[1:]
 
 		case types.BlockBool:
-			b.Bool().Append(*(*bool)(unsafe.Pointer(&buf[0])))
+			b.Bool().Append(buf[0] == 1)
 			buf = buf[1:]
 
 		case types.BlockBytes:
@@ -126,7 +98,6 @@ func (p *Package) AppendWire(buf []byte, meta *types.Meta) {
 				"version", p.schema.Version,
 			)
 		}
-		b.SetDirty()
 	}
 	p.nRows++
 }

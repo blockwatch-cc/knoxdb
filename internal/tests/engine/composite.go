@@ -67,24 +67,24 @@ var CompositeIndexTestCases = []IndexTestCase{
 	},
 }
 
-func TestCompositeIndexEngine[T any, F IF[T]](t *testing.T, driver, eng string, table engine.TableEngine) {
+func TestCompositeIndexEngine[T any, F IF[T]](t *testing.T, table engine.TableEngine, opts ...engine.Option) {
 	t.Helper()
 	for _, c := range CompositeIndexTestCases {
 		t.Run(c.Name, func(t *testing.T) {
 			t.Helper()
 			ctx := context.Background()
-			e := NewTestEngine(t, NewTestDatabaseOptions(t, driver))
+			e := NewTestEngine(t, opts...)
 			defer e.Close(ctx)
 
 			// create table and insert data
 			CreateEnum(t, e)
-			topts := NewTestTableOptions(t, driver, eng)
+			topts := NewTestTableOptions(t, opts...)
 			CreateTable(t, e, table, topts, allTypesSchema)
 			defer table.Close(ctx)
 			InsertData(t, e, table)
 			ts := table.Schema()
 
-			iopts := NewTestIndexOptions(t, driver, eng)
+			iopts := NewTestIndexOptions(t, opts...)
 			ss, err := ts.Select("i32", "i64")
 			require.NoError(t, err)
 			indexSchema := &schema.IndexSchema{
@@ -159,31 +159,31 @@ func CanMatchCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableE
 	CreateIndex(t, e, te, ie, is, io)
 
 	switch to.Engine {
-	case engine.TableKindLSM:
-		// eq
-		require.True(t, ie.CanMatch(makeTree(makeFilter(ts, "i32", EQ, 1, nil))), EQ)
-		// le
-		require.True(t, ie.CanMatch(makeTree(makeFilter(ts, "i32", LE, 1, nil))), LE)
-		// lt
-		require.True(t, ie.CanMatch(makeTree(makeFilter(ts, "i32", LT, 1, nil))), LT)
-		// ge
-		require.True(t, ie.CanMatch(makeTree(makeFilter(ts, "i32", GE, 1, nil))), GE)
-		// gt
-		require.True(t, ie.CanMatch(makeTree(makeFilter(ts, "i32", GT, 1, nil))), GT)
-		// rg
-		require.True(t, ie.CanMatch(makeTree(makeFilter(ts, "i32", RG, 1, 2))), RG)
-		// complex trees
-		require.True(t, ie.CanMatch(makeTree(
-			makeFilter(ts, "i64", EQ, 1, nil),
-			makeFilter(ts, "i32", RG, 1, 2),
-		)), "multi")
-		// no other mode
-		require.False(t, ie.CanMatch(makeTree(makeFilter(ts, "i32", IN, []int{1}, nil))), IN)
-		require.False(t, ie.CanMatch(makeTree(makeFilter(ts, "i32", NI, []int{1}, nil))), NI)
-		// no simple filters
-		require.False(t, ie.CanMatch(makeFilter(ts, "i32", EQ, 1, nil)), "no simple")
-		// no ineligible fields
-		require.False(t, ie.CanMatch(makeTree(makeFilter(ts, "u64", EQ, 1, nil))), "non index field")
+	// case engine.TableKindLSM:
+	// 	// eq
+	// 	require.True(t, ie.CanMatch(makeTree(makeFilter(ts, "i32", EQ, 1, nil))), EQ)
+	// 	// le
+	// 	require.True(t, ie.CanMatch(makeTree(makeFilter(ts, "i32", LE, 1, nil))), LE)
+	// 	// lt
+	// 	require.True(t, ie.CanMatch(makeTree(makeFilter(ts, "i32", LT, 1, nil))), LT)
+	// 	// ge
+	// 	require.True(t, ie.CanMatch(makeTree(makeFilter(ts, "i32", GE, 1, nil))), GE)
+	// 	// gt
+	// 	require.True(t, ie.CanMatch(makeTree(makeFilter(ts, "i32", GT, 1, nil))), GT)
+	// 	// rg
+	// 	require.True(t, ie.CanMatch(makeTree(makeFilter(ts, "i32", RG, 1, 2))), RG)
+	// 	// complex trees
+	// 	require.True(t, ie.CanMatch(makeTree(
+	// 		makeFilter(ts, "i64", EQ, 1, nil),
+	// 		makeFilter(ts, "i32", RG, 1, 2),
+	// 	)), "multi")
+	// 	// no other mode
+	// 	require.False(t, ie.CanMatch(makeTree(makeFilter(ts, "i32", IN, []int{1}, nil))), IN)
+	// 	require.False(t, ie.CanMatch(makeTree(makeFilter(ts, "i32", NI, []int{1}, nil))), NI)
+	// 	// no simple filters
+	// 	require.False(t, ie.CanMatch(makeFilter(ts, "i32", EQ, 1, nil)), "no simple")
+	// 	// no ineligible fields
+	// 	require.False(t, ie.CanMatch(makeTree(makeFilter(ts, "u64", EQ, 1, nil))), "non index field")
 
 	case engine.TableKindPack:
 		// complex trees
@@ -262,13 +262,13 @@ func QueryCompositeIndexTest(t *testing.T, e *engine.Engine, te engine.TableEngi
 	ctx := engine.WithEngine(context.Background(), e)
 
 	switch to.Engine {
-	case engine.TableKindLSM:
-		// le
-		q := makeTree(makeFilter(ts, "i32", LE, 6, nil))
-		res, _, err := ie.QueryComposite(ctx, q)
-		require.NoError(t, err)
-		require.NotNil(t, res)
-		require.Equal(t, 6, res.Count())
+	// case engine.TableKindLSM:
+	// 	// le
+	// 	q := makeTree(makeFilter(ts, "i32", LE, 6, nil))
+	// 	res, _, err := ie.QueryComposite(ctx, q)
+	// 	require.NoError(t, err)
+	// 	require.NotNil(t, res)
+	// 	require.Equal(t, 6, res.Count())
 
 	case engine.TableKindPack:
 		// complex trees

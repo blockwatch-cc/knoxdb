@@ -165,8 +165,7 @@ func TestWorkload5(t *testing.T) {
 		if eng.IsShutdown() {
 			// reopen
 			dir := db.Load().Options().Path
-			dbo := tests.NewTestDatabaseOptions(t, "")
-			dbo.Path = dir
+			dbo := tests.NewTestDatabaseOptions(t, engine.WithPath(dir))
 			eng, _ = engine.Open(ctx, tests.TEST_DB_NAME, dbo.DatabaseOptions()...)
 		}
 		if eng != nil {
@@ -222,7 +221,7 @@ func TestWorkload5(t *testing.T) {
 		}
 		table, err := knox.FindTableFor[tests.AllTypes](knox.WrapEngine(db.Load()), tableName)
 		require.NoError(t, err)
-		pk, n, err := table.Insert(context.Background(), ins)
+		pk, n, err := table.Insert(context.Background(), ins...)
 		require.NoError(t, err)
 		require.Equal(t, len(ins), n, "seed tuples")
 		t.Logf("Inserted %d/%d seed tuples", n, len(ins))
@@ -295,7 +294,10 @@ func TestWorkload5(t *testing.T) {
 					if round < int(lastCrash.Load()) {
 						return nil
 					}
-					table, err := knox.WrapEngine(db.Load()).FindTable(tableName)
+					table, err := knox.FindTableFor[tests.AllTypes](
+						knox.WrapEngine(db.Load()),
+						tableName,
+					)
 					if err != nil {
 						return wrapErr(err)
 					}
@@ -308,7 +310,7 @@ func TestWorkload5(t *testing.T) {
 					n, err := knox.NewQueryFor[tests.AllTypes]().
 						WithTag("update-"+strconv.Itoa(round)).
 						// WithDebug(true).
-						WithTable(table).
+						WithTable(table.Table()).
 						AndEqual("id", id).
 						Execute(context.Background(), &val)
 					if err != nil {
@@ -562,8 +564,7 @@ func TestWorkload5(t *testing.T) {
 
 				// reopen
 				t.Logf("%04d [%s] reopening DB at %s", round, cmd, dir)
-				dbo := tests.NewTestDatabaseOptions(t, "")
-				dbo.Path = dir
+				dbo := tests.NewTestDatabaseOptions(t, engine.WithPath(dir))
 				eng, err := engine.Open(context.Background(), tests.TEST_DB_NAME, dbo.DatabaseOptions()...)
 				if err != nil {
 					lastCrash.Store(int64(len(schedule)))
@@ -585,8 +586,7 @@ func TestWorkload5(t *testing.T) {
 
 				// reopen
 				t.Logf("%04d [%s] reopening DB at %s", round, cmd, dir)
-				dbo := tests.NewTestDatabaseOptions(t, "")
-				dbo.Path = dir
+				dbo := tests.NewTestDatabaseOptions(t, engine.WithPath(dir))
 				eng, err := engine.Open(context.Background(), tests.TEST_DB_NAME, dbo.DatabaseOptions()...)
 				if err != nil {
 					lastCrash.Store(int64(len(schedule)))

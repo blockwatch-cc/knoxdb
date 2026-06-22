@@ -72,13 +72,33 @@ func (p *Package) SetMeta(row int, m *types.Meta) {
 		"cap", p.maxRows,
 	)
 
-	p.blocks[p.rx+ridOffs].Uint64().Set(row, m.Rid)
-	p.blocks[p.rx+refOffs].Uint64().Set(row, m.Ref)
-	p.blocks[p.rx+xminOffs].Uint64().Set(row, uint64(m.Xmin))
-	p.blocks[p.rx+xmaxOffs].Uint64().Set(row, uint64(m.Xmax))
+	p.RowIds().Set(row, m.Rid)
+	p.RowIds().Set(row, m.Ref)
+	p.Xmins().Set(row, uint64(m.Xmin))
+	p.Xmaxs().Set(row, uint64(m.Xmax))
 	if m.Xmax > 0 {
-		p.blocks[p.rx+delOffs].Bool().Set(row)
+		p.Dels().Set(row)
 	} else {
-		p.blocks[p.rx+delOffs].Bool().Unset(row)
+		p.Dels().Unset(row)
+	}
+}
+
+func (p *Package) AppendMeta(meta *types.Meta) {
+	if !p.HasMeta() {
+		return
+	}
+
+	if meta != nil {
+		p.RowIds().Append(meta.Rid)
+		p.RefIds().Append(meta.Ref)
+		p.Xmins().Append(uint64(meta.Xmin))
+		p.Xmaxs().Append(uint64(meta.Xmax))
+		p.Dels().Append(meta.Xmax > 0)
+	} else {
+		p.RowIds().Append(0)
+		p.RefIds().Append(0)
+		p.Xmins().Append(0)
+		p.Xmaxs().Append(0)
+		p.Dels().Append(false)
 	}
 }

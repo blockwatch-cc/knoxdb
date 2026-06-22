@@ -70,8 +70,8 @@ type Table interface {
 	Schema() *schema.Schema
 	Metrics() TableMetrics
 	Engine() engine.TableEngine
-	Insert(context.Context, any) (uint64, int, error)
-	Update(context.Context, any) (int, error)
+	Insert(context.Context, *schema.Batch) (uint64, int, error)
+	Update(context.Context, *schema.Batch) (int, error)
 	Delete(context.Context, QueryRequest) (int, error)
 	Count(context.Context, QueryRequest) (int, error)
 	Query(context.Context, QueryRequest) (QueryResult, error)
