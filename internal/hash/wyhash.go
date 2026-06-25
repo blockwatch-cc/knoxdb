@@ -45,7 +45,7 @@ func WyHash(buf []byte, seed uint64) uint64 {
 	return uint64(wyHash(unsafe.Pointer(&buf[0]), uintptr(seed), uintptr(len(buf))))
 }
 
-func WyVec64u64(src, dst []uint64) []uint64 {
+func WyVec64u64(dst, src []uint64) []uint64 {
 	if len(src) == 0 {
 		return dst[:0]
 	}
@@ -55,7 +55,7 @@ func WyVec64u64(src, dst []uint64) []uint64 {
 	for range len(src) / 128 {
 		s := (*[128]uint64)(unsafe.Add(sp, i*8))
 		r := (*[128]uint64)(unsafe.Add(rp, i*8))
-		wyVec64u64core(s, r)
+		wyVec64u64core(r, s)
 		i += 128
 	}
 	for i < len(src) {
@@ -65,7 +65,7 @@ func WyVec64u64(src, dst []uint64) []uint64 {
 	return dst
 }
 
-func wyVec64u64core(src, dst *[128]uint64) {
+func wyVec64u64core(dst, src *[128]uint64) {
 	for i := 0; i < len(src); i += 16 {
 		dst[0] = WyHash64(src[i], 0)
 		dst[i+1] = WyHash64(src[i+1], 0)

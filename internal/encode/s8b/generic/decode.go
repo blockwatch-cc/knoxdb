@@ -5,6 +5,7 @@ package generic
 
 import (
 	"encoding/binary"
+	"fmt"
 	"unsafe"
 
 	"blockwatch.cc/knoxdb/internal/arena"
@@ -21,50 +22,50 @@ func Decode[T types.Integer](dst []T, buf []byte, minv T) (int, error) {
 	}
 
 	// pick selector based on input bit width
-	unpack := unpackSelector[T](minv)
+	unpack := unpackSelector(minv)
 
 	var i, j int
 	src := arena.FromBytes[uint64](buf)
 	for range len(src) / 8 {
 		v0 := src[i]
 		s0 := (v0 >> 60) & 0xf
-		n0 := maxNPerSelector[s0]
+		n0 := int(maxNPerSelector[s0])
 		unpack[s0](v0, unsafe.Pointer(&dst[j]), uint64(minv))
 
 		v1 := src[i+1]
 		s1 := (v1 >> 60) & 0xf
-		n1 := maxNPerSelector[s1]
+		n1 := int(maxNPerSelector[s1])
 		unpack[s1](v1, unsafe.Pointer(&dst[j+n0]), uint64(minv))
 
 		v2 := src[i+2]
 		s2 := (v2 >> 60) & 0xf
-		n2 := maxNPerSelector[s2]
+		n2 := int(maxNPerSelector[s2])
 		unpack[s2](v2, unsafe.Pointer(&dst[j+n0+n1]), uint64(minv))
 
 		v3 := src[i+3]
 		s3 := (v3 >> 60) & 0xf
-		n3 := maxNPerSelector[s3]
+		n3 := int(maxNPerSelector[s3])
 		unpack[s3](v3, unsafe.Pointer(&dst[j+n0+n1+n2]), uint64(minv))
 		j += n0 + n1 + n2 + n3
 
 		v4 := src[i+4]
 		s4 := (v4 >> 60) & 0xf
-		n4 := maxNPerSelector[s4]
+		n4 := int(maxNPerSelector[s4])
 		unpack[s4](v4, unsafe.Pointer(&dst[j]), uint64(minv))
 
 		v5 := src[i+5]
 		s5 := (v5 >> 60) & 0xf
-		n5 := maxNPerSelector[s5]
+		n5 := int(maxNPerSelector[s5])
 		unpack[s5](v5, unsafe.Pointer(&dst[j+n4]), uint64(minv))
 
 		v6 := src[i+6]
 		s6 := (v6 >> 60) & 0xf
-		n6 := maxNPerSelector[s6]
+		n6 := int(maxNPerSelector[s6])
 		unpack[s6](v6, unsafe.Pointer(&dst[j+n4+n5]), uint64(minv))
 
 		v7 := src[i+7]
 		s7 := (v7 >> 60) & 0xf
-		n7 := maxNPerSelector[s7]
+		n7 := int(maxNPerSelector[s7])
 		unpack[s7](v7, unsafe.Pointer(&dst[j+n4+n5+n6]), uint64(minv))
 		j += n4 + n5 + n6 + n7
 		i += 8
@@ -74,7 +75,7 @@ func Decode[T types.Integer](dst []T, buf []byte, minv T) (int, error) {
 		v := src[i]
 		sel := (v >> 60) & 0xf
 		unpack[sel](v, unsafe.Pointer(&dst[j]), uint64(minv))
-		j += maxNPerSelector[sel]
+		j += int(maxNPerSelector[sel])
 		i++
 	}
 	return j, nil
@@ -87,19 +88,19 @@ func CountValues(src []byte) int {
 	)
 
 	for range len(src) / 64 {
-		n += maxNPerSelector[src[i]>>4]
-		n += maxNPerSelector[src[i+8]>>4]
-		n += maxNPerSelector[src[i+16]>>4]
-		n += maxNPerSelector[src[i+24]>>4]
-		n += maxNPerSelector[src[i+32]>>4]
-		n += maxNPerSelector[src[i+40]>>4]
-		n += maxNPerSelector[src[i+48]>>4]
-		n += maxNPerSelector[src[i+56]>>4]
+		n += int(maxNPerSelector[src[i]>>4])
+		n += int(maxNPerSelector[src[i+8]>>4])
+		n += int(maxNPerSelector[src[i+16]>>4])
+		n += int(maxNPerSelector[src[i+24]>>4])
+		n += int(maxNPerSelector[src[i+32]>>4])
+		n += int(maxNPerSelector[src[i+40]>>4])
+		n += int(maxNPerSelector[src[i+48]>>4])
+		n += int(maxNPerSelector[src[i+56]>>4])
 		i += 64
 	}
 
 	for i < len(src) {
-		n += maxNPerSelector[src[i]>>4]
+		n += int(maxNPerSelector[src[i]>>4])
 		i += 8
 	}
 
@@ -120,14 +121,14 @@ func Seek(src []byte, v int) (int, int) {
 	// skip large portions when seeking further ahead
 	if v > 256 {
 		for range len(src) / 64 {
-			n += maxNPerSelector[src[i]>>4]
-			n += maxNPerSelector[src[i+8]>>4]
-			n += maxNPerSelector[src[i+16]>>4]
-			n += maxNPerSelector[src[i+24]>>4]
-			n += maxNPerSelector[src[i+32]>>4]
-			n += maxNPerSelector[src[i+40]>>4]
-			n += maxNPerSelector[src[i+48]>>4]
-			n += maxNPerSelector[src[i+56]>>4]
+			n += int(maxNPerSelector[src[i]>>4])
+			n += int(maxNPerSelector[src[i+8]>>4])
+			n += int(maxNPerSelector[src[i+16]>>4])
+			n += int(maxNPerSelector[src[i+24]>>4])
+			n += int(maxNPerSelector[src[i+32]>>4])
+			n += int(maxNPerSelector[src[i+40]>>4])
+			n += int(maxNPerSelector[src[i+48]>>4])
+			n += int(maxNPerSelector[src[i+56]>>4])
 			i += 64
 			if n >= v {
 				break
@@ -140,7 +141,7 @@ func Seek(src []byte, v int) (int, int) {
 		// walk back in case large ranges overcounted
 		i -= 8
 		for i >= -1 {
-			n -= maxNPerSelector[src[i]>>4]
+			n -= int(maxNPerSelector[src[i]>>4])
 			if n <= v {
 				return i - 7, v - n
 			}
@@ -152,7 +153,7 @@ func Seek(src []byte, v int) (int, int) {
 	default:
 		// walk forward (regular and tail case)
 		for i < len(src) {
-			s := maxNPerSelector[src[i]>>4]
+			s := int(maxNPerSelector[src[i]>>4])
 			if n+s > v {
 				return i - 7, v - n
 			}
@@ -173,7 +174,7 @@ type Decoder[T types.Integer] struct {
 func NewDecoder[T types.Integer](minv T) *Decoder[T] {
 	return &Decoder[T]{
 		minv:   minv,
-		unpack: unpackSelector[T](minv),
+		unpack: unpackSelector(minv),
 	}
 }
 
@@ -181,14 +182,9 @@ func NewDecoder[T types.Integer](minv T) *Decoder[T] {
 func (d *Decoder[T]) DecodeWordPtr(dst unsafe.Pointer, l int, buf []byte) int {
 	v := binary.LittleEndian.Uint64(buf)
 	sel := v >> 60
-	n := maxNPerSelector[sel]
+	n := int(maxNPerSelector[sel])
 	if l < n {
-		// TODO: partial word decode is unsupported and slow
-		// tmp := make([]T, n)
-		// d.unpack[sel](v, unsafe.Pointer(&tmp[0]), uint64(d.minv))
-		// copy(unsafe.Slice((*T)(dst), l), tmp)
-		// return l
-		return 0
+		panic(fmt.Errorf("short buffer %d for sel[%d]=%d", l, sel, n))
 	}
 	d.unpack[sel](v, dst, uint64(d.minv))
 	return n
@@ -198,9 +194,9 @@ func (d *Decoder[T]) DecodeWordPtr(dst unsafe.Pointer, l int, buf []byte) int {
 func (d *Decoder[T]) DecodeWord(dst []T, buf []byte) int {
 	v := binary.LittleEndian.Uint64(buf)
 	sel := v >> 60
-	n := maxNPerSelector[sel]
+	n := int(maxNPerSelector[sel])
 	if len(dst) < n {
-		return 0
+		panic(fmt.Errorf("short buffer %d for sel[%d]=%d", len(dst), sel, n))
 	}
 	d.unpack[sel](v, unsafe.Pointer(&dst[0]), uint64(d.minv))
 	return n

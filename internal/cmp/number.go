@@ -5,6 +5,8 @@ package cmp
 
 import (
 	"math/bits"
+
+	"blockwatch.cc/knoxdb/pkg/num"
 )
 
 type Integer interface {
@@ -21,6 +23,14 @@ type Float interface {
 
 type Number interface {
 	Integer | Float
+}
+
+type Strided interface {
+	num.Int128Stride | num.Int256Stride
+}
+
+type StrideBase interface {
+	num.Int128 | num.Int256
 }
 
 func cmp_eq[T Integer](src []T, val T, res []byte) int64 {

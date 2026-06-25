@@ -455,7 +455,7 @@ func (m *bitInSetMatcher) WithSlice(slice any) {
 	case 2:
 		m.from, m.to = vals[0], vals[1]
 	}
-	m.hashes = hash.Vec(vals, m.hashes)
+	m.hashes = hash.Vec(m.hashes, vals)
 }
 
 func (m *bitInSetMatcher) WithSet(set *xroar.Bitmap) {

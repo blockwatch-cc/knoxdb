@@ -157,7 +157,7 @@ func (j *Journal) UpdateWalBatch(ctx context.Context, rec *wal.Record, rd engine
 		// make change schema (for parsing change records)
 		cids := make([]uint16, 0, cset.Count())
 		cols := make([]int, 0, cset.Count())
-		for i := range cset.Iterator() {
+		for i := range cset.Ones() {
 			cids = append(cids, s.Fields[i].Id)
 			cols = append(cols, i)
 		}

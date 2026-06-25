@@ -104,15 +104,19 @@ func (c *CompactStringContainer) Get(i int) []byte {
 	return c.buf[ofs : ofs+len]
 }
 
-func (c *CompactStringContainer) Iterator() iter.Seq2[int, []byte] {
-	return func(fn func(int, []byte) bool) {
-		for i := range c.n {
-			ofs := c.ofs.Get(i)
-			len := c.len.Get(i)
-			if !fn(i, c.buf[ofs:ofs+len:ofs+len]) {
-				return
-			}
-		}
+func (c *CompactStringContainer) All() iter.Seq2[int, []byte] {
+	return func(yield func(int, []byte) bool) {
+		it := c.Chunks()
+		it.All()(yield)
+		it.Close()
+	}
+}
+
+func (c *CompactStringContainer) Values() iter.Seq[[]byte] {
+	return func(yield func([]byte) bool) {
+		it := c.Chunks()
+		it.Values()(yield)
+		it.Close()
 	}
 }
 
@@ -144,7 +148,7 @@ func (c *CompactStringContainer) Encode(ctx *StringContext, vals types.StringAcc
 	uniq := arena.Alloc[int32](ctx.NumUnique)
 
 	// compact and reference duplicates
-	for i, v := range vals.Iterator() {
+	for i, v := range vals.All() {
 		k := ctx.Dups[i]
 		if k < 0 {
 			// append non duplicate
@@ -235,8 +239,8 @@ func (it *CompactStringIterator) fill(base int) int {
 	// load code chunk at base and translate
 	it.start.Seek(base)
 	it.size.Seek(base)
-	ofs, n := it.start.NextChunk()
-	len, m := it.size.NextChunk()
+	ofs, n := it.start.Next()
+	len, m := it.size.Next()
 	if n == 0 || n != m {
 		it.ofs = it.len
 		it.base = -1
@@ -247,21 +251,21 @@ func (it *CompactStringIterator) fill(base int) int {
 	var i int
 	for range n / 16 {
 		it.chunk[i] = it.buf[ofs[i] : ofs[i]+len[i] : ofs[i]+len[i]]
-		it.chunk[i+1] = it.buf[ofs[i+1] : ofs[i]+len[i+1] : ofs[i]+len[i+1]]
-		it.chunk[i+2] = it.buf[ofs[i+2] : ofs[i]+len[i+2] : ofs[i]+len[i+2]]
-		it.chunk[i+3] = it.buf[ofs[i+3] : ofs[i]+len[i+3] : ofs[i]+len[i+3]]
-		it.chunk[i+4] = it.buf[ofs[i+4] : ofs[i]+len[i+4] : ofs[i]+len[i+4]]
-		it.chunk[i+5] = it.buf[ofs[i+5] : ofs[i]+len[i+5] : ofs[i]+len[i+5]]
-		it.chunk[i+6] = it.buf[ofs[i+6] : ofs[i]+len[i+6] : ofs[i]+len[i+6]]
-		it.chunk[i+7] = it.buf[ofs[i+7] : ofs[i]+len[i+7] : ofs[i]+len[i+7]]
-		it.chunk[i+8] = it.buf[ofs[i+8] : ofs[i]+len[i+8] : ofs[i]+len[i+8]]
-		it.chunk[i+9] = it.buf[ofs[i+9] : ofs[i]+len[i+9] : ofs[i]+len[i+9]]
-		it.chunk[i+10] = it.buf[ofs[i+10] : ofs[i]+len[i+10] : ofs[i]+len[i+10]]
-		it.chunk[i+11] = it.buf[ofs[i+11] : ofs[i]+len[i+11] : ofs[i]+len[i+11]]
-		it.chunk[i+12] = it.buf[ofs[i+12] : ofs[i]+len[i+12] : ofs[i]+len[i+12]]
-		it.chunk[i+13] = it.buf[ofs[i+13] : ofs[i]+len[i+13] : ofs[i]+len[i+13]]
-		it.chunk[i+14] = it.buf[ofs[i+14] : ofs[i]+len[i+14] : ofs[i]+len[i+14]]
-		it.chunk[i+15] = it.buf[ofs[i+15] : ofs[i]+len[i+15] : ofs[i]+len[i+15]]
+		it.chunk[i+1] = it.buf[ofs[i+1] : ofs[i+1]+len[i+1] : ofs[i+1]+len[i+1]]
+		it.chunk[i+2] = it.buf[ofs[i+2] : ofs[i+2]+len[i+2] : ofs[i+2]+len[i+2]]
+		it.chunk[i+3] = it.buf[ofs[i+3] : ofs[i+3]+len[i+3] : ofs[i+3]+len[i+3]]
+		it.chunk[i+4] = it.buf[ofs[i+4] : ofs[i+4]+len[i+4] : ofs[i+4]+len[i+4]]
+		it.chunk[i+5] = it.buf[ofs[i+5] : ofs[i+5]+len[i+5] : ofs[i+5]+len[i+5]]
+		it.chunk[i+6] = it.buf[ofs[i+6] : ofs[i+6]+len[i+6] : ofs[i+6]+len[i+6]]
+		it.chunk[i+7] = it.buf[ofs[i+7] : ofs[i+7]+len[i+7] : ofs[i+7]+len[i+7]]
+		it.chunk[i+8] = it.buf[ofs[i+8] : ofs[i+8]+len[i+8] : ofs[i+8]+len[i+8]]
+		it.chunk[i+9] = it.buf[ofs[i+9] : ofs[i+9]+len[i+9] : ofs[i+9]+len[i+9]]
+		it.chunk[i+10] = it.buf[ofs[i+10] : ofs[i+10]+len[i+10] : ofs[i+10]+len[i+10]]
+		it.chunk[i+11] = it.buf[ofs[i+11] : ofs[i+11]+len[i+11] : ofs[i+11]+len[i+11]]
+		it.chunk[i+12] = it.buf[ofs[i+12] : ofs[i+12]+len[i+12] : ofs[i+12]+len[i+12]]
+		it.chunk[i+13] = it.buf[ofs[i+13] : ofs[i+13]+len[i+13] : ofs[i+13]+len[i+13]]
+		it.chunk[i+14] = it.buf[ofs[i+14] : ofs[i+14]+len[i+14] : ofs[i+14]+len[i+14]]
+		it.chunk[i+15] = it.buf[ofs[i+15] : ofs[i+15]+len[i+15] : ofs[i+15]+len[i+15]]
 		i += 16
 	}
 	for i < n {

@@ -64,7 +64,7 @@ func (r *Result) Append(seg *Segment, bits *bitset.Bitset) {
 
 	// add selection vector unless all records match
 	if !bits.All() {
-		sel := bits.Indexes(nil)
+		sel := bits.AllIndexes(nil)
 		if r.order.IsReverse() {
 			slices.Reverse(sel)
 		}

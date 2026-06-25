@@ -33,11 +33,11 @@ var (
 // TFloatAlp
 type FloatAlpContainer[T types.Float, E int64 | int32] struct {
 	readOnlyContainer[T]
-	Values    NumberContainer[E]
-	Patches   NumberContainer[T]
-	Positions NumberContainer[uint32]
-	Exponent  uint8
-	Factor    uint8
+	values    NumberContainer[E]
+	patches   NumberContainer[T]
+	positions NumberContainer[uint32]
+	exponent  uint8
+	factor    uint8
 	flags     AlpFlags
 	dec       atomic.Pointer[alp.Decoder[T, E]]
 }
@@ -45,11 +45,11 @@ type FloatAlpContainer[T types.Float, E int64 | int32] struct {
 func (c *FloatAlpContainer[T, E]) Info() string {
 	if c.flags&FlagPatched > 0 {
 		return fmt.Sprintf("ALP(%s)_[%d,%d]_[v=%s]_[ex=%s]_[pos=%s]",
-			TypeName[T](), c.Exponent, c.Factor,
-			c.Values.Info(), c.Patches.Info(), c.Positions.Info())
+			TypeName[T](), c.exponent, c.factor,
+			c.values.Info(), c.patches.Info(), c.positions.Info())
 	}
 	return fmt.Sprintf("ALP(%s)_[%d,%d]_[v=%s]_[noex]", TypeName[T](),
-		c.Exponent, c.Factor, c.Values.Info())
+		c.exponent, c.factor, c.values.Info())
 }
 
 func (c *FloatAlpContainer[T, E]) Close() {
@@ -57,16 +57,16 @@ func (c *FloatAlpContainer[T, E]) Close() {
 	if ok := c.dec.CompareAndSwap(p, nil); ok && p != nil {
 		p.Close()
 	}
-	c.Values.Close()
-	c.Values = nil
+	c.values.Close()
+	c.values = nil
 	if c.flags&FlagPatched > 0 {
-		c.Patches.Close()
-		c.Positions.Close()
-		c.Patches = nil
-		c.Positions = nil
+		c.patches.Close()
+		c.positions.Close()
+		c.patches = nil
+		c.positions = nil
 	}
 	c.flags = 0
-	putFloatAlpContainer[T](c)
+	putFloatAlpContainer(c)
 }
 
 func (c *FloatAlpContainer[T, E]) Type() ContainerType {
@@ -74,13 +74,13 @@ func (c *FloatAlpContainer[T, E]) Type() ContainerType {
 }
 
 func (c *FloatAlpContainer[T, E]) Len() int {
-	return c.Values.Len()
+	return c.values.Len()
 }
 
 func (c *FloatAlpContainer[T, E]) Size() int {
-	v := 4 + c.Values.Size()
+	v := 4 + c.values.Size()
 	if c.flags&FlagPatched > 0 {
-		v += c.Patches.Size() + c.Positions.Size()
+		v += c.patches.Size() + c.positions.Size()
 	}
 	return v
 }
@@ -94,27 +94,31 @@ func (c *FloatAlpContainer[T, E]) Chunks() types.NumberIterator[T] {
 	return NewFloatAlpIterator(c)
 }
 
-func (c *FloatAlpContainer[T, E]) Iterator() iter.Seq2[int, T] {
-	return func(fn func(int, T) bool) {
+func (c *FloatAlpContainer[T, E]) All() iter.Seq2[int, T] {
+	return func(yield func(int, T) bool) {
 		it := c.Chunks()
-		for i := range it.Len() {
-			if !fn(i, it.Get(i)) {
-				break
-			}
-		}
+		it.All()(yield)
+		it.Close()
+	}
+}
+
+func (c *FloatAlpContainer[T, E]) Values() iter.Seq[T] {
+	return func(yield func(T) bool) {
+		it := c.Chunks()
+		it.Values()(yield)
 		it.Close()
 	}
 }
 
 func (c *FloatAlpContainer[T, E]) Store(dst []byte) []byte {
 	dst = append(dst, byte(TFloatAlp))
-	dst = binary.AppendUvarint(dst, uint64(c.Exponent))
-	dst = binary.AppendUvarint(dst, uint64(c.Factor))
+	dst = binary.AppendUvarint(dst, uint64(c.exponent))
+	dst = binary.AppendUvarint(dst, uint64(c.factor))
 	dst = append(dst, byte(c.flags))
-	dst = c.Values.Store(dst)
+	dst = c.values.Store(dst)
 	if c.flags&FlagPatched > 0 {
-		dst = c.Patches.Store(dst)
-		dst = c.Positions.Store(dst)
+		dst = c.patches.Store(dst)
+		dst = c.positions.Store(dst)
 	}
 	return dst
 }
@@ -126,11 +130,11 @@ func (c *FloatAlpContainer[T, E]) Load(buf []byte) ([]byte, error) {
 	buf = buf[1:]
 
 	v, n := binary.Uvarint(buf)
-	c.Exponent = uint8(v)
+	c.exponent = uint8(v)
 	buf = buf[n:]
 
 	v, n = binary.Uvarint(buf)
-	c.Factor = uint8(v)
+	c.factor = uint8(v)
 	buf = buf[n:]
 
 	// load flags
@@ -138,24 +142,24 @@ func (c *FloatAlpContainer[T, E]) Load(buf []byte) ([]byte, error) {
 	buf = buf[1:]
 
 	// alloc and decode values child container
-	c.Values = NewInt[E](ContainerType(buf[0]))
+	c.values = NewInt[E](ContainerType(buf[0]))
 	var err error
-	buf, err = c.Values.Load(buf)
+	buf, err = c.values.Load(buf)
 	if err != nil {
 		return buf, err
 	}
 
 	if c.flags&FlagPatched > 0 {
 		// patch values
-		c.Patches = NewFloat[T](ContainerType(buf[0]))
-		buf, err = c.Patches.Load(buf)
+		c.patches = NewFloat[T](ContainerType(buf[0]))
+		buf, err = c.patches.Load(buf)
 		if err != nil {
 			return buf, err
 		}
 
 		// patch positions
-		c.Positions = NewInt[uint32](ContainerType(buf[0]))
-		buf, err = c.Positions.Load(buf)
+		c.positions = NewInt[uint32](ContainerType(buf[0]))
+		buf, err = c.positions.Load(buf)
 		if err != nil {
 			return buf, err
 		}
@@ -166,14 +170,14 @@ func (c *FloatAlpContainer[T, E]) Load(buf []byte) ([]byte, error) {
 
 func (c *FloatAlpContainer[T, E]) Get(n int) T {
 	c.initDecoder()
-	return c.dec.Load().DecodeValue(c.Values.Get(n), n)
+	return c.dec.Load().DecodeValue(c.values.Get(n), n)
 }
 
 func (c *FloatAlpContainer[T, E]) AppendTo(dst []T, sel []uint32) []T {
 	if sel == nil {
 		// faster to do serial unpack & decode
 		sz := c.Len()
-		tmp := c.Values.AppendTo(arena.Alloc[E](sz), nil)
+		tmp := c.values.AppendTo(arena.Alloc[E](sz), nil)
 		c.initDecoder()
 		dst = dst[:sz]
 		c.dec.Load().Decode(dst, tmp)
@@ -181,7 +185,7 @@ func (c *FloatAlpContainer[T, E]) AppendTo(dst []T, sel []uint32) []T {
 	} else {
 		it := c.Chunks()
 		for _, v := range sel {
-			dst = append(dst, it.Get(int(v)))
+			dst = append(dst, it.Value(int(v)))
 		}
 		it.Close()
 	}
@@ -192,20 +196,20 @@ func (c *FloatAlpContainer[T, E]) Encode(ctx *Context[T], vals []T) NumberContai
 	// encode using parames from analysis
 	enc := alp.NewEncoder[T, E]()
 	res := enc.Encode(vals, ctx.Alp.Exp)
-	c.Exponent = ctx.Alp.Exp.E
-	c.Factor = ctx.Alp.Exp.F
+	c.exponent = ctx.Alp.Exp.E
+	c.factor = ctx.Alp.Exp.F
 
 	// encode child containers, skip analysis and use known values
 	vctx := NewIntContext(res.Min, res.Max, len(vals)).WithLevel(ctx.Lvl - 1)
-	c.Values = EncodeInt(vctx, res.Encoded)
+	c.values = EncodeInt(vctx, res.Encoded)
 	vctx.Close()
 	if n := len(res.PatchValues); n > 0 {
 		c.flags |= FlagPatched
 		pctx := AnalyzeFloat(res.PatchValues, false, false).WithLevel(1)
-		c.Patches = NewFloat[T](TFloatRaw).Encode(pctx, res.PatchValues)
+		c.patches = NewFloat[T](TFloatRaw).Encode(pctx, res.PatchValues)
 		pctx.Close()
 		ectx := NewIntContext(0, res.PatchIndices[n-1], n).WithLevel(ctx.Lvl - 1)
-		c.Positions = EncodeInt(ectx, res.PatchIndices)
+		c.positions = EncodeInt(ectx, res.PatchIndices)
 		ectx.Close()
 	}
 	if res.IsSafeInt {
@@ -220,12 +224,12 @@ func (c *FloatAlpContainer[T, E]) initDecoder() {
 	if c.dec.Load() != nil {
 		return
 	}
-	p := alp.NewDecoder[T, E](c.Factor, c.Exponent).WithSafeInt(c.flags&FlagSafeInt > 0)
+	p := alp.NewDecoder[T, E](c.factor, c.exponent).WithSafeInt(c.flags&FlagSafeInt > 0)
 	if c.flags&FlagPatched > 0 {
-		cnt := c.Patches.Len()
+		cnt := c.patches.Len()
 		p.WithPatches(
-			c.Patches.AppendTo(arena.Alloc[T](cnt), nil),
-			c.Positions.AppendTo(arena.Alloc[uint32](cnt), nil),
+			c.patches.AppendTo(arena.Alloc[T](cnt), nil),
+			c.positions.AppendTo(arena.Alloc[uint32](cnt), nil),
 		)
 	}
 	c.dec.Store(p)
@@ -243,24 +247,24 @@ func (c *FloatAlpContainer[T, E]) MatchEqual(val T, bits, mask *Bitset) {
 	if !isNaN {
 		// try translate val into ALP domain
 		enc := alp.NewEncoder[T, E]()
-		av, ok := enc.EncodeSingle(val, alp.Exponents{E: c.Exponent, F: c.Factor})
+		av, ok := enc.EncodeSingle(val, alp.Exponents{E: c.exponent, F: c.factor})
 
 		// on success, match against encoded int values
 		if ok {
-			c.Values.MatchEqual(av, bits, mask)
+			c.values.MatchEqual(av, bits, mask)
 		}
 	}
 
 	// merge _all_ patches by flipping bits, note values contain
 	// vector min as replacement and value match above may have
-	// matched it but the true patched value is not equal
+	// matched it but the true patched value would not match
 	if c.flags&FlagPatched > 0 {
 		// load decoded patch data
 		c.initDecoder()
 		vals, pos := c.dec.Load().Patches()
 
 		// if av == min we must revert bits on all patch positions
-		// we know by checking of any patch position is already set
+		// we know by checking if any patch position is already set
 		if bits.Contains(int(pos[0])) {
 			for _, p := range pos {
 				bits.Unset(int(p))
@@ -302,19 +306,20 @@ func (c *FloatAlpContainer[T, E]) MatchLess(val T, bits, mask *Bitset) {
 	// replacement for all patched values. we need to undo these
 	// matches below when creating the union(values, patches)
 	enc := alp.NewEncoder[T, E]()
-	exp := alp.Exponents{E: c.Exponent, F: c.Factor}
+	exp := alp.Exponents{E: c.exponent, F: c.factor}
 	av, ok := enc.EncodeSingle(val, exp)
-	if ok {
-		// match successful encoded value
-		c.Values.MatchLess(av, bits, mask)
-	} else {
-		// match using the next smaller integer, use LE
-		c.Values.MatchLessEqual(enc.EncodeBelow(val, exp), bits, mask)
+	if !ok {
+		// slow-path: decode and match
+		matchIt(c.Chunks(), matchFn[T](types.FilterModeLt), val, bits, mask)
+		return
 	}
+
+	// match successful encoded value
+	c.values.MatchLess(av, bits, mask)
 
 	// merge _all_ patches by flipping bits, note values contain
 	// vector min as replacement and value match above may have
-	// matched it but the true patched value is not less
+	// matched it but the true patched value would not match
 	if c.flags&FlagPatched > 0 {
 		c.initDecoder()
 		vals, pos := c.dec.Load().Patches()
@@ -344,19 +349,20 @@ func (c *FloatAlpContainer[T, E]) MatchLessEqual(val T, bits, mask *Bitset) {
 	// replacement for all patched values. we need to undo these
 	// matches below when creating the union(values, patches)
 	enc := alp.NewEncoder[T, E]()
-	exp := alp.Exponents{E: c.Exponent, F: c.Factor}
+	exp := alp.Exponents{E: c.exponent, F: c.factor}
 	av, ok := enc.EncodeSingle(val, exp)
-	if ok {
-		// match successful encoded value
-		c.Values.MatchLessEqual(av, bits, mask)
-	} else {
-		// match using the next smaller integer
-		c.Values.MatchLessEqual(enc.EncodeBelow(val, exp), bits, mask)
+	if !ok {
+		// slow-path: decode and match
+		matchIt(c.Chunks(), matchFn[T](types.FilterModeLe), val, bits, mask)
+		return
 	}
+
+	// match successful encoded value
+	c.values.MatchLessEqual(av, bits, mask)
 
 	// merge _all_ patches by flipping bits, note values contain
 	// vector min as replacement and value match above may have
-	// matched it but the true patched value is not less
+	// matched it but the true patched value would not match
 	if c.flags&FlagPatched > 0 {
 		c.initDecoder()
 		vals, pos := c.dec.Load().Patches()
@@ -383,19 +389,20 @@ func (c *FloatAlpContainer[T, E]) MatchGreater(val T, bits, mask *Bitset) {
 	// replacement for all patched values. we need to undo these
 	// matches below when creating the union(values, patches)
 	enc := alp.NewEncoder[T, E]()
-	exp := alp.Exponents{E: c.Exponent, F: c.Factor}
+	exp := alp.Exponents{E: c.exponent, F: c.factor}
 	av, ok := enc.EncodeSingle(val, exp)
-	if ok {
-		// match successful encoded value
-		c.Values.MatchGreater(av, bits, mask)
-	} else {
-		// match using the next larger integer, use GE
-		c.Values.MatchGreaterEqual(enc.EncodeAbove(val, exp), bits, mask)
+	if !ok {
+		// slow-path: decode and match
+		matchIt(c.Chunks(), matchFn[T](types.FilterModeGt), val, bits, mask)
+		return
 	}
+
+	// match successful encoded value
+	c.values.MatchGreater(av, bits, mask)
 
 	// merge _all_ patches by flipping bits, note values contain
 	// vector min as replacement and value match above may have
-	// matched it but the true patched value is not greater
+	// matched it but the true patched value would not match
 	if c.flags&FlagPatched > 0 {
 		c.initDecoder()
 		vals, pos := c.dec.Load().Patches()
@@ -425,19 +432,20 @@ func (c *FloatAlpContainer[T, E]) MatchGreaterEqual(val T, bits, mask *Bitset) {
 	// replacement for all patched values. we need to undo these
 	// matches below when creating the union(values, patches)
 	enc := alp.NewEncoder[T, E]()
-	exp := alp.Exponents{E: c.Exponent, F: c.Factor}
+	exp := alp.Exponents{E: c.exponent, F: c.factor}
 	av, ok := enc.EncodeSingle(val, exp)
-	if ok {
-		// match successful encoded value
-		c.Values.MatchGreaterEqual(av, bits, mask)
-	} else {
-		// match using the next larger integer
-		c.Values.MatchGreaterEqual(enc.EncodeAbove(val, exp), bits, mask)
+	if !ok {
+		// slow-path: decode and match
+		matchIt(c.Chunks(), matchFn[T](types.FilterModeGe), val, bits, mask)
+		return
 	}
+
+	// match successful encoded value
+	c.values.MatchGreaterEqual(av, bits, mask)
 
 	// merge _all_ patches by flipping bits, note values contain
 	// vector min as replacement and value match above may have
-	// matched it but the true patched value is not less
+	// matched it but the true patched value would not match
 	if c.flags&FlagPatched > 0 {
 		c.initDecoder()
 		vals, pos := c.dec.Load().Patches()
@@ -459,26 +467,28 @@ func (c *FloatAlpContainer[T, E]) MatchBetween(a, b T, bits, mask *Bitset) {
 		return
 	}
 
-	// match integers first. likely includes min val which is used as
+	// try match integers first. likely includes min val which is used as
 	// replacement for all patched values. we need to undo these
 	// matches below when creating the union(values, patches)
 	enc := alp.NewEncoder[T, E]()
-	exp := alp.Exponents{E: c.Exponent, F: c.Factor}
-	av, ok := enc.EncodeSingle(a, exp)
-	if !ok {
-		av = enc.EncodeAbove(a, exp)
-	}
-	bv, ok := enc.EncodeSingle(b, exp)
-	if !ok {
-		bv = enc.EncodeBelow(b, exp)
+	exp := alp.Exponents{E: c.exponent, F: c.factor}
+	av, ok1 := enc.EncodeSingle(a, exp)
+	bv, ok2 := enc.EncodeSingle(b, exp)
+	if !ok1 || !ok2 {
+		// slow-path: decode and match because boundary values
+		// don't cleanly translate to ALP domain
+		matchRangeIt(c.Chunks(), matchFn[T](types.FilterModeRange), a, b, bits, mask)
+		return
 	}
 
 	// match integer range
-	c.Values.MatchBetween(av, bv, bits, mask)
+	if av <= bv {
+		c.values.MatchBetween(av, bv, bits, mask)
+	}
 
 	// merge _all_ patches by flipping bits, note values contain
 	// vector min as replacement and value match above may have
-	// matched it but the true patched value is not less
+	// matched it but the true patched value would not match
 	if c.flags&FlagPatched > 0 {
 		c.initDecoder()
 		vals, pos := c.dec.Load().Patches()
@@ -497,7 +507,7 @@ func (c *FloatAlpContainer[T, E]) MatchBetween(a, b T, bits, mask *Bitset) {
 func (c *FloatAlpContainer[T, E]) MatchInSet(_ any, _, _ *Bitset)    {}
 func (c *FloatAlpContainer[T, E]) MatchNotInSet(_ any, _, _ *Bitset) {}
 
-type FloatAlpFactory struct {
+type FloatAlpfactory struct {
 	f64Pool   sync.Pool
 	f32Pool   sync.Pool
 	f64ItPool sync.Pool
@@ -507,9 +517,9 @@ type FloatAlpFactory struct {
 func newFloatAlpContainer[T types.Float]() NumberContainer[T] {
 	switch any(T(0)).(type) {
 	case float64:
-		return floatAlpFactory.f64Pool.Get().(NumberContainer[T])
+		return floatAlpfactory.f64Pool.Get().(NumberContainer[T])
 	case float32:
-		return floatAlpFactory.f32Pool.Get().(NumberContainer[T])
+		return floatAlpfactory.f32Pool.Get().(NumberContainer[T])
 	default:
 		return nil
 	}
@@ -518,18 +528,18 @@ func newFloatAlpContainer[T types.Float]() NumberContainer[T] {
 func putFloatAlpContainer[T types.Float](c NumberContainer[T]) {
 	switch any(T(0)).(type) {
 	case float64:
-		floatAlpFactory.f64Pool.Put(c)
+		floatAlpfactory.f64Pool.Put(c)
 	case float32:
-		floatAlpFactory.f32Pool.Put(c)
+		floatAlpfactory.f32Pool.Put(c)
 	}
 }
 
 func newFloatAlpIterator[T types.Float, E int64 | int32]() *FloatAlpIterator[T, E] {
 	switch any(T(0)).(type) {
 	case float64:
-		return floatAlpFactory.f64ItPool.Get().(*FloatAlpIterator[T, E])
+		return floatAlpfactory.f64ItPool.Get().(*FloatAlpIterator[T, E])
 	case float32:
-		return floatAlpFactory.f32ItPool.Get().(*FloatAlpIterator[T, E])
+		return floatAlpfactory.f32ItPool.Get().(*FloatAlpIterator[T, E])
 	default:
 		return nil
 	}
@@ -538,13 +548,13 @@ func newFloatAlpIterator[T types.Float, E int64 | int32]() *FloatAlpIterator[T, 
 func putFloatAlpIterator[T types.Float, E int64 | int32](c *FloatAlpIterator[T, E]) {
 	switch any(T(0)).(type) {
 	case float64:
-		floatAlpFactory.f64ItPool.Put(c)
+		floatAlpfactory.f64ItPool.Put(c)
 	case float32:
-		floatAlpFactory.f32ItPool.Put(c)
+		floatAlpfactory.f32ItPool.Put(c)
 	}
 }
 
-var floatAlpFactory = FloatAlpFactory{
+var floatAlpfactory = FloatAlpfactory{
 	f64Pool:   sync.Pool{New: func() any { return new(FloatAlpContainer[float64, int64]) }},
 	f32Pool:   sync.Pool{New: func() any { return new(FloatAlpContainer[float32, int32]) }},
 	f64ItPool: sync.Pool{New: func() any { return new(FloatAlpIterator[float64, int64]) }},
@@ -564,7 +574,7 @@ type FloatAlpIterator[T types.Float, E int64 | int32] struct {
 func NewFloatAlpIterator[T types.Float, E int64 | int32](c *FloatAlpContainer[T, E]) *FloatAlpIterator[T, E] {
 	it := newFloatAlpIterator[T, E]()
 	it.dec = c.dec.Load()
-	it.src = c.Values.Chunks()
+	it.src = c.values.Chunks()
 	it.base = -1
 	it.len = c.Len()
 	it.BaseIterator.fill = it.fill
@@ -582,7 +592,7 @@ func (it *FloatAlpIterator[T, E]) Close() {
 func (it *FloatAlpIterator[T, E]) fill(base int) int {
 	// load next source chunk at base and translate
 	it.src.Seek(base)
-	src, n := it.src.NextChunk()
+	src, n := it.src.Next()
 	if n == 0 {
 		it.ofs = it.len
 		it.base = -1

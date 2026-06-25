@@ -4,6 +4,7 @@
 package s8b
 
 import (
+	"iter"
 	"sync"
 	"unsafe"
 
@@ -17,15 +18,16 @@ const (
 )
 
 type Iterator[T types.Integer] struct {
-	chunk [CHUNK_SIZE]T
-	src   []byte // s8b encoded uint64 words
-	minv  T      // min-FOR value
-	base  int    // index of first value in chunk
-	len   int    // total count of encoded values in src
-	ofs   int    // next value index in vector
-	cnt   int    // count of valid values in chunk
-	read  int    // next src read offset
-	dec   *generic.Decoder[T]
+	chunk [CHUNK_SIZE + 60]T  // overallocate for max word size
+	src   []byte              // s8b encoded uint64 words
+	minv  T                   // min-FOR value
+	base  int                 // index of current chunk in vector
+	ofs   int                 // next base
+	len   int                 // total count of encoded values in src
+	align int                 // first valid value in chunk
+	sz    int                 // word size
+	idx   *IndexImpl[uint32]  // value offset index
+	dec   *generic.Decoder[T] // embedded decoder
 }
 
 func NewIterator[T types.Integer](buf []byte, n int, minv T) *Iterator[T] {
@@ -34,10 +36,18 @@ func NewIterator[T types.Integer](buf []byte, n int, minv T) *Iterator[T] {
 	}
 	it := newIterator[T]()
 	it.base = -1
+	it.ofs = 0
 	it.src = buf
 	it.len = n
+	it.align = 0
+	it.sz = arena.SizeFor[T]()
 	it.minv = minv
 	it.dec = generic.NewDecoder(minv)
+	if it.idx != nil {
+		it.idx = makeIndex(buf, it.idx.ends)
+	} else {
+		it.idx = makeIndex[uint32](buf, nil)
+	}
 	return it
 }
 
@@ -46,10 +56,11 @@ func (it *Iterator[T]) Close() {
 	it.minv = 0
 	it.base = 0
 	it.ofs = 0
+	it.align = 0
 	it.len = 0
-	it.cnt = 0
-	it.read = 0
+	it.sz = 0
 	it.dec = nil
+	// keep index
 	putIterator(it)
 }
 
@@ -61,66 +72,40 @@ func (it *Iterator[T]) Len() int {
 	return it.len
 }
 
-func (it *Iterator[T]) Get(n int) T {
+func (it *Iterator[T]) Value(n int) T {
 	if n < 0 || n >= it.len {
 		return 0
 	}
-	if uint(n-it.base) >= uint(it.cnt) {
-		it.fill(n)
+	if base := types.ChunkBase(n); base != it.base {
+		it.fill(base)
 	}
-	return it.chunk[n-it.base]
+	return it.chunk[it.align+types.ChunkPos(n)]
 }
 
-func (it *Iterator[T]) Next() (T, bool) {
-	// EOF
-	if it.ofs >= it.len {
-		return 0, false
-	}
-
-	// refill on chunk boundary
-	if uint(it.ofs-it.base) >= uint(it.cnt) {
-		it.fill(it.ofs)
-	}
-
-	// advance n for next call
-	i := it.ofs - it.base
-	it.ofs++
-
-	return it.chunk[i], true
-}
-
-func (it *Iterator[T]) NextChunk() (*[CHUNK_SIZE]T, int) {
-	// EOF
+func (it *Iterator[T]) Next() (*[CHUNK_SIZE]T, int) {
+	// check EOF
 	if it.ofs >= it.len {
 		return nil, 0
 	}
 
-	// refill from current end of chunk (note: base inits at -1)
-	n := it.fill(max(0, it.ofs))
+	// refill (considering seek/skip/reset state updates)
+	n := min(CHUNK_SIZE, it.len-it.base)
+	if base := types.ChunkBase(it.ofs); base != it.base {
+		n = it.fill(base)
+	}
 	it.ofs = it.base + n
 
-	return &it.chunk, n
+	// adjust chunk by new alignment
+	return (*[CHUNK_SIZE]T)(unsafe.Pointer(&it.chunk[it.align])), n
 }
 
-func (it *Iterator[T]) SkipChunk() int {
-	maxn := min(CHUNK_SIZE, it.len-it.ofs)
-	srcIdx := it.read + 7
-
-	// skip next 128 (or less) values at code word granularity
-	var n int
-	for srcIdx < len(it.src) {
-		sn := maxNPerSelector[it.src[srcIdx]>>4]
-		if sn+n > maxn {
-			break
-		}
-		n += sn
-		srcIdx += 8
-	}
+func (it *Iterator[T]) Skip() int {
+	n := min(CHUNK_SIZE, it.len-it.ofs)
 	it.ofs += n
 	return n
 }
 
-// seek to a given value position
+// seek to a given value position modulo chunk size
 func (it *Iterator[T]) Seek(n int) bool {
 	// bounds check
 	if n < 0 || n >= it.len {
@@ -128,44 +113,76 @@ func (it *Iterator[T]) Seek(n int) bool {
 		return false
 	}
 
-	// fill on seek to an unloaded chunk
-	if uint(n-it.base) >= uint(it.cnt) {
-		it.fill(n)
+	// fill on seek to a new chunk
+	if base := types.ChunkBase(n); base != it.base {
+		it.fill(base)
 	}
 
-	// reset ofs to n, so call to Next() delivers value
+	// reset ofs to n, so call to Next() delivers the chunk
 	it.ofs = n
 	return true
 }
 
-func (it *Iterator[T]) fill(idx int) int {
-	// ideally we continue reading at start of next code word
-	srcIdx, srcPos := it.read, 0
-
-	// on seek however we may have to jump to a different codeword
-	if idx != it.base+it.cnt {
-		srcIdx, srcPos = generic.Seek(it.src, idx)
+func (it *Iterator[T]) fill(base int) int {
+	// find code word for this chunk base
+	word, skip, ok := it.idx.Find(base)
+	if !ok {
+		it.align = 0
+		it.ofs = it.len
+		it.base = -1
+		return 0
 	}
 
-	// attempt to fill chunk as much as possible without overflow,
-	// peek into next selector to count codewords
-	p := unsafe.Pointer(&it.chunk[0])
-	w := arena.SizeFor[T]()
-	it.cnt = 0
-	for srcIdx < len(it.src) {
-		n := it.dec.DecodeWordPtr(unsafe.Add(p, it.cnt*w), CHUNK_SIZE-it.cnt, it.src[srcIdx:])
-		if n == 0 {
-			break
+	// decode words into chunk until full or at end
+	var (
+		cnt  int
+		p    = unsafe.Pointer(&it.chunk[0])
+		stop = CHUNK_SIZE + skip
+	)
+	for cnt < stop && word+1 <= len(it.src)/8 {
+		n := it.dec.DecodeWordPtr(p, len(it.chunk)-cnt, it.src[word*8:])
+		word++
+		p = unsafe.Add(p, n*it.sz)
+		cnt += n
+	}
+	it.align = skip
+	it.base = base
+
+	return min(cnt-skip, CHUNK_SIZE)
+}
+
+func (it *Iterator[T]) All() iter.Seq2[int, T] {
+	return func(yield func(int, T) bool) {
+		for i := range it.len {
+			// refill on chunk boundary
+			n := i % CHUNK_SIZE
+			if n == 0 {
+				it.fill(i)
+			}
+			// yield
+			if !yield(i, it.chunk[it.align+n]) {
+				break
+			}
 		}
-		srcIdx += 8
-		it.cnt += n
+		it.Reset()
 	}
+}
 
-	it.read = srcIdx
-	it.base = idx - srcPos // chunk starts at code word
-	it.ofs = idx           // for exact seeks
-
-	return it.cnt
+func (it *Iterator[T]) Values() iter.Seq[T] {
+	return func(yield func(T) bool) {
+		for i := range it.len {
+			// refill on chunk boundary
+			n := i % CHUNK_SIZE
+			if n == 0 {
+				it.fill(i)
+			}
+			// yield
+			if !yield(it.chunk[it.align+n]) {
+				break
+			}
+		}
+		it.Reset()
+	}
 }
 
 type IteratorFactory struct {

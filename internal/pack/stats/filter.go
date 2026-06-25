@@ -217,13 +217,13 @@ func EstimateCardinality(b *block.Block, precision int) (int, []uint64) {
 	switch b.Type() {
 	case block.BlockInt64, block.BlockUint64, block.BlockFloat64:
 		flt := llb.NewFilterWithPrecision(uint32(precision))
-		hashes := hash.Vec64(b.Uint64().Slice(), arena.Alloc[uint64](l))
+		hashes := hash.Vec64(arena.Alloc[uint64](l), b.Uint64().Slice())
 		flt.Add(hashes...)
 		return min(l, int(flt.Cardinality())), hashes
 
 	case block.BlockInt32, block.BlockUint32, block.BlockFloat32:
 		flt := llb.NewFilterWithPrecision(uint32(precision))
-		hashes := hash.Vec32(b.Uint32().Slice(), arena.Alloc[uint64](l))
+		hashes := hash.Vec32(arena.Alloc[uint64](l), b.Uint32().Slice())
 		flt.Add(hashes...)
 		return min(l, int(flt.Cardinality())), hashes
 
@@ -243,27 +243,27 @@ func EstimateCardinality(b *block.Block, precision int) (int, []uint64) {
 
 	case block.BlockInt256:
 		flt := llb.NewFilterWithPrecision(uint32(precision))
-		hashes := arena.Alloc[uint64](l)[:l]
-		for i, v := range b.Int256().Iterator() {
-			hashes[i] = hash.Hash(v.Bytes())
+		hashes := arena.Alloc[uint64](l)
+		for v := range b.Int256().Values() {
+			hashes = append(hashes, hash.Hash(v.Bytes()))
 		}
 		flt.Add(hashes...)
 		return min(l, int(flt.Cardinality())), hashes
 
 	case block.BlockInt128:
 		flt := llb.NewFilterWithPrecision(uint32(precision))
-		hashes := arena.Alloc[uint64](l)[:l]
-		for i, v := range b.Int128().Iterator() {
-			hashes[i] = hash.Hash(v.Bytes())
+		hashes := arena.Alloc[uint64](l)
+		for v := range b.Int128().Values() {
+			hashes = append(hashes, hash.Hash(v.Bytes()))
 		}
 		flt.Add(hashes...)
 		return min(l, int(flt.Cardinality())), hashes
 
 	case block.BlockBytes:
 		flt := llb.NewFilterWithPrecision(uint32(precision))
-		hashes := arena.Alloc[uint64](l)[:l]
-		for i, v := range b.Bytes().Iterator() {
-			hashes[i] = hash.Hash(v)
+		hashes := arena.Alloc[uint64](l)
+		for v := range b.Bytes().Values() {
+			hashes = append(hashes, hash.Hash(v))
 		}
 		flt.Add(hashes...)
 		return min(l, int(flt.Cardinality())), hashes
@@ -301,43 +301,43 @@ func BuildBloomFilter(b *block.Block, cardinality int, factor int, hashes []uint
 	// reuse hashes from cardinality estimation if available
 	if hashes == nil {
 		// pre-alloc a hash slice
-		hashes = arena.Alloc[uint64](b.Len())[:b.Len()]
+		hashes = arena.Alloc[uint64](b.Len())
 		switch b.Type() {
 		case block.BlockInt64, block.BlockUint64, block.BlockFloat64:
 			// we write uint64 data in little endian order into the filter,
 			// so all 8 byte numeric types look the same (float64 uses FloatBits == uint64)
-			hashes = hash.Vec64(b.Uint64().Slice(), hashes)
+			hashes = hash.Vec64(hashes, b.Uint64().Slice())
 
 		case block.BlockInt32, block.BlockUint32, block.BlockFloat32:
 			// we write uint32 data in little endian order into the filter,
 			// so all 4 byte numeric types look the same (float32 uses FloatBits == uint32)
-			hashes = hash.Vec32(b.Uint32().Slice(), hashes)
+			hashes = hash.Vec32(hashes, b.Uint32().Slice())
 
 		case block.BlockInt16, block.BlockUint16:
 			// we write uint16 data in little endian order into the filter,
 			// so all 2 byte numeric types look the
-			hashes = hash.Vec16(b.Uint16().Slice(), hashes)
+			hashes = hash.Vec16(hashes, b.Uint16().Slice())
 
 		case block.BlockInt8, block.BlockUint8:
-			hashes = hash.Vec8(b.Uint8().Slice(), hashes)
+			hashes = hash.Vec8(hashes, b.Uint8().Slice())
 
 		case block.BlockInt256:
 			// write individual elements (no optimization exists)
-			for i, v := range b.Int256().Iterator() {
-				hashes[i] = hash.Hash(v.Bytes())
+			for v := range b.Int256().Values() {
+				hashes = append(hashes, hash.Hash(v.Bytes()))
 			}
 
 		case block.BlockInt128:
 			// write individual elements (no optimization exists)
-			for i, v := range b.Int128().Iterator() {
-				hashes[i] = hash.Hash(v.Bytes())
+			for v := range b.Int128().Values() {
+				hashes = append(hashes, hash.Hash(v.Bytes()))
 			}
 
 		case block.BlockBytes:
 			// write only unique elements (post-dedup optimization this avoids
 			// calculating hashes for duplicates)
-			for i, v := range b.Bytes().Iterator() {
-				hashes[i] = hash.Hash(v)
+			for v := range b.Bytes().Values() {
+				hashes = append(hashes, hash.Hash(v))
 			}
 
 		default:
@@ -413,24 +413,24 @@ func BuildFuseFilter[T uint8 | uint16](b *block.Block) (*fuse.BinaryFuse[T], err
 		// write individual elements (no optimization exists)
 		u64 = arena.Alloc[uint64](b.Len())
 		defer arena.Free(u64)
-		for i, v := range b.Int256().Iterator() {
-			u64[i] = hash.Hash(v.Bytes())
+		for v := range b.Int256().Values() {
+			u64 = append(u64, hash.Hash(v.Bytes()))
 		}
 
 	case block.BlockInt128:
 		// write individual elements (no optimization exists)
 		u64 = arena.Alloc[uint64](b.Len())
 		defer arena.Free(u64)
-		for i, v := range b.Int128().Iterator() {
-			u64[i] = hash.Hash(v.Bytes())
+		for v := range b.Int128().Values() {
+			u64 = append(u64, hash.Hash(v.Bytes()))
 		}
 
 	case block.BlockBytes:
 		// write all strings
 		u64 = arena.Alloc[uint64](b.Len())
 		defer arena.Free(u64)
-		for i, v := range b.Bytes().Iterator() {
-			u64[i] = hash.Hash(v)
+		for v := range b.Bytes().Values() {
+			u64 = append(u64, hash.Hash(v))
 		}
 
 	default:

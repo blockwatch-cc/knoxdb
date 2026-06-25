@@ -25,20 +25,20 @@ var (
 // TIntDictionary
 type DictionaryContainer[T types.Integer] struct {
 	readOnlyContainer[T]
-	Dict  NumberContainer[T]
-	Codes NumberContainer[uint16]
+	dict  NumberContainer[T]
+	codes NumberContainer[uint16]
 }
 
 func (c *DictionaryContainer[T]) Info() string {
-	return fmt.Sprintf("Dict(%s)_[%s]_[%s]", TypeName[T](), c.Dict.Info(), c.Codes.Info())
+	return fmt.Sprintf("Dict(%s)_[%s]_[%s]", TypeName[T](), c.dict.Info(), c.codes.Info())
 }
 
 func (c *DictionaryContainer[T]) Close() {
-	c.Dict.Close()
-	c.Codes.Close()
-	c.Dict = nil
-	c.Codes = nil
-	putDictionaryContainer[T](c)
+	c.dict.Close()
+	c.codes.Close()
+	c.dict = nil
+	c.codes = nil
+	putDictionaryContainer(c)
 }
 
 func (c *DictionaryContainer[T]) Type() ContainerType {
@@ -46,11 +46,11 @@ func (c *DictionaryContainer[T]) Type() ContainerType {
 }
 
 func (c *DictionaryContainer[T]) Len() int {
-	return c.Codes.Len()
+	return c.codes.Len()
 }
 
 func (c *DictionaryContainer[T]) Size() int {
-	return 1 + c.Dict.Size() + c.Codes.Size()
+	return 1 + c.dict.Size() + c.codes.Size()
 }
 
 func (c *DictionaryContainer[T]) Matcher() types.NumberMatcher[T] {
@@ -58,25 +58,29 @@ func (c *DictionaryContainer[T]) Matcher() types.NumberMatcher[T] {
 }
 
 func (c *DictionaryContainer[T]) Chunks() types.NumberIterator[T] {
-	return NewDictionaryIterator(c.Dict, c.Codes)
+	return NewDictionaryIterator(c.dict, c.codes)
 }
 
-func (c *DictionaryContainer[T]) Iterator() iter.Seq2[int, T] {
-	return func(fn func(int, T) bool) {
+func (c *DictionaryContainer[T]) All() iter.Seq2[int, T] {
+	return func(yield func(int, T) bool) {
 		it := c.Chunks()
-		for i := range it.Len() {
-			if !fn(i, it.Get(i)) {
-				break
-			}
-		}
+		it.All()(yield)
+		it.Close()
+	}
+}
+
+func (c *DictionaryContainer[T]) Values() iter.Seq[T] {
+	return func(yield func(T) bool) {
+		it := c.Chunks()
+		it.Values()(yield)
 		it.Close()
 	}
 }
 
 func (c *DictionaryContainer[T]) Store(dst []byte) []byte {
 	dst = append(dst, byte(TIntDictionary))
-	dst = c.Dict.Store(dst)
-	return c.Codes.Store(dst)
+	dst = c.dict.Store(dst)
+	return c.codes.Store(dst)
 }
 
 func (c *DictionaryContainer[T]) Load(buf []byte) ([]byte, error) {
@@ -86,27 +90,27 @@ func (c *DictionaryContainer[T]) Load(buf []byte) ([]byte, error) {
 	buf = buf[1:]
 
 	// alloc and decode dict child container
-	c.Dict = NewInt[T](ContainerType(buf[0]))
+	c.dict = NewInt[T](ContainerType(buf[0]))
 	var err error
-	buf, err = c.Dict.Load(buf)
+	buf, err = c.dict.Load(buf)
 	if err != nil {
 		return buf, err
 	}
 
 	// alloc and decode codes child container
-	c.Codes = NewInt[uint16](ContainerType(buf[0]))
-	return c.Codes.Load(buf)
+	c.codes = NewInt[uint16](ContainerType(buf[0]))
+	return c.codes.Load(buf)
 }
 
 func (c *DictionaryContainer[T]) Get(n int) T {
-	return c.Dict.Get(int(c.Codes.Get(n)))
+	return c.dict.Get(int(c.codes.Get(n)))
 }
 
 func (c *DictionaryContainer[T]) AppendTo(dst []T, sel []uint32) []T {
 	it := c.Chunks()
 	if sel == nil {
 		for {
-			src, n := it.NextChunk()
+			src, n := it.Next()
 			if n == 0 {
 				break
 			}
@@ -114,7 +118,7 @@ func (c *DictionaryContainer[T]) AppendTo(dst []T, sel []uint32) []T {
 		}
 	} else {
 		for _, v := range sel {
-			dst = append(dst, it.Get(int(v)))
+			dst = append(dst, it.Value(int(v)))
 		}
 	}
 	it.Close()
@@ -128,26 +132,26 @@ func (c *DictionaryContainer[T]) Encode(ctx *Context[T], vals []T) NumberContain
 		codes []uint16
 	)
 	if len(ctx.UniqueArray) > 0 || arena.SizeFor[T]() <= 2 {
-		dict, codes = dictEncodeArray(ctx, vals)
+		dict, codes = DictEncodeArray(ctx, vals)
 	} else {
 		dict, codes = hashprobe.BuildDict(vals, ctx.NumUnique)
 	}
 
 	// encode child containers
 	vctx := AnalyzeInt(dict, false).WithLevel(ctx.Lvl - 1)
-	c.Dict = EncodeInt(vctx, dict)
+	c.dict = EncodeInt(vctx, dict)
 	vctx.Close()
 	arena.Free(dict)
 
 	cctx := AnalyzeInt(codes, false).WithLevel(ctx.Lvl - 1)
-	c.Codes = EncodeInt(cctx, codes)
+	c.codes = EncodeInt(cctx, codes)
 	cctx.Close()
 	arena.Free(codes)
 
 	return c
 }
 
-func dictEncodeArray[T types.Integer](ctx *Context[T], vals []T) ([]T, []uint16) {
+func DictEncodeArray[T types.Integer](ctx *Context[T], vals []T) ([]T, []uint16) {
 	// cross-check we have the unique array initialized
 	if len(ctx.UniqueArray) == 0 {
 		ctx.NumUnique = ctx.buildUniqueArray(vals)
@@ -180,8 +184,8 @@ func (c *DictionaryContainer[T]) Cmp(i, j int) int {
 
 func (c *DictionaryContainer[T]) MatchEqual(val T, bits, mask *Bitset) {
 	// early skip if val is smaller than first or larger than last dict entry
-	l := c.Dict.Len()
-	if val < c.Dict.Get(0) || val > c.Dict.Get(l-1) {
+	l := c.dict.Len()
+	if val < c.dict.Get(0) || val > c.dict.Get(l-1) {
 		return
 	}
 
@@ -189,55 +193,55 @@ func (c *DictionaryContainer[T]) MatchEqual(val T, bits, mask *Bitset) {
 	// TODO: add a `Find(T) int` function to all containers and let them choose the
 	// most efficient search strategy
 	idx := sort.Search(l, func(i int) bool {
-		return c.Dict.Get(i) >= val
+		return c.dict.Get(i) >= val
 	})
 
 	// if not found, equal match does not exist
-	if idx == l || c.Dict.Get(idx) != val {
+	if idx == l || c.dict.Get(idx) != val {
 		return
 	}
 
 	// lookup code at index and run equal search on codes
-	c.Codes.MatchEqual(uint16(idx), bits, mask)
+	c.codes.MatchEqual(uint16(idx), bits, mask)
 }
 
 func (c *DictionaryContainer[T]) MatchNotEqual(val T, bits, mask *Bitset) {
 	// early skip if val is smaller than first or larger than last dict entry
-	l := c.Dict.Len()
-	if val < c.Dict.Get(0) || val > c.Dict.Get(l-1) {
+	l := c.dict.Len()
+	if val < c.dict.Get(0) || val > c.dict.Get(l-1) {
 		bits.One()
 		return
 	}
 
 	// find position of val using binary search (dict is sorted and values are unique)
 	idx := sort.Search(l, func(i int) bool {
-		return c.Dict.Get(i) >= val
+		return c.dict.Get(i) >= val
 	})
 
 	// if not found, equal match does not exist and we can set all bits one
-	if idx == l || c.Dict.Get(idx) != val {
+	if idx == l || c.dict.Get(idx) != val {
 		bits.One()
 		return
 	}
 
 	// if found, we run a not equal scan on codes
-	c.Codes.MatchNotEqual(uint16(idx), bits, mask)
+	c.codes.MatchNotEqual(uint16(idx), bits, mask)
 }
 
 func (c *DictionaryContainer[T]) MatchLess(val T, bits, mask *Bitset) {
 	// early skip if val is smaller than first or larger last
-	if val < c.Dict.Get(0) {
+	if val < c.dict.Get(0) {
 		return
 	}
-	l := c.Dict.Len()
-	if val > c.Dict.Get(l-1) {
+	l := c.dict.Len()
+	if val > c.dict.Get(l-1) {
 		bits.One()
 		return
 	}
 
 	// find position of val using binary search (dict is sorted and values are unique)
 	idx := sort.Search(l, func(i int) bool {
-		return c.Dict.Get(i) >= val
+		return c.dict.Get(i) >= val
 	})
 
 	// adjust index for search values > last dict entry
@@ -249,27 +253,27 @@ func (c *DictionaryContainer[T]) MatchLess(val T, bits, mask *Bitset) {
 	// the first value larger than val which is ok too. At this point
 	// we know idx is between 0 and l-1, so we can directly translate to a
 	// less(code) search.
-	c.Codes.MatchLess(uint16(idx), bits, mask)
+	c.codes.MatchLess(uint16(idx), bits, mask)
 }
 
 func (c *DictionaryContainer[T]) MatchLessEqual(val T, bits, mask *Bitset) {
 	// early skip if val is smaller than first or larger than last
-	if val < c.Dict.Get(0) {
+	if val < c.dict.Get(0) {
 		return
 	}
-	l := c.Dict.Len()
-	if val >= c.Dict.Get(l-1) {
+	l := c.dict.Len()
+	if val >= c.dict.Get(l-1) {
 		bits.One()
 		return
 	}
 
 	// find position of val using binary search (dict is sorted and values are unique)
 	idx := sort.Search(l, func(i int) bool {
-		return c.Dict.Get(i) >= val
+		return c.dict.Get(i) >= val
 	})
 
 	// adjust when we reached the end or no exact match was found
-	if idx == l || val < c.Dict.Get(idx) {
+	if idx == l || val < c.dict.Get(idx) {
 		idx--
 	}
 
@@ -277,57 +281,57 @@ func (c *DictionaryContainer[T]) MatchLessEqual(val T, bits, mask *Bitset) {
 	// the first value larger than val which is ok too. At this point
 	// we know idx is between 0 and l-1, so we can directly translate to a
 	// less(code) search.
-	c.Codes.MatchLessEqual(uint16(idx), bits, mask)
+	c.codes.MatchLessEqual(uint16(idx), bits, mask)
 }
 
 func (c *DictionaryContainer[T]) MatchGreater(val T, bits, mask *Bitset) {
 	// early skip if val is smaller than first or larger or equal to last
-	if val < c.Dict.Get(0) {
+	if val < c.dict.Get(0) {
 		bits.One()
 		return
 	}
-	l := c.Dict.Len()
-	if val >= c.Dict.Get(l-1) {
+	l := c.dict.Len()
+	if val >= c.dict.Get(l-1) {
 		return
 	}
 
 	// find position of val using binary search (dict is sorted and values are unique)
 	idx := sort.Search(l, func(i int) bool {
-		return c.Dict.Get(i) > val
+		return c.dict.Get(i) > val
 	})
 
 	// Since we are searching for strictly greater dict entries we found the
 	// next higher code (or end of dict). Use GE for code match.
-	c.Codes.MatchGreaterEqual(uint16(idx), bits, mask)
+	c.codes.MatchGreaterEqual(uint16(idx), bits, mask)
 }
 
 func (c *DictionaryContainer[T]) MatchGreaterEqual(val T, bits, mask *Bitset) {
 	// early skip if val is smaller than first or larger to last
-	if val < c.Dict.Get(0) {
+	if val < c.dict.Get(0) {
 		bits.One()
 		return
 	}
-	l := c.Dict.Len()
-	if val > c.Dict.Get(l-1) {
+	l := c.dict.Len()
+	if val > c.dict.Get(l-1) {
 		return
 	}
 
 	// find position of val using binary search (dict is sorted and values are unique)
 	idx := sort.Search(l, func(i int) bool {
-		return c.Dict.Get(i) >= val
+		return c.dict.Get(i) >= val
 	})
 
 	// If found we are good. If not found, we have at least found the index of
 	// the first value larger than val which is ok too. At this point
 	// we know idx is between 0 and l-1, so we can directly translate to a
 	// less(code) search.
-	c.Codes.MatchGreaterEqual(uint16(idx), bits, mask)
+	c.codes.MatchGreaterEqual(uint16(idx), bits, mask)
 }
 
 func (c *DictionaryContainer[T]) MatchBetween(a, b T, bits, mask *Bitset) {
 	// skip when range does not intersect with dict or does fully contain dict
-	l := c.Dict.Len()
-	first, last := c.Dict.Get(0), c.Dict.Get(l-1)
+	l := c.dict.Len()
+	first, last := c.dict.Get(0), c.dict.Get(l-1)
 	if b < first || a > last {
 		return
 	}
@@ -338,24 +342,24 @@ func (c *DictionaryContainer[T]) MatchBetween(a, b T, bits, mask *Bitset) {
 
 	// translate range [a,b] into code range [ca, cb]
 	ai := sort.Search(l, func(i int) bool {
-		return c.Dict.Get(i) >= a
+		return c.dict.Get(i) >= a
 	})
 	bi := sort.Search(l, func(i int) bool {
-		return c.Dict.Get(i) >= b
+		return c.dict.Get(i) >= b
 	})
 
 	// range is within a dict value gap
-	if v := c.Dict.Get(ai); ai == bi && v != a && v != b {
+	if v := c.dict.Get(ai); ai == bi && v != a && v != b {
 		return
 	}
 
 	// adjust bi when b > last
-	if bi == l || c.Dict.Get(bi) != b {
+	if bi == l || c.dict.Get(bi) != b {
 		bi--
 	}
 
 	// forward between match on the code vector
-	c.Codes.MatchBetween(uint16(ai), uint16(bi), bits, mask)
+	c.codes.MatchBetween(uint16(ai), uint16(bi), bits, mask)
 }
 
 func (c *DictionaryContainer[T]) MatchInSet(s any, bits, mask *Bitset) {
@@ -370,10 +374,10 @@ func (c *DictionaryContainer[T]) MatchInSet(s any, bits, mask *Bitset) {
 
 	// single match, translate to equal match
 	if cset == nil {
-		c.Codes.MatchEqual(code, bits, mask)
+		c.codes.MatchEqual(code, bits, mask)
 	} else {
 		// code set match
-		c.Codes.MatchInSet(cset, bits, mask)
+		c.codes.MatchInSet(cset, bits, mask)
 	}
 }
 
@@ -390,10 +394,10 @@ func (c *DictionaryContainer[T]) MatchNotInSet(s any, bits, mask *Bitset) {
 
 	// single match, translate to not equal match
 	if cset == nil {
-		c.Codes.MatchNotEqual(code, bits, mask)
+		c.codes.MatchNotEqual(code, bits, mask)
 	} else {
 		// code set match
-		c.Codes.MatchNotInSet(cset, bits, mask)
+		c.codes.MatchNotInSet(cset, bits, mask)
 	}
 }
 
@@ -405,8 +409,8 @@ func (c *DictionaryContainer[T]) translateSet(s any) (any, uint16, bool) {
 	// In an attempt to be efficient we only allocate a new bitset if
 	// we have found more than one set value in the dict.
 	var (
-		l            = c.Dict.Len()
-		first, last  = c.Dict.Get(0), c.Dict.Get(l - 1)
+		l            = c.dict.Len()
+		first, last  = c.dict.Get(0), c.dict.Get(l - 1)
 		firstCode    uint16
 		hasFirstCode bool
 		cset         *xroar.Bitmap
@@ -436,10 +440,10 @@ next:
 			idx = l - 1
 		default:
 			idx = sort.Search(l, func(i int) bool {
-				return c.Dict.Get(i) >= val
+				return c.dict.Get(i) >= val
 			})
 			// not found
-			if c.Dict.Get(idx) != val {
+			if c.dict.Get(idx) != val {
 				continue next
 			}
 		}
@@ -624,7 +628,7 @@ func (it *DictionaryIterator[T]) Close() {
 func (it *DictionaryIterator[T]) fill(base int) int {
 	// load code chunk at base and translate
 	it.code.Seek(base)
-	codes, n := it.code.NextChunk()
+	codes, n := it.code.Next()
 	if n == 0 {
 		it.ofs = it.len
 		it.base = -1

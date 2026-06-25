@@ -116,7 +116,7 @@ func AnalyzeString(vals types.StringAccessor) *StringContext {
 		c.Max = c.Min
 		c.MinLen = len(c.Min)
 		c.MaxLen = c.MinLen
-		for i, v := range vals.Iterator() {
+		for i, v := range vals.All() {
 			if bytes.Compare(v, c.Min) < 0 {
 				c.Min = v
 			} else if bytes.Compare(v, c.Max) > 0 {

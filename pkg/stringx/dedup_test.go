@@ -87,7 +87,7 @@ func TestDedupPoolIterators(t *testing.T) {
 	}
 
 	// iterator
-	for i, v := range pool.Iterator() {
+	for i, v := range pool.All() {
 		require.Equal(t, data[i], v, "it", i)
 	}
 
@@ -95,6 +95,6 @@ func TestDedupPoolIterators(t *testing.T) {
 	it := pool.Chunks()
 	require.Equal(t, len(data), it.Len(), "it len")
 	for i, v := range data {
-		require.Equal(t, v, it.Get(i))
+		require.Equal(t, v, it.Value(i))
 	}
 }

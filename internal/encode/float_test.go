@@ -202,6 +202,12 @@ func testFloatContainerCompare[T types.Float](t *testing.T, scheme ContainerType
 			t.Run("RG", func(t *testing.T) {
 				testCompareFunc2[T](t, enc.MatchBetween, src, types.FilterModeRange)
 			})
+			// if t.Failed() {
+			// 	type Dumper interface {
+			// 		Dump() string
+			// 	}
+			// 	t.Log(enc.(Dumper).Dump())
+			// }
 		})
 	}
 }
@@ -219,8 +225,10 @@ func testFloatContainerIterator[T types.Float](t *testing.T, scheme ContainerTyp
 			// --------------------------
 			// test next
 			//
-			for i, v := range enc.Iterator() {
+			var i int
+			for v := range enc.Values() {
 				require.Equal(t, src[i], v, "invalid val at pos=%d", i)
+				i++
 			}
 
 			// --------------------
@@ -232,7 +240,7 @@ func testFloatContainerIterator[T types.Float](t *testing.T, scheme ContainerTyp
 			}
 			var seen int
 			for {
-				dst, n := it.NextChunk()
+				dst, n := it.Next()
 				if n == 0 {
 					break
 				}
@@ -249,10 +257,10 @@ func testFloatContainerIterator[T types.Float](t *testing.T, scheme ContainerTyp
 			// --------------------------
 			// test skip
 			it = enc.Chunks()
-			seen = it.SkipChunk()
-			seen += it.SkipChunk()
+			seen = it.Skip()
+			seen += it.Skip()
 			for {
-				dst, n := it.NextChunk()
+				dst, n := it.Next()
 				if n == 0 {
 					break
 				}
@@ -274,22 +282,22 @@ func testFloatContainerIterator[T types.Float](t *testing.T, scheme ContainerTyp
 				i := testutil.RandIntn(len(src))
 				ok := it.Seek(i)
 				require.True(t, ok, "seek to existing pos %d/%d failed", i, len(src))
-				vals, n := it.NextChunk()
+				vals, n := it.Next()
 				require.Greater(t, n, 0, "next after seek to existing pos %d/%d failed", i, len(src))
 				require.Equal(t, src[i], vals[i%CHUNK_SIZE], "invalid val at pos=%d after seek, vals=%v ", i, vals[:n])
 			}
 
 			// seek to invalid values
 			require.False(t, it.Seek(-1), "seek to negative")
-			_, n := it.NextChunk()
+			_, n := it.Next()
 			require.Equal(t, 0, n, "next after bad seek")
 
 			require.False(t, it.Seek(len(src)), "seek to end")
-			_, n = it.NextChunk()
+			_, n = it.Next()
 			require.Equal(t, 0, n, "next after bad seek to end")
 
 			require.False(t, it.Seek(len(src)+1), "seek beyond end")
-			_, n = it.NextChunk()
+			_, n = it.Next()
 			require.Equal(t, 0, n, "next after bad seek beyond end")
 
 			it.Close()

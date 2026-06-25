@@ -91,11 +91,22 @@ func (a Accessor[T]) Slice() []T {
 	return unsafe.Slice((*T)(unsafe.Pointer(a.block.buf)), a.block.cap)[:a.block.len]
 }
 
-func (a Accessor[T]) Iterator() iter.Seq2[int, T] {
+func (a Accessor[T]) All() iter.Seq2[int, T] {
 	return func(fn func(int, T) bool) {
 		ptr := unsafe.Pointer(a.block.buf)
 		for i := range a.block.len {
 			if !fn(int(i), *(*T)(unsafe.Add(ptr, i*uint32(a.block.sz)))) {
+				return
+			}
+		}
+	}
+}
+
+func (a Accessor[T]) Values() iter.Seq[T] {
+	return func(fn func(T) bool) {
+		ptr := unsafe.Pointer(a.block.buf)
+		for i := range a.block.len {
+			if !fn(*(*T)(unsafe.Add(ptr, i*uint32(a.block.sz)))) {
 				return
 			}
 		}

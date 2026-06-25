@@ -54,10 +54,20 @@ func (c *ConstContainer[T]) Chunks() types.NumberIterator[T] {
 	return NewConstIterator(c.Val, c.N)
 }
 
-func (c *ConstContainer[T]) Iterator() iter.Seq2[int, T] {
+func (c *ConstContainer[T]) All() iter.Seq2[int, T] {
 	return func(fn func(int, T) bool) {
 		for i := range c.N {
 			if !fn(i, c.Val) {
+				return
+			}
+		}
+	}
+}
+
+func (c *ConstContainer[T]) Values() iter.Seq[T] {
+	return func(fn func(T) bool) {
+		for range c.N {
+			if !fn(c.Val) {
 				return
 			}
 		}

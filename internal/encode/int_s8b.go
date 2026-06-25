@@ -46,7 +46,7 @@ func (c *Simple8Container[T]) Close() {
 		c.it.Close()
 		c.it = nil
 	}
-	putSimple8Container[T](c)
+	putSimple8Container(c)
 }
 
 func (c *Simple8Container[T]) Type() ContainerType {
@@ -68,20 +68,27 @@ func (c *Simple8Container[T]) Matcher() types.NumberMatcher[T] {
 	return c
 }
 
-func (c *Simple8Container[T]) Chunks() types.NumberIterator[T] {
-	return s8b.NewIterator[T](c.Packed, c.N, c.For)
+func (c *Simple8Container[T]) iter() types.NumberIterator[T] {
+	if c.it == nil {
+		c.it = s8b.NewIterator(c.Packed, c.N, c.For)
+	}
+	return c.it
 }
 
-func (c *Simple8Container[T]) Iterator() iter.Seq2[int, T] {
-	return func(fn func(int, T) bool) {
-		it := c.Chunks()
-		for i := range it.Len() {
-			if !fn(i, it.Get(i)) {
-				break
-			}
-		}
-		it.Close()
-	}
+func (c *Simple8Container[T]) Chunks() types.NumberIterator[T] {
+	return s8b.NewIterator(c.Packed, c.N, c.For)
+}
+
+func (c *Simple8Container[T]) Get(n int) T {
+	return c.iter().Value(n)
+}
+
+func (c *Simple8Container[T]) All() iter.Seq2[int, T] {
+	return c.iter().All()
+}
+
+func (c *Simple8Container[T]) Values() iter.Seq[T] {
+	return c.iter().Values()
 }
 
 func (c *Simple8Container[T]) Store(dst []byte) []byte {
@@ -114,13 +121,6 @@ func (c *Simple8Container[T]) Load(buf []byte) ([]byte, error) {
 	return buf[int(v):], nil
 }
 
-func (c *Simple8Container[T]) Get(n int) T {
-	if c.it == nil {
-		c.it = s8b.NewIterator[T](c.Packed, c.N, c.For)
-	}
-	return c.it.Get(n)
-}
-
 func (c *Simple8Container[T]) AppendTo(dst []T, sel []uint32) []T {
 	if sel == nil {
 		n, err := s8b.Decode(dst[:c.N], c.Packed, c.For)
@@ -130,11 +130,10 @@ func (c *Simple8Container[T]) AppendTo(dst []T, sel []uint32) []T {
 		}
 		dst = dst[:n]
 	} else {
-		it := c.Chunks()
+		it := c.iter()
 		for _, v := range sel {
-			dst = append(dst, it.Get(int(v)))
+			dst = append(dst, it.Value(int(v)))
 		}
-		it.Close()
 	}
 	return dst
 }
@@ -239,15 +238,15 @@ func (c *Simple8Container[T]) MatchInSet(s any, bits, mask *Bitset) {
 	set := s.(*xroar.Bitmap)
 	if mask != nil {
 		// only process values from mask
-		for i := range mask.Iterator() {
-			if set.Contains(uint64(it.Get(i))) {
+		for i := range mask.Ones() {
+			if set.Contains(uint64(it.Value(i))) {
 				bits.Set(i)
 			}
 		}
 	} else {
 		var i int
 		for {
-			vals, n := it.NextChunk()
+			vals, n := it.Next()
 			if n == 0 {
 				break
 			}
@@ -267,15 +266,15 @@ func (c *Simple8Container[T]) MatchNotInSet(s any, bits, mask *Bitset) {
 	set := s.(*xroar.Bitmap)
 	if mask != nil {
 		// only process values from mask
-		for i := range mask.Iterator() {
-			if !set.Contains(uint64(it.Get(i))) {
+		for i := range mask.Ones() {
+			if !set.Contains(uint64(it.Value(i))) {
 				bits.Set(i)
 			}
 		}
 	} else {
 		var i int
 		for {
-			vals, n := it.NextChunk()
+			vals, n := it.Next()
 			if n == 0 {
 				break
 			}

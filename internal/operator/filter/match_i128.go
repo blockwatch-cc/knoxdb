@@ -335,7 +335,7 @@ func (m *i128InSetMatcher) WithValue(val any) {
 
 func (m *i128InSetMatcher) WithSlice(slice any) {
 	m.slice = num.SortInt128(slice.([]num.Int128))
-	m.hashes = hash.Vec(m.slice, m.hashes)
+	m.hashes = hash.Vec(m.hashes, m.slice)
 }
 
 func (m i128InSetMatcher) MatchValue(v any) bool {
@@ -354,13 +354,13 @@ func (m i128InSetMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset)
 	stride := b.Int128()
 	if mask != nil {
 		// skip masked values
-		for i := range mask.Iterator() {
+		for i := range mask.Ones() {
 			if num.ContainsInt128(m.slice, stride.Get(i)) {
 				bits.Set(i)
 			}
 		}
 	} else {
-		for i, v := range stride.Iterator() {
+		for i, v := range stride.All() {
 			if num.ContainsInt128(m.slice, v) {
 				bits.Set(i)
 			}
@@ -415,13 +415,13 @@ func (m i128NotInSetMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bits
 	stride := b.Int128()
 	if mask != nil {
 		// skip masked values
-		for i := range mask.Iterator() {
+		for i := range mask.Ones() {
 			if !num.ContainsInt128(m.slice, stride.Get(i)) {
 				bits.Set(i)
 			}
 		}
 	} else {
-		for i, v := range stride.Iterator() {
+		for i, v := range stride.All() {
 			if !num.ContainsInt128(m.slice, v) {
 				bits.Set(i)
 			}

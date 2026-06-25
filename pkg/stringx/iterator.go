@@ -4,6 +4,7 @@
 package stringx
 
 import (
+	"iter"
 	"unsafe"
 
 	"blockwatch.cc/knoxdb/internal/types"
@@ -33,7 +34,7 @@ func (it *StringChunkIterator) Len() int {
 	return len(it.pool.ptr)
 }
 
-func (it *StringChunkIterator) Get(n int) []byte {
+func (it *StringChunkIterator) Value(n int) []byte {
 	return it.pool.Get(n)
 }
 
@@ -47,7 +48,7 @@ func (it *StringChunkIterator) Seek(n int) bool {
 	return true
 }
 
-func (it *StringChunkIterator) NextChunk() (*[CHUNK_SIZE][]byte, int) {
+func (it *StringChunkIterator) Next() (*[CHUNK_SIZE][]byte, int) {
 	l := len(it.pool.ptr)
 	if it.base >= l {
 		return nil, 0
@@ -67,7 +68,7 @@ func (it *StringChunkIterator) NextChunk() (*[CHUNK_SIZE][]byte, int) {
 	return &it.chunk, n
 }
 
-func (it *StringChunkIterator) SkipChunk() int {
+func (it *StringChunkIterator) Skip() int {
 	n := min(types.CHUNK_SIZE, len(it.pool.ptr)-it.base)
 	it.base += n
 	return n
@@ -77,4 +78,16 @@ func (it *StringChunkIterator) Close() {
 	clear(it.chunk[:])
 	it.pool = nil
 	it.base = 0
+}
+
+func (it *StringChunkIterator) All() iter.Seq2[int, []byte] {
+	return it.pool.All()
+}
+
+func (it *StringChunkIterator) Values() iter.Seq[[]byte] {
+	return it.pool.Values()
+}
+
+func (it *StringChunkIterator) Select(sel []uint32) iter.Seq[[]byte] {
+	return it.pool.Select(sel)
 }

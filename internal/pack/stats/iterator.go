@@ -116,7 +116,7 @@ func (it *Iterator) NValues() int {
 	return int(nvals)
 }
 
-// query
+// debug use only
 func (it *Iterator) ReadWire() []byte {
 	if it.snode == nil {
 		return nil

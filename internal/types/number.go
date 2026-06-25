@@ -71,9 +71,11 @@ type NumberReader[T Number] interface {
 	// materialized vectors.
 	Slice() []T
 
-	// Iterator returns a Go style iterator to walk the container
-	// with a for range loop.
-	Iterator() iter.Seq2[int, T]
+	// Values returns sequence for all index-value pairs in the container.
+	All() iter.Seq2[int, T]
+
+	// Values returns sequence for all values in the container.
+	Values() iter.Seq[T]
 
 	// Chunks returns a chunked iterator which enables efficient
 	// batch processing of vector data.
@@ -105,34 +107,40 @@ type NumberReader[T Number] interface {
 // values in L1 cache which minimizes costs of linear and (small range)
 // random access.
 //
-// Use NextChunk for linear walks, Get for point access and
-// Seek or SkipChunk for jumping.
+// Use Next for linear walks, Get for point access and
+// Seek or Skip for jumping.
 type NumberIterator[T Number] interface {
 	// Returns the total number of elements in this vector.
 	Len() int
 
 	// Returns an element at position n or zero when out of bounds.
 	// Implicitly seeks and decodes the chunk containing n.
-	Get(int) T
+	Value(int) T
 
 	// Seeks to position n rounded by CHUNK_SIZE and decodes
-	// the relevant chunk. Compatible with NextChunk and Get.
+	// the relevant chunk. Compatible with Next and Get.
 	Seek(int) bool
 
 	// Decodes and returns the next chunk at CHUNK_SIZE boundaries
 	// and the number of valid elements in the chunk. Past EOF
 	// returns nil and zero n.
-	NextChunk() (*[CHUNK_SIZE]T, int)
+	Next() (*[CHUNK_SIZE]T, int)
 
 	// Skips a chunk efficiently without decoding data and returns
 	// the number of elements skipped or zero when at EOF. Users may
-	// call skip repeatedly before requesting data from NextChunk.
-	SkipChunk() int
+	// call skip repeatedly before requesting data from Next.
+	Skip() int
 
 	// Close releases pointers and allows for efficient re-use
 	// of iterators. Users are encouraged to call Close after use
 	// to reduce allocations and GC overhead.
 	Close()
+
+	// All iterates over all index/value pairs in the array.
+	All() iter.Seq2[int, T]
+
+	// Values iterates over all values in the array in order.
+	Values() iter.Seq[T]
 }
 
 type NumberAccessor[T Number] interface {

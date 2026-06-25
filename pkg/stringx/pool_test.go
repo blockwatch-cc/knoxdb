@@ -138,7 +138,7 @@ func TestStringPoolIterators(t *testing.T) {
 	}
 
 	// iterator
-	for i, v := range pool.Iterator() {
+	for i, v := range pool.All() {
 		require.Equal(t, data[i], v, "it", i)
 	}
 
@@ -146,7 +146,7 @@ func TestStringPoolIterators(t *testing.T) {
 	it := pool.Chunks()
 	require.Equal(t, len(data), it.Len(), "it len")
 	for i, v := range data {
-		require.Equal(t, v, it.Get(i))
+		require.Equal(t, v, it.Value(i))
 	}
 }
 
@@ -239,7 +239,7 @@ func BenchmarkStringPoolIterator(b *testing.B) {
 			b.ReportAllocs()
 			b.SetBytes(int64(sz.N * 32))
 			for b.Loop() {
-				for _, v := range pool.Iterator() {
+				for _, v := range pool.All() {
 					x += len(v)
 				}
 			}
@@ -262,7 +262,7 @@ func BenchmarkStringPoolChunk(b *testing.B) {
 			for b.Loop() {
 				it := pool.Chunks()
 				for {
-					c, n := it.NextChunk()
+					c, n := it.Next()
 					if n == 0 {
 						break
 					}

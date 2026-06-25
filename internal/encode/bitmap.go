@@ -168,7 +168,7 @@ func (c *BitmapContainer) All() bool {
 	}
 }
 
-func (c *BitmapContainer) Any() bool {
+func (c *BitmapContainer) Some() bool {
 	switch c.Typ {
 	case TBitmapZero:
 		return false
@@ -176,7 +176,7 @@ func (c *BitmapContainer) Any() bool {
 		return true
 	case TBitmapDense:
 		b := bitset.NewFromBytes(c.Buf, c.N)
-		ok := b.Any()
+		ok := b.Some()
 		b.Close()
 		return ok
 	case TBitmapSparse:
@@ -253,7 +253,7 @@ func (c *BitmapContainer) Encode(ctx *BitmapContext, vals *bitset.Bitset) *Bitma
 		c.Buf = nil
 	case n*2 < c.N/8:
 		c.Typ = TBitmapSparse
-		keys := vals.Indexes(arena.Alloc[uint32](n))
+		keys := vals.AllIndexes(arena.Alloc[uint32](n))
 		c.Buf = xroar.NewFromSorted(keys).Bytes()
 		arena.Free(keys)
 	default:
@@ -263,7 +263,7 @@ func (c *BitmapContainer) Encode(ctx *BitmapContext, vals *bitset.Bitset) *Bitma
 	return c
 }
 
-func (c *BitmapContainer) Iterator() iter.Seq[int] {
+func (c *BitmapContainer) Ones() iter.Seq[int] {
 	switch c.Typ {
 	case TBitmapOne:
 		return func(fn func(int) bool) {
@@ -275,7 +275,7 @@ func (c *BitmapContainer) Iterator() iter.Seq[int] {
 		}
 	case TBitmapDense:
 		b := bitset.NewFromBytes(c.Buf, c.N)
-		return b.Iterator()
+		return b.Ones()
 	case TBitmapSparse:
 		return func(fn func(int) bool) {
 			it := xroar.NewFromBytes(c.Buf).NewIterator()
@@ -295,18 +295,67 @@ func (c *BitmapContainer) Iterator() iter.Seq[int] {
 	}
 }
 
+func (c *BitmapContainer) Values() iter.Seq[bool] {
+	switch c.Typ {
+	case TBitmapOne:
+		return func(fn func(bool) bool) {
+			for range c.N {
+				if !fn(true) {
+					return
+				}
+			}
+		}
+	case TBitmapDense:
+		return func(fn func(bool) bool) {
+			b := bitset.NewFromBytes(c.Buf, c.N)
+			b.Values()(fn)
+			b.Close()
+		}
+	case TBitmapSparse:
+		return func(fn func(bool) bool) {
+			it := xroar.NewFromBytes(c.Buf).NewIterator()
+			var i uint64
+			for {
+				n, ok := it.Next()
+				if !ok {
+					break
+				}
+				for i < n {
+					if !fn(false) {
+						break
+					}
+					i++
+				}
+				if !fn(true) {
+					break
+				}
+				i++
+			}
+		}
+	default:
+		// TBitmapZero
+		return func(fn func(bool) bool) {
+			for range c.N {
+				if !fn(false) {
+					return
+				}
+			}
+		}
+	}
+}
+
 func (c *BitmapContainer) Chunks() bitset.BitmapIterator {
 	switch c.Typ {
 	case TBitmapOne:
-		return &oneBitmapIterator{size: c.N, last: -1}
+		return newStaticBitmapIterator(c.N, true)
 	case TBitmapDense:
 		b := bitset.NewFromBytes(c.Buf, c.N)
 		return b.Chunks()
 	case TBitmapSparse:
-		return &xroarBitmapIterator{it: xroar.NewFromBytes(c.Buf).NewIterator()}
+		return newXroarBitmapIterator(xroar.NewFromBytes(c.Buf), c.N)
 	default:
 		// TBitmapZero
-		return &zeroBitmapIterator{}
+		return newStaticBitmapIterator(c.N, false)
 	}
 }
 
@@ -448,67 +497,167 @@ var bitmapFactory = BitmapFactory{
 //
 
 type xroarBitmapIterator struct {
-	chunk [types.CHUNK_SIZE]int
-	it    *xroar.Iterator
+	chunk [types.CHUNK_SIZE]bool
+	set   *xroar.Bitmap
+	len   int
+	last  int
+}
+
+func newXroarBitmapIterator(set *xroar.Bitmap, n int) bitset.BitmapIterator {
+	return &xroarBitmapIterator{
+		set: set,
+		len: n,
+	}
+}
+
+func (it *xroarBitmapIterator) Len() int {
+	return it.len
+}
+
+func (it *xroarBitmapIterator) Value(i int) bool {
+	return it.set.Contains(uint64(i))
+}
+
+func (it *xroarBitmapIterator) Skip() int {
+	n := min(types.CHUNK_SIZE, it.len-it.last)
+	it.last += n
+	return n
+}
+
+func (it *xroarBitmapIterator) Seek(n int) bool {
+	if n < 0 || n >= it.len {
+		it.last = it.len
+		return false
+	}
+	it.last = n
+	return true
+}
+
+func (it *xroarBitmapIterator) Next() (*[types.CHUNK_SIZE]bool, int) {
+	if it.last >= it.len {
+		return nil, 0
+	}
+	n := min(it.len-it.last, types.CHUNK_SIZE)
+	for i := range n {
+		it.chunk[i] = it.set.Contains(uint64(it.last))
+		it.last++
+	}
+	return &it.chunk, n
+}
+
+func (it *xroarBitmapIterator) All() iter.Seq2[int, bool] {
+	return func(yield func(int, bool) bool) {
+		for i := range it.len {
+			if !yield(i, it.set.Contains(uint64(i))) {
+				return
+			}
+		}
+	}
+}
+
+func (it *xroarBitmapIterator) Values() iter.Seq[bool] {
+	return func(yield func(bool) bool) {
+		for i := range it.len {
+			if !yield(it.set.Contains(uint64(i))) {
+				return
+			}
+		}
+	}
+}
+
+func (it *xroarBitmapIterator) Select(sel []uint32) iter.Seq[bool] {
+	return func(yield func(bool) bool) {
+		for _, i := range sel {
+			if !yield(it.set.Contains(uint64(i))) {
+				return
+			}
+		}
+	}
 }
 
 func (it *xroarBitmapIterator) Close() {
-	it.it = nil
+	it.set = nil
 }
 
-func (it *xroarBitmapIterator) Next() ([]int, bool) {
-	var n int
-	for {
-		val, ok := it.it.Next()
-		if !ok {
-			break
-		}
-		it.chunk[n] = int(val)
-		n++
-		if n == types.CHUNK_SIZE {
-			break
-		}
-	}
-	return it.chunk[:n], n > 0
-}
-
-type zeroBitmapIterator struct{}
-
-func (*zeroBitmapIterator) Close()              {}
-func (*zeroBitmapIterator) Next() ([]int, bool) { return nil, false }
-
-type oneBitmapIterator struct {
-	chunk [types.CHUNK_SIZE]int
+type staticBitmapIterator struct {
+	chunk [types.CHUNK_SIZE]bool
 	last  int
-	size  int
+	len   int
 }
 
-func (it *oneBitmapIterator) Close() {
-	it.last = 0
-	it.size = 0
+func newStaticBitmapIterator(n int, val bool) bitset.BitmapIterator {
+	it := &staticBitmapIterator{
+		len: n,
+	}
+	for i := range it.chunk {
+		it.chunk[i] = val
+	}
+	return it
 }
 
-func (it *oneBitmapIterator) Next() ([]int, bool) {
-	if it.last+1 >= it.size {
-		return nil, false
+func (it *staticBitmapIterator) Len() int {
+	return it.len
+}
+
+func (it *staticBitmapIterator) Value(i int) bool {
+	return it.chunk[0]
+}
+
+func (it *staticBitmapIterator) Next() (*[types.CHUNK_SIZE]bool, int) {
+	if it.last >= it.len {
+		return nil, 0
 	}
-	var (
-		i int
-		v = it.last + 1
-	)
-	for range 16 {
-		it.chunk[i] = v
-		it.chunk[i+1] = v + 1
-		it.chunk[i+2] = v + 2
-		it.chunk[i+3] = v + 3
-		it.chunk[i+4] = v + 4
-		it.chunk[i+5] = v + 5
-		it.chunk[i+6] = v + 6
-		it.chunk[i+7] = v + 7
-		i += 8
-		v += 8
-	}
-	n := min(128, it.size-it.last-1)
+	n := min(it.len-it.last, types.CHUNK_SIZE)
 	it.last += n
-	return it.chunk[:n], true
+	return &it.chunk, n
+}
+
+func (it *staticBitmapIterator) Seek(n int) bool {
+	if n < 0 || n >= it.len {
+		it.last = it.len
+		return false
+	}
+	it.last = n
+	return true
+}
+
+func (it *staticBitmapIterator) Skip() int {
+	n := min(types.CHUNK_SIZE, it.len-it.last)
+	it.last += n
+	return n
+}
+
+func (it *staticBitmapIterator) Close() {
+	it.len = 0
+	it.last = 0
+}
+
+func (it *staticBitmapIterator) All() iter.Seq2[int, bool] {
+	return func(yield func(int, bool) bool) {
+		for i := range it.len {
+			if !yield(i, it.chunk[0]) {
+				return
+			}
+		}
+	}
+}
+
+func (it *staticBitmapIterator) Values() iter.Seq[bool] {
+	return func(yield func(bool) bool) {
+		for range it.len {
+			if !yield(it.chunk[0]) {
+				return
+			}
+		}
+	}
+}
+
+func (it *staticBitmapIterator) Select(sel []uint32) iter.Seq[bool] {
+	return func(yield func(bool) bool) {
+		for range sel {
+			if !yield(it.chunk[0]) {
+				return
+			}
+		}
+	}
 }

@@ -31,33 +31,19 @@ func TestIterator(t *testing.T) {
 			require.NoError(t, err)
 
 			// --------------------------
-			// test next
+			// test all
 			//
 			it := NewIterator(buf, len(src), minv)
 			require.Equal(t, len(src), it.Len(), "bad it len")
-			for i, v := range src {
-				val, ok := it.Next()
-				require.True(t, ok, "short iterator at pos %d", i)
-				require.Equal(t, val, v, "invalid val=%d pos=%d src=%d minv=%d",
-					val, i, src[i], minv)
+			for i, v := range it.All() {
+				require.Equal(t, src[i], v, "invalid val=%d pos=%d src=%d minv=%d",
+					v, i, src[i], minv)
 			}
-
-			// --------------------------
-			// test reset
-			//
-			it.Reset()
-			require.Equal(t, len(src), it.Len(), "bad it len post reset")
-			for i, v := range src {
-				val, ok := it.Next()
-				require.True(t, ok, "short iterator at pos %d post reset", i)
-				require.Equal(t, val, v, "invalid val=%d pos=%d post reset", val, i)
-			}
-			it.Close()
 
 			// --------------------------
 			// test init without len
 			//
-			it = NewIterator[uint64](buf, 0, minv)
+			it = NewIterator(buf, 0, minv)
 			require.Equal(t, len(src), it.Len(), "bad it len when detected")
 
 			// --------------------
@@ -66,7 +52,7 @@ func TestIterator(t *testing.T) {
 			it.Reset()
 			var seen int
 			for {
-				dst, n := it.NextChunk()
+				dst, n := it.Next()
 				if n == 0 {
 					break
 				}
@@ -82,10 +68,10 @@ func TestIterator(t *testing.T) {
 			// --------------------------
 			// test skip
 			it.Reset()
-			seen = it.SkipChunk()
-			seen += it.SkipChunk()
+			seen = it.Skip()
+			seen += it.Skip()
 			for {
-				dst, n := it.NextChunk()
+				dst, n := it.Next()
 				if n == 0 {
 					break
 				}
@@ -106,23 +92,23 @@ func TestIterator(t *testing.T) {
 				i := testutil.RandIntn(len(src))
 				ok := it.Seek(i)
 				require.True(t, ok, "seek to existing pos %d/%d failed", i, len(src))
-				val, ok := it.Next()
-				require.True(t, ok, "next after seek to existing pos %d/%d failed", i, len(src))
-				require.Equal(t, src[i], val, "invalid val=%d pos=%d after seek", val, i)
+				vals, n := it.Next()
+				require.GreaterOrEqual(t, n, 1, "next after seek to existing pos %d/%d failed", i, len(src))
+				require.Equal(t, src[i], vals[i%CHUNK_SIZE], "invalid val at pos=%d after seek, vals=%v ", i, vals[:n])
 			}
 
 			// seek to invalid values
 			require.False(t, it.Seek(-1), "seek to negative")
-			_, ok := it.Next()
-			require.False(t, ok, "next after bad seek")
+			_, n := it.Next()
+			require.Zero(t, n, "next after bad seek")
 
 			require.False(t, it.Seek(len(src)), "seek to end")
-			_, ok = it.Next()
-			require.False(t, ok, "next after seek to end")
+			_, n = it.Next()
+			require.Zero(t, n, "next after seek to end")
 
 			require.False(t, it.Seek(len(src)+1), "seek beyond end")
-			_, ok = it.Next()
-			require.False(t, ok, "next after seek beyond end")
+			_, n = it.Next()
+			require.Zero(t, n, "next after seek beyond end")
 
 			it.Close()
 		})

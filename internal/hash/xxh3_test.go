@@ -114,7 +114,7 @@ func TestXXH3Uint32Generic(t *testing.T) {
 	for _, c := range xxh3Uint32Cases {
 		t.Run(c.name, func(t *testing.T) {
 			// pre-allocate the result slice
-			res := xxh3_u32_purego(c.slice, make([]uint64, len(c.slice)))
+			res := xxh3_u32_purego(make([]uint64, len(c.slice)), c.slice)
 			require.Equal(t, len(c.result), len(res), "len")
 			require.Equal(t, c.result, res, "result")
 		})
@@ -128,7 +128,7 @@ func BenchmarkXXH3Uint32Generic(b *testing.B) {
 		b.Run(n.Name, func(b *testing.B) {
 			b.SetBytes(4 * int64(n.N))
 			for range b.N {
-				xxh3_u32_purego(a, res)
+				xxh3_u32_purego(res, a)
 			}
 		})
 	}
@@ -166,7 +166,7 @@ func TestXXH3Uint64Generic(t *testing.T) {
 	for _, c := range xxh3Uint64Cases {
 		t.Run(c.name, func(t *testing.T) {
 			// pre-allocate the result slice
-			res := xxh3_u64_purego(c.slice, make([]uint64, len(c.slice)))
+			res := xxh3_u64_purego(make([]uint64, len(c.slice)), c.slice)
 			require.Equal(t, len(c.result), len(res), "len")
 			require.Equal(t, c.result, res, "result")
 		})
@@ -180,7 +180,7 @@ func BenchmarkXXH3Uint64Generic(b *testing.B) {
 		b.Run(n.Name, func(b *testing.B) {
 			b.SetBytes(8 * int64(n.N))
 			for range b.N {
-				xxh3_u64_purego(a, res)
+				xxh3_u64_purego(res, a)
 			}
 		})
 	}

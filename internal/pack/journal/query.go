@@ -56,7 +56,7 @@ func (j *Journal) Query(plan *query.QueryPlan, epoch uint32) *Result {
 		seg.Match(plan.Filters, plan.Snap, res.tomb, bits)
 
 		// add segment to result if it has any match
-		if bits.Any() {
+		if bits.Some() {
 			// plan.Log.Debugf("using journal segment %d with %d matches", seg.Id(), bits.Count())
 			res.Append(seg, bits)
 		}

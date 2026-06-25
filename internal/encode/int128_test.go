@@ -26,7 +26,7 @@ func TestInt128Encode(t *testing.T) {
 
 			// validate contents
 			require.Equal(t, c.N, enc.Len(), "T=%s", enc)
-			for i, v := range c.Data.Iterator() {
+			for i, v := range c.Data.All() {
 				require.Equal(t, v, enc.Get(i))
 			}
 
@@ -43,7 +43,7 @@ func TestInt128Encode(t *testing.T) {
 
 			// validate contents
 			require.Equal(t, c.N, enc2.Len(), "T=%s", enc)
-			for i, v := range c.Data.Iterator() {
+			for i, v := range c.Data.All() {
 				require.Equal(t, v, enc2.Get(i))
 			}
 
@@ -83,7 +83,7 @@ func TestInt128Iterator(t *testing.T) {
 				// --------------------------
 				// test next
 				//
-				for i, v := range enc.Iterator() {
+				for i, v := range enc.All() {
 					require.Equal(t, src.Get(i), v, "invalid val at pos=%d", i)
 				}
 
@@ -96,13 +96,13 @@ func TestInt128Iterator(t *testing.T) {
 				}
 				var seen int
 				for {
-					dst, n := it.NextChunk()
+					dst, n := it.Next()
 					if n == 0 {
 						break
 					}
 					require.GreaterOrEqual(t, n, 0, "next chunk returned negative n")
 					require.LessOrEqual(t, seen+n, c.N, "next chunk returned too large n")
-					for i, v := range dst.Range(0, n).Iterator() {
+					for i, v := range dst[:n] {
 						require.Equal(t, src.Get(seen+i), v, "invalid val=%d pos=%d src=%d", v, seen+i, src.Get(seen+i))
 					}
 					seen += n
@@ -113,16 +113,16 @@ func TestInt128Iterator(t *testing.T) {
 				// --------------------------
 				// test skip
 				it = enc.Chunks()
-				seen = it.SkipChunk()
-				seen += it.SkipChunk()
+				seen = it.Skip()
+				seen += it.Skip()
 				for {
-					dst, n := it.NextChunk()
+					dst, n := it.Next()
 					if n == 0 {
 						break
 					}
 					require.GreaterOrEqual(t, n, 0, "next chunk returned negative n")
 					require.LessOrEqual(t, seen+n, c.N, "next chunk returned too large n")
-					for i, v := range dst.Range(0, n).Iterator() {
+					for i, v := range dst[:n] {
 						require.Equal(t, src.Get(seen+i), v, "invalid val=%d pos=%d src=%d after skip", v, seen+i, src.Get(seen+i))
 					}
 					seen += n
@@ -138,22 +138,22 @@ func TestInt128Iterator(t *testing.T) {
 					i := testutil.RandIntn(c.N)
 					ok := it.Seek(i)
 					require.True(t, ok, "seek to existing pos %d/%d failed", i, c.N)
-					vals, n := it.NextChunk()
+					vals, n := it.Next()
 					require.Greater(t, n, 0, "next after seek to existing pos %d/%d failed", i, src.Len())
-					require.Equal(t, src.Get(i), vals.Get(i%CHUNK_SIZE), "invalid val at pos=%d after seek", i)
+					require.Equal(t, src.Get(i), vals[i%CHUNK_SIZE], "invalid val at pos=%d after seek", i)
 				}
 
 				// seek to invalid values
 				require.False(t, it.Seek(-1), "seek to negative")
-				_, n := it.NextChunk()
+				_, n := it.Next()
 				require.Equal(t, 0, n, "next after bad seek")
 
 				require.False(t, it.Seek(c.N), "seek to end")
-				_, n = it.NextChunk()
+				_, n = it.Next()
 				require.Equal(t, 0, n, "next after bad seek to end")
 
 				require.False(t, it.Seek(c.N+1), "seek beyond end")
-				_, n = it.NextChunk()
+				_, n = it.Next()
 				require.Equal(t, 0, n, "next after bad seek to end")
 
 				it.Close()
@@ -255,7 +255,7 @@ func MakeInt128Tests(n int) []TestCaseInt128 {
 
 func i128EnsureBits(t *testing.T, vals *num.Int128Stride, val, val2 num.Int128, bits *bitset.Bitset, mode types.FilterMode) {
 	if etests.ShowValues {
-		for i, v := range vals.Iterator() {
+		for i, v := range vals.All() {
 			t.Logf("Val %d: %v", i, v)
 		}
 		t.Logf("Bitset %x", bits.Bytes())
@@ -263,43 +263,43 @@ func i128EnsureBits(t *testing.T, vals *num.Int128Stride, val, val2 num.Int128, 
 	minv, maxv := vals.MinMax()
 	switch mode {
 	case types.FilterModeEqual:
-		for i, v := range vals.Iterator() {
+		for i, v := range vals.All() {
 			require.Equal(t, v == val, bits.Contains(i), "bit=%d val=%v %s %v min=%v max=%v",
 				i, v, mode, val, minv, maxv)
 		}
 
 	case types.FilterModeNotEqual:
-		for i, v := range vals.Iterator() {
+		for i, v := range vals.All() {
 			require.Equal(t, v != val, bits.Contains(i), "bit=%d val=%v %s %v min=%v max=%v",
 				i, v, mode, val, minv, maxv)
 		}
 
 	case types.FilterModeLt:
-		for i, v := range vals.Iterator() {
+		for i, v := range vals.All() {
 			require.Equal(t, v.Lt(val), bits.Contains(i), "bit=%d val=%v %s %v min=%v max=%v",
 				i, v, mode, val, minv, maxv)
 		}
 
 	case types.FilterModeLe:
-		for i, v := range vals.Iterator() {
+		for i, v := range vals.All() {
 			require.Equal(t, v.Le(val), bits.Contains(i), "bit=%d val=%v %s %v min=%v max=%v",
 				i, v, mode, val, minv, maxv)
 		}
 
 	case types.FilterModeGt:
-		for i, v := range vals.Iterator() {
+		for i, v := range vals.All() {
 			require.Equal(t, v.Gt(val), bits.Contains(i), "bit=%d val=%v %s %v min=%v max=%v",
 				i, v, mode, val, minv, maxv)
 		}
 
 	case types.FilterModeGe:
-		for i, v := range vals.Iterator() {
+		for i, v := range vals.All() {
 			require.Equal(t, v.Ge(val), bits.Contains(i), "bit=%d val=%v %s %v min=%v max=%v",
 				i, v, mode, val, minv, maxv)
 		}
 
 	case types.FilterModeRange:
-		for i, v := range vals.Iterator() {
+		for i, v := range vals.All() {
 			require.Equal(t, v.Ge(val) && v.Le(val2), bits.Contains(i), "bit=%d val=%v %s [%v,%v] min=%v max=%v",
 				i, v, mode, val, val2, minv, maxv)
 		}
@@ -503,7 +503,7 @@ func BenchmarkInt128Iterator(b *testing.B) {
 				}
 				it := enc2.Chunks()
 				for {
-					_, n := it.NextChunk()
+					_, n := it.Next()
 					if n == 0 {
 						break
 					}

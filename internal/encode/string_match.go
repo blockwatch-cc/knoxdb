@@ -14,7 +14,7 @@ func matchStringEqual(a types.StringReader, val []byte, bits, mask *bitset.Bitse
 	set := bits.Bytes()
 	var cnt int
 	if mask != nil {
-		for i := range mask.Iterator() {
+		for i := range mask.Ones() {
 			if !bytes.Equal(a.Get(i), val) {
 				continue
 			}
@@ -22,7 +22,7 @@ func matchStringEqual(a types.StringReader, val []byte, bits, mask *bitset.Bitse
 			cnt++
 		}
 	} else {
-		for i, v := range a.Iterator() {
+		for i, v := range a.All() {
 			if !bytes.Equal(v, val) {
 				continue
 			}
@@ -37,7 +37,7 @@ func matchStringNotEqual(a types.StringReader, val []byte, bits, mask *bitset.Bi
 	set := bits.Bytes()
 	var cnt int
 	if mask != nil {
-		for i := range mask.Iterator() {
+		for i := range mask.Ones() {
 			if bytes.Equal(a.Get(i), val) {
 				continue
 			}
@@ -45,7 +45,7 @@ func matchStringNotEqual(a types.StringReader, val []byte, bits, mask *bitset.Bi
 			cnt++
 		}
 	} else {
-		for i, v := range a.Iterator() {
+		for i, v := range a.All() {
 			if bytes.Equal(v, val) {
 				continue
 			}
@@ -60,7 +60,7 @@ func matchStringLess(a types.StringReader, val []byte, bits, mask *bitset.Bitset
 	set := bits.Bytes()
 	var cnt int
 	if mask != nil {
-		for i := range mask.Iterator() {
+		for i := range mask.Ones() {
 			if bytes.Compare(a.Get(i), val) >= 0 {
 				continue
 			}
@@ -68,7 +68,7 @@ func matchStringLess(a types.StringReader, val []byte, bits, mask *bitset.Bitset
 			cnt++
 		}
 	} else {
-		for i, v := range a.Iterator() {
+		for i, v := range a.All() {
 			if bytes.Compare(v, val) >= 0 {
 				continue
 			}
@@ -83,7 +83,7 @@ func matchStringLessEqual(a types.StringReader, val []byte, bits, mask *bitset.B
 	set := bits.Bytes()
 	var cnt int
 	if mask != nil {
-		for i := range mask.Iterator() {
+		for i := range mask.Ones() {
 			if bytes.Compare(a.Get(i), val) > 0 {
 				continue
 			}
@@ -91,7 +91,7 @@ func matchStringLessEqual(a types.StringReader, val []byte, bits, mask *bitset.B
 			cnt++
 		}
 	} else {
-		for i, v := range a.Iterator() {
+		for i, v := range a.All() {
 			if bytes.Compare(v, val) > 0 {
 				continue
 			}
@@ -106,7 +106,7 @@ func matchStringGreater(a types.StringReader, val []byte, bits, mask *bitset.Bit
 	set := bits.Bytes()
 	var cnt int
 	if mask != nil {
-		for i := range mask.Iterator() {
+		for i := range mask.Ones() {
 			if bytes.Compare(a.Get(i), val) <= 0 {
 				continue
 			}
@@ -114,7 +114,7 @@ func matchStringGreater(a types.StringReader, val []byte, bits, mask *bitset.Bit
 			cnt++
 		}
 	} else {
-		for i, v := range a.Iterator() {
+		for i, v := range a.All() {
 			if bytes.Compare(v, val) <= 0 {
 				continue
 			}
@@ -129,7 +129,7 @@ func matchStringGreaterEqual(a types.StringReader, val []byte, bits, mask *bitse
 	set := bits.Bytes()
 	var cnt int
 	if mask != nil {
-		for i := range mask.Iterator() {
+		for i := range mask.Ones() {
 			if bytes.Compare(a.Get(i), val) < 0 {
 				continue
 			}
@@ -137,7 +137,7 @@ func matchStringGreaterEqual(a types.StringReader, val []byte, bits, mask *bitse
 			cnt++
 		}
 	} else {
-		for i, v := range a.Iterator() {
+		for i, v := range a.All() {
 			if bytes.Compare(v, val) < 0 {
 				continue
 			}
@@ -161,7 +161,7 @@ func matchStringBetween(a types.StringReader, from, to []byte, bits, mask *bitse
 	set := bits.Bytes()
 	var cnt int
 	if mask != nil {
-		for i := range mask.Iterator() {
+		for i := range mask.Ones() {
 			v := a.Get(i)
 			if bytes.Compare(v, from) < 0 {
 				continue
@@ -173,7 +173,7 @@ func matchStringBetween(a types.StringReader, from, to []byte, bits, mask *bitse
 			cnt++
 		}
 	} else {
-		for i, v := range a.Iterator() {
+		for i, v := range a.All() {
 			if bytes.Compare(v, from) < 0 {
 				continue
 			}

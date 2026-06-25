@@ -92,19 +92,23 @@ func (c *Int128Container) Size() int {
 	return 1 + c.X0.Size() + c.X1.Size()
 }
 
-func (c *Int128Container) Iterator() iter.Seq2[int, num.Int128] {
-	return func(fn func(int, num.Int128) bool) {
+func (c *Int128Container) All() iter.Seq2[int, num.Int128] {
+	return func(yield func(int, num.Int128) bool) {
 		it := c.Chunks()
-		for i := range it.Len() {
-			if !fn(i, it.Get(i)) {
-				break
-			}
-		}
+		it.All()(yield)
 		it.Close()
 	}
 }
 
-func (c *Int128Container) Chunks() num.BigIntIterator[num.Int128, num.Int128Stride] {
+func (c *Int128Container) Values() iter.Seq[num.Int128] {
+	return func(yield func(num.Int128) bool) {
+		it := c.Chunks()
+		it.Values()(yield)
+		it.Close()
+	}
+}
+
+func (c *Int128Container) Chunks() num.BigIntIterator[num.Int128] {
 	return NewInt128Iterator(c)
 }
 
@@ -218,13 +222,13 @@ func (c *Int128Container) match(cmpFn I128MatchFunc, val num.Int128, bits, mask 
 		i   int
 		cnt int64
 		buf = bits.Bytes()
-		it  = c.Chunks()
+		it  = NewInt128StrideIterator(c)
 	)
 
 	for {
 		// check mask and skip chunks if not required
 		if mask != nil && !mask.ContainsRange(i, i+CHUNK_SIZE-1) {
-			n := it.SkipChunk()
+			n := it.Skip()
 			i += n
 			if i >= it.Len() {
 				break
@@ -232,7 +236,7 @@ func (c *Int128Container) match(cmpFn I128MatchFunc, val num.Int128, bits, mask 
 		}
 
 		// get next chunk, on tail n may be < CHUNK_SZIE
-		src, n := it.NextChunk()
+		src, n := it.Next()
 		if n == 0 {
 			break
 		}
@@ -255,13 +259,13 @@ func (c *Int128Container) matchRange(cmpFn I128RangeMatchFunc, a, b num.Int128, 
 		i   int
 		cnt int64
 		buf = bits.Bytes()
-		it  = c.Chunks()
+		it  = NewInt128StrideIterator(c)
 	)
 
 	for {
 		// check mask and skip chunks if not required
 		if mask != nil && !mask.ContainsRange(i, i+CHUNK_SIZE-1) {
-			n := it.SkipChunk()
+			n := it.Skip()
 			i += n
 			if i >= it.Len() {
 				break
@@ -269,7 +273,7 @@ func (c *Int128Container) matchRange(cmpFn I128RangeMatchFunc, a, b num.Int128, 
 		}
 
 		// get next chunk, on tail n may be < CHUNK_SZIE
-		src, n := it.NextChunk()
+		src, n := it.Next()
 		if n == 0 {
 			break
 		}
@@ -288,8 +292,9 @@ func (c *Int128Container) matchRange(cmpFn I128RangeMatchFunc, a, b num.Int128, 
 }
 
 type Int128Factory struct {
-	cPool  sync.Pool // container pool
-	itPool sync.Pool // iterator pool
+	cPool   sync.Pool // container pool
+	itPool  sync.Pool // iterator pool
+	sitPool sync.Pool // stride iterator pool
 }
 
 func newInt128Container() *Int128Container {
@@ -308,12 +313,21 @@ func putInt128Iterator(c *Int128Iterator) {
 	i128Factory.itPool.Put(c)
 }
 
-var i128Factory = Int128Factory{
-	cPool:  sync.Pool{New: func() any { return new(Int128Container) }},
-	itPool: sync.Pool{New: func() any { return new(Int128Iterator) }},
+func newInt128StrideIterator() *Int128StrideIterator {
+	return i128Factory.sitPool.Get().(*Int128StrideIterator)
 }
 
-type Int128Iterator struct {
+func putInt128StrideIterator(c *Int128StrideIterator) {
+	i128Factory.sitPool.Put(c)
+}
+
+var i128Factory = Int128Factory{
+	cPool:   sync.Pool{New: func() any { return new(Int128Container) }},
+	itPool:  sync.Pool{New: func() any { return new(Int128Iterator) }},
+	sitPool: sync.Pool{New: func() any { return new(Int128StrideIterator) }},
+}
+
+type Int128StrideIterator struct {
 	chunk num.Int128Stride
 	x0    types.NumberIterator[int64]
 	x1    types.NumberIterator[uint64]
@@ -322,8 +336,8 @@ type Int128Iterator struct {
 	ofs   int
 }
 
-func NewInt128Iterator(c *Int128Container) *Int128Iterator {
-	it := newInt128Iterator()
+func NewInt128StrideIterator(c *Int128Container) *Int128StrideIterator {
+	it := newInt128StrideIterator()
 	it.x0 = c.X0.Chunks()
 	it.x1 = c.X1.Chunks()
 	it.base = -1
@@ -331,7 +345,7 @@ func NewInt128Iterator(c *Int128Container) *Int128Iterator {
 	return it
 }
 
-func (it *Int128Iterator) Close() {
+func (it *Int128StrideIterator) Close() {
 	it.chunk.X0 = nil
 	it.chunk.X1 = nil
 	it.x0.Close()
@@ -341,18 +355,14 @@ func (it *Int128Iterator) Close() {
 	it.base = 0
 	it.len = 0
 	it.ofs = 0
-	putInt128Iterator(it)
+	putInt128StrideIterator(it)
 }
 
-// func (it *Int128Iterator) Reset() {
-// 	it.ofs = 0
-// }
-
-func (it *Int128Iterator) Len() int {
+func (it *Int128StrideIterator) Len() int {
 	return it.len
 }
 
-func (it *Int128Iterator) Get(n int) num.Int128 {
+func (it *Int128StrideIterator) Value(n int) num.Int128 {
 	if n < 0 || n >= it.len {
 		return num.ZeroInt128
 	}
@@ -362,26 +372,7 @@ func (it *Int128Iterator) Get(n int) num.Int128 {
 	return it.chunk.Get(chunkPos(n))
 }
 
-// func (it *Int128Iterator) Next() (num.Int128, bool) {
-// 	if it.ofs >= it.len {
-// 		// EOF
-// 		return num.ZeroInt128, false
-// 	}
-
-// 	// refill on chunk boundary
-// 	if base := chunkBase(it.ofs); base != it.base {
-// 		it.fill(base)
-// 	}
-// 	i := chunkPos(it.ofs)
-
-// 	// advance ofs for next call
-// 	it.ofs++
-
-// 	// return calculated value
-// 	return it.chunk.Get(i), true
-// }
-
-func (it *Int128Iterator) NextChunk() (*num.Int128Stride, int) {
+func (it *Int128StrideIterator) Next() (*num.Int128Stride, int) {
 	// EOF
 	if it.ofs >= it.len {
 		return nil, 0
@@ -397,13 +388,13 @@ func (it *Int128Iterator) NextChunk() (*num.Int128Stride, int) {
 	return &it.chunk, n
 }
 
-func (it *Int128Iterator) SkipChunk() int {
+func (it *Int128StrideIterator) Skip() int {
 	n := min(CHUNK_SIZE, it.len-it.ofs)
 	it.ofs += n
 	return n
 }
 
-func (it *Int128Iterator) Seek(n int) bool {
+func (it *Int128StrideIterator) Seek(n int) bool {
 	if n < 0 || n >= it.len {
 		it.ofs = it.len
 		return false
@@ -419,12 +410,12 @@ func (it *Int128Iterator) Seek(n int) bool {
 	return true
 }
 
-func (it *Int128Iterator) fill(base int) int {
+func (it *Int128StrideIterator) fill(base int) int {
 	// load chunks at base and relink into stride
 	it.x0.Seek(base)
-	x0, n := it.x0.NextChunk()
+	x0, n := it.x0.Next()
 	it.x1.Seek(base)
-	x1, m := it.x1.NextChunk()
+	x1, m := it.x1.Next()
 
 	if n != m {
 		panic(fmt.Errorf("i128-it: unexpected base it fill n=%d m=%d", n, m))
@@ -437,6 +428,82 @@ func (it *Int128Iterator) fill(base int) int {
 
 	it.chunk.X0 = x0[:n]
 	it.chunk.X1 = x1[:n]
+
+	it.base = base
+	return n
+}
+
+// Int128 iterator
+type Int128Iterator struct {
+	BaseIterator[num.Int128]
+	x0 types.NumberIterator[int64]
+	x1 types.NumberIterator[uint64]
+}
+
+func NewInt128Iterator(c *Int128Container) *Int128Iterator {
+	it := newInt128Iterator()
+	it.x0 = c.X0.Chunks()
+	it.x1 = c.X1.Chunks()
+	it.base = -1
+	it.len = c.Len()
+	it.BaseIterator.fill = it.fill
+	return it
+}
+
+func (it *Int128Iterator) Close() {
+	it.x0.Close()
+	it.x0 = nil
+	it.x1.Close()
+	it.x1 = nil
+	it.BaseIterator.Close()
+	putInt128Iterator(it)
+}
+
+func (it *Int128Iterator) fill(base int) int {
+	// load chunks at base and relink into stride
+	it.x0.Seek(base)
+	x0, n := it.x0.Next()
+	it.x1.Seek(base)
+	x1, m := it.x1.Next()
+
+	if n != m {
+		panic(fmt.Errorf("i128-it: unexpected base it fill [%d,%d]", n, m))
+	}
+	if n == 0 {
+		it.ofs = it.len
+		it.base = -1
+		return 0
+	}
+
+	stride := num.Int128Stride{
+		X0: x0[:n],
+		X1: x1[:n],
+	}
+
+	var i int
+	for range n / 16 {
+		it.chunk[i] = stride.Get(i)
+		it.chunk[i+1] = stride.Get(i + 1)
+		it.chunk[i+2] = stride.Get(i + 2)
+		it.chunk[i+3] = stride.Get(i + 3)
+		it.chunk[i+4] = stride.Get(i + 4)
+		it.chunk[i+5] = stride.Get(i + 5)
+		it.chunk[i+6] = stride.Get(i + 6)
+		it.chunk[i+7] = stride.Get(i + 7)
+		it.chunk[i+8] = stride.Get(i + 8)
+		it.chunk[i+9] = stride.Get(i + 9)
+		it.chunk[i+10] = stride.Get(i + 10)
+		it.chunk[i+11] = stride.Get(i + 11)
+		it.chunk[i+12] = stride.Get(i + 12)
+		it.chunk[i+13] = stride.Get(i + 13)
+		it.chunk[i+14] = stride.Get(i + 14)
+		it.chunk[i+15] = stride.Get(i + 15)
+		i += 16
+	}
+	for i < n {
+		it.chunk[i] = stride.Get(i)
+		i++
+	}
 
 	it.base = base
 	return n

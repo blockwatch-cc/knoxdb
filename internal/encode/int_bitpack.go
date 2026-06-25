@@ -79,13 +79,19 @@ func (c *BitpackContainer[T]) Chunks() types.NumberIterator[T] {
 	return NewBitpackIterator[T](c.dec)
 }
 
-func (c *BitpackContainer[T]) Iterator() iter.Seq2[int, T] {
-	return func(fn func(int, T) bool) {
-		for i := range c.N {
-			if !fn(i, c.Get(i)) {
-				return
-			}
-		}
+func (c *BitpackContainer[T]) All() iter.Seq2[int, T] {
+	return func(yield func(int, T) bool) {
+		it := c.Chunks()
+		it.All()(yield)
+		it.Close()
+	}
+}
+
+func (c *BitpackContainer[T]) Values() iter.Seq[T] {
+	return func(yield func(T) bool) {
+		it := c.Chunks()
+		it.Values()(yield)
+		it.Close()
 	}
 }
 
@@ -137,7 +143,7 @@ func (c *BitpackContainer[T]) AppendTo(dst []T, sel []uint32) []T {
 	} else {
 		it := c.Chunks()
 		for _, v := range sel {
-			dst = append(dst, it.Get(int(v)))
+			dst = append(dst, it.Value(int(v)))
 		}
 		it.Close()
 	}
@@ -252,7 +258,7 @@ func (c *BitpackContainer[T]) MatchInSet(s any, bits, mask *Bitset) {
 	if mask != nil {
 		// only process values from mask
 		u32 := arena.Alloc[uint32](mask.Count())
-		for _, k := range mask.Indexes(u32) {
+		for _, k := range mask.AllIndexes(u32) {
 			i := int(k)
 			if set.Contains(uint64(c.dec.DecodeValue(i))) {
 				bits.Set(i)
@@ -274,7 +280,7 @@ func (c *BitpackContainer[T]) MatchNotInSet(s any, bits, mask *Bitset) {
 	if mask != nil {
 		// only process values from mask
 		u32 := arena.Alloc[uint32](mask.Count())
-		for _, k := range mask.Indexes(u32) {
+		for _, k := range mask.AllIndexes(u32) {
 			i := int(k)
 			if !set.Contains(uint64(c.dec.DecodeValue(i))) {
 				bits.Set(i)

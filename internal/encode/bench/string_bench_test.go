@@ -1,12 +1,13 @@
 // Copyright (c) 2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package encode
+package encode_bench
 
 import (
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/bitset"
+	. "blockwatch.cc/knoxdb/internal/encode"
 	etests "blockwatch.cc/knoxdb/internal/encode/tests"
 	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/pkg/stringx"
@@ -39,10 +40,11 @@ func BenchmarkStringEncode(b *testing.B) {
 			TStringCompact,
 			TStringDictionary,
 		} {
-			data := etests.GenForStringScheme(int(scheme), c.N)
-			ctx := AnalyzeString(data)
-			once := etests.ShowInfo
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
+				data := etests.GenForStringScheme(int(scheme), c.N)
+				ctx := AnalyzeString(data)
+				once := etests.ShowInfo
+				b.ResetTimer()
 				b.ReportAllocs()
 				b.SetBytes(int64(data.Size()))
 				var sz int
@@ -58,8 +60,8 @@ func BenchmarkStringEncode(b *testing.B) {
 				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 				b.ReportMetric(float64(sz*8)/float64(b.N)/float64(c.N), "bits/val")
 				b.ReportMetric(100*float64(sz)/float64(b.N*c.N*8), "c(%)")
+				ctx.Close()
 			})
-			ctx.Close()
 		}
 	}
 }
@@ -72,9 +74,10 @@ func BenchmarkStringEncodeAndStore(b *testing.B) {
 			TStringCompact,
 			TStringDictionary,
 		} {
-			data := etests.GenForStringScheme(int(scheme), c.N)
-			once := etests.ShowInfo
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
+				data := etests.GenForStringScheme(int(scheme), c.N)
+				once := etests.ShowInfo
+				b.ResetTimer()
 				b.ReportAllocs()
 				b.SetBytes(int64(data.Size()))
 				var sz int
@@ -130,13 +133,14 @@ func BenchmarkStringDecode(b *testing.B) {
 			TStringCompact,
 			TStringDictionary,
 		} {
-			data := etests.GenForStringScheme(int(scheme), c.N)
-			ctx := AnalyzeString(data)
-			enc := NewString(scheme).Encode(ctx, data)
-			buf := enc.Store(make([]byte, 0, enc.Size()))
-			dst := stringx.NewStringPool(c.N)
-			b.Log(enc.Info())
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
+				data := etests.GenForStringScheme(int(scheme), c.N)
+				ctx := AnalyzeString(data)
+				enc := NewString(scheme).Encode(ctx, data)
+				buf := enc.Store(make([]byte, 0, enc.Size()))
+				dst := stringx.NewStringPool(c.N)
+				b.Log(enc.Info())
+				b.ResetTimer()
 				b.SetBytes(int64(data.Size()))
 				for b.Loop() {
 					enc2 := NewString(scheme)
@@ -147,12 +151,14 @@ func BenchmarkStringDecode(b *testing.B) {
 					enc2.Close()
 				}
 				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+				enc.Close()
+				ctx.Close()
 			})
 		}
 	}
 }
 
-func BenchmarkStringCmp(b *testing.B) {
+func BenchmarkStringMatchEqual(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		for _, scheme := range []ContainerType{
 			TStringConstant,
@@ -160,17 +166,20 @@ func BenchmarkStringCmp(b *testing.B) {
 			TStringCompact,
 			TStringDictionary,
 		} {
-			data := etests.GenForStringScheme(int(scheme), c.N)
-			ctx := AnalyzeString(data)
-			enc := NewString(scheme).Encode(ctx, data)
-			bits := bitset.New(c.N)
-			b.Log(enc.Info())
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
+				data := etests.GenForStringScheme(int(scheme), c.N)
+				ctx := AnalyzeString(data)
+				enc := NewString(scheme).Encode(ctx, data)
+				bits := bitset.New(c.N)
+				b.Log(enc.Info())
+				b.ResetTimer()
 				b.SetBytes(int64(data.Size()))
 				for b.Loop() {
 					enc.MatchEqual(data.Get(0), bits, nil)
 				}
 				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+				enc.Close()
+				ctx.Close()
 			})
 		}
 	}
@@ -184,12 +193,13 @@ func BenchmarkStringIterator(b *testing.B) {
 			TStringCompact,
 			TStringDictionary,
 		} {
-			data := etests.GenForStringScheme(int(scheme), c.N)
-			ctx := AnalyzeString(data)
-			enc := NewString(scheme).Encode(ctx, data)
-			buf := enc.Store(make([]byte, 0, enc.Size()))
-			b.Log(enc.Info())
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
+				data := etests.GenForStringScheme(int(scheme), c.N)
+				ctx := AnalyzeString(data)
+				enc := NewString(scheme).Encode(ctx, data)
+				buf := enc.Store(make([]byte, 0, enc.Size()))
+				b.Log(enc.Info())
+				b.ResetTimer()
 				b.SetBytes(int64(data.Size()))
 				for b.Loop() {
 					enc2 := NewString(scheme)
@@ -197,7 +207,7 @@ func BenchmarkStringIterator(b *testing.B) {
 					require.NoError(b, err)
 					it := enc2.Chunks()
 					for {
-						_, n := it.NextChunk()
+						_, n := it.Next()
 						if n == 0 {
 							break
 						}
@@ -206,6 +216,42 @@ func BenchmarkStringIterator(b *testing.B) {
 					enc2.Close()
 				}
 				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+				enc.Close()
+				ctx.Close()
+			})
+		}
+	}
+}
+
+func BenchmarkStringAll(b *testing.B) {
+	for _, c := range tests.BenchmarkSizes {
+		for _, scheme := range []ContainerType{
+			TStringConstant,
+			TStringFixed,
+			TStringCompact,
+			TStringDictionary,
+		} {
+			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
+				data := etests.GenForStringScheme(int(scheme), c.N)
+				ctx := AnalyzeString(data)
+				enc := NewString(scheme).Encode(ctx, data)
+				buf := enc.Store(make([]byte, 0, enc.Size()))
+				b.Log(enc.Info())
+				b.ResetTimer()
+				b.SetBytes(int64(data.Size()))
+				b.ReportAllocs()
+				for b.Loop() {
+					enc2 := NewString(scheme)
+					_, err := enc2.Load(buf)
+					require.NoError(b, err)
+					for _, v := range enc2.All() {
+						_ = v
+					}
+					enc2.Close()
+				}
+				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+				enc.Close()
+				ctx.Close()
 			})
 		}
 	}

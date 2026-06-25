@@ -46,7 +46,7 @@ func BenchmarkSetRange(b *testing.B) {
 	}
 }
 
-func BenchmarkIndexes(b *testing.B) {
+func BenchmarkAllIndexes(b *testing.B) {
 	for _, n := range sizes {
 		for _, d := range densities {
 			buf := fillBitsetRand(nil, n.L, d.D)
@@ -57,7 +57,7 @@ func BenchmarkIndexes(b *testing.B) {
 				b.SetBytes(int64(bits.Len()))
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
-					_ = bits.Indexes(slice)
+					_ = bits.AllIndexes(slice)
 				}
 				b.ReportMetric(float64(n.L*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 			})
@@ -66,7 +66,7 @@ func BenchmarkIndexes(b *testing.B) {
 }
 
 // see https://lemire.me/blog/2016/09/22/swift-versus-java-the-bitset-performance-test/
-func BenchmarkIterate(b *testing.B) {
+func BenchmarkIndexes(b *testing.B) {
 	for _, n := range sizes {
 		for _, d := range densities {
 			bits := NewFromBytes(fillBitsetRand(nil, n.L, d.D), n.L)
@@ -79,7 +79,7 @@ func BenchmarkIterate(b *testing.B) {
 						last = -1
 					)
 					for {
-						vals, ok := bits.Iterate(last, buf[:])
+						vals, ok := bits.Indexes(last, buf[:])
 						if !ok {
 							break
 						}
@@ -88,6 +88,32 @@ func BenchmarkIterate(b *testing.B) {
 				}
 				b.ReportMetric(float64(n.L*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 			})
+		}
+	}
+}
+
+func BenchmarkView(b *testing.B) {
+	for _, n := range sizes {
+		for _, d := range densities {
+			bits := NewFromBytes(fillBitsetRand(nil, n.L, d.D), n.L)
+			var sum int
+			b.Run(n.Name+"/"+d.Name, func(b *testing.B) {
+				b.ResetTimer()
+				b.SetBytes(int64(bits.Len()))
+				for b.Loop() {
+					it := bits.View()
+					for {
+						idxs, ok := it.Next()
+						if !ok {
+							break
+						}
+						sum += len(idxs)
+					}
+					it.Close()
+				}
+				b.ReportMetric(float64(n.L*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+			})
+			_ = sum
 		}
 	}
 }
@@ -103,14 +129,11 @@ func BenchmarkChunk(b *testing.B) {
 				for b.Loop() {
 					it := bits.Chunks()
 					for {
-						idxs, ok := it.Next()
-						if !ok {
+						_, n := it.Next()
+						if n == 0 {
 							break
 						}
-						sum += len(idxs)
-						// for _, idx := range idxs {
-						// 	sum += idx
-						// }
+						sum += n
 					}
 					it.Close()
 				}
@@ -121,7 +144,7 @@ func BenchmarkChunk(b *testing.B) {
 	}
 }
 
-func BenchmarkIterator(b *testing.B) {
+func BenchmarkOnesSeq(b *testing.B) {
 	for _, n := range sizes {
 		for _, d := range densities {
 			buf := fillBitsetRand(nil, n.L, d.D)
@@ -130,7 +153,7 @@ func BenchmarkIterator(b *testing.B) {
 			b.Run(n.Name+"/"+d.Name, func(b *testing.B) {
 				b.SetBytes(int64(src.Len()))
 				for b.Loop() {
-					for v := range src.Iterator() {
+					for v := range src.Ones() {
 						x += v
 					}
 				}

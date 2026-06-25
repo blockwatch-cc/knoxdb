@@ -31,7 +31,7 @@ func (op *PhysicalFilter) Process(ctx context.Context, src *pack.Package) (*pack
 	if op.bits.All() {
 		src.WithSelection(nil)
 	} else {
-		src.WithSelection(op.bits.Indexes(nil))
+		src.WithSelection(op.bits.AllIndexes(nil))
 	}
 	return src, ResultOK
 }

@@ -451,7 +451,7 @@ func cmp_i128_ge(src *num.Int128Stride, val num.Int128, res, mask []byte) int64 
 func cmp_i128_bw(src *num.Int128Stride, a, b num.Int128, bits, mask []byte) int64 {
 	var cnt int64
 	if mask != nil {
-		for i := range bitset.NewFromBytes(mask, src.Len()).Iterator() {
+		for i := range bitset.NewFromBytes(mask, src.Len()).Ones() {
 			v := src.Get(i)
 			if a.Le(v) && b.Ge(v) {
 				bits[i>>3] |= byte(1) << (i & 7)
@@ -459,7 +459,7 @@ func cmp_i128_bw(src *num.Int128Stride, a, b num.Int128, bits, mask []byte) int6
 			}
 		}
 	} else {
-		for i, v := range src.Iterator() {
+		for i, v := range src.All() {
 			if a.Le(v) && b.Ge(v) {
 				bits[i>>3] |= byte(1) << (i & 7)
 				cnt++

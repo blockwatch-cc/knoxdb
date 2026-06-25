@@ -57,10 +57,20 @@ func (c *DeltaContainer[T]) Chunks() types.NumberIterator[T] {
 	return NewDeltaIterator[T](c.Delta, c.For, c.N)
 }
 
-func (c *DeltaContainer[T]) Iterator() iter.Seq2[int, T] {
+func (c *DeltaContainer[T]) All() iter.Seq2[int, T] {
 	return func(fn func(int, T) bool) {
 		for i := range c.N {
 			if !fn(i, c.Get(i)) {
+				return
+			}
+		}
+	}
+}
+
+func (c *DeltaContainer[T]) Values() iter.Seq[T] {
+	return func(fn func(T) bool) {
+		for i := range c.N {
+			if !fn(c.Get(i)) {
 				return
 			}
 		}
@@ -454,7 +464,7 @@ func (c *DeltaContainer[T]) MatchInSet(s any, bits, mask *Bitset) {
 	if mask != nil {
 		// only process values from mask
 		u32 := arena.Alloc[uint32](mask.Count())
-		for _, k := range mask.Indexes(u32) {
+		for _, k := range mask.AllIndexes(u32) {
 			i := int(k)
 			if set.Contains(uint64(c.Delta*T(i) + c.For)) {
 				bits.Set(i)
@@ -478,7 +488,7 @@ func (c *DeltaContainer[T]) MatchNotInSet(s any, bits, mask *Bitset) {
 	if mask != nil {
 		// only process values from mask
 		u32 := arena.Alloc[uint32](mask.Count())
-		for _, k := range mask.Indexes(u32) {
+		for _, k := range mask.AllIndexes(u32) {
 			i := int(k)
 			if !set.Contains(uint64(c.Delta*T(i) + c.For)) {
 				bits.Set(i)

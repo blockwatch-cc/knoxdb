@@ -190,7 +190,7 @@ func (s *Sniffer) analyzeLines() {
 		haveNull    bool
 		haveSpace   bool
 	)
-	for _, line := range s.sample.Iterator() {
+	for _, line := range s.sample.All() {
 		// skip comment lines
 		if line[0] == byte(Comment) {
 			haveComment = true
@@ -674,7 +674,7 @@ func tryDuration(buf []byte) (int, bool) {
 func (s *Sniffer) analyzeHeader() {
 	// analyze the first non comment line (goal: identify header)
 	s.head = make([]string, s.res.NumFields)
-	for _, line := range s.sample.Iterator() {
+	for _, line := range s.sample.All() {
 		if line[0] == byte(Comment) {
 			continue
 		}
@@ -711,7 +711,7 @@ func (s *Sniffer) analyzeHeader() {
 func (s *Sniffer) analyzeTypes() {
 	// analyze text properties for each field, aggregate props per column
 	skipHeader := s.res.HasHeader
-	for _, line := range s.sample.Iterator() {
+	for _, line := range s.sample.All() {
 		// skip comments
 		if line[0] == byte(Comment) {
 			continue

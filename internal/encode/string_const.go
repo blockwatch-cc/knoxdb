@@ -76,10 +76,20 @@ func (c *ConstStringContainer) Get(i int) []byte {
 	return c.val
 }
 
-func (c *ConstStringContainer) Iterator() iter.Seq2[int, []byte] {
+func (c *ConstStringContainer) All() iter.Seq2[int, []byte] {
 	return func(fn func(int, []byte) bool) {
 		for i := range c.n {
 			if !fn(i, c.val) {
+				return
+			}
+		}
+	}
+}
+
+func (c *ConstStringContainer) Values() iter.Seq[[]byte] {
+	return func(fn func([]byte) bool) {
+		for range c.n {
+			if !fn(c.val) {
 				return
 			}
 		}

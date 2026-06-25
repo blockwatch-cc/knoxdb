@@ -73,7 +73,7 @@ func TestPrecision(t *testing.T) {
 		for _, f := range []int{8, 9, 10, 11, 12, 13, 14, 15, 16} {
 			// now := time.Now()
 			flt := NewFilterWithPrecision(uint32(f))
-			flt.Add(hash.Vec(testutil.RandInts[int64](sz), nil)...)
+			flt.Add(hash.Vec(nil, testutil.RandInts[int64](sz))...)
 			c := flt.Cardinality()
 			_ = c
 			// t.Logf("F=%d SZ=%d C=%d ERR=%f RT=%s", f, sz, c, float64(sz-int(c))/float64(sz), time.Since(now))
@@ -229,7 +229,7 @@ func BenchmarkHashAndAddPrealloc(b *testing.B) {
 			b.Run(fmt.Sprintf("%s/p=%d", c.Name, p), func(b *testing.B) {
 				b.SetBytes(int64(8 * c.N))
 				for b.Loop() {
-					u64 := hash.Vec64(data, hashes)
+					u64 := hash.Vec64(hashes, data)
 					f := NewFilterWithPrecision(p)
 					f.Add(u64...)
 				}
@@ -243,7 +243,7 @@ func BenchmarkCardinalityPureGo(b *testing.B) {
 		for _, p := range benchPrecisons {
 			data := tests.GenRnd[uint32](c.N)
 			f := NewFilterWithPrecision(p)
-			f.Add(hash.Vec32(data, nil)...)
+			f.Add(hash.Vec32(nil, data)...)
 			b.Run(fmt.Sprintf("%s/p=%d", c.Name, p), func(b *testing.B) {
 				b.SetBytes(int64(len(f.buf)))
 				for b.Loop() {
@@ -262,8 +262,8 @@ func BenchmarkMergePureGo(b *testing.B) {
 
 			f1 := NewFilterWithPrecision(p)
 			f2 := NewFilterWithPrecision(p)
-			f1.Add(hash.Vec32(data1, nil)...)
-			f2.Add(hash.Vec32(data2, nil)...)
+			f1.Add(hash.Vec32(nil, data1)...)
+			f2.Add(hash.Vec32(nil, data2)...)
 
 			b.Run(fmt.Sprintf("%s/p=%d", c.Name, p), func(b *testing.B) {
 				b.SetBytes(int64(len(f1.buf)))

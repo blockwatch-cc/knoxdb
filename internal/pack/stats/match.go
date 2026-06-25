@@ -130,10 +130,10 @@ func matchFilterVector(f *filter.Filter, pkg *pack.Package, bits, mask *bitset.B
 	// A filter no-match will flip the result bit for a data pack off
 	// so that the pack will not be loaded for this query.
 
-	// use bits.Iterator() instead of bits.Indexes() to avoid allocating a full sized
+	// use bits.Ones() instead of bits.Indexes() to avoid allocating a full sized
 	// []uint32 slice here in case we have a full match
 	var n int
-	for v := range bits.Iterator() {
+	for v := range bits.Ones() {
 		// filter key is data-pack-key + data-pack-col-id + data-pack-version
 		key := pkg.Uint32(STATS_ROW_KEY, v)
 		ver := pkg.Uint32(STATS_ROW_VERSION, v)

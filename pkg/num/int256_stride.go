@@ -249,9 +249,9 @@ func (dst *Int256Stride) Copy(src *Int256Stride, dstPos, srcPos, n int) {
 	copy(dst.X3[dstPos:], src.X3[srcPos:srcPos+n])
 }
 
-func (s *Int256Stride) Iterator() iter.Seq2[int, Int256] {
+func (s *Int256Stride) All() iter.Seq2[int, Int256] {
 	return func(fn func(int, Int256) bool) {
-		for i := 0; i < len(s.X0); i++ {
+		for i := range s.X0 {
 			if !fn(i, Int256{uint64(s.X0[i]), s.X1[i], s.X2[i], s.X3[i]}) {
 				return
 			}
@@ -259,7 +259,17 @@ func (s *Int256Stride) Iterator() iter.Seq2[int, Int256] {
 	}
 }
 
-func (s *Int256Stride) Chunks() BigIntIterator[Int256, Int256Stride] {
+func (s *Int256Stride) Values() iter.Seq[Int256] {
+	return func(fn func(Int256) bool) {
+		for i := range s.X0 {
+			if !fn(Int256{uint64(s.X0[i]), s.X1[i], s.X2[i], s.X3[i]}) {
+				return
+			}
+		}
+	}
+}
+
+func (s *Int256Stride) Chunks() BigIntIterator[Int256] {
 	return NewInt256Iterator(s)
 }
 

@@ -86,6 +86,8 @@ func EstimateInt[T types.Integer](ctx *Context[T], scheme ContainerType, v []T) 
 	case TIntRunEnd:
 		// upper bound for run end encoding using bit-packing as child base
 		estSize, ok = ctx.runEndCosts(), true
+		// case TIntSimple8:
+		// 	estSize, ok = s8b.EstimateMaxSize(len(v), ctx.Min, ctx.Max)*8, true
 	}
 	if ok {
 		return float64(estSize) / float64(rawSize)

@@ -19,22 +19,67 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func decodeHelper(minv uint64, word []byte, skip int) uint64 {
+	dec := generic.NewDecoder(minv)
+	var dst [128]uint64
+	n := dec.DecodeWord(dst[:], word)
+	if n > len(dst) {
+		panic("short buffer")
+	}
+	return dst[skip]
+}
+
+func TestIndex(t *testing.T) {
+	for _, c := range stests.MakeTests[uint64]() {
+		t.Run(c.Name, func(t *testing.T) {
+			if c.Err {
+				t.Skip()
+			}
+			src := c.Data
+			if c.Gen != nil {
+				src = c.Gen()
+			}
+			if len(src) == 0 {
+				t.Skip()
+			}
+			minv, maxv := slices.Min(src), slices.Max(src)
+			buf, err := Encode(make([]byte, len(src)*8), src, minv, maxv)
+			require.NoError(t, err)
+			t.Logf("Encode len=%d minv=%d maxv=%d buf=%d",
+				len(src), minv, maxv, len(buf))
+
+			idx := MakeIndex[uint32](buf, nil)
+			require.Equal(t, len(buf)/8, idx.Len())
+			require.Equal(t, len(src), idx.End(), "%#v", idx)
+
+			for i, v := range src {
+				word, skip, ok := idx.Find(i)
+				require.True(t, ok, "cannot find %d/%d", i, len(src))
+				require.GreaterOrEqual(t, word, 0, "word < 0")
+				require.GreaterOrEqual(t, skip, 0, "skip < 0")
+				d := decodeHelper(minv, buf[word*8:], skip)
+				require.Equal(t, v, d, "bad val %d at pos=%d in %#v", d, i, src)
+			}
+		})
+	}
+}
+
 type IndexFunc[T uint16 | uint32] func([]byte, []T) Index
 
 func BenchmarkIndex16(b *testing.B) {
-	IndexBenchmark[uint16](b, Encode[uint16], MakeIndex[uint16])
+	IndexBenchmark(b, Encode[uint16], MakeIndex[uint16])
 }
 
 func BenchmarkIndex16Find(b *testing.B) {
-	IndexFindBenchmark[uint16](b, Encode[uint16], MakeIndex[uint16])
+	IndexFindBenchmark(b, Encode[uint16], MakeIndex[uint16])
 }
 
 func BenchmarkIndex32(b *testing.B) {
-	IndexBenchmark[uint32](b, Encode[uint32], MakeIndex[uint32])
+	IndexBenchmark(b, Encode[uint32], MakeIndex[uint32])
 }
 
 func BenchmarkIndex32Find(b *testing.B) {
-	IndexFindBenchmark[uint32](b, Encode[uint32], MakeIndex[uint32])
+	IndexFindBenchmark(b, Encode[uint32], MakeIndex[uint32])
 }
 
 func IndexBenchmark[T types.Unsigned, I uint16 | uint32](b *testing.B, enc stests.EncodeFunc[T], idx IndexFunc[I]) {

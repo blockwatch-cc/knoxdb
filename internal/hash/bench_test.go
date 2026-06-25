@@ -100,7 +100,7 @@ func HashBenchMulti64(b *testing.B, name string, fn func([]uint64, []uint64) []u
 		b.Run(fmt.Sprintf("%s/%s", name, sz.Name), func(b *testing.B) {
 			b.SetBytes(int64(sz.N) * 8)
 			for b.Loop() {
-				_ = fn(data, res)
+				_ = fn(res, data)
 			}
 		})
 	}

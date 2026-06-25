@@ -549,8 +549,11 @@ func GenStringRnd(n, l int) *stringx.StringPool {
 
 func GenStringDups(n, c, l int) *stringx.StringPool {
 	var mk func() []byte
+	if l == 0 {
+		panic("zero length strings requested")
+	}
 	if l <= 0 {
-		mk = func() []byte { return testutil.RandBytes(testutil.RandIntn(64)) }
+		mk = func() []byte { return testutil.RandBytes(testutil.RandIntn(63) + 1) }
 	} else {
 		mk = func() []byte { return testutil.RandBytes(l) }
 	}
@@ -561,8 +564,13 @@ func GenStringDups(n, c, l int) *stringx.StringPool {
 		c = 1
 	}
 	unique := make([][]byte, 0, c)
-	for range c {
-		unique = append(unique, mk())
+	u := make(map[string]int)
+	for len(unique) < c {
+		v := mk()
+		if _, ok := u[string(v)]; !ok {
+			u[string(v)]++
+			unique = append(unique, v)
+		}
 	}
 	p := stringx.NewStringPool(n)
 	for range n {
@@ -578,7 +586,7 @@ func GenStringRuns(n, r, l int) *stringx.StringPool {
 	}
 	var mk func() []byte
 	if l <= 0 {
-		mk = func() []byte { return testutil.RandBytes(testutil.RandIntn(64)) }
+		mk = func() []byte { return testutil.RandBytes(testutil.RandIntn(63) + 1) }
 	} else {
 		mk = func() []byte { return testutil.RandBytes(l) }
 	}

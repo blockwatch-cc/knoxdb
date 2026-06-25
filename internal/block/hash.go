@@ -15,13 +15,13 @@ func (b *Block) Hash() *Block {
 
 	switch b.typ {
 	case BlockFloat64, BlockInt64, BlockUint64:
-		hash.Vec64(b.Uint64().Slice(), h.Uint64().Slice())
+		hash.Vec64(h.Uint64().Slice(), b.Uint64().Slice())
 	case BlockUint32, BlockInt32, BlockFloat32:
-		hash.Vec32(b.Uint32().Slice(), h.Uint64().Slice())
+		hash.Vec32(h.Uint64().Slice(), b.Uint32().Slice())
 	case BlockUint16, BlockInt16:
-		hash.Vec16(b.Uint16().Slice(), h.Uint64().Slice())
+		hash.Vec16(h.Uint64().Slice(), b.Uint16().Slice())
 	case BlockUint8, BlockInt8:
-		hash.Vec8(b.Uint8().Slice(), h.Uint64().Slice())
+		hash.Vec8(h.Uint64().Slice(), b.Uint8().Slice())
 	case BlockBool:
 		zero, one := hash.Hash([]byte{0}), hash.Hash([]byte{1})
 		bits := b.Bool()
@@ -33,23 +33,23 @@ func (b *Block) Hash() *Block {
 			slicex.Fill(u64, zero)
 		default:
 			slicex.Fill(u64, zero)
-			for i := range bits.Iterator() {
+			for i := range bits.Ones() {
 				u64[i] = one
 			}
 		}
 	case BlockBytes:
 		u64 := h.Uint64().Slice()
-		for i, v := range b.Bytes().Iterator() {
+		for i, v := range b.Bytes().All() {
 			u64[i] = hash.Hash(v)
 		}
 	case BlockInt128:
 		u64 := h.Uint64().Slice()
-		for i, v := range b.Int128().Iterator() {
+		for i, v := range b.Int128().All() {
 			u64[i] = hash.Hash(v.Bytes())
 		}
 	case BlockInt256:
 		u64 := h.Uint64().Slice()
-		for i, v := range b.Int256().Iterator() {
+		for i, v := range b.Int256().All() {
 			u64[i] = hash.Hash(v.Bytes())
 		}
 	}

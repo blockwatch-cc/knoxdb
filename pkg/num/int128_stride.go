@@ -107,7 +107,7 @@ func (s *Int128Stride) Cap() int {
 }
 
 func (s *Int128Stride) Size() int {
-	return cap(s.X0) * 16 * 48
+	return cap(s.X0)*16 + 48
 }
 
 func (s *Int128Stride) Min() Int128 {
@@ -208,9 +208,9 @@ func (dst *Int128Stride) Copy(src *Int128Stride, dstPos, srcPos, n int) {
 	copy(dst.X1[dstPos:], src.X1[srcPos:srcPos+n])
 }
 
-func (s *Int128Stride) Iterator() iter.Seq2[int, Int128] {
+func (s *Int128Stride) All() iter.Seq2[int, Int128] {
 	return func(fn func(int, Int128) bool) {
-		for i := 0; i < len(s.X0); i++ {
+		for i := range s.X0 {
 			if !fn(i, s.Get(i)) {
 				return
 			}
@@ -218,7 +218,17 @@ func (s *Int128Stride) Iterator() iter.Seq2[int, Int128] {
 	}
 }
 
-func (s *Int128Stride) Chunks() BigIntIterator[Int128, Int128Stride] {
+func (s *Int128Stride) Values() iter.Seq[Int128] {
+	return func(fn func(Int128) bool) {
+		for i := range s.X0 {
+			if !fn(s.Get(i)) {
+				return
+			}
+		}
+	}
+}
+
+func (s *Int128Stride) Chunks() BigIntIterator[Int128] {
 	return NewInt128Iterator(s)
 }
 

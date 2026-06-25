@@ -623,7 +623,7 @@ func (m *numInSetMatcher[T]) WithSlice(slice any) {
 	for _, v := range slice.([]T) {
 		m.set.Set(uint64(v))
 	}
-	m.hashes = hash.Vec(slice.([]T), m.hashes)
+	m.hashes = hash.Vec(m.hashes, slice)
 }
 
 func (m *numInSetMatcher[T]) WithSet(set *xroar.Bitmap) {
@@ -676,7 +676,7 @@ func (m numInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bitse
 	}
 	acc := block.NewAccessor[T](b)
 	if mask != nil {
-		for i := range mask.Iterator() {
+		for i := range mask.Ones() {
 			if m.set.Contains(uint64(acc.Get(i))) {
 				bits.Set(i)
 			}
@@ -704,7 +704,7 @@ func (m numInSetMatcher[T]) MatchRangeVectors(mins, maxs *block.Block, bits, mas
 	minx := block.NewAccessor[T](mins).Slice()
 	maxx := block.NewAccessor[T](maxs).Slice()
 	if mask != nil {
-		for i := range mask.Iterator() {
+		for i := range mask.Ones() {
 			minU64, maxU64 := uint64(minx[i]), uint64(maxx[i])
 			// source could contain negative integers
 			if minU64 > maxU64 {
@@ -793,7 +793,7 @@ func (m numNotInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bi
 	}
 	acc := block.NewAccessor[T](b)
 	if mask != nil {
-		for i := range mask.Iterator() {
+		for i := range mask.Ones() {
 			if !m.set.Contains(uint64(acc.Get(i))) {
 				bits.Set(i)
 			}

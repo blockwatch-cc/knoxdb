@@ -65,7 +65,7 @@ func (j *Journal) deletePackWithWal(src *pack.Package, xid types.XID, w *wal.Wal
 		// write all records when no selection vector is defined
 		it := src.RowIds().Chunks()
 		for {
-			vals, n := it.NextChunk()
+			vals, n := it.Next()
 			if n == 0 {
 				break
 			}
@@ -157,7 +157,7 @@ func (j *Journal) deletePackNoWal(src *pack.Package, xid types.XID) (int, error)
 		// write all records when no selection vector is defined
 		it := src.RowIds().Chunks()
 		for {
-			vals, n := it.NextChunk()
+			vals, n := it.Next()
 			if n == 0 {
 				break
 			}

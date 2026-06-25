@@ -58,7 +58,7 @@ const (
 )
 
 var (
-	maxNPerSelector = [16]int{128, 128, 60, 30, 20, 15, 12, 10, 8, 7, 6, 5, 4, 3, 2, 1}
+	maxNPerSelector = [16]byte{128, 128, 60, 30, 20, 15, 12, 10, 8, 7, 6, 5, 4, 3, 2, 1}
 
 	// max values per bit width
 	maxNPerBits = [64]byte{
@@ -117,7 +117,7 @@ func Encode[T types.Integer](dst []byte, src []T, minv, maxv T) ([]byte, error) 
 	}
 
 	// pick selector based on input bit width and minv (zero or not)
-	selector := packSelector[T](minv)
+	selector := packSelector(minv)
 
 	// determine the maximum possible bit width for this vector (post min-FOR)
 	// we use it to
@@ -193,10 +193,10 @@ func Encode[T types.Integer](dst []byte, src []T, minv, maxv T) ([]byte, error) 
 		// and possible adjusting down n (note: code words must always be full)
 		sel := codeByBits[usedBits]
 		if !isFull {
-			for sel < 15 && n < maxNPerSelector[sel] {
+			for sel < 15 && n < int(maxNPerSelector[sel]) {
 				sel++
 			}
-			n = min(n, maxNPerSelector[sel])
+			n = min(n, int(maxNPerSelector[sel]))
 		}
 
 		// pack values

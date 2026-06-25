@@ -36,6 +36,8 @@ func init() {
 
 var (
 	testStructs = []Encodable{
+		&Account{},
+		&Transfer{},
 		&scalarStruct{},
 		&byteStruct{},
 		&arrayStruct{},
@@ -45,6 +47,14 @@ var (
 		&specialStruct{},
 		&encodeTestStruct{},
 	}
+
+	accountEnc = encode.NewEncoderFor[Account]()
+	accountDec = encode.NewDecoderFor[Account]()
+	accountBuf = accountEnc.NewBuffer(1)
+
+	transferEnc = encode.NewEncoderFor[Transfer]()
+	transferDec = encode.NewDecoderFor[Transfer]()
+	transferBuf = transferEnc.NewBuffer(1)
 
 	scalarStructEnc = encode.NewEncoderFor[scalarStruct]()
 	scalarStructDec = encode.NewDecoderFor[scalarStruct]()
@@ -97,6 +107,23 @@ func makeTypedPackage(typ any, fill int) *Package {
 	return pkg
 }
 
+// func makeTypedFrame(typ any, fill int) *array.Frame {
+// 	s, err := sreflect.SchemaOf(typ, schema.Enums(enums))
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	frame := array.MakeFrame(s, PACK_SIZE)
+// 	enc := encode.NewEncoder(s)
+// 	buf := enc.NewBuffer(1)
+// 	if err = enc.Encode(buf, makeZeroStruct(typ)); err != nil {
+// 		panic(err)
+// 	}
+// 	for range fill {
+// 		frame.AppendRecord(buf.Bytes())
+// 	}
+// 	return frame
+// }
+
 func makeZeroStruct(v any) any {
 	typ := reflect.TypeOf(v).Elem()
 	ptr := reflect.New(typ)
@@ -123,6 +150,56 @@ type Enum uint16
 type Encodable interface {
 	Encode() []byte
 	Decode([]byte) error
+}
+
+type Account struct {
+	ID          uint64   `knox:"id,pk"`
+	UserData256 [32]byte `knox:"user_data_256"`
+	UserData64  uint64   `knox:"user_data_64"`
+	UserData32  uint32   `knox:"user_data_32"`
+	Reserved    uint32   `knox:"reserved"`
+	Ledger      uint32   `knox:"ledger"`
+	Code        uint16   `knox:"code"`
+	Flags       uint16   `knox:"flags"`
+	Timestamp   uint64   `knox:"timestamp,timebase"`
+}
+
+func (s *Account) Encode() []byte {
+	accountBuf.Reset()
+	accountEnc.Encode(accountBuf, s)
+	return accountBuf.Bytes()
+}
+
+func (s *Account) Decode(buf []byte) error {
+	_, err := accountDec.Decode(buf, s)
+	return err
+}
+
+type Transfer struct {
+	ID              uint64     `knox:"id,pk"`
+	DebitAccountID  uint64     `knox:"debit_account_id"`
+	CreditAccountID uint64     `knox:"credit_account_id"`
+	Amount          num.Int128 `knox:"amount"`
+	PendingID       uint64     `knox:"pending_id"`
+	UserData256     [32]byte   `knox:"user_data_265"`
+	UserData64      uint64     `knox:"user_data_64"`
+	UserData32      uint32     `knox:"user_data_32"`
+	Timeout         uint32     `knox:"timeout"`
+	Ledger          uint32     `knox:"ledger"`
+	Code            uint16     `knox:"code"`
+	Flags           uint16     `knox:"flags"`
+	Timestamp       uint64     `knox:"timestamp,timebase"`
+}
+
+func (s *Transfer) Encode() []byte {
+	transferBuf.Reset()
+	transferEnc.Encode(transferBuf, s)
+	return transferBuf.Bytes()
+}
+
+func (s *Transfer) Decode(buf []byte) error {
+	_, err := transferDec.Decode(buf, s)
+	return err
 }
 
 type scalarStruct struct {

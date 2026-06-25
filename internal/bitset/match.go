@@ -60,3 +60,11 @@ func (s *Bitset) MatchBetween(a, b bool, bits, _ *Bitset) {
 		s.MatchEqual(false, bits, nil)
 	}
 }
+
+func (s *Bitset) MatchInSet(_ any, _, _ *Bitset) {
+	// noop
+}
+
+func (s *Bitset) MatchNotInSet(_ any, _, _ *Bitset) {
+	// noop
+}

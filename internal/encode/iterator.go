@@ -4,11 +4,14 @@
 package encode
 
 import (
+	"iter"
+	"slices"
 	"unsafe"
 
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/slicex"
 )
 
@@ -35,7 +38,7 @@ func matchIt[T types.Number](it types.NumberIterator[T], cmpFn unsafe.Pointer, v
 	for {
 		// check mask and skip chunks if not required
 		if mask != nil && !mask.ContainsRange(i, i+CHUNK_SIZE-1) {
-			n := it.SkipChunk()
+			n := it.Skip()
 			i += n
 			if i >= it.Len() {
 				break
@@ -43,7 +46,7 @@ func matchIt[T types.Number](it types.NumberIterator[T], cmpFn unsafe.Pointer, v
 		}
 
 		// get next chunk, on tail n may be < CHUNK_SZIE
-		src, n := it.NextChunk()
+		src, n := it.Next()
 		if n == 0 {
 			break
 		}
@@ -66,7 +69,7 @@ func matchRangeIt[T types.Number](it types.NumberIterator[T], cmpFn unsafe.Point
 	for {
 		// check mask and skip chunks if not required
 		if mask != nil && !mask.ContainsRange(i, i+CHUNK_SIZE-1) {
-			n := it.SkipChunk()
+			n := it.Skip()
 			i += n
 			if i >= it.Len() {
 				break
@@ -74,7 +77,7 @@ func matchRangeIt[T types.Number](it types.NumberIterator[T], cmpFn unsafe.Point
 		}
 
 		// get next chunk, on tail n may be < CHUNK_SZIE
-		src, n := it.NextChunk()
+		src, n := it.Next()
 		if n == 0 {
 			break
 		}
@@ -123,13 +126,26 @@ func matchFn[T types.Float](mode types.FilterMode) unsafe.Pointer {
 	}
 }
 
+// TODO
+// - inverse iterator integration
+// - outside one host iterator impl driving the logic Iterator[T ValueType]
+// - inside a container specific state driving the inside value decoding
+// - supports nesting iterators (e.g. dict has encoded codes & values)
+// - API: init, next, skip
+//   - Init(*[128]T): can pre-fill the chunk with fixed values
+//   - Next(*[128]T): fills the chunk with new values
+//   - Skip(n): skips n chunks worth of data on internal iterators
+//
+// Beware!
+// - selection lists can be unsorted!
+
 // ---------------------------------
 // Base Iterator
 //
 
 var _ types.NumberIterator[uint64] = (*BaseIterator[uint64])(nil)
 
-type BaseIterator[T types.Number | []byte] struct {
+type BaseIterator[T types.Number | []byte | num.Int128 | num.Int256] struct {
 	chunk [CHUNK_SIZE]T
 	base  int
 	len   int
@@ -144,15 +160,11 @@ func (it *BaseIterator[T]) Close() {
 	it.fill = nil
 }
 
-// func (it *BaseIterator[T]) Reset() {
-// 	it.ofs = 0
-// }
-
 func (it *BaseIterator[T]) Len() int {
 	return it.len
 }
 
-func (it *BaseIterator[T]) Get(n int) (t T) {
+func (it *BaseIterator[T]) Value(n int) (t T) {
 	if n < 0 || n >= it.len {
 		return
 	}
@@ -162,26 +174,7 @@ func (it *BaseIterator[T]) Get(n int) (t T) {
 	return it.chunk[chunkPos(n)]
 }
 
-// func (it *BaseIterator[T]) Next() (T, bool) {
-// 	if it.ofs >= it.len {
-// 		// EOF
-// 		return 0, false
-// 	}
-
-// 	// refill on chunk boundary
-// 	if base := chunkBase(it.ofs); base != it.base {
-// 		it.fill(base)
-// 	}
-// 	i := chunkPos(it.ofs)
-
-// 	// advance ofs for next call
-// 	it.ofs++
-
-// 	// return calculated value
-// 	return it.chunk[i], true
-// }
-
-func (it *BaseIterator[T]) NextChunk() (*[CHUNK_SIZE]T, int) {
+func (it *BaseIterator[T]) Next() (*[CHUNK_SIZE]T, int) {
 	// EOF
 	if it.ofs >= it.len {
 		return nil, 0
@@ -197,7 +190,7 @@ func (it *BaseIterator[T]) NextChunk() (*[CHUNK_SIZE]T, int) {
 	return &it.chunk, n
 }
 
-func (it *BaseIterator[T]) SkipChunk() int {
+func (it *BaseIterator[T]) Skip() int {
 	n := min(CHUNK_SIZE, it.len-it.ofs)
 	it.ofs += n
 	return n
@@ -214,9 +207,79 @@ func (it *BaseIterator[T]) Seek(n int) bool {
 		it.fill(base)
 	}
 
-	// reset ofs to n, so call to Next() delivers value
+	// reset ofs to n, so call to Next() delivers the chunk
 	it.ofs = n
 	return true
+}
+
+// helper func to implement container All
+func (it *BaseIterator[T]) All() iter.Seq2[int, T] {
+	return func(yield func(int, T) bool) {
+		for i := range it.len {
+			p := i % CHUNK_SIZE
+			if p == 0 {
+				it.fill(i)
+			}
+			if !yield(i, it.chunk[p]) {
+				return
+			}
+		}
+	}
+}
+
+// helper func to implement container Values
+func (it *BaseIterator[T]) Values() iter.Seq[T] {
+	return func(yield func(T) bool) {
+		for i := range it.len {
+			p := i % CHUNK_SIZE
+			if p == 0 {
+				it.fill(i)
+			}
+			if !yield(it.chunk[p]) {
+				return
+			}
+		}
+	}
+}
+
+// TODO: should be a container property
+func (it *BaseIterator[T]) Select(sel []uint32) iter.Seq[T] {
+	if slices.IsSorted(sel) {
+		// fast path with single-pass forward only walk
+		return func(yield func(T) bool) {
+			var (
+				c = -1
+				n int
+			)
+			it.base = 0
+			it.ofs = 0
+			for _, v := range sel {
+				if nc := int(v) / CHUNK_SIZE; nc > c {
+					for range nc - c - 1 {
+						it.Skip()
+						c++
+					}
+					_, n = it.Next()
+					if n == 0 {
+						break
+					}
+					c++
+				}
+				if !yield(it.chunk[v%CHUNK_SIZE]) {
+					return
+				}
+			}
+		}
+	} else {
+		// slow path with amortized random batch load
+		return func(yield func(T) bool) {
+			for _, v := range sel {
+				if !yield(it.Value(int(v))) {
+					return
+				}
+			}
+		}
+	}
 }
 
 // Must be overloaed by derived implementations, left here for reference
@@ -255,27 +318,14 @@ func (it *RawIterator[T]) Len() int {
 	return len(it.vals)
 }
 
-func (it *RawIterator[T]) Get(n int) T {
+func (it *RawIterator[T]) Value(n int) T {
 	if n >= 0 && n < len(it.vals) {
 		return it.vals[n]
 	}
 	return 0
 }
 
-// func (it *RawIterator[T]) Next() (T, bool) {
-// 	if it.ofs >= len(it.vals) {
-// 		// EOF
-// 		return 0, false
-// 	}
-
-// 	// advance ofs for next call
-// 	it.ofs++
-
-// 	// return value
-// 	return it.vals[it.ofs-1], true
-// }
-
-func (it *RawIterator[T]) NextChunk() (*[CHUNK_SIZE]T, int) {
+func (it *RawIterator[T]) Next() (*[CHUNK_SIZE]T, int) {
 	// EOF
 	if it.ofs >= len(it.vals) {
 		return nil, 0
@@ -286,7 +336,7 @@ func (it *RawIterator[T]) NextChunk() (*[CHUNK_SIZE]T, int) {
 	return (*[CHUNK_SIZE]T)(unsafe.Pointer(&it.vals[base])), n
 }
 
-func (it *RawIterator[T]) SkipChunk() int {
+func (it *RawIterator[T]) Skip() int {
 	n := min(CHUNK_SIZE, len(it.vals)-it.ofs)
 	it.ofs += n
 	return n
@@ -300,6 +350,14 @@ func (it *RawIterator[T]) Seek(n int) bool {
 	// reset ofs to n, so call to Next() delivers value
 	it.ofs = n
 	return true
+}
+
+func (it *RawIterator[T]) All() iter.Seq2[int, T] {
+	return slices.All(it.vals)
+}
+
+func (it *RawIterator[T]) Values() iter.Seq[T] {
+	return slices.Values(it.vals)
 }
 
 // ---------------------------------

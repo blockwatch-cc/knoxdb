@@ -6,11 +6,11 @@
 
 // **************************** xxh3Uint32 ***************************************************
 
-// func xxh3_u32_core_avx2(src []uint32, res []uint64)
+// func xxh3_u32_core_avx2(res []uint64, src []uint32)
 TEXT ·xxh3_u32_core_avx2(SB), NOSPLIT, $0-48
-	MOVQ src_base+0(FP), SI
-	MOVQ src_len+8(FP), BX
-	MOVQ res_base+24(FP), DI
+	MOVQ res_base+0(FP), DI
+	MOVQ src_base+24(FP), SI
+	MOVQ src_len+32(FP), BX
 
 	VPBROADCASTQ key64_008<>(SB), Y11
 	VPBROADCASTQ key64_016<>(SB), Y12
@@ -66,11 +66,11 @@ exit_avx:
 	VZEROUPPER
 	RET
 
-// func xxh3_u32_core_avx512(src []uint32, res []uint64)
+// func xxh3_u32_core_avx512(res []uint64, src []uint32)
 TEXT ·xxh3_u32_core_avx512(SB), NOSPLIT, $0-48
-	MOVQ src_base+0(FP), SI
-	MOVQ src_len+8(FP), BX
-	MOVQ res_base+24(FP), DI
+	MOVQ res_base+0(FP), DI
+	MOVQ src_base+24(FP), SI
+	MOVQ src_len+32(FP), BX
 
 	VPBROADCASTQ key64_008<>(SB), Z11
 	VPBROADCASTQ key64_016<>(SB), Z12
@@ -126,11 +126,11 @@ exit_avx:
 
 // **************************** xxh3Uint64 ***************************************************
 
-// func xxh3_u64_core_avx2(src []uint64, res []uint64)
+// func xxh3_u64_core_avx2(res []uint64, src []uint64)
 TEXT ·xxh3_u64_core_avx2(SB), NOSPLIT, $0-48
-	MOVQ src_base+0(FP), SI
-	MOVQ src_len+8(FP), BX
-	MOVQ res_base+24(FP), DI
+	MOVQ res_base+0(FP), DI
+	MOVQ src_base+24(FP), SI
+	MOVQ src_len+32(FP), BX
 
 	VPBROADCASTQ key64_008<>(SB), Y11
 	VPBROADCASTQ key64_016<>(SB), Y12
@@ -187,11 +187,11 @@ exit_avx:
 	VZEROUPPER
 	RET
 
-// func xxh3_u64_core_avx512(src []uint64, res []uint64)
+// func xxh3_u64_core_avx512(res []uint64, src []uint64)
 TEXT ·xxh3_u64_core_avx512(SB), NOSPLIT, $0-48
-	MOVQ src_base+0(FP), SI
-	MOVQ src_len+8(FP), BX
-	MOVQ res_base+24(FP), DI
+	MOVQ res_base+0(FP), DI
+	MOVQ src_base+24(FP), SI
+	MOVQ src_len+32(FP), BX
 
 	VPBROADCASTQ key64_008<>(SB), Z11
 	VPBROADCASTQ key64_016<>(SB), Z12

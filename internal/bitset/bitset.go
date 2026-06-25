@@ -322,9 +322,9 @@ func (s *Bitset) None() bool {
 	return true
 }
 
-// Any returns true if any bit is set, false otherwise
-func (s *Bitset) Any() bool {
-	return !s.None()
+// Some returns true if any bit is set, false otherwise
+func (s *Bitset) Some() bool {
+	return s.All() || !s.None()
 }
 
 func (s *Bitset) Clone() *Bitset {
@@ -393,6 +393,13 @@ func (s *Bitset) Resize(size int) *Bitset {
 
 // Grow increases the bitset to a new size.
 func (s *Bitset) Grow(size int) *Bitset {
+	// fast path
+	if sz := bitFieldLen(s.size + size); sz < cap(s.buf) {
+		s.buf = s.buf[:sz]
+		s.size += size
+		return s
+	}
+	// slow path
 	return s.Resize(s.size + size)
 }
 
@@ -599,7 +606,7 @@ func (s *Bitset) AppendRange(src *Bitset, i, j int) *Bitset {
 			done bool
 		)
 		for {
-			idxs, ok := src.Iterate(last, tmp[:])
+			idxs, ok := src.Indexes(last, tmp[:])
 			if done || !ok || idxs[0] > j {
 				break
 			}

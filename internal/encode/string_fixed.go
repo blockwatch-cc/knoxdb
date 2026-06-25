@@ -86,14 +86,28 @@ func (c *FixedStringContainer) Get(i int) []byte {
 	return c.buf[i*c.sz : (i+1)*c.sz]
 }
 
-func (c *FixedStringContainer) Iterator() iter.Seq2[int, []byte] {
+func (c *FixedStringContainer) All() iter.Seq2[int, []byte] {
 	return func(fn func(int, []byte) bool) {
-		var n int
+		var n, e int
 		for i := range c.n {
-			if !fn(i, c.buf[n:n+c.sz:n+c.sz]) {
+			e = n + c.sz
+			if !fn(i, c.buf[n:e:e]) {
 				return
 			}
-			n += c.sz
+			n = e
+		}
+	}
+}
+
+func (c *FixedStringContainer) Values() iter.Seq[[]byte] {
+	return func(fn func([]byte) bool) {
+		var n, e int
+		for range c.n {
+			e = n + c.sz
+			if !fn(c.buf[n:e:e]) {
+				return
+			}
+			n = e
 		}
 	}
 }
@@ -122,7 +136,7 @@ func (c *FixedStringContainer) Encode(ctx *StringContext, vals types.StringAcces
 	sz := c.sz * c.n
 	c.buf = arena.Alloc[byte](sz)
 	c.free = true
-	for _, v := range vals.Iterator() {
+	for _, v := range vals.All() {
 		c.buf = append(c.buf, v...)
 	}
 	return c

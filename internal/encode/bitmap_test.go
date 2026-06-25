@@ -31,7 +31,7 @@ func TestBitmapEncode(t *testing.T) {
 			}
 
 			// validate iterator
-			for i := range enc.Iterator() {
+			for i := range enc.Ones() {
 				require.True(t, enc.Get(i))
 			}
 
@@ -53,7 +53,7 @@ func TestBitmapEncode(t *testing.T) {
 			}
 
 			// validate iterator
-			for i := range enc2.Iterator() {
+			for i := range enc2.Ones() {
 				require.True(t, enc2.Get(i))
 			}
 
@@ -141,18 +141,10 @@ func MakeBitmapTests(n int) []TestCaseBitmap {
 	return []TestCaseBitmap{
 		{"zero", n, bitset.New(n)},
 		{"one", n, bitset.New(n).One()},
-		{"dense", n, bitset.New(n).SetIndexes(seq(n/2, 2))},
-		{"sparse", n, bitset.New(n).SetIndexes(seq(n/32, 32))},
+		{"dense", n, bitset.New(n).SetIndexes(etests.MakeSeq(n/2, 2))},
+		{"sparse", n, bitset.New(n).SetIndexes(etests.MakeSeq(n/32, 32))},
 		{"rand", n, bitset.New(n).SetIndexes(slicex.Unique(testutil.RandIntsn(n, n)))},
 	}
-}
-
-func seq(n, step int) []int {
-	res := make([]int, n)
-	for i := range n {
-		res[i] = i * step
-	}
-	return res
 }
 
 func bitmapEnsureBits(t *testing.T, vals *bitset.Bitset, val, val2 bool, bits *bitset.Bitset, mode types.FilterMode) {
@@ -274,7 +266,7 @@ func TestBitmapIterator(t *testing.T) {
 				// --------------------------
 				// test next
 				//
-				for i := range enc.Iterator() {
+				for i := range enc.Ones() {
 					require.True(t, src.Get(i), "invalid val at pos=%d", i)
 				}
 
@@ -287,19 +279,18 @@ func TestBitmapIterator(t *testing.T) {
 				}
 				var seen int
 				for {
-					dst, ok := it.Next()
-					if !ok {
+					dst, n := it.Next()
+					if n == 0 {
 						break
 					}
-					n := len(dst)
 					require.GreaterOrEqual(t, n, 1, "next chunk returned empty dst")
-					require.LessOrEqual(t, seen+n, src.Count(), "next chunk returned too large n")
+					require.LessOrEqual(t, seen+n, src.Len(), "next chunk returned too large n")
 					for i, v := range dst[:n] {
-						require.True(t, src.Get(v), "invalid at pos=%d", seen+i)
+						require.Equal(t, src.Get(seen+i), v, "invalid at pos=%d", seen+i)
 					}
 					seen += n
 				}
-				require.Equal(t, src.Count(), seen, "next chunk did not return all values")
+				require.Equal(t, src.Len(), seen, "next chunk did not return all values")
 				it.Close()
 			})
 			if t.Failed() {

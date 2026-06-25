@@ -4,6 +4,7 @@
 package block
 
 import (
+	"iter"
 	"unsafe"
 
 	"blockwatch.cc/knoxdb/internal/types"
@@ -24,7 +25,7 @@ func (it *BlockIterator[T]) Len() int {
 	return int(it.block.len)
 }
 
-func (it *BlockIterator[T]) Get(n int) T {
+func (it *BlockIterator[T]) Value(n int) T {
 	return *(*T)(unsafe.Add(unsafe.Pointer(it.block.buf), n*int(it.block.sz)))
 }
 
@@ -37,7 +38,7 @@ func (it *BlockIterator[T]) Seek(n int) bool {
 	return true
 }
 
-func (it *BlockIterator[T]) NextChunk() (*[types.CHUNK_SIZE]T, int) {
+func (it *BlockIterator[T]) Next() (*[types.CHUNK_SIZE]T, int) {
 	if it.base >= it.block.len {
 		return nil, 0
 	}
@@ -47,7 +48,7 @@ func (it *BlockIterator[T]) NextChunk() (*[types.CHUNK_SIZE]T, int) {
 	return (*[types.CHUNK_SIZE]T)(ptr), int(n)
 }
 
-func (it *BlockIterator[T]) SkipChunk() int {
+func (it *BlockIterator[T]) Skip() int {
 	n := min(types.CHUNK_SIZE, it.block.len-it.base)
 	it.base += n
 	return int(n)
@@ -56,4 +57,12 @@ func (it *BlockIterator[T]) SkipChunk() int {
 func (it *BlockIterator[T]) Close() {
 	it.block = nil
 	it.base = 0
+}
+
+func (it *BlockIterator[T]) All() iter.Seq2[int, T] {
+	return NewAccessor[T](it.block).All()
+}
+
+func (it *BlockIterator[T]) Values() iter.Seq[T] {
+	return NewAccessor[T](it.block).Values()
 }

@@ -60,14 +60,18 @@ func (c *FloatDictionaryContainer[T]) Chunks() types.NumberIterator[T] {
 	return NewFloatDictionaryIterator(c.Dict, c.Codes)
 }
 
-func (c *FloatDictionaryContainer[T]) Iterator() iter.Seq2[int, T] {
-	return func(fn func(int, T) bool) {
+func (c *FloatDictionaryContainer[T]) All() iter.Seq2[int, T] {
+	return func(yield func(int, T) bool) {
 		it := c.Chunks()
-		for i := range it.Len() {
-			if !fn(i, it.Get(i)) {
-				break
-			}
-		}
+		it.All()(yield)
+		it.Close()
+	}
+}
+
+func (c *FloatDictionaryContainer[T]) Values() iter.Seq[T] {
+	return func(yield func(T) bool) {
+		it := c.Chunks()
+		it.Values()(yield)
 		it.Close()
 	}
 }
@@ -105,7 +109,7 @@ func (c *FloatDictionaryContainer[T]) AppendTo(dst []T, sel []uint32) []T {
 	it := c.Chunks()
 	if sel == nil {
 		for {
-			src, n := it.NextChunk()
+			src, n := it.Next()
 			if n == 0 {
 				break
 			}
@@ -113,7 +117,7 @@ func (c *FloatDictionaryContainer[T]) AppendTo(dst []T, sel []uint32) []T {
 		}
 	} else {
 		for _, v := range sel {
-			dst = append(dst, it.Get(int(v)))
+			dst = append(dst, it.Value(int(v)))
 		}
 	}
 	it.Close()
@@ -410,7 +414,7 @@ func (it *FloatDictionaryIterator[T]) Close() {
 func (it *FloatDictionaryIterator[T]) fill(base int) int {
 	// load code chunk at base and translate
 	it.code.Seek(base)
-	codes, n := it.code.NextChunk()
+	codes, n := it.code.Next()
 	if n == 0 {
 		it.ofs = it.len
 		it.base = -1

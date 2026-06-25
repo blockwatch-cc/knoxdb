@@ -360,129 +360,129 @@ type Closer interface {
 
 // Appends range [i:j] from src to the block. Panics if range would overflow.
 // Src may be materialized or compressed block.
-func (b *Block) AppendRange(src *Block, i, j int) {
-	assert.Always(b != nil, "append: nil block, potential use after free")
-	assert.Always(b.IsMaterialized(), "append: block not materialized")
-	assert.Always(src != nil, "append: nil source block, potential use after free")
-	assert.Always(b.typ == src.typ, "append: block type mismatch", b.typ, src.typ)
-	n := uint32(j - i)
-	assert.Always(b.len+n <= b.cap, "append: out of bounds",
-		"dst.len", b.len, "dst.cap", b.cap, "n", n)
-	assert.Always(j <= int(src.len), "append: src out of bounds", "src.len", src.len, "j", j)
-	if b.len+n > b.cap || i > j || j > int(src.len) {
-		panic(ErrBlockOutOfBounds)
-	}
-	switch b.typ {
-	case BlockBytes:
-		switch {
-		case n == 1:
-			// single value
-			b.Bytes().Append(src.Bytes().Get(i))
-		case src.IsMaterialized():
-			// src is uncompressed (can optimize)
-			src.any.(*stringx.StringPool).Range(i, j).AppendTo(b.Bytes(), nil)
-		default:
-			sel := types.NewRange(i, j-1).AsSelection()
-			src.Bytes().AppendTo(b.Bytes(), sel)
-		}
+// func (b *Block) AppendRange(src *Block, i, j int) {
+// 	assert.Always(b != nil, "append: nil block, potential use after free")
+// 	assert.Always(b.IsMaterialized(), "append: block not materialized")
+// 	assert.Always(src != nil, "append: nil source block, potential use after free")
+// 	assert.Always(b.typ == src.typ, "append: block type mismatch", b.typ, src.typ)
+// 	n := uint32(j - i)
+// 	assert.Always(b.len+n <= b.cap, "append: out of bounds",
+// 		"dst.len", b.len, "dst.cap", b.cap, "n", n)
+// 	assert.Always(j <= int(src.len), "append: src out of bounds", "src.len", src.len, "j", j)
+// 	if b.len+n > b.cap || i > j || j > int(src.len) {
+// 		panic(ErrBlockOutOfBounds)
+// 	}
+// 	switch b.typ {
+// 	case BlockBytes:
+// 		switch {
+// 		case n == 1:
+// 			// single value
+// 			b.Bytes().Append(src.Bytes().Get(i))
+// 		case src.IsMaterialized():
+// 			// src is uncompressed (can optimize)
+// 			src.any.(*stringx.StringPool).Range(i, j).AppendTo(b.Bytes(), nil)
+// 		default:
+// 			sel := types.NewRange(i, j-1).AsSelection()
+// 			src.Bytes().AppendTo(b.Bytes(), sel)
+// 		}
 
-	case BlockBool:
-		switch {
-		case n == 1:
-			// single value
-			b.Bool().Append(src.Bool().Get(i))
-		case src.IsMaterialized():
-			// src is uncompressed (can optimize)
-			b.Bool().Writer().AppendRange(src.Bool().Writer(), i, j)
-		default:
-			// src is compressed
-			sel := types.NewRange(i, j-1).AsSelection()
-			src.Bool().AppendTo(b.Bool().Writer(), sel)
-		}
+// 	case BlockBool:
+// 		switch {
+// 		case n == 1:
+// 			// single value
+// 			b.Bool().Append(src.Bool().Get(i))
+// 		case src.IsMaterialized():
+// 			// src is uncompressed (can optimize)
+// 			b.Bool().Writer().AppendRange(src.Bool().Writer(), i, j)
+// 		default:
+// 			// src is compressed
+// 			sel := types.NewRange(i, j-1).AsSelection()
+// 			src.Bool().AppendTo(b.Bool().Writer(), sel)
+// 		}
 
-	case BlockInt128:
-		switch {
-		case n == 1:
-			// single value
-			b.Int128().Append(src.Int128().Get(i))
-		case src.IsMaterialized():
-			// src is uncompressed (can optimize)
-			s128 := src.any.(*num.Int128Stride)
-			d128 := b.any.(*num.Int128Stride)
-			s128.Range(i, j).AppendTo(d128, nil)
-		default:
-			// src is compressed
-			sel := types.NewRange(i, j-1).AsSelection()
-			d128 := b.any.(*num.Int128Stride)
-			src.Int128().AppendTo(d128, sel)
-		}
+// 	case BlockInt128:
+// 		switch {
+// 		case n == 1:
+// 			// single value
+// 			b.Int128().Append(src.Int128().Get(i))
+// 		case src.IsMaterialized():
+// 			// src is uncompressed (can optimize)
+// 			s128 := src.any.(*num.Int128Stride)
+// 			d128 := b.any.(*num.Int128Stride)
+// 			s128.Range(i, j).AppendTo(d128, nil)
+// 		default:
+// 			// src is compressed
+// 			sel := types.NewRange(i, j-1).AsSelection()
+// 			d128 := b.any.(*num.Int128Stride)
+// 			src.Int128().AppendTo(d128, sel)
+// 		}
 
-	case BlockInt256:
-		switch {
-		case n == 1:
-			// single value
-			b.Int256().Append(src.Int256().Get(i))
-		case src.IsMaterialized():
-			// src is uncompressed (can optimize)
-			s256 := src.any.(*num.Int256Stride)
-			d256 := b.any.(*num.Int256Stride)
-			s256.Range(i, j).AppendTo(d256, nil)
-		default:
-			// src is compressed
-			sel := types.NewRange(i, j-1).AsSelection()
-			d256 := b.any.(*num.Int256Stride)
-			src.Int256().AppendTo(d256, sel)
-		}
+// 	case BlockInt256:
+// 		switch {
+// 		case n == 1:
+// 			// single value
+// 			b.Int256().Append(src.Int256().Get(i))
+// 		case src.IsMaterialized():
+// 			// src is uncompressed (can optimize)
+// 			s256 := src.any.(*num.Int256Stride)
+// 			d256 := b.any.(*num.Int256Stride)
+// 			s256.Range(i, j).AppendTo(d256, nil)
+// 		default:
+// 			// src is compressed
+// 			sel := types.NewRange(i, j-1).AsSelection()
+// 			d256 := b.any.(*num.Int256Stride)
+// 			src.Int256().AppendTo(d256, sel)
+// 		}
 
-	default:
-		switch {
-		case n == 1:
-			// single value
-			switch b.typ {
-			case BlockUint64, BlockInt64:
-				b.Uint64().Append(src.Uint64().Get(i))
-			case BlockUint32, BlockInt32:
-				b.Uint32().Append(src.Uint32().Get(i))
-			case BlockUint16, BlockInt16:
-				b.Uint16().Append(src.Uint16().Get(i))
-			case BlockUint8, BlockInt8:
-				b.Uint8().Append(src.Uint8().Get(i))
-			case BlockFloat64:
-				b.Float64().Append(src.Float64().Get(i))
-			case BlockFloat32:
-				b.Float32().Append(src.Float32().Get(i))
-			}
-		case src.IsMaterialized():
-			// src is uncompressed (can optimize)
-			i *= int(b.sz)
-			j *= int(b.sz)
-			ofs := int(b.len) * int(b.sz)
-			dbuf := b.buffer()
-			sbuf := src.buffer()
-			copy(dbuf[ofs:], sbuf[i:j])
-			b.len += n
-		default:
-			// src is compressed
-			sel := types.NewRange(i, j-1).AsSelection()
-			switch b.typ {
-			case BlockUint64, BlockInt64:
-				src.Uint64().AppendTo(b.Uint64().Slice(), sel)
-			case BlockUint32, BlockInt32:
-				src.Uint32().AppendTo(b.Uint32().Slice(), sel)
-			case BlockUint16, BlockInt16:
-				src.Uint16().AppendTo(b.Uint16().Slice(), sel)
-			case BlockUint8, BlockInt8:
-				src.Uint8().AppendTo(b.Uint8().Slice(), sel)
-			case BlockFloat64:
-				src.Float64().AppendTo(b.Float64().Slice(), sel)
-			case BlockFloat32:
-				src.Float32().AppendTo(b.Float32().Slice(), sel)
-			}
-			b.len += n
-		}
-	}
-	b.SetDirty()
-}
+// 	default:
+// 		switch {
+// 		case n == 1:
+// 			// single value
+// 			switch b.typ {
+// 			case BlockUint64, BlockInt64:
+// 				b.Uint64().Append(src.Uint64().Get(i))
+// 			case BlockUint32, BlockInt32:
+// 				b.Uint32().Append(src.Uint32().Get(i))
+// 			case BlockUint16, BlockInt16:
+// 				b.Uint16().Append(src.Uint16().Get(i))
+// 			case BlockUint8, BlockInt8:
+// 				b.Uint8().Append(src.Uint8().Get(i))
+// 			case BlockFloat64:
+// 				b.Float64().Append(src.Float64().Get(i))
+// 			case BlockFloat32:
+// 				b.Float32().Append(src.Float32().Get(i))
+// 			}
+// 		case src.IsMaterialized():
+// 			// src is uncompressed (can optimize)
+// 			i *= int(b.sz)
+// 			j *= int(b.sz)
+// 			ofs := int(b.len) * int(b.sz)
+// 			dbuf := b.buffer()
+// 			sbuf := src.buffer()
+// 			copy(dbuf[ofs:], sbuf[i:j])
+// 			b.len += n
+// 		default:
+// 			// src is compressed
+// 			sel := types.NewRange(i, j-1).AsSelection()
+// 			switch b.typ {
+// 			case BlockUint64, BlockInt64:
+// 				src.Uint64().AppendTo(b.Uint64().Slice(), sel)
+// 			case BlockUint32, BlockInt32:
+// 				src.Uint32().AppendTo(b.Uint32().Slice(), sel)
+// 			case BlockUint16, BlockInt16:
+// 				src.Uint16().AppendTo(b.Uint16().Slice(), sel)
+// 			case BlockUint8, BlockInt8:
+// 				src.Uint8().AppendTo(b.Uint8().Slice(), sel)
+// 			case BlockFloat64:
+// 				src.Float64().AppendTo(b.Float64().Slice(), sel)
+// 			case BlockFloat32:
+// 				src.Float32().AppendTo(b.Float32().Slice(), sel)
+// 			}
+// 			b.len += n
+// 		}
+// 	}
+// 	b.SetDirty()
+// }
 
 // AppendTo appends all (sel = nil) or selected elements to dst. Dst
 // must be materialized and src may be compressed.
@@ -671,7 +671,7 @@ func (b *Block) MinMax() (any, any) {
 		switch {
 		case b.Bool().All():
 			return true, true
-		case b.Bool().Any():
+		case b.Bool().Some():
 			return false, true
 		default:
 			return false, false
@@ -745,7 +745,7 @@ func (b *Block) Max() any {
 	case BlockBytes:
 		return bytes.Clone(b.Bytes().Max())
 	case BlockBool:
-		return b.Bool().Any()
+		return b.Bool().Some()
 	default:
 		return nil
 	}

@@ -24,57 +24,57 @@ func init() {
 }
 
 //go:noescape
-func xxh3_u64_core_avx2(src []uint64, res []uint64)
+func xxh3_u64_core_avx2(res []uint64, src []uint64)
 
 //go:noescape
-func xxh3_u64_core_avx512(src []uint64, res []uint64)
+func xxh3_u64_core_avx512(res []uint64, src []uint64)
 
 //go:noescape
-func xxh3_u32_core_avx2(src []uint32, res []uint64)
+func xxh3_u32_core_avx2(res []uint64, src []uint32)
 
 //go:noescape
-func xxh3_u32_core_avx512(src []uint32, res []uint64)
+func xxh3_u32_core_avx512(res []uint64, src []uint32)
 
-func xxh3_u32_avx2(src []uint32, res []uint64) []uint64 {
+func xxh3_u32_avx2(res []uint64, src []uint32) []uint64 {
 	if cap(res) < len(src) {
 		res = make([]uint64, len(src))
 	}
 	res = res[:len(src)]
 	len_head := len(src) & 0x7ffffffffffffffc
-	xxh3_u32_core_avx2(src, res)
-	xxh3_u32_purego(src[len_head:], res[len_head:])
+	xxh3_u32_core_avx2(res, src)
+	xxh3_u32_purego(res[len_head:], src[len_head:])
 	return res
 }
 
-func xxh3_u32_avx512(src []uint32, res []uint64) []uint64 {
+func xxh3_u32_avx512(res []uint64, src []uint32) []uint64 {
 	if cap(res) < len(src) {
 		res = make([]uint64, len(src))
 	}
 	res = res[:len(src)]
 	len_head := len(src) & 0x7ffffffffffffff8
-	xxh3_u32_core_avx512(src, res)
-	xxh3_u32_purego(src[len_head:], res[len_head:])
+	xxh3_u32_core_avx512(res, src)
+	xxh3_u32_purego(res[len_head:], src[len_head:])
 	return res
 }
 
-func xxh3_u64_avx2(src []uint64, res []uint64) []uint64 {
+func xxh3_u64_avx2(res []uint64, src []uint64) []uint64 {
 	if cap(res) < len(src) {
 		res = make([]uint64, len(src))
 	}
 	res = res[:len(src)]
 	len_head := len(src) & 0x7ffffffffffffffc
-	xxh3_u64_core_avx2(src, res)
-	xxh3_u64_purego(src[len_head:], res[len_head:])
+	xxh3_u64_core_avx2(res, src)
+	xxh3_u64_purego(res[len_head:], src[len_head:])
 	return res
 }
 
-func xxh3_u64_avx512(src []uint64, res []uint64) []uint64 {
+func xxh3_u64_avx512(res []uint64, src []uint64) []uint64 {
 	if cap(res) < len(src) {
 		res = make([]uint64, len(src))
 	}
 	res = res[:len(src)]
 	len_head := len(src) & 0x7ffffffffffffff8
-	xxh3_u64_core_avx512(src, res)
-	xxh3_u64_purego(src[len_head:], res[len_head:])
+	xxh3_u64_core_avx512(res, src)
+	xxh3_u64_purego(res[len_head:], src[len_head:])
 	return res
 }

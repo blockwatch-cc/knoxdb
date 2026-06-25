@@ -1,21 +1,18 @@
 // Copyright (c) 2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package encode
+package encode_bench
 
 import (
 	"fmt"
-	"slices"
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/bitset"
+	. "blockwatch.cc/knoxdb/internal/encode"
 	etests "blockwatch.cc/knoxdb/internal/encode/tests"
-	"blockwatch.cc/knoxdb/internal/filter/llb"
-	"blockwatch.cc/knoxdb/internal/hash"
 	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/internal/xroar"
 	"github.com/stretchr/testify/require"
 )
 
@@ -39,7 +36,6 @@ func BenchmarkIntAnalyze(b *testing.B) {
 
 func BenchmarkIntEstimate(b *testing.B) {
 	for _, c := range tests.MakeBenchmarks[uint64]() {
-		ctx := AnalyzeInt(c.Data, true)
 		for _, scheme := range []ContainerType{
 			TIntConstant,
 			TIntDelta,
@@ -50,6 +46,8 @@ func BenchmarkIntEstimate(b *testing.B) {
 			TIntRaw,
 		} {
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
+				ctx := AnalyzeInt(c.Data, true)
+				b.ResetTimer()
 				b.ReportAllocs()
 				b.SetBytes(int64(len(c.Data) * 8))
 				var n int
@@ -74,10 +72,11 @@ func BenchmarkIntEncode(b *testing.B) {
 			TIntSimple8,
 			TIntRaw,
 		} {
-			data := etests.GenForIntScheme[int64](int(scheme), c.N)
-			ctx := AnalyzeInt(data, scheme == TIntDictionary)
-			once := etests.ShowInfo
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
+				data := etests.GenForIntScheme[int64](int(scheme), c.N)
+				ctx := AnalyzeInt(data, scheme == TIntDictionary)
+				once := etests.ShowInfo
+				b.ResetTimer()
 				b.ReportAllocs()
 				b.SetBytes(int64(c.N * 8))
 				var sz int
@@ -93,8 +92,8 @@ func BenchmarkIntEncode(b *testing.B) {
 				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
 				b.ReportMetric(float64(sz*8/b.N/c.N), "bits/val")
 				b.ReportMetric(100*float64(sz)/float64(b.N*c.N*8), "c(%)")
+				ctx.Close()
 			})
-			ctx.Close()
 		}
 	}
 }
@@ -110,9 +109,10 @@ func BenchmarkIntEncodeAndStore(b *testing.B) {
 			TIntSimple8,
 			TIntRaw,
 		} {
-			data := etests.GenForIntScheme[int64](int(scheme), c.N)
-			once := etests.ShowInfo
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
+				data := etests.GenForIntScheme[int64](int(scheme), c.N)
+				once := etests.ShowInfo
+				b.ResetTimer()
 				b.ReportAllocs()
 				b.SetBytes(int64(c.N * 8))
 				var sz int
@@ -171,13 +171,15 @@ func BenchmarkIntDecode(b *testing.B) {
 			TIntSimple8,
 			TIntRaw,
 		} {
-			data := etests.GenForIntScheme[int64](int(scheme), c.N)
-			ctx := AnalyzeInt(data, scheme == TIntDictionary)
-			enc := NewInt[int64](scheme).Encode(ctx, data)
-			buf := enc.Store(make([]byte, 0, enc.Size()))
-			dst := make([]int64, 0, c.N)
-			b.Log(enc.Info())
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
+				data := etests.GenForIntScheme[int64](int(scheme), c.N)
+				ctx := AnalyzeInt(data, scheme == TIntDictionary)
+				enc := NewInt[int64](scheme).Encode(ctx, data)
+				buf := enc.Store(make([]byte, 0, enc.Size()))
+				dst := make([]int64, 0, c.N)
+				// b.Log(enc.Info())
+				b.ResetTimer()
+				b.ReportAllocs()
 				b.SetBytes(int64(c.N * 8))
 				for b.Loop() {
 					enc2 := NewInt[int64](scheme)
@@ -188,12 +190,14 @@ func BenchmarkIntDecode(b *testing.B) {
 					enc2.Close()
 				}
 				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+				enc.Close()
+				ctx.Close()
 			})
 		}
 	}
 }
 
-func BenchmarkIntCmp(b *testing.B) {
+func BenchmarkIntMatchEqual(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		for _, scheme := range []ContainerType{
 			TIntConstant,
@@ -204,17 +208,22 @@ func BenchmarkIntCmp(b *testing.B) {
 			TIntSimple8,
 			TIntRaw,
 		} {
-			data := etests.GenForIntScheme[uint64](int(scheme), c.N)
-			ctx := AnalyzeInt(data, true)
-			enc := NewInt[uint64](scheme).Encode(ctx, data)
-			bits := bitset.New(c.N)
-			b.Log(enc.Info())
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
+				data := etests.GenForIntScheme[uint64](int(scheme), c.N)
+				ctx := AnalyzeInt(data, true)
+				enc := NewInt[uint64](scheme).Encode(ctx, data)
+				bits := bitset.New(c.N)
+				// b.Log(enc.Info())
+
+				b.ResetTimer()
+				b.ReportAllocs()
 				b.SetBytes(int64(c.N * 8))
 				for b.Loop() {
 					enc.MatchEqual(data[0], bits, nil)
 				}
 				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+				enc.Close()
+				ctx.Close()
 			})
 		}
 	}
@@ -231,12 +240,14 @@ func BenchmarkIntIterator(b *testing.B) {
 			TIntSimple8,
 			TIntRaw,
 		} {
-			data := etests.GenForIntScheme[int64](int(scheme), c.N)
-			ctx := AnalyzeInt(data, true)
-			enc := NewInt[int64](scheme).Encode(ctx, data)
-			buf := enc.Store(make([]byte, 0, enc.Size()))
-			b.Log(enc.Info())
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
+				data := etests.GenForIntScheme[int64](int(scheme), c.N)
+				ctx := AnalyzeInt(data, true)
+				enc := NewInt[int64](scheme).Encode(ctx, data)
+				buf := enc.Store(make([]byte, 0, enc.Size()))
+				// b.Log(enc.Info())
+
+				b.ResetTimer()
 				b.ReportAllocs()
 				b.SetBytes(int64(c.N * 8))
 				for b.Loop() {
@@ -245,7 +256,7 @@ func BenchmarkIntIterator(b *testing.B) {
 					require.NoError(b, err)
 					it := enc2.Chunks()
 					for {
-						_, n := it.NextChunk()
+						_, n := it.Next()
 						if n == 0 {
 							break
 						}
@@ -254,117 +265,48 @@ func BenchmarkIntIterator(b *testing.B) {
 					enc2.Close()
 				}
 				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+				enc.Close()
+				ctx.Close()
 			})
 		}
 	}
 }
 
-// -----------------------------------------------
-// Microbenchmarks
-//
-
-func BenchmarkUniqueMap(b *testing.B) {
+func BenchmarkIntAll(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
-		data := tests.GenRnd[int16](c.N)
-		var card int
-		b.Run(c.Name, func(b *testing.B) {
-			b.ReportAllocs()
-			b.SetBytes(int64(c.N * 2))
-			for range b.N {
-				u := make(map[int16]struct{}, c.N)
-				for _, v := range data {
-					u[v] = struct{}{}
-				}
-				card = len(u)
-			}
-			_ = card
-		})
-	}
-}
+		for _, scheme := range []ContainerType{
+			TIntConstant,
+			TIntDelta,
+			TIntRunEnd,
+			TIntBitpacked,
+			TIntDictionary,
+			TIntSimple8,
+			TIntRaw,
+		} {
+			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
+				data := etests.GenForIntScheme[int64](int(scheme), c.N)
+				ctx := AnalyzeInt(data, true)
+				enc := NewInt[int64](scheme).Encode(ctx, data)
+				buf := enc.Store(make([]byte, 0, enc.Size()))
+				// b.Log(enc.Info())
 
-func BenchmarkUniqueArray(b *testing.B) {
-	for _, c := range tests.BenchmarkSizes {
-		data := tests.GenRnd[int16](c.N)
-		minx := slices.Min(data)
-		maxx := slices.Max(data)
-		var card int
-		b.Run(c.Name, func(b *testing.B) {
-			b.ReportAllocs()
-			b.SetBytes(int64(c.N * 2))
-			for range b.N {
-				u := make([]uint16, int(maxx)-int(minx)+1)
-				for _, v := range data {
-					u[int(v)-int(minx)] = 1
-				}
-				for _, v := range u {
-					if v > 0 {
-						card++
+				b.ResetTimer()
+				b.ReportAllocs()
+				b.SetBytes(int64(c.N * 8))
+				for b.Loop() {
+					enc2 := NewInt[int64](scheme)
+					_, err := enc2.Load(buf)
+					require.NoError(b, err)
+					for _, v := range enc2.All() {
+						_ = v
 					}
+					enc2.Close()
 				}
-			}
-		})
-	}
-}
-
-func BenchmarkUniqueBitset(b *testing.B) {
-	for _, c := range tests.BenchmarkSizes {
-		data := tests.GenRnd[int16](c.N)
-		minx := slices.Min(data)
-		maxx := slices.Max(data)
-		var card int
-		b.Run(c.Name, func(b *testing.B) {
-			b.ReportAllocs()
-			b.SetBytes(int64(c.N * 2))
-			for range b.N {
-				u := bitset.New(int(maxx) - int(minx) + 1)
-				for _, v := range data {
-					u.Set(int(v) - int(minx))
-				}
-				card = u.Count()
-				u.Close()
-			}
-		})
-		_ = card
-	}
-}
-
-func BenchmarkUniqueRoaring(b *testing.B) {
-	for _, c := range tests.BenchmarkSizes {
-		data := tests.GenRnd[int16](c.N)
-		minx := slices.Min(data)
-		var card int
-		b.Run(c.Name, func(b *testing.B) {
-			b.ReportAllocs()
-			b.SetBytes(int64(c.N * 2))
-			for range b.N {
-				u := xroar.New()
-				for _, v := range data {
-					u.Set(uint64(v) - uint64(minx))
-				}
-				card = u.Count()
-			}
-		})
-		_ = card
-	}
-}
-
-func BenchmarkUniqueLLB(b *testing.B) {
-	for _, c := range tests.BenchmarkSizes {
-		data := tests.GenRnd[uint32](c.N)
-		var card int
-		b.Run(c.Name, func(b *testing.B) {
-			b.ReportAllocs()
-			b.SetBytes(int64(c.N * 2))
-			for range b.N {
-				hashes := hash.Vec32(data, arena.Alloc[uint64](len(data))[:len(data)])
-				var scratch [256]byte // need 256 byte scratch space
-				unique, _ := llb.NewFilterBuffer(scratch[:], 8)
-				unique.Add(hashes...)
-				card = int(unique.Cardinality())
-				arena.Free(data)
-			}
-		})
-		_ = card
+				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+				enc.Close()
+				ctx.Close()
+			})
+		}
 	}
 }
 
@@ -383,7 +325,7 @@ func DictArrayBenchmark[T types.Integer](b *testing.B) {
 				b.ReportAllocs()
 				b.SetBytes(int64(c.N * arena.SizeFor[T]()))
 				for range b.N {
-					dict, codes := dictEncodeArray(ctx, data)
+					dict, codes := DictEncodeArray(ctx, data)
 					card = len(dict)
 					arena.Free(dict)
 					arena.Free(codes)

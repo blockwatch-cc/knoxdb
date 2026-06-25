@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/bitset"
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/operator/filter"
@@ -584,7 +585,8 @@ func (p *JoinPlan) doJoin(ctx context.Context, out QueryResultConsumer) error {
 			// match result pack against extra filter
 			pkg := agg.Pack()
 			bits := filter.Match(p.Where, pkg, nil, bitset.New(pkg.Len()))
-			sel := bits.Indexes(nil)
+			sel := arena.Alloc[uint32](bits.Count())
+			sel = bits.AllIndexes(sel)
 
 			// apply limit
 			if p.Limit > 0 {
@@ -599,8 +601,10 @@ func (p *JoinPlan) doJoin(ctx context.Context, out QueryResultConsumer) error {
 			}
 
 			// free temp resources and reset aggregation result
+			pkg.WithSelection(nil)
 			bits.Close()
 			agg.Reset()
+			arena.Free(sel)
 		}
 
 		// check limit

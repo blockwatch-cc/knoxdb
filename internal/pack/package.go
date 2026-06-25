@@ -169,26 +169,26 @@ func (p *Package) Alloc() *Package {
 // Clone creates a private materialized copy of a pack with new allocated
 // block storage. The capacity of the clone is defined in sz and may be
 // larger than the length of the source pack.
-func (p *Package) Clone(sz int) *Package {
-	clone := New()
-	clone.nRows = p.nRows
-	clone.key = p.key
-	clone.version = p.version
-	clone.nRows = p.nRows
-	clone.maxRows = p.maxRows
-	clone.px = p.px
-	clone.rx = p.rx
-	clone.schema = p.schema
-	clone.blocks = make([]*block.Block, len(p.blocks))
-	for i, b := range p.blocks {
-		if b == nil {
-			continue
-		}
-		// alloc sz capacity and copy len block data
-		clone.blocks[i] = b.Clone(sz)
-	}
-	return clone
-}
+// func (p *Package) Clone(sz int) *Package {
+// 	clone := New()
+// 	clone.nRows = p.nRows
+// 	clone.key = p.key
+// 	clone.version = p.version
+// 	clone.nRows = p.nRows
+// 	clone.maxRows = p.maxRows
+// 	clone.px = p.px
+// 	clone.rx = p.rx
+// 	clone.schema = p.schema
+// 	clone.blocks = make([]*block.Block, len(p.blocks))
+// 	for i, b := range p.blocks {
+// 		if b == nil {
+// 			continue
+// 		}
+// 		// alloc sz capacity and copy len block data
+// 		clone.blocks[i] = b.Clone(sz)
+// 	}
+// 	return clone
+// }
 
 // Copy creates a shallow copy of pack referencing all data vectors.
 func (p *Package) Copy() *Package {

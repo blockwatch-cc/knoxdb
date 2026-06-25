@@ -281,7 +281,7 @@ func (n *SNode) DeletePack(src *pack.Package) bool {
 func (n *SNode) PrepareWrite(ctx context.Context, b store.Bucket) (*SNode, error) {
 	// create clone to prevent overriding spack used by concurrent readers
 	src := n.spack.Load()
-	pkg := src.Clone(src.Cap())
+	pkg := src.Copy()
 
 	// load missing blocks (previous version)
 	_, err := pkg.LoadFromDisk(ctx, b, nil, 0)
@@ -349,7 +349,7 @@ func (n *SNode) Query(it *Iterator) error {
 			_, it.vmatch = matchVector(it.flt, pkg, nil, it.vmatch)
 
 			// convert bitset to indexes
-			it.match = it.vmatch.Indexes(it.match)
+			it.match = it.vmatch.AllIndexes(it.match)
 		}
 		return nil
 	}
@@ -419,7 +419,7 @@ func (n *SNode) Query(it *Iterator) error {
 			atomic.AddInt64(&it.idx.bytesRead, int64(m))
 
 			// convert bitset to indexes
-			it.match = it.vmatch.Indexes(it.match)
+			it.match = it.vmatch.AllIndexes(it.match)
 		}
 
 		return nil

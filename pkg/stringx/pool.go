@@ -178,7 +178,7 @@ func (p *StringPool) MinMaxLen() (int, int) {
 	return int(lmin), int(lmax)
 }
 
-// unary iterator `for v := range pool.Iterator() {}`
+// unary iterator `for v := range pool.Values() {}`
 func (p *StringPool) Values() iter.Seq[[]byte] {
 	return func(fn func([]byte) bool) {
 		for _, ptr := range p.ptr {
@@ -190,12 +190,24 @@ func (p *StringPool) Values() iter.Seq[[]byte] {
 	}
 }
 
-// 2-ary iterator `for i, v := range pool.Iterator2() {}`
-func (p *StringPool) Iterator() iter.Seq2[int, []byte] {
+// 2-ary iterator `for i, v := range pool.All() {}`
+func (p *StringPool) All() iter.Seq2[int, []byte] {
 	return func(fn func(int, []byte) bool) {
 		for i, ptr := range p.ptr {
 			ofs, len := ptr2pair(ptr)
 			if !fn(i, unsafe.Slice((*byte)(unsafe.Add(p.base, ofs)), len)) {
+				return
+			}
+		}
+	}
+}
+
+// unary iterator for selection `for v := range pool.Select(sel) {}`
+func (p *StringPool) Select(sel []uint32) iter.Seq[[]byte] {
+	return func(fn func([]byte) bool) {
+		for _, v := range sel {
+			ofs, len := ptr2pair(p.ptr[v])
+			if !fn(unsafe.Slice((*byte)(unsafe.Add(p.base, ofs)), len)) {
 				return
 			}
 		}
@@ -294,7 +306,11 @@ func (p *StringPool) get(i int) []byte {
 // so its unsafe to use the string after close.
 // Panics if i is out of bounds.
 func (p *StringPool) GetString(i int) string {
-	return util.UnsafeGetString(p.Get(i))
+	if uint(i) > uint(len(p.ptr)) {
+		return ""
+	}
+	ofs, sz := ptr2pair(*(*uint64)(unsafe.Add(unsafe.Pointer(p.pp), i*8)))
+	return unsafe.String((*byte)(unsafe.Add(p.base, ofs)), sz)
 }
 
 // Set replaces entry at position i with a new string. The new string

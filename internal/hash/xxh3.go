@@ -57,7 +57,7 @@ func xxh3_u8(val uint8) uint64 {
 	return xxhAvalancheSmall(h)
 }
 
-func xxh3_u64_purego(src, dst []uint64) []uint64 {
+func xxh3_u64_purego(dst, src []uint64) []uint64 {
 	if len(src) == 0 {
 		return dst[:0]
 	}
@@ -71,7 +71,7 @@ func xxh3_u64_purego(src, dst []uint64) []uint64 {
 	for range len(src) / 128 {
 		s := (*[128]uint64)(unsafe.Add(sp, i*8))
 		r := (*[128]uint64)(unsafe.Add(rp, i*8))
-		xxh3_u64_core(s, r)
+		xxh3_u64_core(r, s)
 		i += 128
 	}
 	for i < len(src) {
@@ -81,7 +81,7 @@ func xxh3_u64_purego(src, dst []uint64) []uint64 {
 	return dst
 }
 
-func xxh3_u64_core(src, dst *[128]uint64) {
+func xxh3_u64_core(dst, src *[128]uint64) {
 	for i := 0; i < len(src); i += 16 {
 		dst[i] = xxh3_u64(src[i])
 		dst[i+1] = xxh3_u64(src[i+1])
@@ -103,7 +103,7 @@ func xxh3_u64_core(src, dst *[128]uint64) {
 	}
 }
 
-func xxh3_u32_purego(src []uint32, dst []uint64) []uint64 {
+func xxh3_u32_purego(dst []uint64, src []uint32) []uint64 {
 	if len(src) == 0 {
 		return dst[:0]
 	}
@@ -117,7 +117,7 @@ func xxh3_u32_purego(src []uint32, dst []uint64) []uint64 {
 	for range len(src) / 128 {
 		s := (*[128]uint32)(unsafe.Add(sp, i*4))
 		r := (*[128]uint64)(unsafe.Add(rp, i*8))
-		xxh3_u32_core(s, r)
+		xxh3_u32_core(r, s)
 		i += 128
 	}
 	for i < len(src) {
@@ -127,7 +127,7 @@ func xxh3_u32_purego(src []uint32, dst []uint64) []uint64 {
 	return dst
 }
 
-func xxh3_u32_core(src *[128]uint32, dst *[128]uint64) {
+func xxh3_u32_core(dst *[128]uint64, src *[128]uint32) {
 	for i := 0; i < len(src); i += 16 {
 		dst[i] = xxh3_u32(src[i])
 		dst[i+1] = xxh3_u32(src[i+1])
@@ -149,7 +149,7 @@ func xxh3_u32_core(src *[128]uint32, dst *[128]uint64) {
 	}
 }
 
-func xxh3_u16_purego(src []uint16, dst []uint64) []uint64 {
+func xxh3_u16_purego(dst []uint64, src []uint16) []uint64 {
 	if len(src) == 0 {
 		return dst[:0]
 	}
@@ -163,7 +163,7 @@ func xxh3_u16_purego(src []uint16, dst []uint64) []uint64 {
 	for range len(src) / 128 {
 		s := (*[128]uint16)(unsafe.Add(sp, i*2))
 		r := (*[128]uint64)(unsafe.Add(rp, i*8))
-		xxh3_u16_core(s, r)
+		xxh3_u16_core(r, s)
 		i += 128
 	}
 	for i < len(src) {
@@ -173,7 +173,7 @@ func xxh3_u16_purego(src []uint16, dst []uint64) []uint64 {
 	return dst
 }
 
-func xxh3_u16_core(src *[128]uint16, dst *[128]uint64) {
+func xxh3_u16_core(dst *[128]uint64, src *[128]uint16) {
 	for i := 0; i < len(src); i += 16 {
 		dst[i] = xxh3_u16(src[i])
 		dst[i+1] = xxh3_u16(src[i+1])
@@ -195,7 +195,7 @@ func xxh3_u16_core(src *[128]uint16, dst *[128]uint64) {
 	}
 }
 
-func xxh3_u8_purego(src []uint8, dst []uint64) []uint64 {
+func xxh3_u8_purego(dst []uint64, src []uint8) []uint64 {
 	if len(src) == 0 {
 		return dst[:0]
 	}
@@ -209,7 +209,7 @@ func xxh3_u8_purego(src []uint8, dst []uint64) []uint64 {
 	for range len(src) / 128 {
 		s := (*[128]uint8)(unsafe.Add(sp, i))
 		r := (*[128]uint64)(unsafe.Add(rp, i*8))
-		xxh3_u8_core(s, r)
+		xxh3_u8_core(r, s)
 		i += 128
 	}
 	for i < len(src) {
@@ -219,7 +219,7 @@ func xxh3_u8_purego(src []uint8, dst []uint64) []uint64 {
 	return dst
 }
 
-func xxh3_u8_core(src *[128]uint8, dst *[128]uint64) {
+func xxh3_u8_core(dst *[128]uint64, src *[128]uint8) {
 	for i := 0; i < len(src); i += 16 {
 		dst[i] = xxh3_u8(src[i])
 		dst[i+1] = xxh3_u8(src[i+1])

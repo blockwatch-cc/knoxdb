@@ -385,7 +385,7 @@ func (it *ScanIterator) Next(ctx context.Context) (*pack.Package, []uint32, erro
 		}
 
 		// handle real matches
-		it.hits = it.bits.Indexes(it.hits)
+		it.hits = it.bits.AllIndexes(it.hits)
 		// it.idx.log.Infof("Found %d hits", len(it.hits))
 
 		return it.pack, it.hits, nil

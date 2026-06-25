@@ -19,7 +19,7 @@ func (p *StringPool) Matcher() types.StringMatcher {
 
 func (p *StringPool) MatchEqual(val []byte, bits, mask *Bitset) {
 	if mask != nil {
-		for i := range mask.Iterator() {
+		for i := range mask.Ones() {
 			ofs, len := ptr2pair(p.ptr[i])
 			if !bytes.Equal(p.buf[ofs:ofs+len], val) {
 				continue
@@ -52,7 +52,7 @@ func (p *StringPool) MatchEqual(val []byte, bits, mask *Bitset) {
 
 func (p *StringPool) MatchNotEqual(val []byte, bits, mask *Bitset) {
 	if mask != nil {
-		for i := range mask.Iterator() {
+		for i := range mask.Ones() {
 			ofs, len := ptr2pair(p.ptr[i])
 			if bytes.Equal(p.buf[ofs:ofs+len], val) {
 				continue
@@ -85,7 +85,7 @@ func (p *StringPool) MatchNotEqual(val []byte, bits, mask *Bitset) {
 
 func (p *StringPool) MatchLess(val []byte, bits, mask *Bitset) {
 	if mask != nil {
-		for i := range mask.Iterator() {
+		for i := range mask.Ones() {
 			ofs, len := ptr2pair(p.ptr[i])
 			if bytes.Compare(p.buf[ofs:ofs+len], val) >= 0 {
 				continue
@@ -118,7 +118,7 @@ func (p *StringPool) MatchLess(val []byte, bits, mask *Bitset) {
 
 func (p *StringPool) MatchLessEqual(val []byte, bits, mask *Bitset) {
 	if mask != nil {
-		for i := range mask.Iterator() {
+		for i := range mask.Ones() {
 			ofs, len := ptr2pair(p.ptr[i])
 			if bytes.Compare(p.buf[ofs:ofs+len], val) > 0 {
 				continue
@@ -151,7 +151,7 @@ func (p *StringPool) MatchLessEqual(val []byte, bits, mask *Bitset) {
 
 func (p *StringPool) MatchGreater(val []byte, bits, mask *Bitset) {
 	if mask != nil {
-		for i := range mask.Iterator() {
+		for i := range mask.Ones() {
 			ofs, len := ptr2pair(p.ptr[i])
 			if bytes.Compare(p.buf[ofs:ofs+len], val) <= 0 {
 				continue
@@ -184,7 +184,7 @@ func (p *StringPool) MatchGreater(val []byte, bits, mask *Bitset) {
 
 func (p *StringPool) MatchGreaterEqual(val []byte, bits, mask *Bitset) {
 	if mask != nil {
-		for i := range mask.Iterator() {
+		for i := range mask.Ones() {
 			ofs, len := ptr2pair(p.ptr[i])
 			if bytes.Compare(p.buf[ofs:ofs+len], val) < 0 {
 				continue
@@ -217,7 +217,7 @@ func (p *StringPool) MatchGreaterEqual(val []byte, bits, mask *Bitset) {
 
 func (p *StringPool) MatchBetween(x, y []byte, bits, mask *Bitset) {
 	if mask != nil {
-		for i := range mask.Iterator() {
+		for i := range mask.Ones() {
 			ofs, len := ptr2pair(p.ptr[i])
 			val := p.buf[ofs : ofs+len]
 			if bytes.Compare(val, x) < 0 || bytes.Compare(val, y) > 0 {
@@ -248,4 +248,12 @@ func (p *StringPool) MatchBetween(x, y []byte, bits, mask *Bitset) {
 		}
 		bits.ResetCount(cnt)
 	}
+}
+
+func (p *StringPool) MatchInSet(_ any, _, _ *Bitset) {
+	// noop
+}
+
+func (p *StringPool) MatchNotInSet(_ any, _, _ *Bitset) {
+	// noop
 }

@@ -118,16 +118,19 @@ func (c *DictStringContainer) Get(i int) []byte {
 	return c.dict[ofs : ofs+len]
 }
 
-func (c *DictStringContainer) Iterator() iter.Seq2[int, []byte] {
-	return func(fn func(int, []byte) bool) {
-		for i := range c.n {
-			ptr := c.code.Get(i)
-			ofs := c.ofs.Get(int(ptr))
-			len := c.len.Get(int(ptr))
-			if !fn(i, c.dict[ofs:ofs+len:ofs+len]) {
-				return
-			}
-		}
+func (c *DictStringContainer) All() iter.Seq2[int, []byte] {
+	return func(yield func(int, []byte) bool) {
+		it := c.Chunks()
+		it.All()(yield)
+		it.Close()
+	}
+}
+
+func (c *DictStringContainer) Values() iter.Seq[[]byte] {
+	return func(yield func([]byte) bool) {
+		it := c.Chunks()
+		it.Values()(yield)
+		it.Close()
 	}
 }
 
@@ -162,7 +165,7 @@ func (c *DictStringContainer) Encode(ctx *StringContext, vals types.StringAccess
 	// TODO: sorted dict for dict fusion match
 
 	// compact and reference duplicates
-	for i, v := range vals.Iterator() {
+	for i, v := range vals.All() {
 		k := ctx.Dups[i]
 		if k < 0 {
 			// append non duplicate strings to dict, register dict position
@@ -193,6 +196,9 @@ func (c *DictStringContainer) Encode(ctx *StringContext, vals types.StringAccess
 func (c *DictStringContainer) Cmp(i, j int) int {
 	return bytes.Compare(c.Get(i), c.Get(j))
 }
+
+// TODO: optimize matching by comparing dict codes instead,
+// see integer dictionary
 
 func (c *DictStringContainer) MatchEqual(val []byte, bits, mask *Bitset) {
 	matchStringEqual(c, val, bits, mask)
@@ -258,7 +264,7 @@ func (it *DictStringIterator) Close() {
 func (it *DictStringIterator) fill(base int) int {
 	// load code chunk at base and translate
 	it.code.Seek(base)
-	codes, n := it.code.NextChunk()
+	codes, n := it.code.Next()
 	if n == 0 {
 		it.ofs = it.len
 		it.base = -1

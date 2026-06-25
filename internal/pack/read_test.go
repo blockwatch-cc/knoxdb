@@ -58,7 +58,7 @@ func BenchmarkReadStruct(b *testing.B) {
 					_ = pkg.ReadStruct(k, v, s, l, maps)
 				}
 			}
-			b.ReportMetric(float64(PACK_SIZE*b.N)/float64(b.Elapsed().Nanoseconds()), "rec/ns")
+			b.ReportMetric(float64(PACK_SIZE*b.N)/b.Elapsed().Seconds(), "rec/s")
 			b.ReportMetric(float64(b.Elapsed().Nanoseconds())/float64(PACK_SIZE*b.N), "ns/rec")
 		})
 	}
@@ -75,7 +75,7 @@ func BenchmarkReadRow(b *testing.B) {
 					dst = pkg.ReadRow(i, dst)
 				}
 			}
-			b.ReportMetric(float64(PACK_SIZE*b.N)/float64(b.Elapsed().Nanoseconds()), "rec/ns")
+			b.ReportMetric(float64(PACK_SIZE*b.N)/b.Elapsed().Seconds(), "rec/s")
 			b.ReportMetric(float64(b.Elapsed().Nanoseconds())/float64(PACK_SIZE*b.N), "ns/rec")
 		})
 	}
@@ -93,7 +93,7 @@ func BenchmarkReadWire(b *testing.B) {
 					pkg.ReadWireBuffer(buf, i)
 				}
 			}
-			b.ReportMetric(float64(PACK_SIZE*b.N)/float64(b.Elapsed().Nanoseconds()), "rec/ns")
+			b.ReportMetric(float64(PACK_SIZE*b.N)/b.Elapsed().Seconds(), "rec/s")
 			b.ReportMetric(float64(b.Elapsed().Nanoseconds())/float64(PACK_SIZE*b.N), "ns/rec")
 		})
 	}
@@ -112,7 +112,7 @@ func BenchmarkReadWireE2E(b *testing.B) {
 					_ = v.Decode(buf.Bytes())
 				}
 			}
-			b.ReportMetric(float64(PACK_SIZE*b.N)/float64(b.Elapsed().Nanoseconds()), "rec/ns")
+			b.ReportMetric(float64(PACK_SIZE*b.N)/b.Elapsed().Seconds(), "rec/s")
 			b.ReportMetric(float64(b.Elapsed().Nanoseconds())/float64(PACK_SIZE*b.N), "ns/rec")
 		})
 	}

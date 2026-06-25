@@ -25,19 +25,19 @@ var (
 // TFloatRunEnd
 type FloatRunEndContainer[T types.Float] struct {
 	readOnlyContainer[T]
-	Values NumberContainer[T]      // []T
-	Ends   NumberContainer[uint32] // []uint32
+	values NumberContainer[T]      // []T
+	ends   NumberContainer[uint32] // []uint32
 }
 
 func (c *FloatRunEndContainer[T]) Info() string {
-	return fmt.Sprintf("REE(%s)_[%s]_[%s]", TypeName[T](), c.Values.Info(), c.Ends.Info())
+	return fmt.Sprintf("REE(%s)_[%s]_[%s]", TypeName[T](), c.values.Info(), c.ends.Info())
 }
 
 func (c *FloatRunEndContainer[T]) Close() {
-	c.Values.Close()
-	c.Ends.Close()
-	c.Values = nil
-	c.Ends = nil
+	c.values.Close()
+	c.ends.Close()
+	c.values = nil
+	c.ends = nil
 	putFloatRunEndContainer(c)
 }
 
@@ -46,15 +46,15 @@ func (c *FloatRunEndContainer[T]) Type() ContainerType {
 }
 
 func (c *FloatRunEndContainer[T]) Len() int {
-	l := c.Ends.Len()
+	l := c.ends.Len()
 	if l == 0 {
 		return 0
 	}
-	return int(c.Ends.Get(l-1)) + 1
+	return int(c.ends.Get(l-1)) + 1
 }
 
 func (c *FloatRunEndContainer[T]) Size() int {
-	return 1 + c.Values.Size() + c.Ends.Size()
+	return 1 + c.values.Size() + c.ends.Size()
 }
 
 func (c *FloatRunEndContainer[T]) Matcher() types.NumberMatcher[T] {
@@ -65,11 +65,23 @@ func (c *FloatRunEndContainer[T]) Chunks() types.NumberIterator[T] {
 	return NewFloatRunEndIterator(c)
 }
 
-func (c *FloatRunEndContainer[T]) Iterator() iter.Seq2[int, T] {
+func (c *FloatRunEndContainer[T]) All() iter.Seq2[int, T] {
 	return func(fn func(int, T) bool) {
 		it := c.Chunks()
 		for i := range it.Len() {
-			if !fn(i, it.Get(i)) {
+			if !fn(i, it.Value(i)) {
+				break
+			}
+		}
+		it.Close()
+	}
+}
+
+func (c *FloatRunEndContainer[T]) Values() iter.Seq[T] {
+	return func(fn func(T) bool) {
+		it := c.Chunks()
+		for i := range it.Len() {
+			if !fn(it.Value(i)) {
 				break
 			}
 		}
@@ -79,8 +91,8 @@ func (c *FloatRunEndContainer[T]) Iterator() iter.Seq2[int, T] {
 
 func (c *FloatRunEndContainer[T]) Store(dst []byte) []byte {
 	dst = append(dst, byte(TFloatRunEnd))
-	dst = c.Values.Store(dst)
-	return c.Ends.Store(dst)
+	dst = c.values.Store(dst)
+	return c.ends.Store(dst)
 }
 
 func (c *FloatRunEndContainer[T]) Load(buf []byte) ([]byte, error) {
@@ -90,31 +102,31 @@ func (c *FloatRunEndContainer[T]) Load(buf []byte) ([]byte, error) {
 	buf = buf[1:]
 
 	// alloc and decode values child container
-	c.Values = NewFloat[T](ContainerType(buf[0]))
+	c.values = NewFloat[T](ContainerType(buf[0]))
 	var err error
-	buf, err = c.Values.Load(buf)
+	buf, err = c.values.Load(buf)
 	if err != nil {
 		return buf, err
 	}
 
 	// alloc and decode ends child container
-	c.Ends = NewInt[uint32](ContainerType(buf[0]))
-	return c.Ends.Load(buf)
+	c.ends = NewInt[uint32](ContainerType(buf[0]))
+	return c.ends.Load(buf)
 }
 
 func (c *FloatRunEndContainer[T]) Get(n int) T {
-	idx := sort.Search(c.Ends.Len(), func(i int) bool {
-		return c.Ends.Get(i) >= uint32(n)
+	idx := sort.Search(c.ends.Len(), func(i int) bool {
+		return c.ends.Get(i) >= uint32(n)
 	})
-	return c.Values.Get(idx)
+	return c.values.Get(idx)
 }
 
 func (c *FloatRunEndContainer[T]) AppendTo(dst []T, sel []uint32) []T {
 	if sel == nil {
 		var (
-			sz   = c.Ends.Len()
-			vals = c.Values.AppendTo(arena.Alloc[T](sz), nil)
-			ends = c.Ends.AppendTo(arena.Alloc[uint32](sz), nil)
+			sz   = c.ends.Len()
+			vals = c.values.AppendTo(arena.Alloc[T](sz), nil)
+			ends = c.ends.AppendTo(arena.Alloc[uint32](sz), nil)
 			i    uint32
 		)
 		dst = dst[:ends[sz-1]+1]
@@ -158,9 +170,9 @@ func (c *FloatRunEndContainer[T]) AppendTo(dst []T, sel []uint32) []T {
 		arena.Free(vals)
 	} else {
 		if slices.IsSorted(sel) {
-			vit := c.Values.Chunks()
-			eit := c.Ends.Chunks()
-			idx, end, val := 0, eit.Get(0), vit.Get(0)
+			vit := c.values.Chunks()
+			eit := c.ends.Chunks()
+			idx, end, val := 0, eit.Value(0), vit.Value(0)
 			for len(sel) > 0 {
 				// use current run while valid
 				if sel[0] <= end {
@@ -171,9 +183,9 @@ func (c *FloatRunEndContainer[T]) AppendTo(dst []T, sel []uint32) []T {
 				// find next run
 				for end < sel[0] {
 					idx++
-					end = eit.Get(idx)
+					end = eit.Value(idx)
 				}
-				val = vit.Get(idx)
+				val = vit.Value(idx)
 			}
 			vit.Close()
 			eit.Close()
@@ -181,7 +193,7 @@ func (c *FloatRunEndContainer[T]) AppendTo(dst []T, sel []uint32) []T {
 			// fallback to slower get for unsorted selection lists
 			it := c.Chunks()
 			for _, v := range sel {
-				dst = append(dst, it.Get(int(v)))
+				dst = append(dst, it.Value(int(v)))
 			}
 			it.Close()
 		}
@@ -212,17 +224,17 @@ func (c *FloatRunEndContainer[T]) Encode(ctx *Context[T], vals []T) NumberContai
 
 	// encode child containers, reuse analysis context
 	ctx.NumValues = ctx.NumRuns
-	c.Values = EncodeFloat(ctx.WithLevel(ctx.Lvl-1), values)
-	if c.Values.Type() != TFloatRaw {
+	c.values = EncodeFloat(ctx.WithLevel(ctx.Lvl-1), values)
+	if c.values.Type() != TFloatRaw {
 		arena.Free(values)
 	}
 	ctx.NumValues = len(vals)
 
 	// create analysis context for known sequential data (min=first, max=last)
 	ectx := NewIntContext[uint32](ends[0], ends[len(ends)-1], len(ends)).WithLevel(ctx.Lvl - 1)
-	c.Ends = EncodeInt(ectx, ends)
+	c.ends = EncodeInt(ectx, ends)
 	ectx.Close()
-	if c.Ends.Type() != TIntRaw {
+	if c.ends.Type() != TIntRaw {
 		arena.Free(ends)
 	}
 
@@ -235,56 +247,56 @@ func (c *FloatRunEndContainer[T]) Cmp(i, j int) int {
 
 func (c *FloatRunEndContainer[T]) MatchEqual(val T, bits, mask *Bitset) {
 	// match values container and translate matches
-	vbits := bitset.New(c.Values.Len())
-	c.Values.MatchEqual(val, vbits, mask)
+	vbits := bitset.New(c.values.Len())
+	c.values.MatchEqual(val, vbits, mask)
 	c.applyMatch(bits, vbits)
 	vbits.Close()
 }
 
 func (c *FloatRunEndContainer[T]) MatchNotEqual(val T, bits, mask *Bitset) {
 	// match values container and translate matches
-	vbits := bitset.New(c.Values.Len())
-	c.Values.MatchNotEqual(val, vbits, mask)
+	vbits := bitset.New(c.values.Len())
+	c.values.MatchNotEqual(val, vbits, mask)
 	c.applyMatch(bits, vbits)
 	vbits.Close()
 }
 
 func (c *FloatRunEndContainer[T]) MatchLess(val T, bits, mask *Bitset) {
 	// match values container and translate matches
-	vbits := bitset.New(c.Values.Len())
-	c.Values.MatchLess(val, vbits, mask)
+	vbits := bitset.New(c.values.Len())
+	c.values.MatchLess(val, vbits, mask)
 	c.applyMatch(bits, vbits)
 	vbits.Close()
 }
 
 func (c *FloatRunEndContainer[T]) MatchLessEqual(val T, bits, mask *Bitset) {
 	// match values container and translate matches
-	vbits := bitset.New(c.Values.Len())
-	c.Values.MatchLessEqual(val, vbits, mask)
+	vbits := bitset.New(c.values.Len())
+	c.values.MatchLessEqual(val, vbits, mask)
 	c.applyMatch(bits, vbits)
 	vbits.Close()
 }
 
 func (c *FloatRunEndContainer[T]) MatchGreater(val T, bits, mask *Bitset) {
 	// match values container and translate matches
-	vbits := bitset.New(c.Values.Len())
-	c.Values.MatchGreater(val, vbits, mask)
+	vbits := bitset.New(c.values.Len())
+	c.values.MatchGreater(val, vbits, mask)
 	c.applyMatch(bits, vbits)
 	vbits.Close()
 }
 
 func (c *FloatRunEndContainer[T]) MatchGreaterEqual(val T, bits, mask *Bitset) {
 	// match values container and translate matches
-	vbits := bitset.New(c.Values.Len())
-	c.Values.MatchGreaterEqual(val, vbits, mask)
+	vbits := bitset.New(c.values.Len())
+	c.values.MatchGreaterEqual(val, vbits, mask)
 	c.applyMatch(bits, vbits)
 	vbits.Close()
 }
 
 func (c *FloatRunEndContainer[T]) MatchBetween(a, b T, bits, mask *Bitset) {
 	// match values container and translate matches
-	vbits := bitset.New(c.Values.Len())
-	c.Values.MatchBetween(a, b, vbits, mask)
+	vbits := bitset.New(c.values.Len())
+	c.values.MatchBetween(a, b, vbits, mask)
 	c.applyMatch(bits, vbits)
 	vbits.Close()
 }
@@ -304,12 +316,12 @@ func (c *FloatRunEndContainer[T]) applyMatch(bits, vbits *Bitset) {
 	}
 
 	u32 := arena.Alloc[uint32](vbits.Count())
-	for _, k := range vbits.Indexes(u32) {
+	for _, k := range vbits.AllIndexes(u32) {
 		var start uint32
 		if k > 0 {
-			start = c.Ends.Get(int(k-1)) + 1
+			start = c.ends.Get(int(k-1)) + 1
 		}
-		end := c.Ends.Get(int(k))
+		end := c.ends.Get(int(k))
 		bits.SetRange(int(start), int(end))
 	}
 	arena.Free(u32)
@@ -381,8 +393,8 @@ type FloatRunEndIterator[T types.Float] struct {
 
 func NewFloatRunEndIterator[T types.Float](c *FloatRunEndContainer[T]) *FloatRunEndIterator[T] {
 	it := newFloatRunEndIterator[T]()
-	it.valIt = c.Values.Chunks()
-	it.endIt = c.Ends.Chunks()
+	it.valIt = c.values.Chunks()
+	it.endIt = c.ends.Chunks()
 	it.base = -1
 	it.len = c.Len()
 	it.BaseIterator.fill = it.fill
@@ -404,7 +416,7 @@ func (it *FloatRunEndIterator[T]) fill(base int) int {
 	var k int
 	if base > 0 {
 		k = sort.Search(nRuns, func(i int) bool {
-			return it.endIt.Get(i) >= uint32(base)
+			return it.endIt.Value(i) >= uint32(base)
 		})
 		if k == nRuns {
 			// not found, should not happen
@@ -415,7 +427,7 @@ func (it *FloatRunEndIterator[T]) fill(base int) int {
 	// process REE pairs up until EOF or chunk is full
 	var n int
 	for n < CHUNK_SIZE && k < nRuns {
-		end, val := it.endIt.Get(k), it.valIt.Get(k)
+		end, val := it.endIt.Value(k), it.valIt.Value(k)
 		for range min(CHUNK_SIZE, int(end+1)-base) - n {
 			// fmt.Printf("REE chunk[%d] = ree(%d) = %d\n", n, k, val)
 			it.chunk[n] = val

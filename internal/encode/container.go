@@ -127,3 +127,7 @@ func (_ *readOnlyContainer[T]) Slice() (s []T)           { return }
 func (_ *readOnlyContainer[T]) MinMax() (minv T, maxv T) { return }
 func (_ *readOnlyContainer[T]) Min() (minv T)            { return }
 func (_ *readOnlyContainer[T]) Max() (maxv T)            { return }
+
+// TODO: implement set matchers for all types
+func (_ *readOnlyContainer[T]) MatchInSet(s any, bits, mask *Bitset)    {}
+func (_ *readOnlyContainer[T]) MatchNotInSet(s any, bits, mask *Bitset) {}

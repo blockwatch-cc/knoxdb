@@ -65,14 +65,18 @@ func (c *FloatAlpRdContainer[T, E]) Chunks() types.NumberIterator[T] {
 	return NewFloatAlpRdIterator(c)
 }
 
-func (c *FloatAlpRdContainer[T, E]) Iterator() iter.Seq2[int, T] {
-	return func(fn func(int, T) bool) {
+func (c *FloatAlpRdContainer[T, E]) All() iter.Seq2[int, T] {
+	return func(yield func(int, T) bool) {
 		it := c.Chunks()
-		for i := range it.Len() {
-			if !fn(i, it.Get(i)) {
-				break
-			}
-		}
+		it.All()(yield)
+		it.Close()
+	}
+}
+
+func (c *FloatAlpRdContainer[T, E]) Values() iter.Seq[T] {
+	return func(yield func(T) bool) {
+		it := c.Chunks()
+		it.Values()(yield)
 		it.Close()
 	}
 }
@@ -114,7 +118,7 @@ func (c *FloatAlpRdContainer[T, E]) AppendTo(dst []T, sel []uint32) []T {
 	it := c.Chunks()
 	if sel == nil {
 		for {
-			src, n := it.NextChunk()
+			src, n := it.Next()
 			if n == 0 {
 				break
 			}
@@ -122,7 +126,7 @@ func (c *FloatAlpRdContainer[T, E]) AppendTo(dst []T, sel []uint32) []T {
 		}
 	} else {
 		for _, v := range sel {
-			dst = append(dst, it.Get(int(v)))
+			dst = append(dst, it.Value(int(v)))
 		}
 	}
 	it.Close()
@@ -297,8 +301,8 @@ func (it *FloatAlpRdIterator[T, E]) fill(base int) int {
 	it.left.Seek(base)
 	it.right.Seek(base)
 
-	left, _ := it.left.NextChunk()
-	right, n := it.right.NextChunk()
+	left, _ := it.left.Next()
+	right, n := it.right.Next()
 	if n == 0 {
 		it.ofs = it.len
 		it.base = -1

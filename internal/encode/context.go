@@ -210,15 +210,15 @@ func (c *Context[T]) estimateCardinality(vals []T) int {
 	unique, _ := llb.NewFilterBuffer(scratch[:], 8)
 	if c.PhyBits == 64 {
 		hashes := hash.Vec64(
-			arena.ReinterpretSlice[T, uint64](vals),
 			arena.Alloc[uint64](len(vals))[:len(vals)],
+			arena.ReinterpretSlice[T, uint64](vals),
 		)
 		unique.Add(hashes...)
 		arena.Free(hashes)
 	} else {
 		hashes := hash.Vec32(
-			arena.ReinterpretSlice[T, uint32](vals),
 			arena.Alloc[uint64](len(vals))[:len(vals)],
+			arena.ReinterpretSlice[T, uint32](vals),
 		)
 		unique.Add(hashes...)
 		arena.Free(hashes)
@@ -230,10 +230,9 @@ func (c *Context[T]) estimateCardinality(vals []T) int {
 func (c *Context[T]) buildUniqueArray(vals []T) int {
 	// we only need enough space for our data range
 	sz := uint64(c.Max) - uint64(c.Min) + 1
-	if cap(c.UniqueArray) < int(sz) {
-		c.UniqueArray = make([]T, sz)
-	}
+	c.UniqueArray = arena.Alloc[T](int(sz))
 	c.UniqueArray = c.UniqueArray[:sz]
+	clear(c.UniqueArray)
 
 	// mark existing values
 	for _, v := range vals {
@@ -269,14 +268,11 @@ func (c *Context[T]) EligibleIntSchemes(schemes []ContainerType) []ContainerType
 		schemes = append(schemes, TIntBitpacked)
 	}
 
-	// FIXME: disabled s8 because s8b.Iterator decodes partial chunks which breaks
-	// container iterators plus s8b is much slower than bitpack although it often
-	// compresses better
-	//
-	// simple8b supports max 60bit values but is inefficient if many values are > 20bit
-	// if c.UseBits < c.PhyBits && c.UseBits <= 60 {
-	// 	schemes = append(schemes, TIntegerSimple8)
-	// }
+	// simple8b supports max 60bit values but is pretty inefficient
+	// when many values are > 20bit
+	if c.UseBits < c.PhyBits && c.UseBits <= 20 {
+		schemes = append(schemes, TIntSimple8)
+	}
 
 	// run-end requires avg run lengths >= 4
 	if c.preferRunEnd() {
@@ -367,8 +363,8 @@ func (c *Context[T]) Unique() int {
 
 func (c *Context[T]) Close() {
 	if c.UniqueArray != nil {
-		clear(c.UniqueArray)
-		c.UniqueArray = c.UniqueArray[:0]
+		arena.Free(c.UniqueArray)
+		c.UniqueArray = nil
 	}
 	if c.SampleCtx != nil {
 		c.SampleCtx.Close()

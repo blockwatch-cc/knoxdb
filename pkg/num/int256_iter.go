@@ -3,22 +3,27 @@
 
 package num
 
-var _ BigIntIterator[Int256, Int256Stride] = (*Int256Iterator)(nil)
+import (
+	"iter"
+)
+
+var _ BigIntIterator[Int256] = (*Int256Iterator)(nil)
 
 type Int256Iterator struct {
+	chunk  [128]Int256
 	stride *Int256Stride
 	base   int
 }
 
 func NewInt256Iterator(s *Int256Stride) *Int256Iterator {
-	return &Int256Iterator{s, 0}
+	return &Int256Iterator{stride: s, base: 0}
 }
 
 func (it *Int256Iterator) Len() int {
 	return it.stride.Len()
 }
 
-func (it *Int256Iterator) Get(n int) Int256 {
+func (it *Int256Iterator) Value(n int) Int256 {
 	return it.stride.Get(n)
 }
 
@@ -32,15 +37,18 @@ func (it *Int256Iterator) Seek(n int) bool {
 	return true
 }
 
-func (it *Int256Iterator) NextChunk() (*Int256Stride, int) {
+func (it *Int256Iterator) Next() (*[128]Int256, int) {
 	if it.base >= it.stride.Len() {
 		return nil, 0
 	}
 	n := min(it.stride.Len()-it.base, CHUNK_SIZE)
-	return it.stride.Range(it.base, it.base+n), n
+	for i, v := range it.stride.Range(it.base, it.base+n).All() {
+		it.chunk[i] = v
+	}
+	return &it.chunk, n
 }
 
-func (it *Int256Iterator) SkipChunk() int {
+func (it *Int256Iterator) Skip() int {
 	n := min(CHUNK_SIZE, it.stride.Len()-it.base)
 	it.base += n
 	return n
@@ -49,4 +57,34 @@ func (it *Int256Iterator) SkipChunk() int {
 func (it *Int256Iterator) Close() {
 	it.stride = nil
 	it.base = 0
+}
+
+func (it *Int256Iterator) All() iter.Seq2[int, Int256] {
+	return func(yield func(int, Int256) bool) {
+		for i := range it.stride.X0 {
+			if !yield(i, it.stride.Get(i)) {
+				return
+			}
+		}
+	}
+}
+
+func (it *Int256Iterator) Values() iter.Seq[Int256] {
+	return func(yield func(Int256) bool) {
+		for i := range it.stride.X0 {
+			if !yield(it.stride.Get(i)) {
+				return
+			}
+		}
+	}
+}
+
+func (it *Int256Iterator) Select(sel []uint32) iter.Seq[Int256] {
+	return func(yield func(Int256) bool) {
+		for _, i := range sel {
+			if !yield(it.stride.Get(int(i))) {
+				return
+			}
+		}
+	}
 }

@@ -351,7 +351,7 @@ func (m *i256InSetMatcher) WithValue(val any) {
 
 func (m *i256InSetMatcher) WithSlice(slice any) {
 	m.slice = num.SortInt256(slice.([]num.Int256))
-	m.hashes = hash.Vec(m.slice, m.hashes)
+	m.hashes = hash.Vec(m.hashes, m.slice)
 }
 
 func (m i256InSetMatcher) MatchValue(v any) bool {
@@ -370,13 +370,13 @@ func (m i256InSetMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bitset)
 	stride := b.Int256()
 	if mask != nil {
 		// skip masked values
-		for i := range mask.Iterator() {
+		for i := range mask.Ones() {
 			if num.ContainsInt256(m.slice, stride.Get(i)) {
 				bits.Set(i)
 			}
 		}
 	} else {
-		for i, v := range stride.Iterator() {
+		for i, v := range stride.All() {
 			if num.ContainsInt256(m.slice, v) {
 				bits.Set(i)
 			}
@@ -431,13 +431,13 @@ func (m i256NotInSetMatcher) MatchVector(b *block.Block, bits, mask *bitset.Bits
 	stride := b.Int256()
 	if mask != nil {
 		// skip masked values
-		for i := range mask.Iterator() {
+		for i := range mask.Ones() {
 			if !num.ContainsInt256(m.slice, stride.Get(i)) {
 				bits.Set(i)
 			}
 		}
 	} else {
-		for i, v := range stride.Iterator() {
+		for i, v := range stride.All() {
 			if !num.ContainsInt256(m.slice, v) {
 				bits.Set(i)
 			}

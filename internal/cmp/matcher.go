@@ -7,12 +7,16 @@ import (
 	"unsafe"
 
 	"blockwatch.cc/knoxdb/internal/bitset"
+	"blockwatch.cc/knoxdb/pkg/num"
 )
 
 type (
 	// func types for casting from ptr lookup table [mode][type]unsafe.Pointer
 	numMatchFunc[T Number]      func(slice []T, val T, bits []byte) int64
 	numRangeMatchFunc[T Number] func(slice []T, from, to T, bits []byte) int64
+
+	strideMatchFunc[S Strided, E StrideBase]      func(slice *S, val E, bits []byte) int64
+	strideRangeMatchFunc[S Strided, E StrideBase] func(slice *S, from, to E, bits []byte) int64
 
 	Bitset = bitset.Bitset
 )
@@ -50,7 +54,8 @@ type Matcher[T Number] struct {
 }
 
 func NewMatcher[T Number](vals []T) Matcher[T] {
-	switch any(T(0)).(type) {
+	var t T
+	switch any(t).(type) {
 	case int64:
 		return Matcher[T]{i64_t, vals}
 	case int32:
@@ -116,6 +121,66 @@ func (m Matcher[T]) MatchInSet(s any, bits, mask *Bitset) {
 }
 
 func (m Matcher[T]) MatchNotInSet(s any, bits, mask *Bitset) {
+	// noop, implemeted in query.numXXXMatcher
+}
+
+type StrideMatcher[S Strided, E StrideBase] struct {
+	idx byte
+	val *S
+}
+
+func NewStrideMatcher[S Strided, E StrideBase](val *S) StrideMatcher[S, E] {
+	var e E
+	switch any(e).(type) {
+	case num.Int128:
+		return StrideMatcher[S, E]{i128_t, val}
+	case num.Int256:
+		return StrideMatcher[S, E]{i256_t, val}
+	default:
+		return StrideMatcher[S, E]{} // unused
+	}
+}
+
+func (m StrideMatcher[S, E]) MatchEqual(val E, bits, mask *Bitset) {
+	n := (*(*strideMatchFunc[S, E])(matchFn[eq_t][m.idx]))(m.val, val, bits.Bytes())
+	bits.ResetCount(int(n))
+}
+
+func (m StrideMatcher[S, E]) MatchNotEqual(val E, bits, mask *Bitset) {
+	n := (*(*strideMatchFunc[S, E])(matchFn[ne_t][m.idx]))(m.val, val, bits.Bytes())
+	bits.ResetCount(int(n))
+}
+
+func (m StrideMatcher[S, E]) MatchLess(val E, bits, mask *Bitset) {
+	n := (*(*strideMatchFunc[S, E])(matchFn[lt_t][m.idx]))(m.val, val, bits.Bytes())
+	bits.ResetCount(int(n))
+}
+
+func (m StrideMatcher[S, E]) MatchLessEqual(val E, bits, mask *Bitset) {
+	n := (*(*strideMatchFunc[S, E])(matchFn[le_t][m.idx]))(m.val, val, bits.Bytes())
+	bits.ResetCount(int(n))
+}
+
+func (m StrideMatcher[S, E]) MatchGreater(val E, bits, mask *Bitset) {
+	n := (*(*strideMatchFunc[S, E])(matchFn[gt_t][m.idx]))(m.val, val, bits.Bytes())
+	bits.ResetCount(int(n))
+}
+
+func (m StrideMatcher[S, E]) MatchGreaterEqual(val E, bits, mask *Bitset) {
+	n := (*(*strideMatchFunc[S, E])(matchFn[ge_t][m.idx]))(m.val, val, bits.Bytes())
+	bits.ResetCount(int(n))
+}
+
+func (m StrideMatcher[S, E]) MatchBetween(a, b E, bits, mask *Bitset) {
+	n := (*(*strideRangeMatchFunc[S, E])(matchFn[rg_t][m.idx]))(m.val, a, b, bits.Bytes())
+	bits.ResetCount(int(n))
+}
+
+func (m StrideMatcher[S, E]) MatchInSet(s any, bits, mask *Bitset) {
+	// noop, implemeted in query.numXXXMatcher
+}
+
+func (m StrideMatcher[S, E]) MatchNotInSet(s any, bits, mask *Bitset) {
 	// noop, implemeted in query.numXXXMatcher
 }
 

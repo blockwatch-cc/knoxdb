@@ -12,6 +12,14 @@ import (
 	"blockwatch.cc/knoxdb/pkg/stringx"
 )
 
+func MakeSeq(n, step int) []int {
+	res := make([]int, n)
+	for i := range n {
+		res[i] = i * step
+	}
+	return res
+}
+
 func GenForIntScheme[T types.Number](scheme, n int) []T {
 	sz := arena.SizeFor[T]()
 	switch scheme {
@@ -30,7 +38,7 @@ func GenForIntScheme[T types.Number](scheme, n int) []T {
 	case 5: // TIntDictionary,
 		return tests.GenDups[T](n, n/10, sz*2)
 	case 6: // TIntSimple8,
-		return tests.GenRndBits[T](n, sz*2)
+		return tests.GenRndBits[T](n, 20)
 	case 7: // TIntRaw,
 		return tests.GenRnd[T](n)
 	// 8 TInt128
@@ -77,7 +85,7 @@ func GenForStringScheme(scheme, n int) *stringx.StringPool {
 		return tests.GenStringRnd(n, 8)
 	case 18:
 		// TStringCompact
-		return tests.GenStringDups(n, min(1, n*3/4), -1)
+		return tests.GenStringDups(n, max(1, n*3/4), -1)
 	case 19:
 		// TStringDictionary
 		return tests.GenStringDups(n, n/5, -1)

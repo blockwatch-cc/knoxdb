@@ -369,7 +369,7 @@ func (p *SlabPool) AppendTo(dst types.StringWriter, sel []uint32) {
 }
 
 // 2-ary iterator `for i, v := range pool.Iterator2() {}`
-func (p *SlabPool) Iterator() iter.Seq2[int, []byte] {
+func (p *SlabPool) All() iter.Seq2[int, []byte] {
 	return func(fn func(int, []byte) bool) {
 		var (
 			buf   []byte
@@ -405,6 +405,30 @@ func (p *SlabPool) Values() iter.Seq[[]byte] {
 		)
 		for _, ptr := range p.ptr[:p.wpos.Load()] {
 			id, ofs := ptr2pg(ptr)
+			if id != pgid {
+				pgid = id
+				pg = pages[id]
+				base = unsafe.Pointer(unsafe.SliceData(pg.buf))
+			}
+			l, n := binary.Uvarint(unsafe.Slice((*byte)(unsafe.Add(base, ofs)), 10))
+			if !fn(unsafe.Slice((*byte)(unsafe.Add(base, ofs+n)), l)) {
+				return
+			}
+		}
+	}
+}
+
+// unary iterator for selection `for v := range pool.Select(sel) {}`
+func (p *SlabPool) Select(sel []uint32) iter.Seq[[]byte] {
+	return func(fn func([]byte) bool) {
+		var (
+			pg    *page
+			base  unsafe.Pointer
+			pgid  = -1
+			pages = *p.pages.Load()
+		)
+		for _, v := range sel {
+			id, ofs := ptr2pg(p.ptr[v])
 			if id != pgid {
 				pgid = id
 				pg = pages[id]
@@ -521,7 +545,7 @@ func (it *SlabChunkIterator) Len() int {
 	return len(it.pool.ptr)
 }
 
-func (it *SlabChunkIterator) Get(n int) []byte {
+func (it *SlabChunkIterator) Value(n int) []byte {
 	return it.pool.Get(n)
 }
 
@@ -535,7 +559,7 @@ func (it *SlabChunkIterator) Seek(n int) bool {
 	return true
 }
 
-func (it *SlabChunkIterator) NextChunk() (*[CHUNK_SIZE][]byte, int) {
+func (it *SlabChunkIterator) Next() (*[CHUNK_SIZE][]byte, int) {
 	l := len(it.pool.ptr)
 	if it.base >= l {
 		return nil, 0
@@ -568,7 +592,7 @@ func (it *SlabChunkIterator) NextChunk() (*[CHUNK_SIZE][]byte, int) {
 	return &it.chunk, n
 }
 
-func (it *SlabChunkIterator) SkipChunk() int {
+func (it *SlabChunkIterator) Skip() int {
 	n := min(types.CHUNK_SIZE, len(it.pool.ptr)-it.base)
 	it.base += n
 	return n
@@ -578,4 +602,16 @@ func (it *SlabChunkIterator) Close() {
 	clear(it.chunk[:])
 	it.pool = nil
 	it.base = 0
+}
+
+func (it *SlabChunkIterator) All() iter.Seq2[int, []byte] {
+	return it.pool.All()
+}
+
+func (it *SlabChunkIterator) Values() iter.Seq[[]byte] {
+	return it.pool.Values()
+}
+
+func (it *SlabChunkIterator) Select(sel []uint32) iter.Seq[[]byte] {
+	return it.pool.Select(sel)
 }

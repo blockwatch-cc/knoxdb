@@ -39,13 +39,15 @@ type BigIntReader[T any, E any] interface {
 	// materialized vectors.
 	Slice() *E
 
-	// Iterator returns a Go style iterator to walk the container
-	// with a for range loop.
-	Iterator() iter.Seq2[int, T]
+	// All returns an iterator over all index-values pairs.
+	All() iter.Seq2[int, T]
+
+	// Values returns an iterator over all values.
+	Values() iter.Seq[T]
 
 	// Chunks returns a chunked iterator which enables efficient
 	// batch processing of vector data.
-	Chunks() BigIntIterator[T, E]
+	Chunks() BigIntIterator[T]
 
 	// AppendTo appends selected vector elements to a dst
 	// returns an updated slice header reflecting the new length.
@@ -99,13 +101,13 @@ type BigIntMatcher[T any] interface {
 //
 // Use NextChunk for linear walks, Get for point access and
 // Seek or SkipChunk for jumping.
-type BigIntIterator[T, E any] interface {
+type BigIntIterator[T any] interface {
 	// Returns the total number of elements in this vector.
 	Len() int
 
 	// Returns an element at position n or zero when out of bounds.
 	// Implicitly seeks and decodes the chunk containing n.
-	Get(int) T
+	Value(int) T
 
 	// Seeks to position n rounded by CHUNK_SIZE and decodes
 	// the relevant chunk. Compatible with NextChunk and Get.
@@ -114,15 +116,21 @@ type BigIntIterator[T, E any] interface {
 	// Decodes and returns the next chunk at CHUNK_SIZE boundaries
 	// and the number of valid elements in the chunk. Past EOF
 	// returns nil and zero n.
-	NextChunk() (*E, int)
+	Next() (*[128]T, int)
 
 	// Skips a chunk efficiently without decoding data and returns
 	// the number of elements skipped or zero when at EOF. Users may
 	// call skip repeatedly before requesting data from NextChunk.
-	SkipChunk() int
+	Skip() int
 
 	// Close releases pointers and allows for efficient re-use
 	// of iterators. Users are encouraged to call Close after use
 	// to reduce allocations and GC overhead.
 	Close()
+
+	// All iterates over all index/value pairs in the array.
+	All() iter.Seq2[int, T]
+
+	// Values iterates over all values in the array in order.
+	Values() iter.Seq[T]
 }

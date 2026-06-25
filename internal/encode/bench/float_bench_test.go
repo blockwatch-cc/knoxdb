@@ -1,12 +1,13 @@
 // Copyright (c) 2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package encode
+package encode_bench
 
 import (
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/bitset"
+	. "blockwatch.cc/knoxdb/internal/encode"
 	etests "blockwatch.cc/knoxdb/internal/encode/tests"
 	"blockwatch.cc/knoxdb/internal/tests"
 	"github.com/stretchr/testify/require"
@@ -60,9 +61,10 @@ func BenchmarkFloatEncode(b *testing.B) {
 			TFloatAlpRd,
 			TFloatRaw,
 		} {
-			data := etests.GenForFloatScheme[float64](int(scheme), c.N)
-			once := etests.ShowInfo
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
+				data := etests.GenForFloatScheme[float64](int(scheme), c.N)
+				once := etests.ShowInfo
+				b.ResetTimer()
 				b.ReportAllocs()
 				b.SetBytes(int64(c.N * 8))
 				var sz int
@@ -94,9 +96,10 @@ func BenchmarkFloatEncodeAndStore(b *testing.B) {
 			TFloatAlpRd,
 			TFloatRaw,
 		} {
-			data := etests.GenForFloatScheme[float64](int(scheme), c.N)
-			once := etests.ShowInfo
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
+				data := etests.GenForFloatScheme[float64](int(scheme), c.N)
+				once := etests.ShowInfo
+				b.ResetTimer()
 				b.ReportAllocs()
 				b.SetBytes(int64(c.N * 8))
 				var sz int
@@ -187,13 +190,14 @@ func BenchmarkFloatDecode(b *testing.B) {
 			TFloatAlpRd,
 			TFloatRaw,
 		} {
-			data := etests.GenForFloatScheme[float64](int(scheme), c.N)
-			ctx := AnalyzeFloat(data, scheme == TFloatDictionary, scheme == TFloatAlp)
-			enc := NewFloat[float64](scheme).Encode(ctx, data)
-			buf := enc.Store(make([]byte, 0, enc.Size()))
-			dst := make([]float64, 0, c.N)
-			once := etests.ShowInfo
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
+				data := etests.GenForFloatScheme[float64](int(scheme), c.N)
+				ctx := AnalyzeFloat(data, scheme == TFloatDictionary, scheme == TFloatAlp)
+				enc := NewFloat[float64](scheme).Encode(ctx, data)
+				buf := enc.Store(make([]byte, 0, enc.Size()))
+				dst := make([]float64, 0, c.N)
+				once := etests.ShowInfo
+				b.ResetTimer()
 				b.SetBytes(int64(c.N * 8))
 				for b.Loop() {
 					enc2 := NewFloat[float64](scheme)
@@ -208,6 +212,8 @@ func BenchmarkFloatDecode(b *testing.B) {
 					enc2.Close()
 				}
 				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+				enc.Close()
+				ctx.Close()
 			})
 		}
 	}
@@ -260,7 +266,7 @@ func BenchmarkFloatDecodeFile(b *testing.B) {
 	}
 }
 
-func BenchmarkFloatCmp(b *testing.B) {
+func BenchmarkFloatMatchEqual(b *testing.B) {
 	for _, c := range tests.BenchmarkSizes {
 		for _, scheme := range []ContainerType{
 			TFloatConstant,
@@ -270,21 +276,20 @@ func BenchmarkFloatCmp(b *testing.B) {
 			TFloatAlpRd,
 			TFloatRaw,
 		} {
-			data := etests.GenForFloatScheme[float64](int(scheme), c.N)
-			ctx := AnalyzeFloat(data, true, true)
-			enc := NewFloat[float64](scheme).Encode(ctx, data)
-			bits := bitset.New(c.N)
-			// da, db := data[0], data[0]
-			// if len(data) > 1 {
-			// 	db = data[1]
-			// }
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
+				data := etests.GenForFloatScheme[float64](int(scheme), c.N)
+				ctx := AnalyzeFloat(data, true, true)
+				enc := NewFloat[float64](scheme).Encode(ctx, data)
+				bits := bitset.New(c.N)
+				b.ResetTimer()
 				b.SetBytes(int64(c.N * 8))
 				for b.Loop() {
 					enc.MatchEqual(data[0], bits, nil)
 					// enc.MatchBetween(da, db, bits, nil)
 				}
 				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+				enc.Close()
+				ctx.Close()
 			})
 		}
 	}
@@ -300,12 +305,13 @@ func BenchmarkFloatIterator(b *testing.B) {
 			TFloatAlpRd,
 			TFloatRaw,
 		} {
-			data := etests.GenForFloatScheme[float64](int(scheme), c.N)
-			ctx := AnalyzeFloat(data, true, true)
-			enc := NewFloat[float64](scheme).Encode(ctx, data)
-			buf := enc.Store(make([]byte, 0, enc.Size()))
-			once := etests.ShowInfo
 			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
+				data := etests.GenForFloatScheme[float64](int(scheme), c.N)
+				ctx := AnalyzeFloat(data, true, true)
+				enc := NewFloat[float64](scheme).Encode(ctx, data)
+				buf := enc.Store(make([]byte, 0, enc.Size()))
+				once := etests.ShowInfo
+				b.ResetTimer()
 				b.ReportAllocs()
 				b.SetBytes(int64(c.N * 8))
 				for b.Loop() {
@@ -318,7 +324,7 @@ func BenchmarkFloatIterator(b *testing.B) {
 					}
 					it := enc2.Chunks()
 					for {
-						_, n := it.NextChunk()
+						_, n := it.Next()
 						if n == 0 {
 							break
 						}
@@ -327,6 +333,48 @@ func BenchmarkFloatIterator(b *testing.B) {
 					enc2.Close()
 				}
 				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+				enc.Close()
+				ctx.Close()
+			})
+		}
+	}
+}
+
+func BenchmarkFloatAll(b *testing.B) {
+	for _, c := range tests.BenchmarkSizes {
+		for _, scheme := range []ContainerType{
+			TFloatConstant,
+			TFloatRunEnd,
+			TFloatDictionary,
+			TFloatAlp,
+			TFloatAlpRd,
+			TFloatRaw,
+		} {
+			b.Run(scheme.String()+"/"+c.Name, func(b *testing.B) {
+				data := etests.GenForFloatScheme[float64](int(scheme), c.N)
+				ctx := AnalyzeFloat(data, true, true)
+				enc := NewFloat[float64](scheme).Encode(ctx, data)
+				buf := enc.Store(make([]byte, 0, enc.Size()))
+				once := etests.ShowInfo
+				b.ResetTimer()
+				b.ReportAllocs()
+				b.SetBytes(int64(c.N * 8))
+				for b.Loop() {
+					enc2 := NewFloat[float64](scheme)
+					_, err := enc2.Load(buf)
+					require.NoError(b, err)
+					if once {
+						b.Log(enc2.Info())
+						once = false
+					}
+					for _, v := range enc2.All() {
+						_ = v
+					}
+					enc2.Close()
+				}
+				b.ReportMetric(float64(c.N*b.N)/float64(b.Elapsed().Nanoseconds()), "vals/ns")
+				enc.Close()
+				ctx.Close()
 			})
 		}
 	}

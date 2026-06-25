@@ -605,7 +605,7 @@ func (s *Segment) Match(node *filter.Node, snap *types.Snapshot, tomb *xroar.Bit
 			// we walk bits and check membership)
 			rids := s.data.RowIds()
 			tmax := tomb.Max()
-			for i := range bits.Iterator() {
+			for i := range bits.Ones() {
 				rid := rids.Get(i)
 
 				// stop early when we find an rid that is larger than any deleted rid
@@ -632,7 +632,7 @@ func (s *Segment) Match(node *filter.Node, snap *types.Snapshot, tomb *xroar.Bit
 			// 2. remove invisible new records, i.e. xmin > xown
 			rids := s.data.RowIds()
 			xmins := s.data.Xmins()
-			for i := range bits.Iterator() {
+			for i := range bits.Ones() {
 				if !snap.IsVisible(types.XID(xmins.Get(i))) || tomb.Contains(rids.Get(i)) {
 					bits.Unset(i)
 				}

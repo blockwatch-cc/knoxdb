@@ -135,8 +135,12 @@ func testStringEncode(t *testing.T, scheme ContainerType) {
 
 			// validate contents
 			require.Equal(t, c.N, enc.Len())
-			for i, v := range c.Data.Iterator() {
-				require.Equal(t, v, enc.Get(i))
+			for i, v := range c.Data.All() {
+				if len(v) == 0 {
+					require.Empty(t, enc.Get(i))
+				} else {
+					require.Equal(t, v, enc.Get(i))
+				}
 			}
 
 			// serialize to buffer
@@ -152,7 +156,7 @@ func testStringEncode(t *testing.T, scheme ContainerType) {
 
 			// validate contents
 			require.Equal(t, c.N, enc2.Len())
-			for i, v := range c.Data.Iterator() {
+			for i, v := range c.Data.All() {
 				require.Equal(t, v, enc2.Get(i))
 			}
 
@@ -160,10 +164,10 @@ func testStringEncode(t *testing.T, scheme ContainerType) {
 			dst := stringx.NewStringPool(c.N)
 			enc2.AppendTo(dst, nil)
 			require.Equal(t, c.N, dst.Len())
-			for i, v := range dst.Iterator() {
+			for i, v := range dst.All() {
 				require.Equal(t, v, c.Data.Get(i), "i=%d", i)
 			}
-			for i, v := range c.Data.Iterator() {
+			for i, v := range c.Data.All() {
 				require.Equal(t, v, dst.Get(i), "i=%d", i)
 			}
 
@@ -343,50 +347,50 @@ func MakeShortStringTests(scheme ContainerType) []TestCaseString {
 
 func EnsureStringBits(t *testing.T, vals *stringx.StringPool, val, val2 []byte, bits *bitset.Bitset, mode types.FilterMode) {
 	if etests.ShowValues {
-		for i, v := range vals.Iterator() {
+		for i, v := range vals.All() {
 			t.Logf("Val %d: %v", i, v)
 		}
 		t.Logf("Bitset %x", bits.Bytes())
 	}
 	switch mode {
 	case types.FilterModeEqual:
-		for i, v := range vals.Iterator() {
+		for i, v := range vals.All() {
 			require.Equal(t, bytes.Equal(v, val), bits.Contains(i), "bit=%d val=%x %s %x",
 				i, v, mode, val)
 		}
 
 	case types.FilterModeNotEqual:
-		for i, v := range vals.Iterator() {
+		for i, v := range vals.All() {
 			require.Equal(t, !bytes.Equal(v, val), bits.Contains(i), "bit=%d val=%v %s %v",
 				i, v, mode, val)
 		}
 
 	case types.FilterModeLt:
-		for i, v := range vals.Iterator() {
+		for i, v := range vals.All() {
 			require.Equal(t, bytes.Compare(v, val) < 0, bits.Contains(i), "bit=%d val=%v %s %v",
 				i, v, mode, val)
 		}
 
 	case types.FilterModeLe:
-		for i, v := range vals.Iterator() {
+		for i, v := range vals.All() {
 			require.Equal(t, bytes.Compare(v, val) <= 0, bits.Contains(i), "bit=%d val=%v %s %v",
 				i, v, mode, val)
 		}
 
 	case types.FilterModeGt:
-		for i, v := range vals.Iterator() {
+		for i, v := range vals.All() {
 			require.Equal(t, bytes.Compare(v, val) > 0, bits.Contains(i), "bit=%d val=%v %s %v",
 				i, v, mode, val)
 		}
 
 	case types.FilterModeGe:
-		for i, v := range vals.Iterator() {
+		for i, v := range vals.All() {
 			require.Equal(t, bytes.Compare(v, val) >= 0, bits.Contains(i), "bit=%d val=%v %s %v",
 				i, v, mode, val)
 		}
 
 	case types.FilterModeRange:
-		for i, v := range vals.Iterator() {
+		for i, v := range vals.All() {
 			require.Equal(t, bytes.Compare(v, val) >= 0 && bytes.Compare(v, val2) <= 0, bits.Contains(i), "bit=%d val=%v %s [%v,%v]",
 				i, v, mode, val, val2)
 		}
@@ -406,8 +410,15 @@ func testStringIterator(t *testing.T, scheme ContainerType) {
 			// --------------------------
 			// test next
 			//
-			for i, v := range enc.Iterator() {
-				require.Equal(t, src.Get(i), v, "invalid val at pos=%d", i)
+			for i, v := range enc.All() {
+				// special case nil and empty (a completely empty string
+				// container needs no storage and arena alloc returns a
+				// nil slice which when sliced [:0] will return nil too)
+				if len(v) == 0 {
+					require.Empty(t, src.Get(i), "invalid val at pos=%d", i)
+				} else {
+					require.Equal(t, src.Get(i), v, "invalid val at pos=%d len=%d src=%#v", i, src.Len(), src)
+				}
 			}
 
 			// --------------------
@@ -419,14 +430,18 @@ func testStringIterator(t *testing.T, scheme ContainerType) {
 			}
 			var seen int
 			for {
-				dst, n := it.NextChunk()
+				dst, n := it.Next()
 				if n == 0 {
 					break
 				}
 				require.GreaterOrEqual(t, n, 0, "next chunk returned negative n")
 				require.LessOrEqual(t, seen+n, src.Len(), "next chunk returned too large n")
 				for i, v := range dst[:n] {
-					require.Equal(t, src.Get(seen+i), v, "invalid val=%q pos=%d src=%q", v, seen+i, src.Get(seen+i))
+					if len(v) == 0 {
+						require.Empty(t, src.Get(i), "invalid val at pos=%d", i)
+					} else {
+						require.Equal(t, src.Get(seen+i), v, "invalid val=%q pos=%d src=%q", v, seen+i, src.Get(seen+i))
+					}
 				}
 				seen += n
 			}
@@ -436,10 +451,10 @@ func testStringIterator(t *testing.T, scheme ContainerType) {
 			// --------------------------
 			// test skip
 			it = enc.Chunks()
-			seen = it.SkipChunk()
-			seen += it.SkipChunk()
+			seen = it.Skip()
+			seen += it.Skip()
 			for {
-				dst, n := it.NextChunk()
+				dst, n := it.Next()
 				if n == 0 {
 					break
 				}
@@ -461,7 +476,7 @@ func testStringIterator(t *testing.T, scheme ContainerType) {
 				i := testutil.RandIntn(src.Len())
 				ok := it.Seek(i)
 				require.True(t, ok, "seek to existing pos %d/%d failed", i, src.Len())
-				vals, n := it.NextChunk()
+				vals, n := it.Next()
 				require.Greater(t, n, 0, "next after seek to existing pos %d/%d failed", i, src.Len())
 
 				// FIXME: ignore s8b iterator which seeks to encoder word boundaries only
@@ -472,15 +487,15 @@ func testStringIterator(t *testing.T, scheme ContainerType) {
 
 			// seek to invalid values
 			require.False(t, it.Seek(-1), "seek to negative")
-			_, n := it.NextChunk()
+			_, n := it.Next()
 			require.Equal(t, 0, n, "next after bad seek")
 
 			require.False(t, it.Seek(src.Len()), "seek to end")
-			_, n = it.NextChunk()
+			_, n = it.Next()
 			require.Equal(t, 0, n, "next after bad seek to end")
 
 			require.False(t, it.Seek(src.Len()+1), "seek beyond end")
-			_, n = it.NextChunk()
+			_, n = it.Next()
 			require.Equal(t, 0, n, "next after bad seek to end")
 
 			it.Close()

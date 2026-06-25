@@ -39,7 +39,7 @@ func (m *floatInSetMatcher[T]) WithSlice(slice any) {
 	data := slice.([]T)
 	slices.Sort(data)
 	m.slice = data
-	m.hashes = hash.Vec(data, m.hashes)
+	m.hashes = hash.Vec(m.hashes, data)
 }
 
 func (m floatInSetMatcher[T]) MatchValue(v any) bool {
@@ -58,7 +58,7 @@ func (m floatInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.Bit
 	// Note: float compression containers do not implement set matching
 	acc := block.NewAccessor[T](b)
 	if mask != nil {
-		for i := range mask.Iterator() {
+		for i := range mask.Ones() {
 			if slicex.ContainsSorted(m.slice, acc.Get(i)) {
 				bits.Set(i)
 			}
@@ -121,7 +121,7 @@ func (m floatNotInSetMatcher[T]) MatchVector(b *block.Block, bits, mask *bitset.
 	// Note: float compression containers do not implement set matching
 	acc := block.NewAccessor[T](b)
 	if mask != nil {
-		for i := range mask.Iterator() {
+		for i := range mask.Ones() {
 			if !slicex.ContainsSorted(m.slice, acc.Get(i)) {
 				bits.Set(i)
 			}

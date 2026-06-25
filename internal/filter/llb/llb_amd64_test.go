@@ -249,7 +249,7 @@ func BenchmarkCardinalityAVX2(b *testing.B) {
 		for _, p := range benchPrecisons {
 			data := tests.GenRnd[uint32](c.N)
 			f := NewFilterWithPrecision(p)
-			f.Add(hash.Vec32(data, nil)...)
+			f.Add(hash.Vec32(nil, data)...)
 			b.Run(fmt.Sprintf("%s/p=%d", c.Name, p), func(b *testing.B) {
 				b.SetBytes(int64(len(f.buf)))
 				for b.Loop() {
@@ -268,7 +268,7 @@ func BenchmarkCardinalityAVX512(b *testing.B) {
 		for _, p := range benchPrecisons {
 			data := tests.GenRnd[uint32](c.N)
 			f := NewFilterWithPrecision(p)
-			f.Add(hash.Vec32(data, nil)...)
+			f.Add(hash.Vec32(nil, data)...)
 			b.Run(fmt.Sprintf("%s/p=%d", c.Name, p), func(b *testing.B) {
 				b.SetBytes(int64(len(f.buf)))
 				for b.Loop() {
@@ -290,8 +290,8 @@ func BenchmarkMergeAVX2(b *testing.B) {
 
 			f1 := NewFilterWithPrecision(p)
 			f2 := NewFilterWithPrecision(p)
-			f1.Add(hash.Vec32(data1, nil)...)
-			f2.Add(hash.Vec32(data2, nil)...)
+			f1.Add(hash.Vec32(nil, data1)...)
+			f2.Add(hash.Vec32(nil, data2)...)
 
 			b.Run(fmt.Sprintf("%s/p=%d", c.Name, p), func(b *testing.B) {
 				b.SetBytes(int64(len(f1.buf)))

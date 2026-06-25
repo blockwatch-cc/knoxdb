@@ -79,7 +79,7 @@ func TestUint32(t *testing.T) {
 	for i := range num {
 		slice[i] = uint32(i)
 	}
-	f.Add(hash.Vec32(slice, nil)...)
+	f.Add(hash.Vec32(nil, slice)...)
 
 	// None of the values inserted should ever be considered "not possibly in
 	// the filter".
@@ -123,7 +123,7 @@ func TestUint64(t *testing.T) {
 	for i := range num {
 		slice[i] = uint64(i)
 	}
-	f.Add(hash.Vec64(slice, nil)...)
+	f.Add(hash.Vec64(nil, slice)...)
 
 	// None of the values inserted should ever be considered "not possibly in
 	// the filter".
@@ -166,13 +166,13 @@ func TestMerge(t *testing.T) {
 	for i := 0; i < num/2; i++ {
 		slice[i] = uint32(i)
 	}
-	f.Add(hash.Vec32(slice, nil)...)
+	f.Add(hash.Vec32(nil, slice)...)
 
 	filter2 := NewFilter(fsize)
 	for i := num / 2; i < num; i++ {
 		slice[i-num/2] = uint32(i)
 	}
-	filter2.Add(hash.Vec32(slice, nil)...)
+	filter2.Add(hash.Vec32(nil, slice)...)
 
 	f.Merge(filter2)
 
@@ -223,7 +223,7 @@ func BenchmarkAddManyBytesGo(b *testing.B) {
 			b.Run(fmt.Sprintf("%s/%s", c.Name, s.Name), func(b *testing.B) {
 				b.SetBytes(4 * int64(c.N))
 				for b.Loop() {
-					f.Add(hash.Vec(data, nil)...)
+					f.Add(hash.Vec(nil, data)...)
 				}
 			})
 		}
@@ -238,7 +238,7 @@ func BenchmarkAddManyUint32Go(b *testing.B) {
 			b.Run(fmt.Sprintf("%s/%s", c.Name, s.Name), func(b *testing.B) {
 				b.SetBytes(4 * int64(c.N))
 				for b.Loop() {
-					f.Add(hash.Vec32(data, nil)...)
+					f.Add(hash.Vec32(nil, data)...)
 				}
 			})
 		}
@@ -253,7 +253,7 @@ func BenchmarkAddManyUint64Go(b *testing.B) {
 			b.Run(fmt.Sprintf("%s/%s", c.Name, s.Name), func(b *testing.B) {
 				b.SetBytes(8 * int64(c.N))
 				for b.Loop() {
-					f.Add(hash.Vec64(data, nil)...)
+					f.Add(hash.Vec64(nil, data)...)
 				}
 			})
 		}
@@ -271,7 +271,7 @@ func BenchmarkContainsGo(b *testing.B) {
 			}
 
 			f := NewFilter(s.M)
-			f.Add(hash.Vec(data, nil)...)
+			f.Add(hash.Vec(nil, data)...)
 
 			b.Run(fmt.Sprintf("%s/%s/IN", c.Name, s.Name), func(b *testing.B) {
 				b.ReportAllocs()

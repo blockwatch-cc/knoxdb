@@ -353,7 +353,7 @@ func (r *Reader) nextQueryMatch(ctx context.Context) (*pack.Package, error) {
 				rids := r.pack.RowIds()
 
 				// TODO: use chunk iterator
-				for i := range r.bits.Iterator() {
+				for i := range r.bits.Ones() {
 					// read next row id
 					rid := rids.Get(i)
 
@@ -394,7 +394,7 @@ func (r *Reader) nextQueryMatch(ctx context.Context) (*pack.Package, error) {
 			x, y := r.it.MinMax(r.rx + 2)
 			xmins := r.pack.Xmins()
 			if r.query.Snap.Xmin >= types.XID(x.(uint64)) && r.query.Snap.Xmin <= types.XID(y.(uint64)) {
-				for i := range r.bits.Iterator() {
+				for i := range r.bits.Ones() {
 					if !r.query.Snap.IsVisible(types.XID(xmins.Get(i))) {
 						r.bits.Unset(i)
 					}
@@ -405,7 +405,7 @@ func (r *Reader) nextQueryMatch(ctx context.Context) (*pack.Package, error) {
 			x, y = r.it.MinMax(r.rx + 3)
 			if r.query.Snap.Xmax >= types.XID(x.(uint64)) && r.query.Snap.Xmax <= types.XID(y.(uint64)) {
 				xmaxs := r.pack.Xmaxs()
-				for i := range r.bits.Iterator() {
+				for i := range r.bits.Ones() {
 					if !r.query.Snap.IsVisible(types.XID(xmaxs.Get(i))) {
 						r.bits.Unset(i)
 					}
@@ -430,7 +430,7 @@ func (r *Reader) nextQueryMatch(ctx context.Context) (*pack.Package, error) {
 		// 	r.pack.Key(), r.pack.Version(), r.bits.Count(), r.pack.Len(), pmin, pmax)
 
 		// set pack selection vector
-		sel := r.bits.Indexes(r.hits)
+		sel := r.bits.AllIndexes(r.hits)
 		if r.query.Order.IsReverse() {
 			slices.Reverse(sel)
 		}
