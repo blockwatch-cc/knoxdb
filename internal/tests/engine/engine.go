@@ -43,7 +43,7 @@ func NewTestDatabaseOptions(t testing.TB, opts ...engine.Option) engine.Options 
 		Driver:     firstOf(os.Getenv("KNOX_DRIVER"), "bolt"),
 		PageSize:   4096,
 		PageFill:   1.0,
-		CacheSize:  1 << 20,
+		CacheSize:  1 << 20, // 1M
 		// NoSync:     true, // required for table wal tests
 		Log: log.Log.Clone(""),
 	}
@@ -55,12 +55,12 @@ func NewTestTableOptions(t testing.TB, opts ...engine.Option) engine.Options {
 	testOpts := engine.Options{
 		Driver:      firstOf(os.Getenv("KNOX_DRIVER"), "bolt"),
 		Engine:      firstOf(os.Getenv("KNOX_ENGINE"), "pack"),
-		PageSize:    1 << 16, // 64kB
-		PageFill:    0.9,
-		PackSize:    1 << 16, // 64k
-		JournalSize: 1 << 16, // 64k
-		// NoSync:      true,
-		Log: log.Log.Clone(""),
+		PageSize:    4096,
+		PageFill:    1.0,
+		PackSize:    128,
+		JournalSize: 128,
+		NoSync:      true,
+		Log:         log.Log.Clone(""),
 	}
 	return testOpts.Apply(opts...)
 }
@@ -70,12 +70,12 @@ func NewTestIndexOptions(t testing.TB, opts ...engine.Option) engine.Options {
 	testOpts := engine.Options{
 		Driver:      firstOf(os.Getenv("KNOX_DRIVER"), "bolt"),
 		Engine:      firstOf(os.Getenv("KNOX_ENGINE"), "pack"),
-		JournalSize: 1 << 16, // 64k
-		PageSize:    1 << 16, // 64kB
-		PageFill:    0.9,
-		PackSize:    1 << 12, // 4k
-		// NoSync:      true,
-		Log: log.Log.Clone(""),
+		PageSize:    4096,
+		PageFill:    1.0,
+		PackSize:    128,
+		JournalSize: 128,
+		NoSync:      true,
+		Log:         log.Log.Clone(""),
 	}
 	return testOpts.Apply(opts...)
 }
@@ -133,7 +133,7 @@ func NewDatabase(t testing.TB, typ any, opts ...engine.Option) (*engine.Engine, 
 	for _, is := range indexes {
 		iop := NewTestIndexOptions(t, opts...)
 		_, err = db.CreateIndex(ctx, is, iop.IndexOptions()...)
-		require.NoError(t, err, "create pk index")
+		require.NoError(t, err, "create index")
 	}
 
 	return db, func() {
@@ -143,9 +143,18 @@ func NewDatabase(t testing.TB, typ any, opts ...engine.Option) (*engine.Engine, 
 		for _, is := range indexes {
 			require.NoError(t, db.DropIndex(ctx, is.Name))
 		}
+		if testing.Verbose() {
+			t.Log("Dropping table", s.Name)
+		}
 		require.NoError(t, db.DropTable(ctx, s.Name))
 		require.NoError(t, db.DropEnum(ctx, "my_enum"))
+		if testing.Verbose() {
+			t.Log("Closing database")
+		}
 		require.NoError(t, db.Close(ctx))
+		if testing.Verbose() {
+			t.Log("Cleanup done")
+		}
 	}
 }
 
