@@ -273,7 +273,7 @@ func (m *LockManager) Lock(ctx context.Context, xid XID, mode LockMode, oid uint
 	// upgrade context with timeout
 	if m.timeout > 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, m.timeout)
+		ctx, cancel = context.WithTimeoutCause(ctx, m.timeout, ErrLockTimeout)
 		defer cancel()
 	}
 
@@ -472,13 +472,7 @@ func (m *LockManager) acquire(ctx context.Context, xid XID, mode LockMode, typ L
 		m.mu.Lock()
 		l.drop(xid)
 		m.mu.Unlock()
-
-		// translate timeout error
-		if ctx.Err() == context.DeadlineExceeded {
-			return ErrLockTimeout
-		}
-
-		return ctx.Err()
+		return context.Cause(ctx)
 
 	case <-wait:
 		// lock is granted to us now
