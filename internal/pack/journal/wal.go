@@ -130,10 +130,16 @@ func (j *Journal) UpdateWalBatch(ctx context.Context, rec *wal.Record, rd engine
 
 	if cset.Count() == s.Len() {
 		var (
-			view    = schema.NewView(s)
-			nextRid = j.tip.tstate.NextRid
+			view     = schema.NewView(s)
+			nextRid  = j.tip.tstate.NextRid
+			capacity = j.Capacity()
 		)
 		for len(buf) > 0 {
+			// ensure amount of updates fits into current journal tip
+			if capacity == 0 {
+				return fmt.Errorf("update: num updates is larger than journal capacity")
+			}
+
 			// decode ref
 			ref, n := binary.Uvarint(buf)
 			buf = buf[n:]
@@ -144,12 +150,7 @@ func (j *Journal) UpdateWalBatch(ctx context.Context, rec *wal.Record, rd engine
 			// append to journal
 			j.tip.UpdateRecord(rec.TxID, nextRid, ref, view.Buffer())
 			nextRid++
-
-			// ensure amount of updates fits into current journal tip
-			if j.Capacity() == 0 {
-				// should not happen
-				return fmt.Errorf("update: num updates is larger than journal capacity")
-			}
+			capacity--
 		}
 		j.tip.tstate.NextRid = nextRid
 
