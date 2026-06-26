@@ -27,6 +27,12 @@ import (
 
 var _ engine.IndexEngine = (*Index)(nil)
 
+const (
+	DATA_KEY_IDX = iota
+	TOMB_KEY_IDX
+	STATE_KEY_IDX
+)
+
 // key extraction from wire format is little endian
 var LE = binary.LittleEndian
 
@@ -63,6 +69,7 @@ type Index struct {
 	convert Converter           // table to index schema converter
 	metrics engine.IndexMetrics // usage statistics
 	log     log.Logger          // log instance
+	keys    [3][]byte           // bucket key names
 }
 
 func NewIndex() engine.IndexEngine {
@@ -108,6 +115,9 @@ func (idx *Index) Create(ctx context.Context, t engine.TableEngine, s *schema.In
 	idx.convert = conv
 	idx.metrics = engine.NewIndexMetrics(s.Name)
 	idx.log = idx.opts.Log.Clone("index:" + s.Name)
+	idx.keys[DATA_KEY_IDX] = append([]byte(idx.name), engine.DataKeySuffix...)
+	idx.keys[TOMB_KEY_IDX] = append([]byte(idx.name), engine.TombKeySuffix...)
+	idx.keys[STATE_KEY_IDX] = append([]byte(idx.name), engine.StateKeySuffix...)
 
 	// create backend and store initial state
 	if err := idx.createBackend(ctx); err != nil {
@@ -194,6 +204,9 @@ func (idx *Index) Open(ctx context.Context, t engine.TableEngine, s *schema.Inde
 	idx.convert = conv
 	idx.metrics = engine.NewIndexMetrics(s.Name)
 	idx.log = idx.opts.Log.Clone("index:" + s.Name)
+	idx.keys[DATA_KEY_IDX] = append([]byte(idx.name), engine.DataKeySuffix...)
+	idx.keys[TOMB_KEY_IDX] = append([]byte(idx.name), engine.TombKeySuffix...)
+	idx.keys[STATE_KEY_IDX] = append([]byte(idx.name), engine.StateKeySuffix...)
 
 	// open db backend and load latest state
 	if err := idx.openBackend(ctx); err != nil {
@@ -239,12 +252,7 @@ func (idx *Index) openBackend(ctx context.Context) error {
 
 	// load index state
 	err = idx.db.View(func(tx store.Tx) error {
-		for _, v := range [][]byte{
-			engine.DataKeySuffix,
-			engine.TombKeySuffix,
-			engine.StateKeySuffix,
-		} {
-			key := append([]byte(idx.name), v...)
+		for _, key := range idx.keys {
 			if _, err := tx.Bucket(key); err != nil {
 				return fmt.Errorf("%q: %v", string(key), err)
 			}
@@ -280,6 +288,7 @@ func (idx *Index) Close(ctx context.Context) (err error) {
 	idx.tomb.Release()
 	idx.journal = nil
 	idx.tomb = nil
+	clear(idx.keys[:])
 	return
 }
 
@@ -327,12 +336,7 @@ func (idx *Index) Truncate(ctx context.Context) error {
 	// start direct backend write tx (assumes index and table are
 	// not stored in the same backend db file)
 	err := idx.db.Update(func(tx store.Tx) error {
-		for _, v := range [][]byte{
-			engine.DataKeySuffix,
-			engine.TombKeySuffix,
-			engine.StateKeySuffix,
-		} {
-			key := append([]byte(idx.name), v...)
+		for _, key := range idx.keys {
 			if err := tx.DeleteBucket(key); err != nil {
 				return err
 			}
@@ -396,9 +400,10 @@ func (idx *Index) AddPack(ctx context.Context, pkg *pack.Package, mode pack.Writ
 	ipkg := idx.convert.ConvertPack(pkg, mode)
 	ipkg.WithSelection(pkg.Selected())
 
-	var state pack.AppendState
+	state := pack.NewAppendState(ipkg.NumSelected() > 0)
 
-	for {
+	// stop when src is exhausted
+	for state.More() {
 		// append next chunk of data to journal: max(cap(journal), len(src))
 		_, state = idx.journal.AppendSelected(ipkg, mode, state)
 
@@ -408,11 +413,6 @@ func (idx *Index) AddPack(ctx context.Context, pkg *pack.Package, mode pack.Writ
 				idx.log.Debugf("merge failed: %v", err)
 				return err
 			}
-		}
-
-		// stop when src is exhausted
-		if !state.More() {
-			break
 		}
 	}
 	ipkg.WithSelection(nil)
@@ -428,8 +428,9 @@ func (idx *Index) DelPack(ctx context.Context, pkg *pack.Package, mode pack.Writ
 	ipkg := idx.convert.ConvertPack(pkg, mode)
 	ipkg.WithSelection(pkg.Selected())
 
-	var state pack.AppendState
-	for {
+	// stop when src is exhausted
+	state := pack.NewAppendState(ipkg.NumSelected() > 0)
+	for state.More() {
 		// append next chunk of data to tomb: max(cap(tomb), len(src))
 		_, state = idx.tomb.AppendSelected(ipkg, mode, state)
 
@@ -438,11 +439,6 @@ func (idx *Index) DelPack(ctx context.Context, pkg *pack.Package, mode pack.Writ
 			if err := idx.storeTomb(ctx, epoch); err != nil {
 				return err
 			}
-		}
-
-		// stop when src is exhausted
-		if !state.More() {
-			break
 		}
 	}
 
@@ -520,11 +516,7 @@ func (idx *Index) Cleanup(ctx context.Context, epoch uint32) error {
 	idx.log.Debugf("cleanup until epoch %d", epoch)
 	var drop []uint32
 	err := idx.db.View(func(tx store.Tx) error {
-		b, err := tx.Bucket(append([]byte(idx.name), engine.TombKeySuffix...))
-		if err != nil {
-			return store.ErrBucketNotFound
-		}
-		for key := range b.Scan(nil) {
+		for key := range idx.tombBucket(tx).Scan(nil) {
 			// decode version (Note: block key uses 16bit stripped epoch version)
 			_, v, _ := pack.DecodeBlockKey(key)
 			for e := v; e <= epoch&0xFFFF; e++ {

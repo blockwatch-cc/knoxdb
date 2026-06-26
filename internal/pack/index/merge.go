@@ -175,7 +175,7 @@ func (it *MergeIterator) UpdateIndexState(ctx context.Context) error {
 	return it.idx.state.Store(ctx, it.tx)
 }
 
-func (it *MergeIterator) SplitAndStore(pkg *pack.Package) (*pack.Package, error) {
+func (it *MergeIterator) SplitAndStore(pkg *pack.Package) error {
 	// move the second half of the pack's contents to a new pack
 	half := it.NewPack()
 	pkg.AppendTo(half, it.halfSel)
@@ -185,14 +185,21 @@ func (it *MergeIterator) SplitAndStore(pkg *pack.Package) (*pack.Package, error)
 
 	// store first half
 	if err := it.Store(pkg); err != nil {
-		return nil, err
+		return err
 	}
 
 	// free first half
 	pkg.Release()
 
-	// return second half
-	return half, nil
+	// store second half
+	if err := it.Store(half); err != nil {
+		return err
+	}
+
+	// free second half
+	half.Release()
+
+	return nil
 }
 
 func (it *MergeIterator) Store(pkg *pack.Package) error {
@@ -485,6 +492,15 @@ func (idx *Index) mergeAppend(ctx context.Context) error {
 		}
 
 		if src != nil {
+			// split src when full, restart loop
+			if src.IsFull() {
+				if err := it.SplitAndStore(src); err != nil {
+					return err
+				}
+				continue
+			}
+
+			// resolve src block accessors
 			slen = src.Len()
 			s0 = src.Block(0).Uint64()
 			s1 = src.Block(1).Uint64()
@@ -565,14 +581,12 @@ func (idx *Index) mergeAppend(ctx context.Context) error {
 				break mergeloop
 			}
 
-			// split pack when full
+			// store and alloc new out pack when full
 			if out.IsFull() {
-				half, err := it.SplitAndStore(out)
-				if err != nil {
+				if err = it.Store(out); err != nil {
 					return err
 				}
-				// continue appending to the second half (a new pack)
-				out = half
+				out = it.NewPack()
 				o0 = out.Block(0).Uint64()
 				o1 = out.Block(1).Uint64()
 			}

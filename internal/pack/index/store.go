@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/binary"
 
-	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/hash"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/pkg/slicex"
@@ -17,8 +16,12 @@ import (
 var BE = binary.BigEndian
 
 func (idx *Index) dataBucket(tx store.Tx) store.Bucket {
-	key := append([]byte(idx.name), engine.DataKeySuffix...)
-	b, _ := tx.Bucket(key)
+	b, _ := tx.Bucket(idx.keys[DATA_KEY_IDX])
+	return b
+}
+
+func (idx *Index) tombBucket(tx store.Tx) store.Bucket {
+	b, _ := tx.Bucket(idx.keys[TOMB_KEY_IDX])
 	return b
 }
 
@@ -83,11 +86,7 @@ func (idx *Index) storeTomb(ctx context.Context, epoch uint32) error {
 
 	// write in storage tx
 	err := idx.db.Update(func(tx store.Tx) error {
-		b, err := tx.Bucket(append([]byte(idx.name), engine.TombKeySuffix...))
-		if err != nil {
-			return err
-		}
-		_, err = idx.tomb.StoreToDisk(ctx, b)
+		_, err := idx.tomb.StoreToDisk(ctx, idx.tombBucket(tx))
 		return err
 	})
 	if err != nil {
@@ -108,11 +107,7 @@ func (idx *Index) loadTomb(ctx context.Context, key, epoch uint32) (*pack.Packag
 		WithKey(key).
 		WithVersion(epoch)
 	err := idx.db.View(func(tx store.Tx) error {
-		b, err := tx.Bucket(append([]byte(idx.name), engine.TombKeySuffix...))
-		if err != nil {
-			return err
-		}
-		_, err = pkg.LoadFromDisk(ctx, b, nil, 0)
+		_, err := pkg.LoadFromDisk(ctx, idx.tombBucket(tx), nil, 0)
 		return err
 	})
 	if err != nil {
@@ -135,10 +130,7 @@ func (idx *Index) loadTomb(ctx context.Context, key, epoch uint32) (*pack.Packag
 func (idx *Index) dropTomb(_ context.Context, key, epoch uint32) error {
 	idx.log.Debugf("drop tomb %d[v%d]", key, epoch)
 	return idx.db.Update(func(tx store.Tx) error {
-		b, err := tx.Bucket(append([]byte(idx.name), engine.TombKeySuffix...))
-		if err != nil {
-			return err
-		}
+		b := idx.tombBucket(tx)
 		var bkey [pack.BlockKeySize]byte
 		for _, f := range idx.sstore.Fields {
 			if err := b.Delete(pack.AppendBlockKey(bkey[:0], key, epoch, f.Id)); err != nil {
