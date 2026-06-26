@@ -14,10 +14,11 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
-const STATS_BUCKETS = 6
+const STATS_BUCKETS = 7
 
 const (
-	STATS_BLOCK_KEY = iota
+	STATS_DATA_KEY = iota
+	STATS_BLOCK_KEY
 	STATS_TREE_KEY
 	STATS_FILTER_KEY
 	STATS_RANGE_KEY
@@ -38,6 +39,7 @@ var (
 	RangeKeySuffix  = []byte("_range")       // range filter bucket
 	EpochKeySuffix  = engine.EpochKeySuffix  // live epochs bucket
 	TombKeySuffix   = engine.TombKeySuffix   // version tomb bucket
+	DataKeySuffix   = engine.DataKeySuffix   // table data bucket
 )
 
 func appendNodeKey(buf []byte, kind byte, id, key, ver uint32) []byte {
@@ -67,10 +69,10 @@ func decodeNodeKey(buf []byte) (kind byte, id, key, ver uint32) {
 }
 
 // InitStore generates buckets in the backend store. Used in tests. Tables
-// call idx.Store below.
+// call idx.Store below. Don't create table data bucket.
 func (idx *Index) InitStore(ctx context.Context) error {
 	return idx.db.Update(func(tx store.Tx) error {
-		for _, k := range idx.keys {
+		for _, k := range idx.keys[1:] {
 			if _, err := tx.CreateBucket(k); err != nil {
 				return err
 			}
@@ -102,7 +104,7 @@ func (idx *Index) Store(ctx context.Context, tx store.Tx) error {
 
 	// create buckets if not exist
 	if tree == nil || blocks == nil {
-		for _, k := range idx.keys {
+		for _, k := range idx.keys[1:] {
 			if _, err := tx.CreateBucket(k); err != nil {
 				return err
 			}
@@ -364,7 +366,7 @@ func (idx *Index) Load(ctx context.Context, tx store.Tx) error {
 
 func (idx *Index) Drop(ctx context.Context, tx store.Tx) error {
 	idx.Clear()
-	for _, k := range idx.keys {
+	for _, k := range idx.keys[1:] {
 		_ = tx.DeleteBucket(k)
 	}
 	return nil
@@ -416,8 +418,7 @@ func (idx *Index) tombBucket(tx store.Tx) store.Bucket {
 }
 
 func (idx *Index) tableBucket(tx store.Tx) store.Bucket {
-	b, _ := tx.Bucket(append([]byte(idx.schema.Name), engine.DataKeySuffix...))
-	return b
+	return idx.bucket(tx, STATS_DATA_KEY)
 }
 
 func (idx *Index) bucket(tx store.Tx, id int) store.Bucket {
@@ -430,6 +431,7 @@ func makeStorageKeys(name []byte) [STATS_BUCKETS][]byte {
 		return bytes.Join([][]byte{name, k}, nil)
 	}
 	return [STATS_BUCKETS][]byte{
+		makekey(DataKeySuffix),
 		makekey(BlockKeySuffix),
 		makekey(TreeKeySuffix),
 		makekey(FilterKeySuffix),

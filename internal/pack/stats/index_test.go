@@ -792,74 +792,76 @@ func TestIndexFindPk(t *testing.T) {
 	assert.False(t, it.IsValid(), "is no longer valid")
 }
 
-func TestIndexFindPkEnd(t *testing.T) {
-	ctx := context.Background()
-	db, err := store.Create(
-		store.WithDriver("mem"),
-		store.WithPath("index_test"),
-		store.WithDropOnClose(true),
-	)
-	require.NoError(t, err)
-	defer db.Close()
-	idx := NewIndex().WithDB(db).WithSchema(TestSchema).WithMaxSize(TEST_PKG_SIZE)
-	defer idx.Close()
-	require.NoError(t, idx.InitStore(ctx))
+// DEPRECATED: new behavior always appends row ids
+// func TestIndexFindPkEnd(t *testing.T) {
+// 	ctx := context.Background()
+// 	db, err := store.Create(
+// 		store.WithDriver("mem"),
+// 		store.WithPath("index_test"),
+// 		store.WithDropOnClose(true),
+// 	)
+// 	require.NoError(t, err)
+// 	defer db.Close()
+// 	idx := NewIndex().WithDB(db).WithSchema(TestSchema).WithMaxSize(TEST_PKG_SIZE)
+// 	defer idx.Close()
+// 	require.NoError(t, idx.InitStore(ctx))
 
-	// fill half (last data pack is full, so no more room for this pk)
-	for k := range STATS_PACK_SIZE / 2 {
-		pk := uint64(1 + k*TEST_PKG_SIZE)
-		require.NoError(t, idx.AddPack(ctx, makeTestPackage(t, k, pk)))
-	}
+// 	// fill half (last data pack is full, so no more room for this pk)
+// 	for k := range STATS_PACK_SIZE / 2 {
+// 		pk := uint64(1 + k*TEST_PKG_SIZE)
+// 		require.NoError(t, idx.AddPack(ctx, makeTestPackage(t, k, pk)))
+// 	}
 
-	// find pk beyond the last data pack
-	it, ok := idx.FindRid(ctx, uint64(STATS_PACK_SIZE/2*TEST_PKG_SIZE+1))
-	defer it.Close()
-	require.True(t, ok, "found match")
-	require.NotNil(t, it, "it is not nil")
-	require.True(t, it.IsValid(), "is valid")
-	assert.True(t, it.IsFull(), "is full")
-	assert.Equal(t, uint32(STATS_PACK_SIZE/2-1), it.Key(), "data pack key")
-	assert.Equal(t, TEST_PKG_SIZE, it.NValues(), "data pack len")
-	assert.False(t, it.Next(), "no more matches")
-	assert.False(t, it.IsValid(), "is no longer valid")
-}
+// 	// find pk beyond the last data pack
+// 	it, ok := idx.FindRid(ctx, uint64(STATS_PACK_SIZE/2*TEST_PKG_SIZE+1))
+// 	defer it.Close()
+// 	require.True(t, ok, "found match")
+// 	require.NotNil(t, it, "it is not nil")
+// 	require.True(t, it.IsValid(), "is valid")
+// 	assert.True(t, it.IsFull(), "is full")
+// 	assert.Equal(t, uint32(STATS_PACK_SIZE/2-1), it.Key(), "data pack key")
+// 	assert.Equal(t, TEST_PKG_SIZE, it.NValues(), "data pack len")
+// 	assert.False(t, it.Next(), "no more matches")
+// 	assert.False(t, it.IsValid(), "is no longer valid")
+// }
 
-func TestIndexFindPkEndWithSpace(t *testing.T) {
-	ctx := context.Background()
-	db, err := store.Create(
-		store.WithDriver("mem"),
-		store.WithPath("index_test"),
-		store.WithDropOnClose(true),
-	)
-	require.NoError(t, err)
-	defer db.Close()
-	idx := NewIndex().WithDB(db).WithSchema(TestSchema).WithMaxSize(TEST_PKG_SIZE)
-	defer idx.Close()
-	require.NoError(t, idx.InitStore(ctx))
+// DEPRECATED: new behavior always appends row ids
+// func TestIndexFindPkEndWithSpace(t *testing.T) {
+// 	ctx := context.Background()
+// 	db, err := store.Create(
+// 		store.WithDriver("mem"),
+// 		store.WithPath("index_test"),
+// 		store.WithDropOnClose(true),
+// 	)
+// 	require.NoError(t, err)
+// 	defer db.Close()
+// 	idx := NewIndex().WithDB(db).WithSchema(TestSchema).WithMaxSize(TEST_PKG_SIZE)
+// 	defer idx.Close()
+// 	require.NoError(t, idx.InitStore(ctx))
 
-	// fill half
-	for k := range STATS_PACK_SIZE / 2 {
-		pk := uint64(1 + k*TEST_PKG_SIZE)
-		require.NoError(t, idx.AddPack(ctx, makeTestPackage(t, k, pk)))
-	}
-	// add one more data pack that contains a single row only
-	pk := uint64(1 + STATS_PACK_SIZE/2*TEST_PKG_SIZE)
-	pkg := makeTestPackage(t, STATS_PACK_SIZE/2, pk)
-	pkg.Delete(1, TEST_PKG_SIZE) // remove all but the first record
-	require.NoError(t, idx.AddPack(ctx, pkg))
+// 	// fill half
+// 	for k := range STATS_PACK_SIZE / 2 {
+// 		pk := uint64(1 + k*TEST_PKG_SIZE)
+// 		require.NoError(t, idx.AddPack(ctx, makeTestPackage(t, k, pk)))
+// 	}
+// 	// add one more data pack that contains a single row only
+// 	pk := uint64(1 + STATS_PACK_SIZE/2*TEST_PKG_SIZE)
+// 	pkg := makeTestPackage(t, STATS_PACK_SIZE/2, pk)
+// 	pkg.Delete(1, TEST_PKG_SIZE) // remove all but the first record
+// 	require.NoError(t, idx.AddPack(ctx, pkg))
 
-	// find pk beyond last data pack
-	it, ok := idx.FindRid(ctx, pk+1)
-	defer it.Close()
-	require.True(t, ok, "found match")
-	require.NotNil(t, it, "it is not nil")
-	require.True(t, it.IsValid(), "is valid")
-	assert.False(t, it.IsFull(), "is full")
-	assert.Equal(t, uint32(STATS_PACK_SIZE/2), it.Key(), "data pack key")
-	assert.Equal(t, 1, it.NValues(), "data pack len")
-	assert.False(t, it.Next(), "no more matches")
-	assert.False(t, it.IsValid(), "is no longer valid")
-}
+// 	// find pk beyond last data pack
+// 	it, ok := idx.FindRid(ctx, pk+1)
+// 	defer it.Close()
+// 	require.True(t, ok, "found match")
+// 	require.NotNil(t, it, "it is not nil")
+// 	require.True(t, it.IsValid(), "is valid")
+// 	assert.False(t, it.IsFull(), "is full")
+// 	assert.Equal(t, uint32(STATS_PACK_SIZE/2), it.Key(), "data pack key")
+// 	assert.Equal(t, 1, it.NValues(), "data pack len")
+// 	assert.False(t, it.Next(), "no more matches")
+// 	assert.False(t, it.IsValid(), "is no longer valid")
+// }
 
 // --------------------------------------------
 // Benchmarks

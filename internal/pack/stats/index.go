@@ -686,60 +686,27 @@ func (idx *Index) Get(key uint32) (*Record, bool) {
 	return NewRecordFromWire(idx.schema, it.ReadWire()), true
 }
 
-// Find a candidate data pack to insert/merge a row id into.
+// Find the data pack for a given row id. Only used on tombstone merge.
+// This rid either exists in exactly one data pack or is not in the table.
 //
-// Use Cases
-// 1. update/tombstone merge -> rid is within exactly one data pack's rid range
-// 2. insert -> rid is larger than the last pack's range
-//
-// Out of order insert is unsupported to preserve the design invariant
-// of non-overlapping rid ranges in main table data packs. Without this
-// invariant we'd have to split packs as they run full which would violate
-// pack order invariant (this is required to quickly lookup packs in the index)
+// (in previous versions where rows could be written in-place this was
+// also to find the best place to insert a row including finding the
+// very last non-full pack for appending new records with pks larger
+// than global max. this feature is no longer required as all updates
+// and inserts always append new data with new row ids now.)
 func (idx *Index) FindRid(ctx context.Context, rid uint64) (*Iterator, bool) {
+	// reject row ids beyond global max (e.g. this happens when
+	// tombstones reference records that are only in a journal segment)
+	if gmax := idx.GlobalMaxRid(); rid > gmax {
+		return nil, false
+	}
+
 	// create an equal filter condition which will be used to find
 	// the matching data pack for this rowid based on min/max statistics
 	// this filter ensures the spack min/max rowid columns are loaded
 	// other required columns: STATS_ROW_KEY, STATS_ROW_VERSION and
 	// STATS_ROW_NVALS are auto-loaded by iterator queries
 	flt := idx.makeRidFilter(types.FilterModeEqual, rid)
-
-	// return an iterator for the last data pack in the last spack
-	// unless this data pack is full (requires pack order == rid order
-	// which is true for regular table packs but not history packs)
-	if gmax := idx.GlobalMaxRid(); rid > gmax {
-		slen := len(idx.snodes)
-
-		// update filter to search for the gloabl max pk's data pack
-		// (we know it exists, but we need to load statistics in order
-		// for the merge process to check whether its full)
-		flt.Filter.Value = gmax
-		flt.Filter.Matcher.WithValue(gmax)
-
-		// init an iterator so that calling next() will run a query
-		it := &Iterator{
-			ctx: ctx,
-			idx: idx,
-			flt: flt,
-			ids: []uint16{
-				STATS_ROW_KEY + 1,
-				STATS_ROW_VERSION + 1,
-				STATS_ROW_NVALS + 1,
-				uint16(minColIndex(idx.rx) + 1), // min rid
-				uint16(maxColIndex(idx.rx) + 1), // max rid
-			},
-			use:    0,
-			vmatch: bitset.New(STATS_PACK_SIZE),
-			smatch: bitset.New(slen),
-			match:  arena.Alloc[uint32](STATS_PACK_SIZE),
-			sx:     slen - 2, // start at last spack (it will +1)
-			n:      -1,       // start at first offset (it will +1)
-		}
-		it.smatch.Set(slen - 1)
-
-		// let the iterator load spack data and point to the last data pack
-		return it, it.Next()
-	}
 
 	// should find exactly one pack
 	return idx.Query(ctx, flt, types.OrderAsc)

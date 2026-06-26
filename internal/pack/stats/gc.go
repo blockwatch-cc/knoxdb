@@ -221,7 +221,7 @@ func (idx *Index) gcEpoch(tx store.Tx, epoch uint32) error {
 			pv, _ := store.Uvarint(key[n:])
 			idx.log.Tracef("gc table pack 0x%08d[v%d]", pk, pv)
 
-			// drop blocks
+			// drop table data blocks
 			for _, id := range idx.tomb.activeFields {
 				err := dbucket.Delete(pack.AppendBlockKey(bkey[:0], uint32(pk), uint32(pv), id))
 				if err != nil {
