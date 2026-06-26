@@ -4,14 +4,12 @@
 package bolt
 
 import (
-	"errors"
 	"io"
 	"iter"
 	"sync"
 
 	"blockwatch.cc/knoxdb/pkg/store"
 	bolt "go.etcd.io/bbolt"
-	bolterr "go.etcd.io/bbolt/errors"
 )
 
 var txPool = sync.Pool{}
@@ -88,14 +86,9 @@ func (tx *tx) BucketPath(path ...[]byte) (store.Bucket, error) {
 }
 
 // CreateBucket creates and returns a new top-level bucket with the given key.
-// If the bucket already exists it is returned without error.
 func (tx *tx) CreateBucket(key []byte, _ ...store.BucketOption) (store.Bucket, error) {
 	child, err := tx.tx.CreateBucket(key)
 	if err != nil {
-		// use bucket if exists
-		if errors.Is(err, bolterr.ErrBucketExists) {
-			return tx.Bucket(key)
-		}
 		return nil, wrap(err)
 	}
 	child.FillPercent = tx.db.opts.PageFill

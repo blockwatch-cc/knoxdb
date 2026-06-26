@@ -89,8 +89,8 @@ func (b *bucket) CreateBucket(key []byte, _ ...store.BucketOption) (store.Bucket
 
 	// Check if bucket exists.
 	bkey := bucketizedKey(b.id, key)
-	if bid, ok := b.tx.db.buckets[string(bkey)]; ok {
-		return &bucket{tx: b.tx, id: bid}, nil
+	if _, ok := b.tx.db.buckets[string(bkey)]; ok {
+		return nil, store.ErrBucketExists
 	}
 
 	// Find the appropriate next bucket ID to use for the new bucket.

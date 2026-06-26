@@ -5,13 +5,11 @@ package bolt
 
 import (
 	"bytes"
-	"errors"
 	"io"
 	"iter"
 
 	"blockwatch.cc/knoxdb/pkg/store"
 	bolt "go.etcd.io/bbolt"
-	bolterr "go.etcd.io/bbolt/errors"
 )
 
 // bucket is an internal type used to represent a collection of key/value pairs
@@ -53,14 +51,9 @@ func (b *bucket) Buckets() iter.Seq2[[]byte, store.Bucket] {
 }
 
 // CreateBucket creates and returns a new nested bucket with the given key.
-// If the bucket already exists it is returned without error.
 func (b *bucket) CreateBucket(key []byte, _ ...store.BucketOption) (store.Bucket, error) {
 	child, err := b.bucket.CreateBucket(key)
 	if err != nil {
-		// use bucket if exists
-		if errors.Is(err, bolterr.ErrBucketExists) {
-			return b.Bucket(key)
-		}
 		return nil, wrap(err)
 	}
 	child.FillPercent = b.tx.db.opts.PageFill

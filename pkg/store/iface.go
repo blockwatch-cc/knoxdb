@@ -140,9 +140,8 @@ type Tx interface {
 	IsWriteable() bool
 
 	// CreateBucket creates and returns a new top-level bucket with the
-	// given key. If the bucket already exists it is returned without error.
-	// Calling this method may have immediate effect on the underlying
-	// database even without committing the transaction.
+	// given key. Calling this method may have immediate effect on the
+	// underlying database even without committing the transaction.
 	CreateBucket(key []byte, opts ...BucketOption) (Bucket, error)
 
 	// DeleteBucket removes a top-level bucket with the given key. This
