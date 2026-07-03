@@ -21,5 +21,15 @@ func Free[T FixedSizeType](val []T) {
 	if val == nil {
 		return
 	}
-	_alloc.Free(ToBytes(val))
+	_alloc.Free(ToBytes(val[:cap(val)]))
+}
+
+func Realloc[T FixedSizeType](val []T, n int) []T {
+	if cap(val) <= n {
+		return val[:n]
+	}
+	dst := Alloc[T](n)[:n]
+	copy(dst, val)
+	Free(val)
+	return dst
 }

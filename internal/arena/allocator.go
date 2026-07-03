@@ -14,8 +14,8 @@ import (
 
 const (
 	minAllocClass = 7                                 // 128 byte
-	maxAllocClass = 20                                // 1MB
-	numClasses    = maxAllocClass - minAllocClass + 1 // 14 pools
+	maxAllocClass = 23                                // 16 MB
+	numClasses    = maxAllocClass - minAllocClass + 1 // 17 pools
 )
 
 type goAllocator struct {
