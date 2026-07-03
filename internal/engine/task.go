@@ -24,12 +24,8 @@ func NewTask(fn func(context.Context) error) *Task {
 }
 
 func (t *Task) Wait() error {
-	select {
-	case <-t.done:
-		return t.err
-	default:
-		return nil
-	}
+	<-t.done
+	return t.err
 }
 
 func (t *Task) Done() <-chan struct{} {
@@ -42,7 +38,7 @@ func (t *Task) Err() error {
 
 func (t *Task) Abort() {
 	if t.err == nil {
-		t.err = ErrTaskAborted
+		t.complete(ErrTaskAborted)
 	}
 }
 

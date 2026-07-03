@@ -957,7 +957,7 @@ func (c *Catalog) Recover(ctx context.Context) error {
 	}
 
 	// update engine horizon
-	GetEngine(ctx).UpdateTxHorizon(xmax)
+	GetEngine(ctx).InitTxHorizon(xmax)
 
 	c.log.Debug("catalog: recovery done, writing new checkpoint")
 

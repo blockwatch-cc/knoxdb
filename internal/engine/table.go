@@ -111,7 +111,7 @@ func (e *Engine) CreateTable(ctx context.Context, s *schema.Schema, options ...O
 	table := factory()
 
 	// start transaction and amend context
-	ctx, tx, commit, abort, err := e.WithTransaction(ctx)
+	ctx, tx, commit, abort, err := e.BeginTransaction(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +170,7 @@ func (e *Engine) AlterTable(ctx context.Context, name string, schema *schema.Sch
 	// - add/drop any fields
 
 	// start transaction and amend context
-	// ctx, commit, abort, err := e.WithTransaction(ctx)
+	// ctx, commit, abort, err := e.BeginTransaction(ctx)
 	// if err != nil {
 	//   return err
 	// }
@@ -215,7 +215,7 @@ func (e *Engine) DropTable(ctx context.Context, name string) error {
 	}
 
 	// start transaction and amend context
-	ctx, tx, commit, abort, err := e.WithTransaction(ctx)
+	ctx, tx, commit, abort, err := e.BeginTransaction(ctx)
 	if err != nil {
 		return err
 	}
@@ -262,7 +262,7 @@ func (e *Engine) TruncateTable(ctx context.Context, name string) error {
 	}
 
 	// start transaction and amend context
-	ctx, tx, commit, abort, err := e.WithTransaction(ctx)
+	ctx, tx, commit, abort, err := e.BeginTransaction(ctx)
 	if err != nil {
 		return err
 	}
@@ -294,7 +294,7 @@ func (e *Engine) CompactTable(ctx context.Context, name string) error {
 	}
 
 	// start transaction and amend context
-	ctx, tx, commit, abort, err := e.WithTransaction(ctx)
+	ctx, tx, commit, abort, err := e.BeginTransaction(ctx)
 	if err != nil {
 		return err
 	}

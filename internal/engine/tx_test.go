@@ -16,10 +16,11 @@ import (
 
 func TestNewTx(t *testing.T) {
 	e := NewTestEngine(t, NewTestDatabaseOptions(t, "mem"))
+	ctx := context.Background()
 
 	// 1 start write tx
-	t1 := e.NewTransaction(0)
-	<-e.txchan
+	<-e.xtoken
+	t1 := e.newTransaction(ctx, 0)
 
 	// check write tx
 	// - xid
@@ -29,21 +30,19 @@ func TestNewTx(t *testing.T) {
 	require.NotNil(t, t1)
 	assert.Equal(t, XID(1), t1.Id(), "xid")
 	assert.Equal(t, TxFlags(0), t1.uflags, "flags")
-	assert.Equal(t, XID(1), e.xmin, "xmin")
-	assert.Equal(t, XID(2), e.xnext, "xnext")
-	assert.Equal(t, ReadTxOffset, e.vnext, "vnext")
-	assert.Equal(t, e.xnext, t1.snap.Xmax, "snap.xmax == xnext")
+	assert.Equal(t, XID(1), e.xmin.Load(), "xmin")
+	assert.Equal(t, XID(1), e.xid.Load(), "xid")
+	assert.Equal(t, ReadTxOffset, e.vid.Load(), "vid")
+	assert.Equal(t, e.xid.Load()+1, t1.snap.Xmax, "snap.xmax == xid+1")
 	assert.Equal(t, t1.id, t1.snap.Xmin, "snap.xmin == xid")
 	assert.Equal(t, t1.id, t1.snap.Xown, "snap.xown == xid")
-	assert.True(t, t1.snap.Safe, "snap.safe")
-	assert.NotNil(t, e.wtx, "wtx exists")
-	assert.Len(t, e.txs, 0, "no read txs len")
+	assert.True(t, t1.snap.Safe, "snap.safe true with only writer")
 	assert.False(t, t1.IsClosed(), "open")
 	assert.False(t, t1.IsAborted(), "not yet aborted")
 	assert.False(t, t1.IsCommitted(), "not yet commited")
 
 	// 2 keep write tx and start read tx
-	t2 := e.NewTransaction(TxFlagReadOnly)
+	t2 := e.newTransaction(ctx, TxFlagReadOnly)
 
 	// check read tx
 	// - xid
@@ -52,16 +51,15 @@ func TestNewTx(t *testing.T) {
 	// - tx list
 	// - snapshot does not see t1
 	require.NotNil(t, t2)
-	assert.Equal(t, ReadTxOffset, t2.Id(), "xid")
+	assert.Equal(t, ReadTxOffset+1, t2.Id(), "xid")
 	assert.Equal(t, TxFlagReadOnly, t2.uflags, "flags")
-	assert.Equal(t, XID(1), e.xmin, "xmin")
-	assert.Equal(t, XID(2), e.xnext, "xnext")
-	assert.Equal(t, ReadTxOffset+1, e.vnext, "vnext")
-	assert.Equal(t, e.xnext, t2.snap.Xmax, "snap.xmax == xnext")
+	assert.Equal(t, XID(1), e.xmin.Load(), "xmin")
+	assert.Equal(t, XID(1), e.xid.Load(), "xid")
+	assert.Equal(t, ReadTxOffset+1, e.vid.Load(), "vid")
+	assert.Equal(t, e.xid.Load()+1, t2.snap.Xmax, "snap.xmax == xid+1")
 	assert.Equal(t, t1.id, t2.snap.Xmin, "snap.xmin == t1.xid")
 	assert.Equal(t, XID(0), t2.snap.Xown, "snap.xown == 0")
-	assert.False(t, t2.snap.Safe, "snap.safe")
-	assert.Len(t, e.txs, 1, "read txs len")
+	assert.False(t, t2.snap.Safe, "snap.safe false with existing writer")
 	assert.False(t, t2.snap.IsVisible(t1.id), "t2 cannot see t1")
 	assert.True(t, t2.snap.IsConflict(t1.id), "t2 has RW conflict with t1")
 	assert.False(t, t2.IsClosed(), "open")
@@ -75,25 +73,23 @@ func TestNewTx(t *testing.T) {
 	// - horizon (xmin)
 	// - tx list
 	assert.True(t, t1.IsClosed(), "closed")
-	assert.Len(t, e.txs, 1, "txs len")
-	assert.Equal(t, XID(2), e.xmin, "xmin")
+	assert.Equal(t, XID(2), e.xmin.Load(), "xmin has moved up")
 	assert.True(t, t1.IsClosed(), "closed")
 	assert.True(t, t1.IsAborted(), "aborted")
 	assert.False(t, t1.IsCommitted(), "not commited")
 
 	// 4 start new read tx
-	t3 := e.NewTransaction(TxFlagReadOnly)
+	t3 := e.newTransaction(ctx, TxFlagReadOnly)
 	require.NotNil(t, t3)
-	assert.Equal(t, ReadTxOffset+1, t3.Id(), "xid")
+	assert.Equal(t, ReadTxOffset+2, t3.Id(), "xid")
 	assert.Equal(t, TxFlagReadOnly, t3.uflags, "flags")
-	assert.Equal(t, XID(2), e.xmin, "xmin")
-	assert.Equal(t, XID(2), e.xnext, "xnext")
-	assert.Equal(t, ReadTxOffset+2, e.vnext, "vnext")
-	assert.Equal(t, e.xnext, t3.snap.Xmax, "snap.xmax == xnext")
-	assert.Equal(t, XID(2), t3.snap.Xmin, "snap.xmin == t1.xid")
+	assert.Equal(t, XID(2), e.xmin.Load(), "xmin")
+	assert.Equal(t, XID(1), e.xid.Load(), "xid")
+	assert.Equal(t, ReadTxOffset+2, e.vid.Load(), "vid")
+	assert.Equal(t, e.xmin.Load(), t3.snap.Xmax, "snap.xmax == xmin")
+	assert.Equal(t, e.xmin.Load(), t3.snap.Xmin, "snap.xmin == xmin")
 	assert.Equal(t, XID(0), t3.snap.Xown, "snap.xown == 0")
 	assert.True(t, t3.snap.Safe, "snap.safe")
-	assert.Len(t, e.txs, 2, "txs len")
 	assert.True(t, t3.snap.IsVisible(t1.id), "t3 can see effects of t1")
 	assert.False(t, t3.snap.IsConflict(t1.id), "t3 has no conflict with t1")
 	assert.False(t, t3.IsClosed(), "open")
@@ -103,7 +99,6 @@ func TestNewTx(t *testing.T) {
 	// cleanup
 	require.NoError(t, t2.Abort(), "close t2")
 	require.NoError(t, t3.Commit(), "close t3")
-	assert.Len(t, e.txs, 0, "txs len")
 	assert.True(t, t2.IsClosed(), "closed")
 	assert.True(t, t3.IsClosed(), "closed")
 	assert.True(t, t2.IsAborted(), "aborted")
@@ -113,7 +108,7 @@ func TestNewTx(t *testing.T) {
 func TestWithReadTx(t *testing.T) {
 	e := NewTestEngine(t, NewTestDatabaseOptions(t, "mem"))
 	ctx := context.Background()
-	ctx, tx, commit, abort, err := e.WithTransaction(ctx, TxFlagReadOnly)
+	ctx, tx, commit, abort, err := e.BeginTransaction(ctx, TxFlagReadOnly)
 
 	// check return args
 	require.NoError(t, err)
@@ -125,10 +120,10 @@ func TestWithReadTx(t *testing.T) {
 	require.NotNil(t, GetEngine(ctx), "ctx.engine")
 	require.NotNil(t, GetTx(ctx), "ctx.tx")
 	require.NotNil(t, GetSnapshot(ctx), "ctx.snap")
-	require.Equal(t, ReadTxOffset, GetTxId(ctx), "ctx.xid")
+	require.Equal(t, ReadTxOffset+1, GetTxId(ctx), "ctx.xid")
 
 	// check we get the same tx, context, and noop funcs when calling again
-	ctx2, tx2, commit2, abort2, err := e.WithTransaction(ctx, TxFlagReadOnly)
+	ctx2, tx2, commit2, abort2, err := e.BeginTransaction(ctx, TxFlagReadOnly)
 
 	// check return args
 	require.NoError(t, err)
@@ -140,10 +135,10 @@ func TestWithReadTx(t *testing.T) {
 	require.NotNil(t, GetEngine(ctx2), "ctx.engine")
 	require.NotNil(t, GetTx(ctx2), "ctx.tx")
 	require.NotNil(t, GetSnapshot(ctx2), "ctx.snap")
-	require.Equal(t, ReadTxOffset, GetTxId(ctx2), "ctx.xid")
+	require.Equal(t, ReadTxOffset+1, GetTxId(ctx2), "ctx.xid")
 
 	// check we get an error when we try switching to read-write
-	_, _, _, _, err = e.WithTransaction(ctx)
+	_, _, _, _, err = e.BeginTransaction(ctx)
 	assert.Error(t, err)
 	assert.ErrorIs(t, ErrTxReadonly, err)
 }
@@ -151,7 +146,7 @@ func TestWithReadTx(t *testing.T) {
 func TestWithWriteTx(t *testing.T) {
 	e := NewTestEngine(t, NewTestDatabaseOptions(t, "mem"))
 	ctx := context.Background()
-	ctx, tx, commit, abort, err := e.WithTransaction(ctx)
+	ctx, tx, commit, abort, err := e.BeginTransaction(ctx)
 
 	// check return args
 	require.NoError(t, err)
@@ -166,7 +161,7 @@ func TestWithWriteTx(t *testing.T) {
 	require.Equal(t, XID(1), GetTxId(ctx), "ctx.xid")
 
 	// check we get the same tx, context, and noop funcs when calling again
-	ctx2, tx2, commit2, abort2, err := e.WithTransaction(ctx)
+	ctx2, tx2, commit2, abort2, err := e.BeginTransaction(ctx)
 
 	// check return args
 	require.NoError(t, err)
@@ -181,7 +176,7 @@ func TestWithWriteTx(t *testing.T) {
 	require.Equal(t, XID(1), GetTxId(ctx2), "ctx.xid")
 
 	// check we get no error when we try switching to read-only
-	_, _, _, _, err = e.WithTransaction(ctx, TxFlagReadOnly)
+	_, _, _, _, err = e.BeginTransaction(ctx, TxFlagReadOnly)
 	assert.NoError(t, err)
 }
 
@@ -190,12 +185,12 @@ func TestConcurrentReadTx(t *testing.T) {
 	ctx := context.Background()
 
 	// writer
-	_, _, _, abort, err := e.WithTransaction(ctx)
+	_, _, _, abort, err := e.BeginTransaction(ctx)
 	require.NoError(t, err)
 
 	// reader 1
 	require.Eventually(t, func() bool {
-		_, _, _, abort, err := e.WithTransaction(ctx, TxFlagReadOnly)
+		_, _, _, abort, err := e.BeginTransaction(ctx, TxFlagReadOnly)
 		require.NoError(t, err)
 		require.NoError(t, abort())
 		return true
@@ -203,7 +198,7 @@ func TestConcurrentReadTx(t *testing.T) {
 
 	// reader 2
 	require.Eventually(t, func() bool {
-		_, _, _, abort, err := e.WithTransaction(ctx, TxFlagReadOnly)
+		_, _, _, abort, err := e.BeginTransaction(ctx, TxFlagReadOnly)
 		require.NoError(t, err)
 		require.NoError(t, abort())
 		return true
@@ -219,17 +214,16 @@ func TestTxWait(t *testing.T) {
 	// non error cases
 	// nowait (with no tx)
 	{
-		_, _, _, abort, err := e.WithTransaction(ctx, TxFlagNoWait)
+		_, _, _, abort, err := e.BeginTransaction(ctx, TxFlagNoWait)
 		require.NoError(t, err)
 		require.NoError(t, abort())
-		require.Len(t, e.txs, 0, "txs")
 	}
 
 	// timeout (with 1st tx release)
 	{
 		var lastXid, firstXid, secondXid XID
 		e.opts.TxWaitTimeout = 100 * time.Millisecond
-		_, tx, _, abort, err := e.WithTransaction(ctx)
+		_, tx, _, abort, err := e.BeginTransaction(ctx)
 		firstXid = tx.id
 		require.NoError(t, err)
 		var wg sync.WaitGroup
@@ -239,7 +233,7 @@ func TestTxWait(t *testing.T) {
 			require.NoError(t, abort())
 		})
 		require.Eventually(t, func() bool {
-			_, tx, _, abort, err := e.WithTransaction(ctx)
+			_, tx, _, abort, err := e.BeginTransaction(ctx)
 			secondXid = tx.id
 			require.NoError(t, err)
 			atomic.StoreUint64((*uint64)(&lastXid), uint64(secondXid))
@@ -249,14 +243,13 @@ func TestTxWait(t *testing.T) {
 		wg.Wait()
 		assert.True(t, tx.IsClosed(), "1st tx not closed")
 		assert.Equal(t, secondXid, lastXid, "unexpected last tx id")
-		assert.Len(t, e.txs, 0, "txs")
 		e.opts.TxWaitTimeout = 0
 	}
 
 	// unlimited (with 1st tx release)
 	{
 		var lastXid, firstXid, secondXid XID
-		_, tx, _, abort, err := e.WithTransaction(ctx)
+		_, tx, _, abort, err := e.BeginTransaction(ctx)
 		firstXid = tx.id
 		require.NoError(t, err)
 		var wg sync.WaitGroup
@@ -266,7 +259,7 @@ func TestTxWait(t *testing.T) {
 			require.NoError(t, abort())
 		})
 		require.Eventually(t, func() bool {
-			_, tx, _, abort, err := e.WithTransaction(ctx)
+			_, tx, _, abort, err := e.BeginTransaction(ctx)
 			secondXid = tx.id
 			require.NoError(t, err)
 			atomic.StoreUint64((*uint64)(&lastXid), uint64(secondXid))
@@ -276,13 +269,12 @@ func TestTxWait(t *testing.T) {
 		wg.Wait()
 		assert.True(t, tx.IsClosed(), "1st tx closed")
 		assert.Equal(t, secondXid, lastXid, "last tx closed")
-		assert.Len(t, e.txs, 0, "txs")
 	}
 
 	// deferred waits until snapshot is safe, i.e. writer has finished
 	{
 		var lastXid XID
-		_, tx, _, abort, err := e.WithTransaction(ctx)
+		_, tx, _, abort, err := e.BeginTransaction(ctx)
 		require.NoError(t, err)
 
 		var wg sync.WaitGroup
@@ -295,7 +287,7 @@ func TestTxWait(t *testing.T) {
 		e.opts.TxWaitTimeout = 20 * time.Millisecond
 		require.Eventually(t, func() bool {
 			defer wg.Done()
-			_, tx, _, abort, err := e.WithTransaction(ctx, TxFlagReadOnly, TxFlagDeferred)
+			_, tx, _, abort, err := e.BeginTransaction(ctx, TxFlagReadOnly, TxFlagDeferred)
 			assert.NoError(t, err)
 			assert.True(t, tx.snap.Safe, "safe snapshot")
 			atomic.StoreUint64((*uint64)(&lastXid), uint64(tx.id))
@@ -306,17 +298,16 @@ func TestTxWait(t *testing.T) {
 
 		wg.Wait()
 		assert.True(t, tx.IsClosed(), "1st tx closed")
-		assert.Equal(t, ReadTxOffset, lastXid, "last tx closed")
-		assert.Len(t, e.txs, 0, "txs")
+		assert.Equal(t, ReadTxOffset+1, lastXid, "last tx closed")
 	}
 
 	// error cases with concurrent writer
-	_, tx, _, _, err := e.WithTransaction(ctx)
+	_, _, _, abort, err := e.BeginTransaction(ctx)
 	require.NoError(t, err)
 
 	// nowait throws error
 	{
-		_, _, _, _, err := e.WithTransaction(ctx, TxFlagNoWait)
+		_, _, _, _, err := e.BeginTransaction(ctx, TxFlagNoWait)
 		require.Error(t, err)
 		require.ErrorIs(t, err, ErrTxConflict)
 	}
@@ -325,7 +316,7 @@ func TestTxWait(t *testing.T) {
 	{
 		e.opts.TxWaitTimeout = 20 * time.Millisecond
 		require.Eventually(t, func() bool {
-			_, _, _, _, err := e.WithTransaction(ctx)
+			_, _, _, _, err := e.BeginTransaction(ctx)
 			require.Error(t, err)
 			require.ErrorIs(t, err, ErrTxTimeout)
 			return true
@@ -337,7 +328,7 @@ func TestTxWait(t *testing.T) {
 	{
 		e.opts.TxWaitTimeout = 20 * time.Millisecond
 		require.Eventually(t, func() bool {
-			_, _, _, _, err := e.WithTransaction(ctx, TxFlagReadOnly, TxFlagDeferred)
+			_, _, _, _, err := e.BeginTransaction(ctx, TxFlagReadOnly, TxFlagDeferred)
 			require.Error(t, err)
 			require.ErrorIs(t, err, ErrTxTimeout)
 			return true
@@ -348,14 +339,15 @@ func TestTxWait(t *testing.T) {
 	// unlimited, throws error on shutdown
 	{
 		go func() {
-			// simulate shutdown (order matters!)
-			e.shutdown.Store(true)
-			tx.Kill(ErrDatabaseShutdown)
-			close(e.txchan)
+			// simulate shutdown
+			require.NoError(t, e.Close(context.Background()))
 		}()
+		// abort the write tx which should release locks and
+		// unblock close
+		abort()
 		require.Eventually(t, func() bool {
 			time.Sleep(100 * time.Millisecond)
-			_, _, _, _, err := e.WithTransaction(ctx)
+			_, _, _, _, err := e.BeginTransaction(ctx)
 			require.Error(t, err)
 			require.ErrorIs(t, err, ErrDatabaseShutdown)
 			return true
@@ -370,11 +362,11 @@ func TestTxReadOnlyEngine(t *testing.T) {
 	ctx := context.Background()
 
 	// read is ok
-	_, _, _, _, err := e.WithTransaction(ctx, TxFlagReadOnly)
+	_, _, _, _, err := e.BeginTransaction(ctx, TxFlagReadOnly)
 	require.NoError(t, err)
 
 	// write on read-only engine throws error
-	_, _, _, _, err = e.WithTransaction(ctx)
+	_, _, _, _, err = e.BeginTransaction(ctx)
 	require.Error(t, err)
 	require.ErrorIs(t, err, ErrDatabaseReadOnly)
 }
@@ -384,20 +376,30 @@ func TestReadTxShutdown(t *testing.T) {
 	ctx := context.Background()
 
 	// open tx before shutdown
-	ctx, tx, commit, abort, err := e.WithTransaction(ctx, TxFlagReadOnly)
+	ctx, tx, commit, abort, err := e.BeginTransaction(ctx, TxFlagReadOnly)
 	assert.NoError(t, err)
 
-	// simulate shutdown (order matters!)
+	// simulate shutdown
+	cont := make(chan struct{})
 	go func() {
-		e.shutdown.Store(true)
-		tx.Kill(ErrDatabaseShutdown)
-		close(e.txchan)
+		close(cont)
+		require.NoError(t, e.Close(context.Background()))
+	}()
+
+	// tx state change needs cooperation from tx owner
+	go func() {
+		<-cont
+		commit()
 	}()
 
 	// tx should be aborted, context canceled
 	require.Eventually(t, func() bool {
-		<-ctx.Done()
-		return true
+		select {
+		case <-ctx.Done():
+			return true
+		default:
+			return false
+		}
 	}, time.Second, 100*time.Millisecond)
 
 	assert.True(t, tx.IsClosed())
@@ -419,20 +421,30 @@ func TestWriteTxShutdown(t *testing.T) {
 	ctx := context.Background()
 
 	// open tx before shutdown
-	ctx, tx, commit, abort, err := e.WithTransaction(ctx)
+	ctx, tx, commit, abort, err := e.BeginTransaction(ctx)
 	assert.NoError(t, err)
 
 	// simulate shutdown (order matters!)
+	cont := make(chan struct{})
 	go func() {
-		e.shutdown.Store(true)
-		tx.Kill(ErrDatabaseShutdown)
-		close(e.txchan)
+		close(cont)
+		require.NoError(t, e.Close(context.Background()))
+	}()
+
+	// tx state change needs cooperation from tx owner
+	go func() {
+		<-cont
+		commit()
 	}()
 
 	// tx should be aborted, context canceled
 	require.Eventually(t, func() bool {
-		<-ctx.Done()
-		return true
+		select {
+		case <-ctx.Done():
+			return true
+		default:
+			return false
+		}
 	}, time.Second, 5*time.Millisecond)
 
 	assert.True(t, tx.IsClosed())
@@ -457,7 +469,7 @@ func TestTxCallbacks(t *testing.T) {
 
 	// test commit
 	{
-		_, tx, commit, _, err := e.WithTransaction(ctx)
+		_, tx, commit, _, err := e.BeginTransaction(ctx)
 		require.NoError(t, err)
 
 		tx.OnCommit(func(ctx context.Context) error {
@@ -473,7 +485,7 @@ func TestTxCallbacks(t *testing.T) {
 
 	// test abort
 	{
-		_, tx, _, abort, err := e.WithTransaction(ctx)
+		_, tx, _, abort, err := e.BeginTransaction(ctx)
 		require.NoError(t, err)
 
 		tx.OnCommit(func(ctx context.Context) error {
@@ -496,7 +508,7 @@ func TestTxLocks(t *testing.T) {
 	// committing
 	{
 		assert.Equal(t, 0, e.lm.Len())
-		ctx, tx, commit, _, err := e.WithTransaction(ctx)
+		ctx, tx, commit, _, err := e.BeginTransaction(ctx)
 		require.NoError(t, err)
 		tx.Lock(ctx, 1)
 		tx.RLock(ctx, 2)
@@ -507,7 +519,7 @@ func TestTxLocks(t *testing.T) {
 
 	// aborting
 	{
-		ctx, tx, _, abort, err := e.WithTransaction(ctx)
+		ctx, tx, _, abort, err := e.BeginTransaction(ctx)
 		require.NoError(t, err)
 		tx.Lock(ctx, 1)
 		tx.RLock(ctx, 2)
@@ -520,9 +532,9 @@ func TestTxLocks(t *testing.T) {
 func TestTxFail(t *testing.T) {
 	e := NewTestEngine(t, NewTestDatabaseOptions(t, "mem"))
 	ctx := context.Background()
-	ctx, tx, _, _, err := e.WithTransaction(ctx)
+	ctx, tx, _, _, err := e.BeginTransaction(ctx)
 	require.NoError(t, err)
-	tx.Fail(ErrTxConflict)
+	tx.fail(ErrTxConflict)
 	assert.False(t, tx.IsClosed())
 	assert.False(t, tx.IsAborted())
 	assert.False(t, tx.IsCommitted())
@@ -533,9 +545,10 @@ func TestTxFail(t *testing.T) {
 
 func BenchmarkReadTx(b *testing.B) {
 	e := NewTestEngine(b, NewTestDatabaseOptions(b, "mem"))
+	b.ReportAllocs()
 	ctx := context.Background()
 	for b.Loop() {
-		_, _, _, abort, _ := e.WithTransaction(ctx, TxFlagReadOnly)
+		_, _, _, abort, _ := e.BeginTransaction(ctx, TxFlagReadOnly)
 		abort()
 	}
 }
@@ -543,8 +556,9 @@ func BenchmarkReadTx(b *testing.B) {
 func BenchmarkWriteTxCommit(b *testing.B) {
 	e := NewTestEngine(b, NewTestDatabaseOptions(b, "mem"))
 	ctx := context.Background()
+	b.ReportAllocs()
 	for b.Loop() {
-		_, _, commit, _, _ := e.WithTransaction(ctx)
+		_, _, commit, _, _ := e.BeginTransaction(ctx)
 		commit()
 	}
 }
@@ -552,8 +566,9 @@ func BenchmarkWriteTxCommit(b *testing.B) {
 func BenchmarkWriteTxAbort(b *testing.B) {
 	e := NewTestEngine(b, NewTestDatabaseOptions(b, "mem"))
 	ctx := context.Background()
+	b.ReportAllocs()
 	for b.Loop() {
-		_, _, _, abort, _ := e.WithTransaction(ctx)
+		_, _, _, abort, _ := e.BeginTransaction(ctx)
 		abort()
 	}
 }

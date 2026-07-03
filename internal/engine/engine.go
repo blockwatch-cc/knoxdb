@@ -60,7 +60,8 @@ const (
 // - DDL and DML functions return error ErrDatabaseReadOnly
 
 type Engine struct {
-	mu       sync.RWMutex                           // engine mutex
+	ctx      context.Context                        // tx base, cancel on shutdown
+	cancel   context.CancelCauseFunc                // cancel func
 	shutdown atomic.Bool                            // atomic shutdown state
 	rungc    atomic.Bool                            // gc task state
 	flock    *flock.Flock                           // exclusive directory lock
@@ -72,12 +73,11 @@ type Engine struct {
 	indexes  *util.LockFreeMap[uint64, IndexEngine] // index objects
 	enums    *enum.Registry                         // enum objects
 	opts     Options                                // engine-wide configuration
-	txchan   chan struct{}                          // single writer enforcement
-	txs      TxList                                 // active read transactions
-	wtx      *Tx                                    // active write transaction (single)
-	xmin     XID                                    // xid horizon (minimum active xid)
-	xnext    XID                                    // next txid for read/write tx
-	vnext    XID                                    // virtual xid for read-only tx
+	xtoken   chan struct{}                          // single writer enforcement
+	xwg      sync.WaitGroup                         // tx waitgroup
+	xmin     AtomicXID                              // xid horizon (minimum active xid)
+	xid      AtomicXID                              // latest write xid
+	vid      AtomicXID                              // latest virtual read-only xid
 	log      log.Logger                             // engine logger
 	tasks    *TaskService                           // async task execution service
 	wal      *wal.Wal                               // write ahead log
@@ -232,29 +232,33 @@ func Create(ctx context.Context, name string, options ...Option) (*Engine, error
 		return nil, err
 	}
 
+	// create engine context
+	ectx, ecancel := context.WithCancelCause(opts.BaseContext)
+
 	// init engine
 	e := &Engine{
-		path: filepath.Join(opts.Path, name),
-		cache: CacheManager{
-			blocks:  block.NewCache(0),
-			buffers: NewBufferCache(0),
-		},
+		ctx:     ectx,
+		cancel:  ecancel,
+		dbId:    types.TaggedHash(types.ObjectTagDatabase, name),
+		opts:    opts,
+		path:    filepath.Join(opts.Path, name),
 		tables:  util.NewLockFreeMap[uint64, TableEngine](),
 		indexes: util.NewLockFreeMap[uint64, IndexEngine](),
 		enums:   enum.NewRegistry(),
-		txs:     make(TxList, 0),
-		txchan:  make(chan struct{}, 1),
-		xmin:    1,
-		xnext:   1,
-		vnext:   ReadTxOffset,
-		dbId:    types.TaggedHash(types.ObjectTagDatabase, name),
-		opts:    opts,
+		xtoken:  make(chan struct{}, 1),
 		cat:     NewCatalog(name),
 		log:     log.Disabled,
 		tasks:   NewTaskService().WithLimits(opts.MaxWorkers, opts.MaxTasks),
 		lm:      NewLockManager().WithTimeout(opts.LockTimeout),
+		cache: CacheManager{
+			blocks:  block.NewCache(0),
+			buffers: NewBufferCache(0),
+		},
 	}
-	e.tasks.WithContext(WithEngine(ctx, e))
+	e.ctx = WithEngine(e.ctx, e)
+	e.xmin.Store(1)
+	e.vid.Store(ReadTxOffset)
+	e.tasks.WithContext(e.ctx)
 	e.shutdown.Store(false)
 
 	if opts.Log != nil {
@@ -275,17 +279,19 @@ func Create(ctx context.Context, name string, options ...Option) (*Engine, error
 	}
 
 	// start write transaction and amend context (required to store catalog db)
-	tx := e.NewTransaction(0)
-	ctx = context.WithValue(ctx, TransactionKey{}, tx)
-	ctx = WithEngine(ctx, e)
+	tx := e.newTransaction(ctx, 0)
 
-	// cleanup on any errors
+	// cleanup on errors
 	defer func() {
 		if err == nil {
 			return
 		}
-		tx.Abort()
-		e.Close(ctx)
+		if err := tx.Abort(); err != nil {
+			e.log.Errorf("abort: %v", err)
+		}
+		if err := e.Close(ctx); err != nil {
+			e.log.Error("close: %v", err)
+		}
 	}()
 
 	// init wal
@@ -311,12 +317,12 @@ func Create(ctx context.Context, name string, options ...Option) (*Engine, error
 	e.tasks.Start()
 
 	// init catalog
-	if err = e.cat.Create(ctx, opts); err != nil {
+	if err = e.cat.Create(tx.Context(), opts); err != nil {
 		return nil, err
 	}
 
 	// write db options to catalog
-	if err = e.cat.PutOptions(ctx, e.dbId, &opts); err != nil {
+	if err = e.cat.PutOptions(tx.Context(), e.dbId, &opts); err != nil {
 		return nil, err
 	}
 
@@ -330,35 +336,38 @@ func Create(ctx context.Context, name string, options ...Option) (*Engine, error
 
 func Open(ctx context.Context, name string, options ...Option) (*Engine, error) {
 	opts := defaultDatabaseOptions.Apply(options...)
+	ectx, ecancel := context.WithCancelCause(opts.BaseContext)
 	e := &Engine{
-		path: filepath.Join(opts.Path, name),
-		cache: CacheManager{
-			blocks:  block.NewCache(0),
-			buffers: NewBufferCache(0),
-		},
+		ctx:     ectx,
+		cancel:  ecancel,
+		dbId:    types.TaggedHash(types.ObjectTagDatabase, name),
+		opts:    opts,
+		path:    filepath.Join(opts.Path, name),
 		tables:  util.NewLockFreeMap[uint64, TableEngine](),
 		indexes: util.NewLockFreeMap[uint64, IndexEngine](),
 		enums:   enum.NewRegistry(),
-		txs:     make(TxList, 0),
-		txchan:  make(chan struct{}, 1),
-		xmin:    1,
-		xnext:   1,
-		vnext:   ReadTxOffset,
-		dbId:    types.TaggedHash(types.ObjectTagDatabase, name),
+		xtoken:  make(chan struct{}, 1),
 		cat:     NewCatalog(name),
 		log:     log.Disabled,
 		tasks:   NewTaskService().WithLimits(opts.MaxWorkers, opts.MaxTasks),
 		lm:      NewLockManager(),
+		cache: CacheManager{
+			blocks:  block.NewCache(0),
+			buffers: NewBufferCache(0),
+		},
 	}
-	e.tasks.WithContext(WithEngine(ctx, e))
+	e.ctx = WithEngine(e.ctx, e)
+	e.xmin.Store(1)
+	e.vid.Store(ReadTxOffset)
+	e.tasks.WithContext(e.ctx)
 	e.shutdown.Store(false)
+
 	if opts.Log != nil {
 		e.log = opts.Log.Clone("db:" + name)
 		e.tasks.WithLogger(e.log)
 		e.cat.WithLogger(e.log)
 		opts.Log = e.log
 	}
-
 	e.log.Debugf("open database %q at %q", name, e.path)
 
 	// set exclusive directory lock
@@ -377,11 +386,7 @@ func Open(ctx context.Context, name string, options ...Option) (*Engine, error) 
 	if e.IsReadOnly() {
 		uflags |= TxFlagReadOnly
 	}
-	tx := e.NewTransaction(uflags)
-
-	// link to context
-	ctx = context.WithValue(ctx, TransactionKey{}, tx)
-	ctx = WithEngine(ctx, e)
+	tx := e.newTransaction(ctx, uflags)
 
 	// cleanup on error
 	defer func() {
@@ -397,13 +402,13 @@ func Open(ctx context.Context, name string, options ...Option) (*Engine, error) 
 	}()
 
 	// load and validate catalog
-	if err := e.cat.Open(ctx, opts); err != nil {
+	if err := e.cat.Open(tx.Context(), opts); err != nil {
 		return nil, err
 	}
 
 	// load stored database options
 	var sopts Options
-	err = e.cat.GetOptions(ctx, e.dbId, &sopts)
+	err = e.cat.GetOptions(tx.Context(), e.dbId, &sopts)
 	if err != nil {
 		return nil, err
 	}
@@ -428,21 +433,6 @@ func Open(ctx context.Context, name string, options ...Option) (*Engine, error) 
 	}
 	e.cat.WithWal(e.wal)
 
-	// recover missing catalog changes from wal, potentially clean up files from
-	// failed transactions, we can skip this step if we had a clean shutdown, ie.
-	// db checkpoint == last wal record
-	if !e.IsReadOnly() && e.cat.Checkpoint() < e.wal.Last() {
-		// recover catalog object changes
-		if err = e.cat.Recover(ctx); err != nil {
-			return nil, err
-		}
-
-		// sync wal explicitly (because we work without wal support in tx)
-		if err := e.wal.Sync(); err != nil {
-			return nil, err
-		}
-	}
-
 	// init caches
 	if e.opts.CacheSize > 0 {
 		e.cache.blocks = block.NewCache(e.opts.CacheSize * 90 / 10)
@@ -452,12 +442,27 @@ func Open(ctx context.Context, name string, options ...Option) (*Engine, error) 
 	// start services (enables background merge during wal replay)
 	e.tasks.Start()
 
+	// recover missing catalog changes from wal, potentially clean up files from
+	// failed transactions, we can skip this step if we had a clean shutdown, ie.
+	// db checkpoint == last wal record
+	if !e.IsReadOnly() && e.cat.Checkpoint() < e.wal.Last() {
+		// recover catalog object changes
+		if err = e.cat.Recover(tx.Context()); err != nil {
+			return nil, err
+		}
+
+		// sync wal explicitly (because we work without wal support in tx)
+		if err := e.wal.Sync(); err != nil {
+			return nil, err
+		}
+	}
+
 	// open database objects
-	if err = e.openEnums(ctx); err != nil {
+	if err = e.openEnums(tx.Context()); err != nil {
 		return nil, err
 	}
 
-	if err = e.openTables(ctx); err != nil {
+	if err = e.openTables(tx.Context()); err != nil {
 		return nil, err
 	}
 
@@ -466,7 +471,10 @@ func Open(ctx context.Context, name string, options ...Option) (*Engine, error) 
 		return nil, err
 	}
 
-	e.log.Debugf("engine started with xid=%d vxid=%d", e.xnext, e.vnext)
+	e.log.Debugf("engine started with xid=%d vxid=%d",
+		e.xid.Load(),
+		e.vid.Load(),
+	)
 
 	return e, nil
 }
@@ -475,30 +483,13 @@ func (e *Engine) Close(ctx context.Context) error {
 	if e.IsShutdown() {
 		return ErrDatabaseShutdown
 	}
-	e.log.Debugf("close database %s at %s", e.cat.name, e.path)
-
-	// export engine
-	ctx = WithEngine(ctx, e)
 
 	// set shutdown flag to prevent new transactions
 	e.shutdown.Store(true)
+	e.log.Debugf("close database %s at %s", e.cat.name, e.path)
 
-	// cancel pending transaction, tx contexts
-	for _, tx := range e.txs {
-		e.log.Tracef("kill tx id %d", tx.id)
-		tx.Kill(ErrDatabaseShutdown)
-	}
-
-	// TODO: shutdown user sessions (close wire protocol server)
-	// - should cancel session contexts
-
-	// close write token channel, unblocking waiting writers which will cancel
-	close(e.txchan)
-	e.txchan = nil
-
-	// lock engine
-	e.mu.Lock()
-	defer e.mu.Unlock()
+	// cancel engine context, will cancel all transactions
+	e.cancel(ErrDatabaseShutdown)
 
 	// stop services
 	e.log.Trace("stop services")
@@ -507,10 +498,30 @@ func (e *Engine) Close(ctx context.Context) error {
 		e.tasks = nil
 	}
 
-	// wait for transactions and services to release all locks
-	e.log.Trace("wait LM")
-	e.lm.Wait()
-	e.lm = nil
+	// use shutdown context to cancel waits
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		// wait for transactions and services to release all locks
+		e.log.Trace("wait LM")
+		e.lm.Wait()
+
+		// wait for transactions to finish
+		e.log.Trace("wait TX")
+		e.xwg.Wait()
+
+		e.log.Trace("wait done")
+	}()
+	select {
+	case <-done:
+	case <-ctx.Done():
+	}
+
+	// export engine on shutdown context
+	ctx = WithEngine(ctx, e)
+
+	// close write token channel to cancel waiting writers
+	close(e.xtoken)
 
 	// clear caches
 	e.log.Trace("purge caches")
@@ -580,36 +591,19 @@ func (e *Engine) Close(ctx context.Context) error {
 	return nil
 }
 
-func (e *Engine) ForceShutdown() error {
-	e.log.Debugf("force shutdown database %s at %s", e.cat.name, e.path)
+// ForceClosehutdown forcefully aborts all transactions, closes services
+// and backend files. It is only used during tests to simulate crashes.
+func (e *Engine) ForceClose(ctx context.Context) error {
+	if e.IsShutdown() {
+		return ErrDatabaseShutdown
+	}
 
 	// set shutdown flag to prevent new transactions
 	e.shutdown.Store(true)
+	e.log.Debugf("force shutdown database %s at %s", e.cat.name, e.path)
 
-	// lock engine
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	// close write token channel, unblocking waiting writers which will cancel
-	close(e.txchan)
-	e.txchan = nil
-
-	// TODO: shutdown user sessions (close wire protocol server)
-	// - should cancel contexts
-
-	// abort all pending transactions
-	// TODO: find another way, maybe cancel session contexts + define an explicit
-	// session for sdk usage
-	// for _, tx := range e.txs {
-	// 	e.log.Tracef("Kill tx id %d", tx.id)
-	// 	tx.Fail(ErrDatabaseShutdown)
-	// }
-
-	// abort storage backend transactions
-	for _, tx := range e.txs {
-		e.log.Tracef("kill tx id %d", tx.id)
-		tx.Kill(ErrDatabaseShutdown)
-	}
+	// cancel engine context, will cancel all transactions
+	e.cancel(ErrDatabaseShutdown)
 
 	// stop services
 	e.log.Trace("stop services")
@@ -621,7 +615,21 @@ func (e *Engine) ForceShutdown() error {
 	// release/cleanup locks
 	e.log.Trace("clear LM")
 	e.lm.Clear()
-	e.lm = nil
+
+	// wait for running transactions to finish, break on timeout
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		e.xwg.Wait()
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+	case <-ctx.Done():
+	}
+
+	// close write token channel to cancel waiting writers
+	close(e.xtoken)
 
 	// clear caches
 	e.log.Trace("purge caches")
@@ -644,8 +652,6 @@ func (e *Engine) ForceShutdown() error {
 	// close enums
 	e.log.Trace("close enums")
 	e.enums.Clear()
-
-	ctx := context.Background()
 
 	// close engine storage backend files without journal flush and checkpointing
 	e.log.Trace("close indexes")
@@ -679,13 +685,16 @@ func (e *Engine) ForceShutdown() error {
 }
 
 func (e *Engine) Sync(ctx context.Context) error {
-	// skip in read-only mode
-	if e.IsReadOnly() {
+	// prevent race with shutdown
+	e.xwg.Add(1)
+	defer e.xwg.Done()
+
+	// skip in read-only mode and during shutdown
+	if e.IsReadOnly() || e.IsShutdown() {
 		return nil
 	}
 
 	// write explicit checkpoints for all storage backends
-	// legacy tables without wal write their journal here
 	errg := &errgroup.Group{}
 	errg.SetLimit(runtime.NumCPU())
 
@@ -718,6 +727,9 @@ func (e *Engine) AbortTx(ctx context.Context, oid uint64, xid types.XID) {
 }
 
 func (e *Engine) Schedule(t *Task) bool {
+	if e.IsShutdown() {
+		return false
+	}
 	return e.tasks.Submit(t)
 }
 

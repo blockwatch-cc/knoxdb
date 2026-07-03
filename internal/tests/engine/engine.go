@@ -37,13 +37,14 @@ func firstOf(s ...string) string {
 func NewTestDatabaseOptions(t testing.TB, opts ...engine.Option) engine.Options {
 	t.Helper()
 	testOpts := engine.Options{
-		Path:       t.TempDir(),
-		MaxWorkers: 2,
-		MaxTasks:   4,
-		Driver:     firstOf(os.Getenv("KNOX_DRIVER"), "bolt"),
-		PageSize:   4096,
-		PageFill:   1.0,
-		CacheSize:  1 << 20, // 1M
+		BaseContext: context.Background(),
+		Path:        t.TempDir(),
+		MaxWorkers:  2,
+		MaxTasks:    4,
+		Driver:      firstOf(os.Getenv("KNOX_DRIVER"), "bolt"),
+		PageSize:    4096,
+		PageFill:    1.0,
+		CacheSize:   1 << 20, // 1M
 		// NoSync:     true, // required for table wal tests
 		Log: log.Log.Clone(""),
 	}

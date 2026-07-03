@@ -76,16 +76,18 @@ func (t *Table) ReplayWal(ctx context.Context) error {
 	// merge journal after crash recovery when segments are ready
 	if canMerge {
 		task := engine.NewTask(t.Merge)
+		t.task.Store(task)
 		if t.engine.Schedule(task) {
 			t.log.Trace("merge: scheduled task")
-			t.task.Store(task)
 		} else {
 			t.log.Trace("merge: task queue full")
+			task.Abort()
+			t.task.Store(nil)
 		}
 	}
 
 	// track max xid across all tables
-	t.engine.UpdateTxHorizon(xmax)
+	t.engine.InitTxHorizon(xmax)
 
 	return nil
 }

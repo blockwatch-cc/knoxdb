@@ -104,7 +104,7 @@ func (e *Engine) CreateIndex(ctx context.Context, s *schema.IndexSchema, options
 	}
 
 	// start (or use) transaction and amend context
-	ctx, tx, commit, abort, err := e.WithTransaction(ctx)
+	ctx, tx, commit, abort, err := e.BeginTransaction(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -155,7 +155,7 @@ func (e *Engine) RebuildIndex(ctx context.Context, name string) error {
 	}
 
 	// start read tx (required for table scan and table lock)
-	ctx, tx, commit, abort, err := e.WithTransaction(ctx)
+	ctx, tx, commit, abort, err := e.BeginTransaction(ctx)
 	if err != nil {
 		return err
 	}
@@ -211,7 +211,7 @@ func (e *Engine) DropIndex(ctx context.Context, name string) error {
 	// TODO: stop index build if running
 
 	// start transaction and amend context
-	ctx, tx, commit, abort, err := e.WithTransaction(ctx)
+	ctx, tx, commit, abort, err := e.BeginTransaction(ctx)
 	if err != nil {
 		return err
 	}

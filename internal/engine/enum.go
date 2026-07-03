@@ -64,7 +64,7 @@ func (e *Engine) CreateEnum(ctx context.Context, name string) (*enum.Dictionary,
 	}
 
 	// open write transaction
-	ctx, tx, commit, abort, err := e.WithTransaction(ctx)
+	ctx, tx, commit, abort, err := e.BeginTransaction(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +110,7 @@ func (e *Engine) DropEnum(ctx context.Context, name string) error {
 	}
 
 	// open transaction
-	ctx, tx, commit, abort, err := e.WithTransaction(ctx)
+	ctx, tx, commit, abort, err := e.BeginTransaction(ctx)
 	if err != nil {
 		return err
 	}
@@ -145,7 +145,7 @@ func (e *Engine) ExtendEnum(ctx context.Context, name string, vals ...string) er
 	}
 
 	// open transaction
-	ctx, tx, commit, abort, err := e.WithTransaction(ctx)
+	ctx, tx, commit, abort, err := e.BeginTransaction(ctx)
 	if err != nil {
 		return err
 	}

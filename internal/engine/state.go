@@ -48,6 +48,15 @@ func (s *ObjectState) Reset() {
 	s.Checkpoint = 0
 }
 
+func (s *ObjectState) Update(n ObjectState) {
+	// don't replace key
+	s.NextRid = n.NextRid
+	s.NextPk = n.NextPk
+	s.NRows = n.NRows
+	s.Epoch = n.Epoch
+	s.Checkpoint = n.Checkpoint
+}
+
 func (s *ObjectState) Encode() []byte {
 	var tmp [5 * binary.MaxVarintLen64]byte
 	buf := binary.AppendUvarint(tmp[:0], s.NextRid)

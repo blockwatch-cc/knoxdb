@@ -613,8 +613,8 @@ func validateSegment(t *testing.T, s *Segment) {
 func setupNextTx(t *testing.T, ctx context.Context) context.Context {
 	tx := engine.GetTx(ctx)
 	e := tx.Engine()
-	tx.Close()
-	ctx, _, _, _, err := e.WithTransaction(context.Background(), engine.TxFlagNoWal)
+	tx.Abort()
+	ctx, _, _, _, err := e.BeginTransaction(context.Background(), engine.TxFlagNoWal)
 	require.NoError(t, err)
 	return ctx
 }
@@ -633,7 +633,7 @@ func setupJournalTest(t *testing.T) (context.Context, *Journal, func(int) *schem
 	)
 
 	// create tx without wal support (wo don't want to write)
-	ctx, _, _, _, err := e.WithTransaction(context.Background(), engine.TxFlagNoWal)
+	ctx, _, _, _, err := e.BeginTransaction(context.Background(), engine.TxFlagNoWal)
 	require.NoError(t, err)
 
 	// create record producer helper

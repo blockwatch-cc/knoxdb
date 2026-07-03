@@ -5,6 +5,7 @@ package engine
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"math"
 	"path/filepath"
@@ -21,6 +22,7 @@ type Option func(o *Options)
 
 type Options struct {
 	// engine options
+	BaseContext     context.Context  // engine base context
 	Namespace       string           // unique db identifier
 	Path            string           // on local filesystem
 	CacheSize       int              // engine block cache in bytes
@@ -49,6 +51,7 @@ type Options struct {
 }
 
 var defaultDatabaseOptions = Options{
+	BaseContext:     context.Background(),
 	Path:            "./db",
 	CacheSize:       16 << 20,
 	WalSegmentSize:  128 << 20,
@@ -76,6 +79,7 @@ func (o Options) Apply(opts ...Option) Options {
 
 func (o Options) DatabaseOptions() []Option {
 	return []Option{
+		WithBaseContext(o.BaseContext),
 		WithNamespace(o.Namespace),
 		WithPath(o.Path),
 		WithCacheSize(o.CacheSize),
@@ -164,10 +168,16 @@ func (o Options) StoreOptions() []store.Option {
 		store.WithDriver(o.Driver),
 		store.WithPageSize(o.PageSize),
 		store.WithPageFill(o.PageFill),
-		store.WithLogger(o.Log),
+		// store.WithLogger(o.Log),
 		store.WithNoSync(o.NoSync),
 		store.WithDropOnClose(o.IsTemp),
 		store.WithReadonly(o.ReadOnly),
+	}
+}
+
+func WithBaseContext(ctx context.Context) Option {
+	return func(o *Options) {
+		o.BaseContext = ctx
 	}
 }
 

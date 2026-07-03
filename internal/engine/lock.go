@@ -106,6 +106,7 @@ func (m *LockManager) Clear() {
 		lock.back = nil
 	}
 	clear(m.locks)
+	m.locks = m.locks[:0]
 	clear(m.granted)
 	m.nlocks.Store(0)
 }

@@ -18,7 +18,7 @@ import (
 
 func TestCatalogCreate(t *testing.T) {
 	e := NewTestEngine(t, NewTestDatabaseOptions(t, "mem"))
-	ctx, _, commit, _, err := e.WithTransaction(context.Background())
+	ctx, _, commit, _, err := e.BeginTransaction(context.Background())
 	require.NoError(t, err)
 	require.NoError(t, e.cat.Create(ctx, e.opts))
 	require.NoError(t, commit())
@@ -53,7 +53,7 @@ func TestCatalogCreate(t *testing.T) {
 func TestCatalogOpen(t *testing.T) {
 	// create first engine
 	e := NewTestEngine(t, NewTestDatabaseOptions(t, "mem"))
-	ctx, _, commit, _, err := e.WithTransaction(context.Background())
+	ctx, _, commit, _, err := e.BeginTransaction(context.Background())
 	require.NoError(t, err)
 
 	// create catalog (requires write tx)
@@ -63,7 +63,7 @@ func TestCatalogOpen(t *testing.T) {
 
 	// create new engine
 	e = OpenTestEngine(t, e.opts)
-	ctx, _, _, abort, err := e.WithTransaction(context.Background())
+	ctx, _, _, abort, err := e.BeginTransaction(context.Background())
 	require.NoError(t, err)
 	require.NoError(t, e.cat.Open(ctx, e.opts))
 
@@ -98,7 +98,7 @@ func TestCatalogOpen(t *testing.T) {
 func WithCatalog(t *testing.T) (context.Context, *Engine, *Catalog, func() error) {
 	ctx := context.Background()
 	e := NewTestEngine(t, NewTestDatabaseOptions(t, "mem"))
-	tctx, _, commit, _, err := e.WithTransaction(ctx)
+	tctx, _, commit, _, err := e.BeginTransaction(ctx)
 	require.NoError(t, err)
 	require.NoError(t, e.cat.Create(tctx, e.opts))
 	require.NoError(t, commit())
@@ -113,7 +113,7 @@ type TestTable struct {
 func TestCatalogAddTable(t *testing.T) {
 	ctx, eng, cat, close := WithCatalog(t)
 	defer close()
-	tctx, _, commit, abort, err := eng.WithTransaction(ctx)
+	tctx, _, commit, abort, err := eng.BeginTransaction(ctx)
 	require.NoError(t, err)
 	defer abort()
 	base, err := reflect.SchemaFor[TestTable]()
@@ -129,7 +129,7 @@ func TestCatalogAddTable(t *testing.T) {
 	require.NoError(t, commit())
 
 	// list tables
-	tctx, _, _, abort, err = eng.WithTransaction(ctx)
+	tctx, _, _, abort, err = eng.BeginTransaction(ctx)
 	require.NoError(t, err)
 	defer abort()
 	keys, err := cat.ListTables(tctx)
@@ -147,13 +147,13 @@ func TestCatalogAddTable(t *testing.T) {
 	require.NoError(t, abort())
 
 	// drop table
-	tctx, _, commit, abort, err = eng.WithTransaction(ctx)
+	tctx, _, commit, abort, err = eng.BeginTransaction(ctx)
 	require.NoError(t, err)
 	defer abort()
 	require.NoError(t, cat.DropTable(tctx, 1))
 	require.NoError(t, commit())
 
-	tctx, _, _, abort, err = eng.WithTransaction(ctx)
+	tctx, _, _, abort, err = eng.BeginTransaction(ctx)
 	require.NoError(t, err)
 	defer abort()
 	keys, err = cat.ListTables(tctx)
@@ -162,7 +162,7 @@ func TestCatalogAddTable(t *testing.T) {
 	require.NoError(t, abort())
 
 	// drop unknown table
-	tctx, _, _, abort, err = eng.WithTransaction(ctx)
+	tctx, _, _, abort, err = eng.BeginTransaction(ctx)
 	require.NoError(t, err)
 	defer abort()
 	require.Error(t, cat.DropTable(tctx, 1))
@@ -171,7 +171,7 @@ func TestCatalogAddTable(t *testing.T) {
 func TestCatalogAddIndex(t *testing.T) {
 	ctx, eng, cat, close := WithCatalog(t)
 	defer close()
-	tctx, _, commit, abort, err := eng.WithTransaction(ctx)
+	tctx, _, commit, abort, err := eng.BeginTransaction(ctx)
 	require.NoError(t, err)
 	defer abort()
 	base, err := reflect.SchemaFor[TestTable]()
@@ -195,7 +195,7 @@ func TestCatalogAddIndex(t *testing.T) {
 	require.NoError(t, commit())
 
 	// list indexes
-	tctx, _, _, abort, err = eng.WithTransaction(ctx)
+	tctx, _, _, abort, err = eng.BeginTransaction(ctx)
 	require.NoError(t, err)
 	defer abort()
 	keys, err := cat.ListIndexes(tctx, 1)
@@ -213,13 +213,13 @@ func TestCatalogAddIndex(t *testing.T) {
 	require.NoError(t, abort())
 
 	// drop index
-	tctx, _, commit, abort, err = eng.WithTransaction(ctx)
+	tctx, _, commit, abort, err = eng.BeginTransaction(ctx)
 	require.NoError(t, err)
 	defer abort()
 	require.NoError(t, cat.DropIndex(tctx, 2))
 	require.NoError(t, commit())
 
-	tctx, _, _, abort, err = eng.WithTransaction(ctx)
+	tctx, _, _, abort, err = eng.BeginTransaction(ctx)
 	require.NoError(t, err)
 	defer abort()
 	keys, err = cat.ListIndexes(tctx, 1)
@@ -228,7 +228,7 @@ func TestCatalogAddIndex(t *testing.T) {
 	require.NoError(t, abort())
 
 	// drop unknown index
-	tctx, _, _, abort, err = eng.WithTransaction(ctx)
+	tctx, _, _, abort, err = eng.BeginTransaction(ctx)
 	require.NoError(t, err)
 	defer abort()
 	require.Error(t, cat.DropIndex(tctx, 1))
@@ -237,7 +237,7 @@ func TestCatalogAddIndex(t *testing.T) {
 func TestCatalogAddEnum(t *testing.T) {
 	ctx, eng, cat, close := WithCatalog(t)
 	defer close()
-	tctx, _, commit, abort, err := eng.WithTransaction(ctx)
+	tctx, _, commit, abort, err := eng.BeginTransaction(ctx)
 	require.NoError(t, err)
 	defer abort()
 	enum := enum.NewDictionary("enum")
@@ -246,7 +246,7 @@ func TestCatalogAddEnum(t *testing.T) {
 	require.NoError(t, commit())
 
 	// list enums
-	tctx, _, _, abort, err = eng.WithTransaction(ctx)
+	tctx, _, _, abort, err = eng.BeginTransaction(ctx)
 	require.NoError(t, err)
 	defer abort()
 	keys, err := cat.ListEnums(tctx)
@@ -266,13 +266,13 @@ func TestCatalogAddEnum(t *testing.T) {
 	require.NoError(t, abort())
 
 	// drop enum
-	tctx, _, commit, abort, err = eng.WithTransaction(ctx)
+	tctx, _, commit, abort, err = eng.BeginTransaction(ctx)
 	require.NoError(t, err)
 	defer abort()
 	require.NoError(t, cat.DropEnum(tctx, tag1))
 	require.NoError(t, commit())
 
-	tctx, _, _, abort, err = eng.WithTransaction(ctx)
+	tctx, _, _, abort, err = eng.BeginTransaction(ctx)
 	require.NoError(t, err)
 	defer abort()
 	keys, err = cat.ListEnums(tctx)
@@ -281,7 +281,7 @@ func TestCatalogAddEnum(t *testing.T) {
 	require.NoError(t, abort())
 
 	// drop unknown enum
-	tctx, _, _, abort, err = eng.WithTransaction(ctx)
+	tctx, _, _, abort, err = eng.BeginTransaction(ctx)
 	require.NoError(t, err)
 	defer abort()
 	require.Error(t, cat.DropEnum(tctx, 1))

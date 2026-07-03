@@ -112,7 +112,7 @@ func SetupTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts
 
 func CreateTable(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.Options, s *schema.Schema) {
 	t.Helper()
-	ctx, tx, commit, abort, err := e.WithTransaction(context.Background())
+	ctx, tx, commit, abort, err := e.BeginTransaction(context.Background())
 	tx.WithFlags(engine.TxFlagCatalog) // let tx sync wal
 	require.NoError(t, err)
 	defer abort()
@@ -127,7 +127,7 @@ func CreateTable(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts en
 	// reopen read-only if requested
 	if opts.ReadOnly {
 		require.NoError(t, tab.Close(context.Background()))
-		ctx, _, commit, abort, err = e.WithTransaction(context.Background())
+		ctx, _, commit, abort, err = e.BeginTransaction(context.Background())
 		require.NoError(t, err)
 		defer abort()
 		require.NoError(t, tab.Open(ctx, ts, opts.TableOptions()...))
@@ -137,7 +137,7 @@ func CreateTable(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts en
 
 func CreateEnum(t *testing.T, e *engine.Engine) {
 	t.Helper()
-	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
+	ctx, _, commit, abort, err := e.BeginTransaction(context.Background())
 	defer abort()
 	require.NoError(t, err)
 
@@ -161,7 +161,7 @@ func InsertData(t *testing.T, e *engine.Engine, tab engine.TableEngine) {
 	for _, rec := range data {
 		wr.Reset()
 		require.NoError(t, enc.Encode(wr.Buffer(), rec))
-		ctx, _, commit, abort, err := e.WithTransaction(context.Background())
+		ctx, _, commit, abort, err := e.BeginTransaction(context.Background())
 		require.NoError(t, err)
 		_, _, err = tab.InsertBatch(ctx, wr.Batch())
 		assert.NoError(t, err)
@@ -182,13 +182,13 @@ func CreateMultipleTableSequentialTest(t *testing.T, e *engine.Engine, tab engin
 	t.Helper()
 	CreateEnum(t, e)
 	CreateTable(t, e, tab, opts, allTypesSchema)
-	CreateTable(t, e, tab, opts, securitySchema)
+	CreateTable(t, e, tab, opts, transferSchema)
 }
 
 func OpenTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.Options) {
 	SetupTableTest(t, e, tab, opts)
 	require.NoError(t, tab.Close(context.Background()))
-	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
+	ctx, _, commit, abort, err := e.BeginTransaction(context.Background())
 	defer abort()
 	require.NoError(t, err)
 	s := allTypesSchema.Clone().UseEnums(e.CloneEnums(allTypesSchema.EnumNames()...)).Finalize()
@@ -200,7 +200,7 @@ func OpenTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts 
 
 func DropTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.Options) {
 	SetupTableTest(t, e, tab, opts)
-	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
+	ctx, _, commit, abort, err := e.BeginTransaction(context.Background())
 	defer abort()
 	require.NoError(t, err)
 
@@ -219,7 +219,7 @@ func DropTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts 
 
 func SyncTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.Options) {
 	SetupTableTest(t, e, tab, opts)
-	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
+	ctx, _, commit, abort, err := e.BeginTransaction(context.Background())
 	defer abort()
 	require.NoError(t, err)
 	require.NoError(t, tab.Sync(ctx))
@@ -229,7 +229,7 @@ func SyncTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts 
 // TODO: enable when implemented
 // func CompactTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.TableOptions) {
 // 	SetupTableTest(t, e, tab, opts)
-// 	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
+// 	ctx, _, commit, abort, err := e.BeginTransaction(context.Background())
 // 	defer abort()
 // 	require.NoError(t, err)
 // 	require.NoError(t, tab.Compact(ctx))
@@ -238,7 +238,7 @@ func SyncTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts 
 
 func TruncateTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts engine.Options) {
 	SetupTableTest(t, e, tab, opts)
-	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
+	ctx, _, commit, abort, err := e.BeginTransaction(context.Background())
 	require.NoError(t, err)
 	defer abort()
 	require.NoError(t, tab.Truncate(ctx))
@@ -254,7 +254,7 @@ func InsertRowsReadOnlyTableTest(t *testing.T, e *engine.Engine, tab engine.Tabl
 	opts.ReadOnly = true
 	SetupTableTest(t, e, tab, opts)
 
-	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
+	ctx, _, commit, abort, err := e.BeginTransaction(context.Background())
 	defer abort()
 	require.NoError(t, err)
 
@@ -290,7 +290,7 @@ func UpdateRowsTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine,
 	}
 	require.NoError(t, enc.EncodeBatch(wr.Buffer(), data))
 
-	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
+	ctx, _, commit, abort, err := e.BeginTransaction(context.Background())
 	defer abort()
 	require.NoError(t, err)
 
@@ -304,7 +304,7 @@ func QueryTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts
 	SetupTableTest(t, e, tab, opts)
 	InsertData(t, e, tab)
 
-	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
+	ctx, _, commit, abort, err := e.BeginTransaction(context.Background())
 	defer abort()
 	require.NoError(t, err)
 
@@ -331,7 +331,7 @@ func CountTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opts
 	SetupTableTest(t, e, tab, opts)
 	InsertData(t, e, tab)
 
-	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
+	ctx, _, commit, abort, err := e.BeginTransaction(context.Background())
 	defer abort()
 	require.NoError(t, err)
 
@@ -357,7 +357,7 @@ func DeleteTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opt
 	SetupTableTest(t, e, tab, opts)
 	InsertData(t, e, tab)
 
-	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
+	ctx, _, commit, abort, err := e.BeginTransaction(context.Background())
 	defer abort()
 	require.NoError(t, err)
 
@@ -383,7 +383,7 @@ func StreamTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine, opt
 	SetupTableTest(t, e, tab, opts)
 	InsertData(t, e, tab)
 
-	ctx, _, commit, abort, err := e.WithTransaction(context.Background())
+	ctx, _, commit, abort, err := e.BeginTransaction(context.Background())
 	defer abort()
 	require.NoError(t, err)
 

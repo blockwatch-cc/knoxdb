@@ -28,6 +28,7 @@ type (
 	Package     = pack.Package
 	WriteMode   = pack.WriteMode
 	XID         = types.XID
+	AtomicXID   = types.AtomicXID
 )
 
 type TableKind string
@@ -116,7 +117,8 @@ type TableWriter interface {
 	Finalize(Context, ObjectState) error
 	Close()
 	Epoch() uint32
-	GC() error
+	GC(Context) error
+	Metrics() map[string]time.Duration
 }
 
 type QueryPlan interface {
