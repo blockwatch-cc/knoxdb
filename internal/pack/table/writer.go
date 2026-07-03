@@ -45,6 +45,7 @@ type Writer struct {
 	nRecords int
 	nBytes   int
 	start    time.Time
+	metrics  map[string]time.Duration
 }
 
 func (t *Table) NewWriter(epoch uint32) engine.TableWriter {
@@ -61,6 +62,7 @@ func (t *Table) NewWriter(epoch uint32) engine.TableWriter {
 		vtail:   0,
 		wasFull: s.IsTailFull(),
 		start:   time.Now().UTC(),
+		metrics: make(map[string]time.Duration),
 	}
 }
 
@@ -68,25 +70,18 @@ func (w *Writer) Epoch() uint32 {
 	return w.stats.Epoch()
 }
 
+func (w *Writer) Metrics() map[string]time.Duration {
+	return w.metrics
+}
+
 func (w *Writer) Close() {
 	if w.stats != nil {
 		w.stats.Free() // careful: use free! close drops shared snodes
-		w.stats = nil
 	}
 	if w.tail != nil {
 		w.tail.Release()
-		w.tail = nil
 	}
-	w.vtail = 0
-	w.table = nil
-	w.bcache = nil
-	w.log = nil
-	w.vtail = 0
-	w.wasFull = false
-	w.nPacks = 0
-	w.nRecords = 0
-	w.nBytes = 0
-	w.start = time.Time{}
+	*w = Writer{}
 }
 
 // Runs garbage collection on the table dropping old versions of vector blocks
@@ -94,11 +89,14 @@ func (w *Writer) Close() {
 // new merged blocks can occupy. Note after merge completes, GC will run
 // automatically again, but only if the writer drops the last reference to
 // the current stats index epoch.
-func (w *Writer) GC() error {
+func (w *Writer) GC(ctx context.Context) error {
 	if !w.stats.IsClean() {
-		return w.table.db.Update(func(tx store.Tx) error {
-			return w.stats.RunGC(tx)
+		now := time.Now()
+		err := w.table.db.Update(func(tx store.Tx) error {
+			return w.stats.RunGC(ctx, tx)
 		})
+		w.metrics["gc"] += time.Since(now)
+		return err
 	}
 	return nil
 }
@@ -106,14 +104,12 @@ func (w *Writer) GC() error {
 // Appends src data to table and indexes. Writes new pack versions as they become full.
 // Write mode defines which records to copy based on selection vector.
 func (w *Writer) Append(ctx context.Context, src *pack.Package, mode engine.WriteMode) error {
-	var (
-		state pack.AppendState
-		err   error
-	)
-
 	// w.log.Debugf("appending journal pack %08x", src.Key())
+	state := pack.NewAppendState(src.NumSelected() > 0)
+	var err error
 
-	for {
+	// stop when src is exhausted
+	for state.More() {
 		// append next chunk of data to tail: max(cap(tail), len(src))
 		state, err = w.appendTail(ctx, src, mode, state)
 		if err != nil {
@@ -128,12 +124,6 @@ func (w *Writer) Append(ctx context.Context, src *pack.Package, mode engine.Writ
 			w.tail.Release()
 			w.tail = nil
 			w.wasFull = true
-		}
-
-		// stop when src is exhausted
-		if !state.More() {
-			// w.log.Debugf("no more data to append")
-			break
 		}
 	}
 
@@ -164,7 +154,7 @@ func (w *Writer) Replace(ctx context.Context, src *pack.Package, mode engine.Wri
 	}()
 
 	// single iteration is enough because src length <= capacity
-	_, err := w.appendTail(ctx, src, mode, pack.AppendState{})
+	_, err := w.appendTail(ctx, src, mode, pack.NewAppendState(true))
 	if err != nil {
 		return err
 	}
@@ -207,6 +197,7 @@ func (w *Writer) Finalize(ctx context.Context, state engine.ObjectState) error {
 
 	// write stats update and table state (WAL checkpoint and LSN of next segment)
 	// this will finalize the merge
+	now := time.Now()
 	err := w.table.db.Update(func(tx store.Tx) error {
 		// w.log.Debugf("storing metadata v%d", w.stats.Epoch())
 		if err := w.stats.Store(ctx, tx); err != nil {
@@ -214,59 +205,70 @@ func (w *Writer) Finalize(ctx context.Context, state engine.ObjectState) error {
 		}
 
 		// write state snapshot (as of at end of the current merged journal segment)
-		w.table.state.Epoch = uint64(w.stats.Epoch())
-		w.table.state.Checkpoint = state.Checkpoint
-		w.table.state.NRows = state.NRows
-		w.table.state.NextPk = state.NextPk
-		w.table.state.NextRid = state.NextRid
+		state.Key = w.table.state.Key
+		state.Epoch = uint64(w.stats.Epoch())
 
-		// w.log.Debugf("table checkpoint v%d lsn=%d", w.stats.Epoch(), state.Checkpoint)
-		return w.table.state.Store(ctx, tx)
+		// w.log.Debugf("table checkpoint v%d lsn=%d", state.Epoch, state.Checkpoint)
+		return state.Store(ctx, tx)
 	})
 	if err != nil {
 		return err
 	}
+	w.metrics["stats-store"] += time.Since(now)
 
 	// sync table when running in no-sync mode
 	if w.table.opts.NoSync {
-		if err := w.table.Sync(ctx); err != nil {
+		now = time.Now()
+		if err := w.table.db.Sync(); err != nil {
 			return err
 		}
+		w.metrics["io-sync"] += time.Since(now)
 	}
 
 	// swap new stats index, may GC previous version
 	// w.log.Debugf("installing new metadata v%d", w.stats.Epoch())
-	w.table.stats.Update(w.stats)
+	now = time.Now()
+	w.table.stats.Update(ctx, w.stats)
 	w.stats = nil
+	w.metrics["gc"] += time.Since(now)
+
+	// make new table state visible
+	w.table.state.Update(state)
 
 	return nil
 }
 
 func (w *Writer) AppendIndexes(ctx context.Context, src *pack.Package, mode engine.WriteMode) error {
+	now := time.Now()
 	for _, idx := range w.table.Indexes() {
 		if err := idx.(engine.IndexEngine).AddPack(ctx, src, mode); err != nil {
 			return err
 		}
 	}
+	w.metrics["index-append"] += time.Since(now)
 	return nil
 }
 
 func (w *Writer) DeleteIndexes(ctx context.Context, src *pack.Package, mode engine.WriteMode) error {
+	now := time.Now()
 	for _, idx := range w.table.Indexes() {
 		if err := idx.(engine.IndexEngine).DelPack(ctx, src, mode, w.stats.Epoch()); err != nil {
 			return err
 		}
 	}
+	w.metrics["index-delete"] += time.Since(now)
 	return nil
 }
 
 func (w *Writer) FinalizeIndexes(ctx context.Context) error {
+	now := time.Now()
 	for _, v := range w.table.indexes {
 		idx := v.(engine.IndexEngine)
 		if err := idx.Finalize(ctx, w.stats.Epoch()); err != nil {
 			return err
 		}
 	}
+	w.metrics["index-finalize"] += time.Since(now)
 	return nil
 }
 
@@ -278,6 +280,7 @@ func (w *Writer) appendTail(ctx context.Context, src *pack.Package, mode pack.Wr
 	// load or create a new tail pack when missing (this happens on first call and after store)
 	if w.tail == nil {
 		if w.wasFull {
+			now := time.Now()
 			w.tail = pack.New().
 				WithKey(w.stats.NextKey()).
 				WithVersion(1).
@@ -286,20 +289,25 @@ func (w *Writer) appendTail(ctx context.Context, src *pack.Package, mode pack.Wr
 				Alloc()
 			w.wasFull = false
 			w.vtail = 0
+			w.metrics["alloc"] += time.Since(now)
 		} else {
 			pkg, err := w.loadTail(ctx)
 			if err != nil {
 				return state, err
 			}
+			now := time.Now()
 			w.tail = pkg.Materialize().WithVersion(pkg.Version() + 1)
+			w.metrics["materialize"] += time.Since(now)
 		}
 	}
-	var n int
-	n, state = w.tail.AppendSelected(src, mode, state)
+
+	now := time.Now()
+	n, state := w.tail.AppendSelected(src, mode, state)
 	w.nRecords += n
+	w.metrics["append"] += time.Since(now)
 
 	// w.log.Debugf("append %d records to pack %08x[v%d]",
-	// n, w.tail.Key(), w.tail.Version())
+	// 	n, w.tail.Key(), w.tail.Version())
 	// if n == 0 {
 	// 	sel := src.Selected()
 	// 	panic(fmt.Errorf("selection error n=0, sel=%d %v", len(sel), sel[:min(8, len(sel))]))
@@ -335,7 +343,7 @@ func (w *Writer) storePack(ctx context.Context, pkg *pack.Package) error {
 	pkg.WithStats()
 
 	// w.log.Debugf("storing pack %08x[v%d]", pkg.Key(), pkg.Version())
-
+	now := time.Now()
 	// analyze, optimize, compress and write to disk
 	err := w.table.db.Update(func(tx store.Tx) error {
 		n, err := pkg.StoreToDisk(ctx, w.table.dataBucket(tx))
@@ -356,13 +364,16 @@ func (w *Writer) storePack(ctx context.Context, pkg *pack.Package) error {
 		return err
 	}
 	w.nPacks++
+	w.metrics["io-write"] += time.Since(now)
 
 	// update private metadata index
+	now = time.Now()
 	if w.vtail > 0 {
 		err = w.stats.UpdatePack(ctx, pkg)
 	} else {
 		err = w.stats.AddPack(ctx, pkg)
 	}
+	w.metrics["stats-write"] += time.Since(now)
 
 	// cleanup pack statistics
 	pkg.CloseStats()
@@ -375,7 +386,9 @@ func (w *Writer) storePack(ctx context.Context, pkg *pack.Package) error {
 
 func (w *Writer) loadTail(ctx context.Context) (*pack.Package, error) {
 	// fetch tail pack info from stats index
+	now := time.Now()
 	key, ver, nvals := w.stats.TailInfo()
+	w.metrics["stats-read"] += time.Since(now)
 	// w.log.Debugf("loading pack %08x[v%d]", key, ver)
 
 	// prepare an empty pack without block storage
@@ -395,11 +408,15 @@ func (w *Writer) loadTail(ctx context.Context) (*pack.Package, error) {
 	}
 
 	// stop early when all requested blocks are found
+	now = time.Now()
 	if pkg.LoadFromCache(w.bcache, nil) == nBlocks {
+		w.metrics["cache"] += time.Since(now)
 		return pkg, nil
 	}
+	w.metrics["cache"] += time.Since(now)
 
 	// load from table data bucket in short-lived read tx
+	now = time.Now()
 	err := w.table.db.View(func(tx store.Tx) error {
 		n, err := pkg.LoadFromDisk(ctx, w.table.dataBucket(tx), nil, nvals)
 		if err == nil {
@@ -414,6 +431,7 @@ func (w *Writer) loadTail(ctx context.Context) (*pack.Package, error) {
 		return nil, err
 	}
 	w.vtail = ver
+	w.metrics["io-read"] += time.Since(now)
 
 	// ld := make([]int, 0)
 	// for i, b := range pkg.Blocks() {

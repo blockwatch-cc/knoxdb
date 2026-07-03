@@ -173,8 +173,11 @@ func (t *Table) doQueryAsc(ctx context.Context, plan *query.QueryPlan, res Query
 	plan.Stats.Tick(JOURNAL_TIME_KEY)
 	plan.Log.Debugf("%d/%d journal results in %s", jres.Len(), nRowsScanned, plan.Stats.GetRuntime(JOURNAL_TIME_KEY))
 
-	// l := operator.NewLogger(plan.Log.Logger().Writer(), 10)
-	// l.Process(ctx, t.journal.Tip().Data())
+	// l := operator.NewLogger(plan.Log.Logger().Writer(), 53)
+	// for js := range jres.Iterator() {
+	// 	plan.Log.Debugf("Journal Segment %d", js.Key())
+	// 	l.Process(ctx, js)
+	// }
 
 	// run index query
 	if err := plan.QueryIndexes(ctx); err != nil {
@@ -210,7 +213,8 @@ func (t *Table) doQueryAsc(ctx context.Context, plan *query.QueryPlan, res Query
 				break
 			}
 			nRowsScanned += pkg.Len()
-			// plan.Log.Debugf("found %d matches in pack[%d]", pkg.NumSelected(), pkg.Key())
+			plan.Log.Debugf("found %d matches in pack[%d]", pkg.NumSelected(), pkg.Key())
+			// l.Process(ctx, pkg)
 
 			nRowsMatched += pkg.NumSelected()
 			if err = res.Append(ctx, pkg); err != nil {
@@ -253,7 +257,7 @@ func (t *Table) doQueryDesc(ctx context.Context, plan *query.QueryPlan, res Quer
 	defer jres.Close()
 	nRowsScanned += t.journal.Len()
 	plan.Stats.Tick(JOURNAL_TIME_KEY)
-	plan.Log.Debugf("%d journal results in %s", jres.Len(), plan.Stats.GetRuntime(JOURNAL_TIME_KEY))
+	// plan.Log.Debugf("%d journal results in %s", jres.Len(), plan.Stats.GetRuntime(JOURNAL_TIME_KEY))
 
 	// run index query
 	if err := plan.QueryIndexes(ctx); err != nil {

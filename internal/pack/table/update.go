@@ -89,13 +89,13 @@ func (t *Table) UpdateBatch(ctx context.Context, batch *schema.Batch) (int, erro
 		return 0, err
 	}
 
-	// var nResolved int
-	// for _, rid := range ridMap {
-	// 	if rid > 0 {
-	// 		nResolved++
-	// 	}
-	// }
-	// t.log.Debugf("update resolved %d/%d rids from index: %#v", nResolved, len(pks), ridMap)
+	var nResolved int
+	for _, rid := range ridMap {
+		if rid > 0 {
+			nResolved++
+		}
+	}
+	// t.log.Debugf("update resolved %d/%d rids from index: %v", nResolved, len(ridMap), ridMap)
 
 	// protect journal access
 	t.mu.Lock()
@@ -109,8 +109,15 @@ func (t *Table) UpdateBatch(ctx context.Context, batch *schema.Batch) (int, erro
 	// - one of the pks has been deleted
 	// - one of the pks was not found
 	if !t.journal.Lookup(ridMap, tx.Snapshot()) {
+		// l := operator.NewLogger(t.log.Logger().Writer(), 0)
+		// for _, js := range t.journal.Segments() {
+		// 	t.log.Infof("Segment %d", js.Id())
+		// 	l.Process(ctx, js.Data())
+		// 	t.log.Infof("Tomb %d: %v", js.Id(), js.Tomb().RowIds().ToArray(nil))
+		// }
 		return 0, engine.ErrNoRecord
 	}
+	// t.log.Debugf("updated rids after journal overlay: %v", ridMap)
 
 	// write updates to journal and WAL
 	n, err := t.journal.UpdateBatch(ctx, batch, ridMap)

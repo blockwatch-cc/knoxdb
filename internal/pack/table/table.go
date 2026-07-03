@@ -29,6 +29,11 @@ func init() {
 	engine.RegisterTableFactory(engine.TableKindHistory, NewTable)
 }
 
+const (
+	DATA_KEY_IDX = iota
+	STATE_KEY_IDX
+)
+
 var (
 	defaultTableOptions = engine.Options{
 		Driver:          "bolt",
@@ -70,6 +75,7 @@ type Table struct {
 	journal  *journal.Journal            // in-memory data not yet written to packs
 	metrics  engine.TableMetrics         // usage statistics
 	task     atomic.Pointer[engine.Task] // merge task pointer
+	keys     [2][]byte                   // table data bucket key name
 	log      log.Logger
 }
 
@@ -143,6 +149,8 @@ func (t *Table) Create(ctx context.Context, s *types.TableSchema, options ...eng
 	t.state = engine.NewObjectState(s.Name)
 	t.metrics = engine.NewTableMetrics(s.Name)
 	t.log = t.opts.Log.Clone("table:" + s.Name)
+	t.keys[DATA_KEY_IDX] = append([]byte(s.Name), engine.DataKeySuffix...)
+	t.keys[STATE_KEY_IDX] = append([]byte(s.Name), engine.StateKeySuffix...)
 
 	// write initial checkpoint
 	lsn, err := t.engine.Wal().Write(&wal.Record{
@@ -168,11 +176,9 @@ func (t *Table) createBackend(ctx context.Context) error {
 	// setup backend db file
 	name := t.schema.Name
 	path := filepath.Join(t.engine.RootPath(), name)
-	t.log.Debugf("creating backend=%s path=%s opts=%#v", t.opts.Engine, path, t.opts)
-
 	opts := append(
 		t.opts.StoreOptions(),
-		store.WithLogger(t.log),
+		// store.WithLogger(t.log),
 		store.WithPath(path),
 		store.WithManifest(
 			store.NewManifest(
@@ -181,6 +187,9 @@ func (t *Table) createBackend(ctx context.Context) error {
 			),
 		),
 	)
+	t.log.Debugf("creating pack table %q at path=%s with opts=%#v",
+		name, path, t.opts)
+
 	db, err := store.Create(opts...)
 	if err != nil {
 		return fmt.Errorf("creating table %s: %v", name, err)
@@ -193,11 +202,7 @@ func (t *Table) createBackend(ctx context.Context) error {
 		return err
 	}
 	defer tx.Rollback()
-	for _, v := range [][]byte{
-		engine.DataKeySuffix,
-		engine.StateKeySuffix,
-	} {
-		key := append([]byte(name), v...)
+	for _, key := range t.keys {
 		if _, err := tx.CreateBucket(key); err != nil {
 			if errors.Is(err, store.ErrBucketExists) {
 				return engine.ErrTableExists
@@ -252,6 +257,8 @@ func (t *Table) Open(ctx context.Context, s *types.TableSchema, options ...engin
 	t.state = engine.NewObjectState(s.Name)
 	t.metrics = engine.NewTableMetrics(s.Name)
 	t.log = t.opts.Log.Clone("table:" + s.Name)
+	t.keys[DATA_KEY_IDX] = append([]byte(s.Name), engine.DataKeySuffix...)
+	t.keys[STATE_KEY_IDX] = append([]byte(s.Name), engine.StateKeySuffix...)
 
 	// open db backend and load latest state
 	if err := t.openBackend(ctx); err != nil {
@@ -263,7 +270,7 @@ func (t *Table) Open(ctx context.Context, s *types.TableSchema, options ...engin
 	// cleanup after crash
 	if !t.IsReadOnly() && !t.stats.Get().IsClean() {
 		t.db.Update(func(tx store.Tx) error {
-			return t.stats.Get().CleanupEpochs(tx)
+			return t.stats.Get().CleanupEpochs(ctx, tx)
 		})
 	}
 
@@ -298,10 +305,9 @@ func (t *Table) Open(ctx context.Context, s *types.TableSchema, options ...engin
 func (t *Table) openBackend(ctx context.Context) error {
 	name := t.schema.Name
 	path := filepath.Join(t.engine.RootPath(), name)
-	t.log.Debugf("open backend=%s path=%s opts=%#v", t.opts.Engine, path, t.opts)
 	opts := append(
 		t.opts.StoreOptions(),
-		store.WithLogger(t.log),
+		// store.WithLogger(t.log),
 		store.WithPath(path),
 		store.WithManifest(
 			store.NewManifest(
@@ -310,6 +316,9 @@ func (t *Table) openBackend(ctx context.Context) error {
 			),
 		),
 	)
+	t.log.Debugf("open pack table %q at path=%s with opts=%#v",
+		name, path, t.opts)
+
 	db, err := store.Open(opts...)
 	if err != nil {
 		return err
@@ -319,11 +328,7 @@ func (t *Table) openBackend(ctx context.Context) error {
 	// load table state
 	err = t.db.View(func(tx store.Tx) error {
 		// check storage
-		for _, v := range [][]byte{
-			engine.DataKeySuffix,
-			engine.StateKeySuffix,
-		} {
-			key := append([]byte(name), v...)
+		for _, key := range t.keys {
 			if _, err := tx.Bucket(key); err != nil {
 				return fmt.Errorf("bucket %s: %v", string(key), err)
 			}
@@ -390,6 +395,7 @@ func (t *Table) Close(ctx context.Context) (err error) {
 		t.stats.Get().Close()
 		t.stats = nil
 	}
+	clear(t.keys[:])
 	return
 }
 
@@ -400,7 +406,7 @@ func (t *Table) Metrics() engine.TableMetrics {
 	m.MetaSize = int64(s.HeapSize())
 	m.TotalSize = int64(s.TableSize())
 	m.MetaBytesRead, m.MetaBytesWritten = s.Metrics()
-	s.Release(false)
+	s.Release(context.Background(), false)
 
 	m.TupleCount = int64(t.journal.State().NRows)
 	m.JournalSize = int64(t.journal.Size())
@@ -413,6 +419,7 @@ func (t *Table) Metrics() engine.TableMetrics {
 
 func (t *Table) Drop(ctx context.Context) error {
 	drv, path := t.opts.Driver, t.db.Path()
+	t.log.Debug("dropping table")
 	if err := t.Close(ctx); err != nil {
 		return err
 	}
@@ -435,16 +442,12 @@ func (t *Table) Truncate(ctx context.Context) error {
 			return err
 		}
 		t.journal.Reset()
-		for _, v := range [][]byte{
-			engine.DataKeySuffix,
-			engine.StateKeySuffix,
-		} {
-			key := append([]byte(t.schema.Name), v...)
+		for _, key := range t.keys {
 			if err := tx.DeleteBucket(key); err != nil {
-				return err
+				return fmt.Errorf("%q: %v", key, err)
 			}
 			if _, err := tx.CreateBucket(key); err != nil {
-				return err
+				return fmt.Errorf("%q: %v", key, err)
 			}
 		}
 
@@ -490,12 +493,14 @@ func (t *Table) CommitTx(ctx context.Context, xid types.XID) engine.WaitCh {
 	task := t.task.Load()
 	if canMerge && task == nil {
 		task = engine.NewTask(t.Merge)
+		t.task.Store(task)
 		if t.engine.Schedule(task) {
 			t.log.Trace("merge: scheduled task")
-			t.task.Store(task)
 		} else {
 			t.log.Trace("merge: task queue full")
+			task.Abort()
 			task = nil
+			t.task.Store(nil)
 		}
 	}
 
@@ -517,11 +522,13 @@ func (t *Table) AbortTx(ctx context.Context, xid types.XID) {
 
 	if canMerge && t.task.Load() == nil {
 		task := engine.NewTask(t.Merge)
+		t.task.Store(task)
 		if t.engine.Schedule(task) {
 			t.log.Trace("merge: scheduled task")
-			t.task.Store(task)
 		} else {
 			t.log.Trace("merge: task queue full")
+			task.Abort()
+			t.task.Store(nil)
 		}
 	}
 }
@@ -545,7 +552,6 @@ func (t *Table) Checkpoint(ctx context.Context) error {
 }
 
 func (t *Table) dataBucket(tx store.Tx) store.Bucket {
-	key := append([]byte(t.schema.Name), engine.DataKeySuffix...)
-	b, _ := tx.Bucket(key)
+	b, _ := tx.Bucket(t.keys[DATA_KEY_IDX])
 	return b
 }

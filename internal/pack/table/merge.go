@@ -113,13 +113,6 @@ func (t *Table) Merge(ctx context.Context) error {
 		return engine.ErrTableReadOnly
 	}
 
-	// protect against concurrent table management ops using lock manager
-	unlock, err := t.engine.RLockObject(ctx, t.id)
-	if err != nil {
-		return err
-	}
-	defer unlock()
-
 	for {
 		// get next mergable segment, will atomically mark as merge in progress
 		t.mu.Lock()
@@ -144,7 +137,7 @@ func (t *Table) Merge(ctx context.Context) error {
 
 	// run merge
 	sid := seg.Id()
-	t.log.Tracef("merging journal segment %d", sid)
+	t.log.Debugf("merging journal segment %d", sid)
 	err = t.mergeJournal(ctx, seg)
 	if err != nil {
 		// notify journal, will keep segment in memory and retry
@@ -187,16 +180,21 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 		start      = time.Now()
 	)
 
+	t.log.Debugf("merge epoch %d", seg.Id())
+
 	// init table writer
 	table := t.NewWriter(seg.Id())
 	defer table.Close()
 
 	// run table GC to free up unused space
-	if err := table.GC(); err != nil {
+	if err := table.GC(ctx); err != nil {
 		t.log.Error(err)
 	}
 
-	// t.log.Debugf("merge epoch %d", seg.Id())
+	// check for shutdown
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
 	// init history writer
 	var hist engine.TableWriter
@@ -206,13 +204,16 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 	}
 
 	// Phase 1 - move deleted rows to history, rewrite table packs
-	stones := seg.Tomb().Stones() // non-aborted deletes (within and outside the segment)
-	mask := seg.Tomb().RowIds()   // row id bitmap of all deletes, nil when empty
-	replaced := seg.Replaced()    // bitset of updated/deleted records, nil when empty
+	now := time.Now()
+	stones := seg.Tomb().Stones()       // non-aborted deletes (within and outside the segment)
+	mask := seg.Tomb().RowIds().Clone() // row id bitmap of all deletes, nil when empty, will mutate
+	replaced := seg.Replaced()          // bitset of updated/deleted records, nil when empty
 	nStones = len(stones)
+	t.log.Debugf("merge: prepare time %s", time.Since(now))
 
+	now = time.Now()
 	if mask != nil && mask.Any() && mask.Min() < t.stats.Get().GlobalMaxRid() {
-		t.log.Tracef("merge phase 1: %d/%d tombstones", mask.Count(), len(stones))
+		t.log.Debugf("merge phase 1: %d/%d tombstones", mask.Count(), len(stones))
 		src := t.NewReader().WithMask(mask, engine.ReadModeIncludeMask)
 		defer src.Close()
 		for {
@@ -225,8 +226,8 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 			}
 			nPacks++
 			nDel++
-			// t.log.Debugf("merge pack 0x%08x[v%d] with %d tombs",
-			// 	pkg.Key(), pkg.Version(), len(pkg.Selected()))
+			// t.log.Debugf("merge pack 0x%08x[v%d] with %d tombs and len=%d",
+			// 	pkg.Key(), pkg.Version(), len(pkg.Selected()), pkg.Len())
 
 			if hist != nil {
 				// TODO: patch xmax in history pack (which is writable)
@@ -296,6 +297,8 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 			pkg.Release()
 		}
 	}
+	t.log.Debugf("merge: tomb merge time %s", time.Since(now))
+	now = time.Now()
 
 	// Phase 2 - move journal data to table, exclude aborted and replaced records
 	if seg.Data().Len() > 0 {
@@ -319,7 +322,7 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 			nAdd += n
 			nPacks += (n + t.opts.PackSize - 1) / t.opts.PackSize
 			live.Close()
-			t.log.Tracef("merge phase 2: %d/%d records", pkg.NumSelected(), seg.Data().Len())
+			t.log.Debugf("merge phase 2: %d/%d records", pkg.NumSelected(), seg.Data().Len())
 
 			// append active records to table and indexes
 			if err := table.Append(ctx, pkg, pack.WriteModeIncludeSelected); err != nil {
@@ -335,7 +338,7 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 			pkg := seg.Data()
 			nAdd += pkg.Len()
 			nPacks += (pkg.Len() + t.opts.PackSize - 1) / t.opts.PackSize
-			t.log.Tracef("merge phase 2: %d records", pkg.Len())
+			t.log.Debugf("merge phase 2: %d records", pkg.Len())
 
 			// fast-path (journal contains only valid post-images)
 			if err := table.Append(ctx, pkg, pack.WriteModeAll); err != nil {
@@ -343,6 +346,8 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 			}
 		}
 	}
+
+	t.log.Debugf("merge: table time %s", time.Since(now))
 
 	if hist != nil {
 		// FIXME: howto track history table state?
@@ -355,10 +360,11 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 	// finalize will flush remaining writer packs to disk, update table state
 	// and make new epoch visible by atomically replacing the table stats index
 	// with the new version produced during merge
-	// t.log.Debugf("finalize merge")
+	now = time.Now()
 	if err := table.Finalize(ctx, seg.State()); err != nil {
 		return err
 	}
+	t.log.Debugf("merge: table finalize %s", time.Since(now))
 
 	// collect metrics
 	dur := time.Since(start)
@@ -371,6 +377,8 @@ func (t *Table) mergeJournal(ctx context.Context, seg *journal.Segment) error {
 	t.log.Debugf("merged segment %d packs=%d records=%d tombs=%d heap=%s stored=%s comp=%.2f%% in %s",
 		seg.Id(), nPacks, nAdd, nStones, util.ByteSize(nHeap), util.ByteSize(nBytes),
 		float64(nBytes)*100/float64(nHeap), dur)
+
+	t.log.Debugf("timings %#v", table.Metrics())
 
 	return nil
 }
