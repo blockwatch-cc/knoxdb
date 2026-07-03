@@ -234,7 +234,7 @@ type SimpleHashConverter struct {
 
 func (c *SimpleHashConverter) ConvertPack(pkg *pack.Package, mode pack.WriteMode) *pack.Package {
 	ipkg := pack.New().WithSchema(c.sout).WithMaxRows(pkg.Cap())
-	ipkg.WithBlock(0, pkg.Block(c.hash).Hash())
+	ipkg.WithBlock(0, HashBlock(pkg.Block(c.hash)))
 	for i, v := range c.link {
 		b := pkg.Block(v)
 		b.Retain()
@@ -254,7 +254,7 @@ func (c *SimpleHashConverter) QueryKeys(node *filter.Node) []uint64 {
 	switch flt.Mode {
 	case types.FilterModeEqual:
 		// single
-		_ = f0.WriteValue(buf, flt.Value, LE)
+		_ = f0.AppendValue(buf, flt.Value, LE)
 		return []uint64{hash.Hash(buf.Bytes())}
 
 	case types.FilterModeIn, types.FilterModeNotIn:
@@ -266,7 +266,7 @@ func (c *SimpleHashConverter) QueryKeys(node *filter.Node) []uint64 {
 		res := make([]uint64, rval.Len())
 		for i := range res {
 			buf.Reset()
-			_ = f0.WriteValue(buf, rval.Index(i).Interface(), LE)
+			_ = f0.AppendValue(buf, rval.Index(i).Interface(), LE)
 			res[i] = hash.Hash(buf.Bytes())
 		}
 		return res
@@ -385,7 +385,7 @@ func (c *CompositeHashConverter) QueryKeys(node *filter.Node) []uint64 {
 			// empty result if we cannot build a hash from all index fields
 			return nil
 		}
-		field.WriteValue(buf, node.Filter.Value, LE)
+		field.AppendValue(buf, node.Filter.Value, LE)
 		// set skip flags signalling this condition has been processed
 		node.Skip = true
 		delete(eq, field.Name)

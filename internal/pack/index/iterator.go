@@ -171,28 +171,22 @@ func (it *LookupIterator) loadNextPack(ctx context.Context) (bool, error) {
 	// pack; use the expected next row id as hint to make progress
 	// in case the same index key spreads across multiple index packs
 	var (
-		search  []byte
-		scratch [PackKeySize]byte
+		search    []byte
+		scratch   [PackKeySize]byte
+		searchRid = ^uint64(0)
 	)
 	if it.nextRid > 0 {
-		search = it.idx.appendPackKey(scratch[:0], it.keys[0], it.nextRid, 0)
-		// it.idx.log.Debugf("lookup: searchLE 0x%016x:%016x:%d", it.keys[0], it.nextRid, 0)
-	} else {
-		search = store.AppendUvarint(scratch[:0], it.keys[0])
-		// it.idx.log.Debugf("lookup: searchLE 0x%016x", it.keys[0])
+		searchRid = it.nextRid
 	}
+	search = it.idx.appendPackKey(scratch[:0], it.keys[0], searchRid, 0)
+	// it.idx.log.Debugf("lookup: searchLE 0x%016x:%016x:%d", it.keys[0], searchRid, 0)
 	key, val, err := it.bucket.SearchLE(search)
 	if err != nil {
-		// no hit? happens on prefix search when the search key is
-		// an exact match to the index pack key;
-		key, val, err = it.bucket.SearchGE(search)
-		if err != nil {
-			// it.idx.log.Debugf("lookup: unexpected, did not find any block")
-			return false, err
-		}
+		// it.idx.log.Debugf("lookup: unexpected, did not find any block")
+		return false, err
 	}
 
-	// decode the key, it either points to block idx = 0 (EQUAL atch)
+	// decode the key, it either points to block idx = 0 (EQUAL match)
 	// or 1 (LESS match)
 	ikey, rid, idx := it.idx.decodePackKey(key)
 	// it.idx.log.Debugf("lookup: found 0x%016x:%016x:%d", ikey, rid, idx)

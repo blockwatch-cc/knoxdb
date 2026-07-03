@@ -381,26 +381,33 @@ func (idx *Index) Lookup(ctx context.Context, ridMap map[uint64]uint64) error {
 		k1 := pkg.Block(1).Uint64() // table pks
 		packLen := k0.Len()
 
-		// loop over the remaining (unresolved) keys, packs are sorted by pk
+		// loop over the remaining (unresolved) keys, packs are sorted
 		pos := 0
 		for _, key := range in[next:] {
 			// idx.log.Debugf("looking for ik=0x%016x", key)
 
 			// no more matches in this pack?
 			if kmax < key || k0.Get(pos) > maxKey {
-				// idx.log.Debug("no more matches in this pack")
+				// idx.log.Debugf("no more matches in this pack after pos=%d key=%d kmax=%d maxkey=%d: %v",
+				// 	pos, key, kmax, maxKey, slices.Collect(k0.Values()))
 				break
 			}
 
-			// find key in remainder of pack
+			// find the first occurence of key in remainder of pack
 			n := sort.Search(packLen-pos, func(i int) bool { return k0.Get(pos+i) >= key })
 
 			// skip when not found
 			if pos+n >= packLen || k0.Get(pos+n) != key {
-				// idx.log.Debug("lookup key not found")
+				// idx.log.Debugf("lookup key %d not found in %v", key,
+				// 	slices.Collect(k0.Values()),
+				// )
 				next++
 				continue
 			}
+
+			// update search start pos, all following search keys
+			// are guaranteed to be larger than key (lookup map is unique)
+			// and must therefore be sorted after pos+n in the index
 			// idx.log.Debugf("at pos %d found=%016x", pos+n, k0.Get(pos+n))
 			pos += n
 

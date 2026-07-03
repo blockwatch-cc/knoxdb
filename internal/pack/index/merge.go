@@ -46,19 +46,19 @@ func (v MergeValue) IsValid() bool {
 	return v.Ok
 }
 
+func (v MergeValue) String() string {
+	if v.Ok {
+		return fmt.Sprintf("0x%016x:%016x", v.Key, v.Rid)
+	}
+	return "none"
+}
+
 func (v MergeValue) Equal(w MergeValue) bool {
-	return v.Ok && w.Ok && v.Key == w.Key && v.Rid == w.Rid
+	return v.Key == w.Key && v.Rid == w.Rid
 }
 
 func (v MergeValue) Less(w MergeValue) bool {
-	switch {
-	case v.Ok && w.Ok:
-		return v.Key < w.Key || (v.Key == w.Key && v.Rid < w.Rid)
-	case v.Ok:
-		return true
-	default:
-		return false
-	}
+	return v.Key < w.Key || (v.Key == w.Key && v.Rid < w.Rid)
 }
 
 // MergeIterator is a helper to locate, load and store index packs.
@@ -183,15 +183,12 @@ func (it *MergeIterator) SplitAndStore(pkg *pack.Package) error {
 	// drop second half from pack
 	pkg.Delete(it.idx.opts.PackSize/2, it.idx.opts.PackSize)
 
-	// store first half
+	// store first half (same id as loaded before)
 	if err := it.Store(pkg); err != nil {
 		return err
 	}
 
-	// free first half
-	pkg.Release()
-
-	// store second half
+	// store second half (will generate new key from first record)
 	if err := it.Store(half); err != nil {
 		return err
 	}
@@ -225,9 +222,9 @@ func (it *MergeIterator) Store(pkg *pack.Package) error {
 			)
 			buf, stats, err = pkg.Block(i).Encode(types.CompressNone)
 			if err == nil {
+				// it.idx.log.Tracef("merge storing block 0x%016x:%016x:%d key=%x values=%d size=%d",
+				// 	id.Key, id.Rid, i, key, pkg.Len(), len(buf))
 				err = it.bucket.Put(key, buf)
-				// it.idx.log.Tracef("merge storing block 0x%016x:%016x:%d len=%d size=%d",
-				// 	id.Key, id.Rid, i, pkg.Len(), len(buf))
 				stats.Close()
 				n += len(buf)
 				pkg.Block(i).SetClean()
@@ -305,9 +302,9 @@ func (it *MergeIterator) Next(ctx context.Context, id MergeValue) (*pack.Package
 	if key != nil {
 		boundary.Key, boundary.Rid, _ = it.idx.decodePackKey(key)
 		boundary.Ok = true
-		// it.idx.log.Tracef("merge: next boundary 0x%016x:%016x", boundary.Key, boundary.Rid)
+		// 	it.idx.log.Tracef("merge: next boundary %s", boundary)
 		// } else {
-		// 	it.idx.log.Tracef("merge: no more boundary, will append new pack")
+		// 	it.idx.log.Tracef("merge: no more boundary, will append to source pack")
 	}
 
 	// return current pack and its boundary
@@ -374,7 +371,7 @@ func (it *MergeIterator) loadNextPack(find MergeValue) ([]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("loading block 0x%08x:%08x:%d: %v", ikey, rid, i, err)
 		}
-		// it.idx.log.Tracef("merge: using block %d len=%d count=%d", i, len(buf), b.Len())
+		// it.idx.log.Tracef("merge: using block %d len=%d values=%d", i, len(buf), b.Len())
 		it.pack.WithBlock(i, b)
 		n += len(buf)
 	}
@@ -448,8 +445,6 @@ func (it *MergeIterator) loadNextPack(find MergeValue) ([]byte, error) {
 // writes journal records to index packs. this is called during table merge when
 // index journal runs full and when finalizing index updates.
 func (idx *Index) mergeAppend(ctx context.Context) error {
-	idx.log.Debugf("merging journal[%d]", idx.journal.Len())
-
 	var (
 		start = time.Now()
 		jpos  int
@@ -494,7 +489,8 @@ func (idx *Index) mergeAppend(ctx context.Context) error {
 		if src != nil {
 			// split src when full, restart loop
 			if src.IsFull() {
-				if err := it.SplitAndStore(src); err != nil {
+				// idx.log.Tracef("merge: split full src=%d/%d", src.Len(), src.Cap())
+				if err := it.SplitAndStore(src.Copy().Materialize()); err != nil {
 					return err
 				}
 				continue
@@ -502,11 +498,12 @@ func (idx *Index) mergeAppend(ctx context.Context) error {
 
 			// resolve src block accessors
 			slen = src.Len()
+			// idx.log.Tracef("merge: from src=%d/%d", src.Len(), src.Cap())
 			s0 = src.Block(0).Uint64()
 			s1 = src.Block(1).Uint64()
 		}
-		// idx.log.Tracef("merge: src=%d/%d j=%d/%d boundary=%016x:%016x:%t",
-		// 	spos, slen, jpos, jlen, bound.Key, bound.Rid, bound.Ok)
+		// idx.log.Tracef("merge: src=%d/%d j=%d/%d boundary=%s",
+		// 	spos, slen, jpos, jlen, bound)
 
 		// create a new output pack
 		out := it.NewPack()
@@ -514,20 +511,28 @@ func (idx *Index) mergeAppend(ctx context.Context) error {
 		o1 := out.Block(1).Uint64()
 
 		// merge src and journal content into out
-		var sval, jval MergeValue
+		var (
+			sval, jval        MergeValue
+			atJournalBoundary bool
+		)
 	mergeloop:
 		for {
 			// load next values
 			if spos < slen && !sval.IsValid() {
 				sval = NewMergeValue(s0.Get(spos), s1.Get(spos))
 			}
-			if jpos < jlen && !jval.IsValid() {
+
+			if !atJournalBoundary && jpos < jlen && !jval.IsValid() {
 				jval = NewMergeValue(j0[jpos], j1[jpos])
 
 				// stop when this journal value crosses next src pack's min
+				// note we cannot break the merge loop here as long as index
+				// src pack has unmerged values or otherwise they are lost
+				// silently
 				if bound.IsValid() && !jval.Less(bound) {
 					// idx.log.Tracef("merge: break at boundary jval %x:%d", jval.Key, jval.Rid)
-					break mergeloop
+					jval.Reset()
+					atJournalBoundary = true
 				}
 			}
 
@@ -540,6 +545,7 @@ func (idx *Index) mergeAppend(ctx context.Context) error {
 					o0.Append(sval.Key)
 					o1.Append(sval.Rid)
 					out.UpdateLen()
+					// idx.log.Tracef("merge: index pk=%d rid=%d", sval.Key, sval.Rid)
 					spos++
 					sval.Reset()
 				case sval.Equal(jval):
@@ -548,12 +554,14 @@ func (idx *Index) mergeAppend(ctx context.Context) error {
 					jpos++
 					it.nIns++
 					it.nDups++
+					// idx.log.Tracef("merge: journal skip equal pk=%d rid=%d", jval.Key, jval.Rid)
 					jval.Reset()
 				default:
 					// write jval
 					o0.Append(jval.Key)
 					o1.Append(jval.Rid)
 					out.UpdateLen()
+					// idx.log.Tracef("merge: journal pk=%d rid=%d", jval.Key, jval.Rid)
 					jpos++
 					it.nIns++
 					jval.Reset()
@@ -563,6 +571,7 @@ func (idx *Index) mergeAppend(ctx context.Context) error {
 				o0.Append(sval.Key)
 				o1.Append(sval.Rid)
 				out.UpdateLen()
+				// idx.log.Tracef("merge: index pk=%d rid=%d", sval.Key, sval.Rid)
 				spos++
 				sval.Reset()
 
@@ -571,6 +580,7 @@ func (idx *Index) mergeAppend(ctx context.Context) error {
 				o0.Append(jval.Key)
 				o1.Append(jval.Rid)
 				out.UpdateLen()
+				// idx.log.Tracef("merge: journal pk=%d rid=%d", jval.Key, jval.Rid)
 				jpos++
 				it.nIns++
 				jval.Reset()
@@ -583,9 +593,11 @@ func (idx *Index) mergeAppend(ctx context.Context) error {
 
 			// store and alloc new out pack when full
 			if out.IsFull() {
+				// idx.log.Tracef("merge: store full out pack values=%d", out.Len())
 				if err = it.Store(out); err != nil {
 					return err
 				}
+				out.Release()
 				out = it.NewPack()
 				o0 = out.Block(0).Uint64()
 				o1 = out.Block(1).Uint64()
@@ -594,6 +606,7 @@ func (idx *Index) mergeAppend(ctx context.Context) error {
 
 		// store non-empty output pack
 		if out.Len() > 0 {
+			// idx.log.Tracef("merge: store final out pack values=%d", out.Len())
 			if err = it.Store(out); err != nil {
 				return err
 			}
@@ -642,7 +655,7 @@ func (idx *Index) mergeAppend(ctx context.Context) error {
 
 // removes tombstoned records from journal packs by rewriting packs.
 func (idx *Index) mergeTomb(ctx context.Context, tomb *pack.Package) error {
-	idx.log.Debugf("merging tomb[%d]", tomb.Len())
+	idx.log.Debugf("merging %d tomb records", tomb.Len())
 
 	var (
 		start = time.Now()
