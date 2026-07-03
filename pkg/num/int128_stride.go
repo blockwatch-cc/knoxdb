@@ -68,6 +68,12 @@ func (s *Int128Stride) Append(val Int128) int {
 	return len(s.X0) - 1
 }
 
+func (s *Int128Stride) Reserve(n int) {
+	sz := len(s.X0) + n
+	s.X0 = arena.Realloc(s.X0, sz)
+	s.X1 = arena.Realloc(s.X1, sz)
+}
+
 func (src *Int128Stride) AppendTo(v BigIntWriter[Int128], sel []uint32) {
 	dst := v.(*Int128Stride)
 	if sel == nil {

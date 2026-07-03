@@ -48,6 +48,7 @@ type NumberMatcher[T Number] interface {
 
 type NumberWriter[T Number] interface {
 	Append(T) int
+	Reserve(int)
 	Set(int, T)
 	Delete(int, int)
 }

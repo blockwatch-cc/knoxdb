@@ -89,6 +89,14 @@ func (s *Int256Stride) Append(val Int256) int {
 	return len(s.X0) - 1
 }
 
+func (s *Int256Stride) Reserve(n int) {
+	sz := len(s.X0) + n
+	s.X0 = arena.Realloc(s.X0, sz)
+	s.X1 = arena.Realloc(s.X1, sz)
+	s.X2 = arena.Realloc(s.X2, sz)
+	s.X3 = arena.Realloc(s.X3, sz)
+}
+
 func (src *Int256Stride) AppendTo(v BigIntWriter[Int256], sel []uint32) {
 	dst := v.(*Int256Stride)
 	if sel == nil {

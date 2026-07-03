@@ -73,6 +73,7 @@ type BigIntReader[T any, E any] interface {
 
 type BigIntWriter[T any] interface {
 	Append(T) int
+	Reserve(int)
 	Set(int, T)
 	Delete(int, int)
 	Clear()

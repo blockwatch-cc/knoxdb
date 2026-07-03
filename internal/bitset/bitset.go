@@ -391,6 +391,10 @@ func (s *Bitset) Resize(size int) *Bitset {
 	return s
 }
 
+func (s *Bitset) Reserve(size int) {
+	s.Grow(size)
+}
+
 // Grow increases the bitset to a new size.
 func (s *Bitset) Grow(size int) *Bitset {
 	// fast path
@@ -558,10 +562,11 @@ func (s *Bitset) Fill(b byte) *Bitset {
 // Append grows bitset by 1 and sets the trailing bit to val
 func (s *Bitset) Append(val bool) int {
 	s.Grow(1)
+	i := s.size - 1
 	if val {
-		s.setbit(s.size - 1)
+		s.setbit(i)
 	}
-	return s.size - 1
+	return i
 }
 
 // AppendTo appends selected values to dst.

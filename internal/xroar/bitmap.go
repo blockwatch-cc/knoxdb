@@ -200,6 +200,9 @@ func (ra *Bitmap) Bytes() []byte {
 }
 
 func (ra *Bitmap) Clone() *Bitmap {
+	if ra == nil {
+		return nil
+	}
 	return NewFromBytes(slices.Clone(ra.Bytes()))
 }
 

@@ -56,7 +56,7 @@ func ptr2pair(p uint64) (uint32, uint32) {
 	return uint32(p >> 32), uint32(p)
 }
 
-func pair2ptr(o, l uint32) uint64 {
+func pair2ptr(o, l int) uint64 {
 	return uint64(o)<<32 | uint64(l)
 }
 
@@ -224,13 +224,13 @@ func (p *StringPool) Append(val []byte) int {
 	if vlen > maxPageSize {
 		panic(fmt.Errorf("stringpool: string value too large"))
 	}
-	willGrow := len(p.ptr) == cap(p.ptr) || len(p.buf)+vlen > cap(p.buf)
+	willGrow := len(p.buf)+vlen > cap(p.buf) || len(p.ptr) == cap(p.ptr)
 	if vlen == 0 {
 		// append empty string, may realloc
 		p.ptr = append(p.ptr, 0)
 	} else {
 		// may realloc
-		p.ptr = append(p.ptr, pair2ptr(uint32(len(p.buf)), uint32(vlen)))
+		p.ptr = append(p.ptr, pair2ptr(len(p.buf), vlen))
 		p.buf = append(p.buf, val...)
 	}
 	// check for realloc and update pointers
@@ -239,6 +239,11 @@ func (p *StringPool) Append(val []byte) int {
 		p.pp = unsafe.SliceData(p.ptr)
 	}
 	return len(p.ptr) - 1
+}
+
+func (p *StringPool) Reserve(n int) {
+	p.ptr = arena.Realloc(p.ptr, len(p.ptr)+n)
+	p.pp = unsafe.SliceData(p.ptr)
 }
 
 // AppendMany appends multiple strings and returns the position of
@@ -318,9 +323,7 @@ func (p *StringPool) GetString(i int) string {
 // string becomes garbage. Panics if i is out of bounds.
 func (p *StringPool) Set(i int, val []byte) {
 	// insert val at place i and append string to the end of buf
-	vlen := uint32(len(val))
-	vofs := uint32(len(p.buf))
-	p.ptr[i] = pair2ptr(vofs, vlen)
+	p.ptr[i] = pair2ptr(len(p.buf), len(val))
 	p.buf = append(p.buf, val...)
 }
 

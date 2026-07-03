@@ -21,6 +21,7 @@ type StringMatcher interface {
 
 type StringWriter interface {
 	Append([]byte) int
+	Reserve(int)
 	Set(int, []byte)
 	Delete(int, int)
 	Clear()

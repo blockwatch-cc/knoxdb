@@ -270,6 +270,28 @@ func (b *Block) Size() int {
 	return sz
 }
 
+func (b *Block) Reserve(n int) {
+	assert.Always(b != nil, "reserve: nil block, potential use after free")
+	assert.Always(b.IsMaterialized(), "reserve: block not materialized")
+	switch b.typ {
+	case BlockBool:
+		b.Bool().Reserve(n)
+	case BlockBytes:
+		b.Bytes().Reserve(n)
+	case BlockInt128:
+		b.Int128().Reserve(n)
+	case BlockInt256:
+		b.Int256().Reserve(n)
+	default:
+		sz := b.len + uint32(n)
+		if sz > b.cap {
+			b.buf = unsafe.SliceData(arena.Realloc(b.data(), int(sz*uint32(b.sz))))
+		}
+		b.len += uint32(n)
+	}
+	b.dirty = true
+}
+
 func (b *Block) Clone(sz int) *Block {
 	assert.Always(b != nil, "clone: nil block, potential use after free")
 	assert.Always(b.Len() <= sz, "clone: size smaller than block size")

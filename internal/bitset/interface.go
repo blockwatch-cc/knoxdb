@@ -23,6 +23,7 @@ type BitmapMatcher interface {
 
 type BitmapWriter interface {
 	Append(bool) int
+	Reserve(int)
 	Set(int)
 	Unset(int)
 	Delete(int, int)

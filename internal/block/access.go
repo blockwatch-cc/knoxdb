@@ -161,6 +161,10 @@ func (a Accessor[T]) Cmp(i, j int) int {
 // NumberWriter interface
 //
 
+func (a Accessor[T]) Reserve(n int) {
+	a.block.Reserve(n)
+}
+
 func (a Accessor[T]) Append(v T) int {
 	assert.Always(a.block != nil, "append: nil block")
 	assert.Always(a.block.IsMaterialized(), "append: block not materialized")
