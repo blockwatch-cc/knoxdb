@@ -50,7 +50,7 @@ func unbuffer[T any](seq iter.Seq[[][2]T]) iter.Seq2[T, T] {
 // merge2 is a prioritizing dual-sequence merge algorithm. It uses batching
 // to amortize baseline costs of iter.Pull and considers tombstones in seq0
 // when merging. Any key/value pair in seq0 takes precedence over pairs in
-// seq1. When seq0 contains a tombstone, no pair is outpot. When both seq0
+// seq1. When seq0 contains a tombstone, no pair is output. When both seq0
 // and seq1 contain the same key, the pair from seq0 is output.
 func merge2[T any](cmp func([2]T, [2]T) (int, bool), seq0, seq1 iter.Seq[[][2]T]) iter.Seq[[][2]T] {
 	return func(yield func([][2]T) bool) {
@@ -144,7 +144,7 @@ func merge2[T any](cmp func([2]T, [2]T) (int, bool), seq0, seq1 iter.Seq[[][2]T]
 }
 
 // merge2r performs reverse order merging. it works similar to merge2 but
-// instead of using the minimum of keys it uses the maximom to decide on
+// instead of using the minimum of keys it uses the maximum to decide on
 // the next output.
 func merge2r[T any](cmp func([2]T, [2]T) (int, bool), seq0, seq1 iter.Seq[[][2]T]) iter.Seq[[][2]T] {
 	return func(yield func([][2]T) bool) {

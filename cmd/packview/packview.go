@@ -35,6 +35,7 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/jedib0t/go-pretty/v6/text"
+	"golang.org/x/term"
 )
 
 var (
@@ -60,6 +61,13 @@ func init() {
 	flags.BoolVar(&debug, "vv", false, "enable debug mode")
 	flags.BoolVar(&trace, "vvv", false, "enable trace mode")
 	flags.IntVar(&headRepeat, "head", 80, "repeat headers every `num` records")
+}
+
+func getPageSize() int {
+	if term.IsTerminal(int(os.Stdout.Fd())) {
+		return headRepeat
+	}
+	return 0
 }
 
 func main() {
@@ -292,7 +300,7 @@ func PrintMetadata(view StatsViewer, desc TableDescriptor, w io.Writer) {
 	s := view.Schema()
 	rx, _ := s.IndexId(itypes.MetaRid)
 	t := table.NewWriter()
-	t.SetPageSize(headRepeat)
+	t.Pager(table.PageSize(getPageSize()))
 	t.SetOutputMirror(w)
 	t.SetTitle("%s - %d fields - #%016x", s.Name, s.NumFields(), s.Hash)
 	t.AppendHeader(table.Row{"#", "Key", "Version", "Records", "RID min", "RID max", "Size"})
@@ -367,6 +375,7 @@ func PrintDetail(view Viewer, desc TableDescriptor, w io.Writer) {
 			{Name: "Byte/Val", Align: text.AlignRight},
 		})
 		for i := range s.NumFields() {
+			log.Tracef("Field %d/%d %s", i, pkg.Cols(), pkg.Schema().Field(i).Name)
 			var (
 				sz   int
 				info string
@@ -400,16 +409,13 @@ func PrintDetail(view Viewer, desc TableDescriptor, w io.Writer) {
 }
 
 func printValue(f *schema.Field, val any) any {
+	if val == nil {
+		return "nil"
+	}
 	switch f.Type {
-	case schema.Bytes:
+	case schema.Bytes, schema.Binary:
 		return LimitStringEllipsis(fmt.Sprintf("%x", val), 33)
 	case schema.Enum:
-		if f.Enum != nil {
-			enum, ok := f.Enum.Value(val.(uint16))
-			if ok {
-				return enum
-			}
-		}
 		return val
 	case schema.Timestamp, schema.Date, schema.Time:
 		return schema.TimeScale(f.Scale).Format(val.(time.Time))
@@ -423,7 +429,7 @@ func printValue(f *schema.Field, val any) any {
 func PrintContent(ctx context.Context, view ContentViewer, desc TableDescriptor, w io.Writer) {
 	t := table.NewWriter()
 	t.SetOutputMirror(w)
-	t.SetPageSize(headRepeat)
+	t.Pager(table.PageSize(getPageSize()))
 	s := view.Schema()
 
 	// analyze schema and set custom text transformer for byte and enum columns
@@ -437,19 +443,6 @@ func PrintContent(ctx context.Context, view ContentViewer, desc TableDescriptor,
 					return hex.EncodeToString(val.([]byte))
 				},
 			})
-		case schema.Enum:
-			if field.Enum != nil {
-				cfgs = append(cfgs, table.ColumnConfig{
-					Name: field.Name,
-					Transformer: func(val any) string {
-						enum, ok := field.Enum.Value(val.(uint16))
-						if ok {
-							return enum
-						}
-						return strconv.Itoa(int(val.(uint16)))
-					},
-				})
-			}
 		case schema.Timestamp, schema.Date, schema.Time:
 			cfgs = append(cfgs, table.ColumnConfig{
 				Name: field.Name,
@@ -464,23 +457,28 @@ func PrintContent(ctx context.Context, view ContentViewer, desc TableDescriptor,
 	}
 
 	// handle journal separate (add deleted column)
-	var res []any
 	if desc.PackId < 0 {
 		pkg := view.ViewPackage(ctx, desc.PackId)
 		tomb := view.ViewTomb(desc.PackId)
 		rx, _ := s.IndexId(itypes.MetaRid)
 		head := make(table.Row, 0, s.NumFields()+1)
-		for _, v := range append([]string{"DEL"}, s.Names()...) {
+		for _, v := range append(s.Names(), "TOMB") {
 			head = append(head, any(v))
 		}
+		t.SetTitle("%s - Journal Segment %d[v%d] - %s records",
+			s.Name,
+			pkg.Key(),
+			pkg.Version(),
+			util.PrettyInt(pkg.Len()),
+		)
 		t.AppendHeader(head)
 		for r := 0; r < pkg.Len(); r++ {
-			res = pkg.ReadRow(r, res)
+			res := pkg.ReadRow(r, nil)
 			var live string
 			if tomb.Contains(res[rx].(uint64)) {
 				live = "*"
 			}
-			t.AppendRow(append([]any{live}, res...))
+			t.AppendRow(append(res, live))
 		}
 		t.Render()
 		t.ResetRows()
@@ -513,6 +511,12 @@ func PrintContent(ctx context.Context, view ContentViewer, desc TableDescriptor,
 		for r := 0; r < pkg.Len(); r++ {
 			t.AppendRow(pkg.ReadRow(r, nil))
 		}
+		t.SetTitle("%s - Pack 0x%08x[v%d] - %s records",
+			s.Name,
+			pkg.Key(),
+			pkg.Version(),
+			util.PrettyInt(pkg.Len()),
+		)
 		pkg.Release()
 		t.Render()
 		t.ResetRows()

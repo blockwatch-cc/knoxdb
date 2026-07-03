@@ -31,17 +31,6 @@ func cacheKey(packkey, version uint32, blockId uint16) uint64 {
 
 const BlockKeySize = store.MaxVarintLen32 + 2*store.MaxVarintLen16
 
-// EncodeBlockKey produces a block key for use inside the table's data bucket.
-// The key clusters blocks of the same column into on-disk data pages which
-// amortizes load costs.
-// func EncodeBlockKey(packkey, version uint32, blockId uint16) []byte {
-// 	var b [store.MaxVarintLen32 + 2*store.MaxVarintLen16]byte
-// 	buf := store.AppendUvarint(b[:0], uint64(blockId))
-// 	buf = store.AppendUvarint(buf, uint64(packkey))
-// 	buf = store.AppendUvarint(buf, uint64(version))
-// 	return buf
-// }
-
 func AppendBlockKey(buf []byte, packkey, version uint32, blockId uint16) []byte {
 	buf = store.AppendUvarint(buf, uint64(blockId))
 	buf = store.AppendUvarint(buf, uint64(packkey))
@@ -228,9 +217,11 @@ func (p *Package) StoreToDisk(ctx context.Context, bucket store.Bucket) (int, er
 		// 		p.schema.Name(), p.schema.Field(i).Name(), p.Key(), i, p.Version(), len(buf))
 		// }
 
-		// minv, maxv := stats.MinMax()
-		// fmt.Printf("store block 0x%08x:%02d[v%d]: len=%d size=%d min=%v max=%v\n",
-		// 	p.key, f.Id, p.version, b.Len(), len(buf), minv, maxv)
+		// if f.IsPrimary() {
+		// 	minv, maxv := stats.MinMax()
+		// 	fmt.Printf("store block 0x%08x:%02d[v%d]: len=%d size=%d min=%v max=%v\n",
+		// 		p.key, f.Id, p.version, b.Len(), len(buf), minv, maxv)
+		// }
 
 		// export block statistics
 		if p.stats != nil {

@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/hex"
 	"io"
-	"strconv"
 	"time"
 
 	"blockwatch.cc/knoxdb/internal/pack"
@@ -41,26 +40,13 @@ func (op *Logger) Process(_ context.Context, src *pack.Package) (*pack.Package, 
 	var cfgs []table.ColumnConfig
 	for _, field := range s.Fields {
 		switch field.Type {
-		case types.FT_BYTES:
+		case types.FT_BYTES, types.FT_BINARY:
 			cfgs = append(cfgs, table.ColumnConfig{
 				Name: field.Name,
 				Transformer: func(val any) string {
 					return hex.EncodeToString(val.([]byte))
 				},
 			})
-		case types.FT_ENUM:
-			if field.Enum != nil {
-				cfgs = append(cfgs, table.ColumnConfig{
-					Name: field.Name,
-					Transformer: func(val any) string {
-						enum, ok := field.Enum.Value(val.(uint16))
-						if ok {
-							return enum
-						}
-						return strconv.Itoa(int(val.(uint16)))
-					},
-				})
-			}
 		case types.FT_TIMESTAMP, types.FT_DATE, types.FT_TIME:
 			cfgs = append(cfgs, table.ColumnConfig{
 				Name: field.Name,

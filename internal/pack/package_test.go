@@ -107,23 +107,6 @@ func makeTypedPackage(typ any, fill int) *Package {
 	return pkg
 }
 
-// func makeTypedFrame(typ any, fill int) *array.Frame {
-// 	s, err := sreflect.SchemaOf(typ, schema.Enums(enums))
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	frame := array.MakeFrame(s, PACK_SIZE)
-// 	enc := encode.NewEncoder(s)
-// 	buf := enc.NewBuffer(1)
-// 	if err = enc.Encode(buf, makeZeroStruct(typ)); err != nil {
-// 		panic(err)
-// 	}
-// 	for range fill {
-// 		frame.AppendRecord(buf.Bytes())
-// 	}
-// 	return frame
-// }
-
 func makeZeroStruct(v any) any {
 	typ := reflect.TypeOf(v).Elem()
 	ptr := reflect.New(typ)

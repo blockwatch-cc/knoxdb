@@ -15,18 +15,22 @@ import (
 func (t *Table) ViewStats(i int) *stats.Record {
 	switch {
 	case i == -1:
-		return stats.NewRecordFromPack(t.journal.Tip().Data(), 0)
+		pkg := t.journal.Tip().Data()
+		pkg.BuildStats()
+		return stats.NewRecordFromPack(pkg, 0)
 	case i < -1:
 		i = -i - 2
 		segs := t.journal.Segments()
 		if i < len(segs) {
-			return stats.NewRecordFromPack(segs[i].Data(), 0)
+			pkg := segs[i].Data()
+			pkg.BuildStats()
+			return stats.NewRecordFromPack(pkg, 0)
 		}
 		return nil
 	default:
 		s := t.stats.Retain()
 		info, _ := s.Get(uint32(i))
-		s.Release(false)
+		s.Release(context.Background(), false)
 		return info
 	}
 }

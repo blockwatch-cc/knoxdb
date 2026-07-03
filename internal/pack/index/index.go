@@ -136,7 +136,7 @@ func (idx *Index) createBackend(ctx context.Context) error {
 
 	opts := append(
 		idx.opts.StoreOptions(),
-		store.WithLogger(idx.log),
+		// store.WithLogger(idx.log),
 		store.WithPath(path),
 		store.WithManifest(
 			store.NewManifest(
@@ -235,7 +235,7 @@ func (idx *Index) openBackend(ctx context.Context) error {
 
 	opts := append(
 		idx.opts.StoreOptions(),
-		store.WithLogger(idx.log),
+		// store.WithLogger(idx.log),
 		store.WithPath(path),
 		store.WithManifest(
 			store.NewManifest(
@@ -511,7 +511,7 @@ func (idx *Index) GC(ctx context.Context, epoch uint32) error {
 	return nil
 }
 
-// GC all tombstones <= epoch. Called in startup
+// GC all tombstones <= epoch. Called on startup
 func (idx *Index) Cleanup(ctx context.Context, epoch uint32) error {
 	idx.log.Debugf("cleanup until epoch %d", epoch)
 	var drop []uint32

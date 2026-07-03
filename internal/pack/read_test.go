@@ -117,3 +117,66 @@ func BenchmarkReadWireE2E(b *testing.B) {
 		})
 	}
 }
+
+func BenchmarkPackView(b *testing.B) {
+	pkg := makeTypedPackage(&Transfer{}, 1)
+	b.ReportAllocs()
+	b.ResetTimer()
+	var tf Transfer
+	for b.Loop() {
+		tf.ID = pkg.Uint64(0, 0)
+		tf.DebitAccountID = pkg.Uint64(1, 0)
+		tf.CreditAccountID = pkg.Uint64(2, 0)
+		tf.Amount = pkg.Int128(3, 0)
+		tf.PendingID = pkg.Uint64(4, 0)
+		copy(tf.UserData256[:], pkg.Bytes(5, 0))
+		tf.UserData64 = pkg.Uint64(6, 0)
+		tf.UserData32 = pkg.Uint32(7, 0)
+		tf.Timeout = pkg.Uint32(8, 0)
+		tf.Ledger = pkg.Uint32(9, 0)
+		tf.Code = pkg.Uint16(10, 0)
+		tf.Flags = pkg.Uint16(11, 0)
+		tf.Timestamp = pkg.Uint64(12, 0)
+	}
+	b.ReportMetric(float64(b.N)/b.Elapsed().Seconds(), "rec/s")
+	b.ReportMetric(float64(b.Elapsed().Nanoseconds())/float64(b.N), "ns/rec")
+}
+
+func BenchmarkPackViewPre(b *testing.B) {
+	pkg := makeTypedPackage(&Transfer{}, 1)
+	b.ReportAllocs()
+	b.ResetTimer()
+	var (
+		tf               Transfer
+		aID              = pkg.Block(0).Uint64()
+		aDebitAccountID  = pkg.Block(1).Uint64()
+		aCreditAccountID = pkg.Block(2).Uint64()
+		aAmount          = pkg.Block(3).Int128()
+		aPendingID       = pkg.Block(4).Uint64()
+		aUserData256     = pkg.Block(5).Bytes()
+		aUserData64      = pkg.Block(6).Uint64()
+		aUserData32      = pkg.Block(7).Uint32()
+		aTimeout         = pkg.Block(8).Uint32()
+		aLedger          = pkg.Block(9).Uint32()
+		aCode            = pkg.Block(10).Uint16()
+		aFlags           = pkg.Block(11).Uint16()
+		aTimestamp       = pkg.Block(12).Uint64()
+	)
+	for b.Loop() {
+		tf.ID = aID.Get(0)
+		tf.DebitAccountID = aDebitAccountID.Get(0)
+		tf.CreditAccountID = aCreditAccountID.Get(0)
+		tf.Amount = aAmount.Get(0)
+		tf.PendingID = aPendingID.Get(0)
+		copy(tf.UserData256[:], aUserData256.Get(0))
+		tf.UserData64 = aUserData64.Get(0)
+		tf.UserData32 = aUserData32.Get(0)
+		tf.Timeout = aTimeout.Get(0)
+		tf.Ledger = aLedger.Get(0)
+		tf.Code = aCode.Get(0)
+		tf.Flags = aFlags.Get(0)
+		tf.Timestamp = aTimestamp.Get(0)
+	}
+	b.ReportMetric(float64(b.N)/b.Elapsed().Seconds(), "rec/s")
+	b.ReportMetric(float64(b.Elapsed().Nanoseconds())/float64(b.N), "ns/rec")
+}

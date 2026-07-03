@@ -4,9 +4,12 @@
 package pack
 
 import (
+	"fmt"
+
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/assert"
 	"blockwatch.cc/knoxdb/pkg/num"
+	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
@@ -47,13 +50,13 @@ func (p *Package) ReadRow(row int, dst []any) []any {
 		}
 
 		// add to result
-		dst = append(dst, p.ReadValue(i, row, f.Type, f.Scale))
+		dst = append(dst, p.ReadValue(i, row, f))
 	}
 	return dst
 }
 
 // Reads a single value at postion col,row.
-func (p *Package) ReadValue(col, row int, typ types.FieldType, scale uint8) any {
+func (p *Package) ReadValue(col, row int, f *schema.Field) any {
 	// assert.Always(col >= 0 && col < len(p.blocks), "invalid block id", map[string]any{
 	//  "id":      col,
 	//  "pack":    p.key,
@@ -70,7 +73,7 @@ func (p *Package) ReadValue(col, row int, typ types.FieldType, scale uint8) any 
 	// })
 	b := p.blocks[col]
 
-	switch typ {
+	switch f.Type {
 	case types.FT_I64:
 		return b.Int64().Get(row)
 	case types.FT_I32:
@@ -93,12 +96,12 @@ func (p *Package) ReadValue(col, row int, typ types.FieldType, scale uint8) any 
 		return b.Float32().Get(row)
 	case types.FT_TIMESTAMP, types.FT_DATE, types.FT_TIME:
 		if ts := b.Int64().Get(row); ts > 0 {
-			return types.TimeScale(scale).FromUnix(ts)
+			return types.TimeScale(f.Scale).FromUnix(ts)
 		} else {
 			return zeroTime
 		}
 	case types.FT_DURATION:
-		return types.TimeScale(scale).Duration(b.Int64().Get(row))
+		return types.TimeScale(f.Scale).Duration(b.Int64().Get(row))
 	case types.FT_BOOL:
 		return b.Bool().Get(row)
 	case types.FT_BYTES, types.FT_BINARY:
@@ -110,21 +113,29 @@ func (p *Package) ReadValue(col, row int, typ types.FieldType, scale uint8) any 
 	case types.FT_I128:
 		return b.Int128().Get(row)
 	case types.FT_D256:
-		return num.NewDecimal256(b.Int256().Get(row), scale)
+		return num.NewDecimal256(b.Int256().Get(row), f.Scale)
 	case types.FT_D128:
-		return num.NewDecimal128(b.Int128().Get(row), scale)
+		return num.NewDecimal128(b.Int128().Get(row), f.Scale)
 	case types.FT_D64:
-		return num.NewDecimal64(b.Int64().Get(row), scale)
+		return num.NewDecimal64(b.Int64().Get(row), f.Scale)
 	case types.FT_D32:
-		return num.NewDecimal32(b.Int32().Get(row), scale)
+		return num.NewDecimal32(b.Int32().Get(row), f.Scale)
 	case types.FT_BIGINT:
 		return num.NewBigFromBytes(b.Bytes().Get(row))
+	case types.FT_ENUM:
+		u16 := b.Uint16().Get(row)
+		val, ok := f.Enum.Value(u16)
+		if !ok {
+			return fmt.Errorf("%s: invalid enum value %d", f.Name, u16)
+		}
+		return val
+
 	default:
 		// oh, its a type we don't support yet
 		assert.Unreachable("unhandled field type", map[string]any{
 			"field":   col,
-			"typeid":  int(typ),
-			"type":    typ.String(),
+			"typeid":  int(f.Type),
+			"type":    f.Type.String(),
 			"pack":    p.key,
 			"schema":  p.schema.Name,
 			"version": p.schema.Version,

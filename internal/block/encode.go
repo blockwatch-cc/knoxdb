@@ -15,7 +15,7 @@ import (
 
 func (b *Block) Encode(c Compression) ([]byte, encode.ContextExporter, error) {
 	if !b.IsMaterialized() {
-		return nil, nil, ErrBlockNotMaterialized
+		return nil, nil, fmt.Errorf("encode: %v", ErrBlockNotMaterialized)
 	}
 
 	// encode with best scheme selection
