@@ -209,8 +209,8 @@ type Index struct {
 	tomb         *Tomb                 // per-version tombstone
 	db           store.DB              // backend reference for pulling more data
 	keys         [STATS_BUCKETS][]byte // statistics bucket keys
-	inodes       []*INode              // inner nodes of the binary tree as array
-	snodes       []*SNode              // leaf nodes of the binary tree as array
+	inodes       []*Inode              // inner nodes of the binary tree as array
+	snodes       []*Snode              // leaf nodes of the binary tree as array
 	log          log.Logger            // logger instance
 	bytesRead    int64                 // io metrics
 	bytesWritten int64                 // io metrics
@@ -224,8 +224,8 @@ func NewIndex() *Index {
 	return &Index{
 		rc:     1,
 		epoch:  0,
-		inodes: make([]*INode, 0),
-		snodes: make([]*SNode, 0),
+		inodes: make([]*Inode, 0),
+		snodes: make([]*Snode, 0),
 		tomb:   NewTomb().WithEpoch(0),
 		log:    log.Disabled,
 		use:    FeatBloomFilter | FeatFuseFilter | FeatBitsFilter,
@@ -244,7 +244,7 @@ func (idx *Index) Clone() *Index {
 		rx:           idx.rx,                     // config is read-only
 		px:           idx.px,                     // config is read-only
 		nmax:         idx.nmax,                   // config is read-only
-		tomb:         idx.tomb,                   // tomb is read-only
+		tomb:         idx.tomb.Clone(),           // tomb epoch will change
 		db:           idx.db,                     // db remains the same
 		keys:         idx.keys,                   // bucket keys are read-only
 		inodes:       slices.Clone(idx.inodes),   // tree is copy-on-write
@@ -321,7 +321,7 @@ func (idx *Index) AtomicPtr() *AtomicPointer {
 	return NewAtomicPtr(idx)
 }
 
-func (idx *Index) Release(withGC bool) {
+func (idx *Index) Release(ctx context.Context, withGC bool) {
 	for {
 		rc := atomic.LoadUint32(&idx.rc)
 		if rc == 0 {
@@ -330,7 +330,7 @@ func (idx *Index) Release(withGC bool) {
 		if rc == 1 {
 			// try clean
 			if atomic.CompareAndSwapUint32(&idx.rc, 1, 0) {
-				if err := idx.cleanup(withGC); err != nil {
+				if err := idx.cleanup(ctx, withGC); err != nil {
 					idx.log.Errorf("stats: cleanup failed: %v", err)
 				}
 				idx.Free()
@@ -345,7 +345,7 @@ func (idx *Index) Release(withGC bool) {
 	}
 }
 
-func (idx *Index) cleanup(withGC bool) error {
+func (idx *Index) cleanup(ctx context.Context, withGC bool) error {
 	return idx.db.Update(func(tx store.Tx) error {
 		// drop self
 		if err := idx.dropEpoch(tx); err != nil {
@@ -355,7 +355,7 @@ func (idx *Index) cleanup(withGC bool) error {
 
 		// run GC when requested
 		if withGC {
-			return idx.RunGC(tx)
+			return idx.RunGC(ctx, tx)
 		}
 		return nil
 	})
@@ -367,6 +367,7 @@ func (idx *Index) Free() {
 	clear(idx.inodes)
 	clear(idx.keys[:])
 	idx.table = nil
+	idx.tomb.Close()
 	idx.tomb = nil
 	idx.rc = 0
 	idx.epoch = 0
@@ -499,7 +500,7 @@ func (idx *Index) IndexSize() int {
 // pack management
 func (idx *Index) AddPack(ctx context.Context, pkg *pack.Package) error {
 	// lookup pack placement
-	node, i, ok := idx.findSNode(pkg.Key())
+	node, i, ok := idx.findSnode(pkg.Key())
 
 	// create a new leaf node when not found or full
 	if !ok || node.spack.Load().Len() == STATS_PACK_SIZE {
@@ -527,7 +528,7 @@ func (idx *Index) AddPack(ctx context.Context, pkg *pack.Package) error {
 
 func (idx *Index) UpdatePack(ctx context.Context, pkg *pack.Package) error {
 	// lookup pack placement
-	node, i, ok := idx.findSNode(pkg.Key())
+	node, i, ok := idx.findSnode(pkg.Key())
 	if !ok {
 		// should not happen
 		return fmt.Errorf("stats: missing record for pack %08x[v%d]", pkg.Key(), pkg.Version())
@@ -554,7 +555,7 @@ func (idx *Index) UpdatePack(ctx context.Context, pkg *pack.Package) error {
 
 func (idx *Index) DeletePack(ctx context.Context, pkg *pack.Package) error {
 	// lookup pack placement
-	node, i, ok := idx.findSNode(pkg.Key())
+	node, i, ok := idx.findSnode(pkg.Key())
 	if !ok {
 		// should not happen
 		return fmt.Errorf("stats: missing record for pack %08x[v%d]", pkg.Key(), pkg.Version())
@@ -657,7 +658,7 @@ func (idx *Index) TailInfo() (uint32, uint32, int) {
 
 // debug use only
 func (idx *Index) Get(key uint32) (*Record, bool) {
-	node, _, ok := idx.findSNode(key)
+	node, _, ok := idx.findSnode(key)
 	if !ok {
 		return nil, false
 	}
@@ -872,15 +873,15 @@ func (idx *Index) Query(ctx context.Context, flt *filter.Node, dir types.OrderTy
 }
 
 // root node access
-func (idx *Index) root() *INode {
+func (idx *Index) root() *Inode {
 	if len(idx.inodes) == 0 {
-		return NewINode()
+		return NewInode()
 	}
 	return idx.inodes[0]
 }
 
 // finds snode where key exists or suggests node to place a new key
-func (idx *Index) findSNode(key uint32) (*SNode, int, bool) {
+func (idx *Index) findSnode(key uint32) (*Snode, int, bool) {
 	l := len(idx.snodes)
 	// binary search for the first match (this and all following snodes
 	// return true for the condition below)
@@ -897,7 +898,7 @@ func (idx *Index) findSNode(key uint32) (*SNode, int, bool) {
 	return nil, -1, false
 }
 
-func (idx *Index) addSnode() (*SNode, int) {
+func (idx *Index) addSnode() (*Snode, int) {
 	// read current array lengths
 	ilen, slen := len(idx.inodes), len(idx.snodes)
 
@@ -913,7 +914,7 @@ func (idx *Index) addSnode() (*SNode, int) {
 	if slen > 0 {
 		nextKey = idx.snodes[slen-1].spack.Load().Key() + 1
 	}
-	node := NewSNode(nextKey, idx.schema, true)
+	node := NewSnode(nextKey, idx.schema, true)
 	idx.snodes = append(idx.snodes, node)
 	slen++
 
@@ -952,11 +953,11 @@ func (idx *Index) addSnode() (*SNode, int) {
 
 		// init inodes from the new data node up to the root
 		for n := parentIndex(sx); n > 0; n = parentIndex(n) {
-			idx.inodes[n] = NewINode()
+			idx.inodes[n] = NewInode()
 		}
 
 		// init the new root node
-		idx.inodes[0] = NewINode()
+		idx.inodes[0] = NewInode()
 	} else {
 		// init missing inodes from the new data node up to the root
 		// (see above for how to calculate the new snode's index)
@@ -966,7 +967,7 @@ func (idx *Index) addSnode() (*SNode, int) {
 			if idx.inodes[n] != nil {
 				break
 			}
-			idx.inodes[n] = NewINode()
+			idx.inodes[n] = NewInode()
 		}
 	}
 
@@ -989,6 +990,15 @@ func (idx *Index) updatePathToRoot(i int) {
 	// subtract 1 from ilen)
 	p := parentIndex(ilen - 1 + i)
 	parent := idx.inodes[p]
+
+	// copy on write
+	if !parent.dirty {
+		parent = &Inode{
+			meta:  parent.meta,
+			dirty: true,
+		}
+		idx.inodes[p] = parent
+	}
 
 	// Identify both children and pass them to Update() which will
 	// aggregate both childrens statistics. At the end of the snode
@@ -1018,6 +1028,14 @@ func (idx *Index) updatePathToRoot(i int) {
 	for p = parentIndex(p); ok && p >= 0; p = parentIndex(p) {
 		left := idx.inodes[leftChildIndex(p)]
 		right := idx.inodes[rightChildIndex(p)]
+
+		// copy on write
+		if !idx.inodes[p].dirty {
+			idx.inodes[p] = &Inode{
+				meta:  idx.inodes[p].meta,
+				dirty: true,
+			}
+		}
 
 		// Go is quirky. When we put nil pointers into interfaces the interface
 		// does not compare with nil because its type is non nil. See
@@ -1063,7 +1081,7 @@ func (idx *Index) rebuildInodeTree(ver uint32) {
 		}
 
 		// create new inode and build merged meta statistics
-		idx.inodes[n] = NewINode()
+		idx.inodes[n] = NewInode()
 		idx.inodes[n].Update(idx.view, left, right)
 		idx.inodes[n].SetVersion(idx.view, ver)
 	}
@@ -1085,7 +1103,7 @@ func (idx *Index) rebuildInodeTree(ver uint32) {
 		}
 
 		// create new inode and build merged meta statistics
-		idx.inodes[n] = NewINode()
+		idx.inodes[n] = NewInode()
 		idx.inodes[n].Update(idx.view, left, right)
 		idx.inodes[n].SetVersion(idx.view, ver)
 	}

@@ -322,7 +322,7 @@ func (idx *Index) Load(ctx context.Context, tx store.Tx) error {
 		case KIND_SNODE:
 			// snode
 			// idx.log.Debugf("load snode %d [%x]", id, c.Key())
-			node := NewSNode(key, idx.schema, false)
+			node := NewSnode(key, idx.schema, false)
 			node.meta = bytes.Clone(val)
 			node.LoadVersion(idx.view)
 			idx.snodes[id] = node
@@ -353,7 +353,7 @@ func (idx *Index) Load(ctx context.Context, tx store.Tx) error {
 		case KIND_INODE:
 			// inode
 			// idx.log.Tracef("load inode %d [%x]", id, c.Key())
-			idx.inodes[id] = NewINode()
+			idx.inodes[id] = NewInode()
 			idx.inodes[id].meta = bytes.Clone(val)
 			idx.bytesRead += int64(len(val))
 		default:
@@ -372,7 +372,7 @@ func (idx *Index) Drop(ctx context.Context, tx store.Tx) error {
 	return nil
 }
 
-func (idx *Index) prepareWrite(ctx context.Context, node *SNode, i int) (*SNode, error) {
+func (idx *Index) prepareWrite(ctx context.Context, node *Snode, i int) (*Snode, error) {
 	if node.IsWritable() {
 		return node, nil
 	}

@@ -25,7 +25,7 @@ type Iterator struct {
 	smatch  *bitset.Bitset // snode matches
 	vmatch  *bitset.Bitset // spack matches
 	sx      int            // current snode index
-	snode   *SNode         // current matching snode
+	snode   *Snode         // current matching snode
 	match   []uint32       // row matches in current stats pack
 	n       int            // current offset inside match rows
 	reverse bool           // iteration order

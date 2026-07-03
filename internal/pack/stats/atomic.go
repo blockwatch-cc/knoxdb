@@ -3,7 +3,10 @@
 
 package stats
 
-import "sync/atomic"
+import (
+	"context"
+	"sync/atomic"
+)
 
 // AtomicPointer wraps Index and ensures multiple readers have stable
 // access to the latest reference counted version of the wrapped
@@ -54,7 +57,7 @@ func (p *AtomicPointer) Retain() *Index {
 // attempts to release the old object if no longer in use (i.e.
 // reference count drops to zero.) Note the new index idx must
 // be initialized with a reference count of 1.
-func (p *AtomicPointer) Update(idx *Index) {
+func (p *AtomicPointer) Update(ctx context.Context, idx *Index) {
 	old := p.ptr.Swap(idx)
-	old.Release(true)
+	old.Release(ctx, true)
 }

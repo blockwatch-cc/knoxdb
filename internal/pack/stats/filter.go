@@ -31,7 +31,7 @@ func encodeFilterKey(pkey, ver uint32, fx uint16) []byte {
 	return buf
 }
 
-func (idx *Index) buildFilters(pkg *pack.Package, node *SNode) error {
+func (idx *Index) buildFilters(pkg *pack.Package, node *Snode) error {
 	// access statistics
 	n, ok := node.FindKey(pkg.Key())
 	if !ok {

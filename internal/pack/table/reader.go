@@ -119,6 +119,11 @@ func (r *Reader) WithMask(mask *xroar.Bitmap, mode engine.ReadMode) engine.Table
 	r.mask = mask
 	r.mode = mode
 	r.freeSel = mode == engine.ReadModeIncludeMask
+	// if mask == nil {
+	// 	r.log.Debugf("reader: init with mode %d an no mask", mode)
+	// } else {
+	// 	r.log.Debugf("reader: init with mode %d and mask %v", mode, mask.ToArray(nil))
+	// }
 	return r
 }
 
@@ -170,7 +175,7 @@ func (r *Reader) Close() {
 		r.it = nil
 	}
 	if r.stats != nil {
-		r.stats.Release(false)
+		r.stats.Release(context.Background(), false)
 		r.stats = nil
 	}
 	if r.hits != nil {
@@ -244,12 +249,12 @@ func (r *Reader) nextLookupMatch(ctx context.Context) (*pack.Package, error) {
 	// obtain max row id and remove mask entries within this pack
 	// assumes table is sorted by rid (not applicable to history tables)
 	rmin, rmax := r.it.MinMaxRid()
-	// r.log.Warnf("lookup del match: epoch=%d rmin=%d rmax=%d for maskMin=%d",
+	// r.log.Warnf("lookup match: epoch=%d rmin=%d rmax=%d for maskMin=%d",
 	// 	r.stats.Epoch(), rmin, rmax, r.mask.Min())
 
 	// load pack from it
 	k, v, n := r.it.PackInfo()
-	// r.log.Warnf("lookup del pack info: key=%d ver=%d n=%d", k, v, n)
+	// r.log.Warnf("lookup pack info: key=%d ver=%d n=%d", k, v, n)
 	err := r.loadPack(ctx, k, v, n, r.resFields)
 
 	// close statistics it
@@ -326,7 +331,8 @@ func (r *Reader) nextQueryMatch(ctx context.Context) (*pack.Package, error) {
 		// load match columns only
 		k, v, n := r.it.PackInfo()
 		// rmin, rmax := r.it.MinMaxRid()
-		// r.log.Warnf("query found pack info: key=%d ver=%d n=%d rmin=%d rmax=%d", k, v, n, rmin, rmax)
+		// r.log.Warnf("query found pack info: key=%d ver=%d n=%d rmin=%d rmax=%d epoch=%d",
+		// 	k, v, n, rmin, rmax, r.stats.Epoch())
 		if err := r.loadPack(ctx, k, v, n, r.reqFields); err != nil {
 			return nil, err
 		}
@@ -357,6 +363,8 @@ func (r *Reader) nextQueryMatch(ctx context.Context) (*pack.Package, error) {
 					// read next row id
 					rid := rids.Get(i)
 
+					// r.log.Debugf("reader: cross-check match rid=%d against exclude mask -> %t", rid, r.mask.Contains(rid))
+
 					// reset matched bit and remove rid from mask
 					// this is ok since every rid is only ever merged once
 					if r.mask.Contains(rid) {
@@ -369,6 +377,7 @@ func (r *Reader) nextQueryMatch(ctx context.Context) (*pack.Package, error) {
 
 					// stop early when next mask value is outside this pack
 					if r.mask.Min() > rmax {
+						// r.log.Debugf("reader: stop mask check maskMin=%d > rmax=%d", r.mask.Min(), rmax)
 						break
 					}
 				}

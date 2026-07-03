@@ -18,14 +18,14 @@ import (
 	"blockwatch.cc/knoxdb/pkg/store"
 )
 
-type SNode struct {
+type Snode struct {
 	spack    atomic.Pointer[pack.Package] // statistics union package
 	meta     []byte                       // wire encoded min/max/sum statistics over pkg content
 	disksize int                          // statistics package on-disk data size
 	dirty    bool                         // dirty flag
 }
 
-func NewSNode(key uint32, s *schema.Schema, alloc bool) *SNode {
+func NewSnode(key uint32, s *schema.Schema, alloc bool) *Snode {
 	pkg := pack.New().
 		WithKey(key).
 		WithVersion(1).
@@ -34,14 +34,14 @@ func NewSNode(key uint32, s *schema.Schema, alloc bool) *SNode {
 	if alloc {
 		pkg.Alloc()
 	}
-	node := &SNode{
+	node := &Snode{
 		meta: make([]byte, s.MinWireSize),
 	}
 	node.spack.Store(pkg)
 	return node
 }
 
-func (n *SNode) Clear() {
+func (n *Snode) Clear() {
 	pkg := n.spack.Load()
 	pkg.Release()
 	n.meta = nil
@@ -49,15 +49,15 @@ func (n *SNode) Clear() {
 	n.dirty = false
 }
 
-func (n *SNode) Key() uint32 {
+func (n *Snode) Key() uint32 {
 	return n.spack.Load().Key()
 }
 
-func (n *SNode) Version() uint32 {
+func (n *Snode) Version() uint32 {
 	return n.spack.Load().Version()
 }
 
-func (n *SNode) LoadVersion(view *schema.View) {
+func (n *Snode) LoadVersion(view *schema.View) {
 	v := view.Reset(n.meta).GetPhy(STATS_ROW_VERSION)
 	view.Reset(nil)
 	if v != nil {
@@ -65,29 +65,29 @@ func (n *SNode) LoadVersion(view *schema.View) {
 	}
 }
 
-func (n *SNode) SetVersion(view *schema.View, ver uint32) {
+func (n *Snode) SetVersion(view *schema.View, ver uint32) {
 	view.Reset(n.meta).Set(STATS_ROW_VERSION, ver)
 	view.Reset(nil)
 	n.spack.Load().WithVersion(ver)
 }
 
-func (n *SNode) Bytes() []byte {
+func (n *Snode) Bytes() []byte {
 	return n.meta
 }
 
-func (n *SNode) IsEmpty() bool {
+func (n *Snode) IsEmpty() bool {
 	return n.spack.Load().Len() == 0
 }
 
-func (n *SNode) IsWritable() bool {
-	return n.spack.Load().IsMaterialized()
+func (n *Snode) IsWritable() bool {
+	return n.dirty && n.spack.Load().IsMaterialized()
 }
 
-func (n *SNode) NPacks() int {
+func (n *Snode) NPacks() int {
 	return n.spack.Load().Len()
 }
 
-func (n *SNode) MinKey() uint32 {
+func (n *Snode) MinKey() uint32 {
 	pkg := n.spack.Load()
 	if pkg.Len() > 0 {
 		return pkg.Uint32(STATS_ROW_KEY, 0)
@@ -95,7 +95,7 @@ func (n *SNode) MinKey() uint32 {
 	return 0
 }
 
-func (n *SNode) MaxKey() uint32 {
+func (n *Snode) MaxKey() uint32 {
 	var k uint32
 	pkg := n.spack.Load()
 	if l := pkg.Len(); l > 0 {
@@ -109,7 +109,7 @@ func (n *SNode) MaxKey() uint32 {
 	return k
 }
 
-func (n *SNode) LastNValues() int {
+func (n *Snode) LastNValues() int {
 	pkg := n.spack.Load()
 	if l := pkg.Len(); l > 0 {
 		return int(pkg.Uint64(STATS_ROW_NVALS, l-1))
@@ -117,7 +117,7 @@ func (n *SNode) LastNValues() int {
 	return 0
 }
 
-func (n *SNode) LastInfo() (uint32, uint32, int) {
+func (n *Snode) LastInfo() (uint32, uint32, int) {
 	pkg := n.spack.Load()
 	l := pkg.Len()
 	if l == 0 {
@@ -129,7 +129,7 @@ func (n *SNode) LastInfo() (uint32, uint32, int) {
 	return k, v, int(s)
 }
 
-func (n *SNode) FindKey(key uint32) (int, bool) {
+func (n *Snode) FindKey(key uint32) (int, bool) {
 	// find pack offset (spack is sorted by data pack key)
 	pkg := n.spack.Load()
 	keys := pkg.Block(STATS_ROW_KEY).Uint32()
@@ -143,7 +143,7 @@ func (n *SNode) FindKey(key uint32) (int, bool) {
 	return i, true
 }
 
-func (n *SNode) AppendPack(src *pack.Package) bool {
+func (n *Snode) AppendPack(src *pack.Package) bool {
 	// append meta statistics
 	pkg := n.spack.Load()
 	pkg.Block(STATS_ROW_KEY).Uint32().Append(src.Key())
@@ -186,7 +186,7 @@ func (n *SNode) AppendPack(src *pack.Package) bool {
 	return n.dirty
 }
 
-func (n *SNode) UpdatePack(src *pack.Package) bool {
+func (n *Snode) UpdatePack(src *pack.Package) bool {
 	k, ok := n.FindKey(src.Key())
 	if !ok {
 		// unlikely, should not happen
@@ -255,7 +255,7 @@ func (n *SNode) UpdatePack(src *pack.Package) bool {
 	return n.dirty
 }
 
-func (n *SNode) DeletePack(src *pack.Package) bool {
+func (n *Snode) DeletePack(src *pack.Package) bool {
 	// find pack offset (spack is sorted by data pack key)
 	pkg := n.spack.Load()
 	keys := pkg.Block(STATS_ROW_KEY).Uint32().Slice()
@@ -268,6 +268,7 @@ func (n *SNode) DeletePack(src *pack.Package) bool {
 	}
 
 	// remove statistics row
+	// TODO: rewrite spack without deleted row (could be compressed here)
 	err := pkg.Delete(i, i+1)
 	if err != nil {
 		assert.Unreachable("delete unknown spack", err)
@@ -278,7 +279,7 @@ func (n *SNode) DeletePack(src *pack.Package) bool {
 	return n.dirty
 }
 
-func (n *SNode) PrepareWrite(ctx context.Context, b store.Bucket) (*SNode, error) {
+func (n *Snode) PrepareWrite(ctx context.Context, b store.Bucket) (*Snode, error) {
 	// create clone to prevent overriding spack used by concurrent readers
 	src := n.spack.Load()
 	pkg := src.Copy()
@@ -293,7 +294,7 @@ func (n *SNode) PrepareWrite(ctx context.Context, b store.Bucket) (*SNode, error
 	pkg.Materialize()
 
 	// use clone
-	clone := &SNode{
+	clone := &Snode{
 		meta:     bytes.Clone(n.meta),
 		disksize: n.disksize,
 		dirty:    true,
@@ -303,14 +304,14 @@ func (n *SNode) PrepareWrite(ctx context.Context, b store.Bucket) (*SNode, error
 	return clone, nil
 }
 
-func (n *SNode) Match(flt *filter.Node, view *schema.View) bool {
+func (n *Snode) Match(flt *filter.Node, view *schema.View) bool {
 	view.Reset(n.meta)
 	ok := Match(flt, ViewReader{view})
 	view.Reset(nil)
 	return ok
 }
 
-func (n *SNode) Query(it *Iterator) error {
+func (n *Snode) Query(it *Iterator) error {
 	var (
 		loadBlocks []uint16
 		pkg        = n.spack.Load()
@@ -426,7 +427,7 @@ func (n *SNode) Query(it *Iterator) error {
 	})
 }
 
-func (n *SNode) BuildMetaStats(view *schema.View) bool {
+func (n *Snode) BuildMetaStats(view *schema.View) bool {
 	// use metadata index schema
 	s := view.Schema()
 	wr := s.NewBuffer(1)
@@ -494,7 +495,7 @@ func (n *SNode) BuildMetaStats(view *schema.View) bool {
 		dirty = dirty || !filter.ValueType(b.Type()).EQ(curr, val)
 
 		// write val to builder (even if not changed)
-		s.Fields[i].WriteValue(wr, val, LE)
+		s.Fields[i].AppendValue(wr, val, LE)
 	}
 
 	// reset view to release buffer reference

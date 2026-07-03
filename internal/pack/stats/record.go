@@ -103,11 +103,11 @@ func (r *Record) Update(pkg *pack.Package, n int) *Record {
 
 	s := r.view.Schema()
 	wr := s.NewBuffer(1)
-	s.Fields[STATS_ROW_KEY].WriteValue(wr, r.Key, LE)
-	s.Fields[STATS_ROW_VERSION].WriteValue(wr, r.Version, LE)
-	s.Fields[STATS_ROW_SCHEMA].WriteValue(wr, r.SchemaId, LE)
-	s.Fields[STATS_ROW_NVALS].WriteValue(wr, r.NValues, LE)
-	s.Fields[STATS_ROW_SIZE].WriteValue(wr, r.DiskSize+pstats.SizeDiff(), LE)
+	s.Fields[STATS_ROW_KEY].AppendValue(wr, r.Key, LE)
+	s.Fields[STATS_ROW_VERSION].AppendValue(wr, r.Version, LE)
+	s.Fields[STATS_ROW_SCHEMA].AppendValue(wr, r.SchemaId, LE)
+	s.Fields[STATS_ROW_NVALS].AppendValue(wr, r.NValues, LE)
+	s.Fields[STATS_ROW_SIZE].AppendValue(wr, r.DiskSize+pstats.SizeDiff(), LE)
 
 	for i, b := range pkg.Blocks() {
 		var minv, maxv any
@@ -125,8 +125,8 @@ func (r *Record) Update(pkg *pack.Package, n int) *Record {
 		minx, maxx := minColIndex(i), maxColIndex(i)
 
 		// append statistics values
-		s.Fields[minx].WriteValue(wr, minv, LE)
-		s.Fields[maxx].WriteValue(wr, maxv, LE)
+		s.Fields[minx].AppendValue(wr, minv, LE)
+		s.Fields[maxx].AppendValue(wr, maxv, LE)
 	}
 	r.view.Reset(wr.Bytes())
 	return r

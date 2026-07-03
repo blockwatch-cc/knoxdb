@@ -102,7 +102,7 @@ func (idx *Index) dropEpoch(tx store.Tx) error {
 }
 
 // Delete all reclaimable tombstones.
-func (idx *Index) RunGC(tx store.Tx) error {
+func (idx *Index) RunGC(ctx context.Context, tx store.Tx) error {
 	// read watermark
 	watermark := idx.getWatermark(tx)
 	idx.log.Debugf("gc watermark %d", watermark)
@@ -114,7 +114,7 @@ func (idx *Index) RunGC(tx store.Tx) error {
 		if uint32(v) >= watermark {
 			break
 		}
-		if err := idx.gcEpoch(tx, uint32(v)); err != nil {
+		if err := idx.gcEpoch(ctx, tx, uint32(v)); err != nil {
 			return fmt.Errorf("gc: epoch %d: %v", v, err)
 		}
 		n++
@@ -125,7 +125,7 @@ func (idx *Index) RunGC(tx store.Tx) error {
 
 // Drops all live epochs except the current. GCs tombstones of future
 // epochs. Intended for startup/recovery.
-func (idx *Index) CleanupEpochs(tx store.Tx) error {
+func (idx *Index) CleanupEpochs(ctx context.Context, tx store.Tx) error {
 	// step 1: collect keys (its not safe to mutate inside a cursor)
 	drop := make([]uint32, 0)
 	epochs := idx.epochBucket(tx)
@@ -144,7 +144,7 @@ func (idx *Index) CleanupEpochs(tx store.Tx) error {
 		// GC future tombstones (cleanup after crash)
 		if v >= idx.epoch {
 			idx.log.Debugf("gc broken future epoch %d", v)
-			if err := idx.gcEpoch(tx, v); err != nil {
+			if err := idx.gcEpoch(ctx, tx, v); err != nil {
 				idx.log.Error(err)
 			}
 		}
@@ -160,7 +160,7 @@ func (idx *Index) CleanupEpochs(tx store.Tx) error {
 	idx.clean = true
 
 	// step 3: run regular GC for old epochs
-	return idx.RunGC(tx)
+	return idx.RunGC(ctx, tx)
 }
 
 // Checks if cleanup is required, ie. future epochs exist or GC should run.
@@ -193,7 +193,7 @@ func (idx *Index) numEpochs(tx store.Tx) int {
 	return idx.epochBucket(tx).Stats().NKeys
 }
 
-func (idx *Index) gcEpoch(tx store.Tx, epoch uint32) error {
+func (idx *Index) gcEpoch(ctx context.Context, tx store.Tx, epoch uint32) error {
 	// resolve the epoch bucket
 	ekey := store.EncodeUvarint(uint64(epoch))
 	ebucket, err := idx.tombBucket(tx).Bucket(ekey)
@@ -292,7 +292,7 @@ func (idx *Index) gcEpoch(tx store.Tx, epoch uint32) error {
 	// run index GC
 	for _, v := range idx.table.Indexes() {
 		idx := v.(engine.IndexEngine)
-		if err := idx.GC(context.Background(), epoch); err != nil {
+		if err := idx.GC(ctx, epoch); err != nil {
 			return err
 		}
 	}

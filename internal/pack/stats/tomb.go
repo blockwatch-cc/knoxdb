@@ -33,6 +33,19 @@ func NewTomb() *Tomb {
 	return &Tomb{}
 }
 
+func (t *Tomb) Clone() *Tomb {
+	return &Tomb{
+		db:             t.db,
+		epoch:          t.epoch,
+		tkey:           t.tkey,
+		ekey:           t.ekey,
+		nSpackFields:   t.nSpackFields,
+		activeFields:   t.activeFields,
+		filteredFields: t.filteredFields,
+		rangeFields:    t.rangeFields,
+	}
+}
+
 func (t *Tomb) WithSchema(tableSchema, metaSchema *schema.Schema, use Features) *Tomb {
 	t.nSpackFields = metaSchema.NumFields()
 	t.activeFields = tableSchema.ActiveIds()
@@ -79,7 +92,6 @@ func (t *Tomb) WithEpoch(v uint32) *Tomb {
 }
 
 func (t *Tomb) Close() {
-	t.db = nil
 	*t = Tomb{}
 }
 

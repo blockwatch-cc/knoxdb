@@ -15,20 +15,20 @@ type Node interface {
 	Bytes() []byte
 }
 
-type INode struct {
+type Inode struct {
 	meta  []byte // wire encoded stats schema: min/max (keys, data cols), sum(size, n_val)
 	dirty bool   // dirty flag
 }
 
-func NewINode() *INode {
-	return &INode{}
+func NewInode() *Inode {
+	return &Inode{}
 }
 
-func (n INode) Bytes() []byte {
+func (n Inode) Bytes() []byte {
 	return n.meta
 }
 
-func (n INode) MinKey(view *schema.View) uint32 {
+func (n Inode) MinKey(view *schema.View) uint32 {
 	if len(n.meta) == 0 {
 		return 0
 	}
@@ -40,7 +40,7 @@ func (n INode) MinKey(view *schema.View) uint32 {
 	return val.(uint32)
 }
 
-func (n INode) Version(view *schema.View) uint32 {
+func (n Inode) Version(view *schema.View) uint32 {
 	if len(n.meta) == 0 {
 		return 0
 	}
@@ -52,7 +52,7 @@ func (n INode) Version(view *schema.View) uint32 {
 	return val.(uint32)
 }
 
-func (n INode) NPacks(view *schema.View) int {
+func (n Inode) NPacks(view *schema.View) int {
 	// (u64) schema id repurposed
 	if len(n.meta) == 0 {
 		return 0
@@ -65,7 +65,7 @@ func (n INode) NPacks(view *schema.View) int {
 	return int(val.(uint64))
 }
 
-func (n INode) NValues(view *schema.View) uint64 {
+func (n Inode) NValues(view *schema.View) uint64 {
 	if len(n.meta) == 0 {
 		return 0
 	}
@@ -77,7 +77,7 @@ func (n INode) NValues(view *schema.View) uint64 {
 	return val.(uint64)
 }
 
-func (n INode) Size(view *schema.View) int64 {
+func (n Inode) Size(view *schema.View) int64 {
 	if len(n.meta) == 0 {
 		return 0
 	}
@@ -89,18 +89,18 @@ func (n INode) Size(view *schema.View) int64 {
 	return val.(int64)
 }
 
-func (n INode) Get(view *schema.View, i int) (any, bool) {
+func (n Inode) Get(view *schema.View, i int) (any, bool) {
 	val := view.Reset(n.meta).GetPhy(i)
 	view.Reset(nil)
 	return val, val != nil
 }
 
-func (n *INode) SetVersion(view *schema.View, ver uint32) {
+func (n *Inode) SetVersion(view *schema.View, ver uint32) {
 	view.Reset(n.meta).Set(STATS_ROW_VERSION, ver)
 	view.Reset(nil)
 }
 
-func (n *INode) Update(view *schema.View, left, right Node) bool {
+func (n *Inode) Update(view *schema.View, left, right Node) bool {
 	// update min/max/sum statistics from left and right children
 	// note right may be nil
 	if right == nil {
@@ -133,11 +133,11 @@ func (n *INode) Update(view *schema.View, left, right Node) bool {
 			// handle data pack key
 			// min key is the left subtree's min key
 			n.dirty = n.dirty || !typ.EQ(lval, vval)
-			f.WriteValue(wr, lval, LE)
+			f.AppendValue(wr, lval, LE)
 
 		case STATS_ROW_VERSION:
 			// keep current value (will update on store)
-			f.WriteValue(wr, vval, LE)
+			f.AppendValue(wr, vval, LE)
 
 		case STATS_ROW_SCHEMA, STATS_ROW_NVALS, STATS_ROW_SIZE:
 			// 1: sum data pack count (in u64 field)
@@ -145,7 +145,7 @@ func (n *INode) Update(view *schema.View, left, right Node) bool {
 			// 3: sum of disk sizes
 			val := typ.Add(lval, rval)
 			n.dirty = n.dirty || !typ.EQ(val, vval)
-			f.WriteValue(wr, val, LE)
+			f.AppendValue(wr, val, LE)
 
 		default:
 			// data column statistics
@@ -153,12 +153,12 @@ func (n *INode) Update(view *schema.View, left, right Node) bool {
 				// min fields
 				minVal := typ.Min(lval, rval)
 				n.dirty = n.dirty || !typ.EQ(minVal, vval)
-				f.WriteValue(wr, minVal, LE)
+				f.AppendValue(wr, minVal, LE)
 			} else {
 				// max fields
 				maxVal := typ.Max(lval, rval)
 				n.dirty = n.dirty || !typ.EQ(maxVal, vval)
-				f.WriteValue(wr, maxVal, LE)
+				f.AppendValue(wr, maxVal, LE)
 			}
 		}
 	}
@@ -174,7 +174,7 @@ func (n *INode) Update(view *schema.View, left, right Node) bool {
 	return n.dirty
 }
 
-func (n INode) Match(flt *filter.Node, view *schema.View) bool {
+func (n Inode) Match(flt *filter.Node, view *schema.View) bool {
 	view.Reset(n.meta)
 	defer view.Reset(nil)
 	return Match(flt, &ViewReader{view})
