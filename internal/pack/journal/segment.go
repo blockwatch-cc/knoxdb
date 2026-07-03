@@ -84,6 +84,7 @@ func newSegment(s *schema.Schema, id uint32, maxsz int) *Segment {
 	}
 }
 
+// TODO: deprecate, close and create new segment when needed
 func (s *Segment) Reset() {
 	s.data.Clear()
 	s.tomb.Reset()

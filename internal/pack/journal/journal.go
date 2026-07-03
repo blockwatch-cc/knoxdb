@@ -205,6 +205,7 @@ func (j *Journal) Size() (sz int) {
 	return
 }
 
+// TODO: close and create new tip when needed
 func (j *Journal) Reset() {
 	j.tip.Reset()
 	for _, v := range j.tail {

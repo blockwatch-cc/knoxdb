@@ -137,6 +137,7 @@ func (p *Package) AppendTo(dst *Package, sel []uint32) int {
 	return n
 }
 
+// TODO: deprecate, replace with rewrite into new pack
 // Delete deletes range [i:j) from all blocks in this pack.
 func (p *Package) Delete(i, j int) error {
 	if i < 0 || j < 0 || j < i || p.nRows < j {
@@ -174,6 +175,10 @@ type AppendState struct {
 	srcOffset int
 	selOffset int
 	hasMore   bool
+}
+
+func NewAppendState(more bool) AppendState {
+	return AppendState{hasMore: more}
 }
 
 func (s AppendState) More() bool {
@@ -233,7 +238,7 @@ func (p *Package) AppendSelected(src *Package, mode WriteMode, state AppendState
 
 		// update state
 		state.selOffset += n
-		state.hasMore = len(sel) > state.selOffset
+		state.hasMore = len(sel) > n
 		return n, state
 
 	case WriteModeExcludeSelected:

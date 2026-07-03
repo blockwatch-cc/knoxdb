@@ -51,9 +51,9 @@ import (
 // are written and updates go to the journal only.
 func (j *Journal) UpdateBatch(ctx context.Context, batch *schema.Batch, ridMap map[uint64]uint64) (int, error) {
 	var (
-		sm       = j.tip.data.Schema()
 		tx       = engine.GetTx(ctx)
-		xid      = tx.Id()                    // id of user tx
+		xid      = tx.Id()
+		sm       = j.tip.data.Schema()
 		firstRid = j.tip.tstate.NextRid       // first assigned rid (per wal batch!)
 		nextRid  = firstRid                   // next free row id to assign
 		count    int                          // count of processed records so far
@@ -81,7 +81,7 @@ func (j *Journal) UpdateBatch(ctx context.Context, batch *schema.Batch, ridMap m
 
 		// split batch into wire messages
 		for _, view := range batch.Records() {
-			// stop on journal segment bounadry
+			// stop on journal segment boundary
 			if jcap == 0 {
 				break
 			}
@@ -96,6 +96,8 @@ func (j *Journal) UpdateBatch(ctx context.Context, batch *schema.Batch, ridMap m
 
 			// add update to journal
 			j.tip.UpdateRecord(xid, nextRid, ref, view.Buffer())
+			// j.log.Debugf("Update rid=%d replaces rid=%d for pk=%d (old rid is in tomb=%t)",
+			// 	nextRid, ref, pk, j.tip.tomb.rids.Contains(ref))
 
 			// keep new assigned rid (in case we update again later)
 			ridMap[pk] = nextRid

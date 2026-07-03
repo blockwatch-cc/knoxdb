@@ -74,7 +74,7 @@ func (j *Journal) InsertBatch(ctx context.Context, batch *schema.Batch) (uint64,
 
 		// write wal batch
 		if tx.UseWal() {
-			_, err := tx.Engine().Wal().Write(&wal.Record{
+			_, err := j.wal.Write(&wal.Record{
 				Type:   wal.RecordTypeInsert,
 				Tag:    types.ObjectTagTable,
 				Entity: j.id,
@@ -121,7 +121,7 @@ func (j *Journal) InsertPack(ctx context.Context, src *pack.Package) (uint64, in
 	tx := engine.GetTx(ctx)
 	xid := tx.Id()
 	if tx.UseWal() {
-		return j.insertPackWithWal(ctx, src, xid, tx.Engine().Wal())
+		return j.insertPackWithWal(ctx, src, xid)
 	} else {
 		return j.insertPackNoWal(ctx, src, xid)
 	}
@@ -178,7 +178,7 @@ func (j *Journal) insertPackNoWal(_ context.Context, src *pack.Package, xid type
 	return firstPk, count, nil
 }
 
-func (j *Journal) insertPackWithWal(_ context.Context, src *pack.Package, xid types.XID, w *wal.Wal) (uint64, int, error) {
+func (j *Journal) insertPackWithWal(_ context.Context, src *pack.Package, xid types.XID) (uint64, int, error) {
 	var (
 		view     = schema.NewView(src.Schema()) // view for patching pk
 		sel      = src.Selected()               // selection vector, may be nil
@@ -223,7 +223,7 @@ func (j *Journal) insertPackWithWal(_ context.Context, src *pack.Package, xid ty
 			rec.Data[0] = binary.AppendUvarint(scratch[:0], batchRid)
 			rec.Data[1] = batch.Header()
 			rec.Data[2] = batch.Bytes()
-			_, err := w.Write(rec)
+			_, err := j.wal.Write(rec)
 			if err != nil {
 				return 0, 0, err
 			}
@@ -267,7 +267,7 @@ func (j *Journal) insertPackWithWal(_ context.Context, src *pack.Package, xid ty
 			rec.Data[0] = binary.AppendUvarint(scratch[:0], batchRid)
 			rec.Data[1] = batch.Header()
 			rec.Data[2] = batch.Bytes()
-			_, err := w.Write(rec)
+			_, err := j.wal.Write(rec)
 			if err != nil {
 				return 0, 0, err
 			}

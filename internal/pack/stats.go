@@ -43,10 +43,10 @@ func (p *Package) WithStats() *Package {
 		}
 	}
 	for i, b := range p.blocks {
-		if b == nil || !b.IsDirty() {
+		if b == nil {
 			continue
 		}
-		p.stats.WasDirty[i] = true
+		p.stats.WasDirty[i] = b.IsDirty()
 	}
 	return p
 }

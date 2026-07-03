@@ -218,6 +218,7 @@ func (p *Package) Size() int {
 	return sz
 }
 
+// TODO: deprecate, close and create new pack when needed
 // Clear empties a pack but retains structure and allocated blocks.
 func (p *Package) Clear() {
 	for _, b := range p.blocks {

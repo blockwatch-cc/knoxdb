@@ -32,13 +32,13 @@ func (j *Journal) DeletePack(ctx context.Context, src *pack.Package) (int, error
 	tx := engine.GetTx(ctx)
 	xid := tx.Id()
 	if tx.UseWal() {
-		return j.deletePackWithWal(src, xid, tx.Engine().Wal())
+		return j.deletePackWithWal(src, xid)
 	} else {
 		return j.deletePackNoWal(src, xid)
 	}
 }
 
-func (j *Journal) deletePackWithWal(src *pack.Package, xid types.XID, w *wal.Wal) (int, error) {
+func (j *Journal) deletePackWithWal(src *pack.Package, xid types.XID) (int, error) {
 	// WAL Record format
 	// | rid1 | rid2 | ... |
 	var (
@@ -85,7 +85,7 @@ func (j *Journal) deletePackWithWal(src *pack.Package, xid types.XID, w *wal.Wal
 
 				// write WAL
 				rec.Data[0] = buf
-				_, err := w.Write(rec)
+				_, err := j.wal.Write(rec)
 				if err != nil {
 					return 0, err
 				}
@@ -121,7 +121,7 @@ func (j *Journal) deletePackWithWal(src *pack.Package, xid types.XID, w *wal.Wal
 
 			// write WAL
 			rec.Data[0] = buf
-			_, err := w.Write(rec)
+			_, err := j.wal.Write(rec)
 			if err != nil {
 				return 0, err
 			}
