@@ -69,8 +69,30 @@ func (d *DB) Sync(ctx context.Context) error {
 
 // Transaction
 func (d *DB) Begin(ctx context.Context, flags ...TxFlags) (context.Context, func() error, func() error, error) {
-	ctx, _, commit, abort, err := d.engine.WithTransaction(ctx, flags...)
+	ctx, _, commit, abort, err := d.engine.BeginTransaction(ctx, flags...)
 	return ctx, commit, abort, err
+}
+
+func (d *DB) Update(ctx context.Context, fn func(ctx context.Context) error) error {
+	ctx, _, commit, abort, err := d.engine.BeginTransaction(ctx)
+	if err != nil {
+		return err
+	}
+	defer abort()
+	if err = fn(ctx); err != nil {
+		return err
+	}
+	return commit()
+}
+
+func (d *DB) View(ctx context.Context, fn func(ctx context.Context) error) error {
+	ctx, _, _, abort, err := d.engine.BeginTransaction(ctx, TxFlagReadOnly)
+	if err != nil {
+		return err
+	}
+	err = fn(ctx)
+	_ = abort()
+	return err
 }
 
 // Table

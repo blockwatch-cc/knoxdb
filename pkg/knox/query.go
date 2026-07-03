@@ -390,7 +390,7 @@ func (q Query) Stream(ctx context.Context, fn func(QueryRow) error) error {
 func (q Query) Delete(ctx context.Context) (int, error) {
 	n, err := q.table.Delete(ctx, q)
 	if err != nil {
-		return 0, fmt.Errorf("query %s: %v", q.tag, err)
+		return 0, fmt.Errorf("query %s: %w", q.tag, err)
 	}
 	return n, nil
 }
@@ -398,7 +398,7 @@ func (q Query) Delete(ctx context.Context) (int, error) {
 func (q Query) Count(ctx context.Context) (int, error) {
 	n, err := q.table.Count(ctx, q)
 	if err != nil {
-		return 0, fmt.Errorf("query %s: %v", q.tag, err)
+		return 0, fmt.Errorf("query %s: %w", q.tag, err)
 	}
 	return n, nil
 }

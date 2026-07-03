@@ -394,6 +394,12 @@ func (t *TableT[T]) Count(ctx context.Context, q QueryRequest) (int, error) {
 	return n, nil
 }
 
+func (t *TableT[T]) NewQuery() QueryT[T] {
+	return QueryT[T]{
+		NewQuery().WithTable(t.Table()),
+	}
+}
+
 func (t *TableT[T]) Query(ctx context.Context, q QueryRequest) ([]T, error) {
 	return (QueryT[T]{q.(Query).WithTable(t.Table())}).Run(ctx)
 }
