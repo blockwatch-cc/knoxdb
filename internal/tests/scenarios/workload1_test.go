@@ -14,6 +14,7 @@ import (
 
 	tests "blockwatch.cc/knoxdb/internal/tests/engine"
 	"blockwatch.cc/knoxdb/pkg/knox"
+	"github.com/echa/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,8 +24,8 @@ func TestWorkload1(t *testing.T) {
 
 	eng, cleanup := tests.NewDatabase(t, &tests.Types{})
 	t.Cleanup(func() {
-		cleanup()
 		tests.SaveDatabaseFiles(t, eng)
+		cleanup()
 	})
 	db := knox.WrapEngine(eng)
 	table, err := knox.FindTableFor[tests.Types](db, "types")
@@ -51,11 +52,9 @@ func TestWorkload1(t *testing.T) {
 	err = knox.NewQueryFor[tests.Types]().
 		WithTable(table.Table()).
 		WithTag("validate-stream").
-		WithDebug(true).
-		// WithDebug(testing.Verbose()). // Enable detailed query logging
+		WithDebug(log.Log.Level() == log.LevelTrace).
 		Stream(ctx, func(res *tests.Types) error {
 			require.NotEmpty(t, res.MyEnum, "Unexpected empty enum value %#v", res)
-			// t.Logf("Streamed record: ID=%d, Int64=%d, MyEnum=%s", res.Id, res.Int64, res.MyEnum)
 			require.Equal(t, data[count].Id, res.Id, "Record ID mismatch")
 			require.Equal(t, data[count].Int64, res.Int64, "Int64 mismatch")
 			require.Equal(t, data[count].MyEnum, res.MyEnum, "Enum mismatch")
@@ -69,6 +68,7 @@ func TestWorkload1(t *testing.T) {
 		var res tests.Types
 		_, err := knox.NewQueryFor[tests.Types]().
 			WithTable(table.Table()).
+			WithDebug(log.Log.Level() == log.LevelTrace).
 			AndEqual("int64", v.Int64).
 			Execute(ctx, &res)
 		require.NoError(t, err)

@@ -49,8 +49,8 @@ func TestWorkload4(t *testing.T) {
 	// Setup the unified database
 	eng, cleanup := tests.NewDatabase(t, &UnifiedRow{})
 	t.Cleanup(func() {
-		cleanup()
 		tests.SaveDatabaseFiles(t, eng)
+		cleanup()
 	})
 	db := knox.WrapEngine(eng)
 	table, err := knox.FindTableFor[UnifiedRow](db, "unified_row")
@@ -81,14 +81,7 @@ func TestWorkload4(t *testing.T) {
 	// Multi-threaded interleaved operations
 	for threadID := int32(1); threadID <= numThreads; threadID++ {
 		threadMap := &threadMaps[threadID-1]
-		wg.Add(1)
-		go func(threadID int32, thMap *sync.Map) {
-			start := time.Now()
-			defer func() {
-				log.Infof("Thread %d completed in %s", threadID, time.Since(start))
-				wg.Done()
-			}()
-
+		wg.Go(func() {
 			for i := int64(1); i <= txnSize; i++ {
 				func(txId int64) {
 					// Determine two work-row keys
@@ -134,10 +127,10 @@ func TestWorkload4(t *testing.T) {
 
 					require.NoError(t, commit(), "Commit failed")
 
-					thMap.Store(metaRow.Id, time.Now().UTC())
+					threadMap.Store(metaRow.Id, time.Now().UTC())
 				}(i)
 			}
-		}(threadID, threadMap)
+		})
 	}
 
 	// Wait for all threads to complete
@@ -149,9 +142,15 @@ func TestWorkload4(t *testing.T) {
 	var workRows []*UnifiedRow
 	_, err = knox.NewQueryFor[UnifiedRow]().
 		WithTable(table.Table()).
+		WithDebug(log.Log.Level() == log.LevelTrace).
 		AndEqual("row_type", RowTypeWork).
 		Execute(ctx, &workRows)
 	require.NoError(t, err, "Failed to validate work rows")
+	if len(workRows) != numWorkRows {
+		for i, r := range workRows {
+			t.Logf("%d: %#v", i, r)
+		}
+	}
 	require.Len(t, workRows, numWorkRows, "Work row count must match initial count")
 
 	// 2 run point queries
@@ -178,13 +177,11 @@ func TestWorkload4(t *testing.T) {
 	var metaRows []*UnifiedRow
 	_, err = knox.NewQueryFor[UnifiedRow]().
 		WithTable(table.Table()).
+		WithDebug(log.Log.Level() == log.LevelTrace).
 		AndEqual("row_type", RowTypeMeta).
 		WithLogger(log.Log).
 		Execute(ctx, &metaRows)
 	require.NoError(t, err, "Failed to validate work rows")
-	// for _, r := range metaRows {
-	// 	t.Logf("Found row id=%d TH-%d-TX-%d w1=%d w2=%d", r.Id, r.ThreadID, r.TxId, r.WorkRow1, r.WorkRow2)
-	// }
 
 	// 3 work rows match meta rows (i.e. the last update to a row was written by the correct
 	// thread in the correct tx)
@@ -193,10 +190,10 @@ func TestWorkload4(t *testing.T) {
 		if r.ThreadID == 0 {
 			continue
 		}
-		// t.Logf("Looking for meta row TH-%d-TXN-%d", r.ThreadID, r.TxId)
 		var metarow UnifiedRow
 		_, err = knox.NewQueryFor[UnifiedRow]().
 			WithTable(table.Table()).
+			WithDebug(log.Log.Level() == log.LevelTrace).
 			AndEqual("row_type", RowTypeMeta).
 			AndEqual("thread_id", r.ThreadID).
 			AndEqual("tx_id", r.TxId).

@@ -15,6 +15,7 @@ import (
 
 	tests "blockwatch.cc/knoxdb/internal/tests/engine"
 	"blockwatch.cc/knoxdb/pkg/knox"
+	"github.com/echa/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,8 +31,8 @@ func TestWorkload3(t *testing.T) {
 
 	eng, cleanup := tests.NewDatabase(t, &Ledger{})
 	t.Cleanup(func() {
-		cleanup()
 		tests.SaveDatabaseFiles(t, eng)
+		cleanup()
 	})
 	db := knox.WrapEngine(eng)
 	table, err := knox.FindTableFor[Ledger](db, "ledger")
@@ -72,6 +73,7 @@ func TestWorkload3(t *testing.T) {
 				// Load the "from" account
 				_, err := knox.NewQueryFor[Ledger]().
 					WithTable(table.Table()).
+					WithDebug(log.Log.Level() == log.LevelTrace).
 					AndEqual("id", data[from].Id).
 					Execute(ctx, &fromAccount)
 				require.NoError(t, err, "Failed to load 'from' account with ID: %d", data[from].Id)
@@ -80,6 +82,7 @@ func TestWorkload3(t *testing.T) {
 				// Load the "to" account
 				_, err = knox.NewQueryFor[Ledger]().
 					WithTable(table.Table()).
+					WithDebug(log.Log.Level() == log.LevelTrace).
 					AndEqual("id", data[to].Id).
 					Execute(ctx, &toAccount)
 				require.NoError(t, err, "Failed to load 'to' account with ID: %d", data[to].Id)
@@ -130,6 +133,7 @@ func TestWorkload3(t *testing.T) {
 		var account Ledger
 		_, err := knox.NewQueryFor[Ledger]().
 			WithTable(table.Table()).
+			WithDebug(log.Log.Level() == log.LevelTrace).
 			AndEqual("id", a.Id).
 			Execute(ctx, &account)
 		require.NoError(t, err, "Failed to load account with ID: %d", a.Id)

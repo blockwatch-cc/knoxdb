@@ -26,8 +26,8 @@ func TestWorkload2(t *testing.T) {
 
 	eng, cleanup := tests.NewDatabase(t, &tests.Types{})
 	t.Cleanup(func() {
-		cleanup()
 		tests.SaveDatabaseFiles(t, eng)
+		cleanup()
 	})
 	db := knox.WrapEngine(eng)
 	table, err := knox.FindTableFor[tests.Types](db, "types")
@@ -67,7 +67,7 @@ func TestWorkload2(t *testing.T) {
 	err = knox.NewQueryFor[tests.Types]().
 		WithTable(table.Table()).
 		WithTag("validate-stream").
-		// WithDebug(testing.Verbose()). // Enable detailed query logging
+		WithDebug(testing.Verbose()).
 		Stream(ctx, func(res *tests.Types) error {
 			val, ok := insertedData.Load(res.Id)
 			require.True(t, ok, "Missing record for Id: %d", res.Id)

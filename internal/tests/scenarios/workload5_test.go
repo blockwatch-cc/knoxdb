@@ -11,8 +11,8 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
+	"runtime/debug"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -25,7 +25,6 @@ import (
 	"github.com/echa/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/sync/errgroup"
 )
 
 type command int
@@ -50,7 +49,7 @@ func (c command) String() string {
 const (
 	numCommands = 2048
 	maxProcs    = 32
-	tableName   = "all_types"
+	tableName   = "transfer"
 )
 
 var (
@@ -73,21 +72,23 @@ var (
 	// the expected random occurance of commands, does not need to sum to 1.
 	probs = map[command]float64{
 		insert:   0.25,
-		update:   0.05,
-		delete:   0.05,
+		update:   0.10,
+		delete:   0.10,
 		query:    0.25,
 		stream:   0.25,
 		fsync:    0.02,
 		compact:  0.0001,
 		snapshot: 0.0001,
-		restart:  0.01,
-		crash:    0.01,
+		restart:  0.001,
+		crash:    0.001,
 	}
 
-	NewTestValue = tests.NewAllTypes
+	NewTestValue = tests.NewTransfer
 
 	testRun int
 )
+
+type TestType = tests.Transfer
 
 func init() {
 	var sum float64
@@ -110,10 +111,16 @@ func genCommand() command {
 	return insert
 }
 
-var lastCrash atomic.Int64
+var (
+	// lastCrash atomic.Int64 // round of last restart or crash
+	epoch atomic.Int64 // current restart/crash epoch
+)
 
-func canIgnoreError(err error, round int) bool {
+func canIgnoreError(ctx context.Context, err error, ep int64) bool {
 	if err == nil {
+		return true
+	}
+	if ctx.Err() != nil {
 		return true
 	}
 	switch {
@@ -124,12 +131,76 @@ func canIgnoreError(err error, round int) bool {
 	case errors.Is(err, engine.ErrDatabaseShutdown):
 		return true
 	default:
-		if round < int(lastCrash.Load()) {
+		if ep != epoch.Load() {
 			return true
 		}
-		// log.Error(err)
 		return false
 	}
+}
+
+type Dispatcher struct {
+	ctx    context.Context
+	cancel context.CancelCauseFunc
+	ch     chan func() error
+	stop   chan struct{}
+	wg     sync.WaitGroup
+}
+
+func NewDispatcher() *Dispatcher {
+	return &Dispatcher{
+		ch:   make(chan func() error),
+		stop: make(chan struct{}),
+	}
+}
+
+func (d *Dispatcher) Go(fn func() error) {
+	select {
+	case d.ch <- fn:
+	case <-d.ctx.Done():
+	case <-d.stop:
+	}
+}
+
+func (d *Dispatcher) Run(ctx context.Context, n int) context.Context {
+	d.ctx, d.cancel = context.WithCancelCause(ctx)
+	for range n {
+		// start n workers, stop on first error
+		d.wg.Go(func() {
+			defer func() {
+				if e := recover(); e != nil {
+					debug.PrintStack()
+					switch err := e.(type) {
+					case error:
+						d.cancel(err)
+					default:
+						d.cancel(fmt.Errorf("%v", e))
+					}
+				}
+			}()
+			for {
+				select {
+				case <-d.ctx.Done():
+					return
+				case <-d.stop:
+					return
+				case fn := <-d.ch:
+					if err := fn(); err != nil {
+						d.cancel(err)
+					}
+				}
+			}
+		})
+	}
+	return d.ctx
+}
+
+func (d *Dispatcher) Stop() {
+	close(d.stop)
+}
+
+func (d *Dispatcher) Wait() error {
+	d.wg.Wait()
+	return context.Cause(d.ctx)
 }
 
 func TestWorkload5(t *testing.T) {
@@ -138,7 +209,6 @@ func TestWorkload5(t *testing.T) {
 		nInserts atomic.Int64
 		executed = make(map[command]int)
 		cmdCh    = make(chan command)
-		errg     errgroup.Group
 		wg       sync.WaitGroup
 		liveIds  sync.Map
 		db       atomic.Pointer[engine.Engine]
@@ -148,11 +218,9 @@ func TestWorkload5(t *testing.T) {
 	SetupDeterministicRand(t)
 
 	// create new database and table
-	eng, _ := tests.NewDatabase(t, &tests.AllTypes{})
+	eng, _ := tests.NewDatabase(t, &TestType{})
 	dbo := eng.Options()
 	db.Store(eng)
-
-	errg.SetLimit(maxProcs)
 
 	// save database files on failure
 	t.Cleanup(func() {
@@ -183,25 +251,6 @@ func TestWorkload5(t *testing.T) {
 		require.NoError(t, engine.Drop(tests.TEST_DB_NAME, dbo.DatabaseOptions()...))
 	})
 
-	// set test failed when we detect a panic, this ensures cleanup above
-	// actually runs
-	defer func() {
-		if e := recover(); e != nil {
-			var msg string
-			switch v := e.(type) {
-			case string:
-				msg = v
-			case error:
-				msg = v.Error()
-			default:
-				msg = fmt.Sprintf("%v", v)
-			}
-			t.Log("FAIL -- ", strings.SplitN(msg, "\n", 1)[0])
-			t.Fail()
-			panic(e)
-		}
-	}()
-
 	// count number of commands for logging
 	wg.Go(func() {
 		for {
@@ -213,13 +262,13 @@ func TestWorkload5(t *testing.T) {
 		}
 	})
 
-	// init: insert 1024 values (wrapped into sub-test to catch panics)
+	// init: insert values (wrapped into sub-test to catch panics)
 	t.Run("init", func(t *testing.T) {
-		ins := make([]*tests.AllTypes, 1024)
+		ins := make([]*TestType, 1024)
 		for i := range ins {
-			ins[i] = NewTestValue(i + 1)
+			ins[i] = NewTestValue(int(nInserts.Add(1)))
 		}
-		table, err := knox.FindTableFor[tests.AllTypes](knox.WrapEngine(db.Load()), tableName)
+		table, err := knox.FindTableFor[TestType](knox.WrapEngine(db.Load()), tableName)
 		require.NoError(t, err)
 		pk, n, err := table.Insert(context.Background(), ins...)
 		require.NoError(t, err)
@@ -238,8 +287,6 @@ func TestWorkload5(t *testing.T) {
 	}
 
 	randId := func() uint64 {
-		// return testutil.RandUint64n(uint64(nTuples.Load())+1) + 1
-
 		// pick close-by values to trigger a lot of traffic on the same keys
 		return testutil.RandUint64n(uint64(nInserts.Load())+1) + 1
 	}
@@ -253,51 +300,85 @@ func TestWorkload5(t *testing.T) {
 			schedule[i] = genCommand()
 		}
 
+		// run dispatcher
+		disp := NewDispatcher()
+		ctx := disp.Run(context.Background(), maxProcs)
+		epoch.Add(1)
+
 		for i, cmd := range schedule {
+			// stop scheduling commands after the first failure
+			// canceled the context (due to async execution this
+			// may be delayed)
+			if ctx.Err() != nil || t.Failed() {
+				break
+			}
+
+			// capture round and epoch for error logging
+			// should a restart/crash update the epoch we
+			// ignore errors from the earlier epoch
 			round := i
+			thisEpoch := epoch.Load()
 			wrapErr := func(err error) error {
-				if canIgnoreError(err, round) {
+				if err == nil {
 					return nil
 				}
-				err = fmt.Errorf("%04d [%s]: %v", round, cmd, err)
+				if canIgnoreError(ctx, err, thisEpoch) {
+					t.Logf("%04d [%s]: IGNORE %v", round, cmd, err)
+					return nil
+				}
+				err = fmt.Errorf("%04d [%s]: %w", round, cmd, err)
 				t.Log(err)
 				return err
 			}
 			switch cmd {
 			case insert:
-				errg.Go(func() error {
+				disp.Go(func() error {
 					runtime.Gosched()
-					if round < int(lastCrash.Load()) {
+					if ctx.Err() != nil {
+						t.Logf("%04d [%s] skip", round, cmd)
 						return nil
 					}
-					table, err := knox.FindTableFor[tests.AllTypes](
-						knox.WrapEngine(db.Load()),
-						tableName,
+					db := knox.WrapEngine(db.Load())
+					table, err := knox.FindTableFor[TestType](db, tableName)
+					if err != nil {
+						return wrapErr(err)
+					}
+
+					// open write tx
+					ctx, commit, abort, err := db.Begin(ctx)
+					if err != nil {
+						return wrapErr(err)
+					}
+					defer abort()
+
+					pk, _, err := table.Insert(ctx,
+						NewTestValue(int(nInserts.Add(1))),
 					)
 					if err != nil {
 						return wrapErr(err)
 					}
-					pk, _, err := table.Insert(context.Background(), NewTestValue(int(nInserts.Add(1))))
-					if err != nil {
-						return wrapErr(err)
-					}
-					t.Logf("%04d [%s] pk=%d", round, cmd, pk)
-					nTuples.Add(1)
-					liveIds.Store(pk, nil)
 
 					cmdCh <- cmd
-					return nil
+					if err := commit(); err == nil {
+						t.Logf("%04d [%s] pk=%d", round, cmd, pk)
+						nTuples.Add(1)
+						liveIds.Store(pk, nil)
+						return nil
+					} else {
+						return wrapErr(fmt.Errorf("insert pk=%d: %w", pk, err))
+					}
 				})
+
 			case update:
-				errg.Go(func() error {
+				disp.Go(func() error {
 					runtime.Gosched()
-					if round < int(lastCrash.Load()) {
+					if ctx.Err() != nil {
+						t.Logf("%04d [%s] skip", round, cmd)
 						return nil
 					}
-					table, err := knox.FindTableFor[tests.AllTypes](
-						knox.WrapEngine(db.Load()),
-						tableName,
-					)
+
+					db := knox.WrapEngine(db.Load())
+					table, err := knox.FindTableFor[TestType](db, tableName)
 					if err != nil {
 						return wrapErr(err)
 					}
@@ -305,14 +386,20 @@ func TestWorkload5(t *testing.T) {
 					// pick a random id (may not exist due to delete)
 					id := randId()
 
+					// open write tx
+					ctx, commit, abort, err := db.Begin(ctx)
+					if err != nil {
+						return wrapErr(err)
+					}
+					defer abort()
+
 					// load record if exists
-					var val tests.AllTypes
-					n, err := knox.NewQueryFor[tests.AllTypes]().
+					var val TestType
+					n, err := table.NewQuery().
 						WithTag("update-"+strconv.Itoa(round)).
-						// WithDebug(true).
-						WithTable(table.Table()).
+						WithDebug(log.Log.Level() == log.LevelTrace).
 						AndEqual("id", id).
-						Execute(context.Background(), &val)
+						Execute(ctx, &val)
 					if err != nil {
 						return wrapErr(err)
 					}
@@ -324,50 +411,134 @@ func TestWorkload5(t *testing.T) {
 					}
 
 					// sanity check
-					if id != val.Id {
-						err := fmt.Errorf("%04d [%s] found invalid pk=%d for query with pk=%d", round, cmd, val.Id, id)
+					if id != val.ID {
+						err := fmt.Errorf("%04d [%s] found invalid pk=%d for query with pk=%d",
+							round, cmd, val.ID, id)
 						t.Log(err)
 						return err
 					}
 
-					// update
-					val.Int64++
-					n, err = table.Update(context.Background(), &val)
+					// update in the same write tx
+					val.DebitAccountID++
+					n, err = table.Update(ctx, &val)
 					switch {
 					case errors.Is(err, knox.ErrNoRecord):
 						if _, ok := liveIds.Load(id); ok {
-							err := fmt.Errorf("%04d [%s] wrong update error for existing pk=%d", round, cmd, id)
-							t.Log(err)
-							return err
+							err := fmt.Errorf("notfound error for existing pk=%d", id)
+							return wrapErr(err)
+						} else {
+							err := fmt.Errorf("pk=%d not found (race with delete?)", id)
+							return wrapErr(err)
 						}
-						// race condition with delete?
-						t.Logf("%04d [%s] pk=%d not found (race with delete?)", round, cmd, id)
 					case err != nil && n == 0:
 						return wrapErr(err)
 					case n == 0:
 						// invalid zero update without error
-						err := fmt.Errorf("%04d [%s] invalid zero update without error", round, cmd)
-						t.Log(err)
-						return err
+						err := fmt.Errorf("invalid zero update without error")
+						return wrapErr(err)
 					case n > 1:
 						// must not happen
-						err := fmt.Errorf("%04d [%s] updated %d records with pk=%d", round, cmd, n, val.Id)
-						t.Log(err)
-						return err
+						err := fmt.Errorf("updated %d records with pk=%d", n, val.ID)
+						return wrapErr(err)
 					case n == 1:
 						// success
-						t.Logf("%04d [%s] pk=%d", round, cmd, id)
-						cmdCh <- cmd
+						if err := commit(); err == nil {
+							t.Logf("%04d [%s] pk=%d", round, cmd, id)
+							cmdCh <- cmd
+						} else {
+							return wrapErr(err)
+						}
 					}
 					return nil
 				})
 			case delete:
-				errg.Go(func() error {
+				disp.Go(func() error {
 					runtime.Gosched()
-					if round < int(lastCrash.Load()) {
+					if ctx.Err() != nil {
+						t.Logf("%04d [%s] skip", round, cmd)
 						return nil
 					}
-					table, err := knox.FindTableFor[tests.AllTypes](
+
+					db := knox.WrapEngine(db.Load())
+					table, err := knox.FindTableFor[TestType](db, tableName)
+					if err != nil {
+						return wrapErr(err)
+					}
+
+					// pick a random id (may not exist post delete)
+					id := randId()
+
+					// open write tx
+					ctx, commit, abort, err := db.Begin(ctx)
+					if err != nil {
+						return wrapErr(err)
+					}
+					defer abort()
+
+					// load record if exists
+					var val TestType
+					n, err := table.NewQuery().
+						WithTag("delete-"+strconv.Itoa(round)).
+						AndEqual("id", id).
+						Execute(ctx, &val)
+					if err != nil {
+						return wrapErr(err)
+					}
+
+					// ignore not found
+					if n == 0 {
+						t.Logf("%04d [%s] pk=%d not found", round, cmd, id)
+						return nil
+					}
+
+					// sanity check
+					if id != val.ID {
+						err := fmt.Errorf("%04d [%s] found invalid pk=%d for query with pk=%d", round, cmd, val.ID, id)
+						t.Log(err)
+						return err
+					}
+
+					// delete by id
+					n, err = table.NewQuery().
+						WithTag("delete-"+strconv.Itoa(round)).
+						WithDebug(log.Log.Level() == log.LevelTrace).
+						AndEqual("id", val.ID).
+						Delete(ctx)
+
+					switch {
+					case err != nil:
+						// may happen on shutdown
+						return wrapErr(err)
+					case n == 0:
+						// race with concurrent delete must not happen
+						err := fmt.Errorf("cannot delete existing record pk=%d", val.ID)
+						return wrapErr(err)
+					case n == 1:
+						// expected success case
+						if err := commit(); err == nil {
+							t.Logf("%04d [%s] pk=%d", round, cmd, id)
+							nTuples.Add(-1)
+							liveIds.Delete(val.ID)
+							cmdCh <- cmd
+						} else {
+							return wrapErr(err)
+						}
+					case n > 1:
+						// must not happen
+						err := fmt.Errorf("deleted %d records with pk=%d", n, val.ID)
+						return wrapErr(err)
+					}
+					return nil
+				})
+			case query:
+				disp.Go(func() error {
+					runtime.Gosched()
+					if ctx.Err() != nil {
+						t.Logf("%04d [%s] skip", round, cmd)
+						return nil
+					}
+
+					table, err := knox.FindTableFor[TestType](
 						knox.WrapEngine(db.Load()),
 						tableName,
 					)
@@ -378,97 +549,30 @@ func TestWorkload5(t *testing.T) {
 					// pick a random id (may not exist post delete)
 					id := randId()
 
-					// load record if exists
-					var val tests.AllTypes
-					n, err := knox.NewQueryFor[tests.AllTypes]().
-						WithTag("delete-"+strconv.Itoa(round)).
-						WithTable(table.Table()).
-						AndEqual("id", id).
-						Execute(context.Background(), &val)
-					if err != nil {
-						return wrapErr(err)
-					}
-
-					// ignore not found
-					if n == 0 {
-						t.Logf("%04d [%s] pk=%d not found", round, cmd, id)
-						return nil
-					}
-
-					// sanity check
-					if id != val.Id {
-						err := fmt.Errorf("%04d [%s] found invalid pk=%d for query with pk=%d", round, cmd, val.Id, id)
-						t.Log(err)
-						return err
-					}
-
-					// delete by id
-					n, err = knox.NewQueryFor[tests.AllTypes]().
-						WithTag("delete-"+strconv.Itoa(round)).
-						// WithDebug(true).
-						WithTable(table.Table()).
-						AndEqual("id", val.Id).
-						Delete(context.Background())
-
-					switch {
-					case err != nil:
-						// must not happen
-						return wrapErr(err)
-					case n == 0:
-						// may happen due to race with concurrent delete
-					case n == 1:
-						// expected success case
-						t.Logf("%04d [%s] pk=%d", round, cmd, id)
-						nTuples.Add(-1)
-						liveIds.Delete(val.Id)
-						cmdCh <- cmd
-					case n > 1:
-						// must not happen
-						err := fmt.Errorf("%04d [%s] deleted %d records with pk=%d", round, cmd, n, val.Id)
-						t.Log(err)
-						return err
-					}
-					return nil
-				})
-			case query:
-				errg.Go(func() error {
-					runtime.Gosched()
-					if round < int(lastCrash.Load()) {
-						return nil
-					}
-					table, err := knox.WrapEngine(db.Load()).FindTable(tableName)
-					if err != nil {
-						return wrapErr(err)
-					}
-
-					// pick a random id (may not exist post delete)
-					id := randId()
-					t.Logf("%04d [%s] %d", round, cmd, id)
-
 					// point query
-					var val tests.AllTypes
-					_, err = knox.NewQueryFor[tests.AllTypes]().
+					var val TestType
+					_, err = table.NewQuery().
 						WithTag("query-"+strconv.Itoa(round)).
-						// WithDebug(testing.Verbose()).
-						WithTable(table).
+						WithDebug(log.Log.Level() == log.LevelTrace).
 						AndGte("id", id).
-						Execute(context.Background(), &val)
+						Execute(ctx, &val)
 					if err != nil {
 						return wrapErr(err)
 					}
+					t.Logf("%04d [%s] %d", round, cmd, id)
 					cmdCh <- cmd
 					return nil
 				})
 			case stream:
-				errg.Go(func() error {
+				disp.Go(func() error {
 					runtime.Gosched()
-					if round < int(lastCrash.Load()) {
+					if ctx.Err() != nil {
+						t.Logf("%04d [%s] skip", round, cmd)
 						return nil
 					}
 
 					// limit to N records (stop after, don't use query.Limit)
 					after := randId()
-					t.Logf("%04d [%s]", round, cmd)
 
 					// pick an action randomly
 					action := testutil.RandIntn(3)
@@ -476,21 +580,24 @@ func TestWorkload5(t *testing.T) {
 					// pick an order randomly
 					order := knox.OrderType(testutil.RandIntn(2))
 
-					ctx, cancel := context.WithCancel(context.Background())
+					ctx, cancel := context.WithCancel(ctx)
 					defer cancel()
-					eng := db.Load()
-					table, err := knox.WrapEngine(eng).FindTable(tableName)
+					table, err := knox.FindTableFor[TestType](
+						knox.WrapEngine(db.Load()),
+						tableName,
+					)
 					if err != nil {
 						return wrapErr(err)
 					}
 
-					err = knox.NewQueryFor[tests.AllTypes]().
+					var nrecords int
+					err = table.NewQuery().
 						WithTag("stream-"+strconv.Itoa(round)).
-						// WithDebug(testing.Verbose()).
-						WithTable(table).
+						WithDebug(log.Log.Level() == log.LevelTrace).
 						AndGt("id", 0).
 						WithOrder(order).
-						Stream(ctx, func(v *tests.AllTypes) error {
+						Stream(ctx, func(v *TestType) error {
+							nrecords++
 							after--
 							if after > 0 {
 								return nil
@@ -511,42 +618,46 @@ func TestWorkload5(t *testing.T) {
 					if err != nil {
 						return wrapErr(err)
 					}
+					t.Logf("%04d [%s] act=%d recs=%d", round, cmd, action, nrecords)
 					cmdCh <- cmd
 					return nil
 				})
 			case fsync:
-				errg.Go(func() error {
-					if round < int(lastCrash.Load()) {
+				disp.Go(func() error {
+					if ctx.Err() != nil {
+						t.Logf("%04d [%s] skip", round, cmd)
 						return nil
 					}
-					t.Logf("%04d [%s]", round, cmd)
-					err := db.Load().Sync(context.Background())
+					err := db.Load().Sync(ctx)
 					if err != nil {
 						return wrapErr(err)
 					}
+					t.Logf("%04d [%s]", round, cmd)
 					cmdCh <- cmd
 					return nil
 				})
 			case compact:
-				errg.Go(func() error {
-					if round < int(lastCrash.Load()) {
+				disp.Go(func() error {
+					if ctx.Err() != nil {
+						t.Logf("%04d [%s] skip", round, cmd)
 						return nil
 					}
-					t.Logf("%04d [%s]", round, cmd)
-					err := db.Load().CompactTable(context.Background(), tableName)
+					err := db.Load().CompactTable(ctx, tableName)
 					if err != nil {
 						return wrapErr(err)
 					}
+					t.Logf("%04d [%s]", round, cmd)
 					cmdCh <- cmd
 					return nil
 				})
 			case snapshot:
-				errg.Go(func() error {
-					if round < int(lastCrash.Load()) {
+				disp.Go(func() error {
+					if ctx.Err() != nil {
+						t.Logf("%04d [%s] skip", round, cmd)
 						return nil
 					}
-					t.Logf("%04d [%s]", round, cmd)
-					// err := db.Load().Snapshot(context.Background(), io.Discard)
+					t.Logf("%04d [%s] noop", round, cmd)
+					// err := db.Load().Snapshot(ctx, io.Discard)
 					// if err != nil {
 					//     return wrapErr(err)
 					// }
@@ -555,61 +666,90 @@ func TestWorkload5(t *testing.T) {
 				})
 
 			case restart:
-				t.Logf("%04d [%s]", round, cmd)
-				lastCrash.Store(int64(round))
-				// Graceful shutdown. Concurrent goroutines may fail.
-				_ = errg.Wait()
-				dir := db.Load().Options().Path
-				require.NoError(t, db.Load().Close(context.Background()))
+				// wait until restart is complete
+				var wg sync.WaitGroup
+				wg.Add(1)
 
-				// reopen
-				t.Logf("%04d [%s] reopening DB at %s", round, cmd, dir)
-				dbo := tests.NewTestDatabaseOptions(t, engine.WithPath(dir))
-				eng, err := engine.Open(context.Background(), tests.TEST_DB_NAME, dbo.DatabaseOptions()...)
-				if err != nil {
-					lastCrash.Store(int64(len(schedule)))
-				}
-				require.NoError(t, err, "Failed to open database at %s", dbo.Path)
-				t.Logf("%04d [%s] set new engine %p", round, cmd, eng)
-				db.Store(eng)
-				cmdCh <- cmd
+				disp.Go(func() error {
+					defer wg.Done()
+					if ctx.Err() != nil {
+						t.Logf("%04d [%s] skip", round, cmd)
+						return nil
+					}
+					t.Logf("%04d [%s]", round, cmd)
+
+					dir := db.Load().Options().Path
+					// Graceful shutdown. Concurrent goroutines may fail.
+					require.NoError(t, db.Load().Close(ctx), "shutdown during close")
+
+					// reopen
+					t.Logf("%04d [%s] reopening DB at %s", round, cmd, dir)
+					dbo := tests.NewTestDatabaseOptions(t, engine.WithPath(dir))
+					eng, err := engine.Open(ctx, tests.TEST_DB_NAME, dbo.DatabaseOptions()...)
+					require.NoError(t, err, "Failed to open database at %s", dbo.Path)
+					t.Logf("%04d [%s] set new engine %p", round, cmd, eng)
+					db.Store(eng)
+					cmdCh <- cmd
+					return nil
+				})
+
+				// continue scheduling commands after db restart is complete
+				wg.Wait()
+				epoch.Add(1)
 
 			case crash:
-				lastCrash.Store(int64(round))
-				_ = errg.Wait()
-				eng := db.Load()
-				dir := eng.Options().Path
-				t.Logf("%04d [%s] engine %p", round, cmd, eng)
-				// Crash/unclean shutdown. Concurrent goroutines may fail.
-				require.NoError(t, eng.ForceShutdown())
-				eng = nil
+				// wait until restart is complete
+				var wg sync.WaitGroup
+				wg.Add(1)
 
-				// reopen
-				t.Logf("%04d [%s] reopening DB at %s", round, cmd, dir)
-				dbo := tests.NewTestDatabaseOptions(t, engine.WithPath(dir))
-				eng, err := engine.Open(context.Background(), tests.TEST_DB_NAME, dbo.DatabaseOptions()...)
-				if err != nil {
-					lastCrash.Store(int64(len(schedule)))
-				}
-				require.NoError(t, err, "Failed to open database at %s", dbo.Path)
-				t.Logf("%04d [%s] set new engine %p", round, cmd, eng)
-				db.Store(eng)
-				cmdCh <- cmd
+				// update epoch earlier to silence crash-related errors
+				epoch.Add(1)
+
+				disp.Go(func() error {
+					defer wg.Done()
+					if ctx.Err() != nil {
+						t.Logf("%04d [%s] skip", round, cmd)
+						return nil
+					}
+
+					eng := db.Load()
+					dir := eng.Options().Path
+					t.Logf("%04d [%s] engine %p", round, cmd, eng)
+
+					// Crash/unclean shutdown. Concurrent goroutines may fail.
+					require.NoError(t, eng.ForceClose(ctx), "force shutdown during shutdown")
+					eng = nil
+
+					// reopen
+					t.Logf("%04d [%s] reopening DB at %s", round, cmd, dir)
+					dbo := tests.NewTestDatabaseOptions(t, engine.WithPath(dir))
+					eng, err := engine.Open(ctx, tests.TEST_DB_NAME, dbo.DatabaseOptions()...)
+					require.NoError(t, err, "Failed to open database at %s", dbo.Path)
+					t.Logf("%04d [%s] set new engine %p", round, cmd, eng)
+					db.Store(eng)
+					cmdCh <- cmd
+					return nil
+				})
+
+				// continue scheduling commands after db restart is complete
+				wg.Wait()
 			}
 		}
-	})
 
-	// Wait for all requests to complete.
-	err := errg.Wait()
-	if err != nil {
-		log.Error(err)
-		t.Fail()
-		require.NoError(t, err, "command error")
-	}
+		// Wait for all requests to complete.
+		disp.Stop()
+		require.NoError(t, disp.Wait(), "command error")
+	})
 
 	// close statistics channel
 	close(cmdCh)
 	wg.Wait()
+
+	// don't run validation when an earlier test failed to prevent
+	// polluting the tail of the debug log
+	if t.Failed() {
+		return
+	}
 	t.Logf("All commands completed: %v", executed)
 
 	// sync (wrapped into sub-test to catch panics)
@@ -649,8 +789,8 @@ func TestWorkload5(t *testing.T) {
 			m.StreamCalls,
 		)
 
-		assert.Equal(t, nLive, int(nTuples.Load()), "mismatched live map vs atomic counter")
-		assert.Equal(t, nLive, int(m.TupleCount), "mismatched live map vs tuple metrics")
+		assert.Equal(t, nLive, int(nTuples.Load()), "testcase bug: mismatched live map vs atomic counter")
+		assert.Equal(t, nLive, int(m.TupleCount), "db bug: mismatched live map vs tuple metrics")
 
 		// count scan all db records
 		t.Log("Counting records.")
@@ -660,7 +800,7 @@ func TestWorkload5(t *testing.T) {
 
 		// range scan for all db records
 		t.Log("Scanning records.")
-		var all []*tests.AllTypes
+		var all []*TestType
 		_, err = knox.NewQuery().
 			WithTable(table).
 			Execute(context.Background(), &all)
@@ -669,7 +809,7 @@ func TestWorkload5(t *testing.T) {
 
 		seenIds := make(map[uint64]bool)
 		for _, v := range all {
-			seenIds[v.Id] = false
+			seenIds[v.ID] = false
 		}
 
 		// check all expected records exist in the db
@@ -682,7 +822,7 @@ func TestWorkload5(t *testing.T) {
 			}
 
 			// try point lookup
-			var val tests.AllTypes
+			var val TestType
 			n, err := knox.NewQuery().
 				WithTable(table).
 				AndEqual("id", key.(uint64)).
@@ -694,8 +834,8 @@ func TestWorkload5(t *testing.T) {
 			case n == 0:
 				t.Logf("Error: missing expected pk=%d", key)
 				t.Fail()
-			case val.Id != key.(uint64):
-				t.Logf("Error: mismatched pk=%d, got %d => %#v", key, val.Id, val)
+			case val.ID != key.(uint64):
+				t.Logf("Error: mismatched pk=%d, got %d => %#v", key, val.ID, val)
 				t.Fail()
 			default:
 				seenIds[key.(uint64)] = true
