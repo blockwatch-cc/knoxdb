@@ -55,12 +55,12 @@ func parseStruct(w *schema.Writer, s *schema.Schema, node *yaml.Node) error {
 	// walk all fields at current nesting level (use the passed-in schema
 	// rather than Writer.Field() as the latter is ambiguous when the
 	// current destination field is nested)
-	for _, f := range s.FieldsSeq() {
+	for _, f := range s.TopFields() {
 		valNode, exists := yamlMap[f.Basename()]
 
 		// Missing field, write zero value
 		if !exists {
-			if err := w.Skip(); err != nil {
+			if err := w.AppendNull(); err != nil {
 				return fmt.Errorf("%s: %w", f.Name, err)
 			}
 			continue
@@ -125,26 +125,26 @@ func parsePrimitive(w *schema.Writer, node *yaml.Node) error {
 		if err != nil {
 			return err
 		}
-		return w.Write(tm)
+		return w.Append(tm)
 	case schema.Time:
 		tm, err := schema.TIME_SCALE_SECOND.Parse(node.Value, true)
 		if err != nil {
 			return err
 		}
-		return w.Write(tm)
+		return w.Append(tm)
 	case schema.Date:
 		tm, err := schema.TIME_SCALE_DAY.Parse(node.Value, false)
 		if err != nil {
 			return err
 		}
-		return w.Write(tm)
+		return w.Append(tm)
 	default:
 		parser := parse.NewParser(f.Type, f.Scale, f.Enum)
 		parsed, err := parser.ParseValue(node.Value)
 		if err != nil {
 			return err
 		}
-		if err := w.Write(parsed); err != nil {
+		if err := w.Append(parsed); err != nil {
 			return err
 		}
 	}
@@ -166,13 +166,13 @@ func parseBytes(w *schema.Writer, node *yaml.Node) error {
 			}
 			buf = append(buf, uint8(b))
 		}
-		return w.WriteBytes(buf)
+		return w.AppendBytes(buf)
 	case yaml.ScalarNode:
 		buf, err := hex.DecodeString(node.Value)
 		if err != nil {
 			return err
 		}
-		return w.WriteBytes(buf)
+		return w.AppendBytes(buf)
 
 	default:
 		return fmt.Errorf("expected list or scalar, got %s", nodeKind(node))
@@ -184,7 +184,7 @@ func parseList(w *schema.Writer, node *yaml.Node) error {
 		return fmt.Errorf("expected list, got %s", nodeKind(node))
 	}
 
-	return w.WriteList(func(lw *schema.ListWriter) error {
+	return w.AppendList(func(lw *schema.ListWriter) error {
 		for _, item := range node.Content {
 			var err error
 			if lw.Schema().NumFields() == 1 {
@@ -209,7 +209,7 @@ func parseMap(w *schema.Writer, node *yaml.Node) error {
 	numFields := f.Child.NumFields()
 	valType := f.ValueType()
 
-	return w.WriteMap(func(mw *schema.MapWriter) error {
+	return w.AppendMap(func(mw *schema.MapWriter) error {
 		for i := 0; i < len(node.Content); i += 2 {
 			keyNode := node.Content[i]
 			valNode := node.Content[i+1]
@@ -269,7 +269,7 @@ func parseUnion(w *schema.Writer, node *yaml.Node) error {
 		return fmt.Errorf("invalid union value %q", va.Value)
 	}
 
-	return w.WriteUnion(u)
+	return w.AppendUnion(u)
 }
 
 func parseVariant(w *schema.Writer, node *yaml.Node) error {
@@ -287,7 +287,7 @@ func parseVariant(w *schema.Writer, node *yaml.Node) error {
 		return fmt.Errorf("unknown variant case %q", caseName)
 	}
 
-	return w.WriteVariant(caseId, func(vw *schema.VariantWriter) error {
+	return w.AppendVariant(caseId, func(vw *schema.VariantWriter) error {
 		return parseStruct(vw.Writer, caseSchema, caseValueNode)
 	})
 }

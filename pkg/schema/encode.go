@@ -23,14 +23,14 @@ var scratchBufferPool = sync.Pool{
 	},
 }
 
-// WriteValue serializes the value of an individual field to wire format.
-// It is used in queries and for metadata index nodes. WriteValue accepts
+// AppendValue serializes the value of an individual field to wire format.
+// It is used in queries and for metadata index nodes. AppendValue accepts
 // values of both the logical Go type (e.g. Decimal64 or time.Time) and
 // the physical representation (e.g. int64) for a field and converts if
 // compatible. It does not cast or type convert otherwise. Byte arrays
 // of type [n]byte must be converted to byte slice []byte when used as
 // argument.
-func (f *Field) WriteValue(w *bytes.Buffer, val any, layout binary.ByteOrder) (err error) {
+func (f *Field) AppendValue(w *bytes.Buffer, val any, layout binary.ByteOrder) (err error) {
 	if val == nil {
 		return ErrNilValue
 	}

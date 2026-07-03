@@ -170,7 +170,7 @@ func (s *Schema) ActiveIds() []uint16 {
 }
 
 // Visits all fields at top nesting level.
-func (s *Schema) FieldsSeq() iter.Seq2[int, *Field] {
+func (s *Schema) TopFields() iter.Seq2[int, *Field] {
 	lvl := s.Fields[0].Level
 	return func(yield func(int, *Field) bool) {
 		var n int
@@ -259,6 +259,33 @@ func (s *Schema) PkId() uint16 {
 func (s *Schema) PkIndex() int {
 	for i, f := range s.Fields {
 		if f.IsPrimary() && f.IsActive() {
+			return i
+		}
+	}
+	return -1
+}
+
+func (s *Schema) Timebase() *Field {
+	for _, f := range s.Fields {
+		if f.IsTimebase() && f.IsActive() {
+			return f
+		}
+	}
+	return &Field{}
+}
+
+func (s *Schema) TimebaseId() uint16 {
+	for _, f := range s.Fields {
+		if f.IsTimebase() && f.IsActive() {
+			return f.Id
+		}
+	}
+	return 0
+}
+
+func (s *Schema) TimebaseIndex() int {
+	for i, f := range s.Fields {
+		if f.IsTimebase() && f.IsActive() {
 			return i
 		}
 	}

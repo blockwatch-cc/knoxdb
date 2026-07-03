@@ -223,12 +223,12 @@ func TestViewNestingL1(t *testing.T) {
 	require.Equal(t, buf.Len()/2, v.Len())
 
 	// list iterators produce correct number of list elements
-	require.Equal(t, 2, countIter(v.List(1)))
-	require.Equal(t, 2, countIter(v.List(2)))
-	require.Equal(t, 2, countIter(v.List(3)))
-	require.Equal(t, 2, countIter(v.List(4)))
-	require.Equal(t, 2, countIter(v.List(5)))
-	require.Equal(t, 3, countIter(v.List(6)))
+	require.Equal(t, 2, countIterViewer(v.List(1)))
+	require.Equal(t, 2, countIterViewer(v.List(2)))
+	require.Equal(t, 2, countIterViewer(v.List(3)))
+	require.Equal(t, 2, countIterViewer(v.List(4)))
+	require.Equal(t, 2, countIterViewer(v.List(5)))
+	require.Equal(t, 3, countIterViewer(v.List(6)))
 
 	// individual values
 	require.Equal(t, base.Int64a, v.Int64(0))
@@ -271,25 +271,25 @@ func TestViewNestingL2(t *testing.T) {
 	require.Equal(t, buf.Len()/2, v.Len())
 
 	// list iterators produce correct number of list elements
-	require.Equal(t, 2, countIter(v.List(1)))
-	require.Equal(t, 2, countIter(v.List(2)))
+	require.Equal(t, 2, countIterViewer(v.List(1)))
+	require.Equal(t, 2, countIterViewer(v.List(2)))
 
 	// individual values
 	// [][]uint64
 	for i, vv := range v.List(1) {
-		require.Equal(t, 2, countIter(vv.List(0)))
-		require.LessOrEqual(t, vv.Schema().MinWireSize, len(vv.Buffer()))
+		require.Equal(t, 2, countIterViewer(vv.List(0)))
+		require.LessOrEqual(t, vv.Schema().MinWireSize, len(vv.(*schema.View).Buffer()))
 		for j, vvv := range vv.List(0) {
-			require.LessOrEqual(t, vvv.Schema().MinWireSize, len(vvv.Buffer()))
+			require.LessOrEqual(t, vvv.Schema().MinWireSize, len(vvv.(*schema.View).Buffer()))
 			require.Equal(t, base.NestedUints[i][j], vvv.Uint64(0), "U64List[%d][%d]", i, j)
 		}
 	}
 	// [][]Pair
 	for i, vv := range v.List(2) {
-		require.Equal(t, 2, countIter(vv.List(0)))
-		require.LessOrEqual(t, vv.Schema().MinWireSize, len(vv.Buffer()))
+		require.Equal(t, 2, countIterViewer(vv.List(0)))
+		require.LessOrEqual(t, vv.Schema().MinWireSize, len(vv.(*schema.View).Buffer()))
 		for j, vvv := range vv.List(0) {
-			require.LessOrEqual(t, vvv.Schema().MinWireSize, len(vvv.Buffer()))
+			require.LessOrEqual(t, vvv.Schema().MinWireSize, len(vvv.(*schema.View).Buffer()))
 			require.Equal(t, base.NestedPairs[i][j].Key, vvv.Int64(0), "Pairs[%d][%d].Key", i, j)
 			require.Equal(t, base.NestedPairs[i][j].Val, vvv.Int64(1), "Pairs[%d][%d].Val", i, j)
 		}
@@ -325,20 +325,20 @@ func TestViewNestingL2Empty(t *testing.T) {
 	require.Equal(t, buf.Len()/2, v.Len())
 
 	// list iterators produce correct number of list elements
-	require.Equal(t, 2, countIter(v.List(1)))
-	require.Equal(t, 2, countIter(v.List(2)))
+	require.Equal(t, 2, countIterViewer(v.List(1)))
+	require.Equal(t, 2, countIterViewer(v.List(2)))
 
 	// individual values
 	// [][]uint64
 	for i, vv := range v.List(1) {
-		require.LessOrEqual(t, vv.Schema().MinWireSize, len(vv.Buffer()))
+		require.LessOrEqual(t, vv.Schema().MinWireSize, len(vv.(*schema.View).Buffer()))
 		if i == 0 {
-			require.Equal(t, 0, countIter(vv.List(0)))
+			require.Equal(t, 0, countIterViewer(vv.List(0)))
 		} else {
-			require.Equal(t, 2, countIter(vv.List(0)))
+			require.Equal(t, 2, countIterViewer(vv.List(0)))
 		}
 		for j, vvv := range vv.List(0) {
-			require.LessOrEqual(t, vvv.Schema().MinWireSize, len(vvv.Buffer()))
+			require.LessOrEqual(t, vvv.Schema().MinWireSize, len(vvv.(*schema.View).Buffer()))
 			if j > 0 {
 				require.Equal(t, base.NestedUints[i][j], vvv.Uint64(0), "U64List[%d][%d]", i, j)
 			}
@@ -346,14 +346,14 @@ func TestViewNestingL2Empty(t *testing.T) {
 	}
 	// [][]Pair
 	for i, vv := range v.List(2) {
-		require.LessOrEqual(t, vv.Schema().MinWireSize, len(vv.Buffer()))
+		require.LessOrEqual(t, vv.Schema().MinWireSize, len(vv.(*schema.View).Buffer()))
 		if i == 0 {
-			require.Equal(t, 0, countIter(vv.List(0)))
+			require.Equal(t, 0, countIterViewer(vv.List(0)))
 		} else {
-			require.Equal(t, 2, countIter(vv.List(0)))
+			require.Equal(t, 2, countIterViewer(vv.List(0)))
 		}
 		for j, vvv := range vv.List(0) {
-			require.LessOrEqual(t, vvv.Schema().MinWireSize, len(vvv.Buffer()))
+			require.LessOrEqual(t, vvv.Schema().MinWireSize, len(vvv.(*schema.View).Buffer()))
 			if j > 0 {
 				require.Equal(t, base.NestedPairs[i][j].Key, vvv.Int64(0), "Pairs[%d][%d].Key", i, j)
 				require.Equal(t, base.NestedPairs[i][j].Val, vvv.Int64(1), "Pairs[%d][%d].Val", i, j)
@@ -385,15 +385,15 @@ func TestViewNestingL3(t *testing.T) {
 	require.Equal(t, buf.Len()/2, v.Len())
 
 	// list iterators produce correct number of list elements
-	require.Equal(t, 2, countIter(v.List(1)))
+	require.Equal(t, 2, countIterViewer(v.List(1)))
 
 	// individual values
 	// []OuterPairStruct
 	for i, vv := range v.List(1) {
-		require.Equal(t, 2, countIter(vv.List(1)))
-		require.LessOrEqual(t, vv.Schema().MinWireSize, len(vv.Buffer()))
+		require.Equal(t, 2, countIterViewer(vv.List(1)))
+		require.LessOrEqual(t, vv.Schema().MinWireSize, len(vv.(*schema.View).Buffer()))
 		for j, vvv := range vv.List(1) {
-			require.LessOrEqual(t, vvv.Schema().MinWireSize, len(vvv.Buffer()))
+			require.LessOrEqual(t, vvv.Schema().MinWireSize, len(vvv.(*schema.View).Buffer()))
 			require.Equal(t, base.Pairs1[i].Pairs2[j].Key, vvv.Int64(0), "Pairs1[%d].Pairs2[%d].Key", i, j)
 			require.Equal(t, base.Pairs1[i].Pairs2[j].Val, vvv.Int64(1), "Pairs1[%d].Pairs2[%d].Val", i, j)
 		}
@@ -412,7 +412,7 @@ func TestViewMap(t *testing.T) {
 	base := NewPrimMapRecord()
 	baseSchema := reflect.MustSchemaFor[PrimMapRecord]()
 	w := schema.NewWriter(baseSchema, nil)
-	require.NoError(t, w.Write(base))
+	require.NoError(t, w.Append(base))
 	buf := w.Bytes()
 	require.LessOrEqual(t, baseSchema.MinWireSize, len(buf))
 	// t.Log(baseSchema)
@@ -426,12 +426,12 @@ func TestViewMap(t *testing.T) {
 	require.LessOrEqual(t, baseSchema.MinWireSize, v.Len())
 
 	// map iterators produce correct number of map elements
-	require.Equal(t, 2, countIter(v.Map(0)))
-	require.Equal(t, 2, countIter(v.Map(1)))
-	require.Equal(t, 2, countIter(v.Map(2)))
-	require.Equal(t, 2, countIter(v.Map(3)))
-	require.Equal(t, 1, countIter(v.Map(4)))
-	require.Equal(t, 1, countIter(v.Map(5)))
+	require.Equal(t, 2, countIterViewer(v.Map(0)))
+	require.Equal(t, 2, countIterViewer(v.Map(1)))
+	require.Equal(t, 2, countIterViewer(v.Map(2)))
+	require.Equal(t, 2, countIterViewer(v.Map(3)))
+	require.Equal(t, 1, countIterViewer(v.Map(4)))
+	require.Equal(t, 1, countIterViewer(v.Map(5)))
 
 	// map[uint64]uint64
 	next, stop := iter.Pull2(v.Map(0))
@@ -502,37 +502,45 @@ func countIter(it iter.Seq2[int, *schema.View]) int {
 	return n
 }
 
+func countIterViewer(it iter.Seq2[int, schema.Viewer]) int {
+	var n int
+	for range it {
+		n++
+	}
+	return n
+}
+
 func TestViewVariant(t *testing.T) {
 	buf := customerT.NewBuffer(2)
 	w := schema.NewWriter(customerT, buf)
-	require.NoError(t, w.WriteUint64(1))
-	require.NoError(t, w.WriteString("user"))
-	require.NoError(t, w.WriteVariant(3, // pay: bank transfer
+	require.NoError(t, w.AppendUint64(1))
+	require.NoError(t, w.AppendString("user"))
+	require.NoError(t, w.AppendVariant(3, // pay: bank transfer
 		func(vw *schema.VariantWriter) error {
-			require.NoError(t, vw.WriteString("iban"))
-			require.NoError(t, vw.WriteString("bic"))
-			require.NoError(t, vw.WriteString("holder"))
-			require.NoError(t, vw.WriteString("bank"))
+			require.NoError(t, vw.AppendString("iban"))
+			require.NoError(t, vw.AppendString("bic"))
+			require.NoError(t, vw.AppendString("holder"))
+			require.NoError(t, vw.AppendString("bank"))
 			require.True(t, vw.Done())
 			return nil
 		}))
-	require.NoError(t, w.WriteVariant(2, // billing: business
+	require.NoError(t, w.AppendVariant(2, // billing: business
 		func(vw *schema.VariantWriter) error {
-			require.NoError(t, vw.WriteString("company"))
-			require.NoError(t, vw.WriteString("street"))
-			require.NoError(t, vw.WriteString("city"))
-			require.NoError(t, vw.WriteString("postcode"))
-			require.NoError(t, vw.WriteString("country"))
-			require.NoError(t, vw.WriteString("taxid"))
+			require.NoError(t, vw.AppendString("company"))
+			require.NoError(t, vw.AppendString("street"))
+			require.NoError(t, vw.AppendString("city"))
+			require.NoError(t, vw.AppendString("postcode"))
+			require.NoError(t, vw.AppendString("country"))
+			require.NoError(t, vw.AppendString("taxid"))
 			require.True(t, vw.Done())
 			return nil
 		}))
-	require.NoError(t, w.WriteVariant(1, // shipping: residential
+	require.NoError(t, w.AppendVariant(1, // shipping: residential
 		func(vw *schema.VariantWriter) error {
-			require.NoError(t, vw.WriteString("street"))
-			require.NoError(t, vw.WriteString("city"))
-			require.NoError(t, vw.WriteString("postcode"))
-			require.NoError(t, vw.WriteString("country"))
+			require.NoError(t, vw.AppendString("street"))
+			require.NoError(t, vw.AppendString("city"))
+			require.NoError(t, vw.AppendString("postcode"))
+			require.NoError(t, vw.AppendString("country"))
 			require.True(t, vw.Done())
 			return nil
 		}))

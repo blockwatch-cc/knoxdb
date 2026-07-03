@@ -76,7 +76,7 @@ func (w *MapWriter) Next() {
 	}
 	// fill remaining fields with zeros
 	for !w.Done() {
-		w.Skip()
+		w.AppendNull()
 	}
 	w.n = w.align
 }
@@ -121,7 +121,7 @@ func (w *MapWriter) Close() {
 	mapWriterPool.Put(w)
 }
 
-// WriteMap is a generic helper that writes a map in sorted key order
+// AppendMap is a generic helper that writes a map in sorted key order
 // to w. Key types are implicitly limited to ordered types like integers,
 // floats and string which is a subset of permitted Map key types.
 // Values can be any supported primitive type.
@@ -132,7 +132,7 @@ func (w *MapWriter) Close() {
 // to a MapWriter (optionally inside MarshalSchema). Additionally these
 // generic helpers use any-type Write calls which allocate interfaces
 // for each key and value.
-func WriteMap[K cmp.Ordered, V MapValueTypes](mw *MapWriter, m map[K]V) error {
+func AppendMap[K cmp.Ordered, V MapValueTypes](mw *MapWriter, m map[K]V) error {
 	// sort keys
 	keys := make([]K, 0, len(m))
 	for k := range m {
@@ -142,10 +142,10 @@ func WriteMap[K cmp.Ordered, V MapValueTypes](mw *MapWriter, m map[K]V) error {
 
 	// walk map sorted
 	for _, k := range keys {
-		if err := mw.Write(k); err != nil {
+		if err := mw.Append(k); err != nil {
 			return err
 		}
-		if err := mw.Write(m[k]); err != nil {
+		if err := mw.Append(m[k]); err != nil {
 			return err
 		}
 		mw.Next()
@@ -153,10 +153,10 @@ func WriteMap[K cmp.Ordered, V MapValueTypes](mw *MapWriter, m map[K]V) error {
 	return nil
 }
 
-// WriteTimeMap is a generic helper that writes a map using time-based
+// AppendTimeMap is a generic helper that writes a map using time-based
 // keys in sorted order to w. Values can be any supported primitive type.
 // See performance note above.
-func WriteTimeMap[K time.Time, V MapValueTypes](mw *MapWriter, m map[K]V) error {
+func AppendTimeMap[K time.Time, V MapValueTypes](mw *MapWriter, m map[K]V) error {
 	// sort keys
 	keys := make([]K, 0, len(m))
 	for k := range m {
@@ -166,10 +166,10 @@ func WriteTimeMap[K time.Time, V MapValueTypes](mw *MapWriter, m map[K]V) error 
 
 	// walk map sorted
 	for _, k := range keys {
-		if err := mw.Write(k); err != nil {
+		if err := mw.Append(k); err != nil {
 			return err
 		}
-		if err := mw.Write(m[k]); err != nil {
+		if err := mw.Append(m[k]); err != nil {
 			return err
 		}
 		mw.Next()
@@ -192,10 +192,10 @@ func MarshalMap[K cmp.Ordered, V Marshaler](mw *MapWriter, m map[K]V) error {
 
 	// walk map sorted
 	for _, k := range keys {
-		if err := mw.Write(k); err != nil {
+		if err := mw.Append(k); err != nil {
 			return err
 		}
-		if err := mw.Write(m[k]); err != nil {
+		if err := mw.Append(m[k]); err != nil {
 			return err
 		}
 		mw.Next()
@@ -216,10 +216,10 @@ func MarshalTimeMap[K time.Time, V Marshaler](mw *MapWriter, m map[K]V) error {
 
 	// walk map sorted
 	for _, k := range keys {
-		if err := mw.Write(&k); err != nil {
+		if err := mw.Append(&k); err != nil {
 			return err
 		}
-		if err := mw.Write(m[k]); err != nil {
+		if err := mw.Append(m[k]); err != nil {
 			return err
 		}
 		mw.Next()

@@ -36,7 +36,7 @@ type Marshaler interface {
 // Note when nested fields exist in the receiver's schema type
 // UnmarshalSchema must read all of them.
 type Unmarshaler interface {
-	UnmarshalSchema(*View) error
+	UnmarshalSchema(Viewer) error
 }
 
 var writerPool = sync.Pool{}
@@ -110,15 +110,15 @@ func (w *Writer) Reset() {
 
 // Next prepares the writer to append another record to the same buffer.
 // When Next is called early, before all fields were written, it skips
-// the remaining fields writing zeros.
+// remaining fields writing zeros/nulls.
 func (w *Writer) Next() {
-	// noop if we expect the first field
+	// noop if no field was appended yet
 	if w.n == 0 {
 		return
 	}
 	// fill remaining fields with zeros
 	for !w.Done() {
-		w.Skip()
+		w.AppendNull()
 	}
 	w.n = 0
 }
@@ -141,40 +141,46 @@ func (w *Writer) Buffer() *bytes.Buffer {
 	return w.buf
 }
 
-// Skip writes a zero value for the current or up to n fields.
-func (w *Writer) Skip(n ...int) error {
-	c := 1
-	if len(n) > 0 {
-		c = n[0]
-	}
-	for range c {
-		f, err := w.getFieldChecked(w.n, 0)
-		if err != nil {
+// Skip writes a zero values for up to n fields.
+func (w *Writer) Skip(n int) error {
+	for range n {
+		if err := w.AppendNull(); err != nil {
 			return err
-		}
-
-		// write zero (consider array size can be up to 255 byte)
-		var zero [32]byte
-		for n := f.WireSize(); n > 0; n -= 32 {
-			w.buf.Write(zero[:min(n, 32)])
-		}
-
-		// advance field offset
-		w.n++
-		if f.Child != nil {
-			w.n += len(f.Child.Fields)
 		}
 	}
 	return nil
 }
 
-// Write appends an encoded value to the buffer. Value type
+// AppendNull writes a zero value for the current field.
+func (w *Writer) AppendNull() error {
+	// get the current field
+	f, err := w.getFieldChecked(w.n, 0)
+	if err != nil {
+		return err
+	}
+
+	// write zero (consider array size can be up to 255 byte)
+	var zero [32]byte
+	for n := f.WireSize(); n > 0; n -= 32 {
+		w.buf.Write(zero[:min(n, 32)])
+	}
+
+	// advance field offset
+	w.n++
+	if f.Child != nil {
+		w.n += len(f.Child.Fields)
+	}
+
+	return nil
+}
+
+// Append appends an encoded value to the buffer. Value type
 // must match the next expected value in schema field order.
 // If value implements the Marshaler interface, call this
 // instead. Marshalers are expected to use either the public
 // Writer API which advances field offsets or call consume(n)
 // when writing to the writer buffer directly.
-func (w *Writer) Write(val any) error {
+func (w *Writer) Append(val any) error {
 	// get the current field
 	f, err := w.getFieldChecked(w.n, 0)
 	if err != nil {
@@ -186,7 +192,7 @@ func (w *Writer) Write(val any) error {
 		err = m.MarshalSchema(w)
 	} else {
 		// use field writer (will check for correct type)
-		err = f.WriteValue(w.buf, val, w.layout)
+		err = f.AppendValue(w.buf, val, w.layout)
 	}
 	if err != nil {
 		return w.fail(err)
@@ -200,7 +206,7 @@ func (w *Writer) Write(val any) error {
 	return nil
 }
 
-func (w *Writer) WriteTimestamp(tv time.Time) error {
+func (w *Writer) AppendTimestamp(tv time.Time) error {
 	f, err := w.getFieldChecked(w.n, Timestamp)
 	if err != nil {
 		return err
@@ -210,7 +216,7 @@ func (w *Writer) WriteTimestamp(tv time.Time) error {
 	return nil
 }
 
-func (w *Writer) WriteDuration(d time.Duration) error {
+func (w *Writer) AppendDuration(d time.Duration) error {
 	f, err := w.getFieldChecked(w.n, Duration)
 	if err != nil {
 		return err
@@ -220,7 +226,7 @@ func (w *Writer) WriteDuration(d time.Duration) error {
 	return nil
 }
 
-func (w *Writer) WriteTime(tv time.Time) error {
+func (w *Writer) AppendTime(tv time.Time) error {
 	f, err := w.getFieldChecked(w.n, Time)
 	if err != nil {
 		return err
@@ -230,7 +236,7 @@ func (w *Writer) WriteTime(tv time.Time) error {
 	return nil
 }
 
-func (w *Writer) WriteDate(tv time.Time) error {
+func (w *Writer) AppendDate(tv time.Time) error {
 	f, err := w.getFieldChecked(w.n, Date)
 	if err != nil {
 		return err
@@ -240,7 +246,7 @@ func (w *Writer) WriteDate(tv time.Time) error {
 	return nil
 }
 
-func (w *Writer) WriteInt64(v int64) error {
+func (w *Writer) AppendInt64(v int64) error {
 	_, err := w.getFieldChecked(w.n, Int64)
 	if err != nil {
 		return err
@@ -250,7 +256,7 @@ func (w *Writer) WriteInt64(v int64) error {
 	return nil
 }
 
-func (w *Writer) WriteInt32(v int32) error {
+func (w *Writer) AppendInt32(v int32) error {
 	_, err := w.getFieldChecked(w.n, Int32)
 	if err != nil {
 		return err
@@ -260,7 +266,7 @@ func (w *Writer) WriteInt32(v int32) error {
 	return nil
 }
 
-func (w *Writer) WriteInt16(v int16) error {
+func (w *Writer) AppendInt16(v int16) error {
 	_, err := w.getFieldChecked(w.n, Int16)
 	if err != nil {
 		return err
@@ -270,7 +276,7 @@ func (w *Writer) WriteInt16(v int16) error {
 	return nil
 }
 
-func (w *Writer) WriteInt8(v int8) error {
+func (w *Writer) AppendInt8(v int8) error {
 	_, err := w.getFieldChecked(w.n, Int8)
 	if err != nil {
 		return err
@@ -280,7 +286,7 @@ func (w *Writer) WriteInt8(v int8) error {
 	return nil
 }
 
-func (w *Writer) WriteUint64(v uint64) error {
+func (w *Writer) AppendUint64(v uint64) error {
 	_, err := w.getFieldChecked(w.n, Uint64)
 	if err != nil {
 		return err
@@ -290,7 +296,7 @@ func (w *Writer) WriteUint64(v uint64) error {
 	return nil
 }
 
-func (w *Writer) WriteUint32(v uint32) error {
+func (w *Writer) AppendUint32(v uint32) error {
 	_, err := w.getFieldChecked(w.n, Uint32)
 	if err != nil {
 		return err
@@ -300,7 +306,7 @@ func (w *Writer) WriteUint32(v uint32) error {
 	return nil
 }
 
-func (w *Writer) WriteUint16(v uint16) error {
+func (w *Writer) AppendUint16(v uint16) error {
 	_, err := w.getFieldChecked(w.n, Uint16)
 	if err != nil {
 		return err
@@ -310,7 +316,7 @@ func (w *Writer) WriteUint16(v uint16) error {
 	return nil
 }
 
-func (w *Writer) WriteUint8(v uint8) error {
+func (w *Writer) AppendUint8(v uint8) error {
 	_, err := w.getFieldChecked(w.n, Uint8)
 	if err != nil {
 		return err
@@ -320,7 +326,7 @@ func (w *Writer) WriteUint8(v uint8) error {
 	return nil
 }
 
-func (w *Writer) WriteFloat64(v float64) error {
+func (w *Writer) AppendFloat64(v float64) error {
 	_, err := w.getFieldChecked(w.n, Float64)
 	if err != nil {
 		return err
@@ -330,7 +336,7 @@ func (w *Writer) WriteFloat64(v float64) error {
 	return nil
 }
 
-func (w *Writer) WriteFloat32(v float32) error {
+func (w *Writer) AppendFloat32(v float32) error {
 	_, err := w.getFieldChecked(w.n, Float32)
 	if err != nil {
 		return err
@@ -340,7 +346,7 @@ func (w *Writer) WriteFloat32(v float32) error {
 	return nil
 }
 
-func (w *Writer) WriteBool(v bool) error {
+func (w *Writer) AppendBool(v bool) error {
 	_, err := w.getFieldChecked(w.n, Boolean)
 	if err != nil {
 		return err
@@ -354,7 +360,7 @@ func (w *Writer) WriteBool(v bool) error {
 	return nil
 }
 
-func (w *Writer) WriteEnum(s string) error {
+func (w *Writer) AppendEnum(s string) error {
 	f, err := w.getFieldChecked(w.n, Enum)
 	if err != nil {
 		return err
@@ -371,7 +377,7 @@ func (w *Writer) WriteEnum(s string) error {
 	return nil
 }
 
-func (w *Writer) WriteString(s string) error {
+func (w *Writer) AppendString(s string) error {
 	if len(s) > MAX_STRING {
 		return w.fail(ErrLongValue)
 	}
@@ -391,7 +397,7 @@ func (w *Writer) WriteString(s string) error {
 	return nil
 }
 
-func (w *Writer) WriteText(s string) error {
+func (w *Writer) AppendText(s string) error {
 	_, err := w.getFieldChecked(w.n, Text)
 	if err != nil {
 		return err
@@ -402,7 +408,7 @@ func (w *Writer) WriteText(s string) error {
 	return nil
 }
 
-func (w *Writer) WriteBytes(b []byte) error {
+func (w *Writer) AppendBytes(b []byte) error {
 	if len(b) > MAX_BYTES {
 		return w.fail(ErrLongValue)
 	}
@@ -422,7 +428,7 @@ func (w *Writer) WriteBytes(b []byte) error {
 	return nil
 }
 
-func (w *Writer) WriteBinary(b []byte) error {
+func (w *Writer) AppendBinary(b []byte) error {
 	_, err := w.getFieldChecked(w.n, Binary)
 	if err != nil {
 		return err
@@ -433,7 +439,7 @@ func (w *Writer) WriteBinary(b []byte) error {
 	return nil
 }
 
-func (w *Writer) WriteInt256(v num.Int256) error {
+func (w *Writer) AppendInt256(v num.Int256) error {
 	_, err := w.getFieldChecked(w.n, Int256)
 	if err != nil {
 		return err
@@ -443,7 +449,7 @@ func (w *Writer) WriteInt256(v num.Int256) error {
 	return nil
 }
 
-func (w *Writer) WriteInt128(v num.Int128) error {
+func (w *Writer) AppendInt128(v num.Int128) error {
 	_, err := w.getFieldChecked(w.n, Int128)
 	if err != nil {
 		return err
@@ -453,7 +459,7 @@ func (w *Writer) WriteInt128(v num.Int128) error {
 	return nil
 }
 
-func (w *Writer) WriteDecimal256(v num.Decimal256) error {
+func (w *Writer) AppendDecimal256(v num.Decimal256) error {
 	_, err := w.getFieldChecked(w.n, Decimal256)
 	if err != nil {
 		return err
@@ -463,7 +469,7 @@ func (w *Writer) WriteDecimal256(v num.Decimal256) error {
 	return nil
 }
 
-func (w *Writer) WriteDecimal128(v num.Decimal128) error {
+func (w *Writer) AppendDecimal128(v num.Decimal128) error {
 	_, err := w.getFieldChecked(w.n, Decimal128)
 	if err != nil {
 		return err
@@ -473,7 +479,7 @@ func (w *Writer) WriteDecimal128(v num.Decimal128) error {
 	return nil
 }
 
-func (w *Writer) WriteDecimal64(v num.Decimal64) error {
+func (w *Writer) AppendDecimal64(v num.Decimal64) error {
 	_, err := w.getFieldChecked(w.n, Decimal64)
 	if err != nil {
 		return err
@@ -483,7 +489,7 @@ func (w *Writer) WriteDecimal64(v num.Decimal64) error {
 	return nil
 }
 
-func (w *Writer) WriteDecimal32(v num.Decimal32) error {
+func (w *Writer) AppendDecimal32(v num.Decimal32) error {
 	_, err := w.getFieldChecked(w.n, Decimal32)
 	if err != nil {
 		return err
@@ -493,7 +499,7 @@ func (w *Writer) WriteDecimal32(v num.Decimal32) error {
 	return nil
 }
 
-func (w *Writer) WriteBigint(v num.Big) error {
+func (w *Writer) AppendBigint(v num.Big) error {
 	_, err := w.getFieldChecked(w.n, Bigint)
 	if err != nil {
 		return err
@@ -508,7 +514,7 @@ func (w *Writer) WriteBigint(v num.Big) error {
 	return nil
 }
 
-func (w *Writer) WriteUnion(v UnionValue) error {
+func (w *Writer) AppendUnion(v UnionValue) error {
 	f, err := w.getFieldChecked(w.n, Union)
 	if err != nil {
 		return err
@@ -521,9 +527,9 @@ func (w *Writer) WriteUnion(v UnionValue) error {
 	return nil
 }
 
-// WriteList calls provided callback with a new list writer to
+// AppendList calls provided callback with a new list writer to
 // append nested elements to the buffer.
-func (w *Writer) WriteList(fn func(*ListWriter) error) (err error) {
+func (w *Writer) AppendList(fn func(*ListWriter) error) (err error) {
 	var f *Field
 	f, err = w.getFieldChecked(w.n, List)
 	if err != nil {
@@ -547,9 +553,9 @@ func (w *Writer) WriteList(fn func(*ListWriter) error) (err error) {
 	return w.fail(fn(lw))
 }
 
-// WriteMap calls provided callback with a new map writer to
+// AppendeMap calls provided callback with a new map writer to
 // append nested key/value pairs to the buffer.
-func (w *Writer) WriteMap(fn func(mw *MapWriter) error) (err error) {
+func (w *Writer) AppendMap(fn func(mw *MapWriter) error) (err error) {
 	var f *Field
 	f, err = w.getFieldChecked(w.n, Map)
 	if err != nil {
@@ -575,7 +581,7 @@ func (w *Writer) WriteMap(fn func(mw *MapWriter) error) (err error) {
 
 // WriteVariant calls provided callback with a new variant writer to
 // append a nested variant type to the buffer.
-func (w *Writer) WriteVariant(caseId uint8, fn func(vw *VariantWriter) error) (err error) {
+func (w *Writer) AppendVariant(caseId uint8, fn func(vw *VariantWriter) error) (err error) {
 	var f *Field
 	f, err = w.getFieldChecked(w.n, Variant)
 	if err != nil {

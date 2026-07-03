@@ -62,7 +62,7 @@ func (w *ListWriter) Next() {
 	}
 	// fill remaining fields with zeros
 	for !w.Done() {
-		w.Skip()
+		w.AppendNull()
 	}
 	w.n = w.align
 }

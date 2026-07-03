@@ -225,60 +225,60 @@ func BenchmarkWriterList(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
 			w.Reset()
-			w.WriteInt64(base.Int64a)
+			w.AppendInt64(base.Int64a)
 			// []uint64
-			w.WriteList(func(lw *schema.ListWriter) error {
-				lw.WriteUint64(base.U64List[0])
+			w.AppendList(func(lw *schema.ListWriter) error {
+				lw.AppendUint64(base.U64List[0])
 				lw.Next()
-				lw.WriteUint64(base.U64List[1])
+				lw.AppendUint64(base.U64List[1])
 				return nil
 			})
 
 			// []time
-			w.WriteList(func(lw *schema.ListWriter) error {
-				lw.WriteDate(base.TimeList[0])
+			w.AppendList(func(lw *schema.ListWriter) error {
+				lw.AppendDate(base.TimeList[0])
 				lw.Next()
-				lw.WriteDate(base.TimeList[1])
+				lw.AppendDate(base.TimeList[1])
 				return nil
 			})
 
 			// []Pair
-			w.WriteList(func(lw *schema.ListWriter) error {
-				lw.WriteInt64(base.PairList[0].Key)
-				lw.WriteInt64(base.PairList[0].Val)
+			w.AppendList(func(lw *schema.ListWriter) error {
+				lw.AppendInt64(base.PairList[0].Key)
+				lw.AppendInt64(base.PairList[0].Val)
 				lw.Next()
-				lw.WriteInt64(base.PairList[1].Key)
-				lw.WriteInt64(base.PairList[1].Val)
+				lw.AppendInt64(base.PairList[1].Key)
+				lw.AppendInt64(base.PairList[1].Val)
 				return nil
 			})
 
 			// [][]byte
-			w.WriteList(func(lw *schema.ListWriter) error {
-				lw.WriteBytes(base.ByteList[0])
+			w.AppendList(func(lw *schema.ListWriter) error {
+				lw.AppendBytes(base.ByteList[0])
 				lw.Next()
-				lw.WriteBytes(base.ByteList[1])
+				lw.AppendBytes(base.ByteList[1])
 				return nil
 			})
 
 			// [][2]byte
-			w.WriteList(func(lw *schema.ListWriter) error {
-				lw.WriteBytes(base.ArrList[0][:])
+			w.AppendList(func(lw *schema.ListWriter) error {
+				lw.AppendBytes(base.ArrList[0][:])
 				lw.Next()
-				lw.WriteBytes(base.ArrList[1][:])
+				lw.AppendBytes(base.ArrList[1][:])
 				return nil
 			})
 
 			// []Decimal32
-			w.WriteList(func(lw *schema.ListWriter) error {
-				lw.WriteDecimal32(base.DecimalList[0])
+			w.AppendList(func(lw *schema.ListWriter) error {
+				lw.AppendDecimal32(base.DecimalList[0])
 				lw.Next()
-				lw.WriteDecimal32(base.DecimalList[1])
+				lw.AppendDecimal32(base.DecimalList[1])
 				lw.Next()
-				lw.WriteDecimal32(base.DecimalList[2])
+				lw.AppendDecimal32(base.DecimalList[2])
 				return nil
 			})
 
-			w.WriteInt64(base.Int64b)
+			w.AppendInt64(base.Int64b)
 		}
 	})
 }
@@ -295,8 +295,8 @@ func BenchmarkWriterMap(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
 			w.Reset()
-			w.WriteMap(func(mw *schema.MapWriter) error {
-				return schema.WriteMap(mw, base.U64)
+			w.AppendMap(func(mw *schema.MapWriter) error {
+				return schema.AppendMap(mw, base.U64)
 			})
 		}
 	})
@@ -307,8 +307,8 @@ func BenchmarkWriterMap(b *testing.B) {
 		for b.Loop() {
 			w.Reset()
 			w.Skip(5)
-			w.WriteMap(func(mw *schema.MapWriter) error {
-				return schema.WriteTimeMap(mw, base.Times)
+			w.AppendMap(func(mw *schema.MapWriter) error {
+				return schema.AppendTimeMap(mw, base.Times)
 			})
 		}
 	})
@@ -318,7 +318,7 @@ func BenchmarkWriterMap(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
 			w.Reset()
-			w.WriteMap(func(mw *schema.MapWriter) error {
+			w.AppendMap(func(mw *schema.MapWriter) error {
 				return schema.MarshalMap(mw, attr.Unions)
 			})
 		}
@@ -329,7 +329,7 @@ func BenchmarkWriterMap(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
 			w.Reset()
-			w.WriteMap(func(mw *schema.MapWriter) error {
+			w.AppendMap(func(mw *schema.MapWriter) error {
 				keys := make([]string, 0, len(attr.Unions))
 				for k := range attr.Unions {
 					keys = append(keys, k)
@@ -337,8 +337,8 @@ func BenchmarkWriterMap(b *testing.B) {
 				slices.Sort(keys)
 
 				for _, k := range keys {
-					mw.WriteString(k)
-					mw.WriteUnion(attr.Unions[k])
+					mw.AppendString(k)
+					mw.AppendUnion(attr.Unions[k])
 					mw.Next()
 				}
 				return mw.Err()
@@ -351,10 +351,10 @@ func BenchmarkWriterMap(b *testing.B) {
 		b.ReportAllocs()
 		for b.Loop() {
 			w.Reset()
-			w.WriteMap(func(mw *schema.MapWriter) error {
+			w.AppendMap(func(mw *schema.MapWriter) error {
 				for n, u := range attr.Unions {
-					mw.WriteString(n)
-					mw.WriteUnion(u)
+					mw.AppendString(n)
+					mw.AppendUnion(u)
 					mw.Next()
 				}
 				return mw.Err()

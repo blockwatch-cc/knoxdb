@@ -29,13 +29,13 @@ const (
 // RecordToNode converts a schema record into a yaml.Node tree
 // following the schema's type and nesting. Useful for producing
 // human-readable output and config files.
-func RecordToNode(view *schema.View) (*yaml.Node, error) {
+func RecordToNode(view schema.Viewer) (*yaml.Node, error) {
 	return buildStructNode(view, 0)
 }
 
-func buildStructNode(view *schema.View, ofs int) (*yaml.Node, error) {
+func buildStructNode(view schema.Viewer, ofs int) (*yaml.Node, error) {
 	node := mapNode(view.Schema().NumFields() * 2)
-	for i, f := range view.Schema().FieldsSeq() {
+	for i, f := range view.Schema().TopFields() {
 		if i < ofs {
 			continue
 		}
@@ -53,7 +53,7 @@ func buildStructNode(view *schema.View, ofs int) (*yaml.Node, error) {
 	return node, nil
 }
 
-func buildFieldNode(f *schema.Field, view *schema.View, index int) (*yaml.Node, error) {
+func buildFieldNode(f *schema.Field, view schema.Viewer, index int) (*yaml.Node, error) {
 	switch f.Type {
 	case schema.Timestamp:
 		return timeNode(view.Timestamp(index).Format(time.RFC3339Nano)), nil
@@ -122,7 +122,7 @@ func buildFieldNode(f *schema.Field, view *schema.View, index int) (*yaml.Node, 
 	}
 }
 
-func buildListNode(view *schema.View, index int) (*yaml.Node, error) {
+func buildListNode(view schema.Viewer, index int) (*yaml.Node, error) {
 	node := seqNode()
 	for _, vv := range view.List(index) {
 		var (
@@ -142,7 +142,7 @@ func buildListNode(view *schema.View, index int) (*yaml.Node, error) {
 	return node, nil
 }
 
-func buildMapNode(view *schema.View, index int) (*yaml.Node, error) {
+func buildMapNode(view schema.Viewer, index int) (*yaml.Node, error) {
 	node := mapNode()
 	var (
 		keyField, valField *schema.Field
@@ -196,7 +196,7 @@ func buildUnionNode(u schema.UnionValue) *yaml.Node {
 	return n
 }
 
-func buildVariantNode(view *schema.View, index int) (*yaml.Node, error) {
+func buildVariantNode(view schema.Viewer, index int) (*yaml.Node, error) {
 	// recurse into variant
 	vv, _ := view.Variant(index, nil)
 	caseSchema := vv.Schema()

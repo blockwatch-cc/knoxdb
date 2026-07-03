@@ -131,7 +131,7 @@ func TestParser(t *testing.T) {
 
 			// encode data (golden version)
 			w := schema.NewWriter(s, nil)
-			require.NoError(t, w.Write(val))
+			require.NoError(t, w.Append(val))
 			buf := w.Bytes()
 
 			// produce YAML (alternative 2: via builder)
@@ -163,7 +163,7 @@ func TestParser(t *testing.T) {
 		s := tests.CustomerT
 		w := schema.NewWriter(s, nil)
 		val := tests.NewCustomer()
-		require.NoError(t, w.Write(val))
+		require.NoError(t, w.Append(val))
 		require.True(t, w.Done())
 		buf := w.Bytes()
 

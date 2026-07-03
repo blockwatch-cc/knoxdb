@@ -16,6 +16,50 @@ import (
 	"blockwatch.cc/knoxdb/pkg/util"
 )
 
+// Viewer defines an interface for accessing type field values
+// from a record. It is independent of the storage layout (record
+// or columnar) and supports reading all schema value types.
+type Viewer interface {
+	Schema() *Schema
+	Field(i int) *Field
+	GetPk() uint64
+	GetTimebase() time.Time
+	Uint64(i int) uint64
+	Uint32(i int) uint32
+	Uint16(i int) uint16
+	Uint8(i int) uint8
+	Int64(i int) int64
+	Int32(i int) int32
+	Int16(i int) int16
+	Int8(i int) int8
+	Float64(i int) float64
+	Float32(i int) float32
+	Int256(i int) num.Int256
+	Int128(i int) num.Int128
+	Decimal256(i int) num.Decimal256
+	Decimal128(i int) num.Decimal128
+	Decimal64(i int) num.Decimal64
+	Decimal32(i int) num.Decimal32
+	Bool(i int) bool
+	Timestamp(i int) time.Time
+	Duration(i int) time.Duration
+	Time(i int) time.Time
+	Date(i int) time.Time
+	String(i int) string
+	Text(i int) string
+	Bytes(i int) []byte
+	Binary(i int) []byte
+	Bigint(i int) num.Big
+	Union(i int) UnionValue
+	List(i int) iter.Seq2[int, Viewer]
+	Map(i int) iter.Seq2[int, Viewer]
+	Variant(i int, views []Viewer) (Viewer, uint8)
+	Enum(i int) string
+}
+
+// Ensure View implements the Viewer interface.
+var _ Viewer = (*View)(nil)
+
 // ViewOption defines a function type for view options.
 type ViewOption func(*View)
 
@@ -452,13 +496,9 @@ func (v *View) GetPhy(i int) (val any) {
 		val = v.buf[x]
 	case Float32:
 		val = math.Float32frombits(v.layout.Uint32(v.buf[x:y]))
-	case Int256:
+	case Int256, Decimal256:
 		val = num.Int256FromBytes(v.buf[x:y])
-	case Int128:
-		val = num.Int128FromBytes(v.buf[x:y])
-	case Decimal256:
-		val = num.Int256FromBytes(v.buf[x:y])
-	case Decimal128:
+	case Int128, Decimal128:
 		val = num.Int128FromBytes(v.buf[x:y])
 	}
 	return
@@ -774,7 +814,7 @@ func (v *View) Union(i int) UnionValue {
 
 // List returns an iterator for a list field at position i.
 // It panics on type mismatch or when i is out of range.
-func (v *View) List(i int) iter.Seq2[int, *View] {
+func (v *View) List(i int) iter.Seq2[int, Viewer] {
 	p := v.getCheckedPtr(i, List)
 	return v.makeIter(i, p)
 }
@@ -782,7 +822,7 @@ func (v *View) List(i int) iter.Seq2[int, *View] {
 // Map returns an iterator for a map field at position i.
 // It panics on type mismatch or when i is out of range. The first
 // index (0) on the returned view accesses the map's key.
-func (v *View) Map(i int) iter.Seq2[int, *View] {
+func (v *View) Map(i int) iter.Seq2[int, Viewer] {
 	p := v.getCheckedPtr(i, Map)
 	return v.makeIter(i, p)
 }
@@ -792,7 +832,7 @@ func (v *View) Map(i int) iter.Seq2[int, *View] {
 // It panics on type mismatch or when i is out of range. Users can
 // pass in a list of initialized views returned by earlir calls
 // to re-use allocations.
-func (v *View) Variant(i int, views []*View) (*View, uint8) {
+func (v *View) Variant(i int, views []Viewer) (Viewer, uint8) {
 	// get encoded sub-buffer
 	buf := unsafe.Slice((*byte)(v.getCheckedPtr(i, Variant)), v.len[i])
 
@@ -807,8 +847,11 @@ func (v *View) Variant(i int, views []*View) (*View, uint8) {
 
 	// reuse the first view with matching schema
 	for _, vv := range views {
-		if vv != nil && vv.schema.Hash == s.Hash {
-			return vv.Reset(buf[1:]), caseId
+		if vv != nil {
+			view := vv.(*View)
+			if view.schema.Hash == s.Hash {
+				return view.Reset(buf[1:]), caseId
+			}
 		}
 	}
 
@@ -836,9 +879,9 @@ func (v *View) findField(i int) *Field {
 	return nil
 }
 
-func (v *View) makeIter(i int, p unsafe.Pointer) iter.Seq2[int, *View] {
+func (v *View) makeIter(i int, p unsafe.Pointer) iter.Seq2[int, Viewer] {
 	// make iterator func using child view for nested fields
-	return func(yield func(int, *View) bool) {
+	return func(yield func(int, Viewer) bool) {
 		// slice the list buffer
 		buf := unsafe.Slice((*byte)(p), v.len[i])
 

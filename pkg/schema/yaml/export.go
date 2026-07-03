@@ -66,7 +66,7 @@ func buildSchema(s *schema.Schema) *yaml.Node {
 
 	// field info
 	fields := seqNode(s.NumFields())
-	for _, f := range s.FieldsSeq() {
+	for _, f := range s.TopFields() {
 		fields.Content = append(fields.Content, buildField(f))
 	}
 	node.Content = append(node.Content, strNode("fields"), fields)

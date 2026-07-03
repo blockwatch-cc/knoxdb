@@ -158,12 +158,12 @@ type MarshalType struct {
 }
 
 func (t MarshalType) MarshalSchema(w *schema.Writer) error {
-	w.WriteUint64(t.val)
-	w.WriteUint32(t.tag)
+	w.AppendUint64(t.val)
+	w.AppendUint32(t.tag)
 	return nil
 }
 
-func (t *MarshalType) UnmarshalSchema(v *schema.View) error {
+func (t *MarshalType) UnmarshalSchema(v schema.Viewer) error {
 	t.val = v.Uint64(0)
 	t.tag = v.Uint32(1)
 	return nil
@@ -228,9 +228,9 @@ type MapRecord struct {
 }
 
 func (r MapRecord) MarshalSchema(w *schema.Writer) error {
-	_ = w.WriteTimestamp(r.Timestamp)
-	_ = w.WriteString(r.Message)
-	return w.WriteMap(func(mw *schema.MapWriter) error {
+	_ = w.AppendTimestamp(r.Timestamp)
+	_ = w.AppendString(r.Message)
+	return w.AppendMap(func(mw *schema.MapWriter) error {
 		return schema.MarshalMap(mw, r.Unions)
 	})
 }
@@ -544,16 +544,16 @@ func TestMarshalMap(t *testing.T) {
 	// marshal via writer
 	buf2 := MapRecordSchema.NewBuffer(2)
 	w := schema.NewWriter(MapRecordSchema, buf2)
-	w.Write(vals[0].Timestamp)
-	w.Write(vals[0].Message)
-	require.NoError(t, w.WriteMap(func(mw *schema.MapWriter) error {
+	w.Append(vals[0].Timestamp)
+	w.Append(vals[0].Message)
+	require.NoError(t, w.AppendMap(func(mw *schema.MapWriter) error {
 		return schema.MarshalMap(mw, vals[0].Unions)
 	}))
 	require.True(t, w.Done())
 	w.Next()
-	w.Write(vals[1].Timestamp)
-	w.Write(vals[1].Message)
-	require.NoError(t, w.WriteMap(func(mw *schema.MapWriter) error {
+	w.Append(vals[1].Timestamp)
+	w.Append(vals[1].Message)
+	require.NoError(t, w.AppendMap(func(mw *schema.MapWriter) error {
 		return schema.MarshalMap(mw, vals[1].Unions)
 	}))
 	require.True(t, w.Done())

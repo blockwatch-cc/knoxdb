@@ -147,7 +147,7 @@ func (r *Resolver) ResolveSchema(ctx context.Context, buf []byte) (*Schema, erro
 	ver, hash := LE.Uint32(buf), LE.Uint64(buf[4:])
 
 	// try cached schema first
-	if r.last == nil && r.last.Hash != hash {
+	if r.last != nil && r.last.Hash != hash {
 		if r.last.Version != ver {
 			return nil, ErrInvalidVersion
 		}

@@ -4,12 +4,16 @@
 package schema_tests
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"math/bits"
 	"strings"
 	"testing"
 
+	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/schema/reflect"
 	"github.com/stretchr/testify/assert"
@@ -45,6 +49,205 @@ var (
 	FT_INT  = [2]schema.FieldType{schema.Int32, schema.Int64}[bits.UintSize/32-1]
 	FT_UINT = [2]schema.FieldType{schema.Uint32, schema.Uint64}[bits.UintSize/32-1]
 )
+
+type NativeTypes struct {
+	Int  int  `knox:"int"`
+	Uint uint `knox:"uint"`
+}
+
+type ArrayTypes struct {
+	Id          uint64   `knox:"id,pk"`
+	ByteArray   [20]byte `knox:"byte_array"`
+	StringArray string   `knox:"string_array,array=20"`
+}
+
+func NewArrayTypes(i int64) *ArrayTypes {
+	b := binary.LittleEndian.AppendUint64(nil, uint64(i))
+	buf := bytes.Repeat(b, 3)[:20]
+	return &ArrayTypes{
+		Id:          uint64(i),
+		ByteArray:   [20]byte(buf),
+		StringArray: hex.EncodeToString(buf[:10]),
+	}
+}
+
+// not supported, used for error checks only
+type Stringer []string
+
+func (s Stringer) String() string {
+	return strings.Join(s, ",")
+}
+
+func (s Stringer) MarshalText() ([]byte, error) {
+	return []byte(strings.Join(s, ",")), nil
+}
+
+func (s *Stringer) UnmarshalText(b []byte) error {
+	*s = strings.Split(string(b), ",")
+	return nil
+}
+
+// not supported, used for error checks only
+type Byter [][]byte
+
+func (b Byter) MarshalBinary() ([]byte, error) {
+	return bytes.Join(b, []byte{0}), nil
+}
+
+func (b *Byter) UnmarshalBinary(buf []byte) error {
+	*b = bytes.Split(buf, []byte{0})
+	return nil
+}
+
+// not supported, used for error checks only
+type StringerStruct struct{}
+
+func (s StringerStruct) MarshalText() ([]byte, error) {
+	return []byte{}, nil
+}
+
+func (s *StringerStruct) UnmarshalText(b []byte) error {
+	return nil
+}
+
+// not supported, used for error checks only
+type ByterStruct struct{}
+
+func (s ByterStruct) MarshalBinary() ([]byte, error) {
+	return []byte{}, nil
+}
+
+func (s *ByterStruct) UnmarshalBinary(b []byte) error {
+	return nil
+}
+
+// not supported, used for error checks only
+type MapType map[int]int
+
+func (MapType) MarshalBinary() ([]byte, error) {
+	return []byte{}, nil
+}
+
+func (*MapType) UnmarshalBinary(_ []byte) error {
+	return nil
+}
+
+type NoModelNoTag struct {
+	Id uint64
+}
+
+type NoModelTag struct {
+	Id uint64 `knox:",pk"`
+}
+
+type InvalidPkType struct {
+	Id int64 `knox:",pk"`
+}
+
+type LargeArrayToBlob struct {
+	Id uint64 `knox:"id,pk"`
+	F  [256]byte
+}
+
+type MarshalerTypes struct {
+	Stringer Stringer `knox:"stringer"`
+	Byter    Byter    `knox:"byter"`
+}
+
+type MarshalerStructTypes struct {
+	Stringer StringerStruct `knox:"stringer"`
+	Byter    ByterStruct    `knox:"byter"`
+}
+
+type MarshalerMapTypes struct {
+	Map MapType `knox:"map"`
+}
+
+type NoMarshalerTypes struct {
+	Embed MarshalerStructTypes `knox:"no_marshalers"`
+}
+
+type NoMarshalerSliceTypes struct {
+	Slice []int64 `knox:"no_marshalers"`
+}
+
+type NoMarshalerMapTypes struct {
+	Map map[int]int `knox:"no_map"`
+}
+
+type InvalidPointerType struct {
+	Ptr *int `knox:"ptr"`
+}
+
+type InvalidDuplicateName struct {
+	Id  uint64 `knox:"id"`
+	Val uint64 `knox:"id"`
+}
+
+type InvalidDuplicatePkType struct {
+	Id  uint64 `knox:"id,pk"`
+	Val uint64 `knox:"val,pk"`
+}
+
+type InvalidNativeTypes struct {
+	Int  int  `knox:"int"`
+	Uint uint `knox:"uint"`
+}
+
+type InvalidArrayType struct {
+	F int64 `knox:",array=1"`
+}
+
+type InvalidArrayMissing struct {
+	F []byte `knox:",array"`
+}
+
+type InvalidArrayNaN struct {
+	F []byte `knox:",array=x"`
+}
+
+type InvalidArrayZero struct {
+	F []byte `knox:",array=0"`
+}
+
+type InvalidArrayNeg struct {
+	F []byte `knox:",array=-1"`
+}
+
+type InvalidArraySizeMismatch struct {
+	F [20]byte `knox:",array=21"`
+}
+
+type InvalidScaleType struct {
+	F int64 `knox:",scale=1"`
+}
+
+type InvalidScaleMissing struct {
+	D num.Decimal32 `knox:",scale"`
+}
+
+type InvalidScaleNaN struct {
+	D num.Decimal32 `knox:",scale=x"`
+}
+
+type InvalidScaleNeg struct {
+	D num.Decimal32 `knox:",scale=-1"`
+}
+
+type InvalidScaleTooLarge struct {
+	D num.Decimal32 `knox:",scale=36"`
+}
+
+type BloomFilter struct {
+	Id  uint64 `knox:"id,pk"`
+	Int int64  `knox:"i64,filter=bloom3b"`
+}
+
+type MetaFields struct {
+	Id  uint64 `knox:"id,pk"`
+	I64 int64  `knox:"i64,metadata"`
+	U64 uint64 `knox:"u64"`
+}
 
 // Testcase Definition
 // -------------------

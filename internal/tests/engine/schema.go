@@ -35,7 +35,7 @@ var myEnums = []string{"one", "two", "three", "four"}
 var (
 	enums          *enum.Registry
 	allTypesSchema *schema.Schema
-	securitySchema *schema.Schema
+	transferSchema *schema.Schema
 )
 
 // call this from TestMain() in any package that uses AllTypes
@@ -54,7 +54,7 @@ func RegisterEnum() {
 
 	// init schema and link enums (will lookup myEnum and link to field)
 	allTypesSchema = reflect.MustSchemaFor[AllTypes](schema.Enums(enums))
-	securitySchema = reflect.MustSchemaFor[Security](schema.Enums(enums))
+	transferSchema = reflect.MustSchemaFor[Transfer]()
 }
 
 // Types defines the schema for Workload1 and Workload2.
@@ -137,21 +137,37 @@ func NewAllTypes(i int) *AllTypes {
 	}
 }
 
-type Security struct {
-	Id             uint64         `knox:"id,pk"`
-	Ticker         []byte         `knox:"name"`
-	LastClosePrice num.Decimal256 `knox:"last_close_price"`
-	CreatedAt      time.Time      `knox:"created_at"`
-	UpdatedAt      time.Time      `knox:"updated_at"`
+type Transfer struct {
+	ID              uint64     `knox:"id,pk"`
+	DebitAccountID  uint64     `knox:"debit_id"`
+	CreditAccountID uint64     `knox:"credit_id"`
+	Amount          num.Int128 `knox:"amount"`
+	PendingID       uint64     `knox:"pending_id"`
+	UserData256     [32]byte   `knox:"user_data_256"`
+	UserData64      uint64     `knox:"user_data_64"`
+	UserData32      uint32     `knox:"user_data_32"`
+	Timeout         uint32     `knox:"timeout"`
+	Ledger          uint32     `knox:"ledger"`
+	Code            uint16     `knox:"code"`
+	Flags           uint16     `knox:"flags"`
+	Timestamp       uint64     `knox:"timestamp,timebase"`
 }
 
-func NewSecurity(i int) Security {
-	return Security{
-		Id:             uint64(i),
-		Ticker:         testutil.RandBytes(5),
-		LastClosePrice: num.NewDecimal256(num.Int256FromInt64(int64(i)), 24),
-		CreatedAt:      time.Unix(0, int64(i)).UTC(),
-		UpdatedAt:      time.Unix(0, int64(i)).UTC(),
+func NewTransfer(i int) *Transfer {
+	return &Transfer{
+		ID:              uint64(i),
+		DebitAccountID:  uint64(i),
+		CreditAccountID: uint64(i),
+		Amount:          num.Int128FromInt64(int64(i)),
+		PendingID:       uint64(i),
+		UserData256:     [32]byte{byte(i)},
+		UserData64:      uint64(i),
+		UserData32:      uint32(i),
+		Timeout:         uint32(i),
+		Ledger:          uint32(i),
+		Code:            uint16(i),
+		Flags:           uint16(i),
+		Timestamp:       uint64(i),
 	}
 }
 

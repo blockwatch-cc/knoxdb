@@ -24,32 +24,32 @@ func TestWriterWrite(t *testing.T) {
 	require.NoError(t, baseEnc.Encode(buf, base))
 
 	w := schema.NewWriter(baseSchema, nil)
-	require.NoError(t, w.Write(base.Id))
-	require.NoError(t, w.Write(base.Int64))
-	require.NoError(t, w.Write(base.Int32))
-	require.NoError(t, w.Write(base.Int16))
-	require.NoError(t, w.Write(base.Int8))
-	require.NoError(t, w.Write(base.Uint64))
-	require.NoError(t, w.Write(base.Uint32))
-	require.NoError(t, w.Write(base.Uint16))
-	require.NoError(t, w.Write(base.Uint8))
-	require.NoError(t, w.Write(base.Float64))
-	require.NoError(t, w.Write(base.Float32))
-	require.NoError(t, w.Write(base.D32))
-	require.NoError(t, w.Write(base.D64))
-	require.NoError(t, w.Write(base.D128))
-	require.NoError(t, w.Write(base.D256))
-	require.NoError(t, w.Write(base.I128))
-	require.NoError(t, w.Write(base.I256))
-	require.NoError(t, w.Write(base.Bool))
-	require.NoError(t, w.Write(base.Time))
-	require.NoError(t, w.Write(base.Hash))
-	require.NoError(t, w.Write(base.Array[:]))
-	require.NoError(t, w.Write(base.String))
-	require.NoError(t, w.Write(string(base.MyEnum)))
-	require.NoError(t, w.Write(base.Big))
-	require.NoError(t, w.Write(base.Duration))
-	require.NoError(t, w.Write(base.Union))
+	require.NoError(t, w.Append(base.Id))
+	require.NoError(t, w.Append(base.Int64))
+	require.NoError(t, w.Append(base.Int32))
+	require.NoError(t, w.Append(base.Int16))
+	require.NoError(t, w.Append(base.Int8))
+	require.NoError(t, w.Append(base.Uint64))
+	require.NoError(t, w.Append(base.Uint32))
+	require.NoError(t, w.Append(base.Uint16))
+	require.NoError(t, w.Append(base.Uint8))
+	require.NoError(t, w.Append(base.Float64))
+	require.NoError(t, w.Append(base.Float32))
+	require.NoError(t, w.Append(base.D32))
+	require.NoError(t, w.Append(base.D64))
+	require.NoError(t, w.Append(base.D128))
+	require.NoError(t, w.Append(base.D256))
+	require.NoError(t, w.Append(base.I128))
+	require.NoError(t, w.Append(base.I256))
+	require.NoError(t, w.Append(base.Bool))
+	require.NoError(t, w.Append(base.Time))
+	require.NoError(t, w.Append(base.Hash))
+	require.NoError(t, w.Append(base.Array[:]))
+	require.NoError(t, w.Append(base.String))
+	require.NoError(t, w.Append(string(base.MyEnum)))
+	require.NoError(t, w.Append(base.Big))
+	require.NoError(t, w.Append(base.Duration))
+	require.NoError(t, w.Append(base.Union))
 	require.True(t, w.Done())
 
 	require.Equal(t, buf.Bytes(), w.Bytes())
@@ -64,32 +64,32 @@ func TestWriterPrimitive(t *testing.T) {
 	require.NoError(t, baseEnc.Encode(buf, base))
 
 	w := schema.NewWriter(baseSchema, nil)
-	require.NoError(t, w.WriteUint64(base.Id))
-	require.NoError(t, w.WriteInt64(base.Int64))
-	require.NoError(t, w.WriteInt32(base.Int32))
-	require.NoError(t, w.WriteInt16(base.Int16))
-	require.NoError(t, w.WriteInt8(base.Int8))
-	require.NoError(t, w.WriteUint64(base.Uint64))
-	require.NoError(t, w.WriteUint32(base.Uint32))
-	require.NoError(t, w.WriteUint16(base.Uint16))
-	require.NoError(t, w.WriteUint8(base.Uint8))
-	require.NoError(t, w.WriteFloat64(base.Float64))
-	require.NoError(t, w.WriteFloat32(base.Float32))
-	require.NoError(t, w.WriteDecimal32(base.D32))
-	require.NoError(t, w.WriteDecimal64(base.D64))
-	require.NoError(t, w.WriteDecimal128(base.D128))
-	require.NoError(t, w.WriteDecimal256(base.D256))
-	require.NoError(t, w.WriteInt128(base.I128))
-	require.NoError(t, w.WriteInt256(base.I256))
-	require.NoError(t, w.WriteBool(base.Bool))
-	require.NoError(t, w.WriteTimestamp(base.Time))
-	require.NoError(t, w.WriteBytes(base.Hash))
-	require.NoError(t, w.WriteBytes(base.Array[:]))
-	require.NoError(t, w.WriteString(base.String))
-	require.NoError(t, w.WriteEnum(string(base.MyEnum)))
-	require.NoError(t, w.WriteBigint(base.Big))
-	require.NoError(t, w.WriteDuration(base.Duration))
-	require.NoError(t, w.WriteUnion(base.Union))
+	require.NoError(t, w.AppendUint64(base.Id))
+	require.NoError(t, w.AppendInt64(base.Int64))
+	require.NoError(t, w.AppendInt32(base.Int32))
+	require.NoError(t, w.AppendInt16(base.Int16))
+	require.NoError(t, w.AppendInt8(base.Int8))
+	require.NoError(t, w.AppendUint64(base.Uint64))
+	require.NoError(t, w.AppendUint32(base.Uint32))
+	require.NoError(t, w.AppendUint16(base.Uint16))
+	require.NoError(t, w.AppendUint8(base.Uint8))
+	require.NoError(t, w.AppendFloat64(base.Float64))
+	require.NoError(t, w.AppendFloat32(base.Float32))
+	require.NoError(t, w.AppendDecimal32(base.D32))
+	require.NoError(t, w.AppendDecimal64(base.D64))
+	require.NoError(t, w.AppendDecimal128(base.D128))
+	require.NoError(t, w.AppendDecimal256(base.D256))
+	require.NoError(t, w.AppendInt128(base.I128))
+	require.NoError(t, w.AppendInt256(base.I256))
+	require.NoError(t, w.AppendBool(base.Bool))
+	require.NoError(t, w.AppendTimestamp(base.Time))
+	require.NoError(t, w.AppendBytes(base.Hash))
+	require.NoError(t, w.AppendBytes(base.Array[:]))
+	require.NoError(t, w.AppendString(base.String))
+	require.NoError(t, w.AppendEnum(string(base.MyEnum)))
+	require.NoError(t, w.AppendBigint(base.Big))
+	require.NoError(t, w.AppendDuration(base.Duration))
+	require.NoError(t, w.AppendUnion(base.Union))
 	require.True(t, w.Done())
 
 	require.Equal(t, buf.Bytes(), w.Bytes())
@@ -109,61 +109,61 @@ func TestWriterListL1(t *testing.T) {
 
 	// write
 	w := schema.NewWriter(baseSchema, nil)
-	require.NoError(t, w.WriteInt64(base.Int64a))
+	require.NoError(t, w.AppendInt64(base.Int64a))
 
 	// []uint64
-	require.NoError(t, w.WriteList(func(lw *schema.ListWriter) error {
-		require.NoError(t, lw.WriteUint64(base.U64List[0]))
+	require.NoError(t, w.AppendList(func(lw *schema.ListWriter) error {
+		require.NoError(t, lw.AppendUint64(base.U64List[0]))
 		lw.Next()
-		require.NoError(t, lw.WriteUint64(base.U64List[1]))
+		require.NoError(t, lw.AppendUint64(base.U64List[1]))
 		return nil
 	}))
 
 	// []time
-	require.NoError(t, w.WriteList(func(lw *schema.ListWriter) error {
-		require.NoError(t, lw.WriteDate(base.TimeList[0]))
+	require.NoError(t, w.AppendList(func(lw *schema.ListWriter) error {
+		require.NoError(t, lw.AppendDate(base.TimeList[0]))
 		lw.Next()
-		require.NoError(t, lw.WriteDate(base.TimeList[1]))
+		require.NoError(t, lw.AppendDate(base.TimeList[1]))
 		return nil
 	}))
 
 	// []Pair
-	require.NoError(t, w.WriteList(func(lw *schema.ListWriter) error {
-		require.NoError(t, lw.WriteInt64(base.PairList[0].Key))
-		require.NoError(t, lw.WriteInt64(base.PairList[0].Val))
+	require.NoError(t, w.AppendList(func(lw *schema.ListWriter) error {
+		require.NoError(t, lw.AppendInt64(base.PairList[0].Key))
+		require.NoError(t, lw.AppendInt64(base.PairList[0].Val))
 		lw.Next()
-		require.NoError(t, lw.WriteInt64(base.PairList[1].Key))
-		require.NoError(t, lw.WriteInt64(base.PairList[1].Val))
+		require.NoError(t, lw.AppendInt64(base.PairList[1].Key))
+		require.NoError(t, lw.AppendInt64(base.PairList[1].Val))
 		return nil
 	}))
 
 	// [][]byte
-	require.NoError(t, w.WriteList(func(lw *schema.ListWriter) error {
-		require.NoError(t, lw.WriteBytes(base.ByteList[0]))
+	require.NoError(t, w.AppendList(func(lw *schema.ListWriter) error {
+		require.NoError(t, lw.AppendBytes(base.ByteList[0]))
 		lw.Next()
-		require.NoError(t, lw.WriteBytes(base.ByteList[1]))
+		require.NoError(t, lw.AppendBytes(base.ByteList[1]))
 		return nil
 	}))
 
 	// [][2]byte
-	require.NoError(t, w.WriteList(func(lw *schema.ListWriter) error {
-		require.NoError(t, lw.WriteBytes(base.ArrList[0][:]))
+	require.NoError(t, w.AppendList(func(lw *schema.ListWriter) error {
+		require.NoError(t, lw.AppendBytes(base.ArrList[0][:]))
 		lw.Next()
-		require.NoError(t, lw.WriteBytes(base.ArrList[1][:]))
+		require.NoError(t, lw.AppendBytes(base.ArrList[1][:]))
 		return nil
 	}))
 
 	// []Decimal32
-	require.NoError(t, w.WriteList(func(lw *schema.ListWriter) error {
-		require.NoError(t, lw.WriteDecimal32(base.DecimalList[0]))
+	require.NoError(t, w.AppendList(func(lw *schema.ListWriter) error {
+		require.NoError(t, lw.AppendDecimal32(base.DecimalList[0]))
 		lw.Next()
-		require.NoError(t, lw.WriteDecimal32(base.DecimalList[1]))
+		require.NoError(t, lw.AppendDecimal32(base.DecimalList[1]))
 		lw.Next()
-		require.NoError(t, lw.WriteDecimal32(base.DecimalList[2]))
+		require.NoError(t, lw.AppendDecimal32(base.DecimalList[2]))
 		return nil
 	}))
 
-	require.NoError(t, w.WriteInt64(base.Int64b))
+	require.NoError(t, w.AppendInt64(base.Int64b))
 	require.True(t, w.Done())
 
 	// check writer and encoder produce the same bytes
@@ -192,49 +192,49 @@ func TestWriterListL2(t *testing.T) {
 
 	// write
 	w := schema.NewWriter(baseSchema, nil)
-	require.NoError(t, w.WriteInt64(base.Int64a))
+	require.NoError(t, w.AppendInt64(base.Int64a))
 
 	// [][]uint64
-	require.NoError(t, w.WriteList(func(lw *schema.ListWriter) error {
-		require.NoError(t, lw.WriteList(func(lwi *schema.ListWriter) error {
-			require.NoError(t, lwi.WriteUint64(base.NestedUints[0][0]))
+	require.NoError(t, w.AppendList(func(lw *schema.ListWriter) error {
+		require.NoError(t, lw.AppendList(func(lwi *schema.ListWriter) error {
+			require.NoError(t, lwi.AppendUint64(base.NestedUints[0][0]))
 			lwi.Next()
-			require.NoError(t, lwi.WriteUint64(base.NestedUints[0][1]))
+			require.NoError(t, lwi.AppendUint64(base.NestedUints[0][1]))
 			return nil
 		}))
 		lw.Next()
-		require.NoError(t, lw.WriteList(func(lwi *schema.ListWriter) error {
-			require.NoError(t, lwi.WriteUint64(base.NestedUints[1][0]))
+		require.NoError(t, lw.AppendList(func(lwi *schema.ListWriter) error {
+			require.NoError(t, lwi.AppendUint64(base.NestedUints[1][0]))
 			lwi.Next()
-			require.NoError(t, lwi.WriteUint64(base.NestedUints[1][1]))
+			require.NoError(t, lwi.AppendUint64(base.NestedUints[1][1]))
 			return nil
 		}))
 		return nil
 	}))
 
 	// []Pair
-	require.NoError(t, w.WriteList(func(lw *schema.ListWriter) error {
-		require.NoError(t, lw.WriteList(func(lwi *schema.ListWriter) error {
-			require.NoError(t, lwi.WriteInt64(base.NestedPairs[0][0].Key))
-			require.NoError(t, lwi.WriteInt64(base.NestedPairs[0][0].Val))
+	require.NoError(t, w.AppendList(func(lw *schema.ListWriter) error {
+		require.NoError(t, lw.AppendList(func(lwi *schema.ListWriter) error {
+			require.NoError(t, lwi.AppendInt64(base.NestedPairs[0][0].Key))
+			require.NoError(t, lwi.AppendInt64(base.NestedPairs[0][0].Val))
 			lwi.Next()
-			require.NoError(t, lw.WriteInt64(base.NestedPairs[0][1].Key))
-			require.NoError(t, lw.WriteInt64(base.NestedPairs[0][1].Val))
+			require.NoError(t, lw.AppendInt64(base.NestedPairs[0][1].Key))
+			require.NoError(t, lw.AppendInt64(base.NestedPairs[0][1].Val))
 			return nil
 		}))
 		lw.Next()
-		require.NoError(t, lw.WriteList(func(lwi *schema.ListWriter) error {
-			require.NoError(t, lwi.WriteInt64(base.NestedPairs[1][0].Key))
-			require.NoError(t, lwi.WriteInt64(base.NestedPairs[1][0].Val))
+		require.NoError(t, lw.AppendList(func(lwi *schema.ListWriter) error {
+			require.NoError(t, lwi.AppendInt64(base.NestedPairs[1][0].Key))
+			require.NoError(t, lwi.AppendInt64(base.NestedPairs[1][0].Val))
 			lwi.Next()
-			require.NoError(t, lw.WriteInt64(base.NestedPairs[1][1].Key))
-			require.NoError(t, lw.WriteInt64(base.NestedPairs[1][1].Val))
+			require.NoError(t, lw.AppendInt64(base.NestedPairs[1][1].Key))
+			require.NoError(t, lw.AppendInt64(base.NestedPairs[1][1].Val))
 			return nil
 		}))
 		return nil
 	}))
 
-	require.NoError(t, w.WriteInt64(base.Int64b))
+	require.NoError(t, w.AppendInt64(base.Int64b))
 	require.True(t, w.Done())
 
 	// check writer and encoder produce the same bytes
@@ -263,18 +263,18 @@ func TestWriterListL3(t *testing.T) {
 
 	// write
 	w := schema.NewWriter(baseSchema, nil)
-	require.NoError(t, w.WriteInt64(base.Int64a))
+	require.NoError(t, w.AppendInt64(base.Int64a))
 
 	// []OuterPairStruct
-	require.NoError(t, w.WriteList(func(lw *schema.ListWriter) error {
+	require.NoError(t, w.AppendList(func(lw *schema.ListWriter) error {
 		for i := range 2 {
-			require.NoError(t, lw.WriteUint32(base.Pairs1[i].Val))
-			require.NoError(t, lw.WriteList(func(lwi *schema.ListWriter) error {
-				require.NoError(t, lwi.WriteInt64(base.Pairs1[i].Pairs2[0].Key))
-				require.NoError(t, lwi.WriteInt64(base.Pairs1[i].Pairs2[0].Val))
+			require.NoError(t, lw.AppendUint32(base.Pairs1[i].Val))
+			require.NoError(t, lw.AppendList(func(lwi *schema.ListWriter) error {
+				require.NoError(t, lwi.AppendInt64(base.Pairs1[i].Pairs2[0].Key))
+				require.NoError(t, lwi.AppendInt64(base.Pairs1[i].Pairs2[0].Val))
 				lwi.Next()
-				require.NoError(t, lwi.WriteInt64(base.Pairs1[i].Pairs2[1].Key))
-				require.NoError(t, lwi.WriteInt64(base.Pairs1[i].Pairs2[1].Val))
+				require.NoError(t, lwi.AppendInt64(base.Pairs1[i].Pairs2[1].Key))
+				require.NoError(t, lwi.AppendInt64(base.Pairs1[i].Pairs2[1].Val))
 				return nil
 			}))
 			lw.Next()
@@ -282,7 +282,7 @@ func TestWriterListL3(t *testing.T) {
 		return nil
 	}))
 
-	require.NoError(t, w.WriteInt64(base.Int64b))
+	require.NoError(t, w.AppendInt64(base.Int64b))
 	require.True(t, w.Done())
 
 	// check writer and encoder produce the same bytes
@@ -332,7 +332,7 @@ func TestWriterUnion(t *testing.T) {
 	w.Reset()
 	for _, val := range testValues {
 		n := w.Len()
-		require.NoError(t, w.WriteUnion(val), "write val=%s", val)
+		require.NoError(t, w.AppendUnion(val), "write val=%s", val)
 		t.Logf("Union %s %q => %s", val.Type(), val, hex.Dump(w.Bytes()[n:]))
 	}
 	require.True(t, w.Done(), "done")
@@ -377,9 +377,9 @@ func TestWriterSkip(t *testing.T) {
 		w.Reset()
 		for j, val := range testValues {
 			if j == i {
-				require.NoError(t, w.Skip(), "skip i=%d j=%d", i, j)
+				require.NoError(t, w.AppendNull(), "skip i=%d j=%d", i, j)
 			} else {
-				require.NoError(t, w.Write(val), "write i=%d j=%d", i, j)
+				require.NoError(t, w.Append(val), "write i=%d j=%d", i, j)
 			}
 		}
 		require.True(t, w.Done(), "done")
@@ -407,7 +407,7 @@ func TestWriterMap(t *testing.T) {
 		t.Log(s)
 		base := NewPrimMapRecord()
 		w := schema.NewWriter(s, nil)
-		require.NoError(t, w.Write(base))
+		require.NoError(t, w.Append(base))
 		t.Log(hex.Dump(w.Bytes()))
 	})
 
@@ -415,7 +415,7 @@ func TestWriterMap(t *testing.T) {
 	t.Run("union", func(t *testing.T) {
 		attr := NewUnionMapRecord()
 		w := schema.NewWriter(UnionMapRecordSchema, nil)
-		require.NoError(t, w.Write(attr))
+		require.NoError(t, w.Append(attr))
 		t.Log(hex.Dump(w.Bytes()))
 	})
 
@@ -426,7 +426,7 @@ func TestWriterMap(t *testing.T) {
 		t.Log(s)
 		base := NewMapFields()
 		w := schema.NewWriter(s, nil)
-		require.NoError(t, w.Write(base))
+		require.NoError(t, w.Append(base))
 		t.Log(hex.Dump(w.Bytes()))
 	})
 }
@@ -435,7 +435,7 @@ func TestWriterVariant(t *testing.T) {
 	buf := customerT.NewBuffer(2)
 	w := schema.NewWriter(customerT, buf)
 	val := NewCustomer()
-	require.NoError(t, w.Write(val))
+	require.NoError(t, w.Append(val))
 	require.NoError(t, w.Err())
 	require.True(t, w.Done())
 
@@ -468,7 +468,7 @@ func TestBatchWriter(t *testing.T) {
 			// write batch
 			w := schema.NewBatchWriter(c.Schema, 10)
 			for range 10 {
-				require.NoError(t, w.Write(c.New()))
+				require.NoError(t, w.Append(c.New()))
 				w.Next()
 			}
 			require.NoError(t, w.Err())

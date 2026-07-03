@@ -5,8 +5,10 @@ package schema
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
@@ -65,8 +67,13 @@ func (u UnionValue) MarshalSchema(w *Writer) error {
 	return u.MarshalBuffer(w.buf, w.layout)
 }
 
-func (u *UnionValue) UnmarshalSchema(v *View) error {
-	return u.UnmarshalBuffer(v.Buffer(), v.layout)
+func (u *UnionValue) UnmarshalSchema(v Viewer) error {
+	switch vv := v.(type) {
+	case *View:
+		return u.UnmarshalBuffer(vv.Buffer(), vv.layout)
+	default:
+		return fmt.Errorf("union: invalid viewer type %T", v)
+	}
 }
 
 // MarshalBuffer writes the union's record encoding of to a buffer using
@@ -172,6 +179,25 @@ func (u *UnionValue) UnmarshalBuffer(buf []byte, layout binary.ByteOrder) error 
 		return ErrInvalidValueType
 	}
 	return nil
+}
+
+func NewUnionValue(typ FieldType, num uint64, buf []byte) UnionValue {
+	switch typ {
+	case String, Bigint, Bytes:
+		if len(buf) != int(num) {
+			panic(errors.New("union: invalid buffer length"))
+		}
+		return UnionValue{typ: typ, num: num, buf: unsafe.SliceData(buf)}
+	case Uint64, Int64, Float64, Timestamp, Time, Date, Duration,
+		Uint32, Int32, Float32, Uint16, Int16, Uint8, Int8, Boolean,
+		Int128, Int256:
+		if buf != nil {
+			panic(errors.New("union: invalid buffer for numeric type"))
+		}
+		return UnionValue{typ: typ, num: num, buf: nil}
+	default: // List, Map, Text, Binary, Bytes, DecimalXX, Bigint
+		panic(fmt.Errorf("union: %v", ErrInvalidValueType))
+	}
 }
 
 func MakeUnionValue(typ FieldType, val any) (u UnionValue, ok bool) {
@@ -367,6 +393,15 @@ func (u UnionValue) Type() FieldType {
 	return u.typ
 }
 
+func (u UnionValue) Data() (FieldType, uint64, []byte) {
+	switch u.typ {
+	case String, Bigint, Bytes:
+		return u.typ, u.num, unsafe.Slice(u.buf, u.num)
+	default:
+		return u.typ, u.num, nil
+	}
+}
+
 func (u UnionValue) Int64() int64 {
 	u.ensureType(Int64)
 	return int64(u.num)
@@ -514,6 +549,21 @@ func (u UnionValue) Value() any {
 		return num.Int256FromBytes(u.bytes())
 	default:
 		return nil
+	}
+}
+
+func (u UnionValue) Cmp(v UnionValue) int {
+	if u.typ != v.typ {
+		return cmp.Compare(u.typ, v.typ)
+	}
+	switch u.typ {
+	case String, Bigint, Bytes:
+		if c := cmp.Compare(u.num, v.num); c != 0 {
+			return c
+		}
+		return bytes.Compare(u.bytes(), v.bytes())
+	default:
+		return cmp.Compare(u.num, v.num)
 	}
 }
 

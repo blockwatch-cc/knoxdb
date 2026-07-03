@@ -1,15 +1,14 @@
 package schema_tests
 
 import (
-	"bytes"
 	"encoding/binary"
-	"encoding/hex"
 	"fmt"
-	"strings"
+	"reflect"
 	"time"
 
 	"blockwatch.cc/knoxdb/pkg/num"
 	"blockwatch.cc/knoxdb/pkg/schema"
+	"blockwatch.cc/knoxdb/pkg/schema/encode"
 	"blockwatch.cc/knoxdb/pkg/schema/enum"
 )
 
@@ -25,77 +24,8 @@ func RegisterEnums() *enum.Registry {
 	return enums
 }
 
-// not supported, used for error checks only
-type Stringer []string
-
-func (s Stringer) String() string {
-	return strings.Join(s, ",")
-}
-
-func (s Stringer) MarshalText() ([]byte, error) {
-	return []byte(strings.Join(s, ",")), nil
-}
-
-func (s *Stringer) UnmarshalText(b []byte) error {
-	*s = strings.Split(string(b), ",")
-	return nil
-}
-
-// not supported, used for error checks only
-type Byter [][]byte
-
-func (b Byter) MarshalBinary() ([]byte, error) {
-	return bytes.Join(b, []byte{0}), nil
-}
-
-func (b *Byter) UnmarshalBinary(buf []byte) error {
-	*b = bytes.Split(buf, []byte{0})
-	return nil
-}
-
-// not supported, used for error checks only
-type StringerStruct struct{}
-
-func (s StringerStruct) MarshalText() ([]byte, error) {
-	return []byte{}, nil
-}
-
-func (s *StringerStruct) UnmarshalText(b []byte) error {
-	return nil
-}
-
-// not supported, used for error checks only
-type ByterStruct struct{}
-
-func (s ByterStruct) MarshalBinary() ([]byte, error) {
-	return []byte{}, nil
-}
-
-func (s *ByterStruct) UnmarshalBinary(b []byte) error {
-	return nil
-}
-
-// not supported, used for error checks only
-type MapType map[int]int
-
-func (MapType) MarshalBinary() ([]byte, error) {
-	return []byte{}, nil
-}
-
-func (*MapType) UnmarshalBinary(_ []byte) error {
-	return nil
-}
-
-type NoModelNoTag struct {
-	Id uint64
-}
-
-type NoModelTag struct {
-	Id uint64 `knox:",pk"`
-}
-
-type InvalidPkType struct {
-	Id int64 `knox:",pk"`
+func init() {
+	RegisterEnums()
 }
 
 // Register a global enum and dictionary for all schema tests
@@ -166,26 +96,16 @@ func NewAllTypes(i int64) *AllTypes {
 	}
 }
 
-type NativeTypes struct {
-	Int  int  `knox:"int"`
-	Uint uint `knox:"uint"`
-}
+// func (s *AllTypes) Encode() []byte {
+// 	allTypesBuf.Reset()
+// 	allTypesEnc.Encode(allTypesBuf, s)
+// 	return allTypesBuf.Bytes()
+// }
 
-type ArrayTypes struct {
-	Id          uint64   `knox:"id,pk"`
-	ByteArray   [20]byte `knox:"byte_array"`
-	StringArray string   `knox:"string_array,array=20"`
-}
-
-func NewArrayTypes(i int64) *ArrayTypes {
-	b := binary.LittleEndian.AppendUint64(nil, uint64(i))
-	buf := bytes.Repeat(b, 3)[:20]
-	return &ArrayTypes{
-		Id:          uint64(i),
-		ByteArray:   [20]byte(buf),
-		StringArray: hex.EncodeToString(buf[:10]),
-	}
-}
+// func (s *AllTypes) Decode(buf []byte) error {
+// 	_, err := allTypesDec.Decode(buf, s)
+// 	return err
+// }
 
 type TimeTypes struct {
 	TimestampNs time.Time     `knox:"tsn,timestamp,scale=ns"`
@@ -201,111 +121,6 @@ type TimeTypes struct {
 	DurationU   time.Duration `knox:"dus,scale=us"`
 	DurationM   time.Duration `knox:"dms,scale=ms"`
 	DurationS   time.Duration `knox:"ds,scale=s"`
-}
-
-type LargeArrayToBlob struct {
-	Id uint64 `knox:"id,pk"`
-	F  [256]byte
-}
-
-type MarshalerTypes struct {
-	Stringer Stringer `knox:"stringer"`
-	Byter    Byter    `knox:"byter"`
-}
-
-type MarshalerStructTypes struct {
-	Stringer StringerStruct `knox:"stringer"`
-	Byter    ByterStruct    `knox:"byter"`
-}
-
-type MarshalerMapTypes struct {
-	Map MapType `knox:"map"`
-}
-
-type NoMarshalerTypes struct {
-	Embed MarshalerStructTypes `knox:"no_marshalers"`
-}
-
-type NoMarshalerSliceTypes struct {
-	Slice []int64 `knox:"no_marshalers"`
-}
-
-type NoMarshalerMapTypes struct {
-	Map map[int]int `knox:"no_map"`
-}
-
-type InvalidPointerType struct {
-	Ptr *int `knox:"ptr"`
-}
-
-type InvalidDuplicateName struct {
-	Id  uint64 `knox:"id"`
-	Val uint64 `knox:"id"`
-}
-
-type InvalidDuplicatePkType struct {
-	Id  uint64 `knox:"id,pk"`
-	Val uint64 `knox:"val,pk"`
-}
-
-type InvalidNativeTypes struct {
-	Int  int  `knox:"int"`
-	Uint uint `knox:"uint"`
-}
-
-type InvalidArrayType struct {
-	F int64 `knox:",array=1"`
-}
-
-type InvalidArrayMissing struct {
-	F []byte `knox:",array"`
-}
-
-type InvalidArrayNaN struct {
-	F []byte `knox:",array=x"`
-}
-
-type InvalidArrayZero struct {
-	F []byte `knox:",array=0"`
-}
-
-type InvalidArrayNeg struct {
-	F []byte `knox:",array=-1"`
-}
-
-type InvalidArraySizeMismatch struct {
-	F [20]byte `knox:",array=21"`
-}
-
-type InvalidScaleType struct {
-	F int64 `knox:",scale=1"`
-}
-
-type InvalidScaleMissing struct {
-	D num.Decimal32 `knox:",scale"`
-}
-
-type InvalidScaleNaN struct {
-	D num.Decimal32 `knox:",scale=x"`
-}
-
-type InvalidScaleNeg struct {
-	D num.Decimal32 `knox:",scale=-1"`
-}
-
-type InvalidScaleTooLarge struct {
-	D num.Decimal32 `knox:",scale=36"`
-}
-
-type BloomFilter struct {
-	Id  uint64 `knox:"id,pk"`
-	Int int64  `knox:"i64,filter=bloom3b"`
-}
-
-type MetaFields struct {
-	Id  uint64 `knox:"id,pk"`
-	I64 int64  `knox:"i64,metadata"`
-	U64 uint64 `knox:"u64"`
 }
 
 type ListFields struct {
@@ -354,8 +169,8 @@ type Pair struct {
 }
 
 func (p Pair) MarshalSchema(w *schema.Writer) error {
-	w.WriteInt64(p.Key)
-	w.WriteInt64(p.Val)
+	w.AppendInt64(p.Key)
+	w.AppendInt64(p.Val)
 	return w.Err()
 }
 
@@ -456,32 +271,32 @@ func NewMapFields() *MapFields {
 }
 
 func (r MapFields) MarshalSchema(w *schema.Writer) error {
-	w.WriteInt64(r.Int64a)
-	w.WriteMap(func(mw *schema.MapWriter) error {
-		return schema.WriteMap(mw, r.U64Map)
+	w.AppendInt64(r.Int64a)
+	w.AppendMap(func(mw *schema.MapWriter) error {
+		return schema.AppendMap(mw, r.U64Map)
 	})
-	w.WriteMap(func(mw *schema.MapWriter) error {
-		return schema.WriteMap(mw, r.DateMap)
+	w.AppendMap(func(mw *schema.MapWriter) error {
+		return schema.AppendMap(mw, r.DateMap)
 	})
-	w.WriteMap(func(mw *schema.MapWriter) error {
+	w.AppendMap(func(mw *schema.MapWriter) error {
 		return schema.MarshalMap(mw, r.PairMap)
 	})
-	w.WriteMap(func(mw *schema.MapWriter) error {
-		return schema.WriteMap(mw, r.ByteMap)
+	w.AppendMap(func(mw *schema.MapWriter) error {
+		return schema.AppendMap(mw, r.ByteMap)
 	})
-	w.WriteMap(func(mw *schema.MapWriter) error {
+	w.AppendMap(func(mw *schema.MapWriter) error {
 		for _, k := range schema.SortedKeys(r.ArrMap) {
-			mw.WriteString(k)
+			mw.AppendString(k)
 			v := r.ArrMap[k]
-			mw.WriteBytes(v[:])
+			mw.AppendBytes(v[:])
 			mw.Next()
 		}
 		return mw.Err()
 	})
-	w.WriteMap(func(mw *schema.MapWriter) error {
-		return schema.WriteMap(mw, r.DecimalMap)
+	w.AppendMap(func(mw *schema.MapWriter) error {
+		return schema.AppendMap(mw, r.DecimalMap)
 	})
-	w.WriteInt64(r.Int64b)
+	w.AppendInt64(r.Int64b)
 	return w.Err()
 }
 
@@ -495,23 +310,23 @@ type PrimMapRecord struct {
 }
 
 func (r PrimMapRecord) MarshalSchema(w *schema.Writer) error {
-	w.WriteMap(func(mw *schema.MapWriter) error {
-		return schema.WriteMap(mw, r.U64)
+	w.AppendMap(func(mw *schema.MapWriter) error {
+		return schema.AppendMap(mw, r.U64)
 	})
-	w.WriteMap(func(mw *schema.MapWriter) error {
-		return schema.WriteMap(mw, r.Bools)
+	w.AppendMap(func(mw *schema.MapWriter) error {
+		return schema.AppendMap(mw, r.Bools)
 	})
-	w.WriteMap(func(mw *schema.MapWriter) error {
-		return schema.WriteMap(mw, r.Strings)
+	w.AppendMap(func(mw *schema.MapWriter) error {
+		return schema.AppendMap(mw, r.Strings)
 	})
-	w.WriteMap(func(mw *schema.MapWriter) error {
-		return schema.WriteMap(mw, r.Bigs)
+	w.AppendMap(func(mw *schema.MapWriter) error {
+		return schema.AppendMap(mw, r.Bigs)
 	})
-	w.WriteMap(func(mw *schema.MapWriter) error {
-		return schema.WriteMap(mw, r.Dates)
+	w.AppendMap(func(mw *schema.MapWriter) error {
+		return schema.AppendMap(mw, r.Dates)
 	})
-	w.WriteMap(func(mw *schema.MapWriter) error {
-		return schema.WriteTimeMap(mw, r.Times)
+	w.AppendMap(func(mw *schema.MapWriter) error {
+		return schema.AppendTimeMap(mw, r.Times)
 	})
 	return w.Err()
 }
@@ -534,7 +349,7 @@ type UnionMapRecord struct {
 }
 
 func (r UnionMapRecord) MarshalSchema(w *schema.Writer) error {
-	return w.WriteMap(func(mw *schema.MapWriter) error {
+	return w.AppendMap(func(mw *schema.MapWriter) error {
 		return schema.MarshalMap(mw, r.Unions)
 	})
 }
@@ -713,33 +528,129 @@ func NewCustomer() *CustomerVariant {
 }
 
 func (c CustomerVariant) MarshalSchema(w *schema.Writer) error {
-	w.WriteUint64(1)
-	w.WriteString("user")
-	w.WriteVariant(3, // pay: bank transfer
+	w.AppendUint64(1)
+	w.AppendString("user")
+	w.AppendVariant(3, // pay: bank transfer
 		func(vw *schema.VariantWriter) error {
-			vw.WriteString("iban")
-			vw.WriteString("bic")
-			vw.WriteString("holder")
-			vw.WriteString("bank")
+			vw.AppendString("iban")
+			vw.AppendString("bic")
+			vw.AppendString("holder")
+			vw.AppendString("bank")
 			return vw.Err()
 		})
-	w.WriteVariant(2, // billing: business
+	w.AppendVariant(2, // billing: business
 		func(vw *schema.VariantWriter) error {
-			vw.WriteString("company")
-			vw.WriteString("street")
-			vw.WriteString("city")
-			vw.WriteString("postcode")
-			vw.WriteString("country")
-			vw.WriteString("taxid")
+			vw.AppendString("company")
+			vw.AppendString("street")
+			vw.AppendString("city")
+			vw.AppendString("postcode")
+			vw.AppendString("country")
+			vw.AppendString("taxid")
 			return vw.Err()
 		})
-	w.WriteVariant(1, // shipping: residential
+	w.AppendVariant(1, // shipping: residential
 		func(vw *schema.VariantWriter) error {
-			vw.WriteString("street")
-			vw.WriteString("city")
-			vw.WriteString("postcode")
-			vw.WriteString("country")
+			vw.AppendString("street")
+			vw.AppendString("city")
+			vw.AppendString("postcode")
+			vw.AppendString("country")
 			return vw.Err()
 		})
 	return w.Err()
+}
+
+var (
+	TestStructs = []Encodable{
+		&Account{},
+		&Transfer{},
+		// &AllTypes{},
+	}
+
+	accountEnc = encode.NewEncoderFor[Account]()
+	accountDec = encode.NewDecoderFor[Account]()
+	accountBuf = accountEnc.NewBuffer(1)
+
+	transferEnc = encode.NewEncoderFor[Transfer]()
+	transferDec = encode.NewDecoderFor[Transfer]()
+	transferBuf = transferEnc.NewBuffer(1)
+
+// allTypesEnc = encode.NewEncoderFor[AllTypes](schema.Enums(enums))
+// allTypesDec = encode.NewDecoderFor[AllTypes](schema.Enums(enums))
+// allTypesBuf = allTypesEnc.NewBuffer(1)
+)
+
+func makeZeroStruct(v any) any {
+	typ := reflect.TypeOf(v).Elem()
+	ptr := reflect.New(typ)
+	val := ptr.Elem()
+	for i, l := 0, typ.NumField(); i < l; i++ {
+		dst := val.Field(i)
+		if dst.Kind() == reflect.Pointer {
+			if dst.IsNil() && dst.CanSet() {
+				dst.Set(reflect.New(dst.Type().Elem()))
+			}
+			dst = dst.Elem()
+		}
+		dst.Set(reflect.Zero(typ.Field(i).Type))
+		// fake enum
+		if dst.Kind() == reflect.String {
+			dst.SetString("one")
+		}
+	}
+	return ptr.Interface()
+}
+
+type Encodable interface {
+	Encode() []byte
+	Decode([]byte) error
+}
+
+type Account struct {
+	ID          uint64   `knox:"id,pk"`
+	UserData256 [32]byte `knox:"user_data_256"`
+	UserData64  uint64   `knox:"user_data_64"`
+	UserData32  uint32   `knox:"user_data_32"`
+	Reserved    uint32   `knox:"reserved"`
+	Ledger      uint32   `knox:"ledger"`
+	Code        uint16   `knox:"code"`
+	Flags       uint16   `knox:"flags"`
+	Timestamp   uint64   `knox:"timestamp,timebase"`
+}
+
+func (s *Account) Encode() []byte {
+	accountBuf.Reset()
+	accountEnc.Encode(accountBuf, s)
+	return accountBuf.Bytes()
+}
+
+func (s *Account) Decode(buf []byte) error {
+	_, err := accountDec.Decode(buf, s)
+	return err
+}
+
+type Transfer struct {
+	ID              uint64     `knox:"id,pk"`
+	DebitAccountID  uint64     `knox:"debit_account_id"`
+	CreditAccountID uint64     `knox:"credit_account_id"`
+	Amount          num.Int128 `knox:"amount"`
+	PendingID       uint64     `knox:"pending_id"`
+	UserData256     [32]byte   `knox:"user_data_256"`
+	UserData64      uint64     `knox:"user_data_64"`
+	UserData32      uint32     `knox:"user_data_32"`
+	Timeout         uint32     `knox:"timeout"`
+	Ledger          uint32     `knox:"ledger"`
+	Code            uint16     `knox:"code"`
+	Flags           uint16     `knox:"flags"`
+	Timestamp       uint64     `knox:"timestamp,timebase"`
+}
+
+func (s *Transfer) Encode() []byte {
+	transferBuf.Reset()
+	transferEnc.Encode(transferBuf, s)
+	return transferBuf.Bytes()
+}
+
+func (s *Transfer) Decode(buf []byte) error {
+	_, err := transferDec.Decode(buf, s)
+	return err
 }

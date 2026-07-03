@@ -321,7 +321,7 @@ func TestFieldSerializationRoundTrip(t *testing.T) {
 func encodeDecodeField(t *testing.T, field *schema.Field, value any) any {
 	t.Helper()
 	buf := bytes.NewBuffer(nil)
-	err := field.WriteValue(buf, value, binary.NativeEndian)
+	err := field.AppendValue(buf, value, binary.NativeEndian)
 	require.NoError(t, err, "Encoding failed")
 
 	decoded, err := field.ReadValue(buf, binary.NativeEndian)
