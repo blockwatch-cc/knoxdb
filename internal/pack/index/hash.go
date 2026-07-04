@@ -4,6 +4,8 @@
 package index
 
 import (
+	"math"
+
 	"blockwatch.cc/knoxdb/internal/block"
 	"blockwatch.cc/knoxdb/internal/hash"
 	"blockwatch.cc/knoxdb/pkg/slicex"
@@ -17,7 +19,7 @@ func HashBlock(b *block.Block) *block.Block {
 	u64 := h.Uint64().Slice()
 
 	switch b.Type() {
-	case block.BlockFloat64, block.BlockInt64, block.BlockUint64:
+	case block.BlockInt64, block.BlockUint64:
 		if b.IsMaterialized() {
 			hash.Vec64(h.Uint64().Slice(), b.Uint64().Slice())
 		} else {
@@ -25,7 +27,7 @@ func HashBlock(b *block.Block) *block.Block {
 				u64[i] = hash.Uint64(v)
 			}
 		}
-	case block.BlockUint32, block.BlockInt32, block.BlockFloat32:
+	case block.BlockUint32, block.BlockInt32:
 		if b.IsMaterialized() {
 			hash.Vec32(h.Uint64().Slice(), b.Uint32().Slice())
 		} else {
@@ -47,6 +49,24 @@ func HashBlock(b *block.Block) *block.Block {
 		} else {
 			for i, v := range b.Uint8().All() {
 				u64[i] = hash.Uint8(v)
+			}
+		}
+	case block.BlockFloat64:
+		hnan := hash.Float64(math.NaN())
+		for i, v := range b.Float64().All() {
+			if math.IsNaN(v) {
+				u64[i] = hnan
+			} else {
+				u64[i] = hash.Float64(v)
+			}
+		}
+	case block.BlockFloat32:
+		hnan := hash.Float32(float32(math.NaN()))
+		for i, v := range b.Float32().All() {
+			if math.IsNaN(float64(v)) {
+				u64[i] = hnan
+			} else {
+				u64[i] = hash.Float32(v)
 			}
 		}
 	case block.BlockBool:

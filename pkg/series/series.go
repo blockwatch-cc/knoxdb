@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"blockwatch.cc/knoxdb/internal/engine"
+	"blockwatch.cc/knoxdb/internal/operator/reducer"
 	"blockwatch.cc/knoxdb/internal/query"
-	"blockwatch.cc/knoxdb/internal/reducer"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/schema/enum"
 )

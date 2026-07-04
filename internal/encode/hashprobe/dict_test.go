@@ -9,7 +9,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/cpu"
 	etests "blockwatch.cc/knoxdb/internal/encode/tests"
 	"blockwatch.cc/knoxdb/internal/tests"
-	"blockwatch.cc/knoxdb/pkg/slicex"
+	"blockwatch.cc/knoxdb/pkg/sortx"
 	"github.com/stretchr/testify/require"
 )
 
@@ -174,7 +174,7 @@ func buildDictMap[T Integer](vals []T, numUnique int) ([]T, []uint16) {
 	}
 
 	// sort dict
-	slicex.Sort(dict, 0)
+	sortx.Sort(dict, 0)
 
 	// remap dict codes to original values
 	for i, v := range dict {

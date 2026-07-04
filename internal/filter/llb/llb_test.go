@@ -8,13 +8,11 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math"
-	"slices"
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/hash"
 	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/internal/tests/testutil"
-	"blockwatch.cc/knoxdb/pkg/slicex"
 )
 
 const MaxAllowedLlbError = 5.0
@@ -276,34 +274,5 @@ func BenchmarkMergePureGo(b *testing.B) {
 				}
 			})
 		}
-	}
-}
-
-func BenchmarkUniqueMap(b *testing.B) {
-	for _, c := range tests.BenchmarkSizes {
-		data := tests.GenRnd[uint64](c.N)
-		b.Run(c.Name, func(b *testing.B) {
-			b.SetBytes(int64(8 * c.N))
-			for b.Loop() {
-				f := make(map[uint64]struct{}, len(data))
-				for _, v := range data {
-					f[v] = struct{}{}
-				}
-				_ = len(f)
-			}
-		})
-	}
-}
-
-func BenchmarkUniqueSort(b *testing.B) {
-	for _, c := range tests.BenchmarkSizes {
-		data := tests.GenRnd[uint64](c.N)
-		b.Run(c.Name, func(b *testing.B) {
-			b.SetBytes(int64(8 * c.N))
-			for b.Loop() {
-				res := slicex.Unique(slices.Clone(data))
-				_ = len(res)
-			}
-		})
 	}
 }

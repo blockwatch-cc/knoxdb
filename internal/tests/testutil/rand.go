@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"math/rand/v2"
 	"os"
+	"slices"
 	"strconv"
 	"sync"
 )
@@ -230,4 +231,9 @@ func RandFloatsRange[T Float](sz int, min, max T) []T {
 		s[i] += min
 	}
 	return s
+}
+
+func Unique[T Signed | Unsigned | Float](s []T) []T {
+	slices.Sort(s)
+	return slices.Compact(s)
 }

@@ -8,6 +8,7 @@ import (
 	"slices"
 	"testing"
 
+	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/internal/tests/testutil"
 	"github.com/stretchr/testify/assert"
 )
@@ -522,5 +523,45 @@ func TestOrderedIntegersIntersectRange(t *testing.T) {
 			s := slices.Clone(v.Slice)
 			assert.Equal(t, r.Expected, IntersectRange(s, r.From, r.To), r.Name)
 		}
+	}
+}
+
+type BenchmarkSize struct {
+	Name string
+	N    int
+}
+
+var BenchmarkSizes = []BenchmarkSize{
+	{"1k", 1024},
+	{"16k", 16 * 1024},
+	{"64k", 64 * 1024},
+}
+
+func BenchmarkUniqueMap(b *testing.B) {
+	for _, c := range BenchmarkSizes {
+		data := tests.GenRnd[uint64](c.N)
+		b.Run(c.Name, func(b *testing.B) {
+			b.SetBytes(int64(8 * c.N))
+			for b.Loop() {
+				f := make(map[uint64]struct{}, len(data))
+				for _, v := range data {
+					f[v] = struct{}{}
+				}
+				_ = len(f)
+			}
+		})
+	}
+}
+
+func BenchmarkUniqueSort(b *testing.B) {
+	for _, c := range tests.BenchmarkSizes {
+		data := tests.GenRnd[uint64](c.N)
+		b.Run(c.Name, func(b *testing.B) {
+			b.SetBytes(int64(8 * c.N))
+			for b.Loop() {
+				res := Unique(slices.Clone(data))
+				_ = len(res)
+			}
+		})
 	}
 }

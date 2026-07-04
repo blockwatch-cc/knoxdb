@@ -29,7 +29,6 @@ import (
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/slicex"
 )
 
 const mask = uint64(0xFFFFFFFFFFFF0000)
@@ -109,11 +108,6 @@ func NewFromBytes(src []byte) *Bitmap {
 		data: dst16,
 		keys: toUint64Slice(dst16[:x]),
 	}
-}
-
-func NewFromIndexes[T types.Integer](src []T) *Bitmap {
-	slicex.Sort(src, 0)
-	return NewFromSorted(src)
 }
 
 func NewFromSorted[T types.Integer](vals []T) *Bitmap {

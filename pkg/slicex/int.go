@@ -5,6 +5,8 @@ package slicex
 
 import (
 	"slices"
+
+	"blockwatch.cc/knoxdb/pkg/sortx"
 )
 
 func ContainsSorted[T Integer | Float](s []T, v T) bool {
@@ -20,7 +22,7 @@ func Intersect[T Integer](s, t []T) []T {
 }
 
 func IntersectRange[T Integer](s []T, from, to T) []T {
-	Sort(s, 0)
+	sortx.Sort(s, 0)
 	return IntersectRangeSorted(s, from, to)
 }
 
@@ -29,7 +31,7 @@ func IntersectRangeSorted[T Integer | Float](s []T, from, to T) []T {
 }
 
 func Range[T Integer](s []T) (T, T, bool) {
-	Sort(s, 0)
+	sortx.Sort(s, 0)
 	return RangeSorted(s)
 }
 
@@ -47,8 +49,8 @@ func RangeSorted[T Integer | Float](s []T) (T, T, bool) {
 }
 
 func Remove[T Integer](s []T, t ...T) []T {
-	Sort(s, 0)
-	Sort(t, 0)
+	sortx.Sort(s, 0)
+	sortx.Sort(t, 0)
 	return remove(s, t)
 }
 
@@ -79,6 +81,6 @@ func Union[T Integer](s, t []T) []T {
 }
 
 func Unique[T Integer](s []T) []T {
-	Sort(s, 0)
+	sortx.Sort(s, 0)
 	return unique(s)
 }

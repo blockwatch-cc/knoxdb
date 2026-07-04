@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"blockwatch.cc/knoxdb/internal/engine"
-	"blockwatch.cc/knoxdb/internal/reducer"
+	"blockwatch.cc/knoxdb/internal/operator/reducer"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"github.com/echa/log"
 )

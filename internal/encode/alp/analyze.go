@@ -7,10 +7,10 @@ import (
 	"encoding/binary"
 	"math"
 	"math/bits"
+	"slices"
 
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/slicex"
 )
 
 type Analysis struct {
@@ -90,7 +90,7 @@ func Analyze[T Float, E Int](src []T) Analysis {
 	// bit width estimation we start minv at zero.
 	if nZero > 0 {
 		maxE = 0
-		nonZeroSample = slicex.RemoveZeros(sample)
+		nonZeroSample = slices.DeleteFunc(sample, func(v T) bool { return v == 0 })
 	}
 
 	// Search for an exponent/factor combination which minimizes compression size.

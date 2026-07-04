@@ -1,33 +1,18 @@
 // Copyright (c) 2025 Blockwatch Data Inc.
 // Author: alex@blockwatch.cc
 
-package slicex
+package sortx
 
-import (
-	"cmp"
-	"sort"
-)
-
-type PairSorter[S, T cmp.Ordered] struct {
-	s []S
-	t []T
+type Integer interface {
+	~int | ~uint | ~int8 | ~int16 | ~int32 | ~int64 |
+		~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr
 }
 
-func (s PairSorter[S, T]) Len() int {
-	return min(len(s.s), len(s.t))
-}
-
-func (s PairSorter[S, T]) Less(i, j int) bool {
-	return s.s[i] < s.s[j] || (s.s[i] == s.s[j] && s.t[i] < s.t[j])
-}
-
-func (s PairSorter[S, T]) Swap(i, j int) {
-	s.s[i], s.s[j] = s.s[j], s.s[i]
-	s.t[i], s.t[j] = s.t[j], s.t[i]
-}
-
-func Sort2[S, T cmp.Ordered](s []S, t []T) {
-	sort.Sort(PairSorter[S, T]{s, t})
+func SizeFor[T Integer]() int {
+	x := uint16(1 << 8)
+	y := uint32(2 << 16)
+	z := uint64(4 << 32)
+	return 1 + int(T(x))>>8 + int(T(y))>>16 + int(T(z))>>32
 }
 
 const nbits = 8

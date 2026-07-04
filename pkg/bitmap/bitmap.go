@@ -10,13 +10,12 @@ import (
 type Bitmap = xroar.Bitmap
 
 var (
-	New            = xroar.New
-	NewFromBytes   = xroar.NewFromBytes
-	NewFromIndexes = xroar.NewFromIndexes[uint64]
-	NewFromSorted  = xroar.NewFromSorted[uint64]
-	And            = xroar.And
-	Or             = xroar.Or
-	FastAnd        = xroar.FastAnd
-	FastOr         = xroar.FastOr
-	AndNot         = xroar.AndNot
+	New           = xroar.New
+	NewFromBytes  = xroar.NewFromBytes
+	NewFromSorted = xroar.NewFromSorted[uint64]
+	And           = xroar.And
+	Or            = xroar.Or
+	FastAnd       = xroar.FastAnd
+	FastOr        = xroar.FastOr
+	AndNot        = xroar.AndNot
 )

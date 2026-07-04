@@ -6,7 +6,7 @@ package hashprobe
 import (
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/cpu"
-	"blockwatch.cc/knoxdb/pkg/slicex"
+	"blockwatch.cc/knoxdb/pkg/sortx"
 )
 
 func BuildDict[T Integer](vals []T, numUnique int) ([]T, []uint16) {
@@ -66,7 +66,7 @@ func buildDictGeneric[T Integer](vals []T, numUnique int) ([]T, []uint16) {
 	}
 
 	// Step 3: Sort keys
-	slicex.Sort(dict, 0)
+	sortx.Sort(dict, 0)
 
 	// Step 4: Assign codes in sorted order
 	for i, key := range dict {

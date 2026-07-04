@@ -11,7 +11,6 @@ import (
 	etests "blockwatch.cc/knoxdb/internal/encode/tests"
 	"blockwatch.cc/knoxdb/internal/tests/testutil"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/slicex"
 	"blockwatch.cc/knoxdb/pkg/util"
 	"github.com/stretchr/testify/require"
 )
@@ -143,7 +142,7 @@ func MakeBitmapTests(n int) []TestCaseBitmap {
 		{"one", n, bitset.New(n).One()},
 		{"dense", n, bitset.New(n).SetIndexes(etests.MakeSeq(n/2, 2))},
 		{"sparse", n, bitset.New(n).SetIndexes(etests.MakeSeq(n/32, 32))},
-		{"rand", n, bitset.New(n).SetIndexes(slicex.Unique(testutil.RandIntsn(n, n)))},
+		{"rand", n, bitset.New(n).SetIndexes(testutil.Unique(testutil.RandIntsn(n, n)))},
 	}
 }
 

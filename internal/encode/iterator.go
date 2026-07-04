@@ -12,7 +12,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
-	"blockwatch.cc/knoxdb/pkg/slicex"
 )
 
 const (
@@ -377,7 +376,11 @@ func NewConstIterator[T types.Number | []byte](val T, n int) *ConstIterator[T] {
 			len:  n,
 		},
 	}
-	slicex.Fill(it.chunk[:], val)
+	// fill chunk once
+	it.chunk[0] = val
+	for j := 1; j < len(it.chunk); j *= 2 {
+		copy(it.chunk[j:], it.chunk[:j])
+	}
 	it.BaseIterator.fill = it.fill
 	return it
 }

@@ -15,14 +15,16 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/operator/filter"
+	"blockwatch.cc/knoxdb/internal/tests/engine/mock"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/bitmap"
+	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/schema"
 	"blockwatch.cc/knoxdb/pkg/schema/cast"
 	"blockwatch.cc/knoxdb/pkg/schema/encode"
 	"blockwatch.cc/knoxdb/pkg/schema/enum"
 	sreflect "blockwatch.cc/knoxdb/pkg/schema/reflect"
 	"blockwatch.cc/knoxdb/pkg/slicex"
+	"blockwatch.cc/knoxdb/pkg/sortx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -68,7 +70,8 @@ func (t *testStruct) Encode() []byte {
 }
 
 func makeIndex(rids ...uint64) engine.QueryableIndex {
-	return NewMockIndex(testIndexSchema, bitmap.NewFromIndexes(rids))
+	sortx.Sort(rids, 0)
+	return mock.NewMockIndex(testIndexSchema, xroar.NewFromSorted(rids))
 }
 
 func IsFilterEqual(a, b *filter.Node) bool {
@@ -436,7 +439,7 @@ func TestPlanCompile(t *testing.T) {
 			require.NoError(t, err)
 
 			// construct mock table from schema without index and result
-			mockTable := NewMockTable(testSchema, nil, nil)
+			mockTable := mock.NewMockTable(testSchema, nil, nil)
 
 			// construct a query plan for testing
 			plan := NewQueryPlan().
@@ -529,7 +532,7 @@ func TestPlanQueryIndexes(t *testing.T) {
 			require.NoError(t, err)
 
 			// construct mock table from schema, mock index and mock result
-			mockTable := NewMockTable(
+			mockTable := mock.NewMockTable(
 				testSchema,
 				[]engine.QueryableIndex{tc.Index},
 				nil,

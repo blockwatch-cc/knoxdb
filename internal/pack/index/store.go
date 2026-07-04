@@ -9,7 +9,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/hash"
 	"blockwatch.cc/knoxdb/internal/pack"
-	"blockwatch.cc/knoxdb/pkg/slicex"
+	"blockwatch.cc/knoxdb/pkg/sortx"
 	"blockwatch.cc/knoxdb/pkg/store"
 )
 
@@ -82,7 +82,7 @@ func (idx *Index) storeTomb(ctx context.Context, epoch uint32) error {
 	// co-sort tomb columns in-place
 	t0 := idx.tomb.Block(0).Uint64().Slice() // keys
 	t1 := idx.tomb.Block(1).Uint64().Slice() // rowids
-	slicex.Sort2(t0, t1)
+	sortx.SortPair(t0, t1)
 
 	// write in storage tx
 	err := idx.db.Update(func(tx store.Tx) error {

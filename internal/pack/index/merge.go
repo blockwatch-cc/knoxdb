@@ -16,7 +16,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/types"
-	"blockwatch.cc/knoxdb/pkg/slicex"
+	"blockwatch.cc/knoxdb/pkg/sortx"
 	"blockwatch.cc/knoxdb/pkg/store"
 	"blockwatch.cc/knoxdb/pkg/util"
 )
@@ -456,7 +456,7 @@ func (idx *Index) mergeAppend(ctx context.Context) error {
 	jlen := len(j0)
 
 	// co-sort journal vectors in-place
-	slicex.Sort2(j0, j1)
+	sortx.SortPair(j0, j1)
 
 	// iterator to lookup & load matching source packages
 	it := NewMergeIterator(idx)

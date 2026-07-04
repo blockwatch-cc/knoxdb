@@ -17,7 +17,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/pack"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/assert"
-	"blockwatch.cc/knoxdb/pkg/slicex"
+	"blockwatch.cc/knoxdb/pkg/sortx"
 	"blockwatch.cc/knoxdb/pkg/store"
 )
 
@@ -42,7 +42,7 @@ type LookupIterator struct {
 }
 
 func NewLookupIterator(idx *Index, keys []uint64, useCache bool) *LookupIterator {
-	slicex.Sort(keys, 0)
+	sortx.Sort(keys, 0)
 	return &LookupIterator{
 		keys:     keys,
 		idx:      idx,

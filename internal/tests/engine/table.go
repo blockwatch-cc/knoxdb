@@ -11,6 +11,7 @@ import (
 
 	"blockwatch.cc/knoxdb/internal/engine"
 	"blockwatch.cc/knoxdb/internal/query"
+	"blockwatch.cc/knoxdb/internal/tests/engine/mock"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
 	"blockwatch.cc/knoxdb/pkg/schema"
@@ -278,7 +279,7 @@ func UpdateRowsTableTest(t *testing.T, e *engine.Engine, tab engine.TableEngine,
 		schema.WithIndexFieldId(tab.Schema().PkId()),
 		schema.WithIndexFieldId(types.MetaRid),
 	)
-	idx := query.NewMockIndex(idxSchema, xroar.New())
+	idx := mock.NewMockIndex(idxSchema, xroar.New())
 	tab.ConnectIndex(idx)
 
 	enc := encode.NewEncoder(tab.Schema().Base())
