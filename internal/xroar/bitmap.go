@@ -25,7 +25,6 @@ import (
 	"math"
 	"slices"
 	"sort"
-	"strings"
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/types"
@@ -508,32 +507,6 @@ func (ra *Bitmap) Count() int {
 	return sz
 }
 
-// Select returns the element at the xth index. (0-indexed)
-func (ra *Bitmap) Select(x uint64) (uint64, error) {
-	if x >= uint64(ra.Count()) {
-		return 0, fmt.Errorf("index %d is not less than the cardinality: %d",
-			x, ra.Count())
-	}
-	n := ra.keys.numKeys()
-	for i := range n {
-		off := ra.keys.val(i)
-		con := ra.getContainer(off)
-		c := uint64(getCardinality(con))
-		assert(c != uint64(invalidCardinality))
-		if x < c {
-			key := ra.keys.key(i)
-			switch con[indexType] {
-			case typeArray:
-				return key | uint64(array(con).all()[x]), nil
-			case typeBitmap:
-				return key | uint64(bitmap(con).selectAt(int(x))), nil
-			}
-		}
-		x -= c
-	}
-	panic(ErrUnreachable)
-}
-
 func (ra *Bitmap) initSpaceForKeys(n int) {
 	if n == 0 {
 		return
@@ -792,68 +765,11 @@ func (ra *Bitmap) ToArray(res []uint64) []uint64 {
 	return res
 }
 
-func (ra *Bitmap) String() string {
-	var b strings.Builder
-	b.WriteRune('\n')
-
-	var usedSize, card int
-	usedSize += 4 * (ra.keys.numKeys())
-	for i := 0; i < ra.keys.numKeys(); i++ {
-		k := ra.keys.key(i)
-		v := ra.keys.val(i)
-		c := ra.getContainer(v)
-
-		sz := c[indexSize]
-		usedSize += int(sz)
-		card += getCardinality(c)
-
-		fmt.Fprintf(&b,
-			"[%03d] Key: %#8x. Offset: %7d. Size: %4d. Type: %d. Card: %6d. Uint16/Uid: %.2f\n",
-			i, k, v, sz, c[indexType], getCardinality(c), float64(sz)/float64(getCardinality(c)),
-		)
-	}
-	fmt.Fprintf(&b, "Number of containers: %d. Cardinality: %d\n",
-		ra.keys.numKeys(), card)
-
-	amp := float64(len(ra.data)-usedSize) / float64(usedSize)
-	fmt.Fprintf(&b,
-		"Size in Uint16s. Used: %d. Total: %d. Space Amplification: %.2f%%. Moved: %.2fx\n",
-		usedSize, len(ra.data), amp*100.0, float64(ra.memMoved)/float64(usedSize))
-
-	fmt.Fprintf(&b, "Used Uint16/Uid: %.2f. Total Uint16/Uid: %.2f",
-		float64(usedSize)/float64(card), float64(len(ra.data))/float64(card))
-
-	return b.String()
-}
-
 const fwd int = 0x01
 const rev int = 0x02
 
 func (ra *Bitmap) Min() uint64 { return ra.extreme(fwd) }
 func (ra *Bitmap) Max() uint64 { return ra.extreme(rev) }
-
-func (ra *Bitmap) Debug(x uint64) string {
-	var b strings.Builder
-	hi := x & mask
-	off, found := ra.keys.getValue(hi)
-	if !found {
-		fmt.Fprintf(&b, "Unable to find the container for x: %#x\n", hi)
-		b.WriteString(ra.String())
-	}
-	c := ra.getContainer(off)
-	lo := uint16(x)
-
-	fmt.Fprintf(&b, "x: %#x lo: %#x. offset: %d\n", x, lo, off)
-
-	switch c[indexType] {
-	case typeArray:
-	case typeBitmap:
-		idx := lo / 16
-		pos := lo % 16
-		fmt.Fprintf(&b, "At idx: %d. Pos: %d val: %#b\n", idx, pos, c[startIdx+idx])
-	}
-	return b.String()
-}
 
 func (ra *Bitmap) extreme(dir int) uint64 {
 	N := ra.keys.numKeys()
@@ -1129,39 +1045,6 @@ func Or(a, b *Bitmap) *Bitmap {
 	}
 	return res
 }
-
-// func (ra *Bitmap) Rank(x uint64) int {
-// 	key := x & mask
-// 	offset, has := ra.keys.getValue(key)
-// 	if !has {
-// 		return -1
-// 	}
-// 	c := ra.getContainer(offset)
-// 	y := uint16(x)
-
-// 	// Find the rank within the container
-// 	var rank int
-// 	switch c[indexType] {
-// 	case typeArray:
-// 		rank = array(c).rank(y)
-// 	case typeBitmap:
-// 		rank = bitmap(c).rank(y)
-// 	}
-// 	if rank < 0 {
-// 		return -1
-// 	}
-
-// 	// Add up cardinalities of all the containers on the left of container containing x.
-// 	n := ra.keys.numKeys()
-// 	for i := 0; i < n; i++ {
-// 		if ra.keys.key(i) == key {
-// 			break
-// 		}
-// 		cont := ra.getContainer(ra.keys.val(i))
-// 		rank += getCardinality(cont)
-// 	}
-// 	return rank
-// }
 
 func (ra *Bitmap) Cleanup() {
 	type interval struct {

@@ -4,11 +4,69 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"strings"
 	"testing"
 
 	"blockwatch.cc/knoxdb/internal/tests/testutil"
 	"github.com/stretchr/testify/require"
 )
+
+func (ra *Bitmap) String() string {
+	var b strings.Builder
+	b.WriteRune('\n')
+
+	var usedSize, card int
+	usedSize += 4 * (ra.keys.numKeys())
+	for i := 0; i < ra.keys.numKeys(); i++ {
+		k := ra.keys.key(i)
+		v := ra.keys.val(i)
+		c := ra.getContainer(v)
+
+		sz := c[indexSize]
+		usedSize += int(sz)
+		card += getCardinality(c)
+
+		fmt.Fprintf(&b,
+			"[%03d] Key: %#8x. Offset: %7d. Size: %4d. Type: %d. Card: %6d. Uint16/Uid: %.2f\n",
+			i, k, v, sz, c[indexType], getCardinality(c), float64(sz)/float64(getCardinality(c)),
+		)
+	}
+	fmt.Fprintf(&b, "Number of containers: %d. Cardinality: %d\n",
+		ra.keys.numKeys(), card)
+
+	amp := float64(len(ra.data)-usedSize) / float64(usedSize)
+	fmt.Fprintf(&b,
+		"Size in Uint16s. Used: %d. Total: %d. Space Amplification: %.2f%%. Moved: %.2fx\n",
+		usedSize, len(ra.data), amp*100.0, float64(ra.memMoved)/float64(usedSize))
+
+	fmt.Fprintf(&b, "Used Uint16/Uid: %.2f. Total Uint16/Uid: %.2f",
+		float64(usedSize)/float64(card), float64(len(ra.data))/float64(card))
+
+	return b.String()
+}
+
+func (ra *Bitmap) Debug(x uint64) string {
+	var b strings.Builder
+	hi := x & mask
+	off, found := ra.keys.getValue(hi)
+	if !found {
+		fmt.Fprintf(&b, "Unable to find the container for x: %#x\n", hi)
+		b.WriteString(ra.String())
+	}
+	c := ra.getContainer(off)
+	lo := uint16(x)
+
+	fmt.Fprintf(&b, "x: %#x lo: %#x. offset: %d\n", x, lo, off)
+
+	switch c[indexType] {
+	case typeArray:
+	case typeBitmap:
+		idx := lo / 16
+		pos := lo % 16
+		fmt.Fprintf(&b, "At idx: %d. Pos: %d val: %#b\n", idx, pos, c[startIdx+idx])
+	}
+	return b.String()
+}
 
 func fill(c []uint16, b uint16) {
 	for i := range c[startIdx:] {
@@ -578,18 +636,18 @@ func TestUnsetRange2(t *testing.T) {
 	require.True(t, a.Contains((4<<16)-1))
 }
 
-func TestSelect(t *testing.T) {
-	a := New()
-	N := int(1e4)
-	for i := range N {
-		a.Set(uint64(i))
-	}
-	for i := range N {
-		val, err := a.Select(uint64(i))
-		require.NoError(t, err)
-		require.Equal(t, uint64(i), val)
-	}
-}
+// func TestSelect(t *testing.T) {
+// 	a := New()
+// 	N := int(1e4)
+// 	for i := range N {
+// 		a.Set(uint64(i))
+// 	}
+// 	for i := range N {
+// 		val, err := a.Select(uint64(i))
+// 		require.NoError(t, err)
+// 		require.Equal(t, uint64(i), val)
+// 	}
+// }
 
 func TestClone(t *testing.T) {
 	a := New()
@@ -718,29 +776,29 @@ func TestCleanup2(t *testing.T) {
 	require.Equal(t, n/2, a.keys.numKeys())
 }
 
-func TestCleanupSplit(t *testing.T) {
-	a := New()
-	n := int(1 << 20)
+// func TestCleanupSplit(t *testing.T) {
+// 	a := New()
+// 	n := int(1 << 20)
 
-	for i := range n {
-		a.Set(uint64(i))
-	}
+// 	for i := range n {
+// 		a.Set(uint64(i))
+// 	}
 
-	split := func() {
-		n := a.Count()
-		mid, err := a.Select(uint64(n / 2))
-		require.NoError(t, err)
+// 	split := func() {
+// 		n := a.Count()
+// 		mid, err := a.Select(uint64(n / 2))
+// 		require.NoError(t, err)
 
-		b := a.Clone()
-		a.UnsetRange(0, mid)
-		b.UnsetRange(mid, math.MaxUint64)
+// 		b := a.Clone()
+// 		a.UnsetRange(0, mid)
+// 		b.UnsetRange(mid, math.MaxUint64)
 
-		require.Equal(t, n, a.Count()+b.Count())
-	}
-	for a.Count() > 1 {
-		split()
-	}
-}
+// 		require.Equal(t, n, a.Count()+b.Count())
+// 	}
+// 	for a.Count() > 1 {
+// 		split()
+// 	}
+// }
 
 func TestIsEmpty(t *testing.T) {
 	a := New()

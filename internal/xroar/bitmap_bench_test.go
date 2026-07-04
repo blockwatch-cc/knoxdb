@@ -165,18 +165,3 @@ func BenchmarkUnsetRange(b *testing.B) {
 		bench(b, 256)
 	})
 }
-
-func BenchmarkSelect(b *testing.B) {
-	bm := New()
-	N := uint64(1e5)
-	for i := range N {
-		bm.Set(i)
-	}
-
-	b.ResetTimer()
-	for b.Loop() {
-		for j := range N {
-			bm.Select(j)
-		}
-	}
-}

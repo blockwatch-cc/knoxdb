@@ -11,6 +11,7 @@ import (
 	"testing"
 	"testing/quick"
 
+	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/bitset/tests"
 	"blockwatch.cc/knoxdb/internal/tests/testutil"
 	"github.com/stretchr/testify/assert"
@@ -30,6 +31,34 @@ var bitsetSizes = []int{
 	// only non-avx sizes
 	7, 8, 9, 15, 16, 17, 22, 23, 24, 25, 31, 32, 33,
 	63, 64, 65, 127,
+}
+
+func (s *Bitset) SetFromBytes(buf []byte, size int, reverse bool) *Bitset {
+	l := bitFieldLen(size)
+	if cap(s.buf) < l {
+		if !s.noclose {
+			arena.Free(s.buf)
+			s.noclose = false
+		}
+		s.buf = arena.Alloc[uint8](l)[:l]
+	} else if s.size > size && s.cnt >= 0 {
+		s.cnt = -1
+		clear(s.buf[size>>3:])
+	}
+	s.size = size
+	s.buf = s.buf[:l]
+	copy(s.buf, buf)
+	if reverse {
+		for i, v := range s.buf {
+			s.buf[i] = reverseLut256[v]
+		}
+	}
+	s.cnt = -1
+	// ensure the last byte is masked
+	if size&7 > 0 {
+		s.buf[l-1] &= bytemask(size)
+	}
+	return s
 }
 
 func checkCleanTail(t *testing.T, buf []byte) {

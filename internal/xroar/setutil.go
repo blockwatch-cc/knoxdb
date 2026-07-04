@@ -5,8 +5,6 @@
 
 package xroar
 
-// TODO: Add license from roaring bitmap library.
-
 func difference(set1 []uint16, set2 []uint16, buffer []uint16) int {
 	if len(set2) == 0 {
 		buffer = buffer[:len(set1)]
@@ -165,12 +163,7 @@ func advanceUntil(
 	}
 
 	if array[upper] < min {
-		// means
-		// array
-		// has no
-		// item
-		// >= min
-		// pos = array.length;
+		// means array has no item >= min pos = array.length
 		return length
 	}
 
@@ -207,8 +200,8 @@ func onesidedgallopingintersect2by2(
 	pos := 0
 	s1 := largeset[k1]
 	s2 := smallset[k2]
-mainwhile:
 
+mainwhile:
 	for {
 		if s1 < s2 {
 			k1 = advanceUntil(largeset, k1, len(largeset), s2)

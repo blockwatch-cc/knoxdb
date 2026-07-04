@@ -6,7 +6,6 @@ package bitset
 import (
 	"encoding/binary"
 	"encoding/hex"
-	"io"
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/arena"
@@ -122,35 +121,7 @@ func (s *Bitset) Unset(i int) {
 	s.buf[i>>3] &^= mask
 }
 
-func (s *Bitset) SetFromBytes(buf []byte, size int, reverse bool) *Bitset {
-	l := bitFieldLen(size)
-	if cap(s.buf) < l {
-		if !s.noclose {
-			arena.Free(s.buf)
-			s.noclose = false
-		}
-		s.buf = arena.Alloc[uint8](l)[:l]
-	} else if s.size > size && s.cnt >= 0 {
-		s.cnt = -1
-		clear(s.buf[size>>3:])
-	}
-	s.size = size
-	s.buf = s.buf[:l]
-	copy(s.buf, buf)
-	if reverse {
-		for i, v := range s.buf {
-			s.buf[i] = reverseLut256[v]
-		}
-	}
-	s.cnt = -1
-	// ensure the last byte is masked
-	if size&7 > 0 {
-		s.buf[l-1] &= bytemask(size)
-	}
-	return s
-}
-
-// Sets al bits in range. Start and end indices form a closed interval
+// Sets all bits in range. Start and end indices form a closed interval
 // [start, end], i.e. boundaries are inclusive.
 func (s *Bitset) SetRange(start, end int) {
 	if start > s.size {
@@ -694,10 +665,10 @@ func (s *Bitset) Size() int {
 	return (s.size + 7) >> 3
 }
 
-func (s *Bitset) ReadFrom(r io.Reader) (int64, error) {
-	n, err := io.ReadFull(r, s.buf)
-	return int64(n), err
-}
+// func (s *Bitset) ReadFrom(r io.Reader) (int64, error) {
+// 	n, err := io.ReadFull(r, s.buf)
+// 	return int64(n), err
+// }
 
 // Slice returns a boolean slices for bits between [i:j]. Indices
 // form a half optn interval [i,j) like for Go slices.
@@ -768,35 +739,35 @@ func (s *Bitset) Slice(i, j int) []bool {
 	return res
 }
 
-func (s *Bitset) MarshalBinary() ([]byte, error) {
-	return s.Bytes(), nil
-}
+// func (s *Bitset) MarshalBinary() ([]byte, error) {
+// 	return s.Bytes(), nil
+// }
 
-func (s *Bitset) UnmarshalBinary(data []byte) error {
-	s.buf = make([]byte, len(data))
-	copy(s.buf, data)
-	s.cnt = -1
-	s.size = len(data) * 8
-	return nil
-}
+// func (s *Bitset) UnmarshalBinary(data []byte) error {
+// 	s.buf = make([]byte, len(data))
+// 	copy(s.buf, data)
+// 	s.cnt = -1
+// 	s.size = len(data) * 8
+// 	return nil
+// }
 
-func (s *Bitset) MarshalText() ([]byte, error) {
-	return []byte(s.String()), nil
-}
+// func (s *Bitset) MarshalText() ([]byte, error) {
+// 	return []byte(s.String()), nil
+// }
 
-func (s *Bitset) UnmarshalText(data []byte) error {
-	buf, err := hex.DecodeString(string(data))
-	if err != nil {
-		return err
-	}
-	for i := range buf {
-		buf[i] = reverseLut256[buf[i]]
-	}
-	s.buf = buf
-	s.cnt = -1
-	s.size = len(buf) * 8
-	return nil
-}
+// func (s *Bitset) UnmarshalText(data []byte) error {
+// 	buf, err := hex.DecodeString(string(data))
+// 	if err != nil {
+// 		return err
+// 	}
+// 	for i := range buf {
+// 		buf[i] = reverseLut256[buf[i]]
+// 	}
+// 	s.buf = buf
+// 	s.cnt = -1
+// 	s.size = len(buf) * 8
+// 	return nil
+// }
 
 func (s *Bitset) setbit(i int) {
 	s.buf[i>>3] |= bitmask[i&7]

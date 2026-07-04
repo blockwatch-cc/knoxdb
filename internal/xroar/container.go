@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"math"
 	"math/bits"
-	"strings"
 )
 
 // container uses extra 4 []uint16 in the front as header.
@@ -344,15 +343,6 @@ func (c array) toBitmapContainer(buf []uint16) []uint16 {
 	return b
 }
 
-func (c array) String() string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "size: %d\n", c[0])
-	for i, val := range c[startIdx:] {
-		fmt.Fprintf(&b, "%d: %d\n", i, val)
-	}
-	return b.String()
-}
-
 type bitmap []uint16
 
 var bitmapMask [16]uint16
@@ -434,22 +424,6 @@ func (b bitmap) has(x uint16) bool {
 	has := b[startIdx+idx] & bitmapMask[pos]
 	return has > 0
 }
-
-// func (b bitmap) rank(x uint16) int {
-// 	idx := x >> 4
-// 	pos := x & 0xF
-// 	if b[startIdx+idx]&bitmapMask[pos] == 0 {
-// 		return -1
-// 	}
-
-// 	rank := bitset.NewFromBytes(toByteSlice(b[int(startIdx):int(startIdx+idx)]), 0).Count()
-// 	for p := uint16(0); p <= pos; p++ {
-// 		if b[startIdx+idx]&bitmapMask[p] > 0 {
-// 			rank++
-// 		}
-// 	}
-// 	return rank - 1
-// }
 
 // TODO: This can perhaps be using SIMD instructions.
 func (b bitmap) andBitmap(other bitmap, out []uint16) []uint16 {
@@ -553,29 +527,6 @@ func (b bitmap) all() []uint16 {
 		}
 	}
 	return res
-}
-
-// TODO: It can be optimized.
-func (b bitmap) selectAt(idx int) uint16 {
-	data := b[startIdx:]
-	n := uint16(len(data))
-	for i := range n {
-		x := data[i]
-		c := bits.OnesCount16(x)
-		if idx < c {
-			for pos := range uint16(16) {
-				if idx == 0 && x&bitmapMask[pos] > 0 {
-					return i*16 + pos
-				}
-				if x&bitmapMask[pos] > 0 {
-					idx--
-				}
-			}
-
-		}
-		idx -= c
-	}
-	panic(ErrUnreachable)
 }
 
 // bitValue returns a 0 or a 1 depending upon whether x is present in the bitmap, where 1 means
