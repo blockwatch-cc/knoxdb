@@ -24,10 +24,6 @@ var (
 	// ensure we implement required interfaces
 	_ types.StringAccessor = (*StringPool)(nil)
 
-	// zero is a zero length zero capacity slice uses as placeholder
-	// for returning zero length strings and to avoid allocations
-	zero = make([]byte, 0)[:0:0]
-
 	// minPoolSize defines the minimal number of entries in a pool
 	minPoolSize = 128
 )

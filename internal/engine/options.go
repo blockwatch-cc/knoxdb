@@ -177,7 +177,9 @@ func (o Options) StoreOptions() []store.Option {
 
 func WithBaseContext(ctx context.Context) Option {
 	return func(o *Options) {
-		o.BaseContext = ctx
+		if ctx != nil {
+			o.BaseContext = ctx
+		}
 	}
 }
 
