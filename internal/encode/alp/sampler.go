@@ -11,7 +11,8 @@ const SAMPLE_SIZE = 32
 
 func Sample[T types.Float](dst, src []T) []T {
 	if len(src) <= SAMPLE_SIZE {
-		return src
+		n := copy(dst, src)
+		return dst[:n]
 	}
 	step := len(src) / SAMPLE_SIZE
 	var j int
