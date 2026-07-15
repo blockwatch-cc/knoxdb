@@ -3,13 +3,9 @@
 
 package alp
 
-import (
-	"blockwatch.cc/knoxdb/internal/types"
-)
-
 const SAMPLE_SIZE = 32
 
-func Sample[T types.Float](dst, src []T) []T {
+func Sample[T Float](dst, src []T) []T {
 	if len(src) <= SAMPLE_SIZE {
 		n := copy(dst, src)
 		return dst[:n]

@@ -163,7 +163,7 @@ func EncodeTest[T types.Integer](t *testing.T, enc EncodeFunc[T], dec DecodeFunc
 
 			// encode unsigned tests without min-FOR to be compatible with
 			// testcase data for testing all selectors
-			if !types.IsSigned[T]() {
+			if !tests.IsSigned[T]() {
 				minv = 0
 			}
 			buf, err := enc(buf, slices.Clone(in), minv, maxv)
@@ -315,7 +315,7 @@ func CompareTest[T types.Integer](t *testing.T, enc EncodeFunc[T], dec DecodeFun
 	for _, sz := range CompareSizes {
 		for _, c := range MakeCompareCases[T]() {
 			t.Run(fmt.Sprintf("%T/%s/sz_%d", T(0), c.Name, sz), func(t *testing.T) {
-				if c.SignedOnly && !types.IsSigned[T]() {
+				if c.SignedOnly && !tests.IsSigned[T]() {
 					t.Skip()
 				}
 				vals := c.Gen(sz)
@@ -338,7 +338,7 @@ func CompareTest[T types.Integer](t *testing.T, enc EncodeFunc[T], dec DecodeFun
 				require.Equal(t, 0, bits.Count(), "cleared")
 
 				// skip test if value would wrap around
-				if maxv < types.MaxVal[T]() {
+				if maxv < tests.MaxVal[T]() {
 					// value over bounds
 					over := maxv + 1
 					cmp(buf, uint64(over)-uint64(minv), bits)
@@ -376,7 +376,7 @@ func CompareTest2[T types.Integer](t *testing.T, enc EncodeFunc[T], dec DecodeFu
 	for _, sz := range CompareSizes {
 		for _, c := range MakeCompareCases[T]() {
 			t.Run(fmt.Sprintf("%T/%s/sz_%d", T(0), c.Name, sz), func(t *testing.T) {
-				if c.SignedOnly && !types.IsSigned[T]() {
+				if c.SignedOnly && !tests.IsSigned[T]() {
 					t.Skip()
 				}
 				vals := c.Gen(sz)
@@ -422,7 +422,7 @@ func CompareTest2[T types.Integer](t *testing.T, enc EncodeFunc[T], dec DecodeFu
 				}
 
 				// skip test if value would wrap around
-				if maxv < types.MaxVal[T]()-1 {
+				if maxv < tests.MaxVal[T]()-1 {
 					// out of bounds (over)
 					cmp(buf, uint64(maxv+1)-uint64(minv), uint64(maxv+2)-uint64(minv), bits)
 					// t.Logf("Over Min=%d Max=%d From=%d To=%d", minv, maxv, maxv+1, maxv+2)
@@ -435,7 +435,7 @@ func CompareTest2[T types.Integer](t *testing.T, enc EncodeFunc[T], dec DecodeFu
 				}
 
 				// skip test if value would wrap around
-				if minv > types.MinVal[T]()+2 {
+				if minv > tests.MinVal[T]()+2 {
 					// out of bounds (under)
 					cmp(buf, uint64(minv-2)-uint64(minv), uint64(minv-1)-uint64(minv), bits)
 					// t.Logf("Under Min=%d Max=%d From=%d To=%d", minv, maxv, minv+2, minv+1)

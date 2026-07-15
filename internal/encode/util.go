@@ -88,3 +88,12 @@ func UvarintLen[T types.Integer | int](v T) int {
 	var buf [binary.MaxVarintLen64]byte
 	return binary.PutUvarint(buf[:], uint64(v))
 }
+
+func log2Range[T types.Integer](minv, maxv T) int {
+	isSigned := T(0)-T(1) < T(0)
+	if isSigned {
+		return bits.Len64(uint64(int64(maxv) - int64(minv)))
+	} else {
+		return bits.Len64(uint64(maxv - minv))
+	}
+}

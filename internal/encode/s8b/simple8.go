@@ -98,7 +98,7 @@ func Decode[T types.Integer](dst []T, buf []byte, minv T) (int, error) {
 
 func EstimateMaxSize[T types.Integer](srcLen int, minv, maxv T) int {
 	var log2 int
-	if types.IsSigned[T]() {
+	if isSigned := T(0)-T(1) < T(0); isSigned {
 		log2 = bits.Len64(uint64(int64(maxv) - int64(minv)))
 	} else {
 		log2 = bits.Len64(uint64(maxv - minv))

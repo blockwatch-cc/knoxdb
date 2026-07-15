@@ -5,7 +5,6 @@ package alp
 
 import (
 	"blockwatch.cc/knoxdb/internal/arena"
-	"blockwatch.cc/knoxdb/internal/types"
 )
 
 // Encoder implements a variation of the floating point compression algorithm
@@ -73,7 +72,7 @@ func (e *Encoder[T, E]) Encode(src []T, exp Exponents) *Result[T, E] {
 	r := NewResult[T, E](len(src))
 	r.PatchIndices = r.PatchIndices[:cap(r.PatchIndices)]
 	r.Encoded = r.Encoded[:len(src)]
-	r.Min = types.MaxVal[E]()
+	r.Min = MaxVal[E]()
 	r.Max = 0
 
 	// load exponents

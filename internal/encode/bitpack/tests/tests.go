@@ -41,7 +41,7 @@ func MakeTests[T types.Integer]() []TestCase[T] {
 		{Name: "nil", Vals: nil},
 		{Name: "empty", Vals: []T{}},
 		{Name: "mixed", Vals: []T{7, 6, 127, 4, 3, 2, 1}},
-		{Name: "outlier", Vals: []T{7, 6, types.MaxVal[T]() - 1, 4, 3, 2, 1}},
+		{Name: "outlier", Vals: []T{7, 6, tests.MaxVal[T]() - 1, 4, 3, 2, 1}},
 	}
 }
 
@@ -164,7 +164,7 @@ func CompareTest[T types.Integer](t *testing.T, cmp CompareFunc, mode types.Filt
 					bits.Zero()
 					require.Equal(t, 0, bits.Count(), "cleared")
 
-					if maxv < types.MaxVal[T]() {
+					if maxv < tests.MaxVal[T]() {
 						// value over bounds
 						over := maxv + 1
 						cmp(buf, w, uint64(over), sz, bits)
@@ -231,7 +231,7 @@ func CompareTest2[T types.Integer](t *testing.T, cmp CompareFunc2, mode types.Fi
 					}
 
 					// skip test if value would wrap around
-					if maxv < types.MaxVal[T]()-1 {
+					if maxv < tests.MaxVal[T]()-1 {
 						// out of bounds (over)
 						cmp(buf, w, uint64(maxv+1), uint64(maxv+1), sz, bits)
 						ensureBits(t, buf, w, src, maxv+1, maxv+1, minv, bits, mode)
@@ -239,7 +239,7 @@ func CompareTest2[T types.Integer](t *testing.T, cmp CompareFunc2, mode types.Fi
 					}
 
 					// skip test if value would wrap around
-					if minv > types.MinVal[T]()+2 {
+					if minv > tests.MinVal[T]()+2 {
 						// out of bounds (under)
 						cmp(buf, w, uint64(minv-1), uint64(minv-1), sz, bits)
 						ensureBits(t, buf, w, src, minv-1, minv-1, minv, bits, mode)

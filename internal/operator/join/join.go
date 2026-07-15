@@ -651,7 +651,7 @@ func (p *JoinPlan) doQuery(ctx context.Context, x, y JoinTable) (xRes QueryResul
 		// Note: xRes is in row layout here
 		set := xroar.New()
 		for _, row := range xRes.Iterator() {
-			u64, _ := types.Cast[uint64](row.Get(x.OnIdx))
+			u64, _ := filter.Cast[uint64](row.Get(x.OnIdx))
 			set.Set(u64)
 		}
 		y.Filter.Matcher.WithSet(set)

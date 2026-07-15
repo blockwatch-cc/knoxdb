@@ -15,7 +15,11 @@ type Signed interface {
 }
 
 type Unsigned interface {
-	~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr
+	~uint8 | ~uint16 | ~uint32 | ~uint64
+}
+
+type Integer interface {
+	Signed | Unsigned
 }
 
 type Float interface {

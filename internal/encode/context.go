@@ -52,7 +52,7 @@ func NewIntContext[T types.Integer](minv, maxv T, n int) *Context[T] {
 	c := newContext[T]()
 	c.Lvl = MAX_LEVEL
 	c.PhyBits = arena.SizeFor[T]() * 8
-	c.UseBits = types.Log2Range(minv, maxv)
+	c.UseBits = log2Range(minv, maxv)
 	c.NumValues = n
 	c.Min = minv
 	c.Max = maxv
@@ -111,7 +111,10 @@ func AnalyzeInt[T types.Integer](vals []T, checkUnique bool) *Context[T] {
 
 	// init unique and bits
 	c.NumUnique = min(c.NumRuns, int(c.Max)-int(c.Min)+1)
-	c.UseBits = types.Log2Range(c.Min, c.Max)
+
+	// calculate range of bits used when subtracting minv
+	c.UseBits = log2Range(c.Min, c.Max)
+
 	if c.NumUnique < 0 {
 		c.NumUnique = c.NumRuns
 	}

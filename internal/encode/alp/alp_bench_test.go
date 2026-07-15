@@ -10,7 +10,6 @@ import (
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/encode/bitpack"
 	"blockwatch.cc/knoxdb/internal/tests"
-	"blockwatch.cc/knoxdb/internal/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -114,7 +113,7 @@ func benchDecodeFused[T Float, E Int](b *testing.B) {
 		out1 := make([]T, c.N)
 		out2 := make([]T, c.N)
 
-		log2 := types.Log2Range(res.Min, res.Max)
+		log2 := tests.Log2Range(res.Min, res.Max)
 		dst := make([]byte, c.N*8)
 		dst, _ = bitpack.Encode(dst, res.Encoded, res.Min, res.Max)
 		dec := NewDecoder[T, E](a.Exp.F, a.Exp.E).

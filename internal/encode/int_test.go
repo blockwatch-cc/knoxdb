@@ -11,6 +11,7 @@ import (
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/bitset"
 	etests "blockwatch.cc/knoxdb/internal/encode/tests"
+	"blockwatch.cc/knoxdb/internal/tests"
 	"blockwatch.cc/knoxdb/internal/tests/testutil"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/internal/xroar"
@@ -184,7 +185,7 @@ func testIntEncodeT[T types.Integer](t *testing.T) {
 // typically affects uint8 and int8 cases.
 func isCompatibleTest[T types.Integer](scheme ContainerType, ctx *Context[T]) bool {
 	maxv := uint64(1<<(arena.SizeFor[T]()*8) - 1)
-	if types.IsSigned[T]() {
+	if tests.IsSigned[T]() {
 		maxv >>= 1
 	}
 	if scheme == TIntDelta {
@@ -374,7 +375,7 @@ func testCompareFunc[T types.Number](t *testing.T, cmp CompareFunc[T], src []T, 
 	require.Equal(t, 0, bits.Count(), "cleared")
 
 	// value over bounds
-	if maxv < types.MaxVal[T]() {
+	if maxv < tests.MaxVal[T]() {
 		over := maxv + 1
 		cmp(over, bits, nil)
 		etests.EnsureBits(t, src, over, over, bits, nil, mode)
@@ -383,7 +384,7 @@ func testCompareFunc[T types.Number](t *testing.T, cmp CompareFunc[T], src []T, 
 	}
 
 	// value under bounds
-	if minv > types.MinVal[T]() {
+	if minv > tests.MinVal[T]() {
 		under := minv - 1
 		cmp(under, bits, nil)
 		etests.EnsureBits(t, src, under, under, bits, nil, mode)
@@ -421,14 +422,14 @@ func testCompareFunc2[T types.Number](t *testing.T, cmp CompareFunc2[T], src []T
 	}
 
 	// out of bounds (over)
-	if maxv < types.MaxVal[T]()-1 {
+	if maxv < tests.MaxVal[T]()-1 {
 		cmp(maxv+1, maxv+1, bits, nil)
 		etests.EnsureBits(t, src, maxv+1, maxv+1, bits, nil, mode)
 		bits.Zero()
 	}
 
 	// out of bounds (under)
-	if minv > types.MinVal[T]()+2 {
+	if minv > tests.MinVal[T]()+2 {
 		cmp(minv-1, minv-1, bits, nil)
 		etests.EnsureBits(t, src, minv-1, minv-1, bits, nil, mode)
 		bits.Zero()

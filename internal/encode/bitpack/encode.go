@@ -43,7 +43,7 @@ func Encode[T types.Integer](dst []byte, src []T, minv, maxv T) ([]byte, int) {
 
 func Bitpack8[T int8 | uint8](dst []byte, src []T, minv, maxv T) (int, int) {
 	out := arena.FromBytes[uint64](dst)
-	log2 := types.Log2Range(minv, maxv)
+	log2 := log2Range(minv, maxv)
 	blockN := len(src) / (4 * BlockSize)
 	if blockN == 0 {
 		// input less than block size, use generic encoder
@@ -86,7 +86,7 @@ func Bitpack8[T int8 | uint8](dst []byte, src []T, minv, maxv T) (int, int) {
 
 func Bitpack16[T int16 | uint16](dst []byte, src []T, minv, maxv T) (int, int) {
 	out := arena.FromBytes[uint64](dst)
-	log2 := types.Log2Range(minv, maxv)
+	log2 := log2Range(minv, maxv)
 	blockN := len(src) / (4 * BlockSize)
 	if blockN == 0 {
 		// input less than block size, use generic encoder
@@ -129,7 +129,7 @@ func Bitpack16[T int16 | uint16](dst []byte, src []T, minv, maxv T) (int, int) {
 
 func Bitpack32[T int32 | uint32](dst []byte, src []T, minv, maxv T) (int, int) {
 	out := arena.FromBytes[uint64](dst)
-	log2 := types.Log2Range(minv, maxv)
+	log2 := log2Range(minv, maxv)
 	blockN := len(src) / (4 * BlockSize)
 	if blockN == 0 {
 		// input less than block size, use generic encoder
@@ -172,7 +172,7 @@ func Bitpack32[T int32 | uint32](dst []byte, src []T, minv, maxv T) (int, int) {
 
 func Bitpack64[T int64 | uint64](dst []byte, src []T, minv, maxv T) (int, int) {
 	out := arena.FromBytes[uint64](dst)
-	log2 := types.Log2Range(minv, maxv)
+	log2 := log2Range(minv, maxv)
 	blockN := len(src) / (4 * BlockSize)
 	if blockN == 0 {
 		// input less than block size, use generic encoder

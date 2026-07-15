@@ -12,17 +12,16 @@ import (
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/encode/bitpack"
 	"blockwatch.cc/knoxdb/internal/tests"
-	"blockwatch.cc/knoxdb/internal/types"
 	"github.com/stretchr/testify/require"
 )
 
-type TestCase[T types.Float] struct {
+type TestCase[T Float] struct {
 	Name string
 	Data []T
 	NEx  int
 }
 
-func MakeTestcases[T types.Float]() []TestCase[T] {
+func MakeTestcases[T Float]() []TestCase[T] {
 	if arena.SizeFor[T]() == 8 {
 		// float64 cases
 		return []TestCase[T]{
@@ -160,7 +159,7 @@ func AlpFusedTest[T Float, E Int](t *testing.T) {
 			buf := make([]byte, len(c.Data)*16)
 			buf, _ = bitpack.Encode(buf, res.Encoded, res.Min, res.Max)
 			dst := make([]T, len(c.Data))
-			dec.DecodeFused(dst, buf, types.Log2Range(res.Min, res.Max), res.Min)
+			dec.DecodeFused(dst, buf, tests.Log2Range(res.Min, res.Max), res.Min)
 			for i, v := range c.Data {
 				if math.IsNaN(float64(v)) {
 					require.Equal(t, math.IsNaN(float64(v)), math.IsNaN(float64(dst[i])), "val %d: %v != %v", i, v, dst[i])

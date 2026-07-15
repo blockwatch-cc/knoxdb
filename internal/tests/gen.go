@@ -231,7 +231,7 @@ func (Int256Generator) MakeSlice(n ...int) any {
 func GenSeq[T types.Number](n, d int) []T {
 	res := make([]T, n)
 	if d == 0 {
-		if types.IsSigned[T]() {
+		if IsSigned[T]() {
 			d = -1
 		} else {
 			d = 1

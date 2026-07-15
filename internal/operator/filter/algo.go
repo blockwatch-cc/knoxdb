@@ -178,9 +178,9 @@ func (t ValueType) Inc(v any) any {
 	case BlockBool:
 		return true
 	case BlockFloat64:
-		return math.Nextafter(v.(float64), types.MaxVal[float64]())
+		return math.Nextafter(v.(float64), math.MaxFloat64)
 	case BlockFloat32:
-		return math.Nextafter32(v.(float32), types.MaxVal[float32]())
+		return math.Nextafter32(v.(float32), math.MaxFloat32)
 	case BlockBytes:
 		c := bytes.Clone(v.([]byte))
 		var ok bool
@@ -226,9 +226,9 @@ func (t ValueType) Dec(v any) any {
 	case BlockBool:
 		return false
 	case BlockFloat64:
-		return math.Nextafter(v.(float64), types.MinVal[float64]())
+		return math.Nextafter(v.(float64), -math.MaxFloat64)
 	case BlockFloat32:
-		return math.Nextafter32(v.(float32), types.MinVal[float32]())
+		return math.Nextafter32(v.(float32), -math.MaxFloat32)
 	case BlockBytes:
 		c := bytes.Clone(v.([]byte))
 		var ok bool
@@ -283,25 +283,54 @@ func (t ValueType) Zero() any {
 	}
 }
 
+func Cast[T types.Integer](val any) (t T, ok bool) {
+	ok = true
+	switch v := val.(type) {
+	case int:
+		t = T(v)
+	case int64:
+		t = T(v)
+	case int32:
+		t = T(v)
+	case int16:
+		t = T(v)
+	case int8:
+		t = T(v)
+	case uint:
+		t = T(v)
+	case uint64:
+		t = T(v)
+	case uint32:
+		t = T(v)
+	case uint16:
+		t = T(v)
+	case uint8:
+		t = T(v)
+	default:
+		ok = false
+	}
+	return
+}
+
 // Cast casts any Go integer type into a compatible Go type for a block.
 func (t ValueType) Cast(val any) (res any, ok bool) {
 	switch BlockType(t) {
 	case BlockInt64:
-		res, ok = types.Cast[int64](val)
+		res, ok = Cast[int64](val)
 	case BlockInt32:
-		res, ok = types.Cast[int32](val)
+		res, ok = Cast[int32](val)
 	case BlockInt16:
-		res, ok = types.Cast[int16](val)
+		res, ok = Cast[int16](val)
 	case BlockInt8:
-		res, ok = types.Cast[int8](val)
+		res, ok = Cast[int8](val)
 	case BlockUint64:
-		res, ok = types.Cast[uint64](val)
+		res, ok = Cast[uint64](val)
 	case BlockUint32:
-		res, ok = types.Cast[uint32](val)
+		res, ok = Cast[uint32](val)
 	case BlockUint16:
-		res, ok = types.Cast[uint16](val)
+		res, ok = Cast[uint16](val)
 	case BlockUint8:
-		res, ok = types.Cast[uint8](val)
+		res, ok = Cast[uint8](val)
 	default:
 		ok = false
 	}

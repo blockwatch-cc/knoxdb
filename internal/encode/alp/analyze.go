@@ -10,7 +10,6 @@ import (
 	"slices"
 
 	"blockwatch.cc/knoxdb/internal/arena"
-	"blockwatch.cc/knoxdb/internal/types"
 )
 
 type Analysis struct {
@@ -52,7 +51,7 @@ func bitPackCosts(n, w, minv int) int {
 	return 2 + sz + (w*n+63)&^63/8
 }
 
-func countZeros[T types.Float](src []T) (n int) {
+func countZeros[T Float](src []T) (n int) {
 	for _, v := range src {
 		if v == 0.0 {
 			n++
@@ -80,7 +79,7 @@ func Analyze[T Float, E Int](src []T) Analysis {
 		c        = getConstantPtr[T]()
 		bestExp  Exponents
 		bestSize = math.MaxInt
-		maxE     = types.MaxVal[E]()
+		maxE     = MaxVal[E]()
 		maxEx    = (len(sample) - nZero) >> 2 // max 25% exceptions on non-zero values
 	)
 
@@ -177,7 +176,7 @@ func analyzeRD[T Float, U Uint](sample []T) Analysis {
 			shift             = w*8 - i
 			mask       U      = 1<<shift - 1
 			lmin, lmax uint16 = math.MaxUint16, 0
-			rmin, rmax U      = types.MaxVal[U](), 0
+			rmin, rmax U      = MaxVal[U](), 0
 			lUnique    int
 		)
 
@@ -232,5 +231,20 @@ func analyzeRD[T Float, U Uint](sample []T) Analysis {
 		Split:  bestShift,
 		Rate:   float64(bestSize) / float64(len(sample)*w),
 		Dict:   useDict,
+	}
+}
+
+func MaxVal[T Int | Uint]() T {
+	switch any(T(0)).(type) {
+	case int64:
+		return any(int64(math.MaxInt64)).(T)
+	case int32:
+		return any(int32(math.MaxInt32)).(T)
+	case uint64:
+		return any(uint64(math.MaxUint64)).(T)
+	case uint32:
+		return any(uint32(math.MaxUint32)).(T)
+	default:
+		return 0
 	}
 }
