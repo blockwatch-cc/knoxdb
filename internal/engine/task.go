@@ -54,7 +54,7 @@ type Worker struct {
 
 func NewWorker() *Worker {
 	return &Worker{
-		job: make(chan *Task, 1),
+		job: make(chan *Task),
 	}
 }
 
