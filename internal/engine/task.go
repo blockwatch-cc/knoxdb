@@ -123,6 +123,14 @@ func (m *TaskService) WithLimits(maxWorkers, maxQueue int) *TaskService {
 }
 
 func (m *TaskService) Submit(t *Task) bool {
+	// reject new tasks when shutting down
+	select {
+	case <-m.stop:
+		return false
+	default:
+	}
+
+	// try schedule, will fail on full queue
 	select {
 	case m.tasks <- t:
 		return true
