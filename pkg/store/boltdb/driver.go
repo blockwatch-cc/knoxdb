@@ -156,6 +156,7 @@ func makeBoltOpts(o store.Options) *bolt.Options {
 		NoGrowSync:     o.NoSync,
 		NoFreelistSync: o.NoSync,
 		PageSize:       o.PageSize,
+		NoStatistics:   true,
 		Logger:         logger{o.Log},
 	}
 }
