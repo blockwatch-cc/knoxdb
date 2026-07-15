@@ -102,7 +102,7 @@ func TestNewTx(t *testing.T) {
 	assert.True(t, t2.IsClosed(), "closed")
 	assert.True(t, t3.IsClosed(), "closed")
 	assert.True(t, t2.IsAborted(), "aborted")
-	assert.True(t, t3.IsCommitted(), "commited")
+	assert.True(t, t3.IsAborted(), "aborted") // RO tx auto-abort
 }
 
 func TestWithReadTx(t *testing.T) {

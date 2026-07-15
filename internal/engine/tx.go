@@ -390,8 +390,7 @@ func (t *Tx) OnAbort(fn TxHook) {
 }
 
 func (t *Tx) Commit() error {
-	// prevent race with concurrent Commit/Abort (e.g. called by
-	// context after func on shutdown which happens from a Goroutine)
+	// prevent race with concurrent Commit/Abort
 	if !t.closing.CompareAndSwap(0, 1) {
 		return t.Err()
 	}
@@ -399,21 +398,16 @@ func (t *Tx) Commit() error {
 	// check for shutdown and fail
 	if t.engine.IsShutdown() {
 		t.fail(ErrDatabaseShutdown)
+		return t.abort()
 	}
 
-	// catch shutdown/double-close
-	if t.IsClosed() || t.Err() != nil {
+	// close read-only tx
+	if t.IsReadOnly() {
 		return t.abort()
 	}
 
 	// free resources on exit
 	defer t.close()
-
-	// close read-only tx, still return any error captured
-	// by the tx context
-	if t.IsReadOnly() {
-		return t.Err()
-	}
 
 	// t.engine.log.Tracef("Commit tx %s", t.id)
 
@@ -447,7 +441,7 @@ func (t *Tx) Commit() error {
 		// capture the error and call abort
 		if err != nil {
 			t.fail(err)
-			return t.Abort()
+			return t.abort()
 		}
 	}
 
@@ -535,14 +529,14 @@ func (t *Tx) Commit() error {
 }
 
 func (t *Tx) Abort() error {
-	// catch double-close
-	if t.IsClosed() {
-		return t.Err()
-	}
-
 	// prevent race with concurrent Commit/Abort (e.g. called by
 	// context after func on shutdown which happens from a Goroutine)
 	if !t.closing.CompareAndSwap(0, 1) {
+		return t.Err()
+	}
+
+	// catch double-close
+	if t.IsClosed() {
 		return t.Err()
 	}
 
@@ -561,14 +555,10 @@ func (t *Tx) abort() error {
 	// point of no return
 	t.rtflags |= TxFlagAborted | TxFlagClosed
 
-	if t.IsReadOnly() {
-		return t.Err()
-	}
-
 	// t.engine.log.Tracef("Abort tx %d", t.id)
 
 	// don't log tx without activity
-	if t.UseWal() {
+	if t.UseWal() && !t.IsReadOnly() {
 		// write abort record to wal (no sync required, tx data is ignored if lost)
 		rec := &wal.Record{
 			Type:   wal.RecordTypeAbort,
