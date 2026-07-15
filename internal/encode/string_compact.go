@@ -145,24 +145,21 @@ func (c *CompactStringContainer) Encode(ctx *StringContext, vals types.StringAcc
 	buf := arena.Alloc[byte](vals.Size())
 	offs := arena.Alloc[uint32](ctx.NumValues)[:ctx.NumValues]
 	size := arena.Alloc[uint32](ctx.NumValues)[:ctx.NumValues]
-	uniq := arena.Alloc[int32](ctx.NumUnique)
 
 	// compact and reference duplicates
 	for i, v := range vals.All() {
-		k := ctx.Dups[i]
-		if k < 0 {
-			// append non duplicate
+		k := ctx.DiscId[i]
+		if i == int(ctx.FirstPos[k]) {
+			// append unique string
 			offs[i] = uint32(len(buf))
 			size[i] = uint32(len(v))
 			buf = append(buf, v...)
-			uniq = append(uniq, int32(i))
 		} else {
 			// reference as duplicate
-			offs[i] = offs[uniq[k]]
-			size[i] = size[uniq[k]]
+			offs[i] = offs[ctx.FirstPos[k]]
+			size[i] = size[ctx.FirstPos[k]]
 		}
 	}
-	arena.Free(uniq)
 
 	// encode child containers
 	c.ofs = EncodeInt(nil, offs)

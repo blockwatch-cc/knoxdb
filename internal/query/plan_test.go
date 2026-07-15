@@ -70,7 +70,7 @@ func (t *testStruct) Encode() []byte {
 }
 
 func makeIndex(rids ...uint64) engine.QueryableIndex {
-	sortx.Sort(rids, 0)
+	sortx.Sort(rids)
 	return mock.NewMockIndex(testIndexSchema, xroar.NewFromSorted(rids))
 }
 

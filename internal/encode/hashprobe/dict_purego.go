@@ -66,7 +66,7 @@ func buildDictGeneric[T Integer](vals []T, numUnique int) ([]T, []uint16) {
 	}
 
 	// Step 3: Sort keys
-	sortx.Sort(dict, 0)
+	sortx.Sort(dict)
 
 	// Step 4: Assign codes in sorted order
 	for i, key := range dict {

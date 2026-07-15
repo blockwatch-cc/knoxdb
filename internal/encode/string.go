@@ -5,12 +5,15 @@ package encode
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
+	"slices"
 	"sync"
 
 	"blockwatch.cc/knoxdb/internal/arena"
 	"blockwatch.cc/knoxdb/internal/hash"
 	"blockwatch.cc/knoxdb/internal/types"
+	"blockwatch.cc/knoxdb/pkg/sortx"
 )
 
 // Base sizes
@@ -67,16 +70,21 @@ type StringContext struct {
 	NumValues  int            // vector length
 	UniqueSize int            // size of unique strings in bytes
 	UniqueMap  map[uint64]int // unique values hash map to id (optional)
-	Dups       []int32        // <0 = unique string, >=0 position of original
+	DiscId     []int32        // discovery id
+	FirstPos   []int32        // firstPos[DiscId] = original position of first occurrence
 }
 
 func (c *StringContext) Close() {
 	if c.UniqueMap != nil {
 		clear(c.UniqueMap)
 	}
-	if c.Dups != nil {
-		arena.Free(c.Dups)
-		c.Dups = nil
+	if c.DiscId != nil {
+		arena.Free(c.DiscId)
+		c.DiscId = nil
+	}
+	if c.FirstPos != nil {
+		arena.Free(c.FirstPos)
+		c.FirstPos = nil
 	}
 	c.Min = nil
 	c.Max = nil
@@ -105,9 +113,13 @@ func AnalyzeString(vals types.StringAccessor) *StringContext {
 	if c.UniqueMap == nil {
 		c.UniqueMap = make(map[uint64]int, c.NumValues)
 	}
-	if cap(c.Dups) < c.NumValues {
-		arena.Free(c.Dups)
-		c.Dups = arena.Alloc[int32](c.NumValues)[:c.NumValues]
+	if cap(c.DiscId) < c.NumValues {
+		arena.Free(c.DiscId)
+		c.DiscId = arena.Alloc[int32](c.NumValues)[:c.NumValues]
+	}
+	if cap(c.FirstPos) < c.NumValues {
+		arena.Free(c.FirstPos)
+		c.FirstPos = arena.Alloc[int32](c.NumValues)[:0]
 	}
 
 	// analyze
@@ -116,11 +128,24 @@ func AnalyzeString(vals types.StringAccessor) *StringContext {
 		c.Max = c.Min
 		c.MinLen = len(c.Min)
 		c.MaxLen = c.MinLen
+		min8 := makePrefix(c.Min)
+		max8 := min8
 		for i, v := range vals.All() {
-			if bytes.Compare(v, c.Min) < 0 {
+			switch v8 := makePrefix(v); {
+			case v8 < min8:
 				c.Min = v
-			} else if bytes.Compare(v, c.Max) > 0 {
+				min8 = v8
+			case v8 > max8:
 				c.Max = v
+				max8 = v8
+			case v8 == min8:
+				if bytes.Compare(v, c.Min) < 0 {
+					c.Min = v
+				}
+			case v8 == max8:
+				if bytes.Compare(v, c.Max) > 0 {
+					c.Max = v
+				}
 			}
 			vlen := len(v)
 			c.MinLen = min(c.MinLen, vlen)
@@ -130,10 +155,11 @@ func AnalyzeString(vals types.StringAccessor) *StringContext {
 				h = hash.MemHash(v, emptyHash)
 			}
 			if j, ok := c.UniqueMap[h]; ok {
-				c.Dups[i] = int32(j)
+				c.DiscId[i] = int32(j)
 			} else {
 				c.UniqueMap[h] = c.NumUnique
-				c.Dups[i] = -1
+				c.DiscId[i] = int32(c.NumUnique)
+				c.FirstPos = append(c.FirstPos, int32(i))
 				c.NumUnique++
 				c.UniqueSize += vlen
 			}
@@ -157,6 +183,64 @@ func (c *StringContext) UseScheme() ContainerType {
 		// use compact otherwise (it also handles duplicates but less efficient)
 		return TStringCompact
 	}
+}
+
+func (c *StringContext) SortDictKeys(idx []uint32, vals types.StringAccessor) {
+	if c.NumUnique == 0 {
+		return
+	}
+
+	n := c.NumUnique
+	idx = idx[:n]
+
+	// build 8-byte string prefixes
+	prefixes := arena.Alloc[uint64](n)[:n]
+	for i, p := range c.FirstPos {
+		prefixes[i] = makePrefix(vals.Get(int(p)))
+	}
+
+	// prepare indices for sort
+	for i := range idx {
+		idx[i] = uint32(i)
+	}
+
+	// radix sort the indices by prefix value
+	sortx.SortIndices(idx, func(i uint32) uint64 {
+		return prefixes[i]
+	})
+
+	// fix ordering inside groups with identical prefixes
+	for i := 0; i < n; {
+		start := i
+		i++
+		for i < n && prefixes[idx[start]] == prefixes[idx[i]] {
+			i++
+		}
+
+		if i-start > 1 {
+			// sort this collision group using full string comparison
+			slices.SortFunc(idx[start:i], func(a, b uint32) int {
+				// Here a and b are discovery IDs directly
+				pa := c.FirstPos[a]
+				pb := c.FirstPos[b]
+				return vals.Cmp(int(pa), int(pb))
+			})
+		}
+	}
+	arena.Free(prefixes)
+}
+
+func makePrefix(s []byte) uint64 {
+	if len(s) == 0 {
+		return 0
+	}
+	if len(s) >= 8 {
+		return binary.BigEndian.Uint64(s[:8])
+	}
+	// zero-pad short strings
+	var buf [8]byte
+	copy(buf[:], s)
+	return binary.BigEndian.Uint64(buf[:])
 }
 
 func newStringContext() *StringContext {

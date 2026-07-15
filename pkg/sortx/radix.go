@@ -17,8 +17,14 @@ func SizeFor[T Integer]() int {
 
 const nbits = 8
 
-// custom radix sort, faster than slices.Sort
-func Sort[T Integer](vs []T, shift int) {
+func Sort[T Integer](vals []T) {
+	radixSort(vals, 0)
+}
+
+// radixSort is a fast MSD (Most Significant Digit) radix sort with 8-bit
+// digits and a small-size insertion sort fallback. It sorts integer slices
+// in-place and works recursive.
+func radixSort[T Integer](vs []T, shift int) {
 	w := SizeFor[T]() * 8
 	s := w - nbits - shift
 
@@ -66,7 +72,69 @@ func Sort[T Integer](vs []T, shift int) {
 	if shift < w-nbits {
 		beg := 0
 		for b := range len(bins) {
-			Sort(vs[beg:ends[b]], shift+nbits)
+			radixSort(vs[beg:ends[b]], shift+nbits)
+			beg = ends[b]
+		}
+	}
+}
+
+func SortIndices[T, E Integer](idx []T, getKey func(T) E) {
+	radixSortIndices(idx, getKey, 0)
+}
+
+// radixSortIndices sorts the slice of indices `idx` according to the key
+// returned by getKey.
+func radixSortIndices[T, E Integer](idx []T, getKey func(T) E, shift int) {
+	const nbits = 8
+
+	if len(idx) < 64 {
+		// Insertion sort for small inputs (on indices)
+		for i := range idx {
+			for j := i; j > 0 && getKey(idx[j-1]) > getKey(idx[j]); j-- {
+				idx[j-1], idx[j] = idx[j], idx[j-1]
+			}
+		}
+		return
+	}
+
+	w := SizeFor[T]() * 8
+	s := w - nbits - shift
+
+	// Count elements per bin
+	var bins [1 << nbits]int
+	for _, i := range idx {
+		b := uint(getKey(i)>>s) & 0xFF
+		bins[b]++
+	}
+
+	// Compute bin ranges
+	accum := 0
+	var ends [1 << nbits]int
+	for b := range bins {
+		beg := accum
+		accum += bins[b]
+		ends[b] = accum
+		bins[b] = beg
+	}
+
+	// Distribute indices into bins
+	for b := range bins {
+		for i := bins[b]; i < ends[b]; {
+			bin := int(getKey(idx[i])>>s) & 0xFF
+			if bin == b {
+				i++
+			} else {
+				idx[bins[bin]], idx[i] = idx[i], idx[bins[bin]]
+				bins[bin]++
+			}
+		}
+	}
+
+	// Recurse into each bin for the next digit
+	if shift < w-nbits {
+		beg := 0
+		for b := range bins {
+			radixSortIndices(idx[beg:ends[b]], getKey, shift+nbits)
 			beg = ends[b]
 		}
 	}

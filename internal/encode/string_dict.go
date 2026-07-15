@@ -35,9 +35,15 @@ func (c *DictStringContainer) Info() string {
 }
 
 func (c *DictStringContainer) Close() {
-	c.ofs.Close()
-	c.len.Close()
-	c.code.Close()
+	if c.ofs != nil {
+		c.ofs.Close()
+	}
+	if c.len != nil {
+		c.len.Close()
+	}
+	if c.code != nil {
+		c.code.Close()
+	}
 	c.ofs = nil
 	c.len = nil
 	c.code = nil
@@ -157,27 +163,34 @@ func (c *DictStringContainer) AppendTo(dst types.StringWriter, sel []uint32) {
 }
 
 func (c *DictStringContainer) Encode(ctx *StringContext, vals types.StringAccessor) StringContainer {
+	// alloc target buffers
 	dict := arena.Alloc[byte](ctx.UniqueSize)
-	offs := arena.Alloc[uint32](ctx.NumUnique)
-	size := arena.Alloc[uint32](ctx.NumUnique)
-	code := arena.Alloc[uint32](ctx.NumValues)
+	offs := arena.Alloc[uint32](ctx.NumUnique)[:ctx.NumUnique]
+	size := arena.Alloc[uint32](ctx.NumUnique)[:ctx.NumUnique]
+	code := arena.Alloc[uint32](ctx.NumValues)[:ctx.NumValues]
 
-	// TODO: sorted dict for dict fusion match
+	// alloc temp data
+	idx := arena.Alloc[uint32](ctx.NumUnique)[:ctx.NumUnique]
+	rank := arena.Alloc[uint32](ctx.NumUnique)[:ctx.NumUnique]
 
-	// compact and reference duplicates
-	for i, v := range vals.All() {
-		k := ctx.Dups[i]
-		if k < 0 {
-			// append non duplicate strings to dict, register dict position
-			code = append(code, uint32(len(offs)))
-			offs = append(offs, uint32(len(dict)))
-			size = append(size, uint32(len(v)))
-			dict = append(dict, v...)
-		} else {
-			// reference as duplicate
-			code = append(code, uint32(k))
-		}
+	// sort dict keys
+	ctx.SortDictKeys(idx, vals)
+
+	// build dict and rank
+	for i, discId := range idx {
+		rank[discId] = uint32(i)
+		val := vals.Get(int(ctx.FirstPos[discId]))
+		offs[i] = uint32(len(dict))
+		size[i] = uint32(len(val))
+		dict = append(dict, val...)
 	}
+
+	// emit codes
+	for i := range vals.Len() {
+		code[i] = rank[ctx.DiscId[i]]
+	}
+	arena.Free(idx)
+	arena.Free(rank)
 
 	// encode child containers
 	c.ofs = EncodeInt(nil, offs)
@@ -192,6 +205,46 @@ func (c *DictStringContainer) Encode(ctx *StringContext, vals types.StringAccess
 
 	return c
 }
+
+// func (c *DictStringContainer) EncodeOrig(ctx *StringContext, vals types.StringAccessor) StringContainer {
+// 	// alloc target buffers
+// 	dict := arena.Alloc[byte](ctx.UniqueSize)
+// 	offs := arena.Alloc[uint32](ctx.NumUnique)[:ctx.NumUnique]
+// 	size := arena.Alloc[uint32](ctx.NumUnique)[:ctx.NumUnique]
+// 	code := arena.Alloc[uint32](ctx.NumValues)[:ctx.NumValues]
+// 	rank := arena.Alloc[uint32](ctx.NumUnique)[:ctx.NumUnique]
+
+// 	// 1. sort dict keys to enable match optimizations
+// 	keys := ctx.PrepareSortedKeys(vals)
+
+// 	// 2. build dict and rank from sorted keys
+// 	for i, key := range keys {
+// 		rank[key.discId] = uint32(i)
+// 		val := vals.Get(int(ctx.FirstPos[key.discId]))
+// 		offs[i] = uint32(len(dict))
+// 		size[i] = uint32(len(val))
+// 		dict = append(dict, val...)
+// 	}
+
+// 	// 3. emit codes
+// 	for i := range vals.Len() {
+// 		code[i] = rank[ctx.DiscId[i]]
+// 	}
+// 	arena.Free(rank)
+
+// 	// encode child containers
+// 	c.ofs = EncodeInt(nil, offs)
+// 	arena.Free(offs)
+// 	c.len = EncodeInt(nil, size)
+// 	arena.Free(size)
+// 	c.code = EncodeInt(nil, code)
+// 	arena.Free(code)
+// 	c.dict = dict
+// 	c.free = true
+// 	c.n = ctx.NumValues
+
+// 	return c
+// }
 
 func (c *DictStringContainer) Cmp(i, j int) int {
 	return bytes.Compare(c.Get(i), c.Get(j))

@@ -42,7 +42,7 @@ type LookupIterator struct {
 }
 
 func NewLookupIterator(idx *Index, keys []uint64, useCache bool) *LookupIterator {
-	sortx.Sort(keys, 0)
+	sortx.Sort(keys)
 	return &LookupIterator{
 		keys:     keys,
 		idx:      idx,

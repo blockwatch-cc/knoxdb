@@ -30,7 +30,7 @@ func TestAnalyzeString(t *testing.T) {
 	assert.Equal(t, 3, x.NumUnique, "num_unique")
 	assert.Equal(t, 3, x.NumValues, "num_values")
 	assert.Len(t, x.UniqueMap, 3, "unique map len")
-	assert.Len(t, x.Dups, 3, "dups list len")
+	assert.Len(t, x.DiscId, 3, "discovery id list len")
 	assert.Equal(t, TStringFixed, x.UseScheme(), "selected scheme")
 	x.Close()
 	p.Close()
@@ -46,7 +46,7 @@ func TestAnalyzeString(t *testing.T) {
 	assert.Equal(t, 4, x.NumUnique, "num_unique")
 	assert.Equal(t, 4, x.NumValues, "num_values")
 	assert.Len(t, x.UniqueMap, 4, "unique map len")
-	assert.Len(t, x.Dups, 4, "dups list len")
+	assert.Len(t, x.DiscId, 4, "discovery id list len")
 	assert.Equal(t, TStringCompact, x.UseScheme(), "selected scheme")
 	x.Close()
 	p.Close()
@@ -62,7 +62,7 @@ func TestAnalyzeString(t *testing.T) {
 	assert.Equal(t, 1, x.NumUnique, "num_unique")
 	assert.Equal(t, 4, x.NumValues, "num_values")
 	assert.Len(t, x.UniqueMap, 1, "unique map len")
-	assert.Len(t, x.Dups, 4, "dups list len")
+	assert.Len(t, x.DiscId, 4, "discovery id list len")
 	assert.Equal(t, TStringConstant, x.UseScheme(), "selected scheme")
 	x.Close()
 	p.Close()
@@ -78,10 +78,35 @@ func TestAnalyzeString(t *testing.T) {
 	assert.Equal(t, 3, x.NumUnique, "num_unique")
 	assert.Equal(t, 8, x.NumValues, "num_values")
 	assert.Len(t, x.UniqueMap, 3, "unique map len")
-	assert.Len(t, x.Dups, 8, "dups list len")
+	assert.Len(t, x.DiscId, 8, "discovery id list len")
 	assert.Equal(t, TStringDictionary, x.UseScheme(), "selected scheme")
 	x.Close()
 	p.Close()
+}
+
+func TestStringDictSorter(t *testing.T) {
+	// strings with exact same first 8 bytes prefix
+	// will force sorting to fall back to full string compare
+	strings := [][]byte{
+		[]byte("abcdefgh2-extra-data"), // -> idx 2
+		[]byte("abcdefgh0-first"),      // -> idx 0
+		[]byte("abcdefgh1-middle"),     // -> idx 1
+	}
+
+	// need a minimal StringContext
+	ctx := &StringContext{
+		NumUnique: 3,
+		FirstPos:  []int32{0, 1, 2},
+	}
+
+	// fill strings into pool
+	spool := stringx.NewStringPool(3)
+	spool.AppendMany(strings...)
+
+	// check expected order
+	idx := make([]uint32, 3)
+	ctx.SortDictKeys(idx, spool)
+	require.Equal(t, idx, []uint32{1, 2, 0})
 }
 
 func TestStringEncode(t *testing.T) {
@@ -330,7 +355,7 @@ func MakeStringTests(n int) []TestCaseString {
 }
 
 func MakeShortStringTests(scheme ContainerType) []TestCaseString {
-	n := 6
+	n := 16
 	switch scheme {
 	case TStringConstant:
 		return []TestCaseString{{"const", n, tests.GenStringConst(n, []byte("42"))}}

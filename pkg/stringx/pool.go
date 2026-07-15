@@ -114,7 +114,7 @@ func (p *StringPool) HeapSize() int {
 //
 // Panics when i or j are out of bounds.
 func (p *StringPool) Cmp(i, j int) int {
-	if l := uint(len(p.ptr)); uint(i) > l || uint(j) > l {
+	if l := uint(len(p.ptr)); i == j || uint(i) > l || uint(j) > l {
 		return 0
 	}
 	return bytes.Compare(p.get(i), p.get(j))
@@ -196,6 +196,17 @@ func (p *StringPool) All() iter.Seq2[int, []byte] {
 		for i, ptr := range p.ptr {
 			ofs, len := ptr2pair(ptr)
 			if !fn(i, unsafe.Slice((*byte)(unsafe.Add(p.base, ofs)), len)) {
+				return
+			}
+		}
+	}
+}
+
+func (p *StringPool) AllStrings() iter.Seq2[int, string] {
+	return func(fn func(int, string) bool) {
+		for i, ptr := range p.ptr {
+			ofs, len := ptr2pair(ptr)
+			if !fn(i, unsafe.String((*byte)(unsafe.Add(p.base, ofs)), len)) {
 				return
 			}
 		}

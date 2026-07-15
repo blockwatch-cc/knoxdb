@@ -174,7 +174,7 @@ func buildDictMap[T Integer](vals []T, numUnique int) ([]T, []uint16) {
 	}
 
 	// sort dict
-	sortx.Sort(dict, 0)
+	sortx.Sort(dict)
 
 	// remap dict codes to original values
 	for i, v := range dict {
