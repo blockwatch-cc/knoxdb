@@ -179,31 +179,45 @@ func (c *FloatAlpRdContainer[T, E]) Cmp(i, j int) int {
 }
 
 func (c *FloatAlpRdContainer[T, E]) MatchEqual(val T, bits, mask *Bitset) {
-	matchIt(c.Chunks(), matchFn[T](types.FilterModeEqual), val, bits, mask)
+	it := c.Chunks()
+	matchIt(it, matchFn[T](types.FilterModeEqual), val, bits, mask)
+	it.Close()
 }
 
 func (c *FloatAlpRdContainer[T, E]) MatchNotEqual(val T, bits, mask *Bitset) {
-	matchIt(c.Chunks(), matchFn[T](types.FilterModeNotEqual), val, bits, mask)
+	it := c.Chunks()
+	matchIt(it, matchFn[T](types.FilterModeNotEqual), val, bits, mask)
+	it.Close()
 }
 
 func (c *FloatAlpRdContainer[T, E]) MatchLess(val T, bits, mask *Bitset) {
-	matchIt(c.Chunks(), matchFn[T](types.FilterModeLt), val, bits, mask)
+	it := c.Chunks()
+	matchIt(it, matchFn[T](types.FilterModeLt), val, bits, mask)
+	it.Close()
 }
 
 func (c *FloatAlpRdContainer[T, E]) MatchLessEqual(val T, bits, mask *Bitset) {
-	matchIt(c.Chunks(), matchFn[T](types.FilterModeLe), val, bits, mask)
+	it := c.Chunks()
+	matchIt(it, matchFn[T](types.FilterModeLe), val, bits, mask)
+	it.Close()
 }
 
 func (c *FloatAlpRdContainer[T, E]) MatchGreater(val T, bits, mask *Bitset) {
-	matchIt(c.Chunks(), matchFn[T](types.FilterModeGt), val, bits, mask)
+	it := c.Chunks()
+	matchIt(it, matchFn[T](types.FilterModeGt), val, bits, mask)
+	it.Close()
 }
 
 func (c *FloatAlpRdContainer[T, E]) MatchGreaterEqual(val T, bits, mask *Bitset) {
-	matchIt(c.Chunks(), matchFn[T](types.FilterModeGe), val, bits, mask)
+	it := c.Chunks()
+	matchIt(it, matchFn[T](types.FilterModeGe), val, bits, mask)
+	it.Close()
 }
 
 func (c *FloatAlpRdContainer[T, E]) MatchBetween(a, b T, bits, mask *Bitset) {
-	matchRangeIt(c.Chunks(), matchFn[T](types.FilterModeRange), a, b, bits, mask)
+	it := c.Chunks()
+	matchRangeIt(it, matchFn[T](types.FilterModeRange), a, b, bits, mask)
+	it.Close()
 }
 
 // N.A.

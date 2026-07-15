@@ -249,10 +249,16 @@ func (c *FloatAlpContainer[T, E]) MatchEqual(val T, bits, mask *Bitset) {
 		enc := alp.NewEncoder[T, E]()
 		av, ok := enc.EncodeSingle(val, alp.Exponents{E: c.exponent, F: c.factor})
 
-		// on success, match against encoded int values
-		if ok {
-			c.values.MatchEqual(av, bits, mask)
+		if !ok {
+			// slow-path: decode and match
+			it := c.Chunks()
+			matchIt(it, matchFn[T](types.FilterModeEqual), val, bits, mask)
+			it.Close()
+			return
 		}
+
+		// on success, match against encoded int values
+		c.values.MatchEqual(av, bits, mask)
 	}
 
 	// merge _all_ patches by flipping bits, note values contain
@@ -310,7 +316,9 @@ func (c *FloatAlpContainer[T, E]) MatchLess(val T, bits, mask *Bitset) {
 	av, ok := enc.EncodeSingle(val, exp)
 	if !ok {
 		// slow-path: decode and match
-		matchIt(c.Chunks(), matchFn[T](types.FilterModeLt), val, bits, mask)
+		it := c.Chunks()
+		matchIt(it, matchFn[T](types.FilterModeLt), val, bits, mask)
+		it.Close()
 		return
 	}
 
@@ -353,7 +361,9 @@ func (c *FloatAlpContainer[T, E]) MatchLessEqual(val T, bits, mask *Bitset) {
 	av, ok := enc.EncodeSingle(val, exp)
 	if !ok {
 		// slow-path: decode and match
-		matchIt(c.Chunks(), matchFn[T](types.FilterModeLe), val, bits, mask)
+		it := c.Chunks()
+		matchIt(it, matchFn[T](types.FilterModeLe), val, bits, mask)
+		it.Close()
 		return
 	}
 
@@ -393,7 +403,9 @@ func (c *FloatAlpContainer[T, E]) MatchGreater(val T, bits, mask *Bitset) {
 	av, ok := enc.EncodeSingle(val, exp)
 	if !ok {
 		// slow-path: decode and match
-		matchIt(c.Chunks(), matchFn[T](types.FilterModeGt), val, bits, mask)
+		it := c.Chunks()
+		matchIt(it, matchFn[T](types.FilterModeGt), val, bits, mask)
+		it.Close()
 		return
 	}
 
@@ -436,7 +448,9 @@ func (c *FloatAlpContainer[T, E]) MatchGreaterEqual(val T, bits, mask *Bitset) {
 	av, ok := enc.EncodeSingle(val, exp)
 	if !ok {
 		// slow-path: decode and match
-		matchIt(c.Chunks(), matchFn[T](types.FilterModeGe), val, bits, mask)
+		it := c.Chunks()
+		matchIt(it, matchFn[T](types.FilterModeGe), val, bits, mask)
+		it.Close()
 		return
 	}
 
@@ -475,9 +489,10 @@ func (c *FloatAlpContainer[T, E]) MatchBetween(a, b T, bits, mask *Bitset) {
 	av, ok1 := enc.EncodeSingle(a, exp)
 	bv, ok2 := enc.EncodeSingle(b, exp)
 	if !ok1 || !ok2 {
-		// slow-path: decode and match because boundary values
-		// don't cleanly translate to ALP domain
-		matchRangeIt(c.Chunks(), matchFn[T](types.FilterModeRange), a, b, bits, mask)
+		// slow-path: decode and match
+		it := c.Chunks()
+		matchRangeIt(it, matchFn[T](types.FilterModeRange), a, b, bits, mask)
+		it.Close()
 		return
 	}
 

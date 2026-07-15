@@ -8,8 +8,6 @@ import (
 	"slices"
 	"unsafe"
 
-	"blockwatch.cc/knoxdb/internal/arena"
-	"blockwatch.cc/knoxdb/internal/cmp"
 	"blockwatch.cc/knoxdb/internal/types"
 	"blockwatch.cc/knoxdb/pkg/num"
 )
@@ -26,117 +24,6 @@ func chunkBase(n int) int {
 func chunkPos(n int) int {
 	return n & CHUNK_MASK
 }
-
-func matchIt[T types.Number](it types.NumberIterator[T], cmpFn unsafe.Pointer, val T, bits, mask *Bitset) {
-	var (
-		i   int
-		cnt int64
-		buf = bits.Bytes()
-	)
-
-	for {
-		// check mask and skip chunks if not required
-		if mask != nil && !mask.ContainsRange(i, i+CHUNK_SIZE-1) {
-			n := it.Skip()
-			i += n
-			if i >= it.Len() {
-				break
-			}
-		}
-
-		// get next chunk, on tail n may be < CHUNK_SZIE
-		src, n := it.Next()
-		if n == 0 {
-			break
-		}
-
-		// compare
-		cnt += (*(*NumberMatchFunc[T])(cmpFn))(src[:n], val, buf[i>>3:])
-		i += n
-	}
-	bits.ResetCount(int(cnt))
-	it.Close()
-}
-
-func matchRangeIt[T types.Number](it types.NumberIterator[T], cmpFn unsafe.Pointer, a, b T, bits, mask *Bitset) {
-	var (
-		i   int
-		cnt int64
-		buf = bits.Bytes()
-	)
-
-	for {
-		// check mask and skip chunks if not required
-		if mask != nil && !mask.ContainsRange(i, i+CHUNK_SIZE-1) {
-			n := it.Skip()
-			i += n
-			if i >= it.Len() {
-				break
-			}
-		}
-
-		// get next chunk, on tail n may be < CHUNK_SZIE
-		src, n := it.Next()
-		if n == 0 {
-			break
-		}
-
-		// compare
-		cnt += (*(*NumberRangeMatchFunc[T])(cmpFn))(src[:n], a, b, buf[i>>3:])
-		i += n
-	}
-	bits.ResetCount(int(cnt))
-	it.Close()
-}
-
-var (
-	floatMatch64Fn = [...]unsafe.Pointer{
-		nil,                                      // FilterModeInvalid
-		unsafe.Pointer(&cmp.Float64Equal),        // FilterModeEqual
-		unsafe.Pointer(&cmp.Float64NotEqual),     // FilterModeNotEqual
-		unsafe.Pointer(&cmp.Float64Greater),      // FilterModeGt
-		unsafe.Pointer(&cmp.Float64GreaterEqual), // FilterModeGe
-		unsafe.Pointer(&cmp.Float64Less),         // FilterModeLt
-		unsafe.Pointer(&cmp.Float64LessEqual),    // FilterModeLe
-		nil,                                      // FilterModeIn
-		nil,                                      // FilterModeNotIn
-		unsafe.Pointer(&cmp.Float64Between),      // FilterModeRange
-	}
-
-	floatMatch32Fn = [...]unsafe.Pointer{
-		nil,                                      // FilterModeInvalid
-		unsafe.Pointer(&cmp.Float32Equal),        // FilterModeEqual
-		unsafe.Pointer(&cmp.Float32NotEqual),     // FilterModeNotEqual
-		unsafe.Pointer(&cmp.Float32Greater),      // FilterModeGt
-		unsafe.Pointer(&cmp.Float32GreaterEqual), // FilterModeGe
-		unsafe.Pointer(&cmp.Float32Less),         // FilterModeLt
-		unsafe.Pointer(&cmp.Float32LessEqual),    // FilterModeLe
-		nil,                                      // FilterModeIn
-		nil,                                      // FilterModeNotIn
-		unsafe.Pointer(&cmp.Float32Between),      // FilterModeRange
-	}
-)
-
-func matchFn[T types.Float](mode types.FilterMode) unsafe.Pointer {
-	if arena.SizeFor[T]() == 8 {
-		return floatMatch64Fn[mode]
-	} else {
-		return floatMatch32Fn[mode]
-	}
-}
-
-// TODO
-// - inverse iterator integration
-// - outside one host iterator impl driving the logic Iterator[T ValueType]
-// - inside a container specific state driving the inside value decoding
-// - supports nesting iterators (e.g. dict has encoded codes & values)
-// - API: init, next, skip
-//   - Init(*[128]T): can pre-fill the chunk with fixed values
-//   - Next(*[128]T): fills the chunk with new values
-//   - Skip(n): skips n chunks worth of data on internal iterators
-//
-// Beware!
-// - selection lists can be unsorted!
 
 // ---------------------------------
 // Base Iterator
