@@ -56,7 +56,7 @@ func buildDict64AVX2(vals []uint64, numUnique int) ([]uint64, []uint16) {
 	dict = dict[:retDictSize] // Trim to actual size
 
 	// Step 2: Sort keys
-	sortx.Sort(dict, 0)
+	sortx.Sort(dict)
 	// Sort64(dict, 0)
 
 	// Step 3: Assign codes in sorted order
@@ -105,7 +105,7 @@ func buildDict32AVX2(vals []uint32, numUnique int) ([]uint32, []uint16) {
 	dict = dict[:retDictSize] // Trim to actual size
 
 	// Step 2: Sort keys
-	sortx.Sort(dict, 0)
+	sortx.Sort(dict)
 
 	// Step 3: Assign codes in sorted order
 	for i, key := range dict {
