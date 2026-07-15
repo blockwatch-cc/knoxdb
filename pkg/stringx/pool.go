@@ -49,7 +49,7 @@ type StringPool struct {
 	buf  []byte   // buffer pool
 	ptr  []uint64 // string content pointers [ off << 32 | len ]
 	base unsafe.Pointer
-	pp   *uint64
+	pp   unsafe.Pointer
 }
 
 func ptr2pair(p uint64) (uint32, uint32) {
@@ -71,7 +71,7 @@ func NewStringPoolSize(n, sz int) *StringPool {
 	p.buf = arena.Alloc[byte](n * sz)
 	p.ptr = arena.Alloc[uint64](n)
 	p.base = unsafe.Pointer(unsafe.SliceData(p.buf))
-	p.pp = unsafe.SliceData(p.ptr)
+	p.pp = unsafe.Pointer(unsafe.SliceData(p.ptr))
 	return p
 }
 
@@ -247,14 +247,14 @@ func (p *StringPool) Append(val []byte) int {
 	// check for realloc and update pointers
 	if willGrow {
 		p.base = unsafe.Pointer(unsafe.SliceData(p.buf))
-		p.pp = unsafe.SliceData(p.ptr)
+		p.pp = unsafe.Pointer(unsafe.SliceData(p.ptr))
 	}
 	return len(p.ptr) - 1
 }
 
 func (p *StringPool) Reserve(n int) {
 	p.ptr = arena.Realloc(p.ptr, len(p.ptr)+n)
-	p.pp = unsafe.SliceData(p.ptr)
+	p.pp = unsafe.Pointer(unsafe.SliceData(p.ptr))
 }
 
 // AppendMany appends multiple strings and returns the position of
@@ -294,7 +294,7 @@ func (p *StringPool) AppendTo(dst types.StringWriter, sel []uint32) {
 		}
 	} else {
 		for _, v := range sel {
-			ofs, len := ptr2pair(*(*uint64)(unsafe.Add(unsafe.Pointer(p.pp), v*8)))
+			ofs, len := ptr2pair(*(*uint64)(unsafe.Add(p.pp, v*8)))
 			dst.Append(unsafe.Slice((*byte)(unsafe.Add(p.base, ofs)), len))
 		}
 	}
@@ -304,16 +304,13 @@ func (p *StringPool) AppendTo(dst types.StringWriter, sel []uint32) {
 // with the pool and only valid until close. Returns empty slice when i
 // is out of bounds.
 func (p *StringPool) Get(i int) []byte {
-	if uint(i) > uint(len(p.ptr)) {
-		return zero
-	}
 	return p.get(i)
 }
 
 // get returns entry at position i unchecked. It uses pointer arithmentic
 // like in C (Go requires unsafe here) to avoid slice boundary checks.
 func (p *StringPool) get(i int) []byte {
-	ofs, sz := ptr2pair(*(*uint64)(unsafe.Add(unsafe.Pointer(p.pp), i*8)))
+	ofs, sz := ptr2pair(*(*uint64)(unsafe.Add(p.pp, i*8)))
 	return unsafe.Slice((*byte)(unsafe.Add(p.base, ofs)), sz)
 }
 
@@ -325,7 +322,7 @@ func (p *StringPool) GetString(i int) string {
 	if uint(i) > uint(len(p.ptr)) {
 		return ""
 	}
-	ofs, sz := ptr2pair(*(*uint64)(unsafe.Add(unsafe.Pointer(p.pp), i*8)))
+	ofs, sz := ptr2pair(*(*uint64)(unsafe.Add(p.pp, i*8)))
 	return unsafe.String((*byte)(unsafe.Add(p.base, ofs)), sz)
 }
 
@@ -353,6 +350,6 @@ func (p *StringPool) Range(i, j int) *StringPool {
 		buf:  p.buf,
 		ptr:  rg,
 		base: p.base,
-		pp:   unsafe.SliceData(rg),
+		pp:   unsafe.Pointer(unsafe.SliceData(rg)),
 	}
 }
