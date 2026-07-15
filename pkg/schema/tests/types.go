@@ -3,7 +3,6 @@ package schema_tests
 import (
 	"encoding/binary"
 	"fmt"
-	"reflect"
 	"time"
 
 	"blockwatch.cc/knoxdb/pkg/num"
@@ -578,27 +577,6 @@ var (
 // allTypesDec = encode.NewDecoderFor[AllTypes](schema.Enums(enums))
 // allTypesBuf = allTypesEnc.NewBuffer(1)
 )
-
-func makeZeroStruct(v any) any {
-	typ := reflect.TypeOf(v).Elem()
-	ptr := reflect.New(typ)
-	val := ptr.Elem()
-	for i, l := 0, typ.NumField(); i < l; i++ {
-		dst := val.Field(i)
-		if dst.Kind() == reflect.Pointer {
-			if dst.IsNil() && dst.CanSet() {
-				dst.Set(reflect.New(dst.Type().Elem()))
-			}
-			dst = dst.Elem()
-		}
-		dst.Set(reflect.Zero(typ.Field(i).Type))
-		// fake enum
-		if dst.Kind() == reflect.String {
-			dst.SetString("one")
-		}
-	}
-	return ptr.Interface()
-}
 
 type Encodable interface {
 	Encode() []byte
